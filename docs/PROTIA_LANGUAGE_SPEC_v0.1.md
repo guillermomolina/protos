@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 23  
+Document revision: 24  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -18,6 +18,16 @@ An implementation may internally represent some objects using immediate values, 
 The language has a uniform execution model. There is no fundamental semantic distinction between "global code", "local variables", and "properties". Execution always takes place within contexts, and contexts are themselves objects.
 
 The language favors objects and messages over keywords and special syntactic constructs.
+
+## 1.1 Dynamic Typing
+
+Core v0.1 is dynamically typed.
+
+Slots and parameters do not carry mandatory static type declarations. A slot may hold objects with different behavior over time, subject only to the normal object-state and assignment rules.
+
+Message validity is determined dynamically by receiver behavior and delegation. The language does not introduce overload resolution by declared argument type.
+
+Implementations and tools may infer types, specialize code, or expose optional analysis, but such information must not change observable language semantics.
 
 ## 2. Objects
 
@@ -211,7 +221,7 @@ The object in whose body the method closure was created is not inserted into the
 
 ## Module Contexts and Top-Level Bindings
 
-Protia has no special semantic category of global variables.
+The language has no special semantic category of global variables.
 
 Every module executes inside a `moduleContext`, which is an ordinary execution-context object. Bindings created at the top level of a module are local slots of that module context.
 
@@ -396,7 +406,7 @@ lookupOrigin = parent(methodHome)
 
 ## 8.1 Evaluation Order
 
-Protia evaluates strict subexpressions from left to right. The receiver or assignment target is evaluated before arguments or the right-hand side, and arguments are evaluated left to right. Parent expressions are evaluated before object bodies. Standard binary operators evaluate their left operand before their right operand.
+The language evaluates strict subexpressions from left to right. The receiver or assignment target is evaluated before arguments or the right-hand side, and arguments are evaluated left to right. Parent expressions are evaluated before object bodies. Standard binary operators evaluate their left operand before their right operand.
 
 ```js
 getObject().x = makeValue()
@@ -449,7 +459,7 @@ works because the context containing `n` remains alive while a closure still ref
 
 ## 10. Closures and Methods
 
-Protia has one executable value kind in the core language: **Closure**. There is no separate `Method` value type.
+The language has one executable value kind in the core language: **Closure**. There is no separate `Method` value type.
 
 A closure installed as an object slot acts as a method when it is reached through a message send. "Method" therefore describes an invocation role, not a distinct kind of object.
 
@@ -488,7 +498,7 @@ f()
 
 ## 11. Extracted Methods
 
-Reading a closure-valued slot does not execute it. It reads the executable value. When that value is obtained through receiver lookup, Protia preserves the receiver and lookup origin as binding metadata so that a later plain call has the same receiver semantics as the original method reference.
+Reading a closure-valued slot does not execute it. It reads the executable value. When that value is obtained through receiver lookup, The language preserves the receiver and lookup origin as binding metadata so that a later plain call has the same receiver semantics as the original method reference.
 
 This does not create a distinct `Method` object type; the resulting value is still a closure semantically, with receiver binding metadata.
 
@@ -540,7 +550,7 @@ Early return is expressed using:
 ^value
 ```
 
-Protia follows the Smalltalk/Squeak **home activation** model for non-local return.
+The language follows the Smalltalk/Squeak **home activation** model for non-local return.
 
 A top-level function or method invocation establishes a return home. Closures created lexically during that invocation capture that same home rather than creating a new one merely because they are called.
 
@@ -844,6 +854,46 @@ Ordinary mutable objects, closures, arrays and other identity-bearing objects re
 
 Identity is never defined by comparing hash codes. A runtime may derive or cache hashes from identity where appropriate, but hash collisions cannot make distinct identity-bearing objects identical.
 
+## 21.1 Custom Symbolic Binary Operators
+
+User-defined symbolic binary operators are permitted as ordinary message selectors.
+
+A custom operator expression:
+
+```js
+a @ b
+```
+
+lowers to an ordinary receiver-based send of the symbolic selector to `a`, with `b` as its argument.
+
+All custom binary operators have the same precedence relative to one another and associate left-to-right:
+
+```js
+a @ b |> c
+```
+
+means:
+
+```js
+(a @ b) |> c
+```
+
+Core v0.1 deliberately defines no implicit precedence relationship between custom binary operators and the standard operator groups. Mixing them without explicit grouping is therefore invalid:
+
+```js
+a + b @ c      // invalid
+a @ b * c      // invalid
+```
+
+Parentheses make the intended grouping explicit:
+
+```js
+(a + b) @ c
+a @ (b * c)
+```
+
+Modules, imports, declarations, or runtime mutation cannot change parser precedence. The exact lexical set of characters permitted in custom symbolic selectors remains to be finalized separately.
+
 ## 22. Open Objects
 
 Objects are initially open and mutable.
@@ -1079,6 +1129,8 @@ finally
 ```text
 Everything is an object.
 
+The language is dynamically typed.
+
 There are no classes.
 
 Object is the unique root object and has no delegation parent.
@@ -1286,7 +1338,9 @@ The selector names `at` and `atPut` are part of the Core v0.1 indexed-access pro
 
 ## Invocation Arguments, Defaults, Rest, and Spread
 
-Every invocation exposes the arguments supplied by the caller as an ordinary immutable collection named `args`.
+Every invocation exposes the arguments supplied by the caller as an ordinary immutable collection through the reserved intrinsic `args`.
+
+`args` is not an ordinary writable identifier and cannot be shadowed by a parameter or local slot.
 
 `args` contains exactly the explicit argument expressions from the call site, after evaluation and in source order. It does not contain the receiver and does not contain the caller activation.
 
@@ -1434,7 +1488,9 @@ Point {
 
 directly creates an object whose parent is `Point` and evaluates the object body as slot definitions. It does not implicitly send `init`.
 
-Core v0.1 does not define a combined `Point(args) { ... }` form.
+Core v0.1 does not define a combined object-construction form in which `Point(args) { ... }` means "construct and then evaluate this object body".
+
+When the token sequence `Point(args) { ... }` is otherwise valid under trailing-closure syntax, the braces denote a trailing closure passed to the invocation. They do not become an object-construction body.
 
 ## Contextual Meaning of `...`
 

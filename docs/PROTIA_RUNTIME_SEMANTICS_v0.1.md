@@ -1,11 +1,11 @@
-# Protia Runtime Semantics v0.1
+# Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 23  
+Document revision: 24  
 Status: Draft  
 Last updated: 2026-08-31
 
-This document defines executable-style pseudocode for the core runtime operations of Protia.
+This document defines executable-style pseudocode for the core runtime operations of the language.
 
 It complements:
 
@@ -30,6 +30,7 @@ Activation
     context
     lexicalParent
     receiver       // this
+    arguments      // caller-supplied positional arguments
     methodHome
     returnHome     // target of ^, optional outside callable execution
     ownsReturnHome // true only for the invocation that established returnHome
@@ -61,7 +62,7 @@ Future
 
 These fields are conceptual. An implementation may represent them differently.
 
-`Object` is the unique root prototype. It has no delegation parent. Every other Protia object has exactly one immutable delegation parent, so every delegation chain terminates at `Object`. The absence of a parent on `Object` is structural; it is not represented by `null` or by any other Protia object. Reflective structural operations such as `removeSlot(name)`, `close()`, and `freeze()` are ordinary messages provided through `Object`, with runtime primitives implementing their structural effects.
+`Object` is the unique root prototype. It has no delegation parent. Every other the language object has exactly one immutable delegation parent, so every delegation chain terminates at `Object`. The absence of a parent on `Object` is structural; it is not represented by `null` or by any other the language object. Reflective structural operations such as `removeSlot(name)`, `close()`, and `freeze()` are ordinary messages provided through `Object`, with runtime primitives implementing their structural effects.
 
 ---
 
@@ -233,7 +234,7 @@ produces a bound callable value if `speak` is a method closure.
 
 # 7. Method Binding
 
-There is no distinct runtime-language `Method` value category. The core executable value is `Closure`. A member read never executes a closure. If member lookup yields a closure, the runtime may represent the receiver binding as a lightweight `BoundClosure` wrapper/view, but this is binding metadata rather than a separate method object in Protia semantics.
+There is no distinct runtime-language `Method` value category. The core executable value is `Closure`. A member read never executes a closure. If member lookup yields a closure, the runtime may represent the receiver binding as a lightweight `BoundClosure` wrapper/view, but this is binding metadata rather than a separate method object in the language semantics.
 
 ```text
 function bindIfMethod(value, receiver, methodHome):
@@ -397,7 +398,7 @@ function assignName(activation, name, value):
 
 # 11. Message Send
 
-A method send must preserve both the original receiver and the object where the method was found.
+A receiver-aware message send preserves both the original receiver and the object where the slot was found.
 
 For:
 
@@ -426,30 +427,35 @@ function send(receiver, message, arguments, lookupStart = receiver):
         start = lookupStart
     )
 
-    callable = result.value
+    value = result.value
 
-    if not isCallable(callable):
-        signal NotCallable(
-            value = callable,
-            message = message
+    if isClosure(value):
+        return invokeClosureAsMethod(
+            closure = value,
+            receiver = receiver,
+            methodHome = result.home,
+            arguments = arguments
         )
 
-    return invokeMethod(
-        callable = callable,
-        receiver = receiver,
-        methodHome = result.home,
+    return invoke(
+        receiver = value,
         arguments = arguments
     )
 ```
 
+Closure-valued slots receive method semantics because `this` and `methodHome` must describe the receiver-aware send. Other invokable values use their own invocation protocol.
+
 ---
 
-# 12. Method Invocation
+# 12. Closure Method Invocation
 
 ```text
-function invokeMethod(callable, receiver, methodHome, arguments):
-    closure = unwrapClosure(callable)
-
+function invokeClosureAsMethod(
+    closure,
+    receiver,
+    methodHome,
+    arguments
+):
     activation = createActivation(
         closure = closure,
         arguments = arguments,
@@ -461,28 +467,20 @@ function invokeMethod(callable, receiver, methodHome, arguments):
     return executeActivation(activation)
 ```
 
-The important rule is:
-
-```text
-receiver != methodHome
-```
-
-in general.
-
 For:
 
 ```text
 rex → dog → animal
 ```
 
-if `rex.speak()` finds `speak` in `animal`:
+if `rex.speak()` finds closure `speak` in `animal`:
 
 ```text
 receiver   = rex
 methodHome = animal
 ```
 
-Inside the method:
+and inside the method:
 
 ```text
 this === rex
@@ -490,46 +488,53 @@ this === rex
 
 ---
 
-# 13. Plain Closure Call
+# 13. Polymorphic Invocation
 
-A direct call such as:
+A plain call such as:
 
 ```js
 f(a, b)
 ```
 
-does not perform member lookup.
+does not perform member lookup on the source-level identifier. It evaluates the call receiver and invokes that value.
 
 ```text
-function call(callable, arguments):
-    if not isCallable(callable):
-        signal NotCallable(callable)
-
-    if isBoundClosure(callable):
-        return invokeMethod(
-            callable = callable.closure,
-            receiver = callable.boundReceiver,
-            methodHome = callable.boundMethodHome,
+function invoke(receiver, arguments):
+    if isBoundClosure(receiver):
+        return invokeClosureAsMethod(
+            closure = receiver.closure,
+            receiver = receiver.boundReceiver,
+            methodHome = receiver.boundMethodHome,
             arguments = arguments
         )
 
-    closure = unwrapClosure(callable)
+    if isClosure(receiver):
+        activation = createActivation(
+            closure = receiver,
+            arguments = arguments,
+            receiver = receiver.capturedThis,
+            methodHome = receiver.capturedMethodHome,
+            establishReturnHome =
+                (receiver.capturedReturnHome == null)
+        )
 
-    activation = createActivation(
-        closure = closure,
-        arguments = arguments,
-        receiver = closure.capturedThis,
-        methodHome = closure.capturedMethodHome,
-        establishReturnHome =
-            (closure.capturedReturnHome == null)
+        return executeActivation(activation)
+
+    callBehavior = lookupInvocationBehavior(receiver)
+
+    if callBehavior == NOT_FOUND:
+        signal NotCallable(receiver)
+
+    return executeInvocationBehavior(
+        callBehavior = callBehavior,
+        invocationReceiver = receiver,
+        arguments = arguments
     )
-
-    return executeActivation(activation)
 ```
 
-This preserves the receiver of extracted closures/method references. The plain call does not infer a receiver from the slot name; it uses the binding metadata created when the closure-valued member was read.
+`lookupInvocationBehavior` is the runtime view of the language's ordinary invocation/call protocol. Standard `Closure` behavior executes code; ordinary prototypes inherit default construction behavior from `Object`; user objects may specialize the protocol.
 
----
+The implementation may specialize these cases directly rather than literally allocating or sending an intermediate `call` message, provided observable semantics are unchanged.
 
 # 14. Closure Creation
 
@@ -587,11 +592,11 @@ For example, if `speak` is declared on `animal` and invoked as `dog.speak()`, a 
 
 ---
 
-# 15. Activation Creation
+# 15. Activation Creation and Argument Binding
 
-Protia uses a Smalltalk/Squeak-style **home activation** for `^`.
+The language uses a Smalltalk/Squeak-style **home activation** for `^`.
 
-A method invocation always establishes a fresh return home. A module-level function closure has no captured return home, so calling it also establishes a fresh home. A closure created inside an already active function or method captures that existing home; an ordinary call of that nested closure preserves it.
+Every invocation records the caller-supplied positional arguments before default substitution. The reserved intrinsic `args` exposes an immutable view of that original vector.
 
 ```text
 function createActivation(
@@ -601,49 +606,79 @@ function createActivation(
     methodHome,
     establishReturnHome
 ):
-    if length(arguments) != length(closure.parameters):
-        signal ArgumentCountError()
-
     context = new Object(
         parent = standardContextPrototype
     )
 
-    for each (parameter, argument):
-        createSlot(
-            target = context,
-            name = parameter,
-            value = argument
-        )
+    activation = Activation(
+        context = context,
+        lexicalParent = closure.lexicalContext,
+        receiver = receiver,
+        arguments = immutableArgumentCollection(arguments),
+        methodHome = methodHome
+    )
+
+    bindParametersLeftToRight(
+        activation = activation,
+        parameters = closure.parameters,
+        arguments = arguments
+    )
 
     if establishReturnHome:
-        returnHome = new ReturnTarget()
-        ownsReturnHome = true
+        activation.returnHome = new ReturnTarget()
+        activation.ownsReturnHome = true
     else:
-        returnHome = closure.capturedReturnHome
-        ownsReturnHome = false
+        activation.returnHome = closure.capturedReturnHome
+        activation.ownsReturnHome = false
 
-    return Activation(
-        context = context,
-
-        lexicalParent =
-            closure.lexicalContext,
-
-        receiver = receiver,
-
-        methodHome = methodHome,
-
-        returnHome = returnHome,
-        ownsReturnHome = ownsReturnHome
-    )
+    return activation
 ```
 
-The distinction between owning and merely sharing a return home is essential. A nested block must allow `^` to unwind through its own activation rather than catching the return itself.
+Parameter binding is conceptually:
 
-A method invocation dynamically supplies `receiver` and `methodHome` and establishes a new return home, even if the closure object was originally created inside another activation. This keeps installed method behavior independent while preserving Smalltalk-style non-local return for ordinary nested blocks.
+```text
+function bindParametersLeftToRight(
+    activation,
+    parameters,
+    arguments
+):
+    argumentIndex = 0
 
-An ordinary nested closure invocation uses the captured receiver/method-home metadata and the captured return home.
+    for parameter in parameters from left to right:
+        if parameter is rest:
+            restValues = arguments[argumentIndex .. end]
+            createSlot(
+                activation.context,
+                parameter.name,
+                immutableArgumentCollection(restValues)
+            )
+            argumentIndex = length(arguments)
+            continue
 
----
+        if argumentIndex < length(arguments):
+            value = arguments[argumentIndex]
+            argumentIndex += 1
+        else if parameter has defaultExpression:
+            value = evaluate(
+                parameter.defaultExpression,
+                activation
+            )
+        else:
+            signal ArgumentCountError()
+
+        createSlot(
+            activation.context,
+            parameter.name,
+            value
+        )
+
+    if argumentIndex < length(arguments):
+        signal ArgumentCountError()
+```
+
+Default expressions therefore observe earlier parameter bindings and the invocation context. They do not alter `args`.
+
+A method invocation dynamically supplies `receiver` and `methodHome` and establishes a fresh return home. A module-level function closure with no captured return home likewise establishes one. A nested closure preserves its captured home.
 
 # 16. `super`
 
@@ -777,7 +812,7 @@ The runtime must not silently reinterpret the operation as a local return from `
 function createObject(parent, body, activation):
     // Source-level object creation always supplies exactly one parent.
     // A bare object literal supplies Object. Only Object itself has no parent.
-    require parent is a Protia object
+    require parent is a the language object
 
     object = new Object(
         parent = parent,
@@ -1126,7 +1161,7 @@ function executeAsFuture(closure, parentActivation):
         owner = parentActivation,
         body = () => {
             try:
-                result = call(
+                result = invoke(
                     closure,
                     []
                 )
@@ -1193,7 +1228,7 @@ function failFuture(future, error):
 
 There is no separate promise-rejection type.
 
-The stored value is an ordinary Protia error object.
+The stored value is an ordinary the language error object.
 
 ---
 
@@ -1271,7 +1306,7 @@ function futureThen(source, transformClosure):
             return
 
         try:
-            transformed = call(
+            transformed = invoke(
                 transformClosure,
                 [result.value]
             )
@@ -1411,9 +1446,9 @@ function evaluate(node, activation):
                 body
             )
 
-        Call(callableExpr, arguments):
-            callable = evaluate(
-                callableExpr,
+        Call(receiverExpr, arguments):
+            receiver = evaluate(
+                receiverExpr,
                 activation
             )
 
@@ -1422,8 +1457,8 @@ function evaluate(node, activation):
                 activation
             )
 
-            return call(
-                callable,
+            return invoke(
+                receiver,
                 values
             )
 
@@ -1493,7 +1528,7 @@ garbage collection
 
 These primitives do not alter the object model.
 
-They are implementation services exposed through ordinary Protia objects and messages whenever practical.
+They are implementation services exposed through ordinary the language objects and messages whenever practical.
 
 ---
 
@@ -1517,9 +1552,9 @@ The runtime should grow only when the language requires behavior that cannot be 
 
 # Module Contexts and Top-Level Bindings
 
-Protia has no special global-variable category.
+the language has no special global-variable category.
 
-Every module executes inside a `moduleContext`, which is an ordinary Protia object. A binding created at the top level of a module is therefore simply a local slot of that module's execution context.
+Every module executes inside a `moduleContext`, which is an ordinary the language object. A binding created at the top level of a module is therefore simply a local slot of that module's execution context.
 
 For example:
 
@@ -1611,7 +1646,7 @@ function executeModule(module, preludeContext):
     )
 ```
 
-The exact module loading, import, export, initialization, and cyclic-dependency semantics remain to be specified.
+Module loading, canonical identity, initialization states, cycle handling, and failure caching are defined later in this document; host-specific resolution and package policy remain outside Core v0.1.
 
 Core invariant:
 
@@ -1623,6 +1658,14 @@ Top-level bindings are slots of a module execution context.
 Modules do not implicitly share mutable global state.
 ```
 
+
+## Dynamic Typing Runtime Requirement
+
+Runtime dispatch is dynamic. Slots and parameters carry objects, not mandatory declared static types.
+
+An implementation may specialize nodes based on observed receiver shapes, prototypes, numeric representations, or inferred types, but deoptimization must preserve the same semantics when those assumptions stop holding.
+
+No runtime overload-resolution mechanism based on declared argument types is part of Core v0.1.
 
 ## Conditional Message Semantics
 
@@ -1865,7 +1908,7 @@ The runtime may optimize argument vectors, rest collections, and `args` views, b
 No dispatch by argument type is implied. These mechanisms support dynamic arity, forwarding, and user-defined helper protocols without introducing method-overload resolution.
 
 
-## Polymorphic Call Protocol and Default Construction
+## Polymorphic Call Protocol and Default Construction (Normative Detail)
 
 Invocation is a protocol operation on the evaluated receiver.
 

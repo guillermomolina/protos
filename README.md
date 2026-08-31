@@ -376,22 +376,21 @@ once the language receives its final name.
 
 ## Work in progress
 
-Version 0.1 is still a draft. Important areas are deliberately being
-resolved before implementation, including:
+Version 0.1 remains a draft, but the major object-model, invocation, collection-access, resource-lifetime, numeric, text, map, module, and unwinding decisions are now specified.
 
--   composition and trait conflict semantics
--   collection and array syntax, including possible `[]` sugar for
-    indexed access/update
--   constructors and destructors / object lifecycle
--   module import/export semantics
--   error handlers and conditions
--   futures, cancellation, and structured concurrency
--   numeric and string literal details
--   reflection and standard-library protocols
+The principal remaining semantic questions include:
 
-The goal is to stabilize the semantic model first, then implement it
-without having implementation details silently define the language.
+- exact numeric identity across `Integer`, `Float`, fixed-width integer values, NaN, and signed zero;
+- the Boolean-result requirement for `Map` key equality;
+- duplicate parameter-name validation;
+- the exact lexical character set for custom symbolic operators;
+- Future cancellation, error-context propagation, and concurrency memory semantics;
+- the public protocol or convenience syntax for dynamic handler installation;
+- malformed-text decoding policy and the final standard encoding catalogue;
+- reflection and standard-library protocol details;
+- the final language name and corresponding filename cleanup.
 
+The specification documents are periodically consolidated so that the canonical grammar and runtime pseudocode match the decisions already closed.
 
 ## Recent Design Decisions
 

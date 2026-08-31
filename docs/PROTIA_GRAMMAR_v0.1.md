@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 23  
+Document revision: 24  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -44,6 +44,7 @@ Reserved intrinsic identifiers:
 ```text
 this
 context
+args
 null
 true
 false
@@ -330,94 +331,99 @@ library.models.animal {
 
 ## 16. Closures
 
+A closure uses a closure body. A closure body contains ordinary expressions; object-composition items are not valid merely because braces are used.
+
 ```ebnf
 closure-expression =
-    parameter-list, "=>", object-body;
+    parameter-list, "=>", closure-body ;
+
+closure-body =
+    "{", expression-sequence, "}" ;
 
 parameter-list =
-    "(", [ parameters ], ")";
+    "(", [ parameter-items ], ")" ;
 
-parameters =
-    identifier,
-    { argument-separator, identifier };
+parameter-items =
+      rest-parameter
+    | parameter, { argument-separator, parameter },
+      [ argument-separator, rest-parameter ] ;
 
-argument-separator =
-      ","
-    | newline;
+parameter =
+    identifier, [ "=", expression ] ;
+
+rest-parameter =
+    "...", identifier ;
 ```
 
-Examples:
-
-```js
-() => {
-    42
-}
-
-(x) => {
-    x * x
-}
-
-(a, b) => {
-    a + b
-}
-```
+A rest parameter, when present, is final. Duplicate parameter names are not settled by this grammar revision and remain a separate validation question.
 
 ## 17. Calls and Arguments
 
 ```ebnf
 argument-list =
-    "(", [ arguments ], ")";
+    "(", [ argument-items ], ")" ;
 
-arguments =
-    expression,
-    { argument-separator, expression };
+argument-items =
+    argument, { argument-separator, argument } ;
+
+argument =
+      expression
+    | "...", expression ;
+
+argument-separator =
+      ","
+    | newline ;
+```
+
+Argument expressions, including spread operands, are evaluated left-to-right.
+
+The reserved intrinsic `args` is not call syntax. It is supplied by invocation runtime semantics and is not an ordinary writable identifier.
+
+## 18. Member Access, Calls, Indexing, and Postfix Expressions
+
+Postfix operations have high precedence and associate left-to-right.
+
+```ebnf
+postfix-expression =
+    primary-expression,
+    { postfix-operation } ;
+
+postfix-operation =
+      member-suffix
+    | call-suffix
+    | index-suffix ;
+
+member-suffix =
+    ".", identifier ;
+
+call-suffix =
+    argument-list, [ trailing-closure ] ;
+
+index-suffix =
+    "[", expression, "]" ;
 ```
 
 Examples:
 
 ```js
-foo()
-foo(1)
-foo(1, 2)
-
-foo(
-    1
-    2
-)
-```
-
-## 18. Member Access and Postfix Expressions
-
-Postfix operations have high precedence and associate left-to-right.
-
-Conceptually:
-
-```ebnf
-postfix-expression =
-    primary-expression,
-    { postfix-operation };
-
-postfix-operation =
-      ".", identifier
-    | argument-list;
-```
-
-This supports:
-
-```js
 dog.speak()
 foo().bar().baz
+matrix[row][column]
+objects[index].name
+factory()[index]
 ```
 
-Member access associates left-to-right.
+Bracket syntax lowers to the ordinary `at` / `atPut` protocol.
+
+Receiver-aware semantic lowering still distinguishes a member invocation such as `dog.speak()` from a plain invocation such as `f()`, so that `this` and `methodHome` are preserved correctly.
 
 ## 19. Trailing Closures
 
-A trailing closure is permitted only after a call.
+A trailing closure is permitted only as part of a call suffix.
 
 ```ebnf
 trailing-closure =
-    [ parameter-list ], object-body;
+    [ parameter-list ], closure-body ;
 ```
 
 Examples:
@@ -425,10 +431,6 @@ Examples:
 ```js
 items.each(item) {
     print(item)
-}
-
-future.then(value) {
-    transform(value)
 }
 
 condition.ifTrue() {
@@ -454,38 +456,26 @@ items.each(
 )
 ```
 
-and:
-
-```js
-condition.ifTrue() {
-    foo()
-}
-```
-
-becomes:
-
-```js
-condition.ifTrue(
-    () => {
-        foo()
-    }
-)
-```
-
-Trailing closures introduce no new runtime concept.
+A trailing closure introduces no new runtime concept.
 
 ## 20. Object Construction vs Trailing Closure
 
-The following distinction is intentional:
+The distinction is intentional:
 
 ```js
 foo { ... }       // object whose parent is foo
-foo() { ... }     // call foo with a trailing closure
+foo() { ... }     // invoke foo with a trailing closure
 ```
 
-A trailing closure therefore requires a preceding call.
+`foo() { ... }` is not a combined object-construction form. It desugars as a call whose final argument is a closure.
 
-This removes ambiguity between object construction and block passing.
+Likewise, if:
+
+```js
+Point(args) { ... }
+```
+
+is valid under trailing-closure syntax, it means invocation of `Point` with a trailing closure. It never means "construct Point(args) and then evaluate this object body".
 
 ## 21. Operators
 
@@ -549,6 +539,38 @@ Binary operators associate left-to-right unless otherwise specified.
 `:` and `=` are right-associative.
 
 Both slot creation and assignment evaluate to the value written.
+
+## 21.1 Custom Binary Operators
+
+Custom symbolic binary operators are ordinary message-send syntax.
+
+All custom binary operators share one precedence level with each other and associate left-to-right.
+
+```js
+a @ b |> c
+```
+
+parses as:
+
+```js
+(a @ b) |> c
+```
+
+There is intentionally no implicit precedence relationship between custom binary operators and standard binary operator groups. Therefore mixed unparenthesized forms such as these are syntax errors:
+
+```js
+a + b @ c
+a @ b * c
+```
+
+Explicit grouping is required:
+
+```js
+(a + b) @ c
+a @ (b * c)
+```
+
+Parser precedence cannot be changed at runtime or by modules/imports. The exact lexical character set accepted for custom symbolic operator tokens remains unresolved.
 
 ## 22. Equality Lowering
 
@@ -632,9 +654,23 @@ a.or(() => b)
 
 ## 24. Composition Syntax
 
+Composition is valid only as an object-body item.
+
 ```ebnf
-composition-expression =
-    "...", expression;
+object-body =
+    "{", object-body-sequence, "}" ;
+
+object-body-sequence =
+    [ object-body-item,
+      { separator, object-body-item },
+      [ separator ] ] ;
+
+object-body-item =
+      composition-item
+    | expression ;
+
+composition-item =
+    "...", expression ;
 ```
 
 Example:
@@ -648,22 +684,11 @@ duck: animal {
 }
 ```
 
-The expression following `...` evaluates to an ordinary object. There is no separate trait declaration or trait value category in the grammar.
+The expression following `...` evaluates to an ordinary object. There is no separate trait declaration or trait value category.
 
-Composition occurs as part of object construction and does not modify the object's delegation chain. It contributes the source object's local slot bindings to the object under construction. The values stored in those slots are not cloned.
+`...` is not a standalone expression operator. Its object-composition meaning exists only while parsing an object body.
 
-Composition order has no precedence semantics. If multiple composed sources contribute the same slot name, the conflict is an error unless the receiving object explicitly declares that slot locally in its own body. The local declaration resolves the conflict regardless of whether it appears textually before or after the relevant composition expressions.
-
-The rule applies uniformly to all slots; the grammar does not distinguish state slots from closure-valued method-like slots.
-
-No dedicated aliasing or exclusion grammar is defined. Such transformations are expressed as ordinary message sends whose resulting objects are then composed:
-
-```js
-...source.without("slotName")
-...source.alias("slotName", "aliasName")
-```
-
-The meanings and error conditions of `without` and `alias` are runtime/object-protocol semantics, not parser rules.
+Composition semantics, including binding copying and conflict resolution, are defined by the language/runtime specification.
 
 ## 25. Uniform Object Bodies
 
@@ -871,7 +896,7 @@ This is required for correct `this` and `super` behavior.
 
 ## 32. Extracted Closure / Method Lowering
 
-Protia has no separate `Method` value type. A closure stored in a slot remains a `Closure`; method behavior arises from receiver-aware lookup and invocation.
+The language has no separate `Method` value type. A closure stored in a slot remains a `Closure`; method behavior arises from receiver-aware lookup and invocation.
 
 ```js
 f: dog.speak
@@ -1038,6 +1063,8 @@ Block comments do not nest.
 
 ## 39. Compact EBNF
 
+The compact grammar below incorporates the syntax decisions made through revision 24. Semantic validation still applies after parsing.
+
 ```ebnf
 program =
     expression-sequence ;
@@ -1068,10 +1095,20 @@ non-local-return =
 
 assignable =
       identifier
-    | member-expression ;
+    | assignable-postfix-expression ;
+
+assignable-postfix-expression =
+    primary-expression,
+    { postfix-operation },
+    assignable-postfix-operation ;
+
+assignable-postfix-operation =
+      ".", identifier
+    | "[", expression, "]" ;
 
 binary-expression =
-    logical-or-expression ;
+      logical-or-expression
+    | custom-binary-expression ;
 
 logical-or-expression =
     logical-and-expression,
@@ -1118,6 +1155,12 @@ multiplicative-operator =
     | "/"
     | "%" ;
 
+custom-binary-expression =
+    unary-expression,
+    custom-binary-operator,
+    unary-expression,
+    { custom-binary-operator, unary-expression } ;
+
 unary-expression =
       unary-operator, unary-expression
     | postfix-expression ;
@@ -1133,7 +1176,11 @@ postfix-expression =
 
 postfix-operation =
       ".", identifier
-    | argument-list ;
+    | call-suffix
+    | "[", expression, "]" ;
+
+call-suffix =
+    argument-list, [ trailing-closure ] ;
 
 primary-expression =
       literal
@@ -1147,9 +1194,13 @@ primary-expression =
 intrinsic-reference =
       "this"
     | "context"
+    | "args"
     | "null"
     | "true"
     | "false" ;
+
+super-message-send =
+    "super", ".", identifier, argument-list ;
 
 parenthesized-expression =
     "(", expression, ")" ;
@@ -1159,7 +1210,19 @@ object-expression =
     | parent-expression, object-body ;
 
 object-body =
-    "{", expression-sequence, "}" ;
+    "{", object-body-sequence, "}" ;
+
+object-body-sequence =
+    [ object-body-item,
+      { separator, object-body-item },
+      [ separator ] ] ;
+
+object-body-item =
+      composition-item
+    | expression ;
+
+composition-item =
+    "...", expression ;
 
 parent-expression =
       identifier
@@ -1167,32 +1230,47 @@ parent-expression =
     | member-expression
     | parenthesized-expression ;
 
+member-expression =
+    primary-expression,
+    { postfix-operation },
+    ".", identifier ;
+
 closure-expression =
-    parameter-list, "=>", object-body ;
+    parameter-list, "=>", closure-body ;
+
+closure-body =
+    "{", expression-sequence, "}" ;
 
 parameter-list =
-    "(", [ parameters ], ")" ;
+    "(", [ parameter-items ], ")" ;
 
-parameters =
-    identifier,
-    { argument-separator, identifier } ;
+parameter-items =
+      rest-parameter
+    | parameter, { argument-separator, parameter },
+      [ argument-separator, rest-parameter ] ;
+
+parameter =
+    identifier, [ "=", expression ] ;
+
+rest-parameter =
+    "...", identifier ;
 
 argument-list =
-    "(", [ arguments ], ")" ;
+    "(", [ argument-items ], ")" ;
 
-arguments =
-    expression,
-    { argument-separator, expression } ;
+argument-items =
+    argument, { argument-separator, argument } ;
+
+argument =
+      expression
+    | "...", expression ;
 
 argument-separator =
       ","
     | newline ;
 
 trailing-closure =
-    [ parameter-list ], object-body ;
-
-composition-expression =
-    "...", expression ;
+    [ parameter-list ], closure-body ;
 
 literal =
       number-literal
@@ -1202,7 +1280,11 @@ literal =
     | "null" ;
 ```
 
-The parser handles trailing closures contextually: `{ ... }` following a call is a trailing closure; `{ ... }` following a parent expression without a call is object construction.
+A parser may implement the expression portion using recursive descent plus Pratt parsing. Custom symbolic operators form their own precedence domain: mixing them with standard binary operators requires parentheses.
+
+Indexed assignment is recognized because an assignable postfix expression may end in `[ expression ]`; it lowers to `atPut` rather than a slot `Assign`.
+
+Composition is intentionally connected only through `object-body-item`, preserving the contextual meaning of `...`.
 
 ## 40. Canonical AST
 
@@ -1225,7 +1307,7 @@ Closure(parameters, body)
 
 Send(receiver, message, arguments)
 
-Call(closure, arguments)
+Call(receiver, arguments)
 
 Sequence(expressions)
 
@@ -1263,7 +1345,7 @@ lowers to:
 
 ```text
 Call(
-    closure = Lookup("f"),
+    receiver = Lookup("f"),
     arguments = [
         Literal(1),
         Literal(2)
@@ -1272,6 +1354,12 @@ Call(
 ```
 
 This distinction preserves the language's receiver semantics without runtime hacks.
+
+## 40.1 Dynamic Typing Grammar Note
+
+Core Grammar v0.1 defines no mandatory type-annotation syntax for slots, parameters, return values, or expressions.
+
+Dynamic typing is a language semantic property rather than a parser feature. Tooling may infer types without changing this grammar or runtime behavior.
 
 ## 41. Syntactic Core
 
@@ -1391,21 +1479,7 @@ The receiver expression and index expression are each evaluated exactly once.
 
 Closure parameter lists may contain ordinary parameters, parameters with defaults, and at most one trailing rest parameter.
 
-Conceptually:
-
-```ebnf
-parameter-list =
-    [ parameter, { ",", parameter }, [ ",", rest-parameter ] ]
-  | [ rest-parameter ] ;
-
-parameter =
-    identifier, [ "=", expression ] ;
-
-rest-parameter =
-    "...", identifier ;
-```
-
-A rest parameter must be the final parameter.
+The normative productions are defined in Sections 16-17 and in the Compact EBNF. A rest parameter must be the final parameter. Defaults, rest capture, and spread are part of the canonical grammar rather than post-parse extensions.
 
 Call argument lists may contain ordinary arguments and spread arguments:
 
@@ -1423,19 +1497,14 @@ f(a, ...values, z)
 
 argument expressions are evaluated left-to-right. A spread argument contributes the elements of its evaluated collection in iteration/index order defined by the spread protocol.
 
-The intrinsic `args` is not special call syntax; it is an invocation-context binding exposed by runtime semantics.
+The reserved intrinsic `args` is not special call syntax; it is an invocation-context binding exposed by runtime semantics and is not an ordinary writable identifier.
 
 Default expressions are evaluated when an argument is absent, in parameter-binding order, in the invocation's execution context.
 
 
 ## Polymorphic Invocation Syntax
 
-Call syntax is not restricted grammatically to closures:
-
-```ebnf
-call-expression =
-    postfix-expression, "(", [ argument-list ], ")" ;
-```
+Call syntax is not restricted grammatically to closures. Invocation is represented canonically by the `call-suffix` postfix production defined above.
 
 Any evaluated receiver expression may syntactically appear in call position:
 
@@ -1455,7 +1524,7 @@ Parent {
 }
 ```
 
-Core v0.1 does not define:
+Core v0.1 does not interpret:
 
 ```js
 Parent(args) {
@@ -1463,7 +1532,7 @@ Parent(args) {
 }
 ```
 
-as a combined construction form.
+as a combined construction form. When accepted by the trailing-closure grammar, the braces are a trailing closure argument to `Parent(args)`.
 
 ## Contextual Ellipsis
 
