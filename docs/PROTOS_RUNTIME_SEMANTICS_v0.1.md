@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 38  
+Document revision: 39  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -9,8 +9,8 @@ This document defines executable-style pseudocode for the core runtime operation
 
 It complements:
 
-- `LANGUAGE_SPEC.md`
-- `GRAMMAR.md`
+- `PROTOS_LANGUAGE_SPEC_v0.1.md`
+- `PROTOS_GRAMMAR_v0.1.md`
 
 The goal is not to mandate an implementation strategy, but to define observable behavior precisely enough that different interpreters or VMs can behave consistently.
 
@@ -1054,9 +1054,9 @@ identical(newObject(), newObject())     == false
 
 `Number` and `String` are immutable value objects. String operations never mutate an existing String in place; a changed textual value is another String value. A runtime may intern, share, inline, box, unbox, or otherwise optimize these values without changing `===`.
 
-String-literal evaluation produces ordinary `String` values. Single-quoted and double-quoted literals are equivalent. There is no separate character type; `'a'` and `"a"` both denote a `String` containing the single-character text `a`. Both forms accept the standard Protos escape sequences. Triple-double-quoted strings are multiline `String` values. Triple-single-quoted strings are invalid syntax. String interpolation is not part of Core v0.1, so `${...}` inside a literal is ordinary text.
+String-literal evaluation produces ordinary `String` values. Single-quoted and double-quoted literals are equivalent. There is no separate character type; `'a'` and `"a"` both denote a `String` containing the single-character text `a`. Single-quoted, double-quoted, and triple-double-quoted strings use the same escape rules. The supported escapes are exactly `\\`, `\'`, `\"`, `\n`, `\r`, `\t`, `\b`, `\f`, and `\u{HEX}`. `\u{HEX}` requires 1 to 6 hexadecimal digits and must denote a valid Unicode scalar value. Invalid or incomplete escape sequences are syntax errors. Octal escapes and `\xNN` escapes are not supported. Triple-double-quoted strings are multiline `String` values, not raw strings. Triple-single-quoted strings are invalid syntax. String interpolation is not part of Core v0.1, so `${...}` inside a literal is ordinary text.
 
-Multiline String indentation normalization is intentionally not specified in Core v0.1 yet. This remains an open semantic question for a future revision; implementations must not silently impose a normalization rule in the meantime.
+The only remaining open String-literal question is multiline indentation normalization. Core v0.1 intentionally leaves that behavior unspecified until a future revision; implementations must not silently impose a normalization rule in the meantime.
 
 `true`, `false`, and `null` are canonical singleton values.
 

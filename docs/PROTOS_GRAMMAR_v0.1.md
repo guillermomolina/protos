@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 38  
+Document revision: 39  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -14,7 +14,7 @@ Prelude bindings introduce no additional grammar. The shared standard prelude is
 
 This document defines the lexical grammar, expression grammar, precedence rules, and mandatory syntactic desugarings of the language.
 
-It does not redefine the object model or runtime semantics specified in `LANGUAGE_SPEC.md`.
+It does not redefine the object model or runtime semantics specified in `PROTOS_LANGUAGE_SPEC_v0.1.md`.
 
 The grammar is written in EBNF:
 
@@ -68,17 +68,33 @@ string-literal =
     | triple-double-quoted-string ;
 ```
 
-Exact number formats and the standard Protos escape sequence set are defined separately.
+Exact number formats are defined separately from the core string escape set.
 
-Single-quoted and double-quoted strings are equivalent String literals.
+Core v0.1 String escape sequences are exactly:
+
+```text
+\
+\'
+\"
+\n
+\r
+\t
+\b
+\f
+\u{HEX}
+```
+
+`\u{HEX}` requires 1 to 6 hexadecimal digits and must denote a valid Unicode scalar value.
+
+Invalid or incomplete escape sequences are syntax errors. Octal escapes are not supported. `\xNN` escapes are not supported.
+
+Single-quoted, double-quoted, and triple-double-quoted String literals use the same escape rules. Triple-double-quoted strings are multiline String literals, not raw strings. Triple-single-quoted strings are not supported.
 
 Protos has no separate character literal or character type. `'a'` and `"a"` both evaluate to a String containing the single-character text `a`.
 
-Triple-double-quoted strings are multiline String literals. Triple-single-quoted strings are not supported.
-
 String interpolation is not part of Core v0.1. Inside a String, `${...}` has no special meaning and is treated as ordinary literal text.
 
-The multiline-string rule intentionally does not yet define indentation normalization. That behavior remains an open semantic question for a future revision and is left unspecified in Core v0.1.
+The only remaining open String-literal question is multiline indentation normalization. Core v0.1 intentionally leaves that behavior unspecified for now.
 
 ## 4. Whitespace and Newlines
 
@@ -1634,7 +1650,23 @@ Single-quoted and double-quoted forms are equivalent String literals:
 
 A String literal denotes a `String` value, not an encoded byte sequence. Protos has no separate character literal or character type.
 
-Both quote forms support the standard Protos escape sequences. Triple-double-quoted strings are multiline String literals:
+The standard Protos escape sequences are exactly:
+
+```text
+\
+\'
+\"
+\n
+\r
+\t
+\b
+\f
+\u{HEX}
+```
+
+`\u{HEX}` requires 1 to 6 hexadecimal digits and must denote a valid Unicode scalar value. Invalid or incomplete escape sequences are syntax errors. Octal escapes and `\xNN` escapes are not supported.
+
+The same escape rules apply to single-quoted, double-quoted, and triple-double-quoted String literals. Triple-double-quoted strings are multiline String literals, not raw strings:
 
 ```js
 """
@@ -1647,7 +1679,7 @@ Triple-single-quoted strings are not supported.
 
 String interpolation is not supported in Core v0.1. `${...}` is literal text inside a String and carries no special meaning.
 
-The multiline-string form does not yet define indentation normalization. This remains an open semantic question for a later revision, and Core v0.1 intentionally leaves it unspecified for now.
+The only remaining open String-literal question is multiline indentation normalization. Core v0.1 intentionally leaves that behavior unspecified for now.
 
 Character encoding is not determined by the source-level string literal syntax. Conversion to or from encoded bytes is performed explicitly through ordinary protocols such as:
 
