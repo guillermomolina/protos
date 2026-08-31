@@ -421,3 +421,12 @@ without having implementation details silently define the language.
 - Bit operations belong naturally to integer protocols.
 - Endianness belongs to binary encoding/decoding, not to the numeric value itself.
 - Float literals require digits after the decimal point; `2.` is not a valid float literal.
+
+
+## Text and Binary Data
+
+- `String` represents abstract Unicode text.
+- `Bytes` represents raw byte sequences.
+- Character encodings such as UTF-8 or UTF-16 are separate protocol objects/concepts.
+- Encoding and decoding are explicit operations.
+- A String's internal storage format is not part of its language-level semantics.

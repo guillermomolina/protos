@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 20  
+Document revision: 21  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1545,3 +1545,47 @@ UInt32.fromBytes(bytes, LittleEndian)
 or equivalent buffer-oriented protocols.
 
 This follows the general rule that semantic values are distinct from their external binary representation.
+
+
+## Text, Bytes, and Character Encodings
+
+Core v0.1 separates abstract text from its external binary representation.
+
+`String` denotes Unicode text as a semantic value. A `String` is not semantically UTF-8, UTF-16, Latin-1, or any other particular byte encoding, even if an implementation chooses one of those representations internally.
+
+`Bytes` denotes a raw sequence of bytes. Byte values carry no implicit text interpretation.
+
+Character encodings are represented independently through encoding objects or protocols, conceptually including values such as:
+
+```text
+UTF8
+UTF16LE
+UTF16BE
+Latin1
+```
+
+Conversion between text and bytes is explicit:
+
+```js
+bytes.decode(UTF8)
+text.encode(UTF8)
+```
+
+Decoding interprets a byte sequence using the selected encoding and produces a `String`. Encoding converts a `String` into a `Bytes` value using the selected encoding.
+
+Malformed-input handling, replacement policy, strict versus permissive decoding, and the exact standard encoding catalogue remain library/protocol design decisions unless later promoted into Core semantics.
+
+This follows the same general principle used for numeric endianness:
+
+```text
+semantic value ≠ external binary representation
+```
+
+Therefore:
+
+```text
+String ≠ UTF-8 bytes
+UInt32 ≠ little-endian bytes
+```
+
+An implementation may use any internal String representation provided observable language semantics remain unchanged.

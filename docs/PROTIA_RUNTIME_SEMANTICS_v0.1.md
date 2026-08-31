@@ -1,7 +1,7 @@
 # Protia Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 20  
+Document revision: 21  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1962,3 +1962,16 @@ Numeric protocol dispatch remains ordinary receiver-based message lookup. Intege
 Floating-point values may use an IEEE-754-compatible host representation provided observable language semantics are preserved.
 
 Byte order is applied only when encoding or decoding numeric values to or from byte sequences. Endianness is not stored as an intrinsic property of the abstract numeric value.
+
+
+## String and Bytes Runtime Separation
+
+The runtime must preserve the semantic distinction between Unicode text and raw byte sequences.
+
+A `String` represents abstract Unicode text. Its internal storage format is implementation-specific and must not be observable as though it were the String's semantic encoding.
+
+A `Bytes` value represents an ordered sequence of byte values with no implicit character encoding.
+
+Encoding and decoding are explicit operations parameterized by an encoding protocol/object. Implementations may intrinsify common encodings such as UTF-8 while preserving ordinary observable message semantics.
+
+The exact meaning of String indexing and String size is defined separately from byte representation; internal code-unit layout must not determine those operations accidentally.

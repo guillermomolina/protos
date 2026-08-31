@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 20  
+Document revision: 21  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1537,3 +1537,17 @@ This keeps member access lexically unambiguous:
 ```
 
 The parser may accept the final form with parentheses purely for readability; parentheses do not change the numeric semantics.
+
+
+## String and Byte Representation Note
+
+String literal syntax denotes `String` values, not encoded byte sequences.
+
+Character encoding is not determined by the source-level string literal syntax. Conversion to or from encoded bytes is performed explicitly through ordinary protocols such as:
+
+```js
+text.encode(UTF8)
+bytes.decode(UTF8)
+```
+
+Core Grammar v0.1 does not require separate literal forms for UTF-8, UTF-16, or other text encodings.
