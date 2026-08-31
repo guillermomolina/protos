@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 19  
+Document revision: 20  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1507,3 +1507,33 @@ body.ensure(cleanup)
 or through higher-level library protocols built from closures and ordinary sends.
 
 The guaranteed execution of cleanup during scope exit is runtime control-flow semantics, not a parser-level special form.
+
+
+## Numeric Literals
+
+Core v0.1 supports integer literals in decimal form and may support explicit radix forms such as hexadecimal (`0x`), binary (`0b`), and octal (`0o`). Radix syntax affects parsing only; it does not create a distinct numeric kind.
+
+Digit separators using `_` may be accepted within numeric literals and have no semantic effect.
+
+Floating-point literals require digits after the decimal point:
+
+```js
+2.5
+2.0
+```
+
+A trailing decimal point is not a valid floating literal:
+
+```js
+2.    // invalid numeric literal
+```
+
+This keeps member access lexically unambiguous:
+
+```js
+2.floor()
+2.5.floor()
+(2.5).floor()
+```
+
+The parser may accept the final form with parentheses purely for readability; parentheses do not change the numeric semantics.

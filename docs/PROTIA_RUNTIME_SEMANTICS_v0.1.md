@@ -1,7 +1,7 @@
 # Protia Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 19  
+Document revision: 20  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1947,3 +1947,18 @@ A future condition that is resumed without leaving the protected dynamic scope m
 The runtime may represent cleanup registrations as unwind records, dynamic frames, or another implementation-specific structure. The representation is not observable.
 
 No GC finalizer or reachability callback is part of the deterministic resource-lifetime semantics.
+
+
+## Numeric Runtime Semantics
+
+Integer arithmetic is semantically exact and must not expose host-machine overflow. A runtime may specialize common integer operations using native machine widths and promote transparently to arbitrary-precision storage when required.
+
+Such specialization is not observable through identity, equality, message lookup, or arithmetic results.
+
+Fixed-width integer objects have explicit range and width semantics. Ordinary operations that exceed the representable range signal an error rather than silently wrapping. Separate explicitly wrapping protocols may be provided.
+
+Numeric protocol dispatch remains ordinary receiver-based message lookup. Integer-only messages such as bit operations are found through the receiver's delegation chain; there is no static overload resolution.
+
+Floating-point values may use an IEEE-754-compatible host representation provided observable language semantics are preserved.
+
+Byte order is applied only when encoding or decoding numeric values to or from byte sequences. Endianness is not stored as an intrinsic property of the abstract numeric value.

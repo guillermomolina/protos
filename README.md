@@ -409,3 +409,15 @@ without having implementation details silently define the language.
 - External resources are released through explicit protocols such as `close()`.
 - The runtime provides unwind-safe `ensure` semantics for normal completion, `^`, and error unwind.
 - GC finalization is not considered a reliable resource-management mechanism.
+
+
+## Numeric Model
+
+- `Number` is the common numeric prototype.
+- `Integer` values are exact and semantically arbitrary precision.
+- `Float` is a separate numeric specialization.
+- Fixed-width integers such as `UInt8` and `Int32` are explicit and range-checked.
+- Ordinary fixed-width arithmetic does not silently wrap.
+- Bit operations belong naturally to integer protocols.
+- Endianness belongs to binary encoding/decoding, not to the numeric value itself.
+- Float literals require digits after the decimal point; `2.` is not a valid float literal.

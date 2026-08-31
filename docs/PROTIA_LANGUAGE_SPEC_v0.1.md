@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 19  
+Document revision: 20  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1481,3 +1481,67 @@ A future resumable-condition mechanism is compatible with this rule: a condition
 Higher-level resource protocols such as `use`, `withOpen`, or similar APIs may be implemented on top of this guarantee using ordinary messages and closures.
 
 Garbage-collector finalization is not a resource-management guarantee and must not be relied upon for deterministic release of external resources.
+
+
+## Numeric Model
+
+Core v0.1 distinguishes numeric behavior through prototype delegation rather than static types or overload resolution.
+
+The conceptual hierarchy includes:
+
+```text
+Number
+├── Integer
+│   ├── fixed-width integer prototypes such as UInt8, Int16, UInt32, ...
+│   └── implementation-specific exact-integer representations
+└── Float
+```
+
+`Integer` denotes mathematically exact integers. Integer semantics are arbitrary precision: ordinary integer arithmetic does not expose machine overflow. An implementation may optimize small values using machine integers or tagged values and transparently promote to an arbitrary-precision representation when necessary. Whether objects such as `SmallInteger` or `BigInteger` are exposed as standard prototypes remains an implementation/library design choice unless otherwise specified.
+
+Integer-only protocols may include bit manipulation operations such as shifts, masks, bitwise conjunction/disjunction/XOR, and bit access. `Float` need not implement those messages.
+
+Fixed-width integer prototypes such as `UInt8`, `Int8`, `UInt16`, `Int16`, `UInt32`, `Int32`, `UInt64`, and `Int64` have width and signedness as part of their semantics. They delegate through `Integer` and may specialize arithmetic and bit-oriented behavior.
+
+For fixed-width integers:
+
+- conversion of an out-of-range value signals an error;
+- ordinary arithmetic does not silently wrap;
+- arithmetic that cannot be represented in the fixed-width result signals an error;
+- explicit wrapping operations may be provided as separate messages.
+
+Literal radix is syntactic only. For example:
+
+```js
+255
+0xFF
+0b11111111
+0o377
+```
+
+denote the same integer value. Digit separators such as `_` may be accepted by the grammar without changing the value.
+
+`/` denotes ordinary numeric division and may produce a `Float` from integer operands:
+
+```js
+5 / 2    // 2.5
+```
+
+Integer quotient/remainder behavior is exposed explicitly through integer protocol messages such as `div` and `mod`.
+
+Conversions between numeric families are explicit when representation or information may change. Operations such as `floor`, `truncate`, and `round` express the intended conversion behavior rather than relying on silent coercion.
+
+`Float` follows IEEE-754-style floating-point behavior, including NaN and infinities where supported by the chosen floating representation.
+
+Endianness is not a property of a numeric value. It belongs to binary encoding and decoding. The same numeric value may be represented as bytes using objects/protocol values such as `BigEndian` and `LittleEndian`.
+
+For example:
+
+```js
+value.toBytes(BigEndian)
+UInt32.fromBytes(bytes, LittleEndian)
+```
+
+or equivalent buffer-oriented protocols.
+
+This follows the general rule that semantic values are distinct from their external binary representation.
