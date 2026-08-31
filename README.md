@@ -382,7 +382,6 @@ The principal remaining semantic questions include:
 
 - Future cancellation, error-context propagation, and concurrency memory semantics;
 - the public protocol or convenience syntax for dynamic handler installation;
-- the final standard encoding catalogue;
 - reflection and standard-library protocol details;
 - the final language name and corresponding filename cleanup.
 
@@ -534,3 +533,19 @@ bytes.decode(UTF8, ReplaceInvalid)
 ```
 
 The exact standard policy names remain a library detail.
+
+## Standard Encodings
+
+Core v0.1 requires these first-class encoding objects:
+
+```text
+UTF8
+UTF16LE
+UTF16BE
+UTF32LE
+UTF32BE
+ASCII
+Latin1
+```
+
+Additional encodings belong to the standard library or optional modules. Endian-unspecified `UTF16`/`UTF32` are not Core aliases; if provided later, their BOM and endianness rules must be explicit.

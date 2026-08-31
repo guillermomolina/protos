@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 31  
+Document revision: 32  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1770,3 +1770,13 @@ bytes.decode(UTF8, ReplaceInvalid)
 ```
 
 use ordinary message-send and argument syntax. Strict decoding is the default semantic behavior; tolerant recovery is selected explicitly through ordinary objects/protocol arguments.
+
+## Standard Encoding Names Grammar Note
+
+The standard encoding names:
+
+```text
+UTF8 UTF16LE UTF16BE UTF32LE UTF32BE ASCII Latin1
+```
+
+are ordinary prelude/library bindings rather than grammar keywords. No new lexical category is introduced for them.
