@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.1.3-SNAPSHOT] - 2026-08-31
+## [0.1.4-SNAPSHOT] - 2026-08-31
 
 ### Added
 - Initial minimal Protos lexer implementation under `com.guillermomolina.protos.lexer`.
@@ -19,8 +19,8 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 - Added JUnit 5 to support lexer-focused test coverage.
-- Updated project version from `0.1.2-SNAPSHOT` to `0.1.3-SNAPSHOT` as a conservative patch bump for the completed milestone.
-- Revised the canonical Protos specification documents to define the Core v0.1 string literal rules: single- and double-quoted literals are equivalent, there is no character literal/type, triple-double-quoted strings are multiline literals, interpolation is unsupported, octal and `\xNN` escapes are invalid, and triple-double-quoted multiline strings now use the formal Core v0.1 indentation normalization rule defined in document revision 40.
+- Updated project version from `0.1.3-SNAPSHOT` to `0.1.4-SNAPSHOT` as a conservative patch bump for the completed milestone.
+- Revised the canonical Protos specification documents to define the Core v0.1 string literal rules and multiline indentation normalization rule, and to specify the lexical comment syntax: `//` line comments, `/* ... */` block comments, no nesting, no `#` comment syntax, and no special documentation-comment feature.
 - Documented the chosen license in the project README for this version.
 
 ### Notes

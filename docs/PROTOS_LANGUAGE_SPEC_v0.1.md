@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 40  
+Document revision: 41  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -696,9 +696,18 @@ users.each((user) => {
 
 Trailing-block syntax does not alter closure semantics.
 
-## 19. Separators and Line Breaks
+## 19. Separators, Line Breaks, and Comments
 
 There is no Automatic Semicolon Insertion.
+
+Core v0.1 defines two comment forms:
+
+- `//` starts a line comment and continues until the next newline or end of file.
+- `/*` starts a block comment and `*/` ends it.
+
+Block comments do not nest. An unterminated block comment is a lexical error. Comment delimiters inside String literals have no special meaning. Comments are lexically equivalent to whitespace and do not produce language-level values.
+
+`#` is not a comment delimiter. Core v0.1 defines no special documentation-comment syntax.
 
 A line break may separate expressions when the grammar determines that the preceding expression is complete.
 

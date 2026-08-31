@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 40  
+Document revision: 41  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1124,17 +1124,27 @@ The parser therefore requires no `async`, `await`, `try`, `catch`, `throw`, or `
 
 ```ebnf
 line-comment =
-    "//", { any-character-except-newline };
+    "//", { any-character-except-newline } ;
 
 block-comment =
     "/*",
-    { any-character },
-    "*/";
+    { any-character-except-block-end },
+    "*/" ;
 ```
 
-Comments behave as whitespace.
+`//` starts a line comment. A line comment continues until the next newline or end of file.
 
-Block comments do not nest.
+`/*` starts a block comment. `*/` ends a block comment. Block comments do not nest in Core v0.1.
+
+An unterminated block comment is a lexical error.
+
+Comment delimiters inside String literals have no special meaning.
+
+Comments are lexically equivalent to whitespace and do not produce language-level values.
+
+`#` is not a comment delimiter.
+
+Core v0.1 defines no special documentation-comment syntax.
 
 ## 39. Compact EBNF
 

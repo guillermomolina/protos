@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 40  
+Document revision: 41  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -61,6 +61,8 @@ Future
 ```
 
 These fields are conceptual. An implementation may represent them differently.
+
+Comments are purely lexical: the lexer strips `//` line comments, `/* ... */` block comments, and they are treated as whitespace. They do not produce runtime values, they do not participate in the language object model, and they do not have any special meaning inside String literals. `#` is not a comment delimiter, and no documentation-comment syntax is defined by Core v0.1.
 
 `Object` is the unique root prototype. It has no delegation parent. Every other the language object has exactly one immutable delegation parent, so every delegation chain terminates at `Object`. The absence of a parent on `Object` is structural; it is not represented by `null` or by any other the language object. Reflective structural operations such as `removeSlot(name)`, `close()`, and `freeze()` are ordinary messages provided through `Object`, with runtime primitives implementing their structural effects.
 
