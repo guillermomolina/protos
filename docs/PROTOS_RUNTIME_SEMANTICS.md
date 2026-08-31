@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 45  
+Document revision: 46  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -66,6 +66,16 @@ Identifiers are lexical constructs that must conform to Unicode `XID_Start` and 
 
 Reserved-word matching is case-sensitive. After lexical identifier recognition, the lexer must check whether the identifier spelling exactly matches one of the seven reserved words: `this`, `context`, `args`, `super`, `true`, `false`, or `null`. If it matches, the lexer tokenizes it as a reserved word token. Otherwise, it is an ordinary identifier token.
 
+**String Escape Validation:**
+
+String escape validation is part of lexical analysis. An invalid, incomplete, or unsupported escape sequence in any Core v0.1 String literal is a lexical error. This includes:
+
+- Malformed `\u{HEX}` escapes (missing braces, incomplete hex digits, extra characters)
+- Unicode escape values that are not valid Unicode scalar values (e.g., surrogates, values > U+10FFFF)
+- Unsupported escape sequences such as octal or `\xNN` forms
+
+The lexer must validate escape sequences and reject invalid ones before the parser receives a String token. A String token passed to the parser must contain only valid escape sequences according to Core v0.1 rules.
+
 **String Literal Newline Handling:**
 
 The lexer must enforce the following rules for String literals:
@@ -75,6 +85,12 @@ The lexer must enforce the following rules for String literals:
 - Newline characters must be represented in single-quoted and double-quoted literals using the escape sequences `\n` (line feed) or `\r` (carriage return).
 - Triple-double-quoted (`"""..."""`) String literals permit raw source newlines as part of the literal content.
 - The escape-sequence rules and multiline indentation normalization for triple-double-quoted literals remain unchanged.
+
+**Tokenization Rules:**
+
+- `...` is a single lexical token representing three consecutive periods. It is recognized greedily and is not parsed as three separate `.` tokens.
+- Maximal-munch tokenization applies to symbolic operators: when multiple valid symbolic operator tokens can begin at the same source position, the lexer must consume the longest valid token.
+- Standard punctuation and structural tokens are tokenized separately from symbolic operators.
 
 Comments are purely lexical: the lexer strips `//` line comments, `/* ... */` block comments, and they are treated as whitespace. They do not produce runtime values, they do not participate in the language object model, and they do not have any special meaning inside String literals. `#` is not a comment delimiter, and no documentation-comment syntax is defined by Core v0.1.
 

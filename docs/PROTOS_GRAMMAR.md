@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 45  
+Document revision: 46  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1884,6 +1884,24 @@ This validation occurs before execution.
 
 ## Custom Operator Lexing
 
+**Ellipsis Token:**
+
+`...` is a single lexical token representing three consecutive periods. It is recognized greedily and is not parsed as three separate `.` tokens. Its meaning remains context-dependent according to the existing grammar:
+
+- Rest parameter syntax
+- Argument spread
+- Object composition
+
+`..` (two periods) has no special Core v0.1 meaning. A single `.` remains punctuation used by the existing grammar, including member access and decimal point literals where applicable.
+
+**Maximal-Munch Tokenization:**
+
+Core v0.1 uses maximal-munch tokenization for symbolic operators. When multiple valid symbolic operator tokens can begin at the same source position, the lexer must consume the longest valid token.
+
+Standard punctuation and structural tokens defined by the grammar, such as parentheses, braces, brackets, commas, semicolons, colons, and periods, are tokenized separately from symbolic operators. The `...` ellipsis token is handled before ordinary period tokenization.
+
+**Custom Operator Character Alphabet:**
+
 Custom symbolic binary operators use the fixed character alphabet:
 
 ```text
@@ -1905,19 +1923,7 @@ Reserved and standard symbolic tokens include:
 +   -  *   /   %   <   >
 ```
 
-Any remaining non-empty sequence made exclusively from operator characters may be tokenized as `CUSTOM_OPERATOR`.
-
-Examples:
-
-```js
-a @ b
-a |> b
-a <=> b
-a ~~ b
-a ** b
-```
-
-The characters `.`, `:`, and `;` never participate in a custom operator token.
+Any remaining non-empty sequence made exclusively from operator characters may be tokenized as `CUSTOM_OPERATOR`. The characters `.`, `:`, and `;` never participate in a custom operator token.
 
 Conceptually:
 

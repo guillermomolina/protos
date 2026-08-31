@@ -4,6 +4,15 @@ All notable changes to the Protos language specification will be documented in t
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.46] - 2026-08-31
+
+### Added
+- Core v0.1 ellipsis token (`...`) definition: single lexical token, greedy recognition, context-dependent meaning.
+- Maximal-munch tokenization rule for symbolic operators.
+- String escape validation as part of lexical analysis: invalid, incomplete, or unsupported escapes are lexical errors.
+- Validation of `\u{HEX}` format and Unicode scalar value constraints.
+- Clarification that no new operator semantics are introduced in this revision.
+
 ## [0.1.45] - 2026-08-31
 
 ### Added
