@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 6  
+Document revision: 7  
 Status: Draft  
 Last updated: 2026-08-30
 
@@ -659,6 +659,19 @@ object: {
 A body may contain ordinary expressions executed during construction.
 
 `{}` is not a special declaration language.
+
+
+## 25.1 Reflective Object Messages
+
+Slot removal, closing, and freezing introduce no special syntax. Calls such as:
+
+```js
+object.removeSlot("name")
+object.close()
+object.freeze()
+```
+
+are parsed as ordinary message sends. `removeSlot` is inherited from the standard root prototype `Object` and affects only a local slot of the receiver; its structural semantics are defined by the runtime specification.
 
 ## 26. Objects vs Closures
 

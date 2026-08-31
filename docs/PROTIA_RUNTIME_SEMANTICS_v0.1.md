@@ -1,7 +1,7 @@
 # Protia Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 6  
+Document revision: 7  
 Status: Draft  
 Last updated: 2026-08-30
 
@@ -60,6 +60,8 @@ Future
 ```
 
 These fields are conceptual. An implementation may represent them differently.
+
+`Object` is the standard root prototype for ordinary objects. Reflective structural operations such as `removeSlot(name)`, `close()`, and `freeze()` are ordinary messages provided through `Object`, with runtime primitives implementing their structural effects.
 
 ---
 
@@ -838,7 +840,34 @@ Composition never changes `target.parent`.
 
 ---
 
-# 22. Closing Objects
+# 22. Removing Local Slots
+
+`removeSlot(name)` is an ordinary message inherited from `Object`. Its primitive behavior affects only the receiver's local slot table and never delegates.
+
+```text
+function removeLocalSlot(object, name):
+    if object.state == frozen:
+        signal FrozenObject(object)
+
+    if object.state == closed:
+        signal ClosedObject(object)
+
+    if not object.localSlots.contains(name):
+        signal LocalSlotNotFound(object, name)
+
+    value = object.localSlots[name]
+    object.localSlots.remove(name)
+
+    invalidateShapeAssumptions(object)
+
+    return value
+```
+
+If a delegated slot with the same name exists, removing the local slot exposes that delegated slot to subsequent reads. No parent object is modified.
+
+---
+
+# 23. Closing Objects
 
 ```text
 function closeObject(object):
@@ -862,7 +891,7 @@ Closing is shallow.
 
 ---
 
-# 23. Freezing Objects
+# 24. Freezing Objects
 
 ```text
 function freezeObject(object):
@@ -882,7 +911,7 @@ Freezing is shallow.
 
 ---
 
-# 24. Identity
+# 25. Identity
 
 Identity is a semantic property and must not leak the runtime representation chosen for an object.
 

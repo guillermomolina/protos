@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 6  
+Document revision: 7  
 Status: Draft  
 Last updated: 2026-08-30
 
@@ -45,7 +45,7 @@ A bare object body:
 }
 ```
 
-creates an object using the standard root prototype as its parent.
+creates an object using `Object`, the standard root prototype, as its parent.
 
 A parent expression followed by an object body creates an object with that parent:
 
@@ -787,7 +787,23 @@ Identity is never defined by comparing hash codes. A runtime may derive or cache
 
 Objects are initially open and mutable.
 
-An open object permits slot creation and modification subject to the normal rules.
+An open object permits local slot creation, modification, and removal subject to the normal rules. Slot removal never delegates.
+
+`Object` is the standard root prototype for ordinary objects and provides the ordinary reflective messages `removeSlot(name)`, `close()`, and `freeze()`. These are normal message sends backed by runtime primitives; they are not special grammar forms.
+
+```js
+dog.removeSlot("age")
+```
+
+`removeSlot(name)` removes only a local slot of `this`. If the named slot is not local, the operation signals an error rather than searching the delegation chain. Removing a local overriding slot can therefore expose a delegated slot with the same name on subsequent reads.
+
+```js
+animal: { alive: true }
+dog: animal { alive: false }
+
+dog.removeSlot("alive")
+dog.alive   // true, delegated from animal
+```
 
 ## 23. Closed Objects
 
