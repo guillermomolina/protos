@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 17  
+Document revision: 18  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1362,3 +1362,88 @@ f.values([10, 20])
 ```
 
 where such protocol methods delegate to normal invocation. No overload resolution by argument type is introduced by these facilities.
+
+
+## Polymorphic Invocation and Object Construction
+
+Parentheses are a polymorphic invocation syntax. Invoking an object uses that object's call protocol; callability is therefore behavior, not a special static category reserved exclusively for closures.
+
+Conceptually:
+
+```js
+receiver(a, b)
+```
+
+performs the receiver's ordinary invocation protocol with the evaluated arguments.
+
+`Closure` provides the standard executable implementation of that protocol. `Object` provides the standard object-construction implementation inherited by ordinary prototypes.
+
+The default construction behavior is conceptually:
+
+```text
+Object.call(...args):
+    instance = createObject(parent = this)
+    send(instance, "init", args)
+    return instance
+```
+
+Thus:
+
+```js
+Point(10, 20)
+```
+
+creates a fresh object whose immutable delegation parent is `Point`, sends `init(10, 20)` to the fresh object, and returns that fresh object.
+
+`init` is an ordinary overridable message. Its return value is ignored by the default construction protocol; the construction expression returns the created instance.
+
+If initialization signals an error, construction fails and the construction expression produces no successful instance result.
+
+`Object` provides a default `init` behavior that accepts zero arguments and signals an argument-count error when arguments are supplied. Therefore:
+
+```js
+Thing()
+```
+
+works for a prototype that does not define its own `init`, while:
+
+```js
+Thing(1, 2)
+```
+
+requires compatible initialization behavior.
+
+Alternative constructors are ordinary named messages rather than overloads:
+
+```js
+Point.fromPolar(radius, angle)
+Point.fromJson(data)
+Point.origin()
+```
+
+Such messages may internally invoke the normal construction protocol.
+
+Object-literal/prototype syntax remains distinct:
+
+```js
+Point {
+    x: 10
+    y: 20
+}
+```
+
+directly creates an object whose parent is `Point` and evaluates the object body as slot definitions. It does not implicitly send `init`.
+
+Core v0.1 does not define a combined `Point(args) { ... }` form.
+
+## Contextual Meaning of `...`
+
+`...` is structural syntax whose meaning is determined by syntactic context:
+
+```text
+parameter list   -> capture remaining arguments
+argument list    -> spread a collection into arguments
+object body      -> compose local slots from an object
+```
+
+It is not a general standalone expression operator and has no universal runtime meaning outside those contexts.

@@ -391,3 +391,13 @@ resolved before implementation, including:
 
 The goal is to stabilize the semantic model first, then implement it
 without having implementation details silently define the language.
+
+
+## Recent Design Decisions
+
+- Bracket access is ordinary `at` / `atPut` protocol sugar.
+- Invocation arguments support defaults, rest capture, spread, and reflective `args`.
+- `()` is polymorphic invocation syntax.
+- Ordinary prototypes inherit default construction from `Object`: create a child object, send `init(...args)`, and return the instance.
+- Alternative constructors are ordinary named messages.
+- `...` is contextual structural syntax for rest capture, argument spread, and slot composition.

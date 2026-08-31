@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 17  
+Document revision: 18  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1426,3 +1426,69 @@ argument expressions are evaluated left-to-right. A spread argument contributes 
 The intrinsic `args` is not special call syntax; it is an invocation-context binding exposed by runtime semantics.
 
 Default expressions are evaluated when an argument is absent, in parameter-binding order, in the invocation's execution context.
+
+
+## Polymorphic Invocation Syntax
+
+Call syntax is not restricted grammatically to closures:
+
+```ebnf
+call-expression =
+    postfix-expression, "(", [ argument-list ], ")" ;
+```
+
+Any evaluated receiver expression may syntactically appear in call position:
+
+```js
+f(1, 2)
+Point(10, 20)
+factory(...args)
+```
+
+Whether the resulting object supports invocation is determined by the ordinary runtime call protocol.
+
+Object-literal construction remains separately expressed as:
+
+```js
+Parent {
+    ...
+}
+```
+
+Core v0.1 does not define:
+
+```js
+Parent(args) {
+    ...
+}
+```
+
+as a combined construction form.
+
+## Contextual Ellipsis
+
+The token `...` is valid only in structural contexts defined by the grammar:
+
+```text
+parameter list   rest capture
+argument list    argument spread
+object body      slot composition
+```
+
+Examples:
+
+```js
+foo: (...args) => { ... }
+foo(...args)
+
+obj: {
+    ...source
+}
+```
+
+Standalone forms such as these are not valid expressions:
+
+```js
+x: ...value
+return ...value
+```

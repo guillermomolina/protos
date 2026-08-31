@@ -1,7 +1,7 @@
 # Protia Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 17  
+Document revision: 18  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1863,3 +1863,50 @@ becomes a normal invocation whose outgoing argument vector contains the elements
 The runtime may optimize argument vectors, rest collections, and `args` views, but observable semantics must remain those of ordinary immutable collections.
 
 No dispatch by argument type is implied. These mechanisms support dynamic arity, forwarding, and user-defined helper protocols without introducing method-overload resolution.
+
+
+## Polymorphic Call Protocol and Default Construction
+
+Invocation is a protocol operation on the evaluated receiver.
+
+Conceptually:
+
+```text
+Call(receiverExpression, arguments):
+    receiver = evaluate(receiverExpression)
+    args = evaluateArgumentsLeftToRight(arguments)
+    return invoke(receiver, args)
+```
+
+`invoke` is polymorphic. Closures provide executable-call behavior. Ordinary prototypes inherit default construction-call behavior from `Object`.
+
+The default `Object` call behavior is conceptually:
+
+```text
+function objectCall(prototype, args):
+    instance = createObject(parent = prototype)
+
+    signalOrReturn = send(instance, "init", args)
+
+    return instance
+```
+
+The result of `init` is deliberately ignored. Successful construction returns the fresh instance.
+
+If `init` signals, normal error-unwinding semantics apply and the construction call does not successfully return the instance.
+
+The standard `Object.init` accepts no arguments. A non-empty argument vector handled by the inherited default initialization signals an argument-count error.
+
+`init` is found through ordinary message lookup beginning at the fresh instance, so a prototype may specialize initialization simply by providing an `init` slot.
+
+Alternative constructors require no runtime facility. Named constructor-like messages are ordinary sends and may invoke the receiver or another prototype through the same call protocol.
+
+Object-literal creation:
+
+```text
+Object(parent, body)
+```
+
+remains a separate semantic AST operation. It creates a fresh object with the given parent and evaluates its object body; it does not implicitly invoke `init`.
+
+The implementation may specialize closure invocation and standard object construction in Truffle nodes or JIT-compiled paths, but observable behavior must remain equivalent to the polymorphic call protocol.
