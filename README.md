@@ -440,3 +440,15 @@ without having implementation details silently define the language.
 - `StringBuilder`-style objects handle efficient mutable text construction.
 - `Bytes` is mutable.
 - Encoded text representations may be first-class objects and define their own mutability through protocol support such as `atPut`.
+
+
+## Maps and Hashing
+
+- `Map` uses `==` plus `hash`.
+- `IdentityMap` uses `===` plus `identityHash`.
+- Equal keys must have equal hashes.
+- Hash/equality behavior must remain stable while a key is stored.
+- Mutable objects may be keys when the state relevant to hash/equality remains stable.
+- Missing-key indexed lookup signals an error rather than returning `null`.
+- Maps preserve insertion order.
+- Ordinary hashes need not be stable across process executions.

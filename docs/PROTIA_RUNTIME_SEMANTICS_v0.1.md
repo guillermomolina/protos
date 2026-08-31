@@ -1,7 +1,7 @@
 # Protia Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 22  
+Document revision: 23  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1988,3 +1988,26 @@ Implementations may cache grapheme boundaries, specialize common ASCII/Latin tex
 `Bytes` values are mutable raw byte sequences.
 
 Encoded text representations are ordinary objects whose mutability is protocol-defined. The runtime must not infer writability merely from the fact that an object contains bytes or represents text.
+
+
+## Map and Hash Runtime Semantics
+
+Normal `Map` lookup uses the key protocol pair `hash` and `==`.
+
+Implementations may use hash tables, inline caches, specialized key representations, or other internal structures, provided observable semantics follow the language-level equality/hash contract.
+
+The required invariant for correctly behaving keys is:
+
+```text
+a == b  =>  a.hash == b.hash
+```
+
+The hash/equality behavior relevant to a key must remain stable while that key is present in a `Map`.
+
+If user code violates this invariant or mutates a key so that its relevant hash/equality behavior changes, the runtime is not required to repair or reindex that entry automatically. Later operations may fail to locate it or may observe otherwise inconsistent key behavior at the language level. This does not permit memory unsafety or corruption of the runtime itself.
+
+`IdentityMap` uses primitive semantic identity (`===`) together with a stable `identityHash`.
+
+`hash` values need only be valid within the current execution. The runtime may salt hashes per process. Persisted hash values must therefore not rely on the ordinary `hash` protocol.
+
+Map iteration preserves insertion order as an observable collection property.

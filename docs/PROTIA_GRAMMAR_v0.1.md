@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 22  
+Document revision: 23  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1570,3 +1570,17 @@ For `String`, `at` indexes Unicode grapheme clusters.
 `Bytes` is mutable and may provide both `at` and `atPut`.
 
 Other encoded or external string-like representations determine their own indexed-access and mutability behavior through the messages they implement.
+
+
+## Map Indexing Note
+
+Maps require no dedicated indexing grammar.
+
+The existing indexed-access lowering applies unchanged:
+
+```js
+map[key]          // map.at(key)
+map[key] = value  // map.atPut(key, value)
+```
+
+Missing-key behavior, equality, hashing, and iteration order are collection protocol semantics rather than parser semantics.

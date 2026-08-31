@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 22  
+Document revision: 23  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1645,3 +1645,66 @@ MappedText
 ```
 
 These names are illustrative; Core v0.1 does not require this exact library taxonomy.
+
+
+## Maps, Hashing, and Key Equality
+
+`Map` is an ordinary keyed collection whose indexed syntax uses the existing `at` / `atPut` protocol:
+
+```js
+map[key]
+map[key] = value
+```
+
+A normal `Map` uses semantic equality and hashing:
+
+```text
+key equality  -> ==
+key hash      -> hash
+```
+
+The required contract is:
+
+```text
+a == b  =>  a.hash == b.hash
+```
+
+While an object is stored as a key in a `Map`, the observable behavior relevant to its `hash` and `==` operations must remain stable.
+
+Core does not prohibit mutable objects from being keys. A mutable object is valid as a key when the state participating in its hash/equality remains stable for as long as it is stored.
+
+If this contract is violated, subsequent map operations involving that key are not guaranteed to behave as if the key had remained stable. Observable consequences may include failure to find an existing entry, apparently duplicate equal keys, or surprising contains/remove results. Such misuse must not imply host-language memory unsafety or runtime corruption.
+
+Implementations may optionally diagnose some unstable-key cases in debugging modes, but such detection is not required by Core semantics.
+
+For identity-based keyed storage, the standard model includes `IdentityMap`:
+
+```text
+IdentityMap equality -> ===
+IdentityMap hash     -> identityHash
+```
+
+Identity equality and identity hashing are stable for the lifetime of an object.
+
+Missing-key lookup does not silently return `null`, because `null` is a valid language value. A direct lookup such as:
+
+```js
+map[key]
+```
+
+signals an absence/key error when the key is not present.
+
+Alternative lookup behavior is explicit through ordinary messages, for example:
+
+```js
+map.containsKey(key)
+map.atIfAbsent(key, block)
+```
+
+The exact convenience protocol may grow in the standard library without changing the core lookup rule.
+
+`Map` preserves insertion order for iteration. Updating an existing key's value does not create a new insertion position unless a library protocol explicitly specifies otherwise.
+
+The ordinary `hash` operation is not required to be stable across separate process executions. Implementations may use per-process randomization or salting for security. Persistent or interoperable hashing must use a separate explicit protocol or algorithm.
+
+`IdentityMap` follows the same insertion-order rule unless a more specialized collection explicitly documents otherwise.
