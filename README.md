@@ -381,7 +381,6 @@ Version 0.1 remains a draft, but the major object-model, invocation, collection-
 The principal remaining semantic questions include:
 
 - Future cancellation, error-context propagation, and concurrency memory semantics;
-- the public protocol or convenience syntax for dynamic handler installation;
 - reflection and standard-library protocol details;
 - the final language name and corresponding filename cleanup.
 
@@ -549,3 +548,17 @@ Latin1
 ```
 
 Additional encodings belong to the standard library or optional modules. Endian-unspecified `UTF16`/`UTF32` are not Core aliases; if provided later, their BOM and endianness rules must be explicit.
+
+## Dynamic Error Handling
+
+Core v0.1 installs dynamic handlers through the standard closure protocol:
+
+```js
+(() => {
+    riskyOperation()
+}).handle(IOError, (error) => {
+    recover(error)
+})
+```
+
+`handle` uses the existing prototype-chain matching and unwinding semantics. The expression evaluates to the protected result on success or the handler result when a matching error is handled.

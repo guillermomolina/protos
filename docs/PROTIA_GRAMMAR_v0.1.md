@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 32  
+Document revision: 33  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1780,3 +1780,13 @@ UTF8 UTF16LE UTF16BE UTF32LE UTF32BE ASCII Latin1
 ```
 
 are ordinary prelude/library bindings rather than grammar keywords. No new lexical category is introduced for them.
+
+## Error Handler Installation Grammar Note
+
+Dynamic error handling introduces no special grammar.
+
+```js
+protectedClosure.handle(errorPrototype, handlerClosure)
+```
+
+is an ordinary message send using existing closure and argument syntax. The language does not require `try`, `catch`, or `throw` syntax for Core v0.1.
