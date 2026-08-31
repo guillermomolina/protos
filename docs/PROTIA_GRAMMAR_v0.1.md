@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 16  
+Document revision: 17  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1385,3 +1385,44 @@ factory()[index]
 ```
 
 The receiver expression and index expression are each evaluated exactly once.
+
+
+## Parameters, Rest Parameters, and Argument Spread
+
+Closure parameter lists may contain ordinary parameters, parameters with defaults, and at most one trailing rest parameter.
+
+Conceptually:
+
+```ebnf
+parameter-list =
+    [ parameter, { ",", parameter }, [ ",", rest-parameter ] ]
+  | [ rest-parameter ] ;
+
+parameter =
+    identifier, [ "=", expression ] ;
+
+rest-parameter =
+    "...", identifier ;
+```
+
+A rest parameter must be the final parameter.
+
+Call argument lists may contain ordinary arguments and spread arguments:
+
+```ebnf
+argument =
+    expression
+  | "...", expression ;
+```
+
+For:
+
+```js
+f(a, ...values, z)
+```
+
+argument expressions are evaluated left-to-right. A spread argument contributes the elements of its evaluated collection in iteration/index order defined by the spread protocol.
+
+The intrinsic `args` is not special call syntax; it is an invocation-context binding exposed by runtime semantics.
+
+Default expressions are evaluated when an argument is absent, in parameter-binding order, in the invocation's execution context.

@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 16  
+Document revision: 17  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1282,3 +1282,83 @@ getReceiver()[getIndex()] = makeValue()
 the runtime evaluates `getReceiver()`, then `getIndex()`, then `makeValue()`, and finally performs the `atPut` message send.
 
 The selector names `at` and `atPut` are part of the Core v0.1 indexed-access protocol.
+
+
+## Invocation Arguments, Defaults, Rest, and Spread
+
+Every invocation exposes the arguments supplied by the caller as an ordinary immutable collection named `args`.
+
+`args` contains exactly the explicit argument expressions from the call site, after evaluation and in source order. It does not contain the receiver and does not contain the caller activation.
+
+For example:
+
+```js
+dog.move(10, 20)
+```
+
+inside `move`:
+
+```js
+this       // dog
+args[0]    // 10
+args[1]    // 20
+args.size  // 2
+```
+
+The receiver remains available through `this`. Caller introspection, if exposed in the future, belongs to execution-context reflection rather than the argument collection.
+
+Default parameters are supported. Defaults apply only when the corresponding argument was not supplied by the caller.
+
+```js
+foo: (a, b = 10) => {
+    ...
+}
+```
+
+For:
+
+```js
+foo(1)
+```
+
+`b` is bound to `10`, while `args` still contains only the caller-supplied value:
+
+```text
+args == [1]
+```
+
+A closure may declare one trailing rest parameter:
+
+```js
+foo: (first, ...rest) => {
+    ...
+}
+```
+
+The rest parameter is bound to an ordinary collection containing the remaining caller-supplied arguments.
+
+Argument spread is supported at call sites:
+
+```js
+values: [10, 20, 30]
+f(...values)
+```
+
+which invokes `f` with the elements of `values` as individual positional arguments, preserving their order.
+
+These facilities are intended to make invocation forwarding and dynamic arity ordinary language operations:
+
+```js
+forward: (...args) => {
+    target(...args)
+}
+```
+
+Protocols analogous to Smalltalk block invocation helpers may therefore be implemented using ordinary callable objects and spread, for example conceptually:
+
+```js
+f.value(10, 20)
+f.values([10, 20])
+```
+
+where such protocol methods delegate to normal invocation. No overload resolution by argument type is introduced by these facilities.

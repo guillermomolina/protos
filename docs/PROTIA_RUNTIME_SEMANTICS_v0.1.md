@@ -1,7 +1,7 @@
 # Protia Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 16  
+Document revision: 17  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1811,3 +1811,55 @@ Each subexpression is evaluated once and in left-to-right order.
 `at` and `atPut` are ordinary selectors. Arrays, maps, strings, foreign objects, user-defined collections, or unrelated domain objects may implement either message. The runtime must not impose array-specific dispatch merely because bracket syntax was used.
 
 Consistent with the existing assignment-expression rule, indexed assignment evaluates to the value written. The return value of the underlying `atPut` message is not the value of the indexed assignment expression.
+
+
+## Invocation Argument Binding
+
+Each invocation records the caller-supplied positional arguments before default substitution.
+
+Conceptually:
+
+```text
+Activation
+    context
+    receiver
+    arguments
+    methodHome
+    returnHome
+    ...
+```
+
+The intrinsic `args` resolves to an immutable ordinary collection representing `Activation.arguments`.
+
+For a receiver-aware send:
+
+```js
+receiver.message(a, b)
+```
+
+the invocation state is conceptually:
+
+```text
+this = receiver
+args = [evaluated(a), evaluated(b)]
+```
+
+The receiver is not inserted into `args`.
+
+Parameter binding proceeds from left to right. Caller-supplied arguments bind first. Missing parameters with default expressions evaluate those defaults in the new invocation context. The original `args` collection is not modified by default substitution.
+
+A trailing rest parameter receives an ordinary collection containing caller-supplied arguments that were not consumed by preceding positional parameters.
+
+Spread arguments are evaluated left-to-right with surrounding arguments. After evaluation, their elements are expanded into the outgoing positional argument sequence exactly once.
+
+Conceptually:
+
+```text
+f(...values)
+```
+
+becomes a normal invocation whose outgoing argument vector contains the elements produced by the spread operation.
+
+The runtime may optimize argument vectors, rest collections, and `args` views, but observable semantics must remain those of ordinary immutable collections.
+
+No dispatch by argument type is implied. These mechanisms support dynamic arity, forwarding, and user-defined helper protocols without introducing method-overload resolution.
