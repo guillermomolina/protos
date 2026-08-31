@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 21  
+Document revision: 22  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1589,3 +1589,59 @@ UInt32 ≠ little-endian bytes
 ```
 
 An implementation may use any internal String representation provided observable language semantics remain unchanged.
+
+
+## String Indexing, Mutability, and Encoded Representations
+
+`String` is an immutable Unicode text value.
+
+Core String indexing and size operate on Unicode grapheme clusters rather than bytes, encoding code units, or raw Unicode code points:
+
+```js
+text.size
+text[0]
+```
+
+conceptually correspond to grapheme-count and grapheme-at-index operations.
+
+This keeps ordinary text operations aligned with user-perceived characters while preserving explicit lower-level access through separate protocols such as:
+
+```js
+text.graphemes()
+text.codePoints()
+text.encode(UTF8)
+```
+
+Because `String` is immutable, operations that conceptually modify text produce a new `String`:
+
+```js
+text.uppercase()
+text.replace("a", "b")
+text + other
+```
+
+Efficient incremental text construction belongs to separate mutable objects such as `StringBuilder` or equivalent buffer-oriented abstractions.
+
+`Bytes` is a mutable raw byte sequence by default. Indexed access therefore naturally follows the existing protocol:
+
+```js
+bytes[i]          // bytes.at(i)
+bytes[i] = value  // bytes.atPut(i, value)
+```
+
+Encoded textual representations such as UTF-8 data, UTF-16 data, C strings, memory-backed strings, or similar objects may be first-class values with their own protocols.
+
+Their mutability is not globally fixed by Core. An encoded representation may expose `atPut` if mutation is meaningful and supported, or omit it if the representation is immutable or read-only.
+
+Therefore mutability is expressed behaviorally through supported messages rather than through a universal collection mutability flag.
+
+Examples of possible first-class representations include:
+
+```text
+UTF8EncodedString
+UTF16EncodedString
+CString
+MappedText
+```
+
+These names are illustrative; Core v0.1 does not require this exact library taxonomy.

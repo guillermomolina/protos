@@ -430,3 +430,13 @@ without having implementation details silently define the language.
 - Character encodings such as UTF-8 or UTF-16 are separate protocol objects/concepts.
 - Encoding and decoding are explicit operations.
 - A String's internal storage format is not part of its language-level semantics.
+
+
+## String Semantics
+
+- `String` is immutable.
+- `String.size` and `String.at` operate on Unicode grapheme clusters.
+- Lower-level code-point and byte access is explicit through separate protocols.
+- `StringBuilder`-style objects handle efficient mutable text construction.
+- `Bytes` is mutable.
+- Encoded text representations may be first-class objects and define their own mutability through protocol support such as `atPut`.

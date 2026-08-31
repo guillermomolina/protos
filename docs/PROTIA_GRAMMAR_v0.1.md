@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 21  
+Document revision: 22  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1551,3 +1551,22 @@ bytes.decode(UTF8)
 ```
 
 Core Grammar v0.1 does not require separate literal forms for UTF-8, UTF-16, or other text encodings.
+
+
+## String and Bytes Indexing Note
+
+Indexed syntax remains ordinary protocol sugar:
+
+```js
+text[i]        // text.at(i)
+bytes[i]       // bytes.at(i)
+bytes[i] = v   // bytes.atPut(i, v)
+```
+
+For `String`, `at` indexes Unicode grapheme clusters.
+
+`String` is immutable and therefore does not provide ordinary mutation through indexed assignment.
+
+`Bytes` is mutable and may provide both `at` and `atPut`.
+
+Other encoded or external string-like representations determine their own indexed-access and mutability behavior through the messages they implement.
