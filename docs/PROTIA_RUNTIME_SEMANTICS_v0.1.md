@@ -1,7 +1,7 @@
 # Protia Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 14  
+Document revision: 15  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1695,3 +1695,88 @@ function handlerMatches(handler, error):
 Core v0.1 handlers are **unwinding handlers**. Invoking a matching handler abandons the signaling continuation. If the handler returns normally, execution continues according to the handler-installation construct; it does not return a value to the original `signal` operation and does not resume immediately after the signaling point.
 
 Core v0.1 does not expose resumable conditions, `resume`, `retry`, or equivalent operations. Implementations should keep signaling, handler search, and stack transfer conceptually separable so that a later explicit resumable-condition facility can be introduced without redefining error objects or prototype-based handler matching.
+
+
+## Module Registry and Canonical Module Identity
+
+Module loading uses a registry keyed by canonical internal module identity.
+
+Conceptually:
+
+```text
+ModuleRegistry:
+    ModuleKey -> ModuleRecord
+
+ModuleRecord:
+    state
+    moduleContext?
+    value?
+    failure?
+```
+
+Possible states are:
+
+```text
+UNLOADED
+LOADING
+LOADED
+FAILED
+```
+
+A module specifier is not itself the cache key. The loader first resolves it relative to the importing module:
+
+```text
+resolve(importerKey, moduleSpecifier) -> ModuleKey
+```
+
+`ModuleKey` must be canonical and stable within the registry. Equivalent requests for the same module must resolve to the same key.
+
+For a file-backed host this may conceptually involve normalization such as:
+
+```text
+"./lib/../lib/foo.pt"
+    -> canonical file identity
+    -> file:///project/lib/foo.pt
+```
+
+The exact key representation is host-defined and need not be visible to language code.
+
+Conceptual import logic:
+
+```text
+function importModule(importerKey, specifier):
+    key = resolve(importerKey, specifier)
+    record = registry.lookupOrCreate(key)
+
+    if record.state == LOADED:
+        return record.value
+
+    if record.state == FAILED:
+        signal record.failure
+
+    if record.state == LOADING:
+        signal ModuleInitializationCycle(key)
+
+    record.state = LOADING
+    record.moduleContext = createModuleContext(frozenPrelude)
+
+    try:
+        value = executeModule(key, record.moduleContext)
+        record.value = value
+        record.state = LOADED
+        return value
+    catch initializationFailure:
+        record.failure = initializationFailure
+        record.state = FAILED
+        signal initializationFailure
+```
+
+A module value is not made available while its record is `LOADING`. This intentionally forbids observable partially initialized exports.
+
+Successful initialization produces exactly one cached module value. The value may be any language object.
+
+Imports are eager by default. Lazy dependency behavior is expressed explicitly using ordinary closures or other language mechanisms rather than by changing import evaluation semantics.
+
+The private `moduleContext` and the module value are distinct concepts. The runtime must not implicitly expose the entire module context as the module's public result unless the module itself deliberately returns or constructs such an object.
+
+Host-specific resolution policy, package lookup, standard-library naming, remote sources, and package-manager behavior are outside Core Runtime Semantics v0.1.

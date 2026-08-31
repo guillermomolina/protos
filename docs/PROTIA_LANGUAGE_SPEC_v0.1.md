@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 14  
+Document revision: 15  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1187,3 +1187,55 @@ Handling in Core v0.1 is **unwinding**. A matching handler transfers control out
 Core v0.1 does not define resumable conditions, `resume`, `retry`, or equivalent control operations. The runtime representation of signaling and handlers should nevertheless avoid assumptions that would make explicit resumable-condition facilities impossible to add in a later language version.
 
 The exact surface syntax or standard-library protocol used to install a dynamic handler is specified separately; handler matching and unwinding behavior are semantic requirements independent of that syntax.
+
+
+## Module Loading, Identity, and Cycles
+
+Each module executes in a private `moduleContext`. The module's externally visible result is the value produced by successful module initialization. That value may be any object; it is not required to be a namespace object.
+
+Module import uses three distinct concepts:
+
+```text
+module specifier
+    value written by the program
+
+ModuleKey
+    canonical internal identity produced by the module resolver
+
+module value
+    value produced by successful initialization
+```
+
+A module specifier is resolved relative to the importing module and the host/module-resolution environment. Resolution produces a canonical `ModuleKey`.
+
+The exact external form of a `ModuleKey` is host-defined, but it must provide stable identity. Examples might include canonicalized file URIs, standard-library identifiers, or package identifiers. Two import requests that the resolver determines refer to the same module must produce the same `ModuleKey`.
+
+`ModuleKey` is an internal loader/runtime concept. It is not required to be exposed as a normal language object.
+
+Modules are initialized at most once per module registry. The registry tracks module state conceptually as:
+
+```text
+UNLOADED
+LOADING
+LOADED
+FAILED
+```
+
+The first import of an `UNLOADED` module marks it `LOADING`, creates its private module context, executes it, records the produced module value, then marks it `LOADED`.
+
+A later import of a `LOADED` module returns the cached module value.
+
+Partially initialized module values are never observable. If an import attempts to require the value of a module that is currently `LOADING` through the active dependency chain, the runtime signals `ModuleInitializationCycle`.
+
+Failed module initialization is remembered. A later import of the same canonical module re-signals the stored initialization failure rather than silently retrying.
+
+Imports are eager by default. Lazy dependencies are expressed explicitly using ordinary language mechanisms such as closures rather than by implicit lazy-import semantics.
+
+The language does not require import syntax to introduce names into the current lexical scope. An import operation may simply produce the module value, which the program can bind explicitly:
+
+```js
+math: import("math")
+math.sin(x)
+```
+
+The exact resolver rules for files, packages, standard-library modules, search paths, and other host-specific sources are outside Core Language v0.1.

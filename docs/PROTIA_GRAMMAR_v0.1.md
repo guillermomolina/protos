@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 14  
+Document revision: 15  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1322,3 +1322,18 @@ Core Grammar v0.1 introduces no mandatory `try`, `catch`, `throw`, or `finally` 
 Error objects are signaled and handlers are dynamically installed through the object/runtime protocol. The exact convenience syntax, if any, for installing handlers is intentionally left outside the core grammar at this stage.
 
 Handler matching by delegation and unwinding behavior are runtime semantics and require no special parser production.
+
+
+## Module Import Grammar Note
+
+Core Grammar v0.1 does not require dedicated `import` or `export` syntax.
+
+A module-loading facility may be exposed through ordinary call/message syntax, for example:
+
+```js
+module: import("./module.pt")
+```
+
+The parser treats the module specifier expression like any other argument expression. Canonical module identity, caching, initialization states, cycle detection, and host-specific resolution are runtime/module-loader semantics rather than grammar rules.
+
+No grammar rule implicitly injects imported bindings into the current lexical scope.
