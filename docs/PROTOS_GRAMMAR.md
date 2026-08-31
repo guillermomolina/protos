@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 44  
+Document revision: 45  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -113,6 +113,12 @@ Core v0.1 String escape sequences are exactly:
 Invalid or incomplete escape sequences are syntax errors. Octal escapes are not supported. `\xNN` escapes are not supported.
 
 Single-quoted, double-quoted, and triple-double-quoted String literals use the same escape rules. Triple-double-quoted strings are multiline String literals, not raw strings. Triple-single-quoted strings are not supported.
+
+**Newline Handling:**
+
+Single-quoted and double-quoted String literals are single-line literals. A raw source newline is not permitted inside a single-quoted or double-quoted String literal. Encountering a raw newline before the matching closing quote is a lexical error. Newline characters may be represented in these literals using the existing `\n` and `\r` escape sequences.
+
+Triple-double-quoted String literals are the Core v0.1 syntax for source-level multiline text. Raw newlines are permitted and are part of the literal content, subject to the multiline indentation normalization rule.
 
 Protos has no separate character literal or character type. `'a'` and `"a"` both evaluate to a String containing the single-character text `a`.
 

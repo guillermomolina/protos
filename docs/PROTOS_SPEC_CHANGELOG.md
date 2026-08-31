@@ -4,6 +4,15 @@ All notable changes to the Protos language specification will be documented in t
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.45] - 2026-08-31
+
+### Added
+- Core v0.1 newline handling rules for String literals.
+- Single-quoted and double-quoted String literals are single-line; raw newlines are lexical errors in these forms.
+- Newlines may be represented using `\n` and `\r` escape sequences in single-line literals.
+- Triple-double-quoted String literals support raw source newlines as part of multiline content.
+- Lexical rules for enforcing single-line constraints on non-multiline String forms.
+
 ## [0.1.44] - 2026-08-31
 
 ### Added

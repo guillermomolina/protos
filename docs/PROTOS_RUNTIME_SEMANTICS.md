@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 44  
+Document revision: 45  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -65,6 +65,16 @@ These fields are conceptual. An implementation may represent them differently.
 Identifiers are lexical constructs that must conform to Unicode `XID_Start` and `XID_Continue` properties and must be in Unicode NFC normalization form. The lexer must validate NFC compliance and reject non-NFC identifiers as syntax errors.
 
 Reserved-word matching is case-sensitive. After lexical identifier recognition, the lexer must check whether the identifier spelling exactly matches one of the seven reserved words: `this`, `context`, `args`, `super`, `true`, `false`, or `null`. If it matches, the lexer tokenizes it as a reserved word token. Otherwise, it is an ordinary identifier token.
+
+**String Literal Newline Handling:**
+
+The lexer must enforce the following rules for String literals:
+
+- Single-quoted (`'...'`) and double-quoted (`"..."`) String literals are single-line literals.
+- A raw source newline character (U+000A line feed or U+000D carriage return) encountered inside a single-quoted or double-quoted String literal before the matching closing quote is a lexical error.
+- Newline characters must be represented in single-quoted and double-quoted literals using the escape sequences `\n` (line feed) or `\r` (carriage return).
+- Triple-double-quoted (`"""..."""`) String literals permit raw source newlines as part of the literal content.
+- The escape-sequence rules and multiline indentation normalization for triple-double-quoted literals remain unchanged.
 
 Comments are purely lexical: the lexer strips `//` line comments, `/* ... */` block comments, and they are treated as whitespace. They do not produce runtime values, they do not participate in the language object model, and they do not have any special meaning inside String literals. `#` is not a comment delimiter, and no documentation-comment syntax is defined by Core v0.1.
 

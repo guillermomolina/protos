@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 44  
+Document revision: 45  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1938,6 +1938,14 @@ Core v0.1 defines String literals as ordinary `String` values.
 - Triple-single-quoted strings are not supported.
 - String interpolation is not part of Core v0.1.
 - `${...}` has no special meaning inside a String and is treated as literal text.
+
+**Newline Handling in String Literals:**
+
+- Single-quoted and double-quoted String literals are single-line literals.
+- A raw source newline is not permitted inside a single-quoted or double-quoted String literal.
+- Encountering a raw newline before the matching closing quote is a lexical error.
+- Newline characters may be represented in single-quoted and double-quoted literals using the `\n` and `\r` escape sequences.
+- Triple-double-quoted String literals are multiline String literals and permit raw source newlines as part of the literal content.
 - Triple-double-quoted multiline String literals use the Core v0.1 indentation normalization rule: the opening newline is discarded when it immediately follows the opening delimiter; the closing newline and indentation-only trailing line are discarded when they immediately precede the closing delimiter; the minimum common indentation of all non-empty content lines is removed; empty lines do not count toward the minimum; relative indentation beyond the common baseline is preserved; and no implicit trimming occurs when the content begins or ends on the same line as the delimiters.
 
 Example literals:
