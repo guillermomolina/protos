@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 3  
+Document revision: 4  
 Status: Draft  
 Last updated: 2026-08-30
 
@@ -38,7 +38,7 @@ Reserved intrinsic identifiers:
 
 ```text
 this
-thisContext
+context
 null
 true
 false
@@ -127,7 +127,7 @@ program =
     expression-sequence;
 ```
 
-There is no special global grammar. A source module is an expression sequence evaluated with its own module execution context as the initial `thisContext`.
+There is no special global grammar. A source module is an expression sequence evaluated with its own module execution context as the initial `context`.
 
 
 ## Module Contexts and Top-Level Grammar
@@ -142,7 +142,7 @@ Thus:
 x: value
 ```
 
-uses exactly the same slot-creation syntax at module top level as it does elsewhere. When evaluated at module top level, the current `thisContext` is the module's `moduleContext`, so `x` becomes a local slot of that object.
+uses exactly the same slot-creation syntax at module top level as it does elsewhere. When evaluated at module top level, the current `context` is the module's `moduleContext`, so `x` becomes a local slot of that object.
 
 No `global`, `var`, `let`, `const`, or equivalent declaration form is introduced.
 
@@ -207,7 +207,7 @@ Examples:
 x
 person.name
 this.name
-thisContext.value
+context.value
 ```
 
 ## 11. Non-local Return
@@ -710,7 +710,7 @@ x: value
 inside an activation conceptually becomes:
 
 ```text
-CreateSlot(thisContext, "x", value)
+CreateSlot(context, "x", value)
 ```
 
 while:
@@ -1090,7 +1090,7 @@ primary-expression =
 
 intrinsic-reference =
       "this"
-    | "thisContext"
+    | "context"
     | "null"
     | "true"
     | "false" ;

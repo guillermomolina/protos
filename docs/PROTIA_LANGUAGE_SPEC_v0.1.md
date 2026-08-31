@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 3  
+Document revision: 4  
 Status: Draft  
 Last updated: 2026-08-30
 
@@ -143,9 +143,9 @@ An ancestor prototype is never accidentally mutated through one of its descendan
 
 ## 4. Execution Context
 
-Every execution has a `thisContext`.
+Every execution has a `context`.
 
-`thisContext` is an object. Parameters, temporary bindings, and local slots belong to this object.
+`context` is an object. Parameters, temporary bindings, and local slots belong to this object.
 
 ```js
 greet: (name) => {
@@ -157,7 +157,7 @@ greet: (name) => {
 Conceptually:
 
 ```text
-thisContext
+context
 ├── name
 └── message
 ```
@@ -193,7 +193,7 @@ A method may still capture genuine enclosing lexical contexts, such as module bi
 Conceptually, bare-name lookup inside a method is therefore:
 
 ```text
-current activation thisContext
+current activation context
         ↓
 genuine captured lexical contexts
         ↓
@@ -296,7 +296,7 @@ performs implicit contextual lookup.
 Lookup conceptually proceeds through:
 
 ```text
-current thisContext
+current context
         ↓
 captured lexical contexts
         ↓
@@ -340,7 +340,7 @@ creates `x` in the current local context.
 Inside a function, it is conceptually equivalent to:
 
 ```js
-thisContext.x: value
+context.x: value
 ```
 
 To explicitly create state on the receiver:
@@ -359,7 +359,7 @@ It means:
 
 Only a super message send is valid in the core language, for example `super.speak()` or `super.move(x, y)`. Expressions such as `x: super`, `foo(super)`, bare `super`, or method extraction such as `f: super.speak` are invalid.
 
-Conceptually, `super.message(args...)` is syntactic sugar for a context-aware send operation using `thisContext`: the receiver remains `thisContext.receiver`, while lookup starts at `parent(thisContext.methodHome)`. `super` therefore does not need to exist as a runtime object.
+Conceptually, `super.message(args...)` is syntactic sugar for a context-aware send operation using `context`: the receiver remains `context.receiver`, while lookup starts at `parent(context.methodHome)`. `super` therefore does not need to exist as a runtime object.
 
 Given:
 

@@ -1,7 +1,7 @@
 # Protia Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 3  
+Document revision: 4  
 Status: Draft  
 Last updated: 2026-08-30
 
@@ -27,7 +27,7 @@ Object
     state          // open, closed, frozen
 
 Activation
-    thisContext
+    context
     lexicalParent
     receiver       // this
     methodHome
@@ -165,7 +165,7 @@ Unqualified lookup searches lexical contexts first, then the receiver delegation
 
 ```text
 function lookupName(activation, name):
-    context = activation.thisContext
+    context = activation.context
 
     while context != null:
         result = lookupLocal(context, name)
@@ -254,7 +254,7 @@ means:
 
 ```text
 createSlot(
-    target = activation.thisContext,
+    target = activation.context,
     name = "x",
     value = value
 )
@@ -356,7 +356,7 @@ It never modifies a slot inherited by `this`.
 
 ```text
 function assignName(activation, name, value):
-    context = activation.thisContext
+    context = activation.context
 
     while context != null:
         if context.localSlots contains name:
@@ -564,10 +564,10 @@ Conceptually:
 ```text
 function lexicalContextForClosureCreation(activation):
     if activation is evaluating an object body
-       and activation.thisContext is the object being constructed:
+       and activation.context is the object being constructed:
         return activation.lexicalParent
 
-    return activation.thisContext
+    return activation.context
 ```
 
 Therefore a method closure installed on a prototype captures genuine enclosing lexical contexts, while bare object-state names are resolved later against the dynamic receiver (`this`) and its delegation chain.
@@ -593,13 +593,13 @@ function createActivation(
     if length(arguments) != length(closure.parameters):
         signal ArgumentCountError()
 
-    thisContext = new Object(
+    context = new Object(
         parent = standardContextPrototype
     )
 
     for each (parameter, argument):
         createSlot(
-            target = thisContext,
+            target = context,
             name = parameter,
             value = argument
         )
@@ -612,7 +612,7 @@ function createActivation(
         ownsReturnHome = false
 
     return Activation(
-        thisContext = thisContext,
+        context = context,
 
         lexicalParent =
             closure.lexicalContext,
@@ -638,7 +638,7 @@ An ordinary nested closure invocation uses the captured receiver/method-home met
 
 `super` preserves the original receiver but changes where lookup begins. It is not a runtime object or first-class value. The parser lowers only `super.message(arguments...)` to a super-send operation. Bare `super`, passing it as a value, assigning it, or extracting `super.message` without a call is invalid.
 
-Conceptually, a super send uses execution metadata available through `thisContext`: the receiver is the current receiver and the lookup origin is the parent of the current `methodHome`.
+Conceptually, a super send uses execution metadata available through `context`: the receiver is the current receiver and the lookup origin is the parent of the current `methodHome`.
 
 ```text
 function sendSuper(activation, message, arguments):
@@ -770,8 +770,8 @@ function createObject(parent, body, activation):
     )
 
     constructionActivation = Activation(
-        thisContext = object,
-        lexicalParent = activation.thisContext,
+        context = object,
+        lexicalParent = activation.context,
         receiver = object,
         methodHome = null,
         returnHome = activation.returnHome,
@@ -1247,7 +1247,7 @@ function evaluate(node, activation):
             )
 
             target =
-                activation.thisContext
+                activation.context
                 if targetExpr is absent
                 else evaluate(
                     targetExpr,
@@ -1424,7 +1424,7 @@ Closures created by top-level module execution capture the module context throug
 Conceptually, lexical lookup may eventually reach the module context:
 
 ```text
-thisContext
+context
     ↓
 captured lexical contexts
     ↓
@@ -1443,7 +1443,7 @@ Top-level creation:
 x: value
 ```
 
-is equivalent to creating a local slot on the current module context when the current activation's `thisContext` is that module context.
+is equivalent to creating a local slot on the current module context when the current activation's `context` is that module context.
 
 Conceptually:
 
@@ -1461,7 +1461,7 @@ function executeModule(module, preludeContext):
     moduleContext = createModuleContext(preludeContext)
 
     activation = Activation(
-        thisContext = moduleContext,
+        context = moduleContext,
         lexicalParent = preludeContext,
         receiver = moduleContext,
         methodHome = null,
