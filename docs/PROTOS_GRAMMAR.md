@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 41  
+Document revision: 42  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -14,7 +14,7 @@ Prelude bindings introduce no additional grammar. The shared standard prelude is
 
 This document defines the lexical grammar, expression grammar, precedence rules, and mandatory syntactic desugarings of the language.
 
-It does not redefine the object model or runtime semantics specified in `PROTOS_LANGUAGE_SPEC_v0.1.md`.
+It does not redefine the object model or runtime semantics specified in `PROTOS_LANGUAGE_SPEC.md`.
 
 The grammar is written in EBNF:
 
@@ -574,7 +574,6 @@ postfix:
 unary:
     !
     -
-    +
 
 multiplicative:
     *
@@ -1252,7 +1251,6 @@ unary-expression =
 
 unary-operator =
       "!"
-    | "+"
     | "-" ;
 
 postfix-expression =
@@ -1665,33 +1663,59 @@ The guaranteed execution of cleanup during scope exit is runtime control-flow se
 
 ## Numeric Literals
 
-Core v0.1 supports integer literals in decimal form and may support explicit radix forms such as hexadecimal (`0x`), binary (`0b`), and octal (`0o`). Radix syntax affects parsing only; it does not create a distinct numeric kind.
+A leading sign is never part of a numeric literal. Prefix `-` and prefix `!` are ordinary operators, not numeric-literal syntax.
 
-Digit separators using `_` may be accepted within numeric literals and have no semantic effect.
+Decimal integer literals use digits `0` through `9`.
 
-Floating-point literals require digits after the decimal point:
+Leading zeroes are allowed and have no radix significance. For example, `007` is decimal `7`.
+
+Hexadecimal integer literals use `0x` or `0X`.
+
+Binary integer literals use `0b` or `0B`.
+
+Octal integer literals use `0o` or `0O`.
+
+`_` may be used as a visual separator between digits. It cannot appear at the beginning or end of a digit sequence and cannot appear consecutively.
+
+Radix-prefixed literals produce `Integer` values.
+
+Decimal literals containing a decimal point or exponent produce `Float` values.
+
+A decimal point requires at least one digit on both sides:
 
 ```js
-2.5
-2.0
+1.0    // valid
+1.     // invalid numeric literal
+.5     // invalid numeric literal
 ```
 
-A trailing decimal point is not a valid floating literal:
+Decimal exponents use `e` or `E`, optionally followed by `+` or `-`, and require at least one exponent digit:
 
 ```js
-2.    // invalid numeric literal
+1e10
+1e-10
+1.5e+20
 ```
 
-This keeps member access lexically unambiguous:
+Hexadecimal, binary, and octal Float literals are not supported in Core v0.1.
+
+Numeric type suffixes such as `L`, `f`, or `d` are not supported.
+
+`NaN` and `Infinity` are not special numeric literal syntax.
+
+Examples:
 
 ```js
-2.floor()
-2.5.floor()
-(2.5).floor()
+0
+007
+0xFF
+0b1010
+0o77
+1_000
+1.5
+2e3
+1.5e-3
 ```
-
-The parser may accept the final form with parentheses purely for readability; parentheses do not change the numeric semantics.
-
 
 ## String Literals and Byte Representation Note
 

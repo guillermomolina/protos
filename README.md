@@ -372,10 +372,10 @@ mechanisms.
 
 The design is currently described by three documents:
 
--   `PROTOS_LANGUAGE_SPEC_v0.1.md` --- object model and language
-    semantics
--   `PROTOS_GRAMMAR_v0.1.md` --- lexical and syntactic grammar
--   `PROTOS_RUNTIME_SEMANTICS_v0.1.md` --- executable runtime model and
+-   `PROTOS_LANGUAGE_SPEC.md` --- object model and language
+    semantics.
+-   `PROTOS_GRAMMAR.md` --- lexical and syntactic grammar
+-   `PROTOS_RUNTIME_SEMANTICS.md` --- executable runtime model and
     pseudocode
 
 ## License

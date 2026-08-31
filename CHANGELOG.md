@@ -1,6 +1,14 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to the Protos implementation project will be documented in this file.
+
+For specification changes, see [docs/PROTOS_SPEC_CHANGELOG.md](docs/PROTOS_SPEC_CHANGELOG.md).
+
+## [0.1.5-SNAPSHOT] - 2026-08-31
+
+### Notes
+- No implementation changes in this session.
+- Specification changes documented in [docs/PROTOS_SPEC_CHANGELOG.md](docs/PROTOS_SPEC_CHANGELOG.md).
 
 ## [0.1.4-SNAPSHOT] - 2026-08-31
 
@@ -20,9 +28,7 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - Added JUnit 5 to support lexer-focused test coverage.
 - Updated project version from `0.1.3-SNAPSHOT` to `0.1.4-SNAPSHOT` as a conservative patch bump for the completed milestone.
-- Revised the canonical Protos specification documents to define the Core v0.1 string literal rules and multiline indentation normalization rule, and to specify the lexical comment syntax: `//` line comments, `/* ... */` block comments, no nesting, no `#` comment syntax, and no special documentation-comment feature.
 - Documented the chosen license in the project README for this version.
 
 ### Notes
-- This change is intentionally limited to lexical analysis only.
-- No parser or language semantics were implemented in this session.
+- Specification changes documented in [docs/PROTOS_SPEC_CHANGELOG.md](docs/PROTOS_SPEC_CHANGELOG.md).

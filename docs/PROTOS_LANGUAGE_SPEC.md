@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 41  
+Document revision: 42  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1780,16 +1780,38 @@ For fixed-width integers:
 - arithmetic that cannot be represented in the fixed-width result signals an error;
 - explicit wrapping operations may be provided as separate messages.
 
-Literal radix is syntactic only. For example:
+Numeric literal syntax is defined as follows:
+
+- A leading sign is never part of a numeric literal.
+- Decimal integer literals use digits `0` through `9`.
+- Leading zeroes are allowed and have no radix significance; for example, `007` is decimal `7`.
+- Hexadecimal integer literals use `0x` or `0X`.
+- Binary integer literals use `0b` or `0B`.
+- Octal integer literals use `0o` or `0O`.
+- `_` may be used as a visual separator between digits; it cannot appear at the beginning or end of a digit sequence and cannot appear consecutively.
+- Radix-prefixed literals produce `Integer` values.
+- Decimal literals containing a decimal point or exponent produce `Float` values.
+- A decimal point requires at least one digit on both sides: `1.0` is valid; `1.` and `.5` are invalid numeric literals.
+- Decimal exponents use `e` or `E`, optionally followed by `+` or `-`, and require at least one exponent digit.
+- Hexadecimal, binary, and octal `Float` literals are not supported in Core v0.1.
+- Numeric type suffixes such as `L`, `f`, or `d` are not supported.
+- `NaN` and `Infinity` are not special numeric literal syntax.
+
+For example:
 
 ```js
 255
+007
 0xFF
 0b11111111
 0o377
+1_000
+1.5
+2e3
+1.5e-3
 ```
 
-denote the same integer value. Digit separators such as `_` may be accepted by the grammar without changing the value.
+denote the same numeric values described by the rules above. Literal radix is syntactic only.
 
 `/` denotes ordinary numeric division and may produce a `Float` from integer operands:
 
@@ -1860,6 +1882,23 @@ UInt32 ≠ little-endian bytes
 
 An implementation may use any internal String representation provided observable language semantics remain unchanged.
 
+
+## Prefix Operators and Protocol-Based Negation
+
+Core v0.1 supports prefix `-` and prefix `!`.
+
+Prefix `+` is not supported.
+
+Prefix operators are not part of numeric literal syntax.
+
+These operators lower to ordinary message sends, not privileged runtime primitive behavior:
+
+```js
+-x    // equivalent to x.negated()
+!x    // equivalent to x.not()
+```
+
+This is protocol-based rather than a special numeric/Boolean operator. The operators therefore apply to arbitrary expressions according to the normal expression grammar, not only to literals.
 
 ## String Literal Semantics
 

@@ -12,9 +12,9 @@ Canonical language specification
 
 The canonical language definition is maintained in:
 
-- "docs/PROTOS_LANGUAGE_SPEC_v0.1.md"
-- "docs/PROTOS_GRAMMAR_v0.1.md"
-- "docs/PROTOS_RUNTIME_SEMANTICS_v0.1.md"
+- "docs/PROTOS_LANGUAGE_SPEC.md"
+- "docs/PROTOS_GRAMMAR.md"
+- "docs/PROTOS_RUNTIME_SEMANTICS.md"
 
 Treat these documents as the source of truth for language behavior.
 
@@ -22,9 +22,9 @@ Before implementing or modifying syntax, parsing, object semantics, invocation, 
 
 The documents have distinct responsibilities:
 
-- "PROTOS_LANGUAGE_SPEC_v0.1.md" defines the language model and observable semantics.
-- "PROTOS_GRAMMAR_v0.1.md" defines lexical structure, syntax, precedence, parsing rules, mandatory desugarings, and the canonical semantic AST.
-- "PROTOS_RUNTIME_SEMANTICS_v0.1.md" defines executable semantic rules and runtime pseudocode.
+- `PROTOS_LANGUAGE_SPEC.md` defines the language model and observable semantics.
+- `PROTOS_GRAMMAR.md` defines lexical structure, syntax, precedence, parsing rules, mandatory desugarings, and the canonical semantic AST.
+- `PROTOS_RUNTIME_SEMANTICS.md` defines executable semantic rules and runtime pseudocode.
 
 Do not treat runtime pseudocode as permission to change language semantics.
 

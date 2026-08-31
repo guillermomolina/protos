@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 41  
+Document revision: 42  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -9,8 +9,8 @@ This document defines executable-style pseudocode for the core runtime operation
 
 It complements:
 
-- `PROTOS_LANGUAGE_SPEC_v0.1.md`
-- `PROTOS_GRAMMAR_v0.1.md`
+- `PROTOS_LANGUAGE_SPEC.md`
+- `PROTOS_GRAMMAR.md`
 
 The goal is not to mandate an implementation strategy, but to define observable behavior precisely enough that different interpreters or VMs can behave consistently.
 
@@ -253,6 +253,25 @@ function bindIfMethod(value, receiver, methodHome):
 Binding a method does not copy its lexical environment.
 
 It only records the receiver and the home from which the method was obtained.
+
+---
+
+# 8. Prefix Operator Lowering
+
+Prefix `-` and prefix `!` are ordinary protocol operations, not privileged numeric/Boolean runtime intrinsics.
+
+```text
+function lowerUnary(operator, operand):
+    if operator == "-":
+        return send(receiver = operand, message = "negated")
+    if operator == "!":
+        return send(receiver = operand, message = "not")
+    signal InvalidUnaryOperator(operator)
+```
+
+Prefix `+` is not supported.
+
+These operators apply to arbitrary expressions under the normal expression grammar and are not restricted to numeric or literal operands.
 
 ---
 
