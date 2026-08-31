@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 13  
+Document revision: 14  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1166,3 +1166,24 @@ a.or(() => b)
 so the right-hand side is evaluated only if the receiver's implementation chooses to invoke the supplied closure.
 
 Implementations may specialize common Boolean receivers and standard operations in the interpreter or JIT, provided that such specialization preserves the observable semantics of ordinary message sends.
+
+
+## Error Signaling and Handling
+
+Errors are ordinary objects.
+
+Exceptional language and runtime failures are signaled through ordinary error objects. Conceptually:
+
+```js
+error.signal()
+```
+
+Handlers are dynamically scoped. When an error is signaled, the runtime searches the dynamically active handlers from nearest to farthest and selects the nearest handler whose match prototype occurs in the signaled error object's delegation chain.
+
+Thus error categories require no classes or static types. For example, an error object delegating through `FileNotFound` and `IOError` can be handled by a handler matching `FileNotFound`, `IOError`, or a more general error prototype present in that chain.
+
+Handling in Core v0.1 is **unwinding**. A matching handler transfers control out of the signaling computation to the handler. Normal return from the handler does not resume execution at the original signaling point.
+
+Core v0.1 does not define resumable conditions, `resume`, `retry`, or equivalent control operations. The runtime representation of signaling and handlers should nevertheless avoid assumptions that would make explicit resumable-condition facilities impossible to add in a later language version.
+
+The exact surface syntax or standard-library protocol used to install a dynamic handler is specified separately; handler matching and unwinding behavior are semantic requirements independent of that syntax.

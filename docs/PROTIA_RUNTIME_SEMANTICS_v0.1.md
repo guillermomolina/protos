@@ -1,7 +1,7 @@
 # Protia Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 13  
+Document revision: 14  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1653,3 +1653,45 @@ Objects other than `true` and `false` may implement the same protocol. If a rece
 Standard equality and comparison primitives return the canonical Boolean objects. A user-defined implementation of the same message name remains ordinary object behavior and is not runtime-constrained to return Boolean.
 
 An implementation may use inline caches, specialized AST nodes, partial evaluation, or JIT compilation for common cases such as receivers known to be `true` or `false`, or numeric `+`. These optimizations must be observationally equivalent to the corresponding ordinary message sends.
+
+
+## Error Signaling, Handler Matching, and Unwinding
+
+Errors are ordinary objects. Signaling an error searches dynamically active handlers from the current activation outward.
+
+Each handler has a match prototype. A handler matches when that prototype occurs in the signaled error object's delegation chain. Matching therefore uses the normal prototype/delegation model rather than a class hierarchy or static type test.
+
+Conceptually:
+
+```text
+function signal(error, activation):
+    handler = nearestMatchingDynamicHandler(error, activation)
+
+    if handler == none:
+        terminateAsUnhandled(error)
+
+    unwindTo(handler.activation)
+    invokeHandler(handler, error)
+```
+
+Conceptually, prototype matching is:
+
+```text
+function handlerMatches(handler, error):
+    current = error
+
+    loop:
+        if current === handler.matchPrototype:
+            return true
+
+        if current === Object:
+            return false
+
+        current = current.parent
+```
+
+`Object` is the unique root and has no parent; no `null` or hidden sentinel is used as a delegation-chain terminator.
+
+Core v0.1 handlers are **unwinding handlers**. Invoking a matching handler abandons the signaling continuation. If the handler returns normally, execution continues according to the handler-installation construct; it does not return a value to the original `signal` operation and does not resume immediately after the signaling point.
+
+Core v0.1 does not expose resumable conditions, `resume`, `retry`, or equivalent operations. Implementations should keep signaling, handler search, and stack transfer conceptually separable so that a later explicit resumable-condition facility can be introduced without redefining error objects or prototype-based handler matching.

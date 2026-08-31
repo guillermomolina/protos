@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 13  
+Document revision: 14  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1313,3 +1313,12 @@ a.or(() => b)
 ```
 
 The grammar does not require the receiver of `and`, `or`, `ifTrue`, or `ifFalse` to be `true` or `false`. Receiver behavior is determined by ordinary message lookup.
+
+
+## Error Handling Syntax Note
+
+Core Grammar v0.1 introduces no mandatory `try`, `catch`, `throw`, or `finally` syntax.
+
+Error objects are signaled and handlers are dynamically installed through the object/runtime protocol. The exact convenience syntax, if any, for installing handlers is intentionally left outside the core grammar at this stage.
+
+Handler matching by delegation and unwinding behavior are runtime semantics and require no special parser production.
