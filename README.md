@@ -378,6 +378,10 @@ The design is currently described by three documents:
 -   `PROTOS_RUNTIME_SEMANTICS_v0.1.md` --- executable runtime model and
     pseudocode
 
+## License
+
+This project is distributed under the Server Side Public License (SSPL) v1. For the full license text, see [LICENSE](LICENSE).
+
 ## Specification Status
 
 Version 0.1 remains a draft, but the major semantic decisions currently tracked by the design are specified. The specification documents are periodically audited and consolidated so that the canonical grammar, language specification, and runtime pseudocode remain aligned.
