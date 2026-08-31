@@ -1,9 +1,13 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 35  
+Document revision: 36  
 Status: Draft  
 Last updated: 2026-08-31
+
+## Language Name
+
+The language defined by this specification is named **Protos**.
 
 ## 1. Principles
 

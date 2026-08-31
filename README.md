@@ -1,4 +1,12 @@
-# Prototype-Based Language
+# Protos
+
+## Name
+
+The language is named **Protos**.
+
+The name reflects its prototype-based object model and derives naturally from the root associated with *prototype*: the first, original, or archetypal object from which behavior can be derived through delegation.
+
+Canonical project documentation uses the `PROTOS_` filename prefix.
 
 > **Working title:** Prototype-Based Language\
 > **Status:** Early language design / specification draft\
@@ -365,10 +373,10 @@ mechanisms.
 
 The design is currently described by three documents:
 
--   `PROTIA_LANGUAGE_SPEC_v0.1.md` --- object model and language
+-   `PROTOS_LANGUAGE_SPEC_v0.1.md` --- object model and language
     semantics
--   `PROTIA_GRAMMAR_v0.1.md` --- lexical and syntactic grammar
--   `PROTIA_RUNTIME_SEMANTICS_v0.1.md` --- executable runtime model and
+-   `PROTOS_GRAMMAR_v0.1.md` --- lexical and syntactic grammar
+-   `PROTOS_RUNTIME_SEMANTICS_v0.1.md` --- executable runtime model and
     pseudocode
 
 The filenames still contain an earlier working name and will be renamed
