@@ -4,6 +4,26 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [docs/PROTOS_SPEC_CHANGELOG.md](docs/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.1.6-SNAPSHOT] - 2026-08-31
+
+### Added
+
+- Expanded lexer support to cover the lexical rules defined by the current Core v0.1 specification.
+- Added lexer support for comments, Unicode-aware identifiers, reserved words, numeric literal forms, multiline strings, ellipsis, and custom symbolic operators.
+- Added lexical validation for malformed string escape sequences and invalid Unicode scalar values.
+- Added regression coverage for supplementary Unicode escape sequences.
+
+### Changed
+
+- Updated lexer tests to match the current specification for reserved words, period tokenization, and numeric literals adjacent to periods.
+- Unicode escape decoding now preserves supplementary Unicode code points instead of truncating them to Java `char` values.
+
+### Notes
+
+- The lexer implementation is still under specification-compliance review.
+- Unicode identifier handling requires further review for exact `XID_Start` and `XID_Continue` compliance.
+- Specification changes are documented separately in [docs/PROTOS_SPEC_CHANGELOG.md](docs/PROTOS_SPEC_CHANGELOG.md).
+
 ## [0.1.5-SNAPSHOT] - 2026-08-31
 
 ### Notes
