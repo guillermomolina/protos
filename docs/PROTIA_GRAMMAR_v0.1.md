@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 27  
+Document revision: 28  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1684,3 +1684,14 @@ Core v0.1 introduces no required `NaN`, `Infinity`, or `-Infinity` literals or k
 NaN and infinities are semantic Float values. They may be obtained through ordinary Float protocol or produced by floating-point operations.
 
 The grammar therefore requires no new reserved words for these values.
+
+## Float Signed Zero Grammar Note
+
+Signed-zero behavior requires no new grammar. `-0.0` is parsed through the ordinary unary-minus and Float-literal rules.
+
+Its semantics are:
+
+```text
+0.0 == -0.0   -> true
+0.0 === -0.0  -> false
+```

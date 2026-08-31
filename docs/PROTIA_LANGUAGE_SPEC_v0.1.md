@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 27  
+Document revision: 28  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1642,6 +1642,40 @@ NaN
     special semantic value of Float
     potentially many runtime representations
 ```
+
+## Float Signed Zero Semantics
+
+IEEE-style signed zero is semantically observable in the `Float` family.
+
+Numeric equality ignores the distinction:
+
+```js
+0.0 == -0.0    // true
+```
+
+Numeric semantic identity preserves it:
+
+```js
+0.0 === -0.0   // false
+```
+
+The sign of zero is therefore part of Float semantic identity even though it does not affect numeric equality.
+
+This distinction matters because signed zero can influence later floating-point behavior, for example the sign of infinity produced by reciprocal-style operations:
+
+```js
+1.0 / 0.0     // +Infinity
+1.0 / -0.0    // -Infinity
+```
+
+The general rule is:
+
+```text
+==   compares numeric value and ignores the signed-zero distinction
+===  preserves the signed-zero distinction within Float
+```
+
+This rule is semantic and must not depend on boxing, allocation, host references, or implementation-specific representation.
 
 ## Numeric Model
 

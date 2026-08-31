@@ -380,7 +380,6 @@ Version 0.1 remains a draft, but the major object-model, invocation, collection-
 
 The principal remaining semantic questions include:
 
-- exact Float identity/equality for signed zero;
 - duplicate parameter-name validation;
 - the exact lexical character set for custom symbolic operators;
 - Future cancellation, error-context propagation, and concurrency memory semantics;
@@ -496,3 +495,14 @@ nanA === nanB   // true
 IEEE NaN payloads and host-level representations are treated as representation details unless inspected through an explicit low-level protocol.
 
 Core v0.1 does not require `NaN` or infinity literals. Standard Float protocol may expose values such as `Float.nan`, `Float.infinity`, and `Float.negativeInfinity`.
+
+## Float Signed Zero
+
+Signed zero follows IEEE-style numeric equality while remaining visible to semantic identity:
+
+```js
+0.0 == -0.0    // true
+0.0 === -0.0   // false
+```
+
+The sign bit is therefore part of Float semantic identity, unlike NaN payload differences.

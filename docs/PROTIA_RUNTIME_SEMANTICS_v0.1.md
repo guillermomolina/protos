@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 27  
+Document revision: 28  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -2097,6 +2097,42 @@ nanA === nanB -> true
 ```
 
 for semantic Float NaN values.
+
+## Float Signed Zero Runtime Semantics
+
+Float semantic equality and identity treat signed zero differently.
+
+Conceptually:
+
+```text
+function floatNumericEqual(a, b):
+    if isZero(a) and isZero(b):
+        return true
+
+    return ieeeNumericEqual(a, b)
+```
+
+Semantic identity preserves the sign distinction:
+
+```text
+function floatSemanticIdentity(a, b):
+    if isNaN(a) and isNaN(b):
+        return true
+
+    if isZero(a) and isZero(b):
+        return sameZeroSign(a, b)
+
+    return sameFloatIdentityValue(a, b)
+```
+
+Therefore:
+
+```text
++0.0 == -0.0   -> true
++0.0 === -0.0  -> false
+```
+
+The implementation may use native IEEE-754 operations or specialized representations, but must preserve these observable semantics.
 
 ## Numeric Runtime Semantics
 
