@@ -1,7 +1,7 @@
 # Protia Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 10  
+Document revision: 11  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -807,14 +807,14 @@ An implementation may use a specialized construction context provided that obser
 
 ---
 
-# 21. Composition
+# 21. Object Composition
 
 For:
 
 ```js
 target: parent {
-    ...traitA
-    ...traitB
+    ...sourceA
+    ...sourceB
 
     move: () => {
         ...
@@ -822,34 +822,50 @@ target: parent {
 }
 ```
 
-composition is conceptually structural.
+composition is structural flattening of local slot bindings. A composition source is an ordinary object; there is no runtime `Trait` value kind.
+
+The runtime must distinguish three things while constructing an object:
 
 ```text
-function composeSlots(target, source):
+explicitLocalDeclarations
+composedContributionsByName
+the final local slot table
+```
+
+Each composition expression evaluates its source normally and records that source's local slot bindings:
+
+```text
+function collectComposition(source, construction):
+    requireObject(source)
+
     for each local slot in source:
-        name = slot.name
-
-        if target already has local slot name:
-            markConflict(target, name, source)
-        else:
-            provisionally copy slot to target
+        construction.composedContributions[slot.name].append(slot.value)
 ```
 
-After the full object body has been processed:
+The slot **binding** is copied; `slot.value` itself is not cloned. If two receivers compose a slot whose value is the same mutable object, both resulting local slots initially refer to that same object.
+
+Explicit local declarations in the receiving object are recorded independently of textual order. After the complete body has been evaluated sufficiently to determine its composition contributions and explicit local declarations, the final slots are resolved per name:
 
 ```text
-function resolveCompositionConflicts(target):
-    for each unresolved conflict:
-        if object body explicitly declared local slot with same name:
-            conflict is resolved
-        else:
-            signal CompositionConflict(
-                target = target,
-                name = conflict.name
-            )
+function resolveComposedSlot(construction, name):
+    if construction.hasExplicitLocalDeclaration(name):
+        return construction.explicitLocalValue(name)
+
+    contributions = construction.composedContributions[name]
+
+    if contributions.count == 1:
+        return contributions[0]
+
+    if contributions.count > 1:
+        signal CompositionConflict(
+            target = construction.target,
+            name = name
+        )
 ```
 
-Composition never changes `target.parent`.
+Thus an explicit local declaration has priority over any composed contribution and resolves a collision between multiple sources. In the absence of an explicit local declaration, two or more contributions with the same name are an error. Source order never selects a winner.
+
+The rule is uniform for closure-valued slots, immutable values, mutable objects, and all other slot contents. Composition never changes `target.parent` and adds no alternate lookup path. Once construction succeeds, composed slots are ordinary local slots of `target`.
 
 ---
 

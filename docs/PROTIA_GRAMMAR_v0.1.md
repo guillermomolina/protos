@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 10  
+Document revision: 11  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -648,9 +648,13 @@ duck: animal {
 }
 ```
 
-Composition occurs while constructing the object and does not modify its delegation chain.
+The expression following `...` evaluates to an ordinary object. There is no separate trait declaration or trait value category in the grammar.
 
-If composed sources contribute conflicting slots, the conflict is an error unless an explicit local declaration resolves it.
+Composition occurs as part of object construction and does not modify the object's delegation chain. It contributes the source object's local slot bindings to the object under construction. The values stored in those slots are not cloned.
+
+Composition order has no precedence semantics. If multiple composed sources contribute the same slot name, the conflict is an error unless the receiving object explicitly declares that slot locally in its own body. The local declaration resolves the conflict regardless of whether it appears textually before or after the relevant composition expressions.
+
+The rule applies uniformly to all slots; the grammar does not distinguish state slots from closure-valued method-like slots.
 
 ## 25. Uniform Object Bodies
 

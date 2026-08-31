@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 10  
+Document revision: 11  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -731,11 +731,9 @@ result: object
     .bar()
 ```
 
-## 20. Composition and Traits
+## 20. Object Composition
 
-The core supports only one delegation parent.
-
-Horizontal reuse is performed through slot composition.
+The core supports only one delegation parent. Horizontal reuse is performed through **object composition**.
 
 ```js
 duck: animal {
@@ -744,13 +742,47 @@ duck: animal {
 }
 ```
 
-Composition does not introduce additional parents.
+A composition source is an ordinary object. The language has no distinct `Trait` value kind and requires no `trait` declaration. An object may be used as a trait-like source simply by composing its local slots into another object.
 
-Composed slots structurally become slots of the resulting object.
+Composition copies **all local slot bindings** from the source object, regardless of whether a slot contains a closure, immutable data, mutable state, or any other object. It does not clone the objects stored in those slots. Thus composition copies bindings, not object graphs.
 
-Conflicting slots are errors unless explicitly resolved by a local slot declaration.
+```js
+positionable: {
+    x: 0
+    y: 0
+}
 
-This avoids method resolution orders, diamond inheritance, and multiple `super` chains.
+player: { ...positionable }
+enemy:  { ...positionable }
+```
+
+`player` and `enemy` each receive their own local `x` and `y` slots. Initially those slots contain the same immutable numeric values. Modifying `player.x` later modifies only `player`'s local slot. If a composed slot contains an ordinary mutable object, each copied slot initially refers to that same object; composition performs no implicit deep copy.
+
+Composition does not introduce a delegation relationship and never modifies the receiving object's parent. After successful composition, the contributed slots behave exactly as local slots of the receiving object.
+
+Composition order does not resolve conflicts. If multiple composed objects provide the same slot name, the composition is invalid unless the receiving object explicitly declares that slot locally in its own body. The position of that explicit declaration relative to the composition expressions is irrelevant.
+
+```js
+walker:  { move: () => { ... } }
+swimmer: { move: () => { ... } }
+
+duck: {
+    ...walker
+    ...swimmer
+
+    move: () => { ... }   // explicitly resolves the conflict
+}
+```
+
+The same conflict rule applies to every slot; there is no special distinction between method-like closure slots and state slots. A local declaration has priority over composed contributions, composed contributions must agree on uniqueness, and ordinary delegation is considered only after local/composed slots have been established.
+
+Conceptually:
+
+```text
+explicit local slot > unique composed slot > delegated lookup
+```
+
+This avoids composition-order precedence, method resolution orders, diamond inheritance, and multiple `super` chains while preserving structural flattening.
 
 ## 21. Equality and Identity
 
