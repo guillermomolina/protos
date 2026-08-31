@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 42  
+Document revision: 43  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -23,7 +23,17 @@ The language has a uniform execution model. There is no fundamental semantic dis
 
 The language favors objects and messages over keywords and special syntactic constructs.
 
-## 1.1 Dynamic Typing
+## 1.1 Identifier Syntax
+
+Protos identifiers are Unicode-aware and case-sensitive.
+
+An identifier begins with `_` or a Unicode character with the `XID_Start` property. Subsequent characters must have the Unicode `XID_Continue` property.
+
+Every identifier must be in Unicode NFC normalization form. Implementations must reject non-NFC identifiers rather than silently normalizing them. Identifier normalization applies to identifier spelling only; it does not imply normalization of `String` values.
+
+Reserved words (keywords) such as `this`, `null`, `true`, `false`, `context`, `args`, and `super` are recognized after lexical identifier recognition and cannot be used as ordinary identifiers where the grammar reserves them.
+
+## 1.2 Dynamic Typing
 
 Core v0.1 is dynamically typed.
 

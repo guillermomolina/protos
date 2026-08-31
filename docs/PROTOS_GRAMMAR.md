@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 42  
+Document revision: 43  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -27,17 +27,30 @@ x | y     alternative
 
 ## 2. Identifiers
 
-```ebnf
-identifier =
-    identifier-start,
-    { identifier-part };
+Protos identifiers are Unicode-aware and case-sensitive.
 
-identifier-start =
-    letter | "_";
+An identifier must begin with:
+- `_` (underscore), OR
+- A Unicode character with the `XID_Start` property.
 
-identifier-part =
-    letter | digit | "_";
+Subsequent characters must have the Unicode `XID_Continue` property.
+
+Decimal digits are therefore allowed after the first character when permitted by `XID_Continue`.
+
+Every identifier must be in Unicode NFC (Canonical Decomposition, Followed by Canonical Composition) normalization form. Implementations must reject non-NFC identifiers rather than silently normalizing them.
+
+Examples:
+
+```text
+name
+_private
+café
+año
+π
+日本語
 ```
+
+Identifier normalization applies to identifier spelling only and does not imply normalization of `String` values.
 
 Reserved intrinsic identifiers:
 

@@ -4,6 +4,14 @@ All notable changes to the Protos language specification will be documented in t
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.43] - 2026-08-31
+
+### Added
+- Core v0.1 identifier syntax definition: Unicode-aware, case-sensitive, begin with `_` or `XID_Start`, continue with `XID_Continue`.
+- Core v0.1 identifier normalization requirement: all identifiers must be in Unicode NFC form, implementations must reject non-NFC identifiers.
+- Clarification that identifier normalization applies to spelling only, not to `String` values.
+- Reserved word recognition rules after lexical identifier recognition.
+
 ## [0.1.42] - 2026-08-31
 
 ### Added
