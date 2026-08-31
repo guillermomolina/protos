@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 8  
+Document revision: 9  
 Status: Draft  
 Last updated: 2026-08-30
 
@@ -698,15 +698,15 @@ is equivalent to:
 foo(); bar(); baz()
 ```
 
-`;` is an explicit horizontal expression separator.
+`;` is the explicit horizontal expression separator. A comma is **not** an expression separator.
 
-Likewise:
+Therefore an object body written on one line uses `;`:
 
 ```js
-point: { x: 10, y: 20 }
+point: { x: 10; y: 20 }
 ```
 
-may be written:
+and is equivalent to:
 
 ```js
 point: {
@@ -715,7 +715,7 @@ point: {
 }
 ```
 
-A comma primarily acts as a horizontal separator.
+`,` is reserved for list-like syntax such as argument lists and parameter lists, and may also be used by future collection literal syntax. It never sequences arbitrary expressions.
 
 Incomplete expressions continue across line breaks:
 

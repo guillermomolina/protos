@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 8  
+Document revision: 9  
 Status: Draft  
 Last updated: 2026-08-30
 
@@ -109,7 +109,7 @@ separator =
     | newline;
 ```
 
-Thus:
+A comma is not an expression separator. It is reserved for list-like syntactic forms such as arguments and parameters. Thus:
 
 ```js
 foo()
@@ -122,6 +122,14 @@ is equivalent to:
 ```js
 foo(); bar(); baz()
 ```
+
+The same rule applies inside object bodies:
+
+```js
+point: { x: 10; y: 20 }
+```
+
+A comma cannot be substituted for `;` here.
 
 when each expression is complete at the newline.
 
