@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 4  
+Document revision: 5  
 Status: Draft  
 Last updated: 2026-08-30
 
@@ -736,19 +736,42 @@ Conflicting slots are errors unless explicitly resolved by a local slot declarat
 
 This avoids method resolution orders, diamond inheritance, and multiple `super` chains.
 
-## 21. Equality
+## 21. Equality and Identity
 
-`===` represents identity.
+`===` represents **semantic identity** and is not customizable. Its result must not depend on allocation, interning, boxing, tagged values, or any other implementation strategy.
+
+For ordinary identity-bearing objects, identity means that both expressions denote the same individual object:
 
 ```js
-a === b
+a: { x: 1 }
+b: { x: 1 }
+c: a
+
+a === b  // false
+a === c  // true
 ```
 
-is true only when both expressions refer to the same object.
+Some built-in immutable objects have **value identity**. For these objects, the semantic value itself determines identity rather than a particular allocation. In v0.1 this includes at least `Number`, `String`, `Boolean`, and `null`.
 
-`==` represents semantic equality and may be customized through object behavior.
+```js
+1 === 1                    // true
+"hello" === "hello"        // true
+("hel" + "lo") === "hello" // true
+true === true              // true
+null === null              // true
+```
 
-Identity and semantic equality are distinct concepts.
+`Number` objects are immutable value objects.
+
+`String` objects are immutable value objects. An operation on a String never changes that String in place; an operation that produces different text produces another String value. Implementations may freely share or intern String storage because such sharing cannot change observable identity semantics.
+
+`true`, `false`, and `null` are canonical singleton values.
+
+Ordinary mutable objects, closures, arrays and other identity-bearing objects retain individual object identity even when their contents happen to be equal. The exact collection model is specified separately.
+
+`==` represents semantic equality and may be customized through object behavior. For built-in immutable value objects, `==` and `===` may naturally produce the same result, but they remain different operations: `==` is behavioral and customizable, while `===` is a non-overridable identity primitive.
+
+Identity is never defined by comparing hash codes. A runtime may derive or cache hashes from identity where appropriate, but hash collisions cannot make distinct identity-bearing objects identical.
 
 ## 22. Open Objects
 

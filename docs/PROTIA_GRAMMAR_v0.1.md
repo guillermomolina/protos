@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 4  
+Document revision: 5  
 Status: Draft  
 Last updated: 2026-08-30
 
@@ -550,7 +550,19 @@ Identity:
 a === b
 ```
 
-is a non-overridable runtime identity operation.
+is a non-overridable runtime identity operation. Its result is defined by the language semantics rather than by physical allocation or host-language reference identity. Built-in immutable value objects such as `Number`, `String`, `Boolean`, and `null` use value identity; ordinary identity-bearing objects use individual object identity.
+
+Examples:
+
+```js
+1 === 1                    // true
+"hello" === "hello"        // true
+("hel" + "lo") === "hello" // true
+
+{ x: 1 } === { x: 1 }     // false
+```
+
+`String` is immutable; syntax never denotes an in-place mutation of a String value.
 
 ```js
 a !== b

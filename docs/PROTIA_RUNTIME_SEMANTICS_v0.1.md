@@ -1,7 +1,7 @@
 # Protia Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 4  
+Document revision: 5  
 Status: Draft  
 Last updated: 2026-08-30
 
@@ -884,14 +884,40 @@ Freezing is shallow.
 
 # 24. Identity
 
+Identity is a semantic property and must not leak the runtime representation chosen for an object.
+
+Built-in immutable value objects use value identity. In v0.1 this includes at least `Number`, `String`, `Boolean`, and `null`. Ordinary identity-bearing objects use an individual identity token or an equivalent runtime mechanism.
+
+Conceptually:
+
 ```text
 function identical(a, b):
-    return runtimeObjectIdentity(a) == runtimeObjectIdentity(b)
+    if isBuiltInValueObject(a) or isBuiltInValueObject(b):
+        if valueIdentityKind(a) != valueIdentityKind(b):
+            return false
+
+        return sameSemanticValue(a, b)
+
+    return sameObjectIdentity(a, b)
 ```
 
-`===` is not overrideable.
+Consequences include:
 
-An implementation may optimize immutable or immediate values, but observable identity semantics must remain consistent with the language definition.
+```text
+identical(1, 1)                         == true
+identical("hello", "hello")             == true
+identical("hel" + "lo", "hello")      == true
+identical(true, true)                   == true
+identical(null, null)                   == true
+
+identical(newObject(), newObject())     == false
+```
+
+`Number` and `String` are immutable value objects. String operations never mutate an existing String in place; a changed textual value is another String value. A runtime may intern, share, inline, box, unbox, or otherwise optimize these values without changing `===`.
+
+`true`, `false`, and `null` are canonical singleton values.
+
+`===` is not overrideable. Hash codes are not identity: a hash collision must never cause two distinct identity-bearing objects to compare identical.
 
 ---
 
