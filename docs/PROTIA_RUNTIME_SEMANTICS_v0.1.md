@@ -1,7 +1,7 @@
 # Protia Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 5  
+Document revision: 6  
 Status: Draft  
 Last updated: 2026-08-30
 
@@ -1463,6 +1463,16 @@ Modules do not implicitly share mutable global state. Each module has its own mo
 
 Universal language facilities such as core prototypes and standard behavior may be made available through a shared prelude or root environment. Such an environment is part of lexical/runtime setup and does not create a separate global-variable semantic category.
 
+The standard prelude is a shared **frozen** context. Lookup may read its slots normally, but assignment may not modify them. Consequently, an unqualified assignment whose only matching slot is in the prelude fails with the ordinary non-writable/frozen assignment error. Shadowing is explicit slot creation in the module context.
+
+```text
+print("hello")     -> read prelude.print
+print = myPrint     -> ERROR
+print: myPrint      -> create moduleContext.print
+```
+
+Runtime initialization MUST freeze the prelude before executing user modules. `assignName` MUST respect that frozen state and MUST NOT special-case the prelude by mutating it.
+
 Top-level creation:
 
 ```js
@@ -1475,9 +1485,10 @@ Conceptually:
 
 ```text
 function createModuleContext(preludeContext):
+    require preludeContext.state == frozen
+
     return Object(
         parent = standardContextPrototype,
-        lexicalParent = preludeContext,
         state = open
     )
 ```

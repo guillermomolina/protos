@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 5  
+Document revision: 6  
 Status: Draft  
 Last updated: 2026-08-30
 
@@ -236,6 +236,16 @@ Each module has its own module context. Modules do not implicitly share mutable 
 Cross-module visibility must be established explicitly by the module/import/export mechanism. The exact module loading, import, export, initialization, and cyclic-dependency semantics are specified separately.
 
 Universal language facilities such as core prototypes and standard behavior may be supplied through a shared prelude or root lexical environment. Such facilities remain part of the ordinary context and lookup model rather than introducing a global-variable namespace.
+
+The standard prelude is shared but **frozen**. Its slots may be read through ordinary lexical lookup, but unqualified `=` must never mutate a prelude slot. Attempting to modify a binding that resolves only to the frozen prelude signals an assignment error. A module that wants to shadow a prelude binding creates a new local slot with `:`.
+
+```js
+print("hello")     // reads the prelude binding
+print = myPrint     // ERROR: the prelude binding is frozen
+print: myPrint      // OK: creates a module-local binding that shadows it
+```
+
+This preserves module isolation: modules may share immutable standard facilities, but they do not acquire shared mutable global state through the prelude.
 
 Therefore, at module top level:
 
