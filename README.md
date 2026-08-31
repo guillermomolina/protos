@@ -380,7 +380,7 @@ Version 0.1 remains a draft, but the major object-model, invocation, collection-
 
 The principal remaining semantic questions include:
 
-- exact numeric identity across `Integer`, `Float`, fixed-width integer values, NaN, and signed zero;
+- exact Float identity/equality for NaN and signed zero;
 - duplicate parameter-name validation;
 - the exact lexical character set for custom symbolic operators;
 - Future cancellation, error-context propagation, and concurrency memory semantics;
@@ -462,3 +462,24 @@ The standard equality and comparison protocol is Boolean-valued:
 These operations return canonical `true` or `false`, or signal an error. The language never interprets arbitrary objects as truthy comparison results.
 
 This also means `Map` can rely directly on `==` without introducing a separate key-equality convention.
+
+## Numeric Equality and Identity
+
+Numeric `==` compares mathematical numeric value across numeric families without requiring coercion:
+
+```js
+1 == 1.0               // true
+UInt8(1) == 1          // true
+```
+
+The comparison must not create false equality through lossy conversion.
+
+Numeric `===` is stricter and includes the semantic numeric family:
+
+```js
+1 === 1.0               // false
+UInt8(1) === 1          // false
+Int32(1) === UInt32(1)  // false
+```
+
+Float special cases such as NaN and signed zero are still being specified.

@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 25  
+Document revision: 26  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -2011,6 +2011,53 @@ The runtime may represent cleanup registrations as unwind records, dynamic frame
 
 No GC finalizer or reachability callback is part of the deterministic resource-lifetime semantics.
 
+
+## Exact Cross-Family Numeric Equality
+
+Numeric `==` is defined by mathematical value rather than by coercing one operand into the representation of the other.
+
+Conceptually:
+
+```text
+function numericEqual(a, b):
+    require isNumeric(a)
+    require isNumeric(b)
+
+    return exactNumericValueCompare(a, b)
+```
+
+`exactNumericValueCompare` must be representation-aware enough to avoid rounding-induced false equality.
+
+For Integer-versus-Float comparison, the runtime must not simply convert an arbitrary-precision Integer to Float. It may instead compare the exact Integer against the exact finite binary value represented by the Float.
+
+For example:
+
+```text
+9007199254740992 == 9007199254740992.0  -> true
+9007199254740993 == 9007199254740992.0  -> false
+```
+
+Cross-family numeric equality must be symmetric when both sides complete normally.
+
+Numeric semantic identity is stricter. Conceptually:
+
+```text
+numericIdentity(a, b):
+    return sameSemanticNumericFamily(a, b)
+       and sameNumericIdentityValue(a, b)
+```
+
+Therefore:
+
+```text
+1 === 1.0               -> false
+UInt8(1) === 1          -> false
+Int32(1) === UInt32(1)  -> false
+```
+
+The implementation may use optimized paths, but it must preserve this distinction between exact numeric equality and numeric-family-sensitive identity.
+
+Special Float identity/equality rules for NaN and signed zero are defined separately.
 
 ## Numeric Runtime Semantics
 

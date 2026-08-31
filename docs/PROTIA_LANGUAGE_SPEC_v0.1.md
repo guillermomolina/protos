@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 25  
+Document revision: 26  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1555,6 +1555,49 @@ Higher-level resource protocols such as `use`, `withOpen`, or similar APIs may b
 
 Garbage-collector finalization is not a resource-management guarantee and must not be relied upon for deterministic release of external resources.
 
+
+## Numeric Equality Across Families
+
+Numeric semantic equality compares mathematical numeric value across numeric families.
+
+Examples:
+
+```js
+1 == 1.0               // true
+UInt8(1) == 1          // true
+Int32(1) == UInt32(1)  // true
+```
+
+This does **not** imply conversion of either operand into the other's numeric family. Equality must not introduce rounding merely to perform a comparison.
+
+For numeric values, cross-family equality is symmetric:
+
+```text
+a == b  iff  b == a
+```
+
+when both operations complete normally.
+
+Implementations must compare exactly enough to avoid false equality caused by lossy conversion. For example, an arbitrary-precision Integer must not be rounded to Float merely to compare it with a Float.
+
+Semantic identity remains stricter:
+
+```js
+1 === 1.0               // false
+UInt8(1) === 1          // false
+Int32(1) === UInt32(1)  // false
+```
+
+For numeric values, `===` includes the semantic numeric family in identity. Equal mathematical value across distinct numeric families does not imply identity.
+
+This yields the general distinction:
+
+```text
+==   compares numeric value
+===  compares numeric value plus semantic numeric family
+```
+
+Special floating-point cases such as NaN and signed zero are specified separately.
 
 ## Numeric Model
 

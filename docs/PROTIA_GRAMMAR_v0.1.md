@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 25  
+Document revision: 26  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1663,3 +1663,16 @@ The grammar does not encode result types, but the standard equality and comparis
 ```
 
 Each operation returns canonical `true` or `false`, or signals an error. No truthiness conversion is applied to arbitrary returned objects.
+
+## Numeric Equality Grammar Note
+
+No additional syntax is required for cross-family numeric equality. The standard `==` and `===` operators retain their existing grammar and precedence.
+
+Their numeric semantics differ:
+
+```text
+==   mathematical numeric value
+===  numeric value plus semantic numeric family
+```
+
+The exact Float special cases for NaN and signed zero remain semantic questions, not grammar questions.
