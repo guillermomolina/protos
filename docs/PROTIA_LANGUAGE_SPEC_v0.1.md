@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 26  
+Document revision: 27  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1598,6 +1598,50 @@ This yields the general distinction:
 ```
 
 Special floating-point cases such as NaN and signed zero are specified separately.
+
+## Float Special Values and Identity
+
+`NaN` is a special semantic value of the `Float` family, not a language-level singleton object analogous to `null`.
+
+Different IEEE-754 NaN bit patterns or payloads do not create distinct language-level semantic values unless an explicit representation-inspection protocol is used.
+
+Consequently:
+
+```js
+a: someNaNProducingOperation()
+b: someOtherNaNProducingOperation()
+
+a == b    // false
+a === b   // true
+```
+
+Numeric equality follows IEEE-style NaN behavior: a NaN is not numerically equal to any value, including another NaN.
+
+Numeric semantic identity treats all NaN values of the same semantic Float family as the same semantic special value, independent of runtime payload, sign bit, allocation, boxing, or host representation.
+
+`NaN` need not be a reserved literal or a global singleton binding. Standard-library protocol may expose an ordinary way to obtain it, for example:
+
+```js
+Float.nan
+```
+
+Similarly, infinities are special Float values rather than new language literals. A standard library may expose ordinary protocol such as:
+
+```js
+Float.infinity
+Float.negativeInfinity
+```
+
+`null` remains fundamentally different:
+
+```text
+null
+    canonical singleton language object
+
+NaN
+    special semantic value of Float
+    potentially many runtime representations
+```
 
 ## Numeric Model
 

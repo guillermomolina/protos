@@ -380,7 +380,7 @@ Version 0.1 remains a draft, but the major object-model, invocation, collection-
 
 The principal remaining semantic questions include:
 
-- exact Float identity/equality for NaN and signed zero;
+- exact Float identity/equality for signed zero;
 - duplicate parameter-name validation;
 - the exact lexical character set for custom symbolic operators;
 - Future cancellation, error-context propagation, and concurrency memory semantics;
@@ -483,3 +483,16 @@ Int32(1) === UInt32(1)  // false
 ```
 
 Float special cases such as NaN and signed zero are still being specified.
+
+## Float NaN Semantics
+
+`NaN` is a special semantic `Float` value, not a singleton language object like `null`.
+
+```js
+nanA == nanB    // false
+nanA === nanB   // true
+```
+
+IEEE NaN payloads and host-level representations are treated as representation details unless inspected through an explicit low-level protocol.
+
+Core v0.1 does not require `NaN` or infinity literals. Standard Float protocol may expose values such as `Float.nan`, `Float.infinity`, and `Float.negativeInfinity`.

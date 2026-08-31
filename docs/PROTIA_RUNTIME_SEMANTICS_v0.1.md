@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 26  
+Document revision: 27  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -2058,6 +2058,45 @@ Int32(1) === UInt32(1)  -> false
 The implementation may use optimized paths, but it must preserve this distinction between exact numeric equality and numeric-family-sensitive identity.
 
 Special Float identity/equality rules for NaN and signed zero are defined separately.
+
+## Float NaN Semantic Identity
+
+IEEE-754 permits multiple NaN encodings, including distinct payloads and categories such as quiet and signaling NaNs.
+
+Core v0.1 does not expose those representation distinctions through ordinary semantic identity.
+
+Conceptually:
+
+```text
+function floatSemanticIdentity(a, b):
+    if isNaN(a) and isNaN(b):
+        return true
+
+    return sameFloatIdentityValue(a, b)
+```
+
+By contrast, numeric equality follows IEEE-style NaN comparison behavior:
+
+```text
+NaN == anyNumericValue  -> false
+anyNumericValue == NaN  -> false
+```
+
+including:
+
+```text
+NaN == NaN -> false
+```
+
+A runtime may preserve NaN payloads internally or expose them through an explicit low-level representation protocol, but payload/sign/boxing differences must not make ordinary `===` distinguish semantic NaN values.
+
+`NaN` is not required to be implemented as a canonical singleton object. The runtime may produce many host-level or boxed NaN representations while preserving:
+
+```text
+nanA === nanB -> true
+```
+
+for semantic Float NaN values.
 
 ## Numeric Runtime Semantics
 

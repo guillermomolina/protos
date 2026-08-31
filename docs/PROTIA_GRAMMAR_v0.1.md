@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 26  
+Document revision: 27  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1676,3 +1676,11 @@ Their numeric semantics differ:
 ```
 
 The exact Float special cases for NaN and signed zero remain semantic questions, not grammar questions.
+
+## Float Special Values Grammar Note
+
+Core v0.1 introduces no required `NaN`, `Infinity`, or `-Infinity` literals or keywords.
+
+NaN and infinities are semantic Float values. They may be obtained through ordinary Float protocol or produced by floating-point operations.
+
+The grammar therefore requires no new reserved words for these values.
