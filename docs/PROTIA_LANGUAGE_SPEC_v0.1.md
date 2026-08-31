@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 29  
+Document revision: 30  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -872,6 +872,44 @@ They return canonical `true` or `false`, or signal an error. The language define
 Identity is never defined by comparing hash codes. A runtime may derive or cache hashes from identity where appropriate, but hash collisions cannot make distinct identity-bearing objects identical.
 
 ## 21.1 Custom Symbolic Binary Operators
+
+### Custom Operator Lexical Alphabet
+
+Custom symbolic binary operators are formed from the following operator characters:
+
+```text
+! $ % & * + - / < = > ? @ \ ^ | ~
+```
+
+The following punctuation is structural and is not part of the custom-operator alphabet:
+
+```text
+. : ; , ( ) { } [ ]
+```
+
+In particular, `.` is reserved for member access, `:` for slot creation, and `;` for explicit expression separation.
+
+The lexer recognizes reserved and standard operator tokens before classifying a remaining valid symbolic sequence as a custom operator.
+
+Reserved or standard symbolic tokens include:
+
+```text
+=>  =  ==  ===  !=  !==  <=  >=  &&  ||
++   -  *   /   %   <   >
+```
+
+A symbolic sequence composed from the operator alphabet that is not otherwise reserved or standard may be used as a custom binary selector, for example:
+
+```js
+a @ b
+a |> b
+a <=> b
+a ~~ b
+a ** b
+```
+
+The lexical alphabet is fixed by the language grammar. Modules, imports, runtime objects, or operator declarations cannot extend it.
+
 
 User-defined symbolic binary operators are permitted as ordinary message selectors.
 

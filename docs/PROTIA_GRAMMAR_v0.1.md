@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 29  
+Document revision: 30  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -570,7 +570,7 @@ Explicit grouping is required:
 a @ (b * c)
 ```
 
-Parser precedence cannot be changed at runtime or by modules/imports. The exact lexical character set accepted for custom symbolic operator tokens remains unresolved.
+Parser precedence cannot be changed at runtime or by modules/imports. The lexical character set for custom symbolic operators is fixed by the Custom Operator Lexing rules.
 
 ## 22. Equality Lowering
 
@@ -1706,3 +1706,54 @@ The EBNF describes the syntactic shape of parameter lists. A semantic validation
 ```
 
 This validation occurs before execution.
+
+## Custom Operator Lexing
+
+Custom symbolic binary operators use the fixed character alphabet:
+
+```text
+! $ % & * + - / < = > ? @ \ ^ | ~
+```
+
+Structural punctuation is excluded:
+
+```text
+. : ; , ( ) { } [ ]
+```
+
+The lexer must prefer reserved and standard tokens before producing `CUSTOM_OPERATOR`.
+
+Reserved and standard symbolic tokens include:
+
+```text
+=>  =  ==  ===  !=  !==  <=  >=  &&  ||
++   -  *   /   %   <   >
+```
+
+Any remaining non-empty sequence made exclusively from operator characters may be tokenized as `CUSTOM_OPERATOR`.
+
+Examples:
+
+```js
+a @ b
+a |> b
+a <=> b
+a ~~ b
+a ** b
+```
+
+The characters `.`, `:`, and `;` never participate in a custom operator token.
+
+Conceptually:
+
+```ebnf
+operator-character =
+      "!" | "$" | "%" | "&" | "*" | "+"
+    | "-" | "/" | "<" | "=" | ">" | "?"
+    | "@" | "\\" | "^" | "|" | "~" ;
+
+custom-binary-operator =
+    operator-character, { operator-character } ;
+```
+
+After token formation, reserved and standard operator spellings are classified according to their dedicated grammar roles rather than as custom operators.

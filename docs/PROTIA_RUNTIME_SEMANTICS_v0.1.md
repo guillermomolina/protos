@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 29  
+Document revision: 30  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -2208,3 +2208,17 @@ If user code violates this invariant or mutates a key so that its relevant hash/
 `hash` values need only be valid within the current execution. The runtime may salt hashes per process. Persisted hash values must therefore not rely on the ordinary `hash` protocol.
 
 Map iteration preserves insertion order as an observable collection property.
+
+## Custom Operator Runtime Note
+
+Custom symbolic operators do not create a separate runtime dispatch mechanism. After lexing and parsing, a custom binary operator is an ordinary message selector.
+
+For example:
+
+```js
+a |> b
+```
+
+lowers conceptually to an ordinary send whose selector is `"|>"`.
+
+The permitted symbolic character alphabet is a parser/lexer rule and is not mutable at runtime.

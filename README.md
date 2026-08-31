@@ -380,7 +380,6 @@ Version 0.1 remains a draft, but the major object-model, invocation, collection-
 
 The principal remaining semantic questions include:
 
-- the exact lexical character set for custom symbolic operators;
 - Future cancellation, error-context propagation, and concurrency memory semantics;
 - the public protocol or convenience syntax for dynamic handler installation;
 - malformed-text decoding policy and the final standard encoding catalogue;
@@ -509,3 +508,13 @@ The sign bit is therefore part of Float semantic identity, unlike NaN payload di
 ## Parameter Names
 
 Parameter names in a closure signature must be unique. Duplicate required/default parameter names and collisions with the rest parameter are rejected before execution.
+
+## Custom Operator Alphabet
+
+Custom symbolic binary operators use the fixed character set:
+
+```text
+! $ % & * + - / < = > ? @ \ ^ | ~
+```
+
+Structural punctuation such as `.`, `:`, `;`, `,`, and brackets/braces/parentheses is excluded. Reserved and standard operator tokens are recognized before remaining symbolic sequences are classified as custom operators.
