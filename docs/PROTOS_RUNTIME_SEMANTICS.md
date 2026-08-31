@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 43  
+Document revision: 44  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -63,6 +63,8 @@ Future
 These fields are conceptual. An implementation may represent them differently.
 
 Identifiers are lexical constructs that must conform to Unicode `XID_Start` and `XID_Continue` properties and must be in Unicode NFC normalization form. The lexer must validate NFC compliance and reject non-NFC identifiers as syntax errors.
+
+Reserved-word matching is case-sensitive. After lexical identifier recognition, the lexer must check whether the identifier spelling exactly matches one of the seven reserved words: `this`, `context`, `args`, `super`, `true`, `false`, or `null`. If it matches, the lexer tokenizes it as a reserved word token. Otherwise, it is an ordinary identifier token.
 
 Comments are purely lexical: the lexer strips `//` line comments, `/* ... */` block comments, and they are treated as whitespace. They do not produce runtime values, they do not participate in the language object model, and they do not have any special meaning inside String literals. `#` is not a comment delimiter, and no documentation-comment syntax is defined by Core v0.1.
 

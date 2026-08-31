@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 43  
+Document revision: 44  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -23,7 +23,7 @@ The language has a uniform execution model. There is no fundamental semantic dis
 
 The language favors objects and messages over keywords and special syntactic constructs.
 
-## 1.1 Identifier Syntax
+## 1.1 Identifier Syntax and Reserved Words
 
 Protos identifiers are Unicode-aware and case-sensitive.
 
@@ -31,7 +31,19 @@ An identifier begins with `_` or a Unicode character with the `XID_Start` proper
 
 Every identifier must be in Unicode NFC normalization form. Implementations must reject non-NFC identifiers rather than silently normalizing them. Identifier normalization applies to identifier spelling only; it does not imply normalization of `String` values.
 
-Reserved words (keywords) such as `this`, `null`, `true`, `false`, `context`, `args`, and `super` are recognized after lexical identifier recognition and cannot be used as ordinary identifiers where the grammar reserves them.
+The Core v0.1 reserved-word set is exactly:
+
+```text
+this
+context
+args
+super
+true
+false
+null
+```
+
+Reserved-word recognition is case-sensitive. Reserved words cannot be used as ordinary identifiers where the grammar expects an identifier. Names from the standard prelude such as `Object`, `Future`, `Number`, `String`, `Map`, or `IdentityMap` are not reserved words.
 
 ## 1.2 Dynamic Typing
 

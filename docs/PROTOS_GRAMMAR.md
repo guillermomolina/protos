@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 43  
+Document revision: 44  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -54,16 +54,25 @@ Identifier normalization applies to identifier spelling only and does not imply 
 
 Reserved intrinsic identifiers:
 
+The Core v0.1 reserved-word set is exactly:
+
 ```text
 this
 context
 args
-null
+super
 true
 false
+null
 ```
 
-They are not ordinary writable identifiers. `super` is a reserved keyword for super-message-send syntax and is not an expression value.
+Reserved-word recognition happens after lexical identifier recognition. The lexer first recognizes a valid Unicode identifier according to the identifier rules above. If the identifier spelling exactly matches one of the reserved words, it is tokenized as that reserved word rather than as an ordinary identifier. Reserved-word matching is case-sensitive. For example, `this` is reserved but `This` is an ordinary identifier.
+
+Reserved words cannot be used as ordinary identifier names where the grammar expects an identifier.
+
+Names provided by the standard prelude, such as `Object`, `Future`, `Number`, `String`, `Map`, or `IdentityMap`, are not reserved words. Error object names are not reserved.
+
+Core v0.1 defines no additional reserved words such as `if`, `else`, `while`, `for`, `class`, `function`, `try`, `catch`, `throw`, `async`, or `await`.
 
 ## 3. Literals
 
