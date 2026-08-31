@@ -1,7 +1,7 @@
 # Protia Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 18  
+Document revision: 19  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1910,3 +1910,40 @@ Object(parent, body)
 remains a separate semantic AST operation. It creates a fresh object with the given parent and evaluates its object body; it does not implicitly invoke `init`.
 
 The implementation may specialize closure invocation and standard object construction in Truffle nodes or JIT-compiled paths, but observable behavior must remain equivalent to the polymorphic call protocol.
+
+
+## Unwind-Safe Cleanup
+
+The runtime maintains cleanup registrations associated with dynamic execution scopes.
+
+Conceptually:
+
+```text
+ensure(body, cleanup):
+    register cleanup for protected dynamic scope
+
+    execute body
+
+    on leaving the protected scope:
+        execute cleanup
+```
+
+Cleanup runs when the protected scope is exited by:
+
+```text
+normal completion
+non-local return (^)
+error unwind
+```
+
+If cleanup returns normally, the original completion or control transfer continues.
+
+If cleanup signals an error, the cleanup error becomes the active control transfer. A previously active non-local return or error unwind does not continue past that point.
+
+This behavior uses the same general runtime machinery that tracks non-local control transfer and dynamic handlers, but resumable conditions are not required for Core v0.1.
+
+A future condition that is resumed without leaving the protected dynamic scope must not trigger its cleanup merely because the condition was signaled.
+
+The runtime may represent cleanup registrations as unwind records, dynamic frames, or another implementation-specific structure. The representation is not observable.
+
+No GC finalizer or reachability callback is part of the deterministic resource-lifetime semantics.

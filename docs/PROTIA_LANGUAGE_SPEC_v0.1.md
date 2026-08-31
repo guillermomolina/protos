@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 18  
+Document revision: 19  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1447,3 +1447,37 @@ object body      -> compose local slots from an object
 ```
 
 It is not a general standalone expression operator and has no universal runtime meaning outside those contexts.
+
+
+## Resource Cleanup and `ensure`
+
+Core v0.1 defines no deterministic object destructor.
+
+Resource release is explicit protocol behavior, for example:
+
+```js
+file.close()
+socket.close()
+```
+
+The runtime provides unwind-safe cleanup semantics through an `ensure`-style protocol. Conceptually:
+
+```js
+body.ensure(cleanup)
+```
+
+executes `cleanup` whenever execution leaves the protected scope, whether by:
+
+- normal completion,
+- non-local return with `^`,
+- error signaling and unwind.
+
+If `cleanup` completes normally, the original completion or control transfer continues unchanged.
+
+If `cleanup` signals an error, that new error becomes the active control transfer. Any previously active return or error unwind is abandoned in favor of the newly signaled error.
+
+A future resumable-condition mechanism is compatible with this rule: a condition that is handled and resumed without leaving the protected scope does not trigger cleanup merely because it was signaled.
+
+Higher-level resource protocols such as `use`, `withOpen`, or similar APIs may be implemented on top of this guarantee using ordinary messages and closures.
+
+Garbage-collector finalization is not a resource-management guarantee and must not be relied upon for deterministic release of external resources.

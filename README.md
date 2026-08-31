@@ -401,3 +401,11 @@ without having implementation details silently define the language.
 - Ordinary prototypes inherit default construction from `Object`: create a child object, send `init(...args)`, and return the instance.
 - Alternative constructors are ordinary named messages.
 - `...` is contextual structural syntax for rest capture, argument spread, and slot composition.
+
+
+## Resource Lifetime
+
+- Deterministic destructors are not part of Core v0.1.
+- External resources are released through explicit protocols such as `close()`.
+- The runtime provides unwind-safe `ensure` semantics for normal completion, `^`, and error unwind.
+- GC finalization is not considered a reliable resource-management mechanism.

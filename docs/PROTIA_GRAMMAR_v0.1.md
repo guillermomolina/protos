@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 18  
+Document revision: 19  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1492,3 +1492,18 @@ Standalone forms such as these are not valid expressions:
 x: ...value
 return ...value
 ```
+
+
+## Resource Cleanup Syntax Note
+
+Core Grammar v0.1 introduces no destructor syntax and no mandatory `try` / `finally` construct.
+
+Cleanup may be exposed through ordinary message syntax such as:
+
+```js
+body.ensure(cleanup)
+```
+
+or through higher-level library protocols built from closures and ordinary sends.
+
+The guaranteed execution of cleanup during scope exit is runtime control-flow semantics, not a parser-level special form.
