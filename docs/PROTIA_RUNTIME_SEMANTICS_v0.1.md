@@ -1,9 +1,9 @@
 # Protia Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 9  
+Document revision: 10  
 Status: Draft  
-Last updated: 2026-08-30
+Last updated: 2026-08-31
 
 This document defines executable-style pseudocode for the core runtime operations of Protia.
 
@@ -61,7 +61,7 @@ Future
 
 These fields are conceptual. An implementation may represent them differently.
 
-`Object` is the standard root prototype for ordinary objects. Reflective structural operations such as `removeSlot(name)`, `close()`, and `freeze()` are ordinary messages provided through `Object`, with runtime primitives implementing their structural effects.
+`Object` is the unique root prototype. It has no delegation parent. Every other Protia object has exactly one immutable delegation parent, so every delegation chain terminates at `Object`. The absence of a parent on `Object` is structural; it is not represented by `null` or by any other Protia object. Reflective structural operations such as `removeSlot(name)`, `close()`, and `freeze()` are ordinary messages provided through `Object`, with runtime primitives implementing their structural effects.
 
 ---
 
@@ -94,6 +94,12 @@ Extracted methods remain bound to their receiver.
 
 ^ returns to the owning activation.
 
+Object has no delegation parent.
+
+Every other object has exactly one delegation parent.
+
+Every delegation chain terminates at Object.
+
 A delegation parent cannot change after object creation.
 ```
 
@@ -122,18 +128,19 @@ This operation never checks the object's parent.
 function lookupSlot(receiver, name, start = receiver):
     current = start
 
-    while current != null:
+    loop:
         result = lookupLocal(current, name)
 
         if result != NOT_FOUND:
             return result
 
-        current = current.parent
+        if current is Object:
+            signal SlotNotFound(
+                receiver = receiver,
+                name = name
+            )
 
-    signal SlotNotFound(
-        receiver = receiver,
-        name = name
-    )
+        current = delegationParent(current)
 ```
 
 The returned `home` is the object where the slot was physically found.
@@ -649,13 +656,13 @@ function sendSuper(activation, message, arguments):
     if activation.methodHome == null:
         signal InvalidSuper()
 
-    lookupStart = activation.methodHome.parent
-
-    if lookupStart == null:
+    if activation.methodHome is Object:
         signal SlotNotFound(
             receiver = activation.receiver,
             name = message
         )
+
+    lookupStart = delegationParent(activation.methodHome)
 
     return send(
         receiver = activation.receiver,
@@ -768,6 +775,10 @@ The runtime must not silently reinterpret the operation as a local return from `
 
 ```text
 function createObject(parent, body, activation):
+    // Source-level object creation always supplies exactly one parent.
+    // A bare object literal supplies Object. Only Object itself has no parent.
+    require parent is a Protia object
+
     object = new Object(
         parent = parent,
         state = open

@@ -1,9 +1,9 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 9  
+Document revision: 10  
 Status: Draft  
-Last updated: 2026-08-30
+Last updated: 2026-08-31
 
 ## 1. Principles
 
@@ -23,7 +23,9 @@ The language favors objects and messages over keywords and special syntactic con
 
 An object contains slots. A slot associates a name with an object.
 
-Every object has at most **one delegation parent**.
+`Object` is the unique root of the standard delegation hierarchy and has **no delegation parent**.
+
+Every other object has **exactly one delegation parent**. Therefore every delegation chain eventually terminates at `Object`. There are no disconnected root objects and no sentinel object standing for "no parent".
 
 ```js
 animal: {
@@ -73,7 +75,7 @@ slots:
     name → "Rex"
 ```
 
-The delegation parent is fixed at object creation and cannot subsequently be changed.
+The delegation parent is fixed at object creation and cannot subsequently be changed. `Object` is the sole exception to the requirement that an object have exactly one parent: it has none.
 
 ## 3. Slot Creation and Modification
 
@@ -1024,7 +1026,11 @@ Everything is an object.
 
 There are no classes.
 
-Every object has at most one delegation parent.
+Object is the unique root object and has no delegation parent.
+
+Every other object has exactly one delegation parent.
+
+Every delegation chain terminates at Object.
 
 An object's delegation parent cannot change after creation.
 

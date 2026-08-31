@@ -1,9 +1,9 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 9  
+Document revision: 10  
 Status: Draft  
-Last updated: 2026-08-30
+Last updated: 2026-08-31
 
 
 ## Prelude Binding Note
@@ -172,6 +172,9 @@ expression =
 ```
 
 Slot creation and assignment have the lowest precedence.
+
+
+> Root invariant: `Object` is the only object without a delegation parent; every other object has exactly one.
 
 ## 8. Slot Creation
 
