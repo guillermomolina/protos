@@ -380,7 +380,6 @@ Version 0.1 remains a draft, but the major object-model, invocation, collection-
 
 The principal remaining semantic questions include:
 
-- reflection and standard-library protocol details;
 - the final language name and corresponding filename cleanup.
 
 The specification documents are periodically consolidated so that the canonical grammar and runtime pseudocode match the decisions already closed.
@@ -581,3 +580,19 @@ future.value()
 Handlers inside the task apply during task execution; handlers surrounding `future.value()` apply when a stored failure is observed.
 
 Future completion also establishes a visibility boundary: effects performed before completion are visible after that completion is observed through `future.value()`. Shared mutable state otherwise requires explicit synchronization for correct concurrent access.
+
+
+## Core Reflection
+
+Core v0.1 exposes a small reflective protocol:
+
+```js
+object.hasSlot("name")
+object.slotNames()
+object.slotValue("name")
+object.parent()
+```
+
+The slot operations inspect only slots local to the receiver; they never perform delegated lookup. Normal member access continues to use delegation.
+
+`Object.parent()` signals an error because `Object` is the unique structural root and has no parent.

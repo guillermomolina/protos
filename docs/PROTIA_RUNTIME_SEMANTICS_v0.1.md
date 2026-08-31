@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 34  
+Document revision: 35  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -2316,3 +2316,37 @@ Shared mutable objects remain ordinary shared mutable objects. Unsynchronized co
 
 Implementations may map these guarantees to the host VM memory model, locks, atomics, scheduler barriers, or equivalent mechanisms as long as language-level visibility is preserved.
 
+
+
+## Core Reflection Runtime Semantics
+
+The standard reflective messages operate on the receiver's own object structure rather than delegated lookup.
+
+```text
+hasSlot(name)
+    inspect receiver.localSlots only
+
+slotNames()
+    enumerate receiver.localSlots only
+
+slotValue(name)
+    read receiver.localSlots[name] only
+    signal an error if absent
+
+parent()
+    return receiver.delegationParent
+```
+
+No reflective slot operation above walks the delegation chain.
+
+Ordinary member lookup remains responsible for delegated lookup semantics.
+
+For the unique root object:
+
+```text
+Object.parent()
+```
+
+signals an error because `Object` structurally has no delegation parent. The runtime must not expose `null`, a fabricated root object, or an implementation sentinel as Object's parent.
+
+The exact concrete error prototypes used for missing reflective slots and root-parent access may be defined by the standard library/runtime error catalogue, provided they obey the language's normal error signaling rules.

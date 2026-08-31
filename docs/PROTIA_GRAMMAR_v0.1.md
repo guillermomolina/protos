@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 34  
+Document revision: 35  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1804,3 +1804,17 @@ value: future.value()
 ```
 
 These are ordinary message sends. Concurrency memory semantics and cancellation behavior are runtime concerns rather than grammar features.
+
+
+## Reflection Grammar Note
+
+Core reflection introduces no dedicated syntax.
+
+```js
+object.hasSlot("name")
+object.slotNames()
+object.slotValue("name")
+object.parent()
+```
+
+are ordinary message sends parsed by the existing member/call grammar.

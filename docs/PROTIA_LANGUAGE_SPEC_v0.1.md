@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 34  
+Document revision: 35  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -2047,4 +2047,50 @@ Core v0.1 intentionally does not yet specify a full low-level memory model compa
 
 
 ## Futures and Concurrency
+
+
+
+## Core Reflection
+
+Core v0.1 provides a deliberately small reflective protocol through ordinary messages.
+
+```js
+object.hasSlot("name")
+object.slotNames()
+object.slotValue("name")
+object.parent()
+```
+
+The slot-oriented reflective operations inspect only slots local to the receiver:
+
+```text
+hasSlot(name)
+    true if the receiver has a local slot with that name;
+    false otherwise.
+
+slotNames()
+    returns the names of the receiver's local slots.
+
+slotValue(name)
+    returns the value stored in the receiver's local slot;
+    signals an error if that local slot does not exist.
+```
+
+These operations do not perform delegated lookup. Normal member access remains the operation for lookup through the delegation chain:
+
+```js
+object.name
+```
+
+`parent()` returns the receiver's immutable delegation parent.
+
+`Object` is the unique structural root and has no parent. Calling:
+
+```js
+Object.parent()
+```
+
+signals an error rather than manufacturing a sentinel parent value such as `null`.
+
+Core reflection intentionally distinguishes the object's own slot structure from ordinary delegated behavior. Core v0.1 does not require reflective access to implementation-internal activation frames, stacks, `methodHome`, or runtime representation details.
 
