@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 15  
+Document revision: 16  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1337,3 +1337,51 @@ module: import("./module.pt")
 The parser treats the module specifier expression like any other argument expression. Canonical module identity, caching, initialization states, cycle detection, and host-specific resolution are runtime/module-loader semantics rather than grammar rules.
 
 No grammar rule implicitly injects imported bindings into the current lexical scope.
+
+
+## Indexed Access
+
+Bracket indexing is postfix syntax.
+
+Conceptually:
+
+```ebnf
+indexed-read =
+    postfix-expression, "[", expression, "]" ;
+```
+
+Semantic lowering:
+
+```js
+receiver[index]
+```
+
+becomes:
+
+```text
+Send(receiver, "at", [index])
+```
+
+Assignment to an indexed expression is recognized specially at the syntactic lowering boundary:
+
+```js
+receiver[index] = value
+```
+
+becomes:
+
+```text
+Send(receiver, "atPut", [index, value])
+```
+
+rather than a slot `Assign` node.
+
+Indexed access has the same high postfix-binding role as member access and calls. Chained forms are permitted when otherwise grammatically valid, for example:
+
+```js
+matrix[row][column]
+objects[index].name
+factory()[index]
+```
+
+The receiver expression and index expression are each evaluated exactly once.

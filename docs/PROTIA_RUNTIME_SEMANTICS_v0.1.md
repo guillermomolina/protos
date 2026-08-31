@@ -1,7 +1,7 @@
 # Protia Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 15  
+Document revision: 16  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1780,3 +1780,34 @@ Imports are eager by default. Lazy dependency behavior is expressed explicitly u
 The private `moduleContext` and the module value are distinct concepts. The runtime must not implicitly expose the entire module context as the module's public result unless the module itself deliberately returns or constructs such an object.
 
 Host-specific resolution policy, package lookup, standard-library naming, remote sources, and package-manager behavior are outside Core Runtime Semantics v0.1.
+
+
+## Indexed Access Lowering
+
+The runtime has no separate semantic indexing primitive required by the language.
+
+The parser or semantic-lowering phase rewrites bracket forms to normal sends:
+
+```text
+receiver[index]
+    -> Send(receiver, "at", [index])
+
+receiver[index] = value
+    -> Send(receiver, "atPut", [index, value])
+```
+
+Conceptual evaluation for indexed write:
+
+```text
+receiverValue = evaluate(receiver)
+indexValue = evaluate(index)
+assignedValue = evaluate(value)
+send(receiverValue, "atPut", [indexValue, assignedValue])
+result = assignedValue
+```
+
+Each subexpression is evaluated once and in left-to-right order.
+
+`at` and `atPut` are ordinary selectors. Arrays, maps, strings, foreign objects, user-defined collections, or unrelated domain objects may implement either message. The runtime must not impose array-specific dispatch merely because bracket syntax was used.
+
+Consistent with the existing assignment-expression rule, indexed assignment evaluates to the value written. The return value of the underlying `atPut` message is not the value of the indexed assignment expression.

@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 15  
+Document revision: 16  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1239,3 +1239,46 @@ math.sin(x)
 ```
 
 The exact resolver rules for files, packages, standard-library modules, search paths, and other host-specific sources are outside Core Language v0.1.
+
+
+## Indexed Access Syntax
+
+Bracket indexing is syntactic sugar over ordinary message sends. Indexing is not a privileged runtime operation and is not restricted to arrays.
+
+Indexed read:
+
+```js
+receiver[index]
+```
+
+lowers conceptually to:
+
+```js
+receiver.at(index)
+```
+
+Indexed write:
+
+```js
+receiver[index] = value
+```
+
+lowers conceptually to:
+
+```js
+receiver.atPut(index, value)
+```
+
+Any object may support bracket syntax by implementing the corresponding messages.
+
+The bracket forms do not bypass normal message lookup, mutability rules, or error signaling. The meaning of an index, accepted index types, bounds behavior, and storage semantics are defined by the receiver's protocol.
+
+Evaluation order is left-to-right. For:
+
+```js
+getReceiver()[getIndex()] = makeValue()
+```
+
+the runtime evaluates `getReceiver()`, then `getIndex()`, then `makeValue()`, and finally performs the `atPut` message send.
+
+The selector names `at` and `atPut` are part of the Core v0.1 indexed-access protocol.
