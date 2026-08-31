@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 39  
+Document revision: 40  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1056,7 +1056,7 @@ identical(newObject(), newObject())     == false
 
 String-literal evaluation produces ordinary `String` values. Single-quoted and double-quoted literals are equivalent. There is no separate character type; `'a'` and `"a"` both denote a `String` containing the single-character text `a`. Single-quoted, double-quoted, and triple-double-quoted strings use the same escape rules. The supported escapes are exactly `\\`, `\'`, `\"`, `\n`, `\r`, `\t`, `\b`, `\f`, and `\u{HEX}`. `\u{HEX}` requires 1 to 6 hexadecimal digits and must denote a valid Unicode scalar value. Invalid or incomplete escape sequences are syntax errors. Octal escapes and `\xNN` escapes are not supported. Triple-double-quoted strings are multiline `String` values, not raw strings. Triple-single-quoted strings are invalid syntax. String interpolation is not part of Core v0.1, so `${...}` inside a literal is ordinary text.
 
-The only remaining open String-literal question is multiline indentation normalization. Core v0.1 intentionally leaves that behavior unspecified until a future revision; implementations must not silently impose a normalization rule in the meantime.
+Triple-double-quoted String evaluation applies the Core v0.1 multiline indentation normalization rule. If the opening delimiter is immediately followed by a newline, that newline is discarded. If the closing delimiter is immediately preceded by a newline whose preceding content on that line is only indentation whitespace, that trailing newline and indentation are discarded. The minimum common indentation of all non-empty content lines is removed from each content line, empty lines are ignored for indentation calculation, and relative indentation beyond that minimum is preserved. When a multiline String begins or ends on the same line as the delimiters, no implicit leading or trailing newline trimming occurs. Escape processing still follows the standard Core v0.1 String escape rules, and triple-double-quoted strings remain non-raw strings.
 
 `true`, `false`, and `null` are canonical singleton values.
 

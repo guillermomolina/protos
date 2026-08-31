@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 39  
+Document revision: 40  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -96,7 +96,49 @@ Protos has no separate character literal or character type. `'a'` and `"a"` both
 
 String interpolation is not part of Core v0.1. Inside a String, `${...}` has no special meaning and is treated as ordinary literal text.
 
-The only remaining open String-literal question is multiline indentation normalization. Core v0.1 intentionally leaves that behavior unspecified for now.
+For triple-double-quoted String literals, indentation normalization is defined as follows:
+
+- If the opening `"""` is immediately followed by a newline, that newline is not part of the resulting String.
+- If the closing `"""` is immediately preceded by a newline whose preceding content on that line is only indentation whitespace, that final newline and indentation are not part of the resulting String.
+- Determine the minimum common indentation of all non-empty content lines.
+- Remove that common indentation from every content line.
+- Empty lines do not participate in determining the common indentation.
+- Relative indentation beyond the common indentation is preserved.
+- Escape processing follows the already-defined Core v0.1 String escape rules.
+- Triple-double-quoted strings remain non-raw strings.
+- A multiline String may also begin or end on the same line as its delimiters; in that case no implicit leading or trailing newline removal applies.
+
+Examples:
+
+```js
+"""
+    hello
+    world
+"""
+```
+
+produces:
+
+```text
+hello
+world
+```
+
+and:
+
+```js
+"""
+    hello
+        world
+"""
+```
+
+produces:
+
+```text
+hello
+    world
+```
 
 ## 4. Whitespace and Newlines
 
@@ -1681,7 +1723,7 @@ Triple-single-quoted strings are not supported.
 
 String interpolation is not supported in Core v0.1. `${...}` is literal text inside a String and carries no special meaning.
 
-The only remaining open String-literal question is multiline indentation normalization. Core v0.1 intentionally leaves that behavior unspecified for now.
+For triple-double-quoted String literals, indentation normalization follows the Core v0.1 rule defined above: remove the common leading indentation of all non-empty content lines, preserve relative indentation beyond that common baseline, and omit the leading/trailing newline only when the delimiter placement matches the rule. Escape processing still follows the standard Core v0.1 String escape rules, and triple-double-quoted strings remain non-raw strings.
 
 Character encoding is not determined by the source-level string literal syntax. Conversion to or from encoded bytes is performed explicitly through ordinary protocols such as:
 
