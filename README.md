@@ -382,7 +382,7 @@ The principal remaining semantic questions include:
 
 - Future cancellation, error-context propagation, and concurrency memory semantics;
 - the public protocol or convenience syntax for dynamic handler installation;
-- malformed-text decoding policy and the final standard encoding catalogue;
+- the final standard encoding catalogue;
 - reflection and standard-library protocol details;
 - the final language name and corresponding filename cleanup.
 
@@ -518,3 +518,19 @@ Custom symbolic binary operators use the fixed character set:
 ```
 
 Structural punctuation such as `.`, `:`, `;`, `,`, and brackets/braces/parentheses is excluded. Reserved and standard operator tokens are recognized before remaining symbolic sequences are classified as custom operators.
+
+## Malformed Text Decoding
+
+Text decoding is strict by default:
+
+```js
+bytes.decode(UTF8)  // malformed input signals an error
+```
+
+Loss-tolerant decoding must be requested explicitly, for example with a replacement policy:
+
+```js
+bytes.decode(UTF8, ReplaceInvalid)
+```
+
+The exact standard policy names remain a library detail.

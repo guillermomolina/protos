@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 30  
+Document revision: 31  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1757,3 +1757,16 @@ custom-binary-operator =
 ```
 
 After token formation, reserved and standard operator spellings are classified according to their dedicated grammar roles rather than as custom operators.
+
+## Decoding Policy Grammar Note
+
+Malformed-text handling introduces no special syntax.
+
+Examples such as:
+
+```js
+bytes.decode(UTF8)
+bytes.decode(UTF8, ReplaceInvalid)
+```
+
+use ordinary message-send and argument syntax. Strict decoding is the default semantic behavior; tolerant recovery is selected explicitly through ordinary objects/protocol arguments.
