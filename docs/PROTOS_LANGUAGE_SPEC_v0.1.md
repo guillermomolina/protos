@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 37  
+Document revision: 38  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1850,6 +1850,32 @@ UInt32 ≠ little-endian bytes
 ```
 
 An implementation may use any internal String representation provided observable language semantics remain unchanged.
+
+
+## String Literal Semantics
+
+Core v0.1 defines String literals as ordinary `String` values.
+
+- Single-quoted and double-quoted forms are equivalent String literals.
+- Protos has no separate character literal or character type. `'a'` and `"a"` both denote a `String` containing the single-character text `a`.
+- Both forms support the standard Protos escape sequences.
+- Triple-double-quoted strings are multiline String literals.
+- Triple-single-quoted strings are not supported.
+- String interpolation is not part of Core v0.1.
+- `${...}` has no special meaning inside a String and is treated as literal text.
+- Multiline string indentation normalization is intentionally not defined yet. That remains an open semantic question for a later revision.
+
+Example literals:
+
+```js
+"hello"
+'hello'
+"""
+hello
+world
+"""
+"${notInterpolated}"
+```
 
 
 ## String Indexing, Mutability, and Encoded Representations

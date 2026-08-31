@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 37  
+Document revision: 38  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -61,9 +61,24 @@ literal =
     | "true"
     | "false"
     | "null";
+
+string-literal =
+      single-quoted-string
+    | double-quoted-string
+    | triple-double-quoted-string ;
 ```
 
-Exact number formats and string escape rules are defined separately.
+Exact number formats and the standard Protos escape sequence set are defined separately.
+
+Single-quoted and double-quoted strings are equivalent String literals.
+
+Protos has no separate character literal or character type. `'a'` and `"a"` both evaluate to a String containing the single-character text `a`.
+
+Triple-double-quoted strings are multiline String literals. Triple-single-quoted strings are not supported.
+
+String interpolation is not part of Core v0.1. Inside a String, `${...}` has no special meaning and is treated as ordinary literal text.
+
+The multiline-string rule intentionally does not yet define indentation normalization. That behavior remains an open semantic question for a future revision and is left unspecified in Core v0.1.
 
 ## 4. Whitespace and Newlines
 
@@ -1608,9 +1623,31 @@ This keeps member access lexically unambiguous:
 The parser may accept the final form with parentheses purely for readability; parentheses do not change the numeric semantics.
 
 
-## String and Byte Representation Note
+## String Literals and Byte Representation Note
 
-String literal syntax denotes `String` values, not encoded byte sequences.
+Single-quoted and double-quoted forms are equivalent String literals:
+
+```js
+"hello"
+'hello'
+```
+
+A String literal denotes a `String` value, not an encoded byte sequence. Protos has no separate character literal or character type.
+
+Both quote forms support the standard Protos escape sequences. Triple-double-quoted strings are multiline String literals:
+
+```js
+"""
+line one
+line two
+"""
+```
+
+Triple-single-quoted strings are not supported.
+
+String interpolation is not supported in Core v0.1. `${...}` is literal text inside a String and carries no special meaning.
+
+The multiline-string form does not yet define indentation normalization. This remains an open semantic question for a later revision, and Core v0.1 intentionally leaves it unspecified for now.
 
 Character encoding is not determined by the source-level string literal syntax. Conversion to or from encoded bytes is performed explicitly through ordinary protocols such as:
 

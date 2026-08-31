@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 37  
+Document revision: 38  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1053,6 +1053,10 @@ identical(newObject(), newObject())     == false
 ```
 
 `Number` and `String` are immutable value objects. String operations never mutate an existing String in place; a changed textual value is another String value. A runtime may intern, share, inline, box, unbox, or otherwise optimize these values without changing `===`.
+
+String-literal evaluation produces ordinary `String` values. Single-quoted and double-quoted literals are equivalent. There is no separate character type; `'a'` and `"a"` both denote a `String` containing the single-character text `a`. Both forms accept the standard Protos escape sequences. Triple-double-quoted strings are multiline `String` values. Triple-single-quoted strings are invalid syntax. String interpolation is not part of Core v0.1, so `${...}` inside a literal is ordinary text.
+
+Multiline String indentation normalization is intentionally not specified in Core v0.1 yet. This remains an open semantic question for a future revision; implementations must not silently impose a normalization rule in the meantime.
 
 `true`, `false`, and `null` are canonical singleton values.
 
