@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 12  
+Document revision: 13  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1293,3 +1293,23 @@ The genuinely special core syntax is intentionally small:
 ```
 
 Control flow, iteration, errors, futures, collections, numbers, and strings can largely be expressed as object behavior and message sends.
+
+## Conditional Protocol Note
+
+The grammar introduces no truthiness conversion and no Boolean-only receiver restriction for conditional messages.
+
+Conditional behavior is ordinary message syntax. Where logical infix operators are supported, they desugar lazily:
+
+```js
+a && b
+a || b
+```
+
+to the semantic equivalent of:
+
+```js
+a.and(() => b)
+a.or(() => b)
+```
+
+The grammar does not require the receiver of `and`, `or`, `ifTrue`, or `ifFalse` to be `true` or `false`. Receiver behavior is determined by ordinary message lookup.

@@ -1,7 +1,7 @@
 # Protia Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 12  
+Document revision: 13  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1622,3 +1622,34 @@ Top-level bindings are slots of a module execution context.
 
 Modules do not implicitly share mutable global state.
 ```
+
+
+## Conditional Message Semantics
+
+There is no runtime-wide `toBoolean`, truthiness table, or implicit Boolean coercion.
+
+Conditional operations use normal message dispatch.
+
+Conceptually:
+
+```text
+send(condition, "ifTrue", [block])
+send(condition, "ifFalse", [block])
+```
+
+are ordinary sends. The standard objects `true` and `false` implement these messages with the expected Boolean behavior.
+
+Logical operators preserve laziness by passing the right-hand expression as a closure:
+
+```text
+a && b  =>  send(a, "and", [closure(() => b)])
+a || b  =>  send(a, "or",  [closure(() => b)])
+```
+
+The receiver decides whether to invoke the supplied closure.
+
+Objects other than `true` and `false` may implement the same protocol. If a receiver does not understand the message, normal message-lookup failure semantics apply.
+
+Standard equality and comparison primitives return the canonical Boolean objects. A user-defined implementation of the same message name remains ordinary object behavior and is not runtime-constrained to return Boolean.
+
+An implementation may use inline caches, specialized AST nodes, partial evaluation, or JIT compilation for common cases such as receivers known to be `true` or `false`, or numeric `+`. These optimizations must be observationally equivalent to the corresponding ordinary message sends.

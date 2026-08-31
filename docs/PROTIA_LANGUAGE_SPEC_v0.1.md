@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 12  
+Document revision: 13  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1130,3 +1130,39 @@ Top-level bindings are slots of a module execution context.
 There is no special global-variable category.
 
 Modules do not implicitly share mutable global state.
+
+
+## Conditional Protocol and Truthiness
+
+The language defines **no language-wide truthiness conversion**.
+
+Conditional behavior is expressed through ordinary messages. The standard Boolean objects `true` and `false` provide the standard conditional protocol, including behavior corresponding to:
+
+```js
+condition.ifTrue(block)
+condition.ifFalse(block)
+```
+
+A receiver is not required by the language to be a Boolean in order to receive these messages. Any object may implement messages such as `ifTrue`, `ifFalse`, `and`, or `or` and define behavior appropriate to that object.
+
+Consequently, values such as `0`, `""`, `null`, arrays, and arbitrary objects are neither inherently truthy nor inherently falsy. If they do not implement the requested conditional message, ordinary message lookup fails in the usual way.
+
+Standard equality and comparison behavior returns the canonical Boolean objects `true` or `false`. User-defined overrides are ordinary message implementations and are not required by the core language to return a Boolean.
+
+Logical operator syntax, where provided, lowers to ordinary message sends with explicit laziness. For example:
+
+```js
+a && b
+a || b
+```
+
+lower conceptually to:
+
+```js
+a.and(() => b)
+a.or(() => b)
+```
+
+so the right-hand side is evaluated only if the receiver's implementation chooses to invoke the supplied closure.
+
+Implementations may specialize common Boolean receivers and standard operations in the interpreter or JIT, provided that such specialization preserves the observable semantics of ordinary message sends.
