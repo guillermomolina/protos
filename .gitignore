@@ -1,1 +1,24 @@
+# Build output
+/target/
+**/target/
+
+# Maven
+.mvn/
+!.mvn/wrapper/maven-wrapper.properties
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Java
+*.class
+*.log
+hs_err_pid*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Archives
 **/*.zip
