@@ -8,7 +8,6 @@ The name reflects its prototype-based object model and derives naturally from th
 
 Canonical project documentation uses the `PROTOS_` filename prefix.
 
-> **Working title:** Prototype-Based Language\
 > **Status:** Early language design / specification draft\
 > **Language version:** 0.1
 
@@ -379,21 +378,14 @@ The design is currently described by three documents:
 -   `PROTOS_RUNTIME_SEMANTICS_v0.1.md` --- executable runtime model and
     pseudocode
 
-The filenames still contain an earlier working name and will be renamed
-once the language receives its final name.
+## Specification Status
 
-## Work in progress
-
-Version 0.1 remains a draft, but the major object-model, invocation, collection-access, resource-lifetime, numeric, text, map, module, and unwinding decisions are now specified.
-
-The principal remaining semantic questions include:
-
-- the final language name and corresponding filename cleanup.
-
-The specification documents are periodically consolidated so that the canonical grammar and runtime pseudocode match the decisions already closed.
+Version 0.1 remains a draft, but the major semantic decisions currently tracked by the design are specified. The specification documents are periodically audited and consolidated so that the canonical grammar, language specification, and runtime pseudocode remain aligned.
 
 ## Recent Design Decisions
 
+- Structured concurrency is strict by default: an activation waits for non-detached child tasks on normal completion, and cancels then waits for them during error/cancellation unwind.
+- `Future.then` is part of the standard Core v0.1 Future protocol and flattens nested Futures.
 - Bracket access is ordinary `at` / `atPut` protocol sugar.
 - Invocation arguments support defaults, rest capture, spread, and reflective `args`.
 - `()` is polymorphic invocation syntax.

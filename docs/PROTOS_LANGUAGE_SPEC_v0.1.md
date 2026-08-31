@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 36  
+Document revision: 37  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1105,7 +1105,7 @@ If the Future completed with an error, `value()` signals that error in the waiti
 
 ## 30. Future Composition
 
-A Future may support transformation:
+A Future supports transformation:
 
 ```js
 future.then(value) {
@@ -1123,17 +1123,25 @@ If the block returns another Future, the result is automatically flattened rathe
 
 Asynchronous executions belong by default to the execution context that creates them.
 
-This provides a defined lifetime and cancellation structure.
+Non-detached child tasks are structurally owned by that execution context.
 
-When an owning context is cancelled or can no longer maintain its child tasks, associated pending asynchronous executions may be cancelled.
+An activation cannot complete while it still owns non-detached child tasks.
 
-An explicit operation such as:
+On normal completion, the activation waits for all non-detached child tasks to reach a terminal state before the activation itself completes.
+
+On exit caused by error or cancellation, the activation requests cooperative cancellation of all non-detached child tasks, waits for those tasks to unwind and complete their cleanup, and only then continues its own unwind.
+
+This means `ensure` cleanup in child tasks completes before the owning activation finishes unwinding.
+
+An explicit operation:
 
 ```js
 future.detach()
 ```
 
-may detach asynchronous work when an independent lifetime is deliberately required.
+removes that task from the owner's structured-concurrency lifetime. Detached work may continue independently and is not awaited or automatically cancelled merely because the former owner completes.
+
+Detachment is explicit; ordinary `future()` execution remains structured by default.
 
 The exact scheduler implementation is outside the language specification.
 

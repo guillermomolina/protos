@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 36  
+Document revision: 37  
 Status: Draft  
 Last updated: 2026-08-31
 

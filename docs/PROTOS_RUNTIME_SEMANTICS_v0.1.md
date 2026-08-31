@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 36  
+Document revision: 37  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1287,7 +1287,7 @@ function awaitFutureValue(future, activation):
 
         case cancelled:
             signal(
-                FutureCancelled(),
+                Cancelled,
                 activation
             )
 
@@ -1369,18 +1369,40 @@ Conceptually:
 ```text
 function registerChildTask(parentActivation, task):
     parentActivation.childTasks.add(task)
+    task.owner = parentActivation
+    task.detached = false
 ```
 
-When the owner is cancelled:
+A parent activation cannot reach terminal completion while it owns non-detached child tasks.
+
+Normal completion:
 
 ```text
-function cancelActivation(activation):
-    mark activation as cancelled
-
+function completeActivationNormally(activation, result):
     for each task in activation.childTasks:
         if not task.detached:
-            cancelTask(task)
+            awaitTerminalCompletion(task)
+
+    complete activation with result
 ```
+
+Error or cancellation unwind:
+
+```text
+function unwindActivation(activation, controlTransfer):
+    children = all non-detached tasks owned by activation
+
+    for each task in children:
+        requestCooperativeCancellation(task)
+
+    for each task in children:
+        awaitTerminalCompletion(task)
+        // child ensure cleanup has completed here
+
+    continueUnwind(activation, controlTransfer)
+```
+
+Child cancellation uses the normal cooperative cancellation semantics: no unsafe forced termination is permitted, and child `ensure` cleanup runs before terminal completion.
 
 Detachment:
 
@@ -1388,11 +1410,14 @@ Detachment:
 function detachFuture(future):
     future.task.detached = true
     remove future.task from its owner
+    future.task.owner = none
 
     return future
 ```
 
-Exact cancellation guarantees should be refined in a later specification.
+A detached task no longer participates in the former owner's completion or cancellation lifetime.
+
+The scheduler may implement waiting by suspension rather than by blocking an operating-system thread.
 
 ---
 
@@ -1618,7 +1643,7 @@ moduleContext
 
 After lexical lookup is exhausted, the ordinary receiver/delegation lookup rules continue as specified elsewhere in this document.
 
-Modules do not implicitly share mutable global state. Each module has its own module context. Cross-module visibility must be established explicitly by the module/import/export mechanism defined by a future module specification.
+Modules do not implicitly share mutable global state. Each module has its own module context. Cross-module visibility is established explicitly through the module system and ordinary module values, including the standard `import(specifier)` protocol and resolver/registry semantics defined by Core v0.1.
 
 Universal language facilities such as core prototypes and standard behavior may be made available through a shared prelude or root environment. Such an environment is part of lexical/runtime setup and does not create a separate global-variable semantic category.
 
