@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 24  
+Document revision: 25  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -850,7 +850,24 @@ null === null              // true
 
 Ordinary mutable objects, closures, arrays and other identity-bearing objects retain individual object identity even when their contents happen to be equal. The exact collection model is specified separately.
 
-`==` represents semantic equality and may be customized through object behavior. For built-in immutable value objects, `==` and `===` may naturally produce the same result, but they remain different operations: `==` is behavioral and customizable, while `===` is a non-overridable identity primitive.
+`==` represents semantic equality and may be customized through object behavior.
+
+The equality protocol has a strict result contract:
+
+```text
+==  -> true | false | error
+!=  -> true | false | error
+```
+
+An implementation of `==` must return one of the canonical Boolean objects `true` or `false`, or signal an error. Returning any other object is an invalid equality result.
+
+The same Boolean-result contract applies to the standard comparison operators:
+
+```text
+<   <=   >   >=
+```
+
+They return canonical `true` or `false`, or signal an error. The language defines no truthiness conversion for interpreting arbitrary comparison results. For built-in immutable value objects, `==` and `===` may naturally produce the same result, but they remain different operations: `==` is behavioral and customizable, while `===` is a non-overridable identity primitive.
 
 Identity is never defined by comparing hash codes. A runtime may derive or cache hashes from identity where appropriate, but hash collisions cannot make distinct identity-bearing objects identical.
 
@@ -1199,7 +1216,7 @@ A receiver is not required by the language to be a Boolean in order to receive t
 
 Consequently, values such as `0`, `""`, `null`, arrays, and arbitrary objects are neither inherently truthy nor inherently falsy. If they do not implement the requested conditional message, ordinary message lookup fails in the usual way.
 
-Standard equality and comparison behavior returns the canonical Boolean objects `true` or `false`. User-defined overrides are ordinary message implementations and are not required by the core language to return a Boolean.
+Equality and comparison protocols have a Boolean-result contract. Implementations of `==`, `!=`, `<`, `<=`, `>`, and `>=` must return the canonical Boolean objects `true` or `false`, or signal an error. User-defined implementations remain ordinary message behavior, but returning any other object violates the protocol contract.
 
 Logical operator syntax, where provided, lowers to ordinary message sends with explicit laziness. For example:
 
@@ -1718,6 +1735,8 @@ A normal `Map` uses semantic equality and hashing:
 key equality  -> ==
 key hash      -> hash
 ```
+
+Map relies on the language-wide Boolean-result contract of `==`: equality returns canonical `true` or `false`, or signals an error. Map introduces no separate truthiness or Map-specific interpretation rule.
 
 The required contract is:
 

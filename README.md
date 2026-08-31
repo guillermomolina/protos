@@ -381,7 +381,6 @@ Version 0.1 remains a draft, but the major object-model, invocation, collection-
 The principal remaining semantic questions include:
 
 - exact numeric identity across `Integer`, `Float`, fixed-width integer values, NaN, and signed zero;
-- the Boolean-result requirement for `Map` key equality;
 - duplicate parameter-name validation;
 - the exact lexical character set for custom symbolic operators;
 - Future cancellation, error-context propagation, and concurrency memory semantics;
@@ -451,3 +450,15 @@ The specification documents are periodically consolidated so that the canonical 
 - Missing-key indexed lookup signals an error rather than returning `null`.
 - Maps preserve insertion order.
 - Ordinary hashes need not be stable across process executions.
+
+## Equality and Comparison Results
+
+The standard equality and comparison protocol is Boolean-valued:
+
+```text
+==  !=  <  <=  >  >=
+```
+
+These operations return canonical `true` or `false`, or signal an error. The language never interprets arbitrary objects as truthy comparison results.
+
+This also means `Map` can rely directly on `==` without introducing a separate key-equality convention.

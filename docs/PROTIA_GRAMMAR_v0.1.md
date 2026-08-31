@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 24  
+Document revision: 25  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1653,3 +1653,13 @@ map[key] = value  // map.atPut(key, value)
 ```
 
 Missing-key behavior, equality, hashing, and iteration order are collection protocol semantics rather than parser semantics.
+
+## Equality and Comparison Result Contract Note
+
+The grammar does not encode result types, but the standard equality and comparison operators have a semantic Boolean-result contract:
+
+```text
+==  !=  <  <=  >  >=
+```
+
+Each operation returns canonical `true` or `false`, or signals an error. No truthiness conversion is applied to arbitrary returned objects.

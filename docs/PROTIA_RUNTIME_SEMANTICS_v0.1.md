@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 24  
+Document revision: 25  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1054,14 +1054,34 @@ identical(newObject(), newObject())     == false
 
 ```text
 function semanticEqual(a, b):
-    return send(
+    result = send(
         receiver = a,
         message = "==",
         arguments = [b]
     )
+
+    if result !== true and result !== false:
+        signal InvalidEqualityResult(result)
+
+    return result
 ```
 
-`==` is ordinary object behavior and may be customized.
+`==` is ordinary object behavior and may be customized, but it has a strict protocol result contract: the result must be canonical `true` or `false`, or the operation must signal an error.
+
+---
+
+## Equality and Comparison Result Validation
+
+Runtime implementations of the standard comparison protocol must validate their result when necessary:
+
+```text
+function requireBooleanComparisonResult(result):
+    if result !== true and result !== false:
+        signal InvalidComparisonResult(result)
+    return result
+```
+
+The exact internal error object names are not fixed by Core v0.1, but arbitrary non-Boolean values must not be accepted as truthy or falsy comparison results.
 
 ---
 
@@ -1693,7 +1713,7 @@ The receiver decides whether to invoke the supplied closure.
 
 Objects other than `true` and `false` may implement the same protocol. If a receiver does not understand the message, normal message-lookup failure semantics apply.
 
-Standard equality and comparison primitives return the canonical Boolean objects. A user-defined implementation of the same message name remains ordinary object behavior and is not runtime-constrained to return Boolean.
+Equality and comparison implementations, including user-defined ones, are constrained by their protocol contract to return the canonical Boolean objects `true` or `false`, or signal an error. Returning another object is an invalid protocol result.
 
 An implementation may use inline caches, specialized AST nodes, partial evaluation, or JIT compilation for common cases such as receivers known to be `true` or `false`, or numeric `+`. These optimizations must be observationally equivalent to the corresponding ordinary message sends.
 
@@ -2036,6 +2056,8 @@ Encoded text representations are ordinary objects whose mutability is protocol-d
 ## Map and Hash Runtime Semantics
 
 Normal `Map` lookup uses the key protocol pair `hash` and `==`.
+
+Map does not define a separate equality-result convention. It relies on the language-wide `==` contract: canonical `true` or `false`, or an error.
 
 Implementations may use hash tables, inline caches, specialized key representations, or other internal structures, provided observable semantics follow the language-level equality/hash contract.
 
