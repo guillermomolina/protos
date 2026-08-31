@@ -1859,6 +1859,7 @@ Core v0.1 defines String literals as ordinary `String` values.
 - Single-quoted and double-quoted forms are equivalent String literals.
 - Protos has no separate character literal or character type. `'a'` and `"a"` both denote a `String` containing the single-character text `a`.
 - Single-quoted, double-quoted, and triple-double-quoted String literals share the same escape rules.
+- The backslash escape is `\\`.
 - The supported escape sequences are exactly: `\\`, `\'`, `\"`, `\n`, `\r`, `\t`, `\b`, `\f`, and `\u{HEX}`.
 - `\u{HEX}` requires 1 to 6 hexadecimal digits and must denote a valid Unicode scalar value.
 - Invalid or incomplete escape sequences are syntax errors.
@@ -1879,7 +1880,7 @@ hello
 world
 """
 "${notInterpolated}"
-"line\\nfeed"
+"line\nfeed"
 "\u{1F600}"
 ```
 

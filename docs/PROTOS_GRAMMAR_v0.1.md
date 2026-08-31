@@ -70,10 +70,12 @@ string-literal =
 
 Exact number formats are defined separately from the core string escape set.
 
+The backslash escape is displayed unambiguously as `\\`.
+
 Core v0.1 String escape sequences are exactly:
 
 ```text
-\
+\\
 \'
 \"
 \n
