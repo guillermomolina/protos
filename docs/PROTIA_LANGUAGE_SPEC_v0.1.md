@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 11  
+Document revision: 12  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -783,6 +783,29 @@ explicit local slot > unique composed slot > delegated lookup
 ```
 
 This avoids composition-order precedence, method resolution orders, diamond inheritance, and multiple `super` chains while preserving structural flattening.
+
+### Composition Views: `without` and `alias`
+
+Composition sources can be transformed using ordinary messages before they are passed to `...`. No trait-specific exclusion or alias syntax is introduced.
+
+```js
+duck: {
+    ...walker.without("move")
+    ...swimmer.alias("move", "swimMove")
+
+    move: () => {
+        swimMove()
+    }
+}
+```
+
+`without(name)` returns a new ordinary object suitable for composition whose local slots are the source object's local slots except for `name`. It does not modify the receiver. If `name` is not a local slot of the receiver, the operation signals an error.
+
+`alias(sourceName, aliasName)` returns a new ordinary object suitable for composition that contains the receiver's local slots and additionally exposes the binding of `sourceName` under `aliasName`. Aliasing **adds** a name; it does not remove or rename the original slot. The two slots initially contain the same object.
+
+`alias` signals an error if `sourceName` is not local to the receiver or if `aliasName` already exists locally in the resulting object.
+
+Both operations copy slot bindings rather than cloning stored objects. Their results are ordinary objects; `...` has no knowledge that `without` or `alias` was used. These operations therefore compose naturally with the normal message model and introduce no separate trait mechanism.
 
 ## 21. Equality and Identity
 

@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 11  
+Document revision: 12  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -655,6 +655,15 @@ Composition occurs as part of object construction and does not modify the object
 Composition order has no precedence semantics. If multiple composed sources contribute the same slot name, the conflict is an error unless the receiving object explicitly declares that slot locally in its own body. The local declaration resolves the conflict regardless of whether it appears textually before or after the relevant composition expressions.
 
 The rule applies uniformly to all slots; the grammar does not distinguish state slots from closure-valued method-like slots.
+
+No dedicated aliasing or exclusion grammar is defined. Such transformations are expressed as ordinary message sends whose resulting objects are then composed:
+
+```js
+...source.without("slotName")
+...source.alias("slotName", "aliasName")
+```
+
+The meanings and error conditions of `without` and `alias` are runtime/object-protocol semantics, not parser rules.
 
 ## 25. Uniform Object Bodies
 

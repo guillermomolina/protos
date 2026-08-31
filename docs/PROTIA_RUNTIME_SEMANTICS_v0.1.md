@@ -1,7 +1,7 @@
 # Protia Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 11  
+Document revision: 12  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -866,6 +866,42 @@ function resolveComposedSlot(construction, name):
 Thus an explicit local declaration has priority over any composed contribution and resolves a collision between multiple sources. In the absence of an explicit local declaration, two or more contributions with the same name are an error. Source order never selects a winner.
 
 The rule is uniform for closure-valued slots, immutable values, mutable objects, and all other slot contents. Composition never changes `target.parent` and adds no alternate lookup path. Once construction succeeds, composed slots are ordinary local slots of `target`.
+
+### Composition-source transformations
+
+`without` and `alias` are ordinary object messages. They do not mutate their receiver and produce ordinary objects that may subsequently be used as composition sources.
+
+Conceptually:
+
+```text
+function without(receiver, name):
+    requireLocalSlot(receiver, name)
+
+    result = newOrdinaryObject()
+    for each local slot in receiver:
+        if slot.name != name:
+            createLocalSlot(result, slot.name, slot.value)
+
+    return result
+```
+
+and:
+
+```text
+function alias(receiver, sourceName, aliasName):
+    requireLocalSlot(receiver, sourceName)
+
+    if receiver.hasLocalSlot(aliasName):
+        signal AliasConflict(aliasName)
+
+    result = copyLocalSlotBindingsIntoNewObject(receiver)
+    createLocalSlot(result, aliasName, receiver.localSlot(sourceName).value)
+    return result
+```
+
+`alias` preserves the original `sourceName`; it adds `aliasName`. Both names initially refer to the same stored object. Neither operation clones slot values.
+
+Because the returned value is an ordinary object, the composition machinery itself remains unchanged: `...` simply evaluates its operand and composes that object's local slots. Missing source names and alias-name collisions are errors rather than silent no-ops or overwrites.
 
 ---
 
