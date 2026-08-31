@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 28  
+Document revision: 29  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1676,6 +1676,23 @@ The general rule is:
 ```
 
 This rule is semantic and must not depend on boxing, allocation, host references, or implementation-specific representation.
+
+## Parameter Name Uniqueness
+
+Parameter names within a single closure parameter list must be unique.
+
+This applies to required parameters, parameters with defaults, and the rest parameter:
+
+```js
+(a, a) => { ... }             // invalid
+(a, a = 10) => { ... }        // invalid
+(a, ...a) => { ... }          // invalid
+(a, b = 10, ...rest) => { }   // valid
+```
+
+Duplicate parameter names are rejected during parsing or static validation before execution begins.
+
+This is consistent with activation binding: parameters become local slots in the invocation context, and creating the same local slot twice is not permitted.
 
 ## Numeric Model
 

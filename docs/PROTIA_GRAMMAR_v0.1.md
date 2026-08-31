@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 28  
+Document revision: 29  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -355,7 +355,7 @@ rest-parameter =
     "...", identifier ;
 ```
 
-A rest parameter, when present, is final. Duplicate parameter names are not settled by this grammar revision and remain a separate validation question.
+A rest parameter, when present, is final. Parameter names within one parameter list must be unique. Duplicate names, including collisions with the rest parameter name, are rejected during parsing or static validation.
 
 ## 17. Calls and Arguments
 
@@ -1695,3 +1695,14 @@ Its semantics are:
 0.0 == -0.0   -> true
 0.0 === -0.0  -> false
 ```
+
+## Parameter Name Validation
+
+The EBNF describes the syntactic shape of parameter lists. A semantic validation rule additionally requires every parameter name in one list to be unique, including the rest parameter.
+
+```js
+(a, a) => { ... }       // invalid
+(a, ...a) => { ... }    // invalid
+```
+
+This validation occurs before execution.

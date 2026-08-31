@@ -380,7 +380,6 @@ Version 0.1 remains a draft, but the major object-model, invocation, collection-
 
 The principal remaining semantic questions include:
 
-- duplicate parameter-name validation;
 - the exact lexical character set for custom symbolic operators;
 - Future cancellation, error-context propagation, and concurrency memory semantics;
 - the public protocol or convenience syntax for dynamic handler installation;
@@ -506,3 +505,7 @@ Signed zero follows IEEE-style numeric equality while remaining visible to seman
 ```
 
 The sign bit is therefore part of Float semantic identity, unlike NaN payload differences.
+
+## Parameter Names
+
+Parameter names in a closure signature must be unique. Duplicate required/default parameter names and collisions with the rest parameter are rejected before execution.

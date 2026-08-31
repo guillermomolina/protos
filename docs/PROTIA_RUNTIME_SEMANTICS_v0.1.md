@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 28  
+Document revision: 29  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -589,6 +589,16 @@ function lexicalContextForClosureCreation(activation):
 Therefore a method closure installed on a prototype captures genuine enclosing lexical contexts, while bare object-state names are resolved later against the dynamic receiver (`this`) and its delegation chain.
 
 For example, if `speak` is declared on `animal` and invoked as `dog.speak()`, a bare `name` inside `speak` resolves through `dog` before `animal`, unless a genuine lexical binding named `name` shadows it.
+
+---
+
+## Parameter Signature Validation
+
+Executable closure metadata must contain unique parameter names.
+
+Duplicate names are a source/signature validation error and must not be resolved dynamically by overwriting or rebinding activation slots. This includes collisions involving a rest parameter.
+
+The runtime may assume validated closure parameter metadata. Defensive implementations may still reject malformed internal metadata, but such rejection is not the normal language-level execution path.
 
 ---
 
