@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 33  
+Document revision: 34  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1959,3 +1959,92 @@ The exact convenience protocol may grow in the standard library without changing
 The ordinary `hash` operation is not required to be stable across separate process executions. Implementations may use per-process randomization or salting for security. Persistent or interoperable hashing must use a separate explicit protocol or algorithm.
 
 `IdentityMap` follows the same insertion-order rule unless a more specialized collection explicitly documents otherwise.
+
+
+## Future Cancellation
+
+Future cancellation is explicit and cooperative.
+
+```js
+future.cancel()
+```
+
+`cancel()` requests cancellation; it does not forcibly terminate an arbitrary running activation.
+
+A task observes cancellation only at runtime-defined safe points or through cancellation-aware operations. When cancellation becomes effective, the task exits through the normal unwind machinery so that `ensure` cleanup executes.
+
+A cancelled Future completes in the cancelled state. Observing its result:
+
+```js
+future.value()
+```
+
+signals the standard cancellation condition/error object, conceptually `Cancelled`.
+
+Core v0.1 does not define unsafe asynchronous thread-kill semantics.
+
+## Future Failure and Dynamic Error Context
+
+Errors signaled inside a Future do not asynchronously transfer control into the task that created the Future.
+
+If an error is not handled inside the asynchronous task, the Future records failure.
+
+```js
+future: work.future()
+```
+
+If `work` fails, the creator may continue executing. The failure becomes observable when the Future result is consumed:
+
+```js
+future.value()
+```
+
+At that point the recorded error is re-signaled in the dynamic context of the consumer.
+
+The handler rule is therefore:
+
+```text
+while executing the asynchronous task
+    -> handlers dynamically installed inside that task apply
+
+when observing a failed Future through value()
+    -> handlers dynamically surrounding value() apply
+```
+
+A Future does not retain the creator's dynamic handler stack as an indefinitely active error context.
+
+## Concurrency Memory Semantics
+
+Core v0.1 permits mutable objects to be shared between concurrent tasks, but does not make unsynchronized conflicting mutation automatically safe.
+
+Correct concurrent access to shared mutable state requires explicit synchronization provided by runtime or library protocols.
+
+Future completion establishes a visibility boundary:
+
+```text
+all effects performed by a task before successful, failed,
+or cancelled completion happen-before observation of that
+completion through Future.value()
+```
+
+Consequently, after `future.value()` completes normally, writes performed by the Future task before completion are visible to the observing task.
+
+Example:
+
+```js
+state: { value: 0 }
+
+future: (() => {
+    state.value = 42
+}).future()
+
+future.value()
+
+print(state.value)   // observes 42
+```
+
+Core v0.1 intentionally does not yet specify a full low-level memory model comparable to a platform VM memory model. Implementations must nevertheless preserve the Future completion visibility guarantee and the semantics of explicit synchronization primitives.
+
+
+## Futures and Concurrency
+

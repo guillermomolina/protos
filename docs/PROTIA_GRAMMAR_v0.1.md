@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 33  
+Document revision: 34  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -1790,3 +1790,17 @@ protectedClosure.handle(errorPrototype, handlerClosure)
 ```
 
 is an ordinary message send using existing closure and argument syntax. The language does not require `try`, `catch`, or `throw` syntax for Core v0.1.
+
+## Future and Concurrency Grammar Note
+
+Future creation, cancellation, waiting, and error observation require no special syntax.
+
+Examples:
+
+```js
+future: work.future()
+future.cancel()
+value: future.value()
+```
+
+These are ordinary message sends. Concurrency memory semantics and cancellation behavior are runtime concerns rather than grammar features.

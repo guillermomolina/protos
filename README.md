@@ -380,7 +380,6 @@ Version 0.1 remains a draft, but the major object-model, invocation, collection-
 
 The principal remaining semantic questions include:
 
-- Future cancellation, error-context propagation, and concurrency memory semantics;
 - reflection and standard-library protocol details;
 - the final language name and corresponding filename cleanup.
 
@@ -562,3 +561,23 @@ Core v0.1 installs dynamic handlers through the standard closure protocol:
 ```
 
 `handle` uses the existing prototype-chain matching and unwinding semantics. The expression evaluates to the protected result on success or the handler result when a matching error is handled.
+
+## Futures and Concurrency
+
+Core v0.1 defines cooperative Future cancellation:
+
+```js
+future.cancel()
+```
+
+Cancellation never means unsafe forced termination; normal unwinding and `ensure` cleanup still apply.
+
+Unhandled task errors are stored by the Future and re-signaled when a consumer executes:
+
+```js
+future.value()
+```
+
+Handlers inside the task apply during task execution; handlers surrounding `future.value()` apply when a stored failure is observed.
+
+Future completion also establishes a visibility boundary: effects performed before completion are visible after that completion is observed through `future.value()`. Shared mutable state otherwise requires explicit synchronization for correct concurrent access.

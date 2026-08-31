@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 33  
+Document revision: 34  
 Status: Draft  
 Last updated: 2026-08-31
 
@@ -2222,3 +2222,97 @@ a |> b
 lowers conceptually to an ordinary send whose selector is `"|>"`.
 
 The permitted symbolic character alphabet is a parser/lexer rule and is not mutable at runtime.
+
+## Future Cancellation Runtime Semantics
+
+Future cancellation is cooperative.
+
+Conceptually:
+
+```text
+function cancel(future):
+    future.cancellationRequested = true
+    return future
+```
+
+The exact return value of `cancel()` may be refined by the standard protocol, but cancellation request is not an unsafe immediate kill.
+
+Cancellation-aware execution checks the request at safe points. When honored:
+
+```text
+unwind current asynchronous activation
+run all applicable ensure cleanup
+complete Future as CANCELLED
+```
+
+A later:
+
+```text
+future.value()
+```
+
+signals the standard cancellation condition/error, conceptually `Cancelled`.
+
+The runtime must not bypass `ensure` merely to accelerate cancellation.
+
+## Future Failure Propagation
+
+An unhandled error in an asynchronous task is captured as the failed completion of its Future rather than transferred asynchronously into the creator's activation.
+
+Conceptually:
+
+```text
+try:
+    result = invoke(taskClosure, [])
+    future.completeSuccess(result)
+
+on unhandled error:
+    future.completeFailure(error)
+```
+
+When a consumer executes:
+
+```text
+future.value()
+```
+
+the Future behaves conceptually as:
+
+```text
+if SUCCESS:
+    return storedValue
+
+if FAILED:
+    signal(storedError) in current consumer activation
+
+if CANCELLED:
+    signal(Cancelled) in current consumer activation
+
+if PENDING:
+    suspend current activation until completion
+```
+
+Dynamic handlers active only in the Future creator are not implicitly preserved as the Future task's handler stack. Handlers installed inside the task govern errors while that task executes. Handlers surrounding `future.value()` govern re-signaled stored failures at observation time.
+
+## Future Completion Visibility
+
+Future completion is a synchronization boundary.
+
+All memory effects performed by the Future task before it enters a terminal state are visible to a task after that task successfully observes the terminal state through `future.value()`.
+
+Conceptually:
+
+```text
+task effects
+    happen-before
+Future terminal completion
+    happens-before
+return/signal from observer's future.value()
+```
+
+This guarantee applies to SUCCESS, FAILED, and CANCELLED completion with respect to effects that occurred before terminal completion.
+
+Shared mutable objects remain ordinary shared mutable objects. Unsynchronized conflicting concurrent accesses require explicit synchronization; Core v0.1 does not assign race-free semantics to arbitrary data races.
+
+Implementations may map these guarantees to the host VM memory model, locks, atomics, scheduler barriers, or equivalent mechanisms as long as language-level visibility is preserved.
+
