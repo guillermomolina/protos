@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 7  
+Document revision: 8  
 Status: Draft  
 Last updated: 2026-08-30
 
@@ -845,13 +845,15 @@ methodHome = object where speak was found
 
 This is required for correct `this` and `super` behavior.
 
-## 32. Extracted Method Lowering
+## 32. Extracted Closure / Method Lowering
+
+Protia has no separate `Method` value type. A closure stored in a slot remains a `Closure`; method behavior arises from receiver-aware lookup and invocation.
 
 ```js
 f: dog.speak
 ```
 
-produces a bound closure when the slot contains a method closure.
+reads the closure-valued slot without executing it and produces a receiver-bound closure view/value carrying the receiver and lookup origin.
 
 Conceptually it retains:
 

@@ -1,7 +1,7 @@
 # Protia Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 7  
+Document revision: 8  
 Status: Draft  
 Last updated: 2026-08-30
 
@@ -225,6 +225,8 @@ produces a bound callable value if `speak` is a method closure.
 ---
 
 # 7. Method Binding
+
+There is no distinct runtime-language `Method` value category. The core executable value is `Closure`. A member read never executes a closure. If member lookup yields a closure, the runtime may represent the receiver binding as a lightweight `BoundClosure` wrapper/view, but this is binding metadata rather than a separate method object in Protia semantics.
 
 ```text
 function bindIfMethod(value, receiver, methodHome):
@@ -518,7 +520,7 @@ function call(callable, arguments):
     return executeActivation(activation)
 ```
 
-This preserves the receiver of extracted methods.
+This preserves the receiver of extracted closures/method references. The plain call does not infer a receiver from the slot name; it uses the binding metadata created when the closure-valued member was read.
 
 ---
 

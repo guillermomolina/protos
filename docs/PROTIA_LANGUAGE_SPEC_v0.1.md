@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 7  
+Document revision: 8  
 Status: Draft  
 Last updated: 2026-08-30
 
@@ -447,7 +447,9 @@ works because the context containing `n` remains alive while a closure still ref
 
 ## 10. Closures and Methods
 
-A closure installed as an object slot acts as a method.
+Protia has one executable value kind in the core language: **Closure**. There is no separate `Method` value type.
+
+A closure installed as an object slot acts as a method when it is reached through a message send. "Method" therefore describes an invocation role, not a distinct kind of object.
 
 ```js
 animal: {
@@ -484,7 +486,9 @@ f()
 
 ## 11. Extracted Methods
 
-Reading a method through a receiver produces a bound closure.
+Reading a closure-valued slot does not execute it. It reads the executable value. When that value is obtained through receiver lookup, Protia preserves the receiver and lookup origin as binding metadata so that a later plain call has the same receiver semantics as the original method reference.
+
+This does not create a distinct `Method` object type; the resulting value is still a closure semantically, with receiver binding metadata.
 
 ```js
 f: dog.speak
