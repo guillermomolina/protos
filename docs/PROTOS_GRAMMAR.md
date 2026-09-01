@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 49  
+Document revision: 50  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -1962,8 +1962,27 @@ Reserved and standard symbolic tokens include:
 
 ```text
 =>  =  ==  ===  !=  !==  <=  >=  &&  ||
-+   -  *   /   %   <   >
++   -  *   /   %   <   >   !   ^
 ```
+
+The exact one-character spellings `!` and `^` are reserved/standard tokens and are never custom binary operators. They are classified as such wherever they appear; the grammar assigns their roles (prefix `!`, non-local-return `^`), not the lexer. Consequently `a ! b` and `a ^ b` are syntax errors rather than custom binary operator expressions.
+
+The characters `!` and `^` remain members of the custom operator alphabet. Longer symbolic spellings containing them, such as `!!`, `^^`, `!^`, and `^!`, do not exactly match any reserved/standard spelling and are therefore `CUSTOM_OPERATOR` tokens, so `a !! b`, `a ^^ b`, `a !^ b`, and `a ^! b` are custom binary operator expressions.
+
+Symbolic token classification is purely lexical and does not depend on parser position. Maximal munch first forms the longest valid symbolic spelling at a source position; that complete spelling is then classified as a reserved/standard token when it exactly matches a reserved/standard spelling, and as `CUSTOM_OPERATOR` otherwise. A longer custom spelling is never broken up in order to prefer a shorter reserved/standard token, and there is no prefix-position exception. For example:
+
+```text
+!x      -> ! IDENTIFIER("x")
+!!x     -> CUSTOM_OPERATOR("!!") IDENTIFIER("x")
+^value  -> ^ IDENTIFIER("value")
+^^x     -> CUSTOM_OPERATOR("^^") IDENTIFIER("x")
+a ! b   -> IDENTIFIER("a") ! IDENTIFIER("b")
+a !! b  -> IDENTIFIER("a") CUSTOM_OPERATOR("!!") IDENTIFIER("b")
+a ^ b   -> IDENTIFIER("a") ^ IDENTIFIER("b")
+a ^^ b  -> IDENTIFIER("a") CUSTOM_OPERATOR("^^") IDENTIFIER("b")
+```
+
+Whether the resulting token sequence is syntactically valid is the parser's responsibility. `!x` parses as prefix `!` applied to `x`; `^value` parses as a non-local return of `value`. `!!x` and `^^x` are syntax errors because a custom binary operator requires a left operand; `a ! b` and `a ^ b` are syntax errors because `!` and `^` are not custom binary operator tokens; `a !! b` and `a ^^ b` parse as custom binary expressions with selectors `"!!"` and `"^^"`. The same maximal-munch rule applies to other adjacent symbolic spellings such as `^^x`, `--x`, `-!x`, and `!-x`; they are not split into stacked prefix operators. Explicitly nested prefix operations are written with structural punctuation, for example `!(!x)`.
 
 Any remaining non-empty sequence made exclusively from operator characters may be tokenized as `CUSTOM_OPERATOR`. The characters `.`, `:`, and `;` never participate in a custom operator token.
 

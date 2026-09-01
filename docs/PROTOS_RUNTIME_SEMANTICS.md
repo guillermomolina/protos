@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 49  
+Document revision: 50  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -90,6 +90,7 @@ The lexer must enforce the following rules for String literals:
 
 - `...` is a single lexical token representing three consecutive periods. It is recognized greedily and is not parsed as three separate `.` tokens.
 - Maximal-munch tokenization applies to symbolic operators: when multiple valid symbolic operator tokens can begin at the same source position, the lexer must consume the longest valid token.
+- Symbolic token classification is lexical and independent of parser position: maximal munch first forms the longest valid symbolic spelling, which is classified as a reserved/standard token when it exactly matches a reserved/standard spelling and as `CUSTOM_OPERATOR` otherwise. The exact one-character spellings `!` and `^` are reserved/standard tokens with their existing prefix and non-local-return roles and are not custom binary operators; longer spellings containing those characters, such as `!!` or `^^`, are `CUSTOM_OPERATOR` tokens.
 - Standard punctuation and structural tokens are tokenized separately from symbolic operators.
 - A `.` immediately following a complete radix-prefixed Integer literal is a structural `.` token unless it is immediately followed by a decimal digit; a `.` immediately followed by a decimal digit makes the sequence an attempted unsupported radix Float literal and a lexical error (`0b10.5`), not `INTEGER("0b10")` `.` `INTEGER("5")`.
 

@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 49  
+Document revision: 50  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -930,8 +930,10 @@ Reserved or standard symbolic tokens include:
 
 ```text
 =>  =  ==  ===  !=  !==  <=  >=  &&  ||
-+   -  *   /   %   <   >
++   -  *   /   %   <   >   !   ^
 ```
+
+The exact one-character spellings `!` and `^` are reserved/standard tokens and are not custom binary selectors: `a ! b` and `a ^ b` are syntax errors. Their existing roles are unchanged wherever they appear: `!` lowers to `not()` as a prefix operator and `^` performs a non-local return. Symbolic token classification is purely lexical and independent of parser position: maximal munch first forms the longest valid spelling, which is classified as a reserved/standard token when it exactly matches a reserved/standard spelling and as `CUSTOM_OPERATOR` otherwise. The characters `!` and `^` remain members of the custom operator alphabet, so longer spellings containing them, such as `!!`, `^^`, `!^`, and `^!`, are `CUSTOM_OPERATOR` tokens and may be used as custom binary selectors, for example `a !! b` and `a ^^ b`.
 
 A symbolic sequence composed from the operator alphabet that is not otherwise reserved or standard may be used as a custom binary selector, for example:
 
@@ -982,7 +984,7 @@ Parentheses make the intended grouping explicit:
 a @ (b * c)
 ```
 
-Modules, imports, declarations, or runtime mutation cannot change parser precedence. The exact lexical set of characters permitted in custom symbolic selectors remains to be finalized separately.
+Modules, imports, declarations, or runtime mutation cannot change parser precedence.
 
 ## 22. Open Objects
 
