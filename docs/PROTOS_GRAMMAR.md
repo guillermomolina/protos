@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 51  
+Document revision: 52  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -129,7 +129,7 @@ String interpolation is not part of Core v0.1. Inside a String, `${...}` has no 
 For triple-double-quoted String literals, indentation normalization is defined as follows:
 
 - If the opening `"""` is immediately followed by a logical source newline, that newline is not part of the resulting String. A removable `CRLF` is removed as one logical newline: both U+000D and U+000A.
-- If the closing `"""` is immediately preceded by a logical source newline whose preceding content on that line is only indentation whitespace, that final newline and indentation are not part of the resulting String. A removable `CRLF` is removed as one logical newline: both U+000D and U+000A.
+- If the closing `"""` is immediately preceded by a logical source newline whose preceding content on that line is only indentation whitespace (exactly SPACE or TAB; see Whitespace and Newlines), that final newline and indentation are not part of the resulting String. A removable `CRLF` is removed as one logical newline: both U+000D and U+000A.
 - The literal is split into logical content lines at each logical source newline; `LF`, `CR`, and `CRLF` each count as one logical newline for this splitting.
 - Determine the minimum common indentation of all non-empty content lines.
 - Remove that common indentation from every content line.
@@ -173,7 +173,18 @@ hello
 
 ## 4. Whitespace and Newlines
 
-Spaces and tabs are token separators.
+Horizontal whitespace consists of exactly two code points:
+
+```text
+U+0020  SPACE
+U+0009  CHARACTER TABULATION (TAB)
+```
+
+No other code point is horizontal whitespace. This set is closed: it does not depend on Unicode whitespace properties or on any host-language, host-library, or host-operating-system whitespace classification.
+
+Outside lexical constructs that consume their own contents (String literals and comments), SPACE and TAB are insignificant horizontal whitespace. They separate tokens where separation is required and otherwise produce no parser token.
+
+Logical source newlines are a separate lexical category. They are not horizontal whitespace.
 
 A logical source newline is exactly one of `LF` (U+000A), `CR` (U+000D), or `CRLF` (U+000D U+000A). `CRLF` is consumed atomically as one logical source newline, never as two.
 
@@ -184,6 +195,31 @@ Source files may freely mix `LF`, `CR`, and `CRLF` logical newlines. Mixed line-
 In the EBNF, the terminal `newline` denotes this logical `NEWLINE` token. Parser productions using `newline` do not depend on whether the source spelling was `LF`, `CR`, or `CRLF`.
 
 Newline handling does not depend on the host operating system, editor settings, Git line-ending conversion, or any host line-separator convention.
+
+No other Unicode code point is implicitly ignored as whitespace merely because Unicode, Java, an operating system, or another host API classifies it as whitespace or space. In particular, the following are not Core v0.1 whitespace:
+
+```text
+U+000B  VERTICAL TAB
+U+000C  FORM FEED
+U+0085  NEXT LINE
+U+00A0  NO-BREAK SPACE
+U+1680  OGHAM SPACE MARK
+U+2000..U+200A  Unicode space characters
+U+2028  LINE SEPARATOR
+U+2029  PARAGRAPH SEPARATOR
+U+202F  NARROW NO-BREAK SPACE
+U+205F  MEDIUM MATHEMATICAL SPACE
+U+3000  IDEOGRAPHIC SPACE
+U+FEFF  ZERO WIDTH NO-BREAK SPACE
+```
+
+This list is illustrative of important exclusions, not an alternative open-ended definition. The normative rule is that only U+0020 and U+0009 are horizontal whitespace. In particular, U+2028 LINE SEPARATOR and U+2029 PARAGRAPH SEPARATOR are neither horizontal whitespace nor logical source newlines.
+
+A source code point that is neither part of a valid lexical token, nor SPACE or TAB horizontal whitespace, nor a logical source newline, nor consumed inside a lexical construct such as a String or comment is a lexical error. The lexer must not silently discard unknown Unicode whitespace-like or format characters.
+
+Characters such as NBSP, Unicode space characters, U+2028, U+2029, and U+FEFF may occur as ordinary String content where the String literal rules permit them. Their exclusion from lexical whitespace applies outside String content.
+
+Wherever the multiline triple-double-quoted String rules refer to "indentation whitespace", the characters that may constitute indentation whitespace are exactly SPACE (U+0020) and TAB (U+0009). This defines only which characters count as indentation whitespace; it does not define tab width, visual columns, whether a TAB is equivalent to some number of SPACE characters, how common indentation is computed when SPACE and TAB are mixed, or whether mixed SPACE/TAB indentation is permitted.
 
 Line breaks may separate expressions when the current expression is syntactically complete.
 

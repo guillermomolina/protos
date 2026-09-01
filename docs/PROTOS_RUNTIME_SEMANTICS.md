@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 51  
+Document revision: 52  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -84,6 +84,15 @@ The lexer must validate escape sequences and reject invalid ones before the pars
 - Source files may freely mix `LF`, `CR`, and `CRLF` logical newlines; mixed line-ending styles are not lexical errors.
 - Newline recognition does not depend on the host operating system, editor settings, Git line-ending conversion, or any host line-separator convention.
 - A `//` line comment terminates immediately before the next logical source newline or at end of file. The terminating logical source newline is not consumed as part of the comment; it remains available for ordinary newline tokenization.
+
+**Horizontal Whitespace (Lexer Contract):**
+
+- `SPACE` (U+0020) is ignored horizontal whitespace.
+- `CHARACTER TABULATION` (U+0009, TAB) is ignored horizontal whitespace.
+- These two code points are the only Core v0.1 horizontal whitespace. Horizontal whitespace emits no parser token.
+- The lexer must not use host-dependent or Unicode-generic whitespace predicates to expand this set; no other Unicode whitespace-like code point is implicitly ignored.
+- A source code point that is neither part of a valid lexical token, nor SPACE or TAB horizontal whitespace, nor a logical source newline, nor consumed inside a lexical construct such as a String or comment is a lexical error. Otherwise-unrecognized whitespace-like or format code points must not be silently discarded.
+- Logical `NEWLINE` handling is separate and unchanged.
 
 **String Literal Newline Handling:**
 
@@ -1119,7 +1128,7 @@ identical(newObject(), newObject())     == false
 
 String-literal evaluation produces ordinary `String` values. Single-quoted and double-quoted literals are equivalent. There is no separate character type; `'a'` and `"a"` both denote a `String` containing the single-character text `a`. Single-quoted, double-quoted, and triple-double-quoted strings use the same escape rules. The supported escapes are exactly `\\`, `\'`, `\"`, `\n`, `\r`, `\t`, `\b`, `\f`, and `\u{HEX}`. `\u{HEX}` requires 1 to 6 hexadecimal digits and must denote a valid Unicode scalar value. Invalid or incomplete escape sequences are syntax errors. Octal escapes and `\xNN` escapes are not supported. Triple-double-quoted strings are multiline `String` values, not raw strings. Triple-single-quoted strings are invalid syntax. String interpolation is not part of Core v0.1, so `${...}` inside a literal is ordinary text.
 
-Triple-double-quoted String evaluation applies the Core v0.1 multiline indentation normalization rule. Logical source newlines delimit the content lines; each of `LF`, `CR`, and `CRLF` counts as one logical newline for structural processing. If the opening delimiter is immediately followed by a logical source newline, that newline is discarded. If the closing delimiter is immediately preceded by a logical source newline whose preceding content on that line is only indentation whitespace, that trailing newline and indentation are discarded. The minimum common indentation of all non-empty content lines is removed from each content line, empty lines are ignored for indentation calculation, and relative indentation beyond that minimum is preserved. When a multiline String begins or ends on the same line as the delimiters, no implicit leading or trailing newline trimming occurs. Opening/trailing newline removal removes the complete logical newline sequence, so a removable `CRLF` is removed as one logical newline. Retained logical source newlines preserve their original source code points in the resulting String: `LF` remains U+000A, `CR` remains U+000D, and `CRLF` remains U+000D U+000A. Escape processing still follows the standard Core v0.1 String escape rules, and triple-double-quoted strings remain non-raw strings.
+Triple-double-quoted String evaluation applies the Core v0.1 multiline indentation normalization rule. Logical source newlines delimit the content lines; each of `LF`, `CR`, and `CRLF` counts as one logical newline for structural processing. If the opening delimiter is immediately followed by a logical source newline, that newline is discarded. If the closing delimiter is immediately preceded by a logical source newline whose preceding content on that line is only indentation whitespace (exactly SPACE or TAB; see Horizontal Whitespace (Lexer Contract)), that trailing newline and indentation are discarded. The minimum common indentation of all non-empty content lines is removed from each content line, empty lines are ignored for indentation calculation, and relative indentation beyond that minimum is preserved. When a multiline String begins or ends on the same line as the delimiters, no implicit leading or trailing newline trimming occurs. Opening/trailing newline removal removes the complete logical newline sequence, so a removable `CRLF` is removed as one logical newline. Retained logical source newlines preserve their original source code points in the resulting String: `LF` remains U+000A, `CR` remains U+000D, and `CRLF` remains U+000D U+000A. Escape processing still follows the standard Core v0.1 String escape rules, and triple-double-quoted strings remain non-raw strings.
 
 `true`, `false`, and `null` are canonical singleton values.
 
