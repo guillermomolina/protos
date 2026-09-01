@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 55  
+Document revision: 56  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -278,7 +278,7 @@ array[
 ]
 ```
 
-The logical newlines used to lay out these necessarily incomplete constructs do not terminate the surrounding expression. List separators that necessarily require another list element continue the current syntactic construct according to the existing list grammar.
+The logical newlines used to lay out these necessarily incomplete constructs do not terminate the surrounding expression. A comma separates two elements of a comma-separated list and necessarily requires another list element after it, so a newline after a comma is continuation according to the list grammar.
 
 If the expression before a logical newline is syntactically complete, the newline normally acts as an expression separator:
 
@@ -310,7 +310,7 @@ Indentation has no syntactic significance for these rules: the equivalences abov
 
 An explicit `;` remains an expression separator under the existing grammar. There is no semicolon continuation analogous to newline continuation; a semicolon cannot be ignored merely because formatting or the next token suggests continuation.
 
-This section does not decide newline placement between a completed call and a trailing closure, nor before a trailing closure's own parameter list (unresolved issue B7). It does not resolve separator multiplicity or blank-line grammar (issue B4) or list-end separator questions such as trailing commas (issue B3).
+This section does not decide newline placement between a completed call and a trailing closure, nor before a trailing closure's own parameter list (unresolved issue B7). It does not resolve separator multiplicity or blank-line grammar (issue B4). Comma-separated list elements and trailing commas are defined in Closures and Calls and Arguments: `,` is the only list-element separator and trailing commas are syntax errors.
 
 ## 5. Expression Separators
 
@@ -325,7 +325,7 @@ separator =
     | newline;
 ```
 
-A comma is not an expression separator. It is reserved for list-like syntactic forms such as arguments and parameters. Thus:
+A comma is not an expression separator. It is reserved for list-like syntactic forms such as arguments and parameters, where it separates elements and is the only element separator; a trailing comma is not permitted (see Closures and Calls and Arguments). Thus:
 
 ```js
 foo()
@@ -556,18 +556,70 @@ closure-body =
     "{", expression-sequence, "}" ;
 
 parameter-list =
-    "(", [ parameter-items ], ")" ;
+    "(", [ layout ], [ parameter-items ], [ layout ], ")" ;
 
 parameter-items =
       rest-parameter
-    | parameter, { argument-separator, parameter },
-      [ argument-separator, rest-parameter ] ;
+    | parameter, { ",", [ layout ], parameter },
+      [ ",", [ layout ], rest-parameter ] ;
 
 parameter =
     identifier, [ "=", expression ] ;
 
 rest-parameter =
     "...", identifier ;
+
+layout =
+    newline ;
+```
+
+Parameters are comma-separated: exactly one comma is required between each two consecutive parameters. A comma is strictly a separator between two list elements; it is not a terminator and does not represent an empty or omitted element. A comma must have a parameter on both sides within the same list, so a trailing comma before the closing `)` is a syntax error: `(a,)` and `(a, b,)` are invalid. Default parameters and rest parameters use the same separator rule.
+
+A `layout` logical `NEWLINE` is a newline consumed as continuation/layout inside the necessarily-incomplete delimited construct under the Whitespace and Newlines rules. It is formatting, not an element separator: it never separates parameters and never substitutes for the required comma between two consecutive parameters. The productions show at most one optional `layout` newline at each layout position; whether additional consecutive newlines are permitted remains the unresolved blank-line/multiplicity question (issue B4).
+
+Multiline parameter lists remain valid when the commas are present:
+
+```js
+(
+    a,
+    b
+) => {
+    body
+}
+
+(a = 1, b = 2) => {
+    body
+}
+
+(a, ...rest) => {
+    body
+}
+```
+
+Omitting the comma between two parameters is a syntax error, even when the parameters are on separate lines, and a comma immediately before the closing `)` is a syntax error:
+
+```js
+(a b) => {
+    body
+}
+
+(a ...rest) => {
+    body
+}
+
+(
+    a
+    b
+) => {
+    body
+}
+
+(
+    a,
+    b,
+) => {
+    body
+}
 ```
 
 A rest parameter, when present, is final. Parameter names within one parameter list must be unique. Duplicate names, including collisions with the rest parameter name, are rejected during parsing or static validation.
@@ -576,19 +628,68 @@ A rest parameter, when present, is final. Parameter names within one parameter l
 
 ```ebnf
 argument-list =
-    "(", [ argument-items ], ")" ;
+    "(", [ layout ], [ argument-items ], [ layout ], ")" ;
 
 argument-items =
-    argument, { argument-separator, argument } ;
+    argument, { ",", [ layout ], argument } ;
 
 argument =
       expression
     | "...", expression ;
-
-argument-separator =
-      ","
-    | newline ;
 ```
+
+Call arguments are comma-separated: exactly one comma is required between each two consecutive arguments. A comma is strictly a separator between two list elements; it is not a terminator and does not represent an empty or omitted element. A comma must have an argument on both sides within the same list, so a trailing comma before the closing `)` is a syntax error: `foo(a,)` and `foo(a, b,)` are invalid. Spread arguments use the same separator rule.
+
+A logical `NEWLINE` is not an argument separator and does not substitute for a required comma. Newlines inside the delimiters of an open argument list are `layout` (see Closures): continuation/formatting within the necessarily-incomplete construct under the Whitespace and Newlines rules. A newline immediately after the opening delimiter or before the closing delimiter is layout as well and does not imply an empty or omitted element.
+
+Multiline calls are therefore valid when the commas are present:
+
+```js
+foo()
+
+foo(a)
+
+foo(a, b)
+
+foo(
+    a,
+    b
+)
+
+foo(
+    a,
+    ...rest
+)
+```
+
+and invalid when a comma is missing between two arguments or follows the final argument:
+
+```js
+foo(a b)
+
+foo(
+    a
+    b
+)
+
+foo(a ...rest)
+
+foo(
+    a
+    ...rest
+)
+
+foo(a,)
+
+foo(a, b,)
+
+foo(
+    a,
+    b,
+)
+```
+
+The newline between the final argument and the closing delimiter is layout inside the open construct: it is not an element separator, not a trailing list separator, and not an empty element, and it does not make a trailing comma legal.
 
 Argument expressions, including spread operands, are evaluated left-to-right.
 
@@ -1583,12 +1684,12 @@ closure-body =
     "{", expression-sequence, "}" ;
 
 parameter-list =
-    "(", [ parameter-items ], ")" ;
+    "(", [ layout ], [ parameter-items ], [ layout ], ")" ;
 
 parameter-items =
       rest-parameter
-    | parameter, { argument-separator, parameter },
-      [ argument-separator, rest-parameter ] ;
+    | parameter, { ",", [ layout ], parameter },
+      [ ",", [ layout ], rest-parameter ] ;
 
 parameter =
     identifier, [ "=", expression ] ;
@@ -1597,18 +1698,17 @@ rest-parameter =
     "...", identifier ;
 
 argument-list =
-    "(", [ argument-items ], ")" ;
+    "(", [ layout ], [ argument-items ], [ layout ], ")" ;
 
 argument-items =
-    argument, { argument-separator, argument } ;
+    argument, { ",", [ layout ], argument } ;
 
 argument =
       expression
     | "...", expression ;
 
-argument-separator =
-      ","
-    | newline ;
+layout =
+    newline ;
 
 trailing-closure =
     [ parameter-list ], closure-body ;
@@ -1622,6 +1722,8 @@ literal =
 ```
 
 A parser may implement the expression portion using recursive descent plus Pratt parsing. Custom symbolic operators form their own precedence domain: mixing them with standard binary operators requires parentheses.
+
+`layout` denotes a logical `NEWLINE` consumed as continuation inside a necessarily-incomplete delimited construct (see Whitespace and Newlines). It is formatting, not an element separator: commas are the only separators between list elements, and trailing commas are not permitted.
 
 Indexed assignment is recognized because an assignable postfix expression may end in `[ expression ]`; it lowers to `atPut` rather than a slot `Assign`.
 
@@ -1821,6 +1923,8 @@ The receiver expression and index expression are each evaluated exactly once.
 Closure parameter lists may contain ordinary parameters, parameters with defaults, and at most one trailing rest parameter.
 
 The normative productions are defined in Sections 16-17 and in the Compact EBNF. A rest parameter must be the final parameter. Defaults, rest capture, and spread are part of the canonical grammar rather than post-parse extensions.
+
+Elements of parameter and argument lists are separated by commas only. A comma is strictly a separator between two list elements, not a terminator: trailing commas are syntax errors, and a logical newline inside the delimiters is continuation/layout under the newline-continuation rules in Whitespace and Newlines, never a substitute for a missing comma.
 
 Call argument lists may contain ordinary arguments and spread arguments:
 

@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 55  
+Document revision: 56  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -840,7 +840,7 @@ The rule is based on grammatical incompleteness, not on a hard-coded list of tok
 
 An explicit `;` remains an expression separator under the existing grammar. There is no semicolon continuation analogous to newline continuation; a semicolon cannot be ignored merely because formatting or the next token suggests continuation.
 
-This section does not decide newline placement between a completed call and a trailing closure, nor before a trailing closure's own parameter list (unresolved issue B7), and it does not classify `{` or `(` as leading-token continuation exceptions. Separator multiplicity and blank-line grammar (issue B4) and list-end separator questions (issue B3) also remain unresolved.
+This section does not decide newline placement between a completed call and a trailing closure, nor before a trailing closure's own parameter list (unresolved issue B7), and it does not classify `{` or `(` as leading-token continuation exceptions. Separator multiplicity and blank-line grammar (issue B4) also remain unresolved.
 
 ```js
 foo()
@@ -872,6 +872,68 @@ point: {
 ```
 
 `,` is reserved for list-like syntax such as argument lists and parameter lists, and may also be used by future collection literal syntax. It never sequences arbitrary expressions.
+
+Within a comma-separated list, `,` is the only separator between elements. A comma is strictly a separator between two list elements: it is not a terminator and does not represent an empty or omitted element. A comma must therefore have a list element on both sides within the same list, and a trailing comma before the closing delimiter is a syntax error.
+
+This applies to call arguments and closure parameters, including spread arguments and rest parameters. A logical `NEWLINE` is not an element separator and does not substitute for a required comma: multiline formatting works through the newline-continuation rules above, where newlines inside a necessarily-incomplete construct are layout, not through newline separation.
+
+These are valid:
+
+```js
+foo()
+
+foo(a)
+
+foo(a, b)
+
+foo(
+    a,
+    b
+)
+
+(a, b) => {
+    ...
+}
+
+(
+    a,
+    b
+) => {
+    ...
+}
+```
+
+These are syntax errors, either because a required comma is missing between two elements or because a comma precedes the closing delimiter with no element after it:
+
+```js
+foo(a b)
+
+foo(
+    a
+    b
+)
+
+foo(a,)
+
+foo(a, b,)
+
+foo(
+    a,
+    b,
+)
+
+(a b) => {
+    ...
+}
+
+(a,) => {
+    ...
+}
+```
+
+The newline between the final element and the closing delimiter is layout inside the open construct: it is not a separator and not an empty element, and it does not make a trailing comma legal. Indexing contains one expression rather than a comma-separated list, so no multi-index comma syntax is introduced by this rule.
+
+A comma never becomes a general expression operator or an expression-sequence separator; it remains list syntax only. This rule does not decide separator multiplicity or blank-line grammar, which remain unresolved (issue B4).
 
 Incomplete expressions continue across line breaks. These are each one expression:
 
@@ -1671,6 +1733,8 @@ f.values([10, 20])
 ```
 
 where such protocol methods delegate to normal invocation. No overload resolution by argument type is introduced by these facilities.
+
+Argument lists and parameter lists are comma-separated lists: `,` is the only separator between elements, a comma is a separator rather than a terminator, and trailing commas are syntax errors. Newlines inside the delimiters are continuation/layout under the newline-continuation rules in Separators, Line Breaks, and Comments; they never substitute for a required comma.
 
 
 ## Polymorphic Invocation and Object Construction

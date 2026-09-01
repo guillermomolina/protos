@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 55  
+Document revision: 56  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -85,6 +85,7 @@ The lexer must validate escape sequences and reject invalid ones before the pars
 - Newline recognition does not depend on the host operating system, editor settings, Git line-ending conversion, or any host line-separator convention.
 - A `//` line comment terminates immediately before the next logical source newline or at end of file. The terminating logical source newline is not consumed as part of the comment; it remains available for ordinary newline tokenization.
 - Whether a `NEWLINE` token separates expressions or is consumed as continuation is decided entirely by the parser (see `PROTOS_GRAMMAR.md`); the lexer emits `NEWLINE` tokens uniformly. A continuation newline produces no runtime node and has no runtime semantic effect.
+- Commas between elements of argument and parameter lists are likewise resolved entirely by the parser (see `PROTOS_GRAMMAR.md`). A comma separates list elements and produces no runtime node and no runtime semantic effect; only the parsed list elements appear in the semantic representation.
 
 **Block Comments (Lexer Contract):**
 
@@ -1699,7 +1700,7 @@ This sketch is intentionally small.
 
 Most high-level language behavior should be expressed through ordinary objects and message sends rather than by adding evaluator cases.
 
-Newline continuation is resolved entirely during parsing. A logical `NEWLINE` token that is consumed as continuation — while a syntactic construct is necessarily incomplete, or immediately before a leading structural `.` — appears nowhere in the semantic representation: no runtime node and no runtime behavior corresponds to a continuation newline. Only expressions actually separated by parser-level expression separators become distinct elements of a `Sequence`, so continuation newlines have no runtime semantic effect.
+Newline continuation is resolved entirely during parsing. A logical `NEWLINE` token that is consumed as continuation — while a syntactic construct is necessarily incomplete, or immediately before a leading structural `.` — appears nowhere in the semantic representation: no runtime node and no runtime behavior corresponds to a continuation newline. Only expressions actually separated by parser-level expression separators become distinct elements of a `Sequence`, so continuation newlines have no runtime semantic effect. Commas that separate elements of argument and parameter lists are resolved entirely during parsing as well: they delimit the list elements but produce no runtime node and introduce no runtime behavior. Argument evaluation, parameter binding, spread, rest, and default semantics are unchanged.
 
 ---
 
