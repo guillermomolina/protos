@@ -11,14 +11,27 @@
   "customizations": {
     "vscode": {
       "extensions": [
-        "vscjava.vscode-java-pack"
+        "vscjava.vscode-java-pack",
+        "anthropic.claude-code"
       ],
       "settings": {
-        "java.jdt.ls.java.home": "/opt/graalvm-community-java25"
+        // "java.jdt.ls.java.home": "/opt/graalvm-community-java25"
       }
     }
   },
   "runArgs": [
     "--userns=host"
-  ]
+  ],
+  "containerEnv": {
+    "ANTHROPIC_BASE_URL": "https://api.deepseek.com/anthropic",
+    "ANTHROPIC_AUTH_TOKEN": "${localEnv:ANTHROPIC_AUTH_TOKEN}",
+
+    "ANTHROPIC_MODEL": "deepseek-v4-pro[1m]",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL": "deepseek-v4-pro[1m]",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL": "deepseek-v4-pro[1m]",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "deepseek-v4-flash",
+
+    "CLAUDE_CODE_SUBAGENT_MODEL": "deepseek-v4-flash",
+    "CLAUDE_CODE_EFFORT_LEVEL": "max"
+  }
 }
