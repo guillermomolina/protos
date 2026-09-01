@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 56  
+Document revision: 57  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -838,9 +838,9 @@ Three cases are distinguished:
 
 The rule is based on grammatical incompleteness, not on a hard-coded list of token spellings. Indentation, visual alignment, tab width, and source line-ending spelling have no syntactic significance for newline continuation, and the rule has no runtime dependency.
 
-An explicit `;` remains an expression separator under the existing grammar. There is no semicolon continuation analogous to newline continuation; a semicolon cannot be ignored merely because formatting or the next token suggests continuation.
+An explicit `;` is the inline expression separator: it separates two expressions written on the same logical source line. It is a separator, not a terminator: it must have an expression immediately before it and an expression after it on the same logical source line, with no `NEWLINE` token between the `;` and either expression. Leading, trailing, and consecutive semicolons are syntax errors, and a `;` does not acquire terminator meaning merely because a newline follows it. There is no semicolon continuation analogous to newline continuation; a semicolon cannot be ignored merely because formatting or the next token suggests continuation.
 
-This section does not decide newline placement between a completed call and a trailing closure, nor before a trailing closure's own parameter list (unresolved issue B7), and it does not classify `{` or `(` as leading-token continuation exceptions. Separator multiplicity and blank-line grammar (issue B4) also remain unresolved.
+This section does not decide newline placement between a completed call and a trailing closure, nor before a trailing closure's own parameter list (unresolved issue B7), and it does not classify `{` or `(` as leading-token continuation exceptions. Separator multiplicity and blank-line grammar (issue B4) are defined below: a run of separating `NEWLINE` tokens has the effect of a single separating `NEWLINE`, blank lines are permitted and create no empty expressions, and this multiplicity rule does not create continuation behavior this section does not permit.
 
 ```js
 foo()
@@ -848,13 +848,13 @@ bar()
 baz()
 ```
 
-is equivalent to:
+contains the same three expressions as:
 
 ```js
 foo(); bar(); baz()
 ```
 
-`;` is the explicit horizontal expression separator. A comma is **not** an expression separator.
+`;` is the inline expression separator: it separates expressions written on the same logical source line. A logical `NEWLINE` is the ordinary separator between expressions written on different logical source lines. The two mechanisms are distinct syntactic roles, not interchangeable spellings of one generic separator: `;` requires an expression on both sides of it on the same logical source line, while a separating `NEWLINE` ends the current source line and the next expression begins on a later line. There is no requirement to write `;` at the end of a source line, and a `;` at the end of a line is a syntax error, not an optional terminator. A comma is **not** an expression separator.
 
 Therefore an object body written on one line uses `;`:
 
@@ -870,6 +870,70 @@ point: {
     y: 20
 }
 ```
+
+Both separation mechanisms produce the same ordered expressions. These are valid:
+
+```js
+a: 1; b: 2
+
+a: 1; b: 2; c: 3
+
+a: 1
+b: 2
+
+a: 1
+
+
+b: 2
+
+a: 1; b: 2
+c: 3
+
+a: 1; b: 2
+
+
+c: 3
+```
+
+These are syntax errors:
+
+```js
+; a: 1
+
+a: 1;
+
+a: 1;; b: 2
+
+a: 1; ; b: 2
+
+a: 1;
+b: 2
+
+a: 1;
+
+b: 2
+```
+
+The first four fail because a `;` lacks an expression before it or after it on the same logical source line. The last two fail because `;` is same-line only: the `NEWLINE` ends the current line, and the semicolon cannot take the following line's expression as its right-hand expression. A `;` never acquires terminator meaning merely because a newline follows it.
+
+A separating logical `NEWLINE` ends the current line's expression sequence. Consecutive separating logical `NEWLINE` tokens have the same effect as one: blank lines are valid between expressions and create no empty expression, no omitted expression, and no `null` value. Blank lines are likewise permitted at the beginning or end of an expression sequence, such as around the expressions of a block or program, provided the surrounding grammar otherwise permits the sequence:
+
+```js
+{
+
+    a: 1
+    b: 2
+
+}
+```
+
+contains exactly two expressions. Repeated separating `NEWLINE` tokens produce no semantic AST nodes and no runtime behavior.
+
+Whether a `NEWLINE` token acts as separation at all is decided by the newline-continuation rules above: a `NEWLINE` consumed as continuation inside a necessarily-incomplete construct, or immediately before a leading structural `.`, never acts as separation. The multiplicity rule applies once a `NEWLINE` is functioning as line separation; blank lines do not create continuation behavior those rules do not permit.
+
+Comment forms do not change the same-line requirement of `;`. A `//` line comment does not consume its terminating logical source newline, so `a: 1; // comment` followed by `b: 2` on the next line still leaves a `NEWLINE` token between the `;` and `b` and is invalid. A `/* ... */` block comment consumes embedded logical source newlines and behaves whitespace-like, so it does not itself supply a separating `NEWLINE`.
+
+The source-level separator choice does not change what the expressions are: `a: 1; b: 2` and `a: 1` followed by `b: 2` on the next line contain the same ordered expressions, and both forms produce the same `Sequence` structure in the semantic AST. Neither `;` nor a separating `NEWLINE` becomes an AST node, and evaluation remains left-to-right.
 
 `,` is reserved for list-like syntax such as argument lists and parameter lists, and may also be used by future collection literal syntax. It never sequences arbitrary expressions.
 
@@ -891,6 +955,14 @@ foo(
     b
 )
 
+foo(
+
+    a,
+
+    b
+
+)
+
 (a, b) => {
     ...
 }
@@ -898,6 +970,16 @@ foo(
 (
     a,
     b
+) => {
+    ...
+}
+
+(
+
+    a,
+
+    b
+
 ) => {
     ...
 }
@@ -922,6 +1004,12 @@ foo(
     b,
 )
 
+foo(
+    a,
+    b,
+
+)
+
 (a b) => {
     ...
 }
@@ -931,9 +1019,9 @@ foo(
 }
 ```
 
-The newline between the final element and the closing delimiter is layout inside the open construct: it is not a separator and not an empty element, and it does not make a trailing comma legal. Indexing contains one expression rather than a comma-separated list, so no multi-index comma syntax is introduced by this rule.
+The newlines between the final element and the closing delimiter — a single newline or a run of blank lines — are layout inside the open construct: they are not a separator and not an empty element, and they do not make a trailing comma legal. Indexing contains one expression rather than a comma-separated list, so no multi-index comma syntax is introduced by this rule.
 
-A comma never becomes a general expression operator or an expression-sequence separator; it remains list syntax only. This rule does not decide separator multiplicity or blank-line grammar, which remain unresolved (issue B4).
+A comma never becomes a general expression operator or an expression-sequence separator; it remains list syntax only. Separator multiplicity and blank-line grammar are resolved by this revision (issue B4): a run of separating logical newlines acts as one separator, blank lines create no empty expressions, and none of this affects the comma-only list-element rule.
 
 Incomplete expressions continue across line breaks. These are each one expression:
 

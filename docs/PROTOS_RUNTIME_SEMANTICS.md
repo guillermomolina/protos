@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 56  
+Document revision: 57  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -1700,7 +1700,7 @@ This sketch is intentionally small.
 
 Most high-level language behavior should be expressed through ordinary objects and message sends rather than by adding evaluator cases.
 
-Newline continuation is resolved entirely during parsing. A logical `NEWLINE` token that is consumed as continuation — while a syntactic construct is necessarily incomplete, or immediately before a leading structural `.` — appears nowhere in the semantic representation: no runtime node and no runtime behavior corresponds to a continuation newline. Only expressions actually separated by parser-level expression separators become distinct elements of a `Sequence`, so continuation newlines have no runtime semantic effect. Commas that separate elements of argument and parameter lists are resolved entirely during parsing as well: they delimit the list elements but produce no runtime node and introduce no runtime behavior. Argument evaluation, parameter binding, spread, rest, and default semantics are unchanged.
+Expression separation is resolved entirely during parsing. The parser-level separators — an inline `;` between two expressions on the same logical source line, and a separating logical `NEWLINE` between expressions on different source lines — are source-level syntax: neither becomes a semantic AST node, and no runtime node, value, or object corresponds to either separator. A logical `NEWLINE` token consumed as continuation — while a syntactic construct is necessarily incomplete, or immediately before a leading structural `.` — likewise appears nowhere in the semantic representation. Repeated separating `NEWLINE` tokens (blank lines) and layout newlines inside open delimited constructs are formatting: they produce no semantic AST nodes and no runtime behavior, and they never create empty, omitted, or `null` expressions. Only the expressions themselves become distinct elements of a `Sequence`, so `a: 1; b: 2` and the newline-separated form contain the same ordered `Sequence` elements and are evaluated strictly left-to-right in `evaluateSequence`. Commas that separate elements of argument and parameter lists are resolved entirely during parsing as well: they delimit the list elements but produce no runtime node and introduce no runtime behavior. Argument evaluation, parameter binding, spread, rest, and default semantics are unchanged.
 
 ---
 

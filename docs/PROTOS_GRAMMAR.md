@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 56  
+Document revision: 57  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -308,22 +308,45 @@ is one expression, equivalent to `object.foo().bar()`. Conceptually, a logical n
 
 Indentation has no syntactic significance for these rules: the equivalences above hold regardless of indentation.
 
-An explicit `;` remains an expression separator under the existing grammar. There is no semicolon continuation analogous to newline continuation; a semicolon cannot be ignored merely because formatting or the next token suggests continuation.
+An explicit `;` is the inline expression separator: it separates two expressions written on the same logical source line. It is a separator, not a terminator: it must have an expression before it and an expression after it on the same logical source line, with no `NEWLINE` token between the `;` and either expression. Leading, trailing, and consecutive semicolons are syntax errors, and a `;` does not acquire terminator meaning merely because a newline follows it. There is no semicolon continuation analogous to newline continuation; a semicolon cannot be ignored merely because formatting or the next token suggests continuation.
 
-This section does not decide newline placement between a completed call and a trailing closure, nor before a trailing closure's own parameter list (unresolved issue B7). It does not resolve separator multiplicity or blank-line grammar (issue B4). Comma-separated list elements and trailing commas are defined in Closures and Calls and Arguments: `,` is the only list-element separator and trailing commas are syntax errors.
+This section does not decide newline placement between a completed call and a trailing closure, nor before a trailing closure's own parameter list (unresolved issue B7). Once a `NEWLINE` token is functioning as line separation under the rules above, any positive run of separating `NEWLINE` tokens has the effect of one separating `NEWLINE`: blank lines are permitted and create no empty expressions (see Expression Separators). This multiplicity rule does not create continuation behavior that this section does not permit. Comma-separated list elements and trailing commas are defined in Closures and Calls and Arguments: `,` is the only list-element separator and trailing commas are syntax errors.
 
 ## 5. Expression Separators
 
+Core v0.1 has two distinct expression-separation mechanisms with distinct syntactic roles:
+
+- A logical `NEWLINE` separates expressions written on different logical source lines. It is the ordinary cross-line expression separator.
+- `;` separates expressions written on the same logical source line. It is the inline expression separator.
+
+The two mechanisms are not interchangeable spellings of one generic separator. `;` requires an expression on both sides of it on the same logical source line; a separating `NEWLINE` ends the current source line and the next expression begins on a later line. There is no requirement to write `;` at the end of a source line, and a `;` at the end of a line is a syntax error, not an optional terminator.
+
 ```ebnf
 expression-sequence =
-    [ expression,
-      { separator, expression },
-      [ separator ] ];
+    [ newline-run ],
+    [ expression-line-items ],
+    [ newline-run ] ;
 
-separator =
-      ";"
-    | newline;
+expression-line-items =
+    expression-line,
+    { newline-run, expression-line } ;
+
+expression-line =
+    expression,
+    { ";", expression } ;
+
+newline-run =
+    newline,
+    { newline } ;
 ```
+
+An `expression-line` is one or more expressions separated by `;` on one logical source line. `;` is a separator, not a terminator: each `;` must have an expression before it and an expression after it within the same `expression-line`. Leading, trailing, and consecutive semicolons are therefore syntax errors, and a `;` cannot reach an expression on a following source line: since every logical source newline that is not consumed by another lexical construct produces a `NEWLINE` token, and no production permits a `newline` token between a `;` and the expressions on either side of it, the same-line requirement follows from the token structure. `;` is not affected by the newline-continuation rules: there is no semicolon continuation, and a `;` is never ignored merely because formatting or the next token suggests continuation. Comment forms do not change this rule: `//` does not consume its terminating logical source newline, so a `;` before a `//` comment still fails to reach an expression on the next line, while a `/* ... */` comment consumes embedded logical source newlines and behaves whitespace-like.
+
+A `newline-run` is one or more consecutive `NEWLINE` tokens functioning as line separation. Between two `expression-line`s, a `newline-run` of any positive length separates them with the same effect as a single separating `NEWLINE`; a `newline-run` at the beginning or end of an `expression-sequence` is blank-line formatting. Blank lines create no empty, omitted, or `null` expressions, produce no semantic AST nodes, and have no runtime behavior.
+
+Which `NEWLINE` tokens reach an `expression-sequence` at all is decided by the newline-continuation rules in Whitespace and Newlines: a `NEWLINE` is consumed as continuation while the construct before it is necessarily incomplete, or when it is immediately followed by a leading structural `.`; only the remaining `NEWLINE` tokens act as line separation. The multiplicity rule here does not create continuation behavior those rules do not permit.
+
+Both mechanisms produce the same semantic representation: the expressions of an `expression-sequence` become the ordered expressions of `Sequence(expressions)` in the canonical AST. Neither `;` nor a separating `NEWLINE` becomes an AST node, and the source-level separator choice does not change the ordered expressions.
 
 A comma is not an expression separator. It is reserved for list-like syntactic forms such as arguments and parameters, where it separates elements and is the only element separator; a trailing comma is not permitted (see Closures and Calls and Arguments). Thus:
 
@@ -333,13 +356,13 @@ bar()
 baz()
 ```
 
-is equivalent to:
+and:
 
 ```js
 foo(); bar(); baz()
 ```
 
-The same rule applies inside object bodies:
+contain the same three expressions in the same order. The same rule applies inside object bodies:
 
 ```js
 point: { x: 10; y: 20 }
@@ -347,7 +370,50 @@ point: { x: 10; y: 20 }
 
 A comma cannot be substituted for `;` here.
 
-A logical `NEWLINE` token acts as an expression separator only when it is not consumed by the newline-continuation rules defined in Whitespace and Newlines: it separates expressions when the expression before it may legally end, it is consumed as continuation while the construct before it is necessarily incomplete, and it is consumed as continuation when it is immediately followed by a leading structural `.`. An explicit `;` always separates expressions and is not affected by the continuation rules.
+These are valid:
+
+```js
+a: 1; b: 2
+
+a: 1; b: 2; c: 3
+
+a: 1
+b: 2
+
+a: 1
+
+
+b: 2
+
+a: 1; b: 2
+c: 3
+
+a: 1; b: 2
+
+
+c: 3
+```
+
+These are syntax errors:
+
+```js
+; a: 1
+
+a: 1;
+
+a: 1;; b: 2
+
+a: 1; ; b: 2
+
+a: 1;
+b: 2
+
+a: 1;
+
+b: 2
+```
+
+The first four fail because a `;` lacks an expression before it or after it on the same logical source line. The last two fail because `;` is same-line only: the `NEWLINE` ends the current line, and the semicolon cannot take the following line's expression as its right-hand expression.
 
 ## 6. Program
 
@@ -570,12 +636,13 @@ rest-parameter =
     "...", identifier ;
 
 layout =
-    newline ;
+    newline,
+    { newline } ;
 ```
 
 Parameters are comma-separated: exactly one comma is required between each two consecutive parameters. A comma is strictly a separator between two list elements; it is not a terminator and does not represent an empty or omitted element. A comma must have a parameter on both sides within the same list, so a trailing comma before the closing `)` is a syntax error: `(a,)` and `(a, b,)` are invalid. Default parameters and rest parameters use the same separator rule.
 
-A `layout` logical `NEWLINE` is a newline consumed as continuation/layout inside the necessarily-incomplete delimited construct under the Whitespace and Newlines rules. It is formatting, not an element separator: it never separates parameters and never substitutes for the required comma between two consecutive parameters. The productions show at most one optional `layout` newline at each layout position; whether additional consecutive newlines are permitted remains the unresolved blank-line/multiplicity question (issue B4).
+A `layout` logical `NEWLINE` is a newline consumed as continuation/layout inside the necessarily-incomplete delimited construct under the Whitespace and Newlines rules. `layout` denotes one or more consecutive logical `NEWLINE` tokens: at each layout position, a run of newlines — including blank lines — is formatting with the same effect as a single layout newline. It is not an element separator: it never separates parameters, never substitutes for the required comma between two consecutive parameters, and never creates an empty or omitted parameter.
 
 Multiline parameter lists remain valid when the commas are present:
 
@@ -583,6 +650,16 @@ Multiline parameter lists remain valid when the commas are present:
 (
     a,
     b
+) => {
+    body
+}
+
+(
+
+    a,
+
+    b
+
 ) => {
     body
 }
@@ -640,7 +717,7 @@ argument =
 
 Call arguments are comma-separated: exactly one comma is required between each two consecutive arguments. A comma is strictly a separator between two list elements; it is not a terminator and does not represent an empty or omitted element. A comma must have an argument on both sides within the same list, so a trailing comma before the closing `)` is a syntax error: `foo(a,)` and `foo(a, b,)` are invalid. Spread arguments use the same separator rule.
 
-A logical `NEWLINE` is not an argument separator and does not substitute for a required comma. Newlines inside the delimiters of an open argument list are `layout` (see Closures): continuation/formatting within the necessarily-incomplete construct under the Whitespace and Newlines rules. A newline immediately after the opening delimiter or before the closing delimiter is layout as well and does not imply an empty or omitted element.
+A logical `NEWLINE` is not an argument separator and does not substitute for a required comma. Newlines inside the delimiters of an open argument list are `layout` (see Closures): continuation/formatting within the necessarily-incomplete construct under the Whitespace and Newlines rules. One or more consecutive layout newlines — blank lines — are permitted at any layout position. A newline immediately after the opening delimiter or before the closing delimiter is layout as well and does not imply an empty or omitted element.
 
 Multiline calls are therefore valid when the commas are present:
 
@@ -654,6 +731,14 @@ foo(a, b)
 foo(
     a,
     b
+)
+
+foo(
+
+    a,
+
+    b
+
 )
 
 foo(
@@ -687,9 +772,15 @@ foo(
     a,
     b,
 )
+
+foo(
+    a,
+    b,
+
+)
 ```
 
-The newline between the final argument and the closing delimiter is layout inside the open construct: it is not an element separator, not a trailing list separator, and not an empty element, and it does not make a trailing comma legal.
+The newlines between the final argument and the closing delimiter — a single newline or a run of blank lines — are layout inside the open construct: they are not an element separator, not a trailing list separator, and not an empty element, and they do not make a trailing comma legal.
 
 Argument expressions, including spread operands, are evaluated left-to-right.
 
@@ -1078,9 +1169,17 @@ object-body =
     "{", object-body-sequence, "}" ;
 
 object-body-sequence =
-    [ object-body-item,
-      { separator, object-body-item },
-      [ separator ] ] ;
+    [ newline-run ],
+    [ object-body-line-items ],
+    [ newline-run ] ;
+
+object-body-line-items =
+    object-body-line,
+    { newline-run, object-body-line } ;
+
+object-body-line =
+    object-body-item,
+    { ";", object-body-item } ;
 
 object-body-item =
       composition-item
@@ -1513,13 +1612,21 @@ program =
     expression-sequence ;
 
 expression-sequence =
-    [ expression,
-      { separator, expression },
-      [ separator ] ] ;
+    [ newline-run ],
+    [ expression-line-items ],
+    [ newline-run ] ;
 
-separator =
-      ";"
-    | newline ;
+expression-line-items =
+    expression-line,
+    { newline-run, expression-line } ;
+
+expression-line =
+    expression,
+    { ";", expression } ;
+
+newline-run =
+    newline,
+    { newline } ;
 
 expression =
       slot-creation
@@ -1655,9 +1762,17 @@ object-body =
     "{", object-body-sequence, "}" ;
 
 object-body-sequence =
-    [ object-body-item,
-      { separator, object-body-item },
-      [ separator ] ] ;
+    [ newline-run ],
+    [ object-body-line-items ],
+    [ newline-run ] ;
+
+object-body-line-items =
+    object-body-line,
+    { newline-run, object-body-line } ;
+
+object-body-line =
+    object-body-item,
+    { ";", object-body-item } ;
 
 object-body-item =
       composition-item
@@ -1708,7 +1823,8 @@ argument =
     | "...", expression ;
 
 layout =
-    newline ;
+    newline,
+    { newline } ;
 
 trailing-closure =
     [ parameter-list ], closure-body ;
@@ -1723,7 +1839,7 @@ literal =
 
 A parser may implement the expression portion using recursive descent plus Pratt parsing. Custom symbolic operators form their own precedence domain: mixing them with standard binary operators requires parentheses.
 
-`layout` denotes a logical `NEWLINE` consumed as continuation inside a necessarily-incomplete delimited construct (see Whitespace and Newlines). It is formatting, not an element separator: commas are the only separators between list elements, and trailing commas are not permitted.
+`layout` denotes one or more consecutive logical `NEWLINE` tokens consumed as continuation inside a necessarily-incomplete delimited construct (see Whitespace and Newlines). It is formatting, not an element separator: commas are the only separators between list elements, and trailing commas are not permitted.
 
 Indexed assignment is recognized because an assignable postfix expression may end in `[ expression ]`; it lowers to `atPut` rather than a slot `Assign`.
 
@@ -1924,7 +2040,7 @@ Closure parameter lists may contain ordinary parameters, parameters with default
 
 The normative productions are defined in Sections 16-17 and in the Compact EBNF. A rest parameter must be the final parameter. Defaults, rest capture, and spread are part of the canonical grammar rather than post-parse extensions.
 
-Elements of parameter and argument lists are separated by commas only. A comma is strictly a separator between two list elements, not a terminator: trailing commas are syntax errors, and a logical newline inside the delimiters is continuation/layout under the newline-continuation rules in Whitespace and Newlines, never a substitute for a missing comma.
+Elements of parameter and argument lists are separated by commas only. A comma is strictly a separator between two list elements, not a terminator: trailing commas are syntax errors, and one or more logical newlines inside the delimiters are continuation/layout under the newline-continuation rules in Whitespace and Newlines, never a substitute for a missing comma.
 
 Call argument lists may contain ordinary arguments and spread arguments:
 
