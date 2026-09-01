@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 53  
+Document revision: 54  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -573,29 +573,71 @@ Receiver-aware semantic lowering still distinguishes a member invocation such as
 
 ## 19. Trailing Closures
 
-A trailing closure is permitted only as part of a call suffix.
+A trailing closure is permitted only as part of a call suffix. A bare expression followed by a parameter list and a closure body does not gain trailing-closure meaning unless the preceding expression has just completed a call suffix.
 
 ```ebnf
 trailing-closure =
     [ parameter-list ], closure-body ;
 ```
 
-Examples:
+The parentheses of the call's `argument-list` always contain call arguments. They are never reinterpreted as the parameter list of a trailing closure. When a trailing closure is parameterized, its parameters are written in a distinct parameter list placed after the completed call:
 
-```js
-items.each(item) {
-    print(item)
-}
-
-condition.ifTrue() {
-    print("yes")
+```text
+foo(call-arguments...) (closure-parameters...) {
+    closure-body
 }
 ```
+
+The first parentheses are always call arguments. The second parentheses, when present as part of a trailing closure, are always closure parameters. The two lists are not merged or reinterpreted.
+
+A call may be followed by at most one trailing closure.
+
+A parameterless trailing closure:
+
+```js
+foo(args...) {
+    body
+}
+```
+
+is exactly equivalent to:
+
+```js
+foo(
+    args...,
+    () => {
+        body
+    }
+)
+```
+
+The trailing closure is appended as the final argument of the invocation.
+
+A parameterized trailing closure:
+
+```js
+foo(args...) (params...) {
+    body
+}
+```
+
+is exactly equivalent to:
+
+```js
+foo(
+    args...,
+    (params...) => {
+        body
+    }
+)
+```
+
+The parameter list of a parameterized trailing closure uses the ordinary closure parameter grammar and semantics, including defaults and rest parameters where already permitted. The body uses the ordinary closure-body grammar and semantics.
 
 Mandatory desugaring:
 
 ```js
-items.each(item) {
+items.each() (item) {
     print(item)
 }
 ```
@@ -610,7 +652,67 @@ items.each(
 )
 ```
 
-A trailing closure introduces no new runtime concept.
+By contrast:
+
+```js
+items.each(item) {
+    print(item)
+}
+```
+
+desugars to:
+
+```js
+items.each(
+    item,
+    () => {
+        print(item)
+    }
+)
+```
+
+The `item` inside the call parentheses is an ordinary explicit call argument, not a parameter declaration for the trailing closure.
+
+Ordinary arguments and a parameterized trailing closure compose naturally:
+
+```js
+items.reduce(0) (acc, item) {
+    acc + item
+}
+```
+
+is equivalent to:
+
+```js
+items.reduce(
+    0,
+    (acc, item) => {
+        acc + item
+    }
+)
+```
+
+A parameterless trailing closure may also follow a call without ordinary arguments:
+
+```js
+condition.ifTrue() {
+    print("yes")
+}
+```
+
+is equivalent to:
+
+```js
+condition.ifTrue(
+    () => {
+        print("yes")
+    }
+)
+```
+
+A trailing closure introduces no new runtime concept: it is syntactic sugar for an ordinary Closure appended as the final call argument.
+
+This revision does not decide newline placement between the completed call and the trailing closure, nor before a trailing closure's own parameter list.
 
 ## 20. Object Construction vs Trailing Closure
 
@@ -618,10 +720,10 @@ The distinction is intentional:
 
 ```js
 foo { ... }       // object whose parent is foo
-foo() { ... }     // invoke foo with a trailing closure
+foo() { ... }     // invoke foo with a parameterless trailing closure
 ```
 
-`foo() { ... }` is not a combined object-construction form. It desugars as a call whose final argument is a closure.
+`foo() { ... }` is not a combined object-construction form. It desugars as `foo(() => { ... })`: a call whose final argument is a parameterless closure.
 
 Likewise, if:
 
@@ -629,7 +731,7 @@ Likewise, if:
 Point(args) { ... }
 ```
 
-is valid under trailing-closure syntax, it means invocation of `Point` with a trailing closure. It never means "construct Point(args) and then evaluate this object body".
+is valid under trailing-closure syntax, it means invocation of `Point` with a parameterless trailing closure. The `args` are ordinary call arguments and the braces desugar as `() => { ... }`, so the form means `Point(args, () => { ... })`. It never means "construct Point(args) and then evaluate this object body".
 
 ## 21. Operators
 
@@ -1710,7 +1812,7 @@ Parent(args) {
 }
 ```
 
-as a combined construction form. When accepted by the trailing-closure grammar, the braces are a trailing closure argument to `Parent(args)`.
+as a combined construction form. When accepted by the trailing-closure grammar, the braces are a parameterless trailing closure argument to `Parent(args)`.
 
 ## Contextual Ellipsis
 

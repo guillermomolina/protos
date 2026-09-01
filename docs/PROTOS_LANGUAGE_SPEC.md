@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 53  
+Document revision: 54  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -582,7 +582,7 @@ A top-level function or method invocation establishes a return home. Closures cr
 
 ```js
 find: (items) => {
-    items.each(item) {
+    items.each() (item) {
         item.valid.ifTrue() {
             ^item
         }
@@ -675,15 +675,15 @@ Possible `if`/`else` syntax may exist as sugar, but does not define the fundamen
 No primitive `for` construct is required.
 
 ```js
-users.each(user) {
+users.each() (user) {
     print(user.name)
 }
 
-users.map(user) {
+users.map() (user) {
     user.name
 }
 
-1.to(10).each(i) {
+1.to(10).each() (i) {
     print(i)
 }
 ```
@@ -698,25 +698,88 @@ A `while` operation requires a reevaluated condition and therefore semantically 
 
 A future `while (...) { ... }` form may be syntactic sugar.
 
-## 18. Trailing Blocks
+## 18. Trailing Closures
 
-A closure may be passed as the final argument using trailing-block syntax.
+The parentheses of a call always contain call arguments. A call may be followed by one trailing closure, which is appended as the final argument of the invocation.
+
+A parameterless trailing closure:
 
 ```js
-users.each(user) {
-    print(user)
+transaction(options) {
+    work()
 }
 ```
 
-is conceptually equivalent to:
+is exactly equivalent to:
 
 ```js
-users.each((user) => {
-    print(user)
-})
+transaction(
+    options,
+    () => {
+        work()
+    }
+)
 ```
 
-Trailing-block syntax does not alter closure semantics.
+A parameterized trailing closure has its own parameter list after the call's closing parenthesis:
+
+```js
+items.each() (item) {
+    print(item)
+}
+```
+
+is exactly equivalent to:
+
+```js
+items.each(
+    (item) => {
+        print(item)
+    }
+)
+```
+
+Ordinary arguments and a parameterized trailing closure compose naturally:
+
+```js
+items.reduce(0) (acc, item) {
+    acc + item
+}
+```
+
+is equivalent to:
+
+```js
+items.reduce(
+    0,
+    (acc, item) => {
+        acc + item
+    }
+)
+```
+
+The call parentheses are never reinterpreted as the parameter list of a trailing closure. Therefore:
+
+```js
+items.each(item) {
+    print(item)
+}
+```
+
+means:
+
+```js
+items.each(
+    item,
+    () => {
+        print(item)
+    }
+)
+```
+
+The `item` inside the call parentheses is an ordinary explicit call argument. It is not a parameter declaration for the trailing closure.
+
+A trailing closure introduces no new runtime value kind: it is syntactic sugar for an ordinary Closure appended as the final call argument. Trailing-closure syntax does not alter closure semantics.
 
 ## 19. Separators, Line Breaks, and Comments
 
@@ -1175,16 +1238,16 @@ If the Future completed with an error, `value()` signals that error in the waiti
 A Future supports transformation:
 
 ```js
-future.then(value) {
+future.then() (value) {
     transform(value)
 }
 ```
 
 `then` returns another Future.
 
-If the block returns an ordinary value, the resulting Future resolves with it.
+If the closure returns an ordinary value, the resulting Future resolves with it.
 
-If the block returns another Future, the result is automatically flattened rather than producing a nested Future.
+If the closure returns another Future, the result is automatically flattened rather than producing a nested Future.
 
 ## 31. Structured Concurrency
 
@@ -1624,7 +1687,7 @@ directly creates an object whose parent is `Point` and evaluates the object body
 
 Core v0.1 does not define a combined object-construction form in which `Point(args) { ... }` means "construct and then evaluate this object body".
 
-When the token sequence `Point(args) { ... }` is otherwise valid under trailing-closure syntax, the braces denote a trailing closure passed to the invocation. They do not become an object-construction body.
+When the token sequence `Point(args) { ... }` is otherwise valid under trailing-closure syntax, the braces denote a parameterless trailing closure appended to the invocation's arguments: the form desugars as `Point(args, () => { ... })`. The braces do not become an object-construction body.
 
 ## Contextual Meaning of `...`
 

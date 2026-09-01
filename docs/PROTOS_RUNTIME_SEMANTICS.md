@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 53  
+Document revision: 54  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -669,6 +669,59 @@ function lexicalContextForClosureCreation(activation):
 Therefore a method closure installed on a prototype captures genuine enclosing lexical contexts, while bare object-state names are resolved later against the dynamic receiver (`this`) and its delegation chain.
 
 For example, if `speak` is declared on `animal` and invoked as `dog.speak()`, a bare `name` inside `speak` resolves through `dog` before `animal`, unless a genuine lexical binding named `name` shadows it.
+
+---
+
+## Trailing Closure Lowering
+
+A trailing closure is grammar-level sugar for an ordinary Closure appended as the final argument of a call. It introduces no new runtime value kind and no special runtime trailing-block construct.
+
+```text
+foo(args...) {
+    body
+}
+```
+
+lowers to:
+
+```text
+foo(
+    args...,
+    () => {
+        body
+    }
+)
+```
+
+and:
+
+```text
+foo(args...) (params...) {
+    body
+}
+```
+
+lowers to:
+
+```text
+foo(
+    args...,
+    (params...) => {
+        body
+    }
+)
+```
+
+The lowering proceeds as follows:
+
+1. The ordinary explicit call arguments, including spread arguments, are evaluated left-to-right according to the existing argument-evaluation rules.
+2. The trailing Closure is created in the current activation using the ordinary closure creation semantics (see Closure Creation). A parameterless trailing closure is an ordinary Closure with an empty parameter list. A parameterized trailing closure uses the ordinary closure parameter grammar, including defaults and rest parameters where already permitted.
+3. The created Closure is appended as the final argument of the invocation.
+4. The invocation then proceeds with ordinary call semantics (see Message Send, Polymorphic Invocation, and Activation Creation and Argument Binding).
+
+The trailing Closure captures `this`, `context`, `methodHome`, and the return home exactly as an ordinary Closure written in the same source position would. A `^` inside a trailing closure therefore follows the ordinary non-local-return rules.
+
+The call's argument parentheses always contain call arguments; they are never reinterpreted as the trailing closure's parameter list.
 
 ---
 
@@ -1396,7 +1449,7 @@ Suspending an activation does not imply blocking an OS thread.
 For:
 
 ```js
-future.then(value) {
+future.then() (value) {
     transform(value)
 }
 ```
