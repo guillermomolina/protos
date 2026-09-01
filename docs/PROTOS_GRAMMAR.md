@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 54  
+Document revision: 55  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -223,25 +223,80 @@ Characters such as NBSP, Unicode space characters, U+2028, U+2029, and U+FEFF ma
 
 Wherever the multiline triple-double-quoted String rules refer to "indentation whitespace", the characters that may constitute indentation whitespace are exactly SPACE (U+0020) and TAB (U+0009). This defines only which characters count as indentation whitespace; it does not define tab width, visual columns, whether a TAB is equivalent to some number of SPACE characters, how common indentation is computed when SPACE and TAB are mixed, or whether mixed SPACE/TAB indentation is permitted.
 
-Line breaks may separate expressions when the current expression is syntactically complete.
+Expression separation across logical newlines is a parser rule, not a lexical rule. A logical `NEWLINE` token normally separates expressions when the expression before it may legally end at that point. A logical `NEWLINE` does not separate expressions when the syntactic construct before the newline is necessarily incomplete and the parser must consume more input to complete that construct. This rule is based on grammatical incompleteness, not on a hard-coded list of token spellings. It does not depend on indentation, visual alignment, tab width, source line-ending spelling, or runtime semantics.
 
-There is no Automatic Semicolon Insertion.
+There is no Automatic Semicolon Insertion. The parser is deciding whether an existing logical `NEWLINE` token acts as an expression separator or is consumed as continuation whitespace in a syntactically incomplete construct. It is not inserting a separator that is absent from the token stream.
 
-```js
-a: 1
-b: 2
-```
-
-contains two expressions.
+When the syntax before a newline necessarily requires further input, the newline is insignificant for expression separation. An expression ending after an infix/binary operator is necessarily incomplete because the operator requires a right operand:
 
 ```js
 a: 1 +
     2
 ```
 
-contains one expression because `+` requires a right operand.
+contains one expression, equivalent to `a: 1 + 2`. The same applies to every binary operator, including `&&` and `==`.
 
-Likewise:
+Slot creation and assignment also continue after their operator because `:` and `=` require a right-hand expression:
+
+```js
+x:
+    value
+```
+
+is equivalent to `x: value`, and:
+
+```js
+x =
+    value
+```
+
+is equivalent to `x = value`.
+
+An open syntactic delimiter continues until the corresponding construct is complete. Ordinary multiline calls are therefore valid:
+
+```js
+foo(
+    a,
+    b
+)
+```
+
+as are multiline parenthesized expressions:
+
+```js
+(
+    a +
+    b
+)
+```
+
+and multiline indexed expressions:
+
+```js
+array[
+    index
+]
+```
+
+The logical newlines used to lay out these necessarily incomplete constructs do not terminate the surrounding expression. List separators that necessarily require another list element continue the current syntactic construct according to the existing list grammar.
+
+If the expression before a logical newline is syntactically complete, the newline normally acts as an expression separator:
+
+```js
+a: 1
+b: 2
+```
+
+contains two expressions. A binary operator at the beginning of the following line does not normally cause the preceding complete expression to continue. Therefore:
+
+```js
+a
++ b
+```
+
+does not mean `a + b`: the newline terminates the expression `a`, and the following line then begins with `+`, which is invalid in Core v0.1 because standalone unary `+` does not exist. There is no general "operator at the beginning of the line continues the previous expression" rule.
+
+Core v0.1 has one explicit exception to the normal complete-before-newline rule: a leading structural member-access `.` continues the preceding expression as a postfix/member chain. Therefore:
 
 ```js
 result: object
@@ -249,7 +304,13 @@ result: object
     .bar()
 ```
 
-is one expression.
+is one expression, equivalent to `object.foo().bar()`. Conceptually, a logical newline immediately before a leading member-access `.` is consumed as continuation rather than as an expression separator. This exception is deliberate and specific: it does not generalize to binary operators, custom symbolic operators, `(`, `[`, `{`, `=>`, or any other token merely because that token could somehow be attached to the expression on the previous line. The `.` must have its ordinary structural/member-access meaning under the existing lexical and grammar rules; this rule does not alter decimal-dot tokenization or any other lexical rule.
+
+Indentation has no syntactic significance for these rules: the equivalences above hold regardless of indentation.
+
+An explicit `;` remains an expression separator under the existing grammar. There is no semicolon continuation analogous to newline continuation; a semicolon cannot be ignored merely because formatting or the next token suggests continuation.
+
+This section does not decide newline placement between a completed call and a trailing closure, nor before a trailing closure's own parameter list (unresolved issue B7). It does not resolve separator multiplicity or blank-line grammar (issue B4) or list-end separator questions such as trailing commas (issue B3).
 
 ## 5. Expression Separators
 
@@ -286,7 +347,7 @@ point: { x: 10; y: 20 }
 
 A comma cannot be substituted for `;` here.
 
-The `newline` separator applies only when each expression is complete at the newline.
+A logical `NEWLINE` token acts as an expression separator only when it is not consumed by the newline-continuation rules defined in Whitespace and Newlines: it separates expressions when the expression before it may legally end, it is consumed as continuation while the construct before it is necessarily incomplete, and it is consumed as continuation when it is immediately followed by a leading structural `.`. An explicit `;` always separates expressions and is not affected by the continuation rules.
 
 ## 6. Program
 

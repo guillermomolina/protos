@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 54  
+Document revision: 55  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -822,13 +822,25 @@ a() /*
 */ b()
 ```
 
-have the same token-separation effect: the internal logical newlines do not become expression separators. Newlines outside a block comment remain governed by the normal logical-newline rules and may separate expressions when the grammar determines that the preceding expression is complete.
+have the same token-separation effect: the internal logical newlines do not become expression separators. Newlines outside a block comment remain governed by the normal logical-newline rules and are consumed or act as expression separators according to the parser-level newline-continuation rules below.
 
 Comments produce no parser token and no language-level value. They are lexical constructs with whitespace-like token-separation behavior; they do not add code points to the horizontal-whitespace set, which remains exactly `SPACE` and `TAB`.
 
 `#` is not a comment delimiter. Core v0.1 defines no special documentation-comment syntax.
 
-A line break may separate expressions when the grammar determines that the preceding expression is complete.
+Expression separation across line breaks is a parser-level rule: a logical `NEWLINE` token normally separates expressions when the expression before it may legally end at that point, and it does not separate expressions when the syntactic construct before it is necessarily incomplete and the parser must consume more input to complete that construct. The parser decides whether an existing logical `NEWLINE` token acts as an expression separator or is consumed as continuation; it never inserts a separator that is absent from the token stream. There is no Automatic Semicolon Insertion.
+
+Three cases are distinguished:
+
+1. **Syntactically incomplete continuation.** When the syntax before a newline necessarily requires further input — for example, an expression ending after a binary operator, after `:` or `=`, or inside an open call, parenthesized, or indexed construct — the newline is insignificant for expression separation.
+2. **Complete-expression newline separation.** When the expression before a newline is syntactically complete, the newline normally acts as an expression separator. A binary or custom symbolic operator at the beginning of the following line does not cause the preceding complete expression to continue.
+3. **Explicit leading-dot continuation.** A logical newline immediately before a leading structural member-access `.` is consumed as continuation of the preceding postfix/member expression. This is the only complete-before-newline continuation exception: it does not generalize to binary operators, custom symbolic operators, `(`, `[`, `{`, `=>`, or any other token merely because that token could somehow be attached to the expression on the previous line.
+
+The rule is based on grammatical incompleteness, not on a hard-coded list of token spellings. Indentation, visual alignment, tab width, and source line-ending spelling have no syntactic significance for newline continuation, and the rule has no runtime dependency.
+
+An explicit `;` remains an expression separator under the existing grammar. There is no semicolon continuation analogous to newline continuation; a semicolon cannot be ignored merely because formatting or the next token suggests continuation.
+
+This section does not decide newline placement between a completed call and a trailing closure, nor before a trailing closure's own parameter list (unresolved issue B7), and it does not classify `{` or `(` as leading-token continuation exceptions. Separator multiplicity and blank-line grammar (issue B4) and list-end separator questions (issue B3) also remain unresolved.
 
 ```js
 foo()
@@ -861,17 +873,63 @@ point: {
 
 `,` is reserved for list-like syntax such as argument lists and parameter lists, and may also be used by future collection literal syntax. It never sequences arbitrary expressions.
 
-Incomplete expressions continue across line breaks:
+Incomplete expressions continue across line breaks. These are each one expression:
 
 ```js
 result: 1 +
     2 +
     3
 
+x:
+    value
+
+x =
+    value
+
+foo(
+    a,
+    b
+)
+
+array[
+    index
+]
+
+(
+    a +
+    b
+)
+```
+
+The first example is equivalent to `result: 1 + 2 + 3`, the second to `x: value`, and the third to `x = value`; the last three continue because their enclosing delimiters must be closed. In all of these, the expression before the newline is necessarily incomplete, so the newline is insignificant for expression separation.
+
+When the expression before a newline is syntactically complete, the newline normally separates expressions. A binary operator at the beginning of the following line does not retroactively continue the preceding expression:
+
+```js
+a
++ b
+
+a
+&& b
+
+a
+== b
+```
+
+In each of these, the newline separates the expression `a`, and the following line then begins with an operator where the grammar requires an operand. There is no general leading-operator continuation rule.
+
+The one explicit complete-before-newline continuation exception is a leading structural `.`, which continues the preceding postfix/member expression:
+
+```js
 result: object
     .foo()
     .bar()
+
+a
+    .foo()
 ```
+
+The first example is one expression, equivalent to `object.foo().bar()`; the second is equivalent to `a.foo()`. Indentation is irrelevant to all of these rules.
 
 ## 20. Object Composition
 
