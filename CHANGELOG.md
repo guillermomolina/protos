@@ -4,6 +4,19 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [docs/PROTOS_SPEC_CHANGELOG.md](docs/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.0-SNAPSHOT] - 2026-09-01
+
+### Changed
+
+- Relicensed Protos from the Server Side Public License (SSPL) v1 to the OSI-approved Adaptive Public License 1.0 (APL-1.0).
+- Configured the Protos APL Exhibit A with Guillermo Adrián Molina as Initial Contributor, Spain as the Governing Jurisdiction, the broad `Third Party` definition in Part 4(A), and the Patents-Included terms in Part 6.
+- Updated the project version from `0.1.6-SNAPSHOT` to `0.2.0-SNAPSHOT` to mark the licensing change as a significant pre-1.0 project milestone.
+
+### Notes
+
+- This licensing change does not change the Protos Core language version, which remains 0.1.
+- No language specification semantics are changed by this release.
+
 ## [0.1.6-SNAPSHOT] - 2026-08-31
 
 ### Added
