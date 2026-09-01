@@ -1,9 +1,9 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 46  
+Document revision: 47  
 Status: Draft  
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 
 
 ## Prelude Binding Note
@@ -1709,13 +1709,16 @@ Radix-prefixed literals produce `Integer` values.
 
 Decimal literals containing a decimal point or exponent produce `Float` values.
 
-A decimal point requires at least one digit on both sides:
+A `.` belongs to a decimal numeric literal only when it is immediately followed by a decimal digit:
 
-```js
-1.0    // valid
-1.     // invalid numeric literal
-.5     // invalid numeric literal
+```text
+1.0       -> FLOAT("1.0")
+1.        -> INTEGER("1") DOT
+.5        -> DOT INTEGER("5")
+1.to(10)  -> INTEGER("1") DOT IDENTIFIER("to") LPAREN INTEGER("10") RPAREN
 ```
+
+`1.` and `.5` are not numeric literals as complete source sequences. This does not mean that either complete sequence is necessarily a lexical error: the lexer tokenizes them as shown above, and whether the resulting token sequence is syntactically valid is the parser's responsibility.
 
 Decimal exponents use `e` or `E`, optionally followed by `+` or `-`, and require at least one exponent digit:
 

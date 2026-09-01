@@ -1,9 +1,9 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 46  
+Document revision: 47  
 Status: Draft  
-Last updated: 2026-08-31
+Last updated: 2026-09-01
 
 ## Language Name
 
@@ -1813,7 +1813,7 @@ Numeric literal syntax is defined as follows:
 - `_` may be used as a visual separator between digits; it cannot appear at the beginning or end of a digit sequence and cannot appear consecutively.
 - Radix-prefixed literals produce `Integer` values.
 - Decimal literals containing a decimal point or exponent produce `Float` values.
-- A decimal point requires at least one digit on both sides: `1.0` is valid; `1.` and `.5` are invalid numeric literals.
+- A `.` belongs to a decimal numeric literal only when it is immediately followed by a decimal digit: `1.0` is a `Float` literal; `1.` and `.5` are not numeric literals as complete source sequences. The lexer tokenizes `1.` as `INTEGER("1")` followed by a `.` token and `.5` as a `.` token followed by `INTEGER("5")`, so for example `1.to(10)` tokenizes as `INTEGER("1")` `.` `IDENTIFIER("to")` `(` `INTEGER("10")` `)`. This does not make either complete sequence necessarily a lexical error; whether the resulting token sequence is syntactically valid is the parser's responsibility.
 - Decimal exponents use `e` or `E`, optionally followed by `+` or `-`, and require at least one exponent digit.
 - Hexadecimal, binary, and octal `Float` literals are not supported in Core v0.1.
 - Numeric type suffixes such as `L`, `f`, or `d` are not supported.
