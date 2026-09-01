@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 60  
+Document revision: 61  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -1139,6 +1139,31 @@ duck: animal {
     ...swimmable
 }
 ```
+
+Each `...source` is a **composition item**: an object-body item, not a general expression form. Composition items are valid only inside object bodies. They participate in the same object-body item sequence as ordinary expressions and use the same separator rules: a logical `NEWLINE` separates items written on different logical source lines, and `;` separates items written on the same logical source line. Blank lines are permitted and create no empty items; leading, trailing, and consecutive `;` are syntax errors, and there is no implicit adjacency separator.
+
+Both of these are valid:
+
+```js
+{
+    ...base
+    name: "Rex"
+}
+
+{
+    ...base; name: "Rex"
+}
+```
+
+while:
+
+```js
+{
+    ...base name: "Rex"
+}
+```
+
+is invalid because there is no separator between the composition item and the following object-body item.
 
 A composition source is an ordinary object. The language has no distinct `Trait` value kind and requires no `trait` declaration. An object may be used as a trait-like source simply by composing its local slots into another object.
 

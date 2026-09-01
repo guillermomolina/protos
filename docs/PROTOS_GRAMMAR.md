@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 60  
+Document revision: 61  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -362,7 +362,7 @@ and:
 foo(); bar(); baz()
 ```
 
-contain the same three expressions in the same order. The same rule applies inside object bodies:
+contain the same three expressions in the same order. The same rule applies inside object bodies, for ordinary expressions and composition items alike:
 
 ```js
 point: { x: 10; y: 20 }
@@ -591,8 +591,34 @@ object-expression =
     | parent-expression, object-body;
 
 object-body =
-    "{", expression-sequence, "}";
+    "{", object-body-sequence, "}" ;
+
+object-body-sequence =
+    [ newline-run ],
+    [ object-body-line-items ],
+    [ newline-run ] ;
+
+object-body-line-items =
+    object-body-line,
+    { newline-run, object-body-line } ;
+
+object-body-line =
+    object-body-item,
+    { ";", object-body-item } ;
+
+object-body-item =
+      composition-item
+    | expression ;
+
+composition-item =
+    "...", expression ;
 ```
+
+An object body contains a sequence of `object-body-item`. An object-body item is either an ordinary `expression` or a contextual `composition-item` of the form `...expression`.
+
+Object-body items and ordinary expressions share the same separator rules: a logical `NEWLINE` separates items written on different logical source lines, and `;` separates items written on the same logical source line. Blank lines are permitted and create no empty items; leading, trailing, and consecutive `;` are syntax errors. There is no implicit adjacency separator: two items must be separated by a logical `NEWLINE` or a `;`.
+
+Composition is contextual. `...expression` is valid only as an object-body item, is not a general expression form, and does not become valid merely because braces are present. Closure bodies continue to contain only ordinary expressions (see Closures).
 
 Examples:
 
@@ -604,7 +630,26 @@ Examples:
 animal {
     name: "Rex"
 }
+
+{
+    ...base
+    name: "Rex"
+}
+
+{
+    ...base; name: "Rex"
+}
 ```
+
+while:
+
+```js
+{
+    ...base name: "Rex"
+}
+```
+
+is invalid because there is no separator between the composition item and the following object-body item.
 
 Therefore:
 
@@ -1217,32 +1262,7 @@ a.or(() => b)
 
 ## 24. Composition Syntax
 
-Composition is valid only as an object-body item.
-
-```ebnf
-object-body =
-    "{", object-body-sequence, "}" ;
-
-object-body-sequence =
-    [ newline-run ],
-    [ object-body-line-items ],
-    [ newline-run ] ;
-
-object-body-line-items =
-    object-body-line,
-    { newline-run, object-body-line } ;
-
-object-body-line =
-    object-body-item,
-    { ";", object-body-item } ;
-
-object-body-item =
-      composition-item
-    | expression ;
-
-composition-item =
-    "...", expression ;
-```
+Composition is valid only as an object-body item: `composition-item` is defined by the object-body grammar in Object Expressions and is not an alternative of `expression`.
 
 Example:
 
@@ -1263,7 +1283,7 @@ Composition semantics, including binding copying and conflict resolution, are de
 
 ## 25. Uniform Object Bodies
 
-Object bodies and executable bodies intentionally use the same expression grammar.
+Object bodies and executable bodies intentionally use the same expression grammar; object bodies additionally permit contextual composition items as object-body items (see Object Expressions and Composition Syntax).
 
 ```js
 object: {
@@ -1276,7 +1296,7 @@ object: {
 }
 ```
 
-A body may contain ordinary expressions executed during construction.
+A body may contain ordinary expressions executed during construction; an object body may also contain composition items (see Composition Syntax).
 
 `{}` is not a special declaration language.
 
@@ -1662,7 +1682,7 @@ Core v0.1 defines no special documentation-comment syntax.
 
 ## 39. Compact EBNF
 
-The compact grammar below incorporates the syntax decisions made through revision 60. Semantic validation still applies after parsing.
+The compact grammar below incorporates the syntax decisions made through revision 61. Semantic validation still applies after parsing.
 
 ```ebnf
 program =

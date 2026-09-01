@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 60  
+Document revision: 61  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -990,6 +990,8 @@ target: parent {
 ```
 
 composition is structural flattening of local slot bindings. A composition source is an ordinary object; there is no runtime `Trait` value kind.
+
+A `...source` form is a **composition item**: a contextual object-body item recognized by the parser only inside an object body. It is not a general expression form. Recognizing a composition item is purely a parsing matter: it introduces no new runtime value kind and no new runtime operation. The item's source is an ordinary expression evaluated under ordinary expression semantics, and composition items are separated from other object-body items by the same logical-`NEWLINE`/inline-`;` rules as ordinary expressions.
 
 The runtime must distinguish three things while constructing an object:
 
