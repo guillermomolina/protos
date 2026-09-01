@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 57  
+Document revision: 58  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -462,8 +462,10 @@ Slot creation and assignment have the lowest precedence.
 
 ```ebnf
 slot-creation =
-    assignable, ":", expression;
+    slot-creation-target, ":", expression;
 ```
+
+`:` is specifically the slot-creation operator. Its target must be a bare identifier or a member target (see Slot-Creation and Assignment Targets): the final postfix operation of the target may not be an index suffix.
 
 Examples:
 
@@ -471,42 +473,75 @@ Examples:
 x: 10
 person.name: "Guille"
 this.cache: {}
+object[index].name: value
+foo().bar: value
 ```
 
 `:` always creates a new local slot at the selected destination.
+
+These are syntax errors because the final target operation is an index suffix:
+
+```js
+object[index]: value
+object["foo"]: value
+object.foo[index]: value
+```
+
+There is no indexed slot creation: `:` is never lowered to a message.
 
 ## 9. Assignment
 
 ```ebnf
 assignment =
-    assignable, "=", expression;
+    assignment-target, "=", expression;
 ```
+
+`=` applied to a bare identifier or member target modifies an existing writable slot and never creates a missing one (see Slot-Creation and Assignment Targets). When the final target operation is an index suffix, the assignment is indexed assignment and lowers to the `atPut` message instead of a slot `Assign` (see Indexed Access).
 
 Examples:
 
 ```js
 x = 20
 person.name = "Guillermo"
+matrix[0] = value
+matrix[0].name = value
+factory()[i] = value
 ```
 
-`=` modifies an existing writable slot and never creates one.
+The create-versus-modify distinction expressed by `:` versus `=` belongs to the slot model. It does not apply to the indexing protocol: `=` in indexed assignment does not require an already-existing indexed entry, and whether `atPut` creates, replaces, extends, or rejects a missing key or index is defined by the receiver's `atPut` protocol.
 
-## 10. Assignable Expressions
+## 10. Slot-Creation and Assignment Targets
+
+Slot creation and assignment have distinct target categories.
 
 ```ebnf
-assignable =
+slot-creation-target =
       identifier
     | member-expression;
+
+assignment-target =
+      identifier
+    | member-expression
+    | indexed-target;
+
+indexed-target =
+    postfix-expression, "[", expression, "]";
 ```
 
-Examples:
+A `slot-creation-target` is a bare identifier or a postfix chain whose **final** operation is a member suffix. An `assignment-target` may additionally end in an index suffix. The final postfix operation therefore determines which operator may follow the target: a final member target may participate in slot creation or assignment, while a final index target may participate only in indexed assignment, never in slot creation.
+
+Examples of valid targets:
 
 ```js
 x
 person.name
 this.name
 context.value
+object[index].name
+matrix[0]
 ```
+
+`object[index]` is an `indexed-target`, not a `slot-creation-target`, so `object[index]: value` is a syntax error. Chained postfix forms whose final operation is a member remain valid slot-creation targets, for example `object[index].name: value` and `foo().bar: value`. A final index target remains a valid assignment target, for example `object.name[index] = value`.
 
 ## 11. Non-local Return
 
@@ -820,7 +855,9 @@ objects[index].name
 factory()[index]
 ```
 
-Bracket syntax lowers to the ordinary `at` / `atPut` protocol.
+Bracket syntax lowers to the ordinary `at` / `atPut` protocol. Indexed access is not dynamic slot access: `object["foo"]` is not automatically equivalent to `object.foo`, and an object does not become indexable merely because it has slots.
+
+The final postfix operation of a chain determines its role as a target: a final member suffix permits `:` or `=`; a final index suffix permits `=` only (see Slot-Creation and Assignment Targets).
 
 Receiver-aware semantic lowering still distinguishes a member invocation such as `dog.speak()` from a plain invocation such as `f()`, so that `this` and `methodHome` are preserved correctly.
 
@@ -1332,6 +1369,8 @@ becomes:
 CreateSlot(obj, "x", value)
 ```
 
+There is no indexed slot-creation lowering: a final index suffix is not a slot-creation target, so `object[index]: value` is a syntax error and is never represented as `CreateSlot` or as a message send.
+
 ## 29. Assignment Lowering
 
 ```js
@@ -1605,7 +1644,7 @@ Core v0.1 defines no special documentation-comment syntax.
 
 ## 39. Compact EBNF
 
-The compact grammar below incorporates the syntax decisions made through revision 24. Semantic validation still applies after parsing.
+The compact grammar below incorporates the syntax decisions made through revision 58. Semantic validation still applies after parsing.
 
 ```ebnf
 program =
@@ -1635,26 +1674,25 @@ expression =
     | binary-expression ;
 
 slot-creation =
-    assignable, ":", expression ;
+    slot-creation-target, ":", expression ;
 
 assignment =
-    assignable, "=", expression ;
+    assignment-target, "=", expression ;
 
 non-local-return =
     "^", expression ;
 
-assignable =
+slot-creation-target =
       identifier
-    | assignable-postfix-expression ;
+    | member-expression ;
 
-assignable-postfix-expression =
-    primary-expression,
-    { postfix-operation },
-    assignable-postfix-operation ;
+assignment-target =
+      identifier
+    | member-expression
+    | indexed-target ;
 
-assignable-postfix-operation =
-      ".", identifier
-    | "[", expression, "]" ;
+indexed-target =
+    postfix-expression, "[", expression, "]" ;
 
 binary-expression =
       logical-or-expression
@@ -1841,7 +1879,7 @@ A parser may implement the expression portion using recursive descent plus Pratt
 
 `layout` denotes one or more consecutive logical `NEWLINE` tokens consumed as continuation inside a necessarily-incomplete delimited construct (see Whitespace and Newlines). It is formatting, not an element separator: commas are the only separators between list elements, and trailing commas are not permitted.
 
-Indexed assignment is recognized because an assignable postfix expression may end in `[ expression ]`; it lowers to `atPut` rather than a slot `Assign`.
+Indexed assignment is recognized because an `assignment-target` may end in `[ expression ]`; it lowers to `atPut` rather than a slot `Assign`. A `slot-creation-target` may never end in an index suffix, so an indexed `:` has no parse.
 
 Composition is intentionally connected only through `object-body-item`, preserving the contextual meaning of `...`.
 
@@ -2021,7 +2059,9 @@ becomes:
 Send(receiver, "atPut", [index, value])
 ```
 
-rather than a slot `Assign` node.
+rather than a slot `Assign` node. The `=` in indexed assignment does not mean "modify an already-existing indexed entry": whether `atPut` creates a new entry, replaces an existing one, extends a collection, requires an existing or in-range index, rejects the operation, or implements other domain-specific behavior is defined by the receiver's `atPut` protocol. The receiver expression and the index expression are each evaluated exactly once.
+
+Slot creation has no indexed form. The final postfix operation determines the target category (see Slot-Creation and Assignment Targets): `receiver[index]: value`, `object["foo"]: value`, and `object.foo[index]: value` are syntax errors and have no lowering, while `object[index].member: value` remains a valid slot creation on the object produced by the indexed access.
 
 Indexed access has the same high postfix-binding role as member access and calls. Chained forms are permitted when otherwise grammatically valid, for example:
 
@@ -2030,8 +2070,6 @@ matrix[row][column]
 objects[index].name
 factory()[index]
 ```
-
-The receiver expression and index expression are each evaluated exactly once.
 
 
 ## Parameters, Rest Parameters, and Argument Spread

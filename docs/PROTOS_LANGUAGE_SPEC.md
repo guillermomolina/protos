@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 57  
+Document revision: 58  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -178,6 +178,14 @@ dog.alive = true
 is valid.
 
 An ancestor prototype is never accidentally mutated through one of its descendants.
+
+`:` is specifically the slot-creation operator and applies only to slot targets — a bare identifier or a member access. It cannot be applied to an indexed target:
+
+```js
+object[index]: value     // syntax error
+```
+
+Indexed mutation is expressed only through the indexing protocol (see Indexed Access Syntax): `object[index] = value` sends `atPut(index, value)`. The create-versus-modify distinction of `:` versus `=` belongs to the slot model and does not apply to indexing.
 
 ## 4. Execution Context
 
@@ -1702,6 +1710,8 @@ The exact resolver rules for files, packages, standard-library modules, search p
 
 Bracket indexing is syntactic sugar over ordinary message sends. Indexing is not a privileged runtime operation and is not restricted to arrays.
 
+Slot/member access and indexed access are distinct mechanisms. Member syntax accesses the object's slot/delegation model: `object.name` performs ordinary slot lookup. Indexed syntax invokes the indexing protocol: `object[key]` lowers to `object.at(key)`. Indexed access is **not** dynamic slot access. In particular, `object["foo"]` is not defined to be equivalent to `object.foo`; the two expressions may return completely different values. An object does not automatically become indexable merely because it has slots — `object[key]` works only according to the `at` protocol implemented or inherited by that object.
+
 Indexed read:
 
 ```js
@@ -1726,7 +1736,28 @@ lowers conceptually to:
 receiver.atPut(index, value)
 ```
 
+The `=` in indexed assignment does **not** mean "modify an already-existing indexed entry". The syntax itself imposes no universal existence requirement on the key or index. Whether `atPut` creates a new indexed entry, replaces an existing one, extends a collection, requires an existing or in-range index, rejects the operation, or implements some other domain-specific behavior is defined by the receiver's `atPut` protocol. For example, a `Map` may define `map[key] = value` to create the key/value entry when the key is absent and replace its value when the key is already present, while an `Array` may require the index to be within a permitted range. User-defined objects may implement their own `at` / `atPut` behavior; the indexing syntax does not impose `Map` semantics on every indexable object.
+
 Any object may support bracket syntax by implementing the corresponding messages.
+
+Conversely, an indexable object remains an ordinary Protos object and may have ordinary slots, methods, delegation, and openness/frozen state in addition to indexed contents. Indexed contents are not automatically object slots, and a slot is not automatically indexed content. For example:
+
+```js
+map.description: "users"
+map["description"] = user
+```
+
+may coexist and refer to entirely different things: the first operation concerns a slot of `map`, the second concerns `map`'s indexing protocol. Likewise, adding a slot named `foo` does not imply that `object["foo"]` will return that slot; only the receiver's `at` implementation determines the result. Indexability is protocol-based behavior, not a special object kind.
+
+Indexed slot creation is forbidden. `:` is specifically the slot-creation operator and cannot be applied to an indexed target:
+
+```js
+object[index]: value     // syntax error
+object["foo"]: value     // syntax error
+object.foo[index]: value // syntax error
+```
+
+There is no indexed equivalent of slot creation in Core v0.1 and no `atCreate`-style protocol. Indexed mutation is expressed solely through `atPut`. `:` operates on the slot model while `[]` operates on the indexing protocol, and the two mechanisms remain distinct. There is no automatic relationship between String-valued indexes and slot names: `object["foo"]: value` must not be interpreted as `object.foo: value`.
 
 The bracket forms do not bypass normal message lookup, mutability rules, or error signaling. The meaning of an index, accepted index types, bounds behavior, and storage semantics are defined by the receiver's protocol.
 
@@ -1739,6 +1770,32 @@ getReceiver()[getIndex()] = makeValue()
 the runtime evaluates `getReceiver()`, then `getIndex()`, then `makeValue()`, and finally performs the `atPut` message send.
 
 The selector names `at` and `atPut` are part of the Core v0.1 indexed-access protocol.
+
+The slot openness rules that govern `:` — for example, creating a slot on an object that does not permit slot creation fails according to the existing semantics — do not automatically apply to `atPut`. `atPut` is an ordinary protocol operation; its behavior is defined by the receiver/protocol and any existing mutability or frozen rules. This revision does not redesign `open`, `closed`, or `frozen` semantics.
+
+These are valid:
+
+```js
+foo: value
+object.foo: value
+object[index].foo: value
+
+foo = value
+object.foo = value
+object[index] = value
+object[index].foo = value
+object.foo[index] = value
+```
+
+These are syntax errors:
+
+```js
+object[index]: value
+object["foo"]: value
+object.foo[index]: value
+```
+
+`object.foo` and `object["foo"]` are not equivalent unless the object's own `at` implementation deliberately makes them behave that way. Reflection facilities, if they provide dynamic slot access or creation, remain separate from `[]`.
 
 
 ## Invocation Arguments, Defaults, Rest, and Spread

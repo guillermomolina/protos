@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 57  
+Document revision: 58  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -392,6 +392,8 @@ function createSlot(target, name, value):
 ```
 
 Creation never searches the delegation chain.
+
+Indexed syntax never reaches this operation: `object[index]: value` is rejected by the grammar and has no runtime lowering (see Indexed Access Lowering). Slot creation and the indexing protocol remain distinct runtime paths.
 
 ---
 
@@ -2025,6 +2027,8 @@ Host-specific resolution policy, package lookup, standard-library naming, remote
 
 The runtime has no separate semantic indexing primitive required by the language.
 
+Slot operations and indexing protocol operations are distinct runtime paths. Slot creation (`createSlot`) and slot assignment (`assignMember`) operate on the object's local slot model, while indexed access rewrites to ordinary `at` / `atPut` sends whose behavior is defined by the receiver's protocol. Indexed contents are not automatically object slots, and an indexable object remains an ordinary object with ordinary slots.
+
 The parser or semantic-lowering phase rewrites bracket forms to normal sends:
 
 ```text
@@ -2046,6 +2050,8 @@ result = assignedValue
 ```
 
 Each subexpression is evaluated once and in left-to-right order.
+
+No runtime lowering exists for indexed slot creation: `receiver[index]: value` is rejected syntactically by the grammar, has no semantic AST node, and never reaches the runtime. There is no indexed-creation primitive and no `atCreate`-style protocol. Whether `atPut` creates a new indexed entry, replaces an existing one, extends a collection, requires an existing or in-range index, or rejects the operation is defined by the receiver's `atPut` protocol; the `=` in indexed assignment imposes no universal existence requirement on the key or index.
 
 `at` and `atPut` are ordinary selectors. Arrays, maps, strings, foreign objects, user-defined collections, or unrelated domain objects may implement either message. The runtime must not impose array-specific dispatch merely because bracket syntax was used.
 
