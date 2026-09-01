@@ -4,6 +4,18 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [docs/PROTOS_SPEC_CHANGELOG.md](docs/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.0-SNAPSHOT] - 2026-09-01
+
+### Changed
+
+- Relicensed Protos from the Server Side Public License (SSPL) v1 to the OSI-approved Adaptive Public License 1.0 (APL-1.0). The complete license, including the completed Exhibit A, is in [LICENSE.TXT](LICENSE.TXT).
+- Project implementation version changed from `0.1.6-SNAPSHOT` to `0.2.0-SNAPSHOT`.
+
+### Notes
+
+- Protos Core language version remains 0.1.
+- No language semantics changed.
+
 ## [0.1.6-SNAPSHOT] - 2026-08-31
 
 ### Added
@@ -43,7 +55,7 @@ For specification changes, see [docs/PROTOS_SPEC_CHANGELOG.md](docs/PROTOS_SPEC_
   - operators and custom symbolic operators
   - newline-delimited token separation
 - Focused lexer regression tests covering the implemented lexical behavior.
-- Project licensing metadata by adding the license text in [LICENSE](LICENSE) and referencing it from the README.
+- Project licensing metadata by adding the license text in the then-current `LICENSE` file and referencing it from the README.
 
 ### Changed
 - Added JUnit 5 to support lexer-focused test coverage.

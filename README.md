@@ -380,7 +380,15 @@ The design is currently described by three documents:
 
 ## License
 
-This project is distributed under the Server Side Public License (SSPL) v1. For the full license text, see [LICENSE](LICENSE).
+Protos is licensed under the Adaptive Public License 1.0 (APL-1.0), an
+OSI-approved open-source license. The complete Protos-specific license,
+including the completed Exhibit A, is in [LICENSE.TXT](LICENSE.TXT).
+
+Programs written in Protos are not automatically governed by the APL
+merely because they are compiled or run using Protos.
+
+Independent modules or plugins may use separate licenses when they
+qualify as Independent Modules or Larger Work components under the APL.
 
 ## Specification Status
 

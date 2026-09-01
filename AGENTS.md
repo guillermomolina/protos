@@ -309,6 +309,7 @@ At the end of a coding task, summarize:
 - whether the specification was affected
 - whether tests were run
 - any remaining ambiguity, limitation, or follow-up that is directly relevant to the requested task
+- whether license compliance was checked when source files were added or modified
 
 Do not claim tests passed if they were not run.
 
@@ -325,3 +326,56 @@ When editing existing documentation:
 - Before reporting completion, run `git diff --check` and review `git diff` for accidental whitespace, missing spaces, line-break changes, or unrelated formatting changes.
 - Treat existing Markdown hard line breaks (two trailing spaces) as intentional unless the task explicitly requests formatting cleanup.
 - Do not perform unrelated formatting cleanup in a semantic specification revision.
+
+### License compliance
+
+Protos is licensed under the Adaptive Public License 1.0 (APL-1.0).
+
+The canonical repository license is `LICENSE.TXT`, including the completed Exhibit A. Do not modify the APL license text, Exhibit A selections, Initial Contributor information, Designated Web Site, governing jurisdiction, Third Party selection, patent selection, or other license configuration unless the user explicitly requests a licensing change.
+
+For every new Protos-owned source-code file, add the exact APL Part 5 License Notice at the beginning of the file before any package declaration, imports, shebang, or source content, using the comment syntax appropriate for that file type.
+
+For existing Protos-owned source files that are modified, verify that the required APL Part 5 License Notice is present and still matches the notice in `LICENSE.TXT`. Line wrapping and comment-prefix characters may differ, but the notice text itself must not be paraphrased, shortened, replaced with only an SPDX identifier, or otherwise altered.
+
+The current Java form of the required notice is:
+
+```java
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+```
+
+Do not automatically apply the Protos APL notice to generated files, vendored files, third-party source, Maven Wrapper files, dependencies, imported fixtures, or other material not owned by the Protos project. Preserve upstream copyright and license notices on such files.
+
+When adding a new source-code file type or source directory, determine whether it is Protos-owned Source Code under the APL and, if so, add the corresponding Part 5 notice using a syntactically valid comment form.
+
+Keep current project documentation and build metadata consistent with the active license:
+
+- `README.md` must identify APL-1.0 and link to `LICENSE.TXT`.
+- Maven license metadata must identify Adaptive Public License 1.0 / SPDX `APL-1.0`.
+- Distributed JAR artifacts must continue to contain `META-INF/LICENSE.TXT`.
+- Do not reintroduce current SSPL licensing references.
+- Historical documentation may describe the license that applied at that historical time, but must not misleadingly imply that APL applied retroactively.
+
+Before completing any coding task that creates, removes, renames, or modifies source files, perform a license-compliance check:
+
+- verify every new Protos-owned source file has the required Part 5 notice;
+- verify modified Protos-owned source files still have the required notice;
+- verify no Protos APL notice was added to third-party or generated material;
+- verify `LICENSE.TXT` still exists;
+- if build configuration affecting packaging was changed, verify that `META-INF/LICENSE.TXT` remains included in the distributed JAR.
+
+Do not change licensing terms or make licensing-policy decisions implicitly as part of unrelated work. Report any ambiguity before making such a change.
