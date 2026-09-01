@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 50  
+Document revision: 51  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -116,9 +116,11 @@ Single-quoted, double-quoted, and triple-double-quoted String literals use the s
 
 **Newline Handling:**
 
-Single-quoted and double-quoted String literals are single-line literals. A raw source newline is not permitted inside a single-quoted or double-quoted String literal. Encountering a raw newline before the matching closing quote is a lexical error. Newline characters may be represented in these literals using the existing `\n` and `\r` escape sequences.
+A logical source newline is one `LF` (U+000A), one `CR` (U+000D), or one `CRLF` (U+000D U+000A) sequence; the normative definition is in the Whitespace and Newlines section below.
 
-Triple-double-quoted String literals are the Core v0.1 syntax for source-level multiline text. Raw newlines are permitted and are part of the literal content, subject to the multiline indentation normalization rule.
+Single-quoted and double-quoted String literals are single-line literals. A logical source newline is not permitted inside a single-quoted or double-quoted String literal. Encountering `LF`, `CR`, or `CRLF` before the matching closing quote is a lexical error. Newline characters may be represented in these literals using the existing `\n` and `\r` escape sequences, which denote String content and are distinct from raw source newlines.
+
+Triple-double-quoted String literals are the Core v0.1 syntax for source-level multiline text. Logical source newlines are permitted and are part of the literal content, subject to the multiline indentation normalization rule. Retained source newlines preserve their original source code points in the resulting String: `LF` remains U+000A, `CR` remains U+000D, and `CRLF` remains U+000D U+000A. There is no implicit newline normalization of String content.
 
 Protos has no separate character literal or character type. `'a'` and `"a"` both evaluate to a String containing the single-character text `a`.
 
@@ -126,8 +128,9 @@ String interpolation is not part of Core v0.1. Inside a String, `${...}` has no 
 
 For triple-double-quoted String literals, indentation normalization is defined as follows:
 
-- If the opening `"""` is immediately followed by a newline, that newline is not part of the resulting String.
-- If the closing `"""` is immediately preceded by a newline whose preceding content on that line is only indentation whitespace, that final newline and indentation are not part of the resulting String.
+- If the opening `"""` is immediately followed by a logical source newline, that newline is not part of the resulting String. A removable `CRLF` is removed as one logical newline: both U+000D and U+000A.
+- If the closing `"""` is immediately preceded by a logical source newline whose preceding content on that line is only indentation whitespace, that final newline and indentation are not part of the resulting String. A removable `CRLF` is removed as one logical newline: both U+000D and U+000A.
+- The literal is split into logical content lines at each logical source newline; `LF`, `CR`, and `CRLF` each count as one logical newline for this splitting.
 - Determine the minimum common indentation of all non-empty content lines.
 - Remove that common indentation from every content line.
 - Empty lines do not participate in determining the common indentation.
@@ -171,6 +174,16 @@ hello
 ## 4. Whitespace and Newlines
 
 Spaces and tabs are token separators.
+
+A logical source newline is exactly one of `LF` (U+000A), `CR` (U+000D), or `CRLF` (U+000D U+000A). `CRLF` is consumed atomically as one logical source newline, never as two.
+
+Each logical source newline that is not consumed by another lexical construct produces exactly one `NEWLINE` token for the parser. `LF`, `CR`, and `CRLF` therefore each produce one `NEWLINE` token; `CRLF` never produces two.
+
+Source files may freely mix `LF`, `CR`, and `CRLF` logical newlines. Mixed line-ending styles are not lexical errors.
+
+In the EBNF, the terminal `newline` denotes this logical `NEWLINE` token. Parser productions using `newline` do not depend on whether the source spelling was `LF`, `CR`, or `CRLF`.
+
+Newline handling does not depend on the host operating system, editor settings, Git line-ending conversion, or any host line-separator convention.
 
 Line breaks may separate expressions when the current expression is syntactically complete.
 
@@ -235,7 +248,7 @@ point: { x: 10; y: 20 }
 
 A comma cannot be substituted for `;` here.
 
-when each expression is complete at the newline.
+The `newline` separator applies only when each expression is complete at the newline.
 
 ## 6. Program
 
@@ -1159,7 +1172,7 @@ block-comment =
     "*/" ;
 ```
 
-`//` starts a line comment. A line comment continues until the next newline or end of file.
+`//` starts a line comment. A line comment continues until the next logical source newline or end of file. The comment ends immediately before the newline, so none of the newline's code points — including the `CR` of a `CRLF` sequence — are consumed by the comment. The terminating logical source newline remains available for ordinary newline tokenization and produces the usual `NEWLINE` token.
 
 `/*` starts a block comment. `*/` ends a block comment. Block comments do not nest in Core v0.1.
 
@@ -1827,7 +1840,7 @@ Triple-single-quoted strings are not supported.
 
 String interpolation is not supported in Core v0.1. `${...}` is literal text inside a String and carries no special meaning.
 
-For triple-double-quoted String literals, indentation normalization follows the Core v0.1 rule defined above: remove the common leading indentation of all non-empty content lines, preserve relative indentation beyond that common baseline, and omit the leading/trailing newline only when the delimiter placement matches the rule. Escape processing still follows the standard Core v0.1 String escape rules, and triple-double-quoted strings remain non-raw strings.
+For triple-double-quoted String literals, indentation normalization follows the Core v0.1 rule defined above: remove the common leading indentation of all non-empty content lines, preserve relative indentation beyond that common baseline, and omit the leading/trailing newline only when the delimiter placement matches the rule. Retained logical source newlines preserve their original source code points in the resulting String; no newline normalization is applied. Escape processing still follows the standard Core v0.1 String escape rules, and triple-double-quoted strings remain non-raw strings.
 
 Character encoding is not determined by the source-level string literal syntax. Conversion to or from encoded bytes is performed explicitly through ordinary protocols such as:
 

@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 50  
+Document revision: 51  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -76,15 +76,25 @@ String escape validation is part of lexical analysis. An invalid, incomplete, or
 
 The lexer must validate escape sequences and reject invalid ones before the parser receives a String token. A String token passed to the parser must contain only valid escape sequences according to Core v0.1 rules.
 
+**Logical Source Newlines (Lexer Contract):**
+
+- A logical source newline is exactly one of `LF` (U+000A), `CR` (U+000D), or `CRLF` (U+000D U+000A).
+- `CRLF` is consumed atomically as one logical source newline; it never produces two `NEWLINE` tokens.
+- Each logical source newline produces exactly one `NEWLINE` token for the parser when it is not consumed by another lexical construct.
+- Source files may freely mix `LF`, `CR`, and `CRLF` logical newlines; mixed line-ending styles are not lexical errors.
+- Newline recognition does not depend on the host operating system, editor settings, Git line-ending conversion, or any host line-separator convention.
+- A `//` line comment terminates immediately before the next logical source newline or at end of file. The terminating logical source newline is not consumed as part of the comment; it remains available for ordinary newline tokenization.
+
 **String Literal Newline Handling:**
 
 The lexer must enforce the following rules for String literals:
 
 - Single-quoted (`'...'`) and double-quoted (`"..."`) String literals are single-line literals.
-- A raw source newline character (U+000A line feed or U+000D carriage return) encountered inside a single-quoted or double-quoted String literal before the matching closing quote is a lexical error.
-- Newline characters must be represented in single-quoted and double-quoted literals using the escape sequences `\n` (line feed) or `\r` (carriage return).
-- Triple-double-quoted (`"""..."""`) String literals permit raw source newlines as part of the literal content.
-- The escape-sequence rules and multiline indentation normalization for triple-double-quoted literals remain unchanged.
+- A logical source newline (`LF`, `CR`, or `CRLF`) encountered inside a single-quoted or double-quoted String literal before the matching closing quote is a lexical error.
+- Newline characters must be represented in single-quoted and double-quoted literals using the escape sequences `\n` (line feed) or `\r` (carriage return); these escapes denote String content and are distinct from raw source-newline recognition.
+- Triple-double-quoted (`"""..."""`) String literals permit logical source newlines as part of the literal content. Each logical source newline counts as one logical newline for structural processing — delimiter placement, content-line splitting, and indentation normalization — regardless of whether it is spelled `LF`, `CR`, or `CRLF`.
+- Retained source newlines in triple-double-quoted literals preserve their original source code points in the resulting String: `LF` remains U+000A, `CR` remains U+000D, and `CRLF` remains U+000D U+000A. There is no implicit newline normalization of String content.
+- The escape-sequence rules and multiline indentation normalization for triple-double-quoted literals remain unchanged; opening/trailing newline removal removes the complete logical newline sequence.
 
 **Tokenization Rules:**
 
@@ -1109,7 +1119,7 @@ identical(newObject(), newObject())     == false
 
 String-literal evaluation produces ordinary `String` values. Single-quoted and double-quoted literals are equivalent. There is no separate character type; `'a'` and `"a"` both denote a `String` containing the single-character text `a`. Single-quoted, double-quoted, and triple-double-quoted strings use the same escape rules. The supported escapes are exactly `\\`, `\'`, `\"`, `\n`, `\r`, `\t`, `\b`, `\f`, and `\u{HEX}`. `\u{HEX}` requires 1 to 6 hexadecimal digits and must denote a valid Unicode scalar value. Invalid or incomplete escape sequences are syntax errors. Octal escapes and `\xNN` escapes are not supported. Triple-double-quoted strings are multiline `String` values, not raw strings. Triple-single-quoted strings are invalid syntax. String interpolation is not part of Core v0.1, so `${...}` inside a literal is ordinary text.
 
-Triple-double-quoted String evaluation applies the Core v0.1 multiline indentation normalization rule. If the opening delimiter is immediately followed by a newline, that newline is discarded. If the closing delimiter is immediately preceded by a newline whose preceding content on that line is only indentation whitespace, that trailing newline and indentation are discarded. The minimum common indentation of all non-empty content lines is removed from each content line, empty lines are ignored for indentation calculation, and relative indentation beyond that minimum is preserved. When a multiline String begins or ends on the same line as the delimiters, no implicit leading or trailing newline trimming occurs. Escape processing still follows the standard Core v0.1 String escape rules, and triple-double-quoted strings remain non-raw strings.
+Triple-double-quoted String evaluation applies the Core v0.1 multiline indentation normalization rule. Logical source newlines delimit the content lines; each of `LF`, `CR`, and `CRLF` counts as one logical newline for structural processing. If the opening delimiter is immediately followed by a logical source newline, that newline is discarded. If the closing delimiter is immediately preceded by a logical source newline whose preceding content on that line is only indentation whitespace, that trailing newline and indentation are discarded. The minimum common indentation of all non-empty content lines is removed from each content line, empty lines are ignored for indentation calculation, and relative indentation beyond that minimum is preserved. When a multiline String begins or ends on the same line as the delimiters, no implicit leading or trailing newline trimming occurs. Opening/trailing newline removal removes the complete logical newline sequence, so a removable `CRLF` is removed as one logical newline. Retained logical source newlines preserve their original source code points in the resulting String: `LF` remains U+000A, `CR` remains U+000D, and `CRLF` remains U+000D U+000A. Escape processing still follows the standard Core v0.1 String escape rules, and triple-double-quoted strings remain non-raw strings.
 
 `true`, `false`, and `null` are canonical singleton values.
 

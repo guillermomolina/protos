@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 50  
+Document revision: 51  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -722,9 +722,13 @@ Trailing-block syntax does not alter closure semantics.
 
 There is no Automatic Semicolon Insertion.
 
+A logical source newline is exactly one of `LF` (U+000A), `CR` (U+000D), or `CRLF` (U+000D U+000A). `CRLF` is consumed atomically as one logical source newline, never as two. Source files may freely mix `LF`, `CR`, and `CRLF` logical newlines; mixed line-ending styles are not lexical errors.
+
+Each logical source newline that is not consumed by another lexical construct produces exactly one `NEWLINE` token for the parser. Newline handling does not depend on the host operating system, editor settings, Git line-ending conversion, or any host line-separator convention.
+
 Core v0.1 defines two comment forms:
 
-- `//` starts a line comment and continues until the next newline or end of file.
+- `//` starts a line comment and continues until the next logical source newline or end of file. The terminating logical source newline is not consumed as part of the comment; it remains available for ordinary newline tokenization.
 - `/*` starts a block comment and `*/` ends it.
 
 Block comments do not nest. An unterminated block comment is a lexical error. Comment delimiters inside String literals have no special meaning. Comments are lexically equivalent to whitespace and do not produce language-level values.
@@ -1951,11 +1955,16 @@ Core v0.1 defines String literals as ordinary `String` values.
 
 **Newline Handling in String Literals:**
 
+A logical source newline is one `LF` (U+000A), one `CR` (U+000D), or one `CRLF` (U+000D U+000A) sequence, as defined in Separators, Line Breaks, and Comments.
+
 - Single-quoted and double-quoted String literals are single-line literals.
-- A raw source newline is not permitted inside a single-quoted or double-quoted String literal.
-- Encountering a raw newline before the matching closing quote is a lexical error.
-- Newline characters may be represented in single-quoted and double-quoted literals using the `\n` and `\r` escape sequences.
-- Triple-double-quoted String literals are multiline String literals and permit raw source newlines as part of the literal content.
+- A logical source newline (`LF`, `CR`, or `CRLF`) is not permitted inside a single-quoted or double-quoted String literal.
+- Encountering a logical source newline before the matching closing quote is a lexical error.
+- Newline characters may be represented in single-quoted and double-quoted literals using the `\n` and `\r` escape sequences; these escapes denote String content and are distinct from raw source newlines.
+- Triple-double-quoted String literals are multiline String literals and permit logical source newlines as part of the literal content.
+- Each logical source newline inside a triple-double-quoted literal counts as one logical newline for structural processing: opening/closing delimiter placement, content-line splitting, and indentation normalization.
+- Retained source newlines in a triple-double-quoted literal preserve their original source code points in the resulting String: `LF` remains U+000A, `CR` remains U+000D, and `CRLF` remains U+000D U+000A. There is no implicit newline normalization of String content.
+- Opening/trailing newline removal removes the complete logical newline sequence, so a removable `CRLF` is removed as one logical newline.
 - Triple-double-quoted multiline String literals use the Core v0.1 indentation normalization rule: the opening newline is discarded when it immediately follows the opening delimiter; the closing newline and indentation-only trailing line are discarded when they immediately precede the closing delimiter; the minimum common indentation of all non-empty content lines is removed; empty lines do not count toward the minimum; relative indentation beyond the common baseline is preserved; and no implicit trimming occurs when the content begins or ends on the same line as the delimiters.
 
 Example literals:
