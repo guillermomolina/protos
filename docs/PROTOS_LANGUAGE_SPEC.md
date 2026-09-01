@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 59  
+Document revision: 60  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -774,7 +774,60 @@ A parameter list exists only where ordinary closure syntax requires it, before `
 
 A trailing closure introduces no new runtime value kind: it is syntactic sugar for an ordinary Closure appended as the final call argument. Trailing-closure syntax does not alter closure semantics.
 
-This section does not decide newline placement between the completed call and the trailing closure (unresolved issue B7).
+A trailing closure is attached only when no logical `NEWLINE` token intervenes between the completed call and the closure body. The call is complete when its `argument-list` ends; a `NEWLINE` token at that point acts as an expression separator under the complete-expression newline rule (see Separators, Line Breaks, and Comments). Therefore:
+
+```js
+foo() {
+    body
+}
+```
+
+is a call with a parameterless trailing closure, while:
+
+```js
+foo()
+{
+    body
+}
+```
+
+does not attach the braces to `foo()` as a trailing closure. `foo()` is syntactically complete, so the logical `NEWLINE` after it separates expressions. `{` is not a complete-before-newline continuation exception: the only such exception remains the leading structural member-access `.` rule, and it does not generalize to `{`. What the separated `{ ... }` may mean, if anything, is governed by the ordinary grammar independently; the normative claim here is only that it is not attached as a trailing closure to the preceding call. This closes issue B7.
+
+Blank lines and semicolons do not attach a trailing closure: repeated separating `NEWLINE` tokens have the same effect as one separating `NEWLINE`, and `;` is an expression separator, so `foo(); { body }` is not a trailing closure on `foo()`.
+
+Indentation plays no role in the decision: the rule concerns logical `NEWLINE` tokens, not physical source formatting. The two forms:
+
+```js
+foo()
+{
+    body
+}
+```
+
+and:
+
+```js
+foo()
+    {
+        body
+    }
+```
+
+are equivalent with respect to the newline rule; both contain a separating logical `NEWLINE` after the completed call, so neither attaches the braces as a trailing closure. Horizontal whitespace between the completed call and the closure body is permitted: `foo()    { body }` remains valid trailing-closure syntax.
+
+Comments follow the existing lexical rules. A block comment behaves as whitespace and consumes any logical newlines inside it without producing `NEWLINE` tokens, so `foo() /* comment */ { body }` and:
+
+```js
+foo() /*
+    comment
+*/ {
+    body
+}
+```
+
+both attach. A line comment does not consume its terminating logical newline: that newline is tokenized normally, so `foo() // comment` followed by `{ body }` on the next source line does not attach. No special comment-sensitive trailing-closure rule exists; the result follows entirely from tokenization.
+
+A trailing closure is therefore permitted only when the parser sees the closure body as part of the same continuing token sequence after the completed call suffix, with no intervening `NEWLINE` token. A valid trailing closure remains a parameterless closure appended as the final call argument; this revision does not restore parameterized trailing closures.
 
 ## 19. Separators, Line Breaks, and Comments
 
@@ -835,7 +888,7 @@ The rule is based on grammatical incompleteness, not on a hard-coded list of tok
 
 An explicit `;` is the inline expression separator: it separates two expressions written on the same logical source line. It is a separator, not a terminator: it must have an expression immediately before it and an expression after it on the same logical source line, with no `NEWLINE` token between the `;` and either expression. Leading, trailing, and consecutive semicolons are syntax errors, and a `;` does not acquire terminator meaning merely because a newline follows it. There is no semicolon continuation analogous to newline continuation; a semicolon cannot be ignored merely because formatting or the next token suggests continuation.
 
-This section does not decide newline placement between a completed call and a trailing closure (unresolved issue B7), and it does not classify `{` or `(` as leading-token continuation exceptions. Separator multiplicity and blank-line grammar (issue B4) are defined below: a run of separating `NEWLINE` tokens has the effect of a single separating `NEWLINE`, blank lines are permitted and create no empty expressions, and this multiplicity rule does not create continuation behavior this section does not permit.
+This section does not classify `{` or `(` as leading-token continuation exceptions. A completed call is syntactically complete, so a logical `NEWLINE` after it acts as a separator under the complete-expression newline rule above, and the braces of a following `{ ... }` do not attach to the completed call as a trailing closure (see Trailing Closures, where issue B7 is closed). Separator multiplicity and blank-line grammar (issue B4) are defined below: a run of separating `NEWLINE` tokens has the effect of a single separating `NEWLINE`, blank lines are permitted and create no empty expressions, and this multiplicity rule does not create continuation behavior this section does not permit.
 
 ```js
 foo()

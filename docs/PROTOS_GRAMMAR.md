@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 59  
+Document revision: 60  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -310,7 +310,7 @@ Indentation has no syntactic significance for these rules: the equivalences abov
 
 An explicit `;` is the inline expression separator: it separates two expressions written on the same logical source line. It is a separator, not a terminator: it must have an expression before it and an expression after it on the same logical source line, with no `NEWLINE` token between the `;` and either expression. Leading, trailing, and consecutive semicolons are syntax errors, and a `;` does not acquire terminator meaning merely because a newline follows it. There is no semicolon continuation analogous to newline continuation; a semicolon cannot be ignored merely because formatting or the next token suggests continuation.
 
-This section does not decide newline placement between a completed call and a trailing closure (unresolved issue B7). Once a `NEWLINE` token is functioning as line separation under the rules above, any positive run of separating `NEWLINE` tokens has the effect of one separating `NEWLINE`: blank lines are permitted and create no empty expressions (see Expression Separators). This multiplicity rule does not create continuation behavior that this section does not permit. Comma-separated list elements and trailing commas are defined in Closures and Calls and Arguments: `,` is the only list-element separator and trailing commas are syntax errors.
+A completed call is syntactically complete, so a logical `NEWLINE` after it acts as a separator under the complete-expression newline rule above, and the braces of a following `{ ... }` do not attach to the completed call as a trailing closure (see Trailing Closures, where issue B7 is closed). `{` is not a complete-before-newline continuation exception: the only such exception remains the leading structural `.` rule. Once a `NEWLINE` token is functioning as line separation under the rules above, any positive run of separating `NEWLINE` tokens has the effect of one separating `NEWLINE`: blank lines are permitted and create no empty expressions (see Expression Separators). This multiplicity rule does not create continuation behavior that this section does not permit. Comma-separated list elements and trailing commas are defined in Closures and Calls and Arguments: `,` is the only list-element separator and trailing commas are syntax errors.
 
 ## 5. Expression Separators
 
@@ -863,12 +863,21 @@ Receiver-aware semantic lowering still distinguishes a member invocation such as
 
 ## 19. Trailing Closures
 
-A trailing closure is permitted only as part of a call suffix, immediately after a completed call, and is always parameterless. A bare expression followed by a closure body does not gain trailing-closure meaning unless the preceding expression has just completed a call suffix.
+A trailing closure is permitted only as part of a call suffix, immediately after a completed call, and is always parameterless. The closure body must follow the completed call's `argument-list` in the same continuing token sequence: when a logical `NEWLINE` token intervenes between the completed call and the closure body, the braces are not attached as a trailing closure. A bare expression followed by a closure body does not gain trailing-closure meaning unless the preceding expression has just completed a call suffix.
 
 ```ebnf
 trailing-closure =
     closure-body ;
 ```
+
+This production preserves the call-suffix form:
+
+```ebnf
+call-suffix =
+    argument-list, [ trailing-closure ] ;
+```
+
+The `trailing-closure` may be present only when no logical `NEWLINE` token separates the completed `argument-list` from the `closure-body`: the next parser token after a completed call suffix must be the `{` of the closure body. Horizontal whitespace and comments that produce no `NEWLINE` tokens remain ordinary lexical separation and need no grammar production here.
 
 A trailing closure never has its own parameter list. The parentheses of the call's `argument-list` always contain call arguments; they are never a parameter list for the trailing closure. Core v0.1 provides no parameterized trailing-closure syntax: a form such as:
 
@@ -956,7 +965,62 @@ condition.ifTrue(
 
 A trailing closure introduces no new runtime concept: it is syntactic sugar for an ordinary Closure appended as the final call argument.
 
-This revision does not decide newline placement between the completed call and the trailing closure (unresolved issue B7).
+Newline placement between the completed call and the trailing closure (issue B7): a completed call is syntactically complete, so a logical `NEWLINE` after its `argument-list` is a separating newline under the expression-separation and newline-continuation rules (see Whitespace and Newlines and Expression Separators), and a `{` following that `NEWLINE` does not attach as a trailing closure. `{` is not a complete-before-newline continuation exception; the only such exception remains the leading structural `.` rule. Repeated separating `NEWLINE` tokens (blank lines) and `;` separators likewise prevent attachment. This closes issue B7.
+
+These are valid trailing closures:
+
+```js
+foo() {
+    body
+}
+
+foo(a, b) {
+    body
+}
+
+foo()    {
+    body
+}
+
+foo() /* comment */ {
+    body
+}
+
+foo() /*
+    comment
+*/ {
+    body
+}
+```
+
+In these forms the braces do not attach as a trailing closure to the preceding call:
+
+```text
+foo()
+{
+    body
+}
+
+foo()
+
+{
+    body
+}
+
+foo() // comment
+{
+    body
+}
+
+foo();
+{
+    body
+}
+```
+
+A block comment behaves as whitespace and consumes embedded logical source newlines without producing `NEWLINE` tokens (see Comments), so it may appear between the call and the trailing closure, including as a multiline comment. A line comment does not consume its terminating logical source newline, so a `//` comment leaves a separating `NEWLINE` token and prevents attachment. Indentation plays no role in the decision: the rule concerns logical `NEWLINE` tokens, not physical source formatting. No special comment-sensitive trailing-closure rule exists; the result follows entirely from tokenization.
+
+What the braces of a non-attached `{ ... }` after a separating newline may mean, if anything, is governed by the ordinary grammar independently; the normative claim is only that they are not attached as a trailing closure to the preceding call. This revision does not restore parameterized trailing closures: a trailing closure remains parameterless, and `foo() (x) { body }` is not trailing-closure syntax.
 
 ## 20. Object Construction vs Trailing Closure
 
@@ -1598,7 +1662,7 @@ Core v0.1 defines no special documentation-comment syntax.
 
 ## 39. Compact EBNF
 
-The compact grammar below incorporates the syntax decisions made through revision 59. Semantic validation still applies after parsing.
+The compact grammar below incorporates the syntax decisions made through revision 60. Semantic validation still applies after parsing.
 
 ```ebnf
 program =
@@ -1832,6 +1896,8 @@ literal =
 A parser may implement the expression portion using recursive descent plus Pratt parsing. Custom symbolic operators form their own precedence domain: mixing them with standard binary operators requires parentheses.
 
 `layout` denotes one or more consecutive logical `NEWLINE` tokens consumed as continuation inside a necessarily-incomplete delimited construct (see Whitespace and Newlines). It is formatting, not an element separator: commas are the only separators between list elements, and trailing commas are not permitted.
+
+As in the normative grammar, `trailing-closure` may follow a completed `argument-list` in `call-suffix` only when no logical `NEWLINE` token intervenes between them; the restriction is stated normatively in Trailing Closures and needs no additional production here.
 
 Indexed assignment is recognized because an `assignment-target` may end in `[ expression ]`; it lowers to `atPut` rather than a slot `Assign`. A `slot-creation-target` may never end in an index suffix, so an indexed `:` has no parse.
 

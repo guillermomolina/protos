@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 59  
+Document revision: 60  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -709,6 +709,8 @@ The lowering proceeds as follows:
 The trailing Closure captures `this`, `context`, `methodHome`, and the return home exactly as an ordinary Closure written in the same source position would. A `^` inside a trailing closure therefore follows the ordinary non-local-return rules.
 
 The runtime does not need to know whether a parameterless closure originated from trailing-closure syntax or from an explicit `() => { body }` expression: both produce the same ordinary Closure value. The call's argument parentheses always contain call arguments; a trailing closure has no parameter list.
+
+Only a trailing closure that the parser attaches to the completed call reaches this lowering. Attachment requires that no logical `NEWLINE` token intervene between the completed call and the closure body (see the grammar's Trailing Closures section). A `{ ... }` separated from a preceding completed call by a separating logical `NEWLINE` is not a trailing closure, produces no trailing-closure lowering, and introduces no runtime concept here: no runtime newline mechanism exists.
 
 ---
 
