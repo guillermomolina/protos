@@ -313,3 +313,15 @@ At the end of a coding task, summarize:
 Do not claim tests passed if they were not run.
 
 Do not claim behavior is specification-compliant unless the relevant semantics were actually checked against the canonical documents.
+
+### Documentation editing
+
+When editing existing documentation:
+
+- Make minimal, localized edits. Do not reflow, rewrap, or reconstruct surrounding paragraphs unless explicitly required.
+- Preserve existing line breaks, paragraph boundaries, Markdown formatting, and intentional whitespace outside the exact text being changed.
+- Do not concatenate words, punctuation, inline code, or Markdown elements across edit boundaries.
+- After editing, inspect the actual resulting file content around every changed region rather than relying only on the generated patch.
+- Before reporting completion, run `git diff --check` and review `git diff` for accidental whitespace, missing spaces, line-break changes, or unrelated formatting changes.
+- Treat existing Markdown hard line breaks (two trailing spaces) as intentional unless the task explicitly requests formatting cleanup.
+- Do not perform unrelated formatting cleanup in a semantic specification revision.
