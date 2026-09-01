@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 52  
+Document revision: 53  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -728,7 +728,7 @@ Horizontal whitespace is distinct from logical source newlines, which are a sepa
 
 A logical source newline is exactly one of `LF` (U+000A), `CR` (U+000D), or `CRLF` (U+000D U+000A). `CRLF` is consumed atomically as one logical source newline, never as two. Source files may freely mix `LF`, `CR`, and `CRLF` logical newlines; mixed line-ending styles are not lexical errors.
 
-Each logical source newline that is not consumed by another lexical construct produces exactly one `NEWLINE` token for the parser. Newline handling does not depend on the host operating system, editor settings, Git line-ending conversion, or any host line-separator convention.
+Each logical source newline that is not consumed by another lexical construct produces exactly one `NEWLINE` token for the parser. In particular, logical source newlines inside a block comment are consumed as part of the comment and produce no `NEWLINE` token. Newline handling does not depend on the host operating system, editor settings, Git line-ending conversion, or any host line-separator convention.
 
 No other Unicode code point is implicitly ignored as whitespace merely because Unicode, Java, an operating system, or another host API classifies it as whitespace or space. In particular, the following are not Core v0.1 whitespace: U+000B VERTICAL TAB, U+000C FORM FEED, U+0085 NEXT LINE, U+00A0 NO-BREAK SPACE, U+1680 OGHAM SPACE MARK, U+2000..U+200A Unicode space characters, U+2028 LINE SEPARATOR, U+2029 PARAGRAPH SEPARATOR, U+202F NARROW NO-BREAK SPACE, U+205F MEDIUM MATHEMATICAL SPACE, U+3000 IDEOGRAPHIC SPACE, and U+FEFF ZERO WIDTH NO-BREAK SPACE. This list is illustrative of important exclusions, not an alternative open-ended definition. U+2028 LINE SEPARATOR and U+2029 PARAGRAPH SEPARATOR are neither horizontal whitespace nor logical source newlines.
 
@@ -739,9 +739,29 @@ Characters such as NBSP, Unicode space characters, U+2028, U+2029, and U+FEFF ma
 Core v0.1 defines two comment forms:
 
 - `//` starts a line comment and continues until the next logical source newline or end of file. The terminating logical source newline is not consumed as part of the comment; it remains available for ordinary newline tokenization.
-- `/*` starts a block comment and `*/` ends it.
+- `/*` starts a block comment and `*/` ends it. A block comment is one lexical construct: it consumes all source characters from its opening `/*` through its matching closing `*/`, including logical source newlines. The first `*/` after the opening `/*` terminates the comment.
 
-Block comments do not nest. An unterminated block comment is a lexical error. Comment delimiters inside String literals have no special meaning. Comments are lexically equivalent to whitespace and do not produce language-level values.
+Logical source newlines (`LF`, `CR`, or `CRLF`) inside a block comment are consumed as part of the comment and do not produce `NEWLINE` tokens. A `CRLF` inside a block comment remains one logical source newline for source-position and logical-line accounting, but no `NEWLINE` token is emitted for it. Newlines inside a `/* ... */` comment cannot themselves separate expressions.
+
+Block comments do not nest in Core v0.1. An unterminated block comment is a lexical error. Comment delimiters inside String literals have no special meaning.
+
+A block comment has the token-separation effect of insignificant whitespace regardless of whether it contains logical source newlines. The two forms
+
+```js
+a() /* comment */ b()
+```
+
+and
+
+```js
+a() /*
+    comment
+*/ b()
+```
+
+have the same token-separation effect: the internal logical newlines do not become expression separators. Newlines outside a block comment remain governed by the normal logical-newline rules and may separate expressions when the grammar determines that the preceding expression is complete.
+
+Comments produce no parser token and no language-level value. They are lexical constructs with whitespace-like token-separation behavior; they do not add code points to the horizontal-whitespace set, which remains exactly `SPACE` and `TAB`.
 
 `#` is not a comment delimiter. Core v0.1 defines no special documentation-comment syntax.
 

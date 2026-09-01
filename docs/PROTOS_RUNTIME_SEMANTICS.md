@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 52  
+Document revision: 53  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -85,6 +85,14 @@ The lexer must validate escape sequences and reject invalid ones before the pars
 - Newline recognition does not depend on the host operating system, editor settings, Git line-ending conversion, or any host line-separator convention.
 - A `//` line comment terminates immediately before the next logical source newline or at end of file. The terminating logical source newline is not consumed as part of the comment; it remains available for ordinary newline tokenization.
 
+**Block Comments (Lexer Contract):**
+
+- A `/* ... */` block comment is one lexical construct: the lexer consumes all source characters from the opening `/*` through the first following `*/`. Core v0.1 block comments do not nest; an unterminated block comment is a lexical error.
+- Logical source newlines inside a block comment are consumed as part of the comment. Each embedded `LF`, `CR`, or `CRLF` is consumed; no `NEWLINE` token is emitted for an embedded logical newline, and an embedded `CRLF` never produces `NEWLINE` tokens.
+- An embedded logical newline still counts as one logical source newline for source-position and logical-line accounting: line and column tracking advance normally through the comment, including the complete `CR` and `LF` of an embedded `CRLF`.
+- The lexer emits no comment token and no other parser token for a block comment. A block comment has the token-separation effect of insignificant whitespace regardless of whether it contains logical newlines; embedded logical newlines do not become expression separators.
+- Line comments are unchanged: a `//` line comment terminates immediately before its terminating logical source newline, which remains available for ordinary `NEWLINE` tokenization.
+
 **Horizontal Whitespace (Lexer Contract):**
 
 - `SPACE` (U+0020) is ignored horizontal whitespace.
@@ -113,7 +121,7 @@ The lexer must enforce the following rules for String literals:
 - Standard punctuation and structural tokens are tokenized separately from symbolic operators.
 - A `.` immediately following a complete radix-prefixed Integer literal is a structural `.` token unless it is immediately followed by a decimal digit; a `.` immediately followed by a decimal digit makes the sequence an attempted unsupported radix Float literal and a lexical error (`0b10.5`), not `INTEGER("0b10")` `.` `INTEGER("5")`.
 
-Comments are purely lexical: the lexer strips `//` line comments, `/* ... */` block comments, and they are treated as whitespace. They do not produce runtime values, they do not participate in the language object model, and they do not have any special meaning inside String literals. `#` is not a comment delimiter, and no documentation-comment syntax is defined by Core v0.1.
+Comments are purely lexical: the lexer strips `//` line comments and `/* ... */` block comments, which have whitespace-like token-separation behavior but are not additional horizontal-whitespace code points. They do not produce runtime values, they do not participate in the language object model, and they do not have any special meaning inside String literals. `#` is not a comment delimiter, and no documentation-comment syntax is defined by Core v0.1.
 
 `Object` is the unique root prototype. It has no delegation parent. Every other the language object has exactly one immutable delegation parent, so every delegation chain terminates at `Object`. The absence of a parent on `Object` is structural; it is not represented by `null` or by any other the language object. Reflective structural operations such as `removeSlot(name)`, `close()`, and `freeze()` are ordinary messages provided through `Object`, with runtime primitives implementing their structural effects.
 

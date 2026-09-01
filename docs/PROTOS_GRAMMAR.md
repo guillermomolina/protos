@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 52  
+Document revision: 53  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -189,6 +189,8 @@ Logical source newlines are a separate lexical category. They are not horizontal
 A logical source newline is exactly one of `LF` (U+000A), `CR` (U+000D), or `CRLF` (U+000D U+000A). `CRLF` is consumed atomically as one logical source newline, never as two.
 
 Each logical source newline that is not consumed by another lexical construct produces exactly one `NEWLINE` token for the parser. `LF`, `CR`, and `CRLF` therefore each produce one `NEWLINE` token; `CRLF` never produces two.
+
+A block comment is a lexical construct that consumes its own contents, including embedded logical source newlines; those newlines produce no `NEWLINE` token (see Comments).
 
 Source files may freely mix `LF`, `CR`, and `CRLF` logical newlines. Mixed line-ending styles are not lexical errors.
 
@@ -1210,13 +1212,29 @@ block-comment =
 
 `//` starts a line comment. A line comment continues until the next logical source newline or end of file. The comment ends immediately before the newline, so none of the newline's code points — including the `CR` of a `CRLF` sequence — are consumed by the comment. The terminating logical source newline remains available for ordinary newline tokenization and produces the usual `NEWLINE` token.
 
-`/*` starts a block comment. `*/` ends a block comment. Block comments do not nest in Core v0.1.
+`/*` starts a block comment. `*/` ends a block comment. A block comment is one lexical construct: it consumes all source characters from its opening `/*` through its matching closing `*/`, including logical source newlines. The first `*/` after the opening `/*` terminates the comment. Block comments do not nest in Core v0.1.
+
+A logical source newline (`LF`, `CR`, or `CRLF`) occurring inside a block comment is consumed as part of the comment and does not produce a `NEWLINE` token. A `CRLF` inside a block comment remains one logical source newline for source-position and logical-line accounting, but no `NEWLINE` token is emitted for it.
+
+This contrasts with `//`: a line comment terminates immediately before its terminating logical source newline, leaving that newline available for ordinary `NEWLINE` tokenization, whereas a block comment consumes the logical source newlines inside it.
+
+A block comment has the token-separation effect of insignificant whitespace regardless of whether it contains logical source newlines. The two forms
+
+```js
+a() /* comment */ b()
+
+a() /*
+    comment
+*/ b()
+```
+
+have the same token-separation effect: the internal logical newlines do not become expression separators. Newlines outside a block comment remain governed by the normal logical-newline rules and may separate expressions according to the grammar.
 
 An unterminated block comment is a lexical error.
 
 Comment delimiters inside String literals have no special meaning.
 
-Comments are lexically equivalent to whitespace and do not produce language-level values.
+Comments produce no parser token and no language-level value. They are lexical constructs with whitespace-like token-separation behavior; they do not add code points to the horizontal-whitespace set, which remains exactly SPACE and TAB.
 
 `#` is not a comment delimiter.
 
