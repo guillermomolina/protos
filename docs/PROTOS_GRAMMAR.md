@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 47  
+Document revision: 48  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -1733,6 +1733,38 @@ Hexadecimal, binary, and octal Float literals are not supported in Core v0.1.
 Numeric type suffixes such as `L`, `f`, or `d` are not supported.
 
 `NaN` and `Infinity` are not special numeric literal syntax.
+
+**Malformed Numeric Literals and Numeric Token Termination:**
+
+Once a source sequence has begun as a numeric literal, if its immediately adjacent continuation makes that numeric form malformed or creates an invalid numeric/identifier boundary, the lexer reports a lexical error. It must not split the malformed sequence into otherwise valid tokens in order to recover it.
+
+- A radix prefix (`0x`, `0X`, `0b`, `0B`, `0o`, `0O`) must be followed by at least one valid digit for that radix. Once a radix prefix has been recognized, an invalid digit or identifier-like continuation does not cause the lexer to fall back to an `INTEGER("0")` token plus another token.
+- Once `e` or `E` has begun the exponent part of a decimal numeric literal, the exponent must be complete according to the exponent rules above.
+- Invalid underscore placement inside or immediately adjacent to a numeric literal is a lexical error according to the underscore rules above.
+- An identifier cannot begin immediately after a numeric literal without a lexical boundary.
+
+The following source sequences are therefore lexical errors:
+
+```text
+0x
+0xG
+0b2
+0o8
+
+2e
+2e+
+2e-
+
+1__2
+1_
+0x_FF
+
+123abc
+```
+
+For example, `0xG` is a lexical error rather than `INTEGER("0")` followed by `IDENTIFIER("xG")`, and `123abc` is a lexical error rather than `INTEGER("123")` followed by `IDENTIFIER("abc")`.
+
+Valid token boundaries remain valid and are not affected by this rule: punctuation, whitespace, structural delimiters, and operators may terminate a numeric token according to the existing lexical grammar. The decimal-point vs. member-access dot rules above are unchanged.
 
 Examples:
 

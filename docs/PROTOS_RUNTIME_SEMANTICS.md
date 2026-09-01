@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 47  
+Document revision: 48  
 Status: Draft  
 Last updated: 2026-09-01
 
