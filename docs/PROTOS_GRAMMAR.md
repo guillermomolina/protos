@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 58  
+Document revision: 59  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -310,7 +310,7 @@ Indentation has no syntactic significance for these rules: the equivalences abov
 
 An explicit `;` is the inline expression separator: it separates two expressions written on the same logical source line. It is a separator, not a terminator: it must have an expression before it and an expression after it on the same logical source line, with no `NEWLINE` token between the `;` and either expression. Leading, trailing, and consecutive semicolons are syntax errors, and a `;` does not acquire terminator meaning merely because a newline follows it. There is no semicolon continuation analogous to newline continuation; a semicolon cannot be ignored merely because formatting or the next token suggests continuation.
 
-This section does not decide newline placement between a completed call and a trailing closure, nor before a trailing closure's own parameter list (unresolved issue B7). Once a `NEWLINE` token is functioning as line separation under the rules above, any positive run of separating `NEWLINE` tokens has the effect of one separating `NEWLINE`: blank lines are permitted and create no empty expressions (see Expression Separators). This multiplicity rule does not create continuation behavior that this section does not permit. Comma-separated list elements and trailing commas are defined in Closures and Calls and Arguments: `,` is the only list-element separator and trailing commas are syntax errors.
+This section does not decide newline placement between a completed call and a trailing closure (unresolved issue B7). Once a `NEWLINE` token is functioning as line separation under the rules above, any positive run of separating `NEWLINE` tokens has the effect of one separating `NEWLINE`: blank lines are permitted and create no empty expressions (see Expression Separators). This multiplicity rule does not create continuation behavior that this section does not permit. Comma-separated list elements and trailing commas are defined in Closures and Calls and Arguments: `,` is the only list-element separator and trailing commas are syntax errors.
 
 ## 5. Expression Separators
 
@@ -863,14 +863,14 @@ Receiver-aware semantic lowering still distinguishes a member invocation such as
 
 ## 19. Trailing Closures
 
-A trailing closure is permitted only as part of a call suffix. A bare expression followed by a parameter list and a closure body does not gain trailing-closure meaning unless the preceding expression has just completed a call suffix.
+A trailing closure is permitted only as part of a call suffix, immediately after a completed call, and is always parameterless. A bare expression followed by a closure body does not gain trailing-closure meaning unless the preceding expression has just completed a call suffix.
 
 ```ebnf
 trailing-closure =
-    [ parameter-list ], closure-body ;
+    closure-body ;
 ```
 
-The parentheses of the call's `argument-list` always contain call arguments. They are never reinterpreted as the parameter list of a trailing closure. When a trailing closure is parameterized, its parameters are written in a distinct parameter list placed after the completed call:
+A trailing closure never has its own parameter list. The parentheses of the call's `argument-list` always contain call arguments; they are never a parameter list for the trailing closure. Core v0.1 provides no parameterized trailing-closure syntax: a form such as:
 
 ```text
 foo(call-arguments...) (closure-parameters...) {
@@ -878,11 +878,11 @@ foo(call-arguments...) (closure-parameters...) {
 }
 ```
 
-The first parentheses are always call arguments. The second parentheses, when present as part of a trailing closure, are always closure parameters. The two lists are not merged or reinterpreted.
+is not recognized as a trailing closure.
 
 A call may be followed by at most one trailing closure.
 
-A parameterless trailing closure:
+A trailing closure:
 
 ```js
 foo(args...) {
@@ -903,84 +903,38 @@ foo(
 
 The trailing closure is appended as the final argument of the invocation.
 
-A parameterized trailing closure:
+A closure that requires parameters is written as an ordinary explicit closure expression in ordinary call-argument position:
 
 ```js
-foo(args...) (params...) {
+items.each((item) => {
+    print(item)
+})
+
+collection.reduce(initial, (acc, item) => {
+    ...
+})
+```
+
+The exact position of the closure among a particular API's arguments is defined by that API. The trailing-closure sugar only appends a parameterless closure as the final argument.
+
+A `parameter-list` exists only where ordinary closure syntax requires it:
+
+```ebnf
+closure-expression =
+    parameter-list, "=>", closure-body ;
+```
+
+The `=>` explicitly distinguishes closure parameters from a parenthesized expression. Therefore `(x)` is always a parenthesized expression, `(x) => { body }` is always an ordinary closure expression, and there is no third interpretation of `(x)` as the parameter declaration of a trailing closure. No parameter list is inferred from a parenthesized expression, and no semantic/type-based interpretation decides whether parentheses contain closure parameters. Because parameterized trailing closures no longer exist, the grammar requires no parser lookahead and no speculative parsing to distinguish `(x)` from a trailing-closure parameter list: issue B6 is resolved structurally.
+
+Under the expression-separator rules, the removal of parameterized trailing closures does not make a form such as:
+
+```text
+foo() (x) {
     body
 }
 ```
 
-is exactly equivalent to:
-
-```js
-foo(
-    args...,
-    (params...) => {
-        body
-    }
-)
-```
-
-The parameter list of a parameterized trailing closure uses the ordinary closure parameter grammar and semantics, including defaults and rest parameters where already permitted. The body uses the ordinary closure-body grammar and semantics.
-
-Mandatory desugaring:
-
-```js
-items.each() (item) {
-    print(item)
-}
-```
-
-becomes:
-
-```js
-items.each(
-    (item) => {
-        print(item)
-    }
-)
-```
-
-By contrast:
-
-```js
-items.each(item) {
-    print(item)
-}
-```
-
-desugars to:
-
-```js
-items.each(
-    item,
-    () => {
-        print(item)
-    }
-)
-```
-
-The `item` inside the call parentheses is an ordinary explicit call argument, not a parameter declaration for the trailing closure.
-
-Ordinary arguments and a parameterized trailing closure compose naturally:
-
-```js
-items.reduce(0) (acc, item) {
-    acc + item
-}
-```
-
-is equivalent to:
-
-```js
-items.reduce(
-    0,
-    (acc, item) => {
-        acc + item
-    }
-)
-```
+valid as two adjacent same-line expressions: whitespace alone does not separate expressions (see Expression Separators).
 
 A parameterless trailing closure may also follow a call without ordinary arguments:
 
@@ -1002,7 +956,7 @@ condition.ifTrue(
 
 A trailing closure introduces no new runtime concept: it is syntactic sugar for an ordinary Closure appended as the final call argument.
 
-This revision does not decide newline placement between the completed call and the trailing closure, nor before a trailing closure's own parameter list.
+This revision does not decide newline placement between the completed call and the trailing closure (unresolved issue B7).
 
 ## 20. Object Construction vs Trailing Closure
 
@@ -1644,7 +1598,7 @@ Core v0.1 defines no special documentation-comment syntax.
 
 ## 39. Compact EBNF
 
-The compact grammar below incorporates the syntax decisions made through revision 58. Semantic validation still applies after parsing.
+The compact grammar below incorporates the syntax decisions made through revision 59. Semantic validation still applies after parsing.
 
 ```ebnf
 program =
@@ -1865,7 +1819,7 @@ layout =
     { newline } ;
 
 trailing-closure =
-    [ parameter-list ], closure-body ;
+    closure-body ;
 
 literal =
       number-literal

@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 58  
+Document revision: 59  
 Status: Draft  
 Last updated: 2026-09-01
 
@@ -590,11 +590,11 @@ A top-level function or method invocation establishes a return home. Closures cr
 
 ```js
 find: (items) => {
-    items.each() (item) {
+    items.each((item) => {
         item.valid.ifTrue() {
             ^item
         }
-    }
+    })
 
     null
 }
@@ -683,17 +683,17 @@ Possible `if`/`else` syntax may exist as sugar, but does not define the fundamen
 No primitive `for` construct is required.
 
 ```js
-users.each() (user) {
+users.each((user) => {
     print(user.name)
-}
+})
 
-users.map() (user) {
+users.map((user) => {
     user.name
-}
+})
 
-1.to(10).each() (i) {
+1.to(10).each((i) => {
     print(i)
-}
+})
 ```
 
 A `while` operation requires a reevaluated condition and therefore semantically operates on a closure:
@@ -710,7 +710,7 @@ A future `while (...) { ... }` form may be syntactic sugar.
 
 The parentheses of a call always contain call arguments. A call may be followed by one trailing closure, which is appended as the final argument of the invocation.
 
-A parameterless trailing closure:
+A trailing closure is always parameterless:
 
 ```js
 transaction(options) {
@@ -729,42 +729,25 @@ transaction(
 )
 ```
 
-A parameterized trailing closure has its own parameter list after the call's closing parenthesis:
+A trailing closure never has its own parameter list. Core v0.1 provides no parameterized trailing-closure syntax: the former form `foo(args...) (params...) { body }` is not part of Core v0.1, and `items.each() (item) { print(item) }` is not trailing-closure syntax. Such forms do not become two adjacent same-line expressions merely because parameterized trailing closures were removed: whitespace alone does not separate expressions, and no implicit adjacency-based expression separation exists.
+
+A closure that requires parameters is passed explicitly as an ordinary closure expression in ordinary call-argument position:
 
 ```js
-items.each() (item) {
+items.each((item) => {
     print(item)
-}
+})
 ```
 
-is exactly equivalent to:
+Likewise, instead of a parameterized trailing closure after `collection.reduce(initial)`, write an explicit closure argument according to ordinary call syntax:
 
 ```js
-items.each(
-    (item) => {
-        print(item)
-    }
-)
+collection.reduce(initial, (acc, item) => {
+    ...
+})
 ```
 
-Ordinary arguments and a parameterized trailing closure compose naturally:
-
-```js
-items.reduce(0) (acc, item) {
-    acc + item
-}
-```
-
-is equivalent to:
-
-```js
-items.reduce(
-    0,
-    (acc, item) => {
-        acc + item
-    }
-)
-```
+The exact position of the closure among a particular API's arguments is defined by that API. The trailing-closure sugar only appends a parameterless closure as the final argument.
 
 The call parentheses are never reinterpreted as the parameter list of a trailing closure. Therefore:
 
@@ -787,7 +770,11 @@ items.each(
 
 The `item` inside the call parentheses is an ordinary explicit call argument. It is not a parameter declaration for the trailing closure.
 
+A parameter list exists only where ordinary closure syntax requires it, before `=>`. `(x)` is always an ordinary parenthesized expression, and `(x) => { body }` is always an ordinary closure expression; there is no third interpretation of `(x)` as the parameter declaration of a trailing closure. This resolves issue B6 structurally: the parser needs no special lookahead to distinguish `(x)` from a trailing-closure parameter list, no parameter list is inferred from a parenthesized expression, and no semantic/type-based interpretation decides whether parentheses contain closure parameters.
+
 A trailing closure introduces no new runtime value kind: it is syntactic sugar for an ordinary Closure appended as the final call argument. Trailing-closure syntax does not alter closure semantics.
+
+This section does not decide newline placement between the completed call and the trailing closure (unresolved issue B7).
 
 ## 19. Separators, Line Breaks, and Comments
 
@@ -848,7 +835,7 @@ The rule is based on grammatical incompleteness, not on a hard-coded list of tok
 
 An explicit `;` is the inline expression separator: it separates two expressions written on the same logical source line. It is a separator, not a terminator: it must have an expression immediately before it and an expression after it on the same logical source line, with no `NEWLINE` token between the `;` and either expression. Leading, trailing, and consecutive semicolons are syntax errors, and a `;` does not acquire terminator meaning merely because a newline follows it. There is no semicolon continuation analogous to newline continuation; a semicolon cannot be ignored merely because formatting or the next token suggests continuation.
 
-This section does not decide newline placement between a completed call and a trailing closure, nor before a trailing closure's own parameter list (unresolved issue B7), and it does not classify `{` or `(` as leading-token continuation exceptions. Separator multiplicity and blank-line grammar (issue B4) are defined below: a run of separating `NEWLINE` tokens has the effect of a single separating `NEWLINE`, blank lines are permitted and create no empty expressions, and this multiplicity rule does not create continuation behavior this section does not permit.
+This section does not decide newline placement between a completed call and a trailing closure (unresolved issue B7), and it does not classify `{` or `(` as leading-token continuation exceptions. Separator multiplicity and blank-line grammar (issue B4) are defined below: a run of separating `NEWLINE` tokens has the effect of a single separating `NEWLINE`, blank lines are permitted and create no empty expressions, and this multiplicity rule does not create continuation behavior this section does not permit.
 
 ```js
 foo()
