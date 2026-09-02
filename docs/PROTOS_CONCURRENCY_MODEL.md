@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 01
+Document revision: 02
 Status: Draft
 Last updated: 2026-09-02
 
@@ -1087,11 +1087,12 @@ The Protos language semantics must not hard-code infrastructure such as:
 
 Those mechanisms may implement discovery without becoming part of the language model.
 
-## 42. Automatic Actor Placement
+## 42. Automatic Actor Placement and Capacity Scaling
 
-**PENDING EXPLICIT CONFIRMATION**
+**CLOSED**
 
-The normal programmer should create a logical Actor without selecting its physical location.
+The normal programmer creates a logical Actor without selecting its physical
+location.
 
 Conceptually:
 
@@ -1101,51 +1102,338 @@ means:
 
 > Create this logical Actor.
 
-It should not normally mean:
+It does not normally mean:
 
-> Create this Actor in this process, on this Node, or on this host.
+> Create this Actor in this Process, on this Node, or on this physical host.
 
-A scheduler should determine physical placement automatically according to factors such as:
+The runtime scheduler determines placement automatically within the currently
+active execution domain and currently available capacity.
 
-- CPU availability
-- Memory availability
-- Current load
-- Communication locality
-- Actor affinity
-- Resource requirements
-- Node health
-- Network cost
-- Observed communication patterns
+Conceptually:
 
-The Actor may therefore execute in:
+- If only the current Process is active, the Actor is placed in that Process.
+- If a Node coordinates multiple available Processes, the Actor may be placed
+  in any suitable Process within that Node.
+- If a Cluster coordinates multiple Nodes and Processes, the Actor may be
+  placed in any suitable location within that Cluster.
 
-- The current process
-- Another process on the same Node
-- Another Node
+The same Actor creation code therefore scales according to the runtime domain
+that is already active.
 
-without changing its logical identity or ActorRef semantics.
+Normal `spawn()` does not itself create or activate higher runtime domains or
+new infrastructure capacity.
 
-Physical topology should remain observable for diagnostics and administration but should not normally be part of application logic.
+In particular, `spawn()` does not by itself:
 
-Advanced placement constraints or hints may exist for exceptional cases, such as:
+- start another Process;
+- create or activate a Node;
+- create or join a Cluster;
+- provision a machine, VM, container, or infrastructure workload.
 
-- Requirement for a GPU
-- Requirement for a non-transferable local resource
-- Requirement to remain inside a particular isolation boundary
-- Affinity or anti-affinity requirements
+Scheduling and scaling are separate responsibilities.
 
-Such constraints should be secondary mechanisms rather than mandatory arguments to normal Actor creation.
+> Scheduling decides where to place work within existing capacity.
 
-The scheduler may eventually use runtime observations to improve placement or recommend changes.
+> Scaling decides how much capacity exists.
 
-Whether and how an already-running Actor can migrate or be rebalanced remains open.
+The Actor scheduler uses capacity that is already available.
+
+Separate runtime or infrastructure mechanisms may increase or decrease that
+capacity.
+
+For example:
+
+- a Process scaler may create or remove Protos Processes;
+- a Node scaler or infrastructure manager may create or remove Protos Nodes;
+- Kubernetes, Nomad, or another external orchestrator may provision or remove
+  infrastructure workload units;
+- Cluster membership determines which active Nodes participate in distributed
+  placement.
+
+The scheduler may consider factors such as:
+
+- CPU and runnable-work pressure;
+- memory availability and pressure;
+- communication locality;
+- Actor affinity and anti-affinity;
+- resource requirements;
+- runtime health;
+- network cost;
+- observed communication patterns;
+- failure domains;
+- placement stability.
+
+Physical topology remains observable for diagnostics, administration, and
+optimization, but it is not normally part of application logic or Actor
+identity.
+
+Advanced hard constraints or soft placement hints may exist for exceptional
+cases such as:
+
+- requirement for a GPU or another special resource;
+- requirement for a non-transferable local resource;
+- requirement to remain inside a particular isolation boundary;
+- affinity or anti-affinity requirements;
+- high-availability placement requirements.
+
+Such constraints are secondary mechanisms rather than mandatory arguments to
+normal Actor creation.
+
+Scale-up, scale-down, draining, Actor migration, rebalancing, and the exact
+interaction with external infrastructure managers remain open.
+
+## 43. Spawn Backpressure
+
+**CLOSED**
+
+If the scheduler cannot admit a new Actor within the currently available
+capacity and placement policies, Actor creation applies backpressure rather
+than failing immediately or forcing unlimited oversubscription.
+
+Conceptually:
+
+    spawn(...)
+        -> SpawnOperation
+        -> PENDING
+        -> capacity becomes available
+        -> Actor initialization
+        -> READY
+
+A pending SpawnOperation may be waited on, cancelled, or subject to a timeout.
+
+Actor capacity does not imply one CPU or other fixed resource reservation per
+Actor. Many Actors may share the same Process.
+
+Scheduling and scaling remain separate concerns:
+
+- the scheduler places Actors using capacity that already exists;
+- a scaler may react to pending demand or resource pressure by provisioning
+  additional capacity;
+- spawn itself does not create Processes, Nodes, or Clusters.
+
+
+## 44. Hierarchical Runtime Domains
+
+**CLOSED**
+
+The Protos execution hierarchy is intrinsic to the runtime:
+
+    Actor
+        -> Process
+        -> Node
+        -> Cluster
+
+Each level coordinates multiple units of the level below when such
+coordination is required.
+
+A Process is a concrete address-space and runtime execution boundary.
+
+A Node coordinates one or more Protos Processes.
+
+A Cluster coordinates multiple Protos Nodes.
+
+External infrastructure managers such as Kubernetes may provision, place,
+restart, or scale the physical infrastructure in which Protos runtime domains
+execute, but they do not replace Protos runtime membership, ActorRef routing,
+health, or logical coordination.
+
+For example, a Kubernetes deployment may choose to map each Pod to a Protos
+Node containing a single Protos Process. Kubernetes may place two such Pods on
+the same physical machine or on different machines without changing their
+Protos topology.
+
+Physical co-location must therefore never be inferred solely from Protos
+logical topology.
+
+Optimizations that depend on physical locality, such as shared-memory
+transport, must only be used when the runtime can establish that the required
+locality or capability actually exists.
+
+The hierarchy is pay-for-what-you-use: levels that are unnecessary for the
+active execution domain need not incur distributed-runtime machinery.
+
+## 45. Dynamic Actor Capacity and Placement
+
+**CLOSED**
+
+Actor capacity is primarily dynamic rather than based on fixed declarative
+resource reservations.
+
+Normal Actors are not expected to declare Kubernetes-like CPU or memory
+requests.
+
+Placement occurs conceptually in two stages.
+
+First, hard feasibility filtering removes destinations where the Actor cannot
+be admitted. Examples may include:
+
+- unavailable or draining Process;
+- hard memory or resource limit;
+- incompatible runtime or code;
+- required special resource;
+- isolation or placement constraint.
+
+Second, the scheduler scores feasible destinations using dynamic runtime
+information such as:
+
+- CPU and runnable-work pressure;
+- memory pressure;
+- scheduler latency;
+- mailbox pressure;
+- communication locality;
+- affinity;
+- resource locality;
+- failure domains.
+
+Manual resource requirements and placement constraints may exist for cases
+where they are genuinely required, but are exceptional rather than the normal
+Actor programming model.
+
+The runtime may learn from observed Actor behaviour instead of requiring the
+programmer to predict resource consumption in advance.
+
+## 46. Adaptive Admission Control
+
+**CLOSED**
+
+The ability to technically fit another Actor and the desirability of admitting
+more work are distinct concepts.
+
+Soft resource pressure normally affects placement scoring and provides a
+signal for proactive scaling.
+
+When pressure becomes sufficiently severe, the runtime may temporarily stop
+admitting additional Actors, causing their SpawnOperations to remain pending
+and applying backpressure.
+
+Admission decisions are adaptive and multidimensional. They may consider
+runtime information such as:
+
+- runnable work;
+- CPU pressure;
+- memory pressure;
+- scheduler latency;
+- mailbox growth;
+- I/O suspension;
+- allocation pressure;
+- communication pressure.
+
+No fixed CPU, memory, or utilization threshold is part of the language
+semantics.
+
+For example, high CPU utilization alone does not necessarily mean that a
+Process is overloaded. A runtime with healthy scheduling latency and many
+Actors suspended on I/O may still be able to admit additional Actors.
+
+Scaling should not wait until admission is refused.
+
+Increasing resource pressure may proactively signal the scaler so that new
+capacity can be provisioned before SpawnOperations need to be backpressured.
+
+The runtime therefore separates:
+
+    placement pressure
+    scaling pressure
+    admission pressure
+
+while allowing all three to use common runtime observations.
+
+
+## 47. Multi-Objective Placement
+
+**CLOSED**
+
+Protos does not define a universal PACK or SPREAD placement strategy.
+
+Placement is multi-objective and balances several distinct goals.
+
+Performance and scalability may favor:
+
+- distributing runnable CPU work;
+- exploiting additional execution capacity;
+- reducing scheduler pressure;
+- preserving communication locality;
+- exploiting cache, memory, NUMA, or transport locality where known.
+
+Availability and resilience may favor:
+
+- separating failure domains;
+- anti-affinity between redundant components;
+- reducing failure blast radius;
+- preserving required redundancy.
+
+Efficiency may favor:
+
+- consolidation;
+- improved resource utilization;
+- leaving capacity that can be scaled down.
+
+Stability favors avoiding unnecessary placement changes.
+
+PACK and SPREAD are therefore consequences of workload characteristics and
+policy rather than fundamental Protos scheduling policies.
+
+Actors that communicate heavily may be placed together when locality is more
+valuable, while independent CPU-intensive Actors may be spread to exploit
+parallel execution.
+
+High-availability requirements may intentionally override the placement that
+would otherwise be optimal for performance.
+
+The scheduler should not continuously chase a theoretically optimal
+placement. Placement stability has value, and rebalancing should occur only
+when the expected benefit sufficiently exceeds its cost.
+
+Placement may use hard constraints and soft affinity or anti-affinity hints
+when application intent cannot be inferred safely.
+
+
+## 48. Failure Domains
+
+**OPEN**
+
+Proposed direction:
+
+Protos should model failure domains explicitly but generically.
+
+Process is intrinsically a failure domain because failure of a Process affects
+the Actors hosted by that Process.
+
+Additional physical or infrastructure failure domains may include concepts
+such as:
+
+- host;
+- rack;
+- availability zone;
+- site;
+- infrastructure-specific domains.
+
+Such domains may be discovered from the environment or supplied by
+configuration.
+
+Logical Protos topology must not imply physical failure independence.
+
+For example, two Protos Nodes may execute on the same physical host. Unless
+the runtime knows otherwise, placing redundant Actors on those Nodes cannot be
+claimed to provide host-failure tolerance.
+
+Unknown topology means unknown failure independence, not independent failure.
+
+The exact failure-domain model and its relationship with HA placement remain
+OPEN.
 
 ## Open Design Topics
 
 The following topics have been identified but are not yet closed:
 
+- Failure-domain model
+- Failure-domain discovery and configuration
+- HA placement requirements and policies
 - Exact `spawn` API and syntax
 - Actor bootstrap representation
+- Exact SpawnOperation API
+- Exact SpawnOperation states
+- SpawnOperation timeout and cancellation semantics
 - Exact current-behavior installation/replacement API
 - Exact SendOperation API
 - Exact SendOperation states
@@ -1166,6 +1454,14 @@ The following topics have been identified but are not yet closed:
 - Actor pools and groups
 - Routers and load balancing
 - Actor autoscaling
+- Process scaling
+- Node scaling
+- Scale-up policy
+- Scale-down policy
+- Proactive scaling signals
+- Draining Processes and Nodes
+- Interaction between Protos scaling and external infrastructure managers
+- External infrastructure adapters such as Kubernetes or Nomad
 - Actor graceful shutdown
 - Actor stop semantics
 - Actor garbage collection
@@ -1173,11 +1469,16 @@ The following topics have been identified but are not yet closed:
 - Fatal versus non-fatal handler errors
 - Which errors terminate an Actor
 - Node failure
+- Process failure handling
 - Network partitions
 - Split-brain behavior
-- Cluster membership
+- Cluster membership protocol
 - Cluster authentication
-- Placement algorithm
+- Placement scoring algorithm
+- Placement stability and hysteresis
+- Placement policy priorities
+- Actor affinity and anti-affinity API
+- Hard placement constraints
 - Actor rebalancing
 - Actor migration
 - Actor persistence
@@ -1186,7 +1487,10 @@ The following topics have been identified but are not yet closed:
 - ActorRef routing
 - ActorRef persistence
 - Service discovery implementation
+- Physical-locality discovery
 - Cross-process same-host optimization
+- Shared-memory transport eligibility and lifecycle
+- Transport selection and switching
 - Message serialization format
 - Serialization versioning
 - Schema evolution
@@ -1206,14 +1510,19 @@ The following topics have been identified but are not yet closed:
 - Select/race operations
 - CPU-bound Future monopolization
 - Resource limits and quotas
+- Runtime resource-pressure model
+- Actor resource-cost estimation and learning
 - ActorRef security and authorization
 - Remote authentication
 - Cluster configuration UX
 - Cluster lazy startup
+- Node lazy activation
+- Relationship between logical Protos topology and physical infrastructure topology
 - Module implementation sharing
 - Behavior requirements before READY
 - Runtime metrics architecture
 - Scheduler/advisor interaction
+- Scheduler/scaler interaction
 - Code identity for remote Actor bootstrap
 - Code availability and versioning across Nodes
 - Hot code update
