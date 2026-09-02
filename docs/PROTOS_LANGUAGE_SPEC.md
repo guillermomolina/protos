@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 69  
+Document revision: 70  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -43,7 +43,11 @@ false
 null
 ```
 
-Reserved-word recognition is case-sensitive. Reserved words cannot be used as ordinary identifiers where the grammar expects an identifier. Names from the standard prelude such as `Object`, `Future`, `Number`, `String`, `Map`, or `IdentityMap` are not reserved words.
+Reserved-word recognition is case-sensitive. Reserved words cannot be used as ordinary identifiers where the grammar expects an identifier.
+
+A reserved-word spelling is nevertheless a valid contextual member name in the structural position immediately following a member-access `.`. In that position it denotes an ordinary slot or message name and does not retain its expression-level intrinsic, literal, or special meaning: `obj.true` denotes the member named `"true"`, and `obj.true()` invokes the executable stored in that member. This applies to super message sends as well: `super.true()`, `super.this()`, and `super.super()` are valid super message sends whose message names are respectively `true`, `this`, and `super`. Reserved words remain invalid everywhere the grammar expects `identifier`, including parameter names, rest-parameter names, bare assignment targets, and bare slot-creation targets.
+
+Names from the standard prelude such as `Object`, `Future`, `Number`, `String`, `Map`, or `IdentityMap` are not reserved words.
 
 ## 1.2 Dynamic Typing
 
@@ -413,7 +417,7 @@ It means:
 
 > Continue lookup after the object where the currently executing method was found, while preserving the original receiver.
 
-Only a super message send is valid in the core language, for example `super.speak()` or `super.move(x, y)`. Expressions such as `x: super`, `foo(super)`, bare `super`, or method extraction such as `f: super.speak` are invalid.
+Only a super message send is valid in the core language, for example `super.speak()` or `super.move(x, y)`. The message name following `super.` is a contextual member name and may be a reserved-word spelling, so `super.true()`, `super.this()`, and `super.super()` are valid super message sends whose message names are respectively `true`, `this`, and `super`; this does not make `super` a first-class value. Expressions such as `x: super`, `foo(super)`, bare `super`, or method extraction such as `f: super.speak` are invalid.
 
 Conceptually, `super.message(args...)` is syntactic sugar for a context-aware send operation using `context`: the receiver remains `context.receiver`, while lookup starts at `parent(context.methodHome)`. `super` therefore does not need to exist as a runtime object.
 

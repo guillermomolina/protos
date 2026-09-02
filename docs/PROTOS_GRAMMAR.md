@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 69  
+Document revision: 70  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -69,6 +69,68 @@ null
 Reserved-word recognition happens after lexical identifier recognition. The lexer first recognizes a valid Unicode identifier according to the identifier rules above. If the identifier spelling exactly matches one of the reserved words, it is tokenized as that reserved word rather than as an ordinary identifier. Reserved-word matching is case-sensitive. For example, `this` is reserved but `This` is an ordinary identifier.
 
 Reserved words cannot be used as ordinary identifier names where the grammar expects an identifier.
+
+Reserved-word spellings are nevertheless valid structural member names in the contextual position immediately following a member-access `.`. The grammar category `member-name` is:
+
+```ebnf
+member-name =
+      identifier
+    | "this"
+    | "context"
+    | "args"
+    | "super"
+    | "true"
+    | "false"
+    | "null" ;
+```
+
+`member-name` is used only where the grammar structurally expects a name immediately after `.`, in `member-suffix`, `member-expression`, and `super-message-send` (see Member Access, Calls, Indexing, and Postfix Expressions and Super Message Send). In that position a reserved spelling denotes an ordinary slot or message name and does not retain its expression-level intrinsic, literal, or special meaning. Therefore these are valid structural member accesses:
+
+```text
+obj.name
+obj.this
+obj.context
+obj.args
+obj.super
+obj.true
+obj.false
+obj.null
+```
+
+and reserved spellings may be read, invoked, modified, or created through member operations like any other member name:
+
+```text
+obj.true()
+obj.null = value
+obj.super: value
+obj.a.this
+f: obj.true
+```
+
+The leading `super` of `super.foo()` continues to introduce the special super message send; the name following `super.` is a `member-name`, so reserved spellings are valid super message names as well. Thus `super.true()`, `super.this()`, and `super.super()` are syntactically valid super message sends whose message names are respectively `true`, `this`, and `super`. This does not make `super` a first-class value.
+
+Reserved words remain invalid wherever the grammar expects `identifier`: as parameter names, rest-parameter names, bare assignment targets, bare slot-creation targets, or any other non-member name position. These remain invalid:
+
+```text
+this: value
+context: value
+args: value
+super: value
+true: value
+false: value
+null: value
+
+(a, true) => { ... }
+(...super) => { ... }
+
+super
+foo(super)
+f: super.foo
+```
+
+Bare `super`, `x: super`, `foo(super)`, and method extraction such as `f: super.foo` remain invalid; only the member-name position following the `.` of a valid `super-message-send` is generalized.
+
+This revision does not introduce contextual lexing. The lexer continues to tokenize the seven reserved spellings as their dedicated reserved tokens rather than as ordinary identifier tokens; it does not need to inspect whether a token follows `.` or to reclassify reserved tokens. The parser accepts either an identifier token or one of the seven reserved tokens when parsing `member-name`.
 
 Names provided by the standard prelude, such as `Object`, `Future`, `Number`, `String`, `Map`, or `IdentityMap`, are not reserved words. Error object names are not reserved.
 
@@ -675,8 +737,10 @@ primary-expression =
 
 ```ebnf
 super-message-send =
-    "super", ".", identifier, argument-list;
+    "super", ".", member-name, argument-list;
 ```
+
+The name following `super.` is a `member-name` (see Identifiers), so reserved-word spellings are valid super message names: `super.true()`, `super.this()`, and `super.super()` are syntactically valid super message sends whose message names are `true`, `this`, and `super`, respectively. This does not make `super` a first-class value.
 
 `super` is not a value. Consequently bare `super`, passing `super` as an argument, assigning it to a slot, and extracting `super.member` without invoking it are syntax errors in the core grammar.
 
@@ -998,7 +1062,7 @@ postfix-operation =
     | index-suffix ;
 
 member-suffix =
-    ".", identifier ;
+    ".", member-name ;
 
 call-suffix =
     argument-list, [ trailing-closure ] ;
@@ -1009,8 +1073,10 @@ index-suffix =
 member-expression =
     primary-expression,
     { postfix-operation },
-    ".", identifier ;
+    ".", member-name ;
 ```
+
+The name following a member-access `.` is a `member-name`: an `identifier` or one of the seven reserved-word spellings, which in this structural position denote ordinary slot or message names (see Identifiers).
 
 Examples:
 
@@ -1871,7 +1937,7 @@ Core v0.1 defines no special documentation-comment syntax.
 
 ## 39. Compact EBNF
 
-The compact grammar below incorporates the syntax decisions made through revision 69. Semantic validation still applies after parsing. String literal lexical forms are defined normatively in the Literals section and referenced here rather than duplicated.
+The compact grammar below incorporates the syntax decisions made through revision 70. Semantic validation still applies after parsing. String literal lexical forms are defined normatively in the Literals section and referenced here rather than duplicated.
 
 ```ebnf
 program =
@@ -2001,7 +2067,7 @@ postfix-expression =
     { postfix-operation } ;
 
 postfix-operation =
-      ".", identifier
+      ".", member-name
     | call-suffix
     | "[", expression, "]" ;
 
@@ -2023,7 +2089,7 @@ intrinsic-reference =
     | "args" ;
 
 super-message-send =
-    "super", ".", identifier, argument-list ;
+    "super", ".", member-name, argument-list ;
 
 parenthesized-expression =
     "(", expression, ")" ;
@@ -2061,10 +2127,20 @@ parent-expression =
     | member-expression
     | parenthesized-expression ;
 
+member-name =
+      identifier
+    | "this"
+    | "context"
+    | "args"
+    | "super"
+    | "true"
+    | "false"
+    | "null" ;
+
 member-expression =
     primary-expression,
     { postfix-operation },
-    ".", identifier ;
+    ".", member-name ;
 
 closure-expression =
     parameter-list, "=>", closure-body ;
