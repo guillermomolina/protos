@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 72  
+Document revision: 73  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -2500,11 +2500,12 @@ A logical source newline is one `LF` (U+000A), one `CR` (U+000D), or one `CRLF` 
 **Multiline Indentation Normalization:**
 
 - The Core v0.1 multiline indentation normalization rule applies to triple-double-quoted String literals. Indentation is normalized as exact source characters: `SPACE` (U+0020) and `CHARACTER TABULATION` (U+0009, TAB) are distinct code points, they are never considered equivalent for indentation purposes, and Core v0.1 defines no semantic tab width. Normalization is never computed from visual columns or editor tab stops, and never from a minimum-indent rule, a common-visual-column rule, or the longest common whitespace prefix among the content lines.
-- The closing delimiter alone establishes the structural indentation prefix. When the closing `"""` terminates an indentation-only trailing line (the case excluded above), the structural indentation prefix is exactly the sequence of `SPACE` and `TAB` characters on that source line immediately preceding the closing delimiter; the prefix may be empty, which is the case when the closing delimiter begins its line. When content flows into the closing delimiter on its source line rather than ending at an indentation-only trailing line, no structural indentation prefix exists and no indentation is removed.
+- The closing delimiter alone establishes the structural indentation prefix. When the closing `"""` terminates an indentation-only trailing line (the case excluded above), the structural indentation prefix is exactly the sequence of `SPACE` and `TAB` characters on that source line immediately preceding the closing delimiter; the prefix may be empty, which is the case when the closing delimiter begins its line. When content flows into the closing delimiter on its source line rather than ending at an indentation-only trailing line, no structural indentation prefix exists and no indentation normalization is performed.
+- Indentation normalization applies only where a structural indentation prefix exists. Where no structural indentation prefix exists, no indentation or other whitespace is removed from any content line; this includes whitespace-only content lines, whose `SPACE` and `TAB` characters are ordinary String content and are preserved verbatim. Blank-line whitespace stripping is part of multiline indentation normalization and never applies unconditionally. No structural indentation prefix ⇒ no indentation normalization.
 - Where the closing delimiter establishes a structural indentation prefix, the remaining content is split into content lines at each retained logical source newline, and every non-blank content line must begin with exactly that prefix, compared as exact source characters. The prefix is removed exactly once from the beginning of each non-blank content line; the remainder of the line, including any further leading `SPACE` or `TAB` characters, is preserved.
 - A structural indentation prefix may contain both `SPACE` and `TAB` characters, and mixed `SPACE`/`TAB` indentation is legal when each content line begins with exactly the same prefix. A `TAB` never equals any number of `SPACE` characters regardless of how an editor displays it. For example, a closing delimiter preceded by `TAB` `SPACE` `SPACE` requires each non-blank content line to begin with exactly `TAB` `SPACE` `SPACE`; a line beginning with `SPACE` `SPACE` `SPACE` `SPACE` does not satisfy that prefix.
 - Where the closing delimiter establishes a structural indentation prefix, a non-blank content line that does not begin with the exact prefix — because it has fewer prefix characters, uses `SPACE` where the prefix requires `TAB`, uses `TAB` where the prefix requires `SPACE`, or otherwise differs from it — makes the triple-double-quoted String invalid. Consistent with the existing String-literal lexical-error model, this is a lexical error: the literal produces no String token and no String value, and no recovery behavior is defined.
-- A blank content line is a content line containing no characters other than `SPACE` and `TAB` (possibly none). Blank content lines are exempt from the prefix requirement and need not contain the complete structural indentation prefix. Any `SPACE` or `TAB` characters on an otherwise blank content line that arise from source formatting are removed as incidental indentation, so a source blank line contributes an empty logical line rather than whitespace caused solely by source indentation. No intentional whitespace is removed from a non-blank content line beyond the single structural prefix.
+- Where a structural indentation prefix exists, a blank content line — a content line containing no characters other than `SPACE` and `TAB` (possibly none) — is exempt from the prefix requirement and need not contain the complete structural indentation prefix. All `SPACE` and `TAB` characters on such a blank content line are removed as incidental indentation, so a source blank line contributes an empty logical line rather than whitespace caused solely by source indentation. No intentional whitespace is removed from a non-blank content line beyond the single structural prefix.
 - Indentation matching and stripping operate on the raw source characters at the beginning of each content line, before escape sequences are interpreted. An escape sequence that denotes a `TAB` or any other character is not a source `SPACE` or `TAB` and never satisfies the structural indentation prefix. The Core v0.1 escape rules themselves are unchanged by this rule.
 
 Example literals:
@@ -2542,6 +2543,45 @@ evaluates to:
 ```text
 hello
     world
+```
+
+
+Blank-line whitespace stripping occurs only where the closing `"""` establishes a structural indentation prefix. In the following literal the closing delimiter establishes a four-`SPACE` structural prefix, and the intermediate source line between `one` and `two` is whitespace-only and therefore a blank content line:
+
+```js
+"""
+    one
+    
+    two
+    """
+```
+
+The two non-blank content lines each lose the four-`SPACE` prefix exactly once. The whitespace-only intermediate line is exempt from prefix matching, and all of its `SPACE` characters are removed as incidental indentation, so it contributes an empty logical line. The resulting String is conceptually:
+
+```text
+one
+
+two
+```
+
+equivalently:
+
+```text
+"one\n\ntwo"
+```
+
+When content flows into the closing delimiter on its source line, no structural indentation prefix exists and no indentation normalization is performed. In the following literal the intermediate source line contains exactly seven `SPACE` characters and is a whitespace-only line; because no structural prefix exists it is preserved verbatim:
+
+```js
+"""one
+       
+two"""
+```
+
+The resulting String is conceptually:
+
+```text
+"one\n       \ntwo"
 ```
 
 
