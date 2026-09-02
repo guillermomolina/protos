@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 74  
+Document revision: 75  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -23,6 +23,11 @@ The grammar is written in EBNF:
 [ x ]     optional
 x | y     alternative
 "..."     literal token
+[ lookahead != "t" ]          alternative guard: an alternative carrying this guard may be
+                              entered only when the next parser token in the continuing token
+                              sequence is not the literal token "t". A guard selects nothing
+                              and contributes no token to the parse; it is not an optional
+                              element and never derives an empty alternative.
 ```
 
 ## 2. Identifiers
@@ -906,7 +911,7 @@ closure-parameters =
 
 closure-body =
       braced-closure-body
-    | expression ;
+    | [ lookahead != "{" ], expression ;
 
 braced-closure-body =
     "{", expression-sequence, "}" ;
@@ -929,6 +934,8 @@ layout =
     newline,
     { newline } ;
 ```
+
+The `[ lookahead != "{" ]` guard (see the EBNF notation in Scope) expresses the choice between the two body forms formally in the grammar: `braced-closure-body` begins with the literal `{`, and the single-expression alternative may be entered only when the next parser token in the continuing token sequence after `=>` is not `{`. Every braced body therefore begins with `{`, no expression body may begin with `{`, and a body whose first token is `{` has exactly one derivation — the braced form. An `expression` can begin with `{` only as an `object-expression` with no parent (its `object-body`), so the same rule is what excludes a bare object expression from beginning an expression body; an object-expression body is written with ordinary parenthesized grouping (see Composition with the expression grammar).
 
 The parenthesized `parameter-list` is required for a Closure with zero parameters, two or more parameters, a default parameter, or a rest parameter. When a Closure has exactly one parameter and that parameter is neither a default parameter nor a rest parameter, the parentheses may be omitted and the parameter written as a bare `identifier` before `=>`. The bare form is exactly equivalent to a `parameter-list` containing that one parameter:
 
@@ -1057,7 +1064,7 @@ x => {
 }
 ```
 
-The expression body is a full ordinary `expression`, not an artificially restricted subset, so these are valid where semantically valid:
+The expression body is a full ordinary `expression`, not an artificially restricted subset of expression forms: the single-expression alternative restricts nothing about the body's expression except its first token, which may not be `{` — the spelling class that the braced form claims (see Composition with the expression grammar). These are valid where semantically valid:
 
 ```js
 x => x + 1
@@ -1091,7 +1098,7 @@ Invoking an expression-bodied Closure requires explicit grouping where the postf
 (x => x * 2)(10)
 ```
 
-The `{` immediately after `=>` always begins the Closure's braced body; it is never reinterpreted as an object expression merely because expression bodies now exist. The form is chosen by the token that begins the closure body in the continuing token stream after `=>`: a `{` there begins the braced form, and any other token begins the single-expression form. An object-expression body therefore requires the ordinary parenthesized grouping that is already valid under the parenthesized-expression grammar:
+The `{` immediately after `=>` always begins the Closure's braced body; it is never reinterpreted as an object expression merely because expression bodies now exist. The `closure-body` production expresses this decision formally (see the grammar above): `braced-closure-body` requires the literal `{` as its first token, and the single-expression alternative carries the `[ lookahead != "{" ]` guard, so an expression body can never begin with `{`. The two alternatives are therefore disjoint on the token that begins the closure body in the continuing token stream after `=>`: a `{` there is derivable only as the braced form, and any other token begins the single-expression form. An `expression` begins with `{` only as an `object-expression` with no parent, so the same disjointness is what keeps a bare object expression out of expression-body position. An object-expression body therefore requires the ordinary parenthesized grouping that is already valid under the parenthesized-expression grammar:
 
 ```js
 x => ({
@@ -1099,7 +1106,14 @@ x => ({
 })
 ```
 
-`x => { value: x }` is a Closure whose braced body is the ordinary slot-creation expression `value: x`; it is not a Closure that returns an object expression. No parser heuristic, no speculative parse, and no semantic/type-based disambiguation decides these cases; each is decided structurally by the grammar and by ordinary syntactic lookahead.
+The boundary between the two body forms is:
+
+```js
+x => { value: x }        // braced body: the body is the slot-creation expression value: x
+x => ({ value: x })      // expression body: the parenthesized expression yields an object
+```
+
+`x => { value: x }` is a Closure whose braced body is the ordinary slot-creation expression `value: x`; it is not a Closure that returns an object expression. `x => ({ value: x })` is an expression-bodied Closure whose body is the parenthesized expression, which evaluates to the object `{ value: x }`. No parser heuristic, no speculative parse, and no semantic/type-based disambiguation decides these cases; the grammar admits exactly one derivation for each spelling.
 
 ### 16.3 Right association of nested expression-bodied Closures
 
@@ -2179,7 +2193,7 @@ Core v0.1 defines no special documentation-comment syntax.
 
 ## 39. Compact EBNF
 
-The compact grammar below incorporates the syntax decisions made through revision 74. Semantic validation still applies after parsing. String literal lexical forms are defined normatively in the Literals section and referenced here rather than duplicated.
+The compact grammar below incorporates the syntax decisions made through revision 75. Semantic validation still applies after parsing. String literal lexical forms are defined normatively in the Literals section and referenced here rather than duplicated.
 
 ```ebnf
 program =
@@ -2393,7 +2407,7 @@ closure-parameters =
 
 closure-body =
       braced-closure-body
-    | expression ;
+    | [ lookahead != "{" ], expression ;
 
 braced-closure-body =
     "{", expression-sequence, "}" ;
@@ -2529,7 +2543,7 @@ A `custom-binary-operator` is a `symbolic-operator-spelling` that is not itself 
 
 As in the normative grammar, `trailing-closure` may follow a completed `argument-list` in `call-suffix` only when no logical `NEWLINE` token intervenes between them; the restriction is stated normatively in Trailing Closures and needs no additional production here.
 
-In `closure-parameters`, a bare `identifier` is distinguished from an ordinary identifier expression by the token immediately following it: an `identifier` whose next parser token is `=>` introduces a `closure-expression`, and an `identifier` whose next token is anything else is an ordinary identifier expression. This is ordinary syntactic lookahead over the token stream, never a semantic/type-based decision. In `closure-body`, a `{` token in the body's first position begins the braced form; any other token begins the single-expression form, so an object-expression body is written parenthesized as `x => ({ ... })`. Nested single-expression bodies associate to the right (`x => y => x + y` is `x => (y => (x + y))`). All such forms are governed normatively by the Closures section.
+In `closure-parameters`, a bare `identifier` is distinguished from an ordinary identifier expression by the token immediately following it: an `identifier` whose next parser token is `=>` introduces a `closure-expression`, and an `identifier` whose next token is anything else is an ordinary identifier expression. This is ordinary syntactic lookahead over the token stream, never a semantic/type-based decision. In `closure-body`, the `[ lookahead != "{" ]` guard carried by the single-expression alternative (the notation defined in Scope) expresses formally that a `{` token in the body's first position begins the braced form and any other token begins the single-expression form: because `braced-closure-body` begins with the literal `{`, the two alternatives are disjoint on the body's first token and each spelling has exactly one derivation, so an object-expression body is written parenthesized as `x => ({ ... })`. Nested single-expression bodies associate to the right (`x => y => x + y` is `x => (y => (x + y))`). All such forms are governed normatively by the Closures section.
 
 Indexed assignment is recognized because an `assignment-target` may end in `[ expression ]`; it lowers to `atPut` rather than a slot `Assign`. A `slot-creation-target` may never end in an index suffix, so an indexed `:` has no parse.
 
