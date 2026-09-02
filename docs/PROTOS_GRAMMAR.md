@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 73  
+Document revision: 74  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -422,6 +422,8 @@ x =
 ```
 
 is equivalent to `x = value`.
+
+A Closure's `=>` likewise requires a closure body after it, so a logical newline after `=>` is continuation: the body may begin on a later logical source line (see Closures). The same continuation rule never lets a later line's `=>` attach to a preceding complete expression: an `identifier` before a separating logical `NEWLINE` is a complete expression, so the `=>` on the following line cannot begin an expression.
 
 An open syntactic delimiter continues until the corresponding construct is complete. Ordinary multiline calls are therefore valid:
 
@@ -892,13 +894,21 @@ The grammar determines which source forms can denote a parent expression. Whethe
 
 ## 16. Closures
 
-A closure uses a closure body. A closure body contains ordinary expressions; object-composition items are not valid merely because braces are used.
+A closure uses a closure body. A closure body contains ordinary expressions; object-composition items are not valid merely because braces are used. A closure body is written either as a braced sequence of expressions or as exactly one ordinary expression (Body forms below).
 
 ```ebnf
 closure-expression =
-    parameter-list, "=>", closure-body ;
+    closure-parameters, "=>", closure-body ;
+
+closure-parameters =
+      parameter-list
+    | identifier ;
 
 closure-body =
+      braced-closure-body
+    | expression ;
+
+braced-closure-body =
     "{", expression-sequence, "}" ;
 
 parameter-list =
@@ -919,6 +929,39 @@ layout =
     newline,
     { newline } ;
 ```
+
+The parenthesized `parameter-list` is required for a Closure with zero parameters, two or more parameters, a default parameter, or a rest parameter. When a Closure has exactly one parameter and that parameter is neither a default parameter nor a rest parameter, the parentheses may be omitted and the parameter written as a bare `identifier` before `=>`. The bare form is exactly equivalent to a `parameter-list` containing that one parameter:
+
+```text
+x => expression    ==  (x) => expression
+x => { body }      ==  (x) => { body }
+```
+
+These are valid:
+
+```js
+x => x * 2
+(x) => x * 2
+() => value
+(a, b) => a + b
+(x = 10) => x
+(...items) => items
+(first, ...rest) => rest
+```
+
+and these are invalid:
+
+```js
+=> value
+
+a, b => a + b
+
+x = 10 => x
+
+...items => items
+```
+
+Because a bare parameter is an `identifier`, it must satisfy the ordinary identifier rules; a reserved word is not an `identifier` and remains invalid as a parameter name (`true => value` is not a Closure parameter form). A parser distinguishes a bare-parameter Closure from an ordinary identifier expression purely syntactically: when the parser token immediately following an `identifier` is `=>`, the identifier is the parameter of a `closure-expression`; otherwise it is an ordinary identifier expression. This is ordinary one-token syntactic lookahead over the token stream; it involves no semantic, type-based, or runtime-value interpretation, and it never inspects tokens across a separating logical `NEWLINE` (see Newlines below).
 
 Parameters are comma-separated: exactly one comma is required between each two consecutive parameters. A comma is strictly a separator between two list elements; it is not a terminator and does not represent an empty or omitted element. A comma must have a parameter on both sides within the same list, so a trailing comma before the closing `)` is a syntax error: `(a,)` and `(a, b,)` are invalid. Default parameters and rest parameters use the same separator rule.
 
@@ -980,6 +1023,184 @@ Omitting the comma between two parameters is a syntax error, even when the param
 ```
 
 A rest parameter, when present, is final. Parameter names within one parameter list must be unique. Duplicate names, including collisions with the rest parameter name, are rejected during parsing or static validation.
+
+### 16.1 Body forms and exact equivalence
+
+A Closure body is written either as a braced `{ expression-sequence }` — the existing form — or as exactly one ordinary `expression`:
+
+```js
+(x) => x * 2
+```
+
+The single-expression form is an exact mandatory desugaring of a braced Closure whose body is a `Sequence` containing exactly that one expression:
+
+```text
+(x) => expression     ==  (x) => { expression }
+x => expression       ==  x => { expression }
+```
+
+The equivalence holds for every parameter form. It is exact with respect to all Closure semantics: lexical capture by reference, `this`, `context`, `args`, `super`, method binding and `methodHome`, captured-receiver behavior, return homes and non-local return `^`, evaluation behavior, Future/async behavior, and error propagation. Expression-bodied and braced Closures are the same kind of Closure; the desugaring introduces no new callable category, no new runtime concept, and no difference in invocation semantics. Protos continues to have exactly one executable language value kind: Closure.
+
+An expression body is exactly one ordinary `expression`, never an `expression-sequence`. The body therefore ends exactly where that `expression` ends under the Expression Separators and Whitespace and Newlines rules: a `;` after the body expression is the inline expression separator, a separating logical `NEWLINE` after a complete body expression ends the Closure, and a closing `)`, `]`, or `}` or a list comma bounds the body when the Closure appears in a delimited position. Thus `x => print(x); foo()` is a Closure whose body is `print(x)`, followed by the separate expression `foo()` after the `;`; it is not a two-expression Closure body. Likewise:
+
+```js
+x => print(x)
+foo()
+```
+
+does not absorb `foo()` into the Closure body: the body `print(x)` is complete before the separating logical `NEWLINE`, so the Closure ends there and `foo()` is a later expression. Multiple expressions still require a braced body:
+
+```js
+x => {
+    print(x)
+    foo()
+}
+```
+
+The expression body is a full ordinary `expression`, not an artificially restricted subset, so these are valid where semantically valid:
+
+```js
+x => x + 1
+
+x => foo(x)
+
+x => this.value = x
+
+x => ^x
+
+x => y => x + y
+```
+
+Assignment, slot creation, non-local return, nested Closures, and other ordinary expression forms are not prohibited merely because the Closure uses an expression body.
+
+The body expression is parsed maximally: every token after `=>` that can continue an ordinary `expression` belongs to the body rather than to a surrounding expression. `double: x => x * 2` therefore binds the whole `x * 2` as the body and is never read as `(x => x) * 2`; conversely `x => x * 2(10)` binds the call `2(10)` inside the body, which is why invoking the Closure itself needs the grouping shown in Composition with the expression grammar.
+
+### 16.2 Composition with the expression grammar
+
+The shorthand composes with the rest of the expression grammar by ordinary precedence and ordinary expression separation. Creating a Closure never invokes it:
+
+```js
+double: x => x * 2          // double : (x => x * 2)
+f = x => x + 1              // assigns the Closure object to f
+foo(x => x * 2)             // passes the Closure object as an argument
+```
+
+Invoking an expression-bodied Closure requires explicit grouping where the postfix grammar would otherwise attach the call inside the body. `x => x * 2(10)` parses `2(10)` as a call inside the body, so a call of the Closure itself is written with grouping under the parenthesized-expression grammar:
+
+```js
+(x => x * 2)(10)
+```
+
+The `{` immediately after `=>` always begins the Closure's braced body; it is never reinterpreted as an object expression merely because expression bodies now exist. The form is chosen by the token that begins the closure body in the continuing token stream after `=>`: a `{` there begins the braced form, and any other token begins the single-expression form. An object-expression body therefore requires the ordinary parenthesized grouping that is already valid under the parenthesized-expression grammar:
+
+```js
+x => ({
+    value: x
+})
+```
+
+`x => { value: x }` is a Closure whose braced body is the ordinary slot-creation expression `value: x`; it is not a Closure that returns an object expression. No parser heuristic, no speculative parse, and no semantic/type-based disambiguation decides these cases; each is decided structurally by the grammar and by ordinary syntactic lookahead.
+
+### 16.3 Right association of nested expression-bodied Closures
+
+Nested expression-bodied Closures associate to the right:
+
+```js
+x => y => x + y    ==    x => (y => (x + y))
+```
+
+so the example above is exactly equivalent to:
+
+```js
+(x) => {
+    (y) => {
+        x + y
+    }
+}
+```
+
+Right association follows from the grammar: the body of the outer Closure is an `expression`, which may itself be a `closure-expression`.
+
+### 16.4 Newlines around Closure syntax
+
+Newlines around Closure syntax follow the ordinary Whitespace and Newlines and Expression Separators rules; no Closure-specific continuation, no ASI-like mechanism, and no leading-token continuation exception is introduced.
+
+**Bare parameter adjacency.** The bare parameter requires `=>` to be the next parser token after the `identifier` in the same continuing token sequence. An `identifier` followed by a separating logical `NEWLINE` is a completed expression, and the parser does not look across a separating `NEWLINE` to decide that the identifier opened a Closure; the `=>` on the following line cannot begin an expression:
+
+```js
+x
+=> x + 1
+```
+
+is a syntax error. The first line is the completed expression `x`, the logical `NEWLINE` after it is a separator, and `=>` is not a valid expression start.
+
+**Newline after `=>`.** A logical `NEWLINE` immediately after `=>` is continuation under the ordinary incomplete-construct rule, because `=>` requires a closure body. The body may therefore begin on the next logical source line:
+
+```js
+x =>
+    x + 1
+```
+
+is a Closure whose body is `x + 1`. No Closure-specific exception is needed; this is the same incomplete-construct continuation that already applies after `:` and `=`. The rule is independent of indentation and applies to both body forms.
+
+**Member-chain continuation.** Because an expression body is undelimited and is parsed as a maximal `expression`, the ordinary leading-dot continuation rule keeps a member chain that begins on the following logical source line inside the body. `x => x` followed by a newline and then `.foo()` is a Closure whose body is `x.foo()`, not a member access on the Closure object. Attaching a member or other postfix operation to the Closure expression itself requires a braced body or grouping, for example `(x => x).foo()`.
+
+### 16.5 Examples
+
+A Closure stored in an object slot is an ordinary slot whose value is a Closure; it is not a syntactically separate "method declaration". These are valid:
+
+```js
+identity: x => x
+
+double: x => x * 2
+
+getter: () => value
+
+sum: (a, b) => a + b
+
+setter: x => this.value = x
+
+makeAdder: x => y => x + y
+
+people
+    .filter(person => person.age >= 18)
+    .map(person => person.name)
+    .each(name => print(name))
+
+greet: other => {
+    print("Hello " + other.name)
+    print("I'm " + name)
+}
+
+items.each(item => print(item))
+
+dog: animal {
+    name: "Rex"
+    speak: () => print(name)
+    greet: other => print(other.name)
+}
+
+applyLater(x => x * 2)
+```
+
+An anonymous Closure passed as an argument is passed as a Closure object and is not executed merely by being created: `applyLater(x => x * 2)` passes the Closure to `applyLater`, and only an explicit call invokes it.
+
+These are invalid:
+
+```js
+=> x
+
+a, b => a + b
+
+x = 1 => x
+
+...xs => xs
+
+x
+=> x + 1
+```
+
+An object return in an expression-bodied Closure must use the parenthesized form `x => ({ ... })` described above; the braced `x => { ... }` is always a braced Closure body, never an object return.
 
 ## 17. Calls and Arguments
 
@@ -1119,17 +1340,17 @@ A trailing closure is permitted only as part of a call suffix, immediately after
 
 ```ebnf
 trailing-closure =
-    closure-body ;
+    braced-closure-body ;
 ```
 
-This production preserves the call-suffix form:
+A trailing closure therefore always uses a braced closure body; the single-expression body form of an ordinary Closure is never available as a trailing closure. This production preserves the call-suffix form:
 
 ```ebnf
 call-suffix =
     argument-list, [ trailing-closure ] ;
 ```
 
-The `trailing-closure` may be present only when no logical `NEWLINE` token separates the completed `argument-list` from the `closure-body`: the next parser token after a completed call suffix must be the `{` of the closure body. Horizontal whitespace and comments that produce no `NEWLINE` tokens remain ordinary lexical separation and need no grammar production here.
+The `trailing-closure` may be present only when no logical `NEWLINE` token separates the completed `argument-list` from the trailing closure's braced body: the next parser token after a completed call suffix must be the `{` of the braced body. Horizontal whitespace and comments that produce no `NEWLINE` tokens remain ordinary lexical separation and need no grammar production here.
 
 A trailing closure never has its own parameter list. The parentheses of the call's `argument-list` always contain call arguments; they are never a parameter list for the trailing closure. Core v0.1 provides no parameterized trailing-closure syntax: a form such as:
 
@@ -1178,14 +1399,14 @@ collection.reduce(initial, (acc, item) => {
 
 The exact position of the closure among a particular API's arguments is defined by that API. The trailing-closure sugar only appends a parameterless closure as the final argument.
 
-A `parameter-list` exists only where ordinary closure syntax requires it:
+A `parameter-list` exists only where ordinary closure syntax requires it, before `=>`:
 
 ```ebnf
 closure-expression =
-    parameter-list, "=>", closure-body ;
+    closure-parameters, "=>", closure-body ;
 ```
 
-The `=>` explicitly distinguishes closure parameters from a parenthesized expression. Therefore `(x)` is always a parenthesized expression, `(x) => { body }` is always an ordinary closure expression, and there is no third interpretation of `(x)` as the parameter declaration of a trailing closure. No parameter list is inferred from a parenthesized expression, and no semantic/type-based interpretation decides whether parentheses contain closure parameters. Because parameterized trailing closures no longer exist, the grammar requires no parser lookahead and no speculative parsing to distinguish `(x)` from a trailing-closure parameter list: issue B6 is resolved structurally.
+The `=>` explicitly distinguishes closure parameters from a parenthesized expression. Therefore `(x)` is always a parenthesized expression, `(x) => { body }` is always an ordinary closure expression, and there is no third interpretation of `(x)` as the parameter declaration of a trailing closure. No parameter list is inferred from a parenthesized expression, and no semantic/type-based interpretation decides whether parentheses contain closure parameters. Because parameterized trailing closures no longer exist, the grammar requires no parser lookahead and no speculative parsing to distinguish `(x)` from a trailing-closure parameter list: issue B6 is resolved structurally. The single-parameter shorthand introduced in Closures changes nothing here: it is an ordinary explicit closure in ordinary call-argument position (`items.each(item => print(item))`), never a trailing closure, and its one-token `identifier`/`=>` lookahead concerns ordinary closure expressions only.
 
 Under the expression-separator rules, the removal of parameterized trailing closures does not make a form such as:
 
@@ -1601,15 +1822,17 @@ is an object expression.
 
 It is not a closure.
 
-A closure requires:
+A closure requires parameters before `=>` and a body after it:
 
 ```js
 () => {
     ...
 }
+
+x => x * 2
 ```
 
-Therefore:
+The parameter parentheses may be omitted only for exactly one simple parameter, and the body may be a braced sequence or a single expression (see Closures). Therefore:
 
 ```js
 x: {
@@ -1956,7 +2179,7 @@ Core v0.1 defines no special documentation-comment syntax.
 
 ## 39. Compact EBNF
 
-The compact grammar below incorporates the syntax decisions made through revision 71. Semantic validation still applies after parsing. String literal lexical forms are defined normatively in the Literals section and referenced here rather than duplicated.
+The compact grammar below incorporates the syntax decisions made through revision 74. Semantic validation still applies after parsing. String literal lexical forms are defined normatively in the Literals section and referenced here rather than duplicated.
 
 ```ebnf
 program =
@@ -2162,9 +2385,17 @@ member-expression =
     ".", member-name ;
 
 closure-expression =
-    parameter-list, "=>", closure-body ;
+    closure-parameters, "=>", closure-body ;
+
+closure-parameters =
+      parameter-list
+    | identifier ;
 
 closure-body =
+      braced-closure-body
+    | expression ;
+
+braced-closure-body =
     "{", expression-sequence, "}" ;
 
 parameter-list =
@@ -2196,7 +2427,7 @@ layout =
     { newline } ;
 
 trailing-closure =
-    closure-body ;
+    braced-closure-body ;
 
 literal =
       number-literal
@@ -2297,6 +2528,8 @@ A `custom-binary-operator` is a `symbolic-operator-spelling` that is not itself 
 `layout` denotes one or more consecutive logical `NEWLINE` tokens consumed as continuation inside a necessarily-incomplete delimited construct (see Whitespace and Newlines). It is formatting, not an element separator: commas are the only separators between list elements, and trailing commas are not permitted.
 
 As in the normative grammar, `trailing-closure` may follow a completed `argument-list` in `call-suffix` only when no logical `NEWLINE` token intervenes between them; the restriction is stated normatively in Trailing Closures and needs no additional production here.
+
+In `closure-parameters`, a bare `identifier` is distinguished from an ordinary identifier expression by the token immediately following it: an `identifier` whose next parser token is `=>` introduces a `closure-expression`, and an `identifier` whose next token is anything else is an ordinary identifier expression. This is ordinary syntactic lookahead over the token stream, never a semantic/type-based decision. In `closure-body`, a `{` token in the body's first position begins the braced form; any other token begins the single-expression form, so an object-expression body is written parenthesized as `x => ({ ... })`. Nested single-expression bodies associate to the right (`x => y => x + y` is `x => (y => (x + y))`). All such forms are governed normatively by the Closures section.
 
 Indexed assignment is recognized because an `assignment-target` may end in `[ expression ]`; it lowers to `atPut` rather than a slot `Assign`. A `slot-creation-target` may never end in an index suffix, so an indexed `:` has no parse.
 

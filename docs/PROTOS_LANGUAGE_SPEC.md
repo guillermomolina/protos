@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 76  
+Document revision: 77  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -546,21 +546,26 @@ evaluates `getObject()` first, then `makeValue()`, then performs the assignment.
 
 ## 9. Closures
 
-A closure is written as:
+A closure is written with parameters before `=>` and a body after it:
 
 ```js
 () => {
     ...
 }
-```
 
-or:
-
-```js
 (a, b) => {
     ...
 }
 ```
+
+Two purely syntactic conveniences extend these spellings without changing what a Closure is.
+
+- **Expression bodies.** The body may be exactly one ordinary expression instead of a braced sequence: `(x) => x * 2` is exactly equivalent to `(x) => { x * 2 }`. An expression body is exactly one `expression`, not an `expression-sequence`: `x => print(x); foo()` is a Closure whose body is `print(x)` followed by the separate expression `foo()`, and multiple expressions still require a braced body. The body ends where the ordinary expression grammar ends it — a separating logical `NEWLINE` after a complete body expression or an inline `;` ends the Closure; no ASI-like or Closure-specific continuation rule is introduced (see the grammar's Closures section).
+- **Single-parameter shorthand.** Parentheses may be omitted when the Closure has exactly one parameter that is neither a default nor a rest parameter: `x => x * 2` is exactly equivalent to `(x) => x * 2`. Parentheses remain required for zero parameters, two or more parameters, a default parameter, and a rest parameter: `() => value`, `(a, b) => a + b`, `(x = 10) => x`, `(...items) => items`, and `(first, ...rest) => rest`. Because the shorthand parameter is an ordinary `identifier`, reserved words remain invalid as parameter names.
+
+All of these spellings — `(x) => { ... }`, `x => { ... }`, `(x) => expression`, and `x => expression` — create the same kind of Closure and obey precisely the same invocation semantics. There is no JavaScript-style split between a `function` and an arrow callable: Protos has one Closure semantics. Expression-bodied and braced forms behave identically with respect to lexical capture by reference, `this`, `context`, `args`, `super`, method binding, return homes, non-local return `^`, evaluation order, Future/async behavior, and error propagation. Creating a Closure never invokes it: `double: x => x * 2` stores the Closure object in slot `double`, `f = x => x + 1` assigns it to `f`, and `applyLater(x => x * 2)` passes it as an argument; only an explicit call such as `(x => x * 2)(10)` invokes it. Nested shorthand Closures associate to the right: `x => y => x + y` is `x => (y => (x + y))`.
+
+The `{` immediately after `=>` always begins the Closure's braced body, so a Closure whose body is an object expression is written with parenthesized grouping, `x => ({ ... })`. Trailing-closure syntax is unchanged and remains parameterless, and no new keyword or new callable category is introduced.
 
 Closures capture their lexical contexts **by reference**, not by value.
 
@@ -673,6 +678,8 @@ square: (x) => {
     x * x
 }
 ```
+
+In an expression-bodied closure, the single body expression is the final expression and supplies that value, exactly as in the equivalent braced form: `square: (x) => x * x`.
 
 Early return is expressed using:
 
@@ -866,7 +873,7 @@ items.each(
 
 The `item` inside the call parentheses is an ordinary explicit call argument. It is not a parameter declaration for the trailing closure.
 
-A parameter list exists only where ordinary closure syntax requires it, before `=>`. `(x)` is always an ordinary parenthesized expression, and `(x) => { body }` is always an ordinary closure expression; there is no third interpretation of `(x)` as the parameter declaration of a trailing closure. This resolves issue B6 structurally: the parser needs no special lookahead to distinguish `(x)` from a trailing-closure parameter list, no parameter list is inferred from a parenthesized expression, and no semantic/type-based interpretation decides whether parentheses contain closure parameters.
+A parameter list exists only where ordinary closure syntax requires it, before `=>`. `(x)` is always an ordinary parenthesized expression, and `(x) => { body }` is always an ordinary closure expression; there is no third interpretation of `(x)` as the parameter declaration of a trailing closure. This resolves issue B6 structurally: the parser needs no special lookahead to distinguish `(x)` from a trailing-closure parameter list, no parameter list is inferred from a parenthesized expression, and no semantic/type-based interpretation decides whether parentheses contain closure parameters. When a Closure has exactly one simple parameter, its parentheses may be omitted (see Closures); the result, such as `items.each(item => print(item))`, is an ordinary explicit Closure in ordinary call-argument position and never a trailing closure.
 
 A trailing closure introduces no new runtime value kind: it is syntactic sugar for an ordinary Closure appended as the final call argument. Trailing-closure syntax does not alter closure semantics.
 
