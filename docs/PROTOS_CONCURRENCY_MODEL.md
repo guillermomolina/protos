@@ -1,6 +1,6 @@
 # Protos Concurrency Model v0.1
 
-Language version: 0.1 Document revision: 05 Status: Draft Last updated:
+Language version: 0.1 Document revision: 06 Status: Draft Last updated:
 2026-09-02
 
 # Protos Multithreading Design Ledger v1
@@ -862,6 +862,12 @@ A trivial program may conceptually consist only of:
 The RootActor owns the initial program state, including ordinary
 objects, module state, configuration, and Futures.
 
+The RootActor is an ordinary Protos Actor, so its initial program is not
+outside the module model merely because it started the Process. When the
+initial program corresponds to an importable canonical module, it is
+handled like the initial module of any other Actor and follows the same
+Actor-local module-cache identity rules.
+
 Within the RootActor, ordinary state access uses normal Protos semantics
 and does not incur Actor message-passing overhead.
 
@@ -908,9 +914,10 @@ Principle:
 
 ## 34. Actor Module State
 
-**CLOSED**
+**CLOSED --- REVISED**
 
-Each Actor has its own logical module registry and module contexts.
+Each Actor owns its module state: an Actor-local module cache and the
+module contexts (module instances) belonging to that Actor.
 
 Actors do not inherit mutable module contexts from their creator.
 
@@ -922,8 +929,25 @@ as compiled code, immutable metadata, frozen core objects, or shared
 prelude implementation, provided that the sharing is not observable as
 shared mutable Protos state.
 
-A module singleton is therefore logically per Actor unless a future
-explicit distributed abstraction says otherwise.
+Per canonical module identity, an Actor has at most one active cached
+module instance at a time; the Actor-local module cache is authoritative
+for the currently active module instance. Cache membership and ordinary
+object reachability are distinct. This is not a lifetime-wide "module
+singleton" guarantee: an Actor is not limited to a single historical
+object per canonical module identity. A module instance whose
+initialization failed and whose cache entry was removed may remain
+reachable through ordinary escaped references while a later fresh
+instance is the Actor's active cached module instance for the same
+canonical identity. Both objects belong to the same Actor, so their
+coexistence does not violate Actor isolation.
+
+The full module lifecycle rules (module instance equals its
+`moduleContext`, Actor-local cache-before-execute, cache states,
+cyclic-import and failure handling, and the initial module of an Actor)
+are defined in the canonical module-lifecycle sections of
+`PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md`. This
+section states only the Actor isolation and ownership consequences that
+the concurrency model depends on.
 
 ## 35. Scope Roots
 

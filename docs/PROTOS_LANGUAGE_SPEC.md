@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 74  
+Document revision: 75  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -1760,7 +1760,7 @@ Top-level bindings are slots of a module execution context.
 There is no special global-variable category.
 
 Modules do not implicitly share mutable global state.
-
+```
 
 ## Conditional Protocol and Truthiness
 
@@ -1929,6 +1929,16 @@ READY
 
 A module that is absent from the cache is not loaded in that Actor. A transient failure state may exist internally while a failed initialization is being handled, but a failed initialization must not remain in the cache as a successfully importable module. These states are semantic concepts and are not exposed through a public state-inspection or reflection API.
 
+The same cache-before-execute invariant applies to an Actor's initial module when that module has an importable canonical identity. Before its body executes, the initial module is assigned its canonical `ModuleKey` and inserted into the Actor-local module cache in state `INITIALIZING`; it is not a mutable module instance that exists outside the cache. See The Initial Module of an Actor.
+
+The Actor-local module cache is authoritative for the currently active module instance. Within one Actor, the cache maps canonical identity to the current active module record:
+
+```text
+ModuleKey -> ModuleRecord
+```
+
+with at most one record for a given `ModuleKey` at a time. A cache entry whose state is `INITIALIZING` or `READY` represents the active module instance for that key. Removing the entry after a failed initialization ends that instance's status as the active cached module instance. Object reachability and cache membership are distinct concepts: an object is not revoked or invalidated by the removal of its cache entry, and cache membership does not limit whether an otherwise reachable object can remain observable.
+
 ### Cyclic Imports
 
 Cyclic module dependencies are valid. For example:
@@ -2039,13 +2049,95 @@ import foo
     ...
 ```
 
+If a reference to a failed partial instance escaped during initialization, that object remains an ordinary, reachable Protos object after its cache entry is removed. It is the same object it was before failure: it is not revoked, not rolled back, and does not enter a hidden invalid-object state. It is only no longer the Actor's active cached instance for that canonical `ModuleKey`, and its continued existence does not prevent a later import from creating a fresh instance.
+
+The failed instance and a later successful instance may therefore both remain reachable in the same Actor:
+
+```text
+foo#1
+    state INITIALIZING
+    a reference escapes during partial initialization
+    initialization fails
+    cache entry removed
+
+later:
+
+foo#2
+    created by a new import
+    becomes READY
+```
+
+with:
+
+```text
+foo#1 !== foo#2
+```
+
+Only `foo#2` is the current active cached module instance for that `ModuleKey`. This coexistence does not violate Actor isolation, because both objects belong to the same Actor. No tombstone, revocation, identity mutation, or hidden invalid-object state is introduced for a failed instance.
+
 ### Actor Lifetime and Module Lifetime
 
 An Actor's module cache and its Actor-local module instances belong to that Actor's isolated runtime state. When the Actor dies, its module instances die with it unless some implementation artifact is independently retained for non-observable purposes. Another Actor does not inherit or take ownership of those mutable module instances. Creating a new Actor does not inherit the creator's module cache or live module contexts.
 
 ### The Initial Module of an Actor
 
-The initial module executed by an Actor follows the same conceptual module-context model: it executes in a `moduleContext` that belongs to that Actor, and its module state is Actor-local rather than process-global. The initial module is executed directly by the Actor that owns it rather than obtained through `import()`, but there is no unexplained exception whereby imported modules are Actor-local while an Actor's initial module belongs to a process-global mutable context. A new Actor does not inherit its creator's initial module context.
+The initial module executed by an Actor follows the same conceptual module-context model: it executes in a `moduleContext` that belongs to that Actor, and its module state is Actor-local rather than process-global. A new Actor does not inherit its creator's initial module context.
+
+The Actor's initial module is executed directly by the Actor that owns it rather than obtained through `import()`. That direct execution does not place the initial module outside the module model when the initial module has an importable canonical identity.
+
+If the initial module can be resolved by `import()` to a canonical `ModuleKey`, then before executing its body the runtime:
+
+1. determines or assigns that canonical `ModuleKey`;
+2. creates the module instance and its `moduleContext`;
+3. inserts that instance into the Actor-local module cache in state `INITIALIZING`;
+4. executes the module body in that `moduleContext`;
+5. transitions the instance to `READY` on successful initialization;
+6. on failed initialization, removes that cache entry according to the failure semantics defined above.
+
+The same cache-before-execute invariant that applies to imported modules therefore applies to an importable initial module, preventing creation of a second instance when another module imports the Actor's initial module during its initialization. For example:
+
+```text
+main imports b
+b imports main
+```
+
+behaves conceptually as:
+
+```text
+Actor startup:
+
+canonical main -> ModuleKey(main)
+
+create main#1
+cache ModuleKey(main) -> main#1 / INITIALIZING
+
+execute main#1
+    |
+    +--> import b
+            |
+            v
+        create b#1
+        cache ModuleKey(b) -> b#1 / INITIALIZING
+            |
+            +--> import main
+                    |
+                    v
+              return existing main#1
+```
+
+The recursive import must not create `main#2`.
+
+If the Actor's initial module was registered in the cache because it has an importable canonical `ModuleKey`, and its initialization fails, the same failure rule applies as to any other failed module initialization: the cache entry is removed, no successful-looking cache entry is preserved, effects already performed are not rolled back, and the runtime does not invent an automatic retry as part of Actor startup. Whether failure of the Actor's initial module terminates that Actor or its Process remains governed by the existing Actor and root failure semantics, which this section does not redefine.
+
+### Initial Modules Without an Importable Canonical Identity
+
+Core v0.1 does not require the host to assign a fabricated filesystem or package identity to every possible host entry point. If an Actor's initial module is not importable through the host's module resolver and therefore has no canonical `ModuleKey` reachable by `import()`, it may remain outside the normal import lookup namespace:
+
+- it is still Actor-local: it executes in a `moduleContext` belonging to the Actor that launched it, and that mutable `moduleContext` is not shared with another Actor;
+- it must not accidentally alias an imported module, because it has no canonical `ModuleKey` through which an `import()` could address it;
+- if the host does assign it a canonical/importable identity, the rule in The Initial Module of an Actor applies.
+
+No fake registration under an invented import identity is required for such an entry point.
 
 ### `import()` and Bindings
 

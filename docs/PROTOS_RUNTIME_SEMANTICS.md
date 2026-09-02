@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 74  
+Document revision: 75  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -1767,7 +1767,7 @@ The runtime should grow only when the language requires behavior that cannot be 
 
 the language has no special global-variable category.
 
-Every module executes inside a `moduleContext`, which is an ordinary the language object. A binding created at the top level of a module is therefore simply a local slot of that module's execution context.
+Every module executes inside a `moduleContext`, which is an ordinary language object. A binding created at the top level of a module is therefore simply a local slot of that module's execution context.
 
 For example:
 
@@ -1963,6 +1963,8 @@ ModuleRecord:
     instance       // the module instance; the module's moduleContext object
 ```
 
+The cache maps each canonical `ModuleKey` to at most one active `ModuleRecord` at a time; a record whose state is `INITIALIZING` or `READY` is the active module instance for that key in this Actor. Cache membership and ordinary object reachability are distinct concepts: removing an entry ends a module instance's status as the active cached instance for its key without revoking, rolling back, or otherwise invalidating the instance object itself.
+
 A module that is absent from the cache is not loaded in that Actor.
 
 Possible module states are:
@@ -2003,20 +2005,25 @@ initialization / cycles / failure
         defined by Protos semantics
 ```
 
-Conceptual Actor-local import logic:
+Conceptual Actor-local module lifecycle:
 
 ```text
-function importModule(actor, importerKey, specifier):
-    key = resolve(importerKey, specifier)
-
+# Shared by import and by Actor startup of an importable initial module.
+# Returns the Actor's active cached module instance for key, creating and
+# caching it as INITIALIZING and executing its body first when no active
+# record exists. Because import and initial-module startup both call this
+# same function, neither path can create a second active cached instance
+# for the same canonical ModuleKey.
+function ensureModuleInstance(actor, key):
     record = actor.moduleCache.lookup(key)
 
     if record != none:
         # READY or INITIALIZING: the same Actor-local module instance is
-        # returned. In the INITIALIZING case the body is currently executing
-        # (a recursive import) or this import itself has already cached it;
-        # the body is not run again and the existing partial instance is
-        # returned immediately without waiting for READY.
+        # returned. In the INITIALIZING case the module body is currently
+        # executing (a recursive import, or a startup module already
+        # registered before its body began); the body is not run again and
+        # the existing partial instance is returned immediately without
+        # waiting for READY.
         return record.instance
 
     # Cache before execute: the module instance is inserted as INITIALIZING
@@ -2037,6 +2044,28 @@ function importModule(actor, importerKey, specifier):
 
     record.state = READY
     return instance
+
+
+function importModule(actor, importerKey, specifier):
+    key = resolve(importerKey, specifier)
+    return ensureModuleInstance(actor, key)
+
+
+# Actor startup of the initial module when the host module resolver gives
+# that module an importable canonical identity.
+function executeInitialModule(actor, initialModuleKey):
+    return ensureModuleInstance(actor, initialModuleKey)
+
+
+# Actor startup of a host entry point that the resolver cannot map to a
+# canonical ModuleKey. Such an entry point has no importable identity and
+# is not registered in the module cache; it executes directly and remains
+# outside the Actor's import namespace. Its moduleContext is still
+# Actor-local. If the host later gives the entry point a canonical
+# identity, executeInitialModule with that key applies.
+function executeStandaloneEntry(actor, entryModule):
+    instance = createModuleContext(frozenPrelude)
+    executeModuleBody(entryModule, instance, frozenPrelude)
 ```
 
 Cache-before-execute invariant:
@@ -2064,7 +2093,16 @@ If module initialization terminates with an unhandled error:
 
 A failed attempt does not permanently poison the Actor's module cache, and a failed partial module instance is not defined as reusable by a later independent import. If cyclic participants obtained a reference to the partially initialized instance before failure, no rollback of already-executed observable effects or object references is invented: errors do not reverse effects that already occurred unless an existing rule explicitly says otherwise. Removing the failed module from the cache does not undo side effects already performed during its failed initialization.
 
-An Actor's initial module is executed by that Actor with the same module-context model: its `moduleContext` is created as above, belongs to that Actor, and is Actor-local rather than process-global. Creating a new Actor does not inherit the creator's module cache or live module contexts.
+A failed partial instance that remains reachable through an escaped reference stays an ordinary object after its cache entry is removed: it is not revoked, rolled back, or otherwise invalidated, and its continued existence does not prevent a later import from creating a fresh instance. The failed instance and a later successful instance may therefore both remain reachable within the same Actor, with the later instance being the active cached module instance for that `ModuleKey`:
+
+```text
+foo#1 -> INITIALIZING -> failure -> removed from cache
+foo#2 -> INITIALIZING -> READY
+```
+
+with `foo#1 !== foo#2` under ordinary identity comparison. This coexistence is within one Actor and does not violate Actor isolation.
+
+An Actor's initial module is executed by that Actor with the same module-context model: its `moduleContext` is created as above, belongs to that Actor, and is Actor-local rather than process-global. Creating a new Actor does not inherit the creator's module cache or live module contexts. When the host module resolver gives the initial module an importable canonical identity, Actor startup uses `ensureModuleInstance` (through `executeInitialModule`), so the initial module is cached as `INITIALIZING` before its body executes and a cyclic import back to it returns the same instance rather than creating a second one. If the initial module fails to initialize after such registration, the ordinary failure rule applies: the cache entry is removed and no retry is invented as part of Actor startup. A host entry point with no importable canonical identity is executed directly by `executeStandaloneEntry` and is not registered under an invented module identity.
 
 Imports are eager by default. Lazy dependency behavior is expressed explicitly using ordinary closures or other language mechanisms rather than by changing import evaluation semantics. The module specifier is an ordinary expression, and `import(specifier)` returns the module instance; it does not introduce names into the importing lexical scope.
 
