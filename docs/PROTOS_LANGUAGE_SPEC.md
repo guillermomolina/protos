@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 73  
+Document revision: 74  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -375,7 +375,7 @@ Closures created during module execution capture the module context through the 
 
 Each module has its own module context. Modules do not implicitly share mutable global state.
 
-Cross-module visibility must be established explicitly by the module/import/export mechanism. The exact module loading, import, export, initialization, and cyclic-dependency semantics are specified separately.
+Cross-module visibility must be established explicitly by the module/import/export mechanism. Module instance identity, caching, initialization, cycle, and failure semantics are defined in the section Module Loading, Identity, and Cycles; only host-specific module-specifier resolution remains outside Core v0.1.
 
 Universal language facilities such as core prototypes and standard behavior may be supplied through a shared prelude or root lexical environment. Such facilities remain part of the ordinary context and lookup model rather than introducing a global-variable namespace.
 
@@ -1821,7 +1821,44 @@ The exact surface syntax or standard-library protocol used to install a dynamic 
 
 ## Module Loading, Identity, and Cycles
 
-Each module executes in a private `moduleContext`. The module's externally visible result is the value produced by successful module initialization. That value may be any object; it is not required to be a namespace object.
+Each module executes inside a `moduleContext`, an ordinary execution-context object, as described in Module Contexts and Top-Level Bindings. The importable unit is the **module instance**. A module instance is an ordinary object, and in Core v0.1 it is the module's own `moduleContext` object:
+
+- the module body executes with the module instance as its current execution context;
+- a top-level binding created with `:` becomes a local slot of the module instance;
+- `import(specifier)` yields the module instance;
+- reading a member of a module instance therefore observes the module's top-level binding slots exactly as they exist at that moment.
+
+There is no separate namespace object, wrapper, copy, or proxy. Module identity is ordinary object identity (`===`), and a module's observable surface is its current top-level slot state.
+
+### Actor-Local Module Instances
+
+A module instance belongs to one Actor. Each Actor owns an independent module cache.
+
+An Actor is an isolated domain of mutable Protos state and execution. Core v0.1 assumes the Actor isolation principle:
+
+> No shared mutable Protos memory exists between Actors.
+
+The broader Actor concurrency model is developed in `PROTOS_CONCURRENCY_MODEL.md`. This section depends only on the isolation and ownership consequences stated here and introduces no Actor syntax.
+
+Importing a module does not provide access to mutable module state belonging to another Actor. Conceptually:
+
+```text
+compiled/code representation of module foo
+                 |
+        +--------+--------+
+        |                 |
+     Actor A           Actor B
+       |                 |
+     foo@A             foo@B
+       |                 |
+ moduleContext A     moduleContext B
+```
+
+`foo@A` and `foo@B` are distinct module instances with distinct mutable state. There are no process-global mutable module instances. Because a module's `moduleContext` is Actor-local and is captured by closures through the ordinary lexical-context mechanism, closures created during module initialization do not create cross-Actor shared mutable lexical state; closure capture semantics are unchanged.
+
+The runtime may physically share immutable implementation artifacts between Actors, including parsed syntax, bytecode, machine code, immutable metadata, and immutable constant data where otherwise semantically valid. Such sharing must not expose shared mutable Protos state. The observable `moduleContext` and mutable module state remain Actor-local.
+
+### Canonical Module Identity
 
 Module import uses three distinct concepts:
 
@@ -1832,8 +1869,8 @@ module specifier
 ModuleKey
     canonical internal identity produced by the module resolver
 
-module value
-    value produced by successful initialization
+module instance
+    Actor-local module object returned by import
 ```
 
 A module specifier is resolved relative to the importing module and the host/module-resolution environment. Resolution produces a canonical `ModuleKey`.
@@ -1842,31 +1879,186 @@ The exact external form of a `ModuleKey` is host-defined, but it must provide st
 
 `ModuleKey` is an internal loader/runtime concept. It is not required to be exposed as a normal language object.
 
-Modules are initialized at most once per module registry. The registry tracks module state conceptually as:
+The distinction is:
 
 ```text
-UNLOADED
-LOADING
-LOADED
-FAILED
+specifier resolution / locating code
+        may be host-defined
+
+module identity / Actor-local instance / cache /
+initialization / cycles / failure
+        defined by Protos semantics
 ```
 
-The first import of an `UNLOADED` module marks it `LOADING`, creates its private module context, executes it, records the produced module value, then marks it `LOADED`.
+Once a canonical `ModuleKey` has been determined, the current Actor's module cache is consulted. Within one Actor:
 
-A later import of a `LOADED` module returns the cached module value.
+```js
+a: import("foo")
+b: import("foo")
+```
 
-Partially initialized module values are never observable. If an import attempts to require the value of a module that is currently `LOADING` through the active dependency chain, the runtime signals `ModuleInitializationCycle`.
+when both imports resolve to the same canonical `ModuleKey`, they refer to the same Actor-local module instance, so `a === b` holds. The module body is not executed again for the second import. Across Actors, the same canonical `ModuleKey` produces distinct Actor-local module instances with distinct mutable `moduleContext`s:
 
-Failed module initialization is remembered. A later import of the same canonical module re-signals the stored initialization failure rather than silently retrying.
+```text
+Actor A: canonical foo -> foo@A
+Actor B: canonical foo -> foo@B
+```
+
+### Cache Before Execution
+
+When an Actor imports a canonical module that is absent from that Actor's module cache:
+
+1. Create the module instance, creating its `moduleContext`.
+2. Insert that module instance into the Actor-local module cache in state `INITIALIZING`.
+3. Execute the module body in that `moduleContext`.
+4. If initialization completes successfully, transition the module to `READY`.
+5. If initialization fails, apply the failure semantics defined below.
+
+The critical invariant is:
+
+> **Cache before execute.**
+
+The module must be discoverable through recursive imports before its body has finished executing. This prevents import recursion from repeatedly creating fresh instances.
+
+Module initialization states conceptually include:
+
+```text
+INITIALIZING
+READY
+```
+
+A module that is absent from the cache is not loaded in that Actor. A transient failure state may exist internally while a failed initialization is being handled, but a failed initialization must not remain in the cache as a successfully importable module. These states are semantic concepts and are not exposed through a public state-inspection or reflection API.
+
+### Cyclic Imports
+
+Cyclic module dependencies are valid. For example:
+
+```text
+A imports B
+B imports A
+```
+
+must not recurse indefinitely creating new module instances. When B imports A while A is already `INITIALIZING`, B obtains the same Actor-local A module instance already present in the cache. Conceptually:
+
+```text
+import A
+   |
+   v
+cache A as INITIALIZING
+   |
+   v
+execute A
+   |
+   +--> import B
+           |
+           v
+       cache B as INITIALIZING
+           |
+           v
+       execute B
+           |
+           +--> import A
+                   |
+                   v
+              return existing
+              INITIALIZING A
+```
+
+A cycle is not rejected merely because it is cyclic.
+
+### Partially Initialized Modules Are Observable
+
+An import of a module already in state `INITIALIZING` returns that same module instance immediately; it does not wait for the module to become `READY`. The observable state is exactly the state of that module's `moduleContext` at that point in sequential execution.
+
+For example, suppose module `a` executes:
+
+```js
+x: 10
+b: import("./b")
+y: 20
+```
+
+and module `b` executes:
+
+```js
+a: import("./a")
+```
+
+When `b` obtains `a` during the cycle:
+
+- `a.x` exists and is readable, because `x: 10` has already executed.
+- `a.y` does not yet exist, because `y: 20` has not executed.
+
+Reading a slot that has not yet been created follows the ordinary Protos missing-slot / lookup error semantics. There is no module-specific temporal-dead-zone mechanism, no predeclaration of module slots, and no hoisting of future slot creations merely because the source text contains them later. Normal Protos slot semantics remain authoritative, and there is no special "uninitialized module binding" value.
+
+> **A partially initialized module is the real module instance in its current state, not a placeholder copy.**
+
+### Recursive Import Does Not Suspend
+
+When a recursive import discovers an existing `INITIALIZING` module in the current Actor's cache, the import returns that module instance immediately. It must not suspend waiting for initialization to finish, because suspending would deadlock ordinary cyclic imports within the same Actor. No hidden Actor reentrancy or hidden suspension point is introduced for this case. Actor reentrancy remains identifiable only from explicit suspension operations.
+
+### Successful Initialization
+
+When execution of the module body completes normally, the cached module instance transitions:
+
+```text
+INITIALIZING -> READY
+```
+
+The same module instance and the same `moduleContext` remain cached. Subsequent imports in that Actor return that instance without re-executing the module body. No new module identity is created merely because initialization completed.
+
+### Failed Initialization
+
+If module initialization terminates with an unhandled error:
+
+- the initiating `import()` fails with that error according to the normal error-propagation model;
+- the failed module instance does not remain as a successfully cached module;
+- the module's cache entry is removed for that failed initialization attempt;
+- a later import may attempt initialization again and may create a fresh module instance.
+
+A failed initialization attempt does not permanently poison the Actor's module cache. A failed partial module instance is not defined as reusable by a later independent import. If cyclic participants obtained a reference to the partially initialized instance before failure, no rollback of already-executed observable effects or object references is invented. Protos errors do not reverse effects that already occurred unless an existing rule explicitly says otherwise.
+
+> Removing the failed module from the module cache does not time-travel or undo side effects already performed during its failed initialization.
+
+A later import after cache removal creates a new initialization attempt and therefore a new module instance:
+
+```text
+import foo
+    create foo#1
+    cache foo#1 as INITIALIZING
+    execute
+    unhandled error
+    remove foo#1 from cache
+    import fails
+
+later:
+
+import foo
+    create foo#2
+    cache foo#2 as INITIALIZING
+    ...
+```
+
+### Actor Lifetime and Module Lifetime
+
+An Actor's module cache and its Actor-local module instances belong to that Actor's isolated runtime state. When the Actor dies, its module instances die with it unless some implementation artifact is independently retained for non-observable purposes. Another Actor does not inherit or take ownership of those mutable module instances. Creating a new Actor does not inherit the creator's module cache or live module contexts.
+
+### The Initial Module of an Actor
+
+The initial module executed by an Actor follows the same conceptual module-context model: it executes in a `moduleContext` that belongs to that Actor, and its module state is Actor-local rather than process-global. The initial module is executed directly by the Actor that owns it rather than obtained through `import()`, but there is no unexplained exception whereby imported modules are Actor-local while an Actor's initial module belongs to a process-global mutable context. A new Actor does not inherit its creator's initial module context.
+
+### `import()` and Bindings
 
 Imports are eager by default. Lazy dependencies are expressed explicitly using ordinary language mechanisms such as closures rather than by implicit lazy-import semantics.
 
-The language does not require import syntax to introduce names into the current lexical scope. An import operation may simply produce the module value, which the program can bind explicitly:
+The module specifier is an ordinary expression. The language does not require import syntax to introduce names into the current lexical scope; an import operation simply yields the module instance, which the program can bind explicitly:
 
 ```js
 math: import("math")
 math.sin(x)
 ```
+
+No ES-module-style static binding declarations, CommonJS `exports`, Python namespaces, or another language's module syntax are introduced. Cross-module visibility remains explicit.
 
 The exact resolver rules for files, packages, standard-library modules, search paths, and other host-specific sources are outside Core Language v0.1.
 

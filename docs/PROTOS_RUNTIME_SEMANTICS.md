@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 73  
+Document revision: 74  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -1801,7 +1801,7 @@ moduleContext
 
 After lexical lookup is exhausted, the ordinary receiver/delegation lookup rules continue as specified elsewhere in this document.
 
-Modules do not implicitly share mutable global state. Each module has its own module context. Cross-module visibility is established explicitly through the module system and ordinary module values, including the standard `import(specifier)` protocol and resolver/registry semantics defined by Core v0.1.
+Modules do not implicitly share mutable global state. Each module instance has its own module context, local to the Actor that instantiated the module. Cross-module visibility is established explicitly through the module system and ordinary module instances, including the standard `import(specifier)` protocol and resolver plus Actor-local module-cache semantics defined by Core v0.1.
 
 Universal language facilities such as core prototypes and standard behavior may be made available through a shared prelude or root environment. Such an environment is part of lexical/runtime setup and does not create a separate global-variable semantic category.
 
@@ -1835,10 +1835,10 @@ function createModuleContext(preludeContext):
     )
 ```
 
-```text
-function executeModule(module, preludeContext):
-    moduleContext = createModuleContext(preludeContext)
+The module instance of a module is its `moduleContext` object: the object in which the module body executes and on which its top-level bindings are created. `createModuleContext` therefore creates the module instance.
 
+```text
+function executeModuleBody(module, moduleContext, preludeContext):
     activation = Activation(
         context = moduleContext,
         lexicalParent = preludeContext,
@@ -1848,18 +1848,13 @@ function executeModule(module, preludeContext):
         ownsReturnHome = false
     )
 
-    result = executeModuleBody(
+    executeModuleCode(
         module.code,
         activation
     )
-
-    return ModuleExecution(
-        context = moduleContext,
-        result = result
-    )
 ```
 
-Module loading, canonical identity, initialization states, cycle handling, and failure caching are defined later in this document; host-specific resolution and package policy remain outside Core v0.1.
+Module loading, canonical identity, Actor-local caching, initialization states, cycle handling, and failure semantics are defined later in this document; host-specific resolution and package policy remain outside Core v0.1.
 
 Core invariant:
 
@@ -1953,31 +1948,31 @@ Core v0.1 handlers are **unwinding handlers**. Invoking a matching handler aband
 Core v0.1 does not expose resumable conditions, `resume`, `retry`, or equivalent operations. Implementations should keep signaling, handler search, and stack transfer conceptually separable so that a later explicit resumable-condition facility can be introduced without redefining error objects or prototype-based handler matching.
 
 
-## Module Registry and Canonical Module Identity
+## Module Instances and the Actor-Local Module Cache
 
-Module loading uses a registry keyed by canonical internal module identity.
+Module identity, caching, initialization, cycle handling, and failure are Actor-local. Each Actor owns a module cache keyed by canonical internal module identity. An Actor is an isolated domain of mutable Protos state and execution, with no shared mutable Protos memory between Actors. The module cache and the module instances it holds are part of that Actor's isolated runtime state.
 
-Conceptually:
+Conceptually, the Actor-owned module state is:
 
 ```text
-ModuleRegistry:
-    ModuleKey -> ModuleRecord
+ActorModuleState:
+    moduleCache: ModuleKey -> ModuleRecord
 
 ModuleRecord:
-    state
-    moduleContext?
-    value?
-    failure?
+    state          // INITIALIZING | READY
+    instance       // the module instance; the module's moduleContext object
 ```
 
-Possible states are:
+A module that is absent from the cache is not loaded in that Actor.
+
+Possible module states are:
 
 ```text
-UNLOADED
-LOADING
-LOADED
-FAILED
+INITIALIZING
+READY
 ```
+
+`INITIALIZING` means the module instance exists in the cache but its body has not completed execution. `READY` means its body completed successfully. A failed initialization attempt is removed from the cache; failure is not retained as a permanently cached module state. These states are internal semantics and are not exposed through a public state-inspection or reflection API.
 
 A module specifier is not itself the cache key. The loader first resolves it relative to the importing module:
 
@@ -1985,7 +1980,7 @@ A module specifier is not itself the cache key. The loader first resolves it rel
 resolve(importerKey, moduleSpecifier) -> ModuleKey
 ```
 
-`ModuleKey` must be canonical and stable within the registry. Equivalent requests for the same module must resolve to the same key.
+`ModuleKey` must be canonical and stable within an Actor. Equivalent requests for the same module must resolve to the same key.
 
 For a file-backed host this may conceptually involve normalization such as:
 
@@ -1997,43 +1992,81 @@ For a file-backed host this may conceptually involve normalization such as:
 
 The exact key representation is host-defined and need not be visible to language code.
 
-Conceptual import logic:
+The distinction is therefore:
 
 ```text
-function importModule(importerKey, specifier):
-    key = resolve(importerKey, specifier)
-    record = registry.lookupOrCreate(key)
+specifier resolution / locating code
+        may be host-defined
 
-    if record.state == LOADED:
-        return record.value
-
-    if record.state == FAILED:
-        signal record.failure
-
-    if record.state == LOADING:
-        signal ModuleInitializationCycle(key)
-
-    record.state = LOADING
-    record.moduleContext = createModuleContext(frozenPrelude)
-
-    try:
-        value = executeModule(key, record.moduleContext)
-        record.value = value
-        record.state = LOADED
-        return value
-    catch initializationFailure:
-        record.failure = initializationFailure
-        record.state = FAILED
-        signal initializationFailure
+module identity / Actor-local instance / cache /
+initialization / cycles / failure
+        defined by Protos semantics
 ```
 
-A module value is not made available while its record is `LOADING`. This intentionally forbids observable partially initialized exports.
+Conceptual Actor-local import logic:
 
-Successful initialization produces exactly one cached module value. The value may be any language object.
+```text
+function importModule(actor, importerKey, specifier):
+    key = resolve(importerKey, specifier)
 
-Imports are eager by default. Lazy dependency behavior is expressed explicitly using ordinary closures or other language mechanisms rather than by changing import evaluation semantics.
+    record = actor.moduleCache.lookup(key)
 
-The private `moduleContext` and the module value are distinct concepts. The runtime must not implicitly expose the entire module context as the module's public result unless the module itself deliberately returns or constructs such an object.
+    if record != none:
+        # READY or INITIALIZING: the same Actor-local module instance is
+        # returned. In the INITIALIZING case the body is currently executing
+        # (a recursive import) or this import itself has already cached it;
+        # the body is not run again and the existing partial instance is
+        # returned immediately without waiting for READY.
+        return record.instance
+
+    # Cache before execute: the module instance is inserted as INITIALIZING
+    # before its body executes, so recursive imports discover the same
+    # instance instead of creating fresh ones.
+    instance = createModuleContext(frozenPrelude)
+    record = ModuleRecord(
+        state = INITIALIZING,
+        instance = instance
+    )
+    actor.moduleCache.insert(key, record)
+
+    try:
+        executeModuleBody(moduleForKey(key), instance, frozenPrelude)
+    catch initializationFailure:
+        actor.moduleCache.remove(key)
+        signal initializationFailure
+
+    record.state = READY
+    return instance
+```
+
+Cache-before-execute invariant:
+
+> The module must be discoverable through recursive imports before its body has finished executing.
+
+When a recursive import discovers an existing `INITIALIZING` module in the current Actor's cache, the import returns that module instance immediately. It does not suspend waiting for initialization to finish and does not create a fresh instance; suspending would deadlock ordinary cyclic imports within the same Actor. No hidden Actor reentrancy or hidden suspension point is introduced for this case. Actor reentrancy remains identifiable only from explicit suspension operations. Cyclic module dependencies are therefore valid and are not rejected merely because they are cyclic.
+
+A partially initialized module is observable: reading a member of the returned instance observes the module's top-level binding slots exactly as they exist at that point in sequential execution. Only slots whose creating top-level statement has already executed are present; reading a slot that has not yet been created follows the ordinary missing-slot / lookup error semantics. There is no predeclaration of module slots, no hoisting of future slot creations, and no module-specific temporal-dead-zone mechanism.
+
+When execution of the module body completes normally, the record transitions:
+
+```text
+INITIALIZING -> READY
+```
+
+The same module instance and the same `moduleContext` remain cached, and a later import in that Actor returns that instance without re-executing the module body. No new module identity is created because initialization completed.
+
+If module initialization terminates with an unhandled error:
+
+- the initiating `import()` fails with that error according to the normal error-propagation model;
+- the module instance does not remain as a successfully cached module;
+- that attempt's cache entry is removed;
+- a later import may attempt initialization again and may create a fresh module instance.
+
+A failed attempt does not permanently poison the Actor's module cache, and a failed partial module instance is not defined as reusable by a later independent import. If cyclic participants obtained a reference to the partially initialized instance before failure, no rollback of already-executed observable effects or object references is invented: errors do not reverse effects that already occurred unless an existing rule explicitly says otherwise. Removing the failed module from the cache does not undo side effects already performed during its failed initialization.
+
+An Actor's initial module is executed by that Actor with the same module-context model: its `moduleContext` is created as above, belongs to that Actor, and is Actor-local rather than process-global. Creating a new Actor does not inherit the creator's module cache or live module contexts.
+
+Imports are eager by default. Lazy dependency behavior is expressed explicitly using ordinary closures or other language mechanisms rather than by changing import evaluation semantics. The module specifier is an ordinary expression, and `import(specifier)` returns the module instance; it does not introduce names into the importing lexical scope.
 
 Host-specific resolution policy, package lookup, standard-library naming, remote sources, and package-manager behavior are outside Core Runtime Semantics v0.1.
 
