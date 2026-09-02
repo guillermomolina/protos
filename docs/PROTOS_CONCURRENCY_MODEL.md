@@ -5,7 +5,7 @@ Document revision: 79
 Status: Draft
 Last updated: 2026-09-02
 
-# Protos Multithreading Design Ledger v1
+# Protos Multithreading Design Ledger
 
 ## 1. General Principle
 

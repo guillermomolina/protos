@@ -18,6 +18,8 @@ The canonical language definition is maintained in:
 
 Treat these documents as the source of truth for language behavior.
 
+`docs/PROTOS_CONCURRENCY_MODEL.md` is also part of the documentation, but with a less complete status: it is a concurrency design ledger, not a canonical language specification document. See "Concurrency design work" below.
+
 Before implementing or modifying syntax, parsing, object semantics, invocation, lookup, control flow, errors, concurrency, built-in protocols, or other observable language behavior, inspect the relevant specification sections first.
 
 The documents have distinct responsibilities:
@@ -382,9 +384,8 @@ Do not change licensing terms or make licensing-policy decisions implicitly as p
 
 ### Concurrency design work
 
-- `docs/PROTOS_CONCURRENCY_MODEL.md` is a design ledger, not yet a canonical language specification document.
-- Changes to this file do not require entries in `docs/PROTOS_SPEC_CHANGELOG.md` unless and until a decision is promoted into the canonical Protos specification.
-- This document uses its own independent document revision/versioning.
-- `Language version` may track the target language version, but `Document revision` is local to this file and must not be interpreted as the canonical specification revision.
+- `docs/PROTOS_CONCURRENCY_MODEL.md` is part of the documentation, but with a less complete status than the canonical specification documents: it is a design ledger that mixes CLOSED decisions with OPEN, PENDING, and design-only material.
+- All documentation documents share the `Document revision` number. This document carries that common revision and has no independent revision or versioning scheme.
+- Record every change to this file in `docs/PROTOS_SPEC_CHANGELOG.md`, like changes to the canonical specification documents.
 - When a CLOSED decision from this ledger is incorporated into canonical specification documents, update the affected specification files and record that canonical change in `docs/PROTOS_SPEC_CHANGELOG.md`.
 - Do not treat OPEN, PENDING, or design-only material in this ledger as normative language semantics.
