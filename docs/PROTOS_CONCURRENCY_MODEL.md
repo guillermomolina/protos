@@ -1,6 +1,6 @@
 # Protos Concurrency Model v0.1
 
-Language version: 0.1 Document revision: 04 Status: Draft Last updated:
+Language version: 0.1 Document revision: 05 Status: Draft Last updated:
 2026-09-02
 
 # Protos Multithreading Design Ledger v1
@@ -189,15 +189,21 @@ language semantics.
 
 ## 7. Ordering and Fairness
 
-**CLOSED**
+**CLOSED --- REVISED**
 
-Messages from the same sender to the same Actor preserve FIFO ordering.
+Messages from the same sender to the same concrete Actor preserve FIFO
+ordering.
 
 Within one Future or task, normal sequential execution order applies.
 
 No global ordering is guaranteed between unrelated sources of work,
 including different message senders, I/O completions, timers,
 reactivated Futures, or other independently runnable work.
+
+ActorGroup routing does not introduce Group-wide FIFO ordering. Messages
+from the same sender to the same Group may be routed to different Actors
+and therefore have no ordering guarantee relative to each other beyond
+the ordering guarantees of any concrete Actor that receives them.
 
 The runtime provides an abstract no-starvation guarantee among runnable
 work that yields control.
@@ -336,15 +342,15 @@ according to normal Protos activation semantics.
 
 ## 13. send()
 
-**CLOSED**
+**CLOSED --- REVISED**
 
 `send()` represents one-way Actor communication.
 
 It returns a local identity-bearing communication operation object,
 provisionally called `SendOperation`.
 
-A SendOperation represents the logical send and may expose information
-or operations concerning:
+A SendOperation represents the logical delivery operation and may expose
+information or operations concerning:
 
 -   Status
 -   Progress
@@ -365,15 +371,46 @@ uncertain delivery may create duplicates.
 
 Protos does not promise exactly-once delivery by default.
 
+For Group-addressed communication, routing may choose or re-choose a
+concrete Actor only before that Actor accepts the operation.
+
+Acceptance occurs when a concrete Actor takes ownership of the message
+for processing. Acceptance does not imply that handler execution has
+started or completed.
+
+Once accepted, the message belongs to that Actor and is not
+transparently replayed or rerouted if that Actor subsequently fails.
+
+If the runtime cannot determine whether the acceptance boundary was
+crossed, the operation enters an explicit uncertain state rather than
+assuming either delivery or non-delivery. Such uncertainty does not
+authorize transparent replay.
+
 The exact SendOperation API and status set remain open.
 
 ## 14. ask()
 
-**CLOSED**
+**CLOSED --- REVISED**
 
 `ask()` represents request/reply communication.
 
 It returns a Future.
+
+The delivery portion of `ask()` has exactly the same semantics as
+`send()`. `ask()` additionally establishes an ephemeral reply capability
+and a Future that represents the eventual reply.
+
+Conceptually:
+
+    send(message) = delivery
+    ask(message)  = same delivery + reply Future
+
+The underlying delivery operation need not be separately exposed to the
+caller of `ask()`.
+
+An `ask()` Future may remain pending before a concrete Actor has been
+selected or accepted the message. Its resolution represents the reply,
+not merely successful delivery.
 
 The runtime automatically manages the ephemeral reply capability and any
 required correlation, routing, and reply delivery.
@@ -390,17 +427,22 @@ rules.
 
 A timeout while waiting does not imply that remote work did not execute.
 
-## 15. send() and ask() Share Dispatch
+## 15. send() and ask() Share Delivery and Dispatch
 
-**CLOSED**
+**CLOSED --- REVISED**
 
-`send()` and `ask()` use the same Actor message dispatch mechanism.
+`send()` and `ask()` use the same message-delivery semantics and the same
+Actor message dispatch mechanism.
 
 For `send()`, the handler result is ignored.
 
 For `ask()`, the handler result resolves the caller Future.
 
 There are no separate send handlers and ask handlers.
+
+The same snapshot, routing, acceptance, backpressure, cancellation,
+uncertainty, and failure rules apply to the delivery portion of both
+operations.
 
 ## 16. Pass-by-Value Between Actors
 
@@ -441,12 +483,20 @@ environment.
 
 ## 17. Message Snapshot Time
 
-**CLOSED**
+**CLOSED --- REVISED**
 
-A message captures its logical value snapshot at `send()` time.
+A message captures its logical value snapshot when the caller invokes
+`send()` or `ask()`.
+
+The snapshot is fixed before routing, member selection, backpressure,
+capacity waiting, or acceptance.
+
+Delayed routing or pre-acceptance rerouting does not change the logical
+snapshot.
 
 This snapshot rule is semantic. It does not prescribe when or how the
-runtime physically copies memory.
+runtime physically copies memory; copy-on-write or other optimizations
+may defer physical work while preserving the original logical value.
 
 ## 18. Message Transfer Optimizations
 
@@ -532,7 +582,7 @@ later. They are not the default.
 
 ## 22. Timeouts and Deadlines
 
-**CLOSED**
+**CLOSED --- REVISED**
 
 Awaitable operations may support a wait timeout.
 
@@ -542,8 +592,13 @@ underlying operation.
 A timeout must never be interpreted as proof that an operation did not
 occur.
 
-For remote communication, uncertainty may result in a state such as
-`deliveryUnknown`.
+For remote communication, uncertainty may result when the runtime cannot
+determine whether the acceptance boundary was crossed.
+
+    UNKNOWN != NOT DELIVERED
+
+Such uncertainty does not authorize transparent replay or destination
+substitution.
 
 Communication operations may additionally support delivery deadlines or
 cancellation where appropriate.
@@ -552,7 +607,7 @@ The exact APIs remain open.
 
 ## 23. Cancellation
 
-**CLOSED**
+**CLOSED --- REVISED**
 
 Cancellation is cooperative.
 
@@ -567,8 +622,15 @@ Cancelling a Future requests cancellation of its work.
 Cancelling a SendOperation attempts to prevent further delivery while
 that remains safe.
 
+Before concrete-Actor acceptance, cancellation may remove or stop the
+operation where the runtime can still do so safely.
+
 If the destination has already accepted the message, cancellation cannot
 unsend it.
+
+If the runtime cannot determine whether acceptance occurred,
+cancellation may end in an uncertain delivery state rather than assuming
+that the message was cancelled before delivery.
 
 Principle:
 
@@ -657,58 +719,53 @@ This preserves the pay-as-you-grow principle.
 
 Actor identity is the identity of one concrete Actor incarnation.
 
-An ActorRef identifies that concrete Actor.
+An ActorRef identifies exactly that incarnation.
 
-If the Actor terminates, its ActorRef does not become a reference to a
-replacement.
+If the Actor dies, that Actor identity ends permanently and its ActorRef
+never rebinds, resurrects, or retargets to another Actor.
 
-Conceptually:
+Replacement creates another Actor with a new Actor identity and a new
+ActorRef.
 
-    Actor A
-        |
-        +-- ActorRef(A)
-        |
-        X terminates
+Durable state, if later used to initialize a replacement, does not
+resurrect the dead Actor identity.
 
-    ActorRef(A) -> TERMINATED
+Live Actor migration is not required by Protos semantics. If an
+implementation supports migration as an optimization, it may preserve an
+ActorRef only when it preserves the same live Actor incarnation and its
+observable execution state. Killing an Actor and creating another one is
+replacement, not migration.
 
-If policy creates a replacement, that replacement is another Actor with
-another ActorRef.
-
-There is no hidden logical Actor identity spanning multiple
-incarnations.
-
-Stable logical service identity belongs to higher-level abstractions
-such as Actor Groups or service discovery, not to an individual Actor.
+Stable service continuity belongs to higher-level abstractions such as
+Actor Groups or discovery names, not to an individual Actor incarnation.
 
 ## 28. Messages Across Actor Failure
 
 **CLOSED --- REVISED**
 
-Messages that have already been processed retain their effects.
+Effects of messages that completed before Actor failure remain effects of
+those completed operations.
 
-Messages addressed directly to a terminated Actor are never retargeted
-to another Actor.
+A direct message addressed to an ActorRef is never retargeted to another
+Actor after the destination Actor dies.
 
-Messages that have definitely not been accepted remain governed by
-normal SendOperation semantics, but the runtime does not change their
-destination to a replacement.
+For Group-addressed communication, the Group may choose or re-choose a
+member only before a concrete Actor accepts the operation.
 
-Messages accepted by an Actor before it dies are not automatically
-reinjected into another Actor.
+Acceptance occurs when the Actor takes ownership of the message for
+processing. It is distinct from handler start and handler completion.
 
-Automatic reinjection or transparent retry could duplicate effects if
-the failed Actor partially processed the operation.
+If an accepted-but-not-completed operation is lost because the Actor
+fails, Protos does not transparently replay it against a replacement,
+because doing so could duplicate effects.
 
-Stronger guarantees require explicit mechanisms such as:
+If the runtime cannot determine whether acceptance occurred before a
+failure or partition, delivery is uncertain. Uncertainty does not imply
+non-delivery and does not authorize transparent replay.
 
--   Idempotency
--   Acknowledgements
--   Persistence
--   Deduplication
--   Transactional protocols
-
-These mechanisms remain to be designed.
+Exactly-once processing, durable inboxes, deduplication, idempotency, and
+workflow recovery remain explicit higher-level facilities rather than
+properties of ordinary Actor messaging.
 
 ## 29. Monitoring Versus Supervision
 
@@ -817,8 +874,18 @@ service, or other unnecessary runtime machinery is required.
 Creating additional Actors explicitly introduces new isolation and
 parallelism boundaries.
 
-If a program never creates another Actor, the runtime or JIT may
-optimize away unnecessary Actor infrastructure.
+If a program never creates another Actor, the runtime or JIT may optimize
+away unnecessary Actor infrastructure.
+
+RootActor is strictly Process-scoped and ephemeral with its Process.
+Protos does not introduce an intrinsic distributed ApplicationRoot Actor.
+Distributed application or service continuity is expressed through
+Groups, discovery, Cluster/runtime control state, and explicit durable
+state as required.
+
+A future application identity may exist for deployment, configuration,
+observability, or ownership without becoming an Actor or a mandatory
+execution-hierarchy level.
 
 ## 33. Global State
 
@@ -860,9 +927,10 @@ explicit distributed abstraction says otherwise.
 
 ## 35. Scope Roots
 
-**CLOSED --- REVISED**
+**DIRECTION CLOSED, DETAILS OPEN --- REVISED**
 
-The distributed runtime has the conceptual hierarchy:
+The runtime may expose conceptual root capabilities corresponding to its
+active execution scopes:
 
     ClusterRoot
         |
@@ -877,8 +945,8 @@ The distributed runtime has the conceptual hierarchy:
 
 Only RootActor is necessarily an ordinary Protos Actor.
 
-ProcessRoot, NodeRoot, and ClusterRoot should normally be runtime
-services or capabilities rather than ordinary Actors.
+ProcessRoot, NodeRoot, and ClusterRoot should normally be runtime services
+or capabilities rather than ordinary Actors.
 
 Conceptual responsibilities include:
 
@@ -886,9 +954,9 @@ ClusterRoot:
 
 -   Cluster membership
 -   Discovery
--   Placement coordination
+-   Distributed placement coordination
 -   Cluster health
--   Cluster authority facilities when required
+-   Distributed authority facilities when required
 
 NodeRoot:
 
@@ -915,6 +983,11 @@ infrastructure.
 
 NodeRoot and ClusterRoot facilities should be lazy or absent when they
 are not needed.
+
+No intrinsic ApplicationRoot exists above Process RootActors. A higher
+level application/service identity may be introduced later for
+administrative purposes only if it provides semantics not already
+covered by Groups, discovery, durability, and runtime coordination.
 
 ## 36. Actor Runtime Context References
 
@@ -1022,150 +1095,132 @@ terminated.
 A Cluster is the logical distributed coordination domain across Protos
 Nodes.
 
-Cluster identity is independent of the identity of its current Nodes.
+Cluster identity is independent of the identity and current count of its
+Nodes.
 
 Nodes may join, leave, fail, or be replaced while the logical Cluster
-remains the same coordination domain.
+remains the same coordination domain. A Cluster may conceptually have
+zero current Nodes.
 
 Cluster functionality may include:
 
 -   Membership
 -   Discovery
--   Routing
--   Placement
+-   Routing coordination
+-   Placement coordination
 -   Node health
 -   Resource awareness
 -   Failure detection
 -   Group/controller coordination
--   Authority
+-   Authority facilities when required
 -   Rebalancing
 
-Whether Cluster identity can survive the loss of all members remains
-open and depends on the future bootstrap, membership, authority, and
-persistence model.
+Cluster identity is logically independent of current Node membership,
+but persistence of that identity and its defining authoritative/control
+state across complete loss of runtime membership is not intrinsic.
 
-Cluster functionality must remain lazy and must not impose
-distributed-runtime costs on ordinary standalone programs.
+If the state defining the Cluster is explicitly preserved, later Nodes
+may rejoin the same logical Cluster. If all defining runtime/control
+state is lost, a later bootstrap creates a new Cluster identity rather
+than magically reconstructing the old one.
+
+Cluster functionality must remain lazy and must not impose distributed
+runtime costs on ordinary standalone programs.
 
 ## 40. ActorRef
 
 **CLOSED --- REVISED**
 
 ActorRef is an opaque communication capability identifying exactly one
-concrete Actor.
+concrete Actor incarnation.
 
-It is not:
+ActorRef is not a pointer, host:port, URL, Process address, Node address,
+or stable service name.
 
--   A pointer
--   A host and port
--   A URL
--   A physical Process identifier
--   A Node address
--   A stable service identity
+Its semantics are independent of physical placement or transport while
+the same live Actor incarnation continues to exist.
 
-ActorRef identity is independent of physical placement but not
-independent of Actor lifetime.
+If the Actor dies, the ActorRef remains associated with that terminated
+Actor and is never rebound or retargeted to a replacement.
 
-An Actor may move if migration is eventually supported without changing
-its ActorRef, provided it remains the same Actor.
+Node membership loss, routing failure, or temporary unreachability does
+not by itself terminate the ActorRef because those observations do not
+prove Actor termination.
 
-If the Actor terminates, the ActorRef identifies a terminated Actor and
-is never transparently rebound to a replacement.
+Live migration is optional runtime optimization rather than a semantic
+requirement. It may preserve an ActorRef only when the same live Actor
+incarnation and observable execution state are preserved.
 
-Possessing an ActorRef does not imply that the target Actor is currently
-reachable.
+ActorRef is a communication capability. Possessing an ActorRef does not
+by itself demonstrate Authority for a Group, Cluster, exclusive role, or
+other authoritative scope.
 
-## 41. Actor Discovery
+## 41. Actor and Service Discovery
 
-**CLOSED AS DIRECTION --- REVISED**
+**DIRECTION CLOSED, DETAILS OPEN --- REVISED**
 
-Actor identity and stable service naming are separate.
+Concrete identity-bearing references and discovery names are separate
+concepts.
 
-ActorRef represents one concrete Actor identity/capability.
+Conceptually:
 
-A service name or Actor Group may represent a stable logical destination
-whose concrete Actor membership can change.
+    ActorRef(A)       -> one concrete Actor A
+    GroupRef(G)       -> one concrete Group G
+    discovery name    -> may resolve to an ActorRef or GroupRef
 
-Discovery must be pluggable.
+Discovery names may be rebound over time.
 
-The Protos language semantics must not hard-code DNS, Consul,
-Kubernetes, or a specific service registry.
+Concrete ActorRef and GroupRef values are not rebound when a discovery
+name later resolves to a replacement identity.
 
-Those mechanisms may implement discovery without becoming part of the
-language model.
+For example, if `"workers"` resolves to Group G1 and a caller obtains a
+GroupRef for G1, that GroupRef remains G1 even if G1 later terminates and
+the name `"workers"` is rebound to G2.
+
+Discovery remains pluggable. Protos does not hard-code DNS, Consul,
+Kubernetes, or another external service as the semantic discovery model.
+
+Exact discovery APIs, naming rules, persistence, authentication, and
+resolution mechanisms remain open.
 
 ## 42. Automatic Actor Placement and Capacity
 
-**CLOSED --- REVISED**
+**DIRECTION CLOSED, DETAILS OPEN --- REVISED**
 
-The normal programmer creates a logical Actor without selecting its
-physical location.
+Normal Actor creation expresses the intent to create an Actor, not a
+physical placement command.
 
-Conceptually:
+The programmer does not normally choose separate APIs for local Process,
+Node, or Cluster placement.
 
-    worker: spawn(Worker, args).value()
+The scheduler selects among currently available Protos execution capacity
+according to the active runtime domain, feasibility, resource state,
+locality, affinity, availability policy, and placement policy.
 
-means:
+`spawn()` itself does not create Processes, Nodes, Clusters, Pods, VMs,
+or machines.
 
-> Create this Actor.
+Scheduling and infrastructure provisioning are separate responsibilities.
 
-It does not normally mean:
+The scheduler uses capacity already incorporated into Protos through
+normal bootstrap/discovery/membership mechanisms.
 
-> Create this Actor in this Process, on this Node, or on this physical
-> host.
+If no suitable capacity exists, admission may remain pending and may
+produce semantic capacity-demand signals. An external or explicitly
+integrated Infrastructure Controller may react by provisioning raw
+execution capacity, but that capacity becomes usable by Protos only after
+normal runtime bootstrap and membership.
 
-The runtime scheduler determines placement automatically within the
-currently active execution domain and currently available capacity.
+External infrastructure does not directly create Actors, Group members,
+Protos Nodes, or Cluster membership merely by creating physical
+workloads.
 
-Conceptually:
+Advanced hard placement constraints and soft placement hints may be
+provided later, but physical location is not Actor identity.
 
--   If only the current Process is active, the Actor is placed in that
-    Process.
--   If a Node coordinates multiple available Processes, the Actor may be
-    placed in any suitable Process within that Node.
--   If a Cluster coordinates multiple Nodes and Processes, the Actor may
-    be placed in any suitable location within that Cluster.
-
-The same Actor creation code therefore scales according to the runtime
-domain that is already active.
-
-Normal `spawn()` does not itself create or activate higher runtime
-domains or new infrastructure capacity.
-
-In particular, `spawn()` does not by itself:
-
--   start another Process;
--   create or activate a Node;
--   create or join a Cluster;
--   provision a machine, VM, container, Pod, or infrastructure workload.
-
-Scheduling and infrastructure capacity provisioning are separate
-responsibilities.
-
-> Scheduling decides where to place work within existing capacity.
-
-> Capacity provisioning decides how much execution/infrastructure
-> capacity exists.
-
-The Protos scheduler uses capacity that is already available.
-
-The core Protos runtime does not provision infrastructure capacity by
-default.
-
-External or explicitly integrated infrastructure mechanisms may create
-or remove Processes, Nodes, Pods, VMs, machines, or other workload
-units.
-
-Cluster membership determines which active Protos Nodes participate in
-distributed placement.
-
-The scheduler may consider CPU/runnable pressure, memory, communication
-locality, affinity, resources, health, network cost, failure domains,
-and placement stability.
-
-Physical topology remains observable for diagnostics, administration,
-and optimization, but it is not normally part of application logic or
-Actor identity.
+The same Protos program should scale from a standalone Process to larger
+runtime domains without changing the fundamental Actor programming
+model.
 
 ## 43. Spawn Backpressure
 
@@ -1293,32 +1348,47 @@ while allowing all three to use common runtime observations.
 Capacity demand should be observable before admission is necessarily
 refused, allowing infrastructure mechanisms to react proactively.
 
-## 47. Multi-Objective Placement
+## 47. Multi-Objective Placement and Rebalancing
 
-**CLOSED**
+**DIRECTION CLOSED, DETAILS OPEN --- REVISED**
 
-Protos does not define a universal PACK or SPREAD placement strategy.
+Protos does not define one universal PACK or SPREAD placement strategy.
 
-Placement is multi-objective and balances:
+Placement balances multiple objectives such as:
 
--   Performance and scalability
--   Availability and resilience
--   Efficiency
+-   Performance
+-   Scalability
+-   Availability/resilience
+-   Resource efficiency
+-   Locality
 -   Stability
 
-Actors that communicate heavily may be placed together when locality is
-more valuable, while independent CPU-intensive Actors may be spread to
-exploit parallel execution.
+PACK and SPREAD are possible resulting strategies rather than universal
+language modes.
 
-High-availability requirements may intentionally override
-performance-optimal placement.
+Communication-heavy Actors may benefit from physical locality. CPU-heavy
+Actors may benefit from spreading. High-availability requirements may
+override a pure performance optimum.
 
-The scheduler should not continuously chase a theoretically optimal
-placement. Rebalancing should occur only when expected benefit
-sufficiently exceeds cost.
+Rebalancing is the process of improving runtime placement or distribution
+over time. It does not imply live Actor migration.
 
-Placement may use hard constraints and soft affinity or anti-affinity
-hints when application intent cannot be inferred safely.
+Rebalancing may occur by:
+
+-   Choosing better placement for newly created Actors
+-   Choosing better placement for replacement Actors
+-   Changing Group membership or cardinality over time
+-   Avoiding new placement on capacity being retired
+-   Retiring excess or poorly placed members
+-   Optionally using live Actor migration if a future implementation can
+    preserve the same live Actor incarnation and observable execution
+    state
+
+The runtime should avoid churn: rebalancing should occur only when the
+expected benefit justifies its cost and disruption.
+
+Exact placement scoring, hysteresis, affinity APIs, and migration
+mechanics remain open.
 
 ## 48. Failure Domains
 
@@ -1400,8 +1470,8 @@ Actor liveness is ephemeral by default; durability is explicit.
 
 **CLOSED --- REVISED**
 
-Groups are logical policy and management units over homogeneous runtime
-entities.
+Groups are stable logical policy and management units over homogeneous
+runtime entities.
 
 A Group is not an additional level in the intrinsic runtime hierarchy:
 
@@ -1416,79 +1486,205 @@ Conceptually, groups may exist for entities at different levels:
 This notation is conceptual and does not imply generic type syntax.
 
 Each group-managed entity belongs to one management Group at its
-corresponding level. Each grouping level provides an implicit default
+corresponding level. Each grouping level may provide an implicit default
 Group.
 
 Specialized Groups are introduced only when a set of entities requires
 policy different from the default, such as availability, affinity,
 placement, scaling/capacity policy, routing, or resource policy.
 
+### Group Identity and Lifecycle
+
+Group identity is independent of its current membership and of the
+controller instance currently managing it.
+
+A Group may remain valid with zero current members, and complete
+membership replacement does not create a new Group.
+
+Group lifetime is determined by an owning runtime/control scope, not by
+global reachability of GroupRef values. Remote GroupRefs do not keep a
+Group alive by themselves.
+
+A Group may outlive the runtime scope that originally created it only
+when durable or external ownership is explicitly configured. Such
+continuity requires preservation or reconstruction of the defining Group
+identity, policy, and control state.
+
+Stable does not mean durable. If the state defining a non-durable Group
+is lost, that Group identity ends. A later Group created under the same
+discovery name is a new Group.
+
+### Group and Group Controller
+
 Group and Group Controller are distinct concepts.
 
-The Group identifies the managed set and its policy.
+The Group identifies the logical managed set, policy, and stable Group
+identity.
 
-A Group Controller may maintain or modify Group membership according to
-that policy.
+A Group Controller is an ephemeral control-plane executor that may
+reconcile Group policy and membership. Controller replacement or
+Authority transfer does not create a new Group.
 
-Not every Group requires active membership management.
+The Group Controller is not a mandatory data path for every message.
+Runtime routing may use cached or locally available routing views while
+controllers reconcile policy and membership separately.
+
+Not every Group requires active membership management or distributed
+Authority.
+
+Groups do not intrinsically require Authority. Authority is introduced
+only where conflicting decisions could violate an explicit authoritative
+invariant.
+
+### Desired Cardinality
 
 A Group may define desired cardinality.
 
-Desired cardinality only specifies the desired number of members. It
-does not imply identical state, state replication, shared history,
-transparent failover, consensus, or persistent service state.
+Desired cardinality is a convergent control objective, not a strict
+instantaneous global invariant.
+
+It does not imply identical state, state replication, shared history,
+transparent failover, consensus, persistent service state, or an exact
+physical Actor count at every instant.
+
+During partitions, delayed observations, concurrent reconciliation, or
+membership uncertainty, physical membership may temporarily be below or
+above the desired cardinality. Normal reconciliation converges toward the
+desired state when sufficient coordination becomes available.
+
+A strict singleton or maximum-authoritative-role invariant applies to
+valid Authority, not necessarily to the number of physically existing
+Actors, and requires the corresponding Authority/fencing mechanism.
+
+Stopping one concrete Group member terminates that Actor incarnation. It
+does not implicitly reduce Group desired cardinality. If desired state
+still requires capacity, the Group Controller may create a replacement
+Actor.
+
+Failure policy and Group desired-state reconciliation are independent. A
+failure policy such as Stop determines what happens to the failed Actor
+incarnation; it does not suppress Group reconciliation. Where multiple
+policies request equivalent replacement capacity, the runtime may
+reconcile those intents rather than creating redundant replacements.
 
 ### ActorGroup Communication
 
-An Actor Group may optionally act as a communication destination.
+Only an Actor Group is an application communication target by default.
+Process and Node Groups are management, placement, capacity,
+availability, monitoring, or administrative constructs unless future
+explicit APIs define otherwise.
 
-This capability is lazy and follows the Protos pay-as-you-grow
-principle.
+An ActorGroup may optionally act as a location-transparent communication
+destination. This capability is lazy and follows the Protos
+pay-as-you-grow principle.
 
-ActorRef semantics are:
+Conceptually:
 
     ActorRef -> one concrete Actor
+    GroupRef -> one concrete ActorGroup identity; routing selects a member
 
-Communication with an Actor Group instead addresses the logical Group
-and allows its routing policy to select a member.
+ActorRef and GroupRef are both communication targets and expose the same
+fundamental send/ask communication model while retaining different
+destination semantics.
 
-Normal `send` or `ask` directed to an Actor Group selects exactly one
-eligible member.
+Multiple GroupRefs may refer to the same Group. GroupRef identity is not
+Group identity, and implementations need not globally intern GroupRef
+objects.
 
-Broadcast/multicast is a distinct explicit operation.
+A GroupRef may carry a restricted communication capability for its Group.
+Group identity is independent of the permissions carried by a particular
+GroupRef. Authority remains a separate capability.
 
-The Group retains stable logical identity while concrete membership may
-change.
+A GroupRef is location-transparent and remains associated with the same
+Group across member creation, removal, replacement, temporary empty
+membership, controller replacement, and routing-path changes.
+
+Discovery names may rebind; a concrete GroupRef never rebinds to another
+Group identity.
+
+Normal `send` or `ask` directed to an ActorGroup selects exactly one
+eligible concrete Actor by default. Broadcast/multicast is a distinct
+explicit operation.
+
+There is no Group-wide FIFO guarantee. If multiple operations happen to
+route to the same concrete Actor, that Actor's normal ordering guarantees
+apply.
+
+### Routing, Membership, and Authority
+
+Group routing may use locally available, cached, or eventually consistent
+membership information when stronger consistency is not required for
+correctness.
+
+Routing eligibility does not imply Authority. Receiving a Group-routed
+message does not grant, renew, or demonstrate Authority for an exclusive
+role or decision scope.
+
+Operations whose correctness requires Authority must independently
+demonstrate valid Authority for the relevant scope.
+
+Liveness, Group membership, routing eligibility, and Authority are
+separate concepts. An Actor may remain alive and useful for
+non-authoritative work even when it is no longer part of the current
+authoritative membership or role view.
+
+### Routing and Acceptance
 
 While the Group still owns routing responsibility and no concrete Actor
-has accepted an operation, it may wait for capacity or choose another
-eligible member.
+has accepted an operation, it may wait for capacity, select another
+eligible member, or re-route according to its routing policy.
 
-Once a particular Actor has accepted a message, normal Actor
-delivery/failure semantics apply.
+Acceptance occurs when a concrete Actor takes ownership of the message
+for processing. Acceptance does not imply handler start or completion.
 
-Actor Group communication does not imply transparent retry on another
-member after acceptance and does not introduce exactly-once delivery
-semantics.
+Once accepted, normal concrete-Actor delivery and failure semantics
+apply. Group communication does not imply transparent retry, replay, or
+exactly-once delivery after acceptance.
 
-If an Actor Group currently has no eligible member, communication
-applies backpressure.
+If the runtime cannot determine whether acceptance occurred, the
+operation becomes uncertain. Uncertainty does not authorize transparent
+replay.
 
-Demand for a Group with insufficient eligible membership may contribute
-to capacity-demand signals.
+The logical message snapshot remains the snapshot taken at the original
+`send()` or `ask()` invocation across all pre-acceptance waiting and
+rerouting.
 
-Sending to a Group does not itself create Actors, Processes, Nodes, or
-infrastructure capacity.
+### Empty, Unreachable, and Terminated Groups
+
+Group lifetime, member availability, routing reachability, controller
+reachability, and Authority availability are distinct.
+
+If a live ActorGroup currently has no eligible member, communication
+applies bounded backpressure and may remain pending according to normal
+timeout, deadline, cancellation, and capacity-demand semantics.
+
+Temporary inability to reach Group routing/control information does not
+by itself prove that the Group has terminated.
+
+If the Group is known to have terminated before a pending operation has
+been accepted by a concrete Actor, that operation fails.
+
+If a concrete Actor already accepted the operation, subsequent Group
+termination does not revoke ownership of that accepted operation; normal
+Actor semantics apply.
+
+Demand for a live Group with insufficient eligible membership may
+contribute to capacity-demand signals.
+
+Sending to a Group does not itself provision infrastructure. Group
+reconciliation may create Actors when policy requires them, and external
+Infrastructure Controllers may separately provision Process/Node
+capacity in response to semantic capacity demand.
 
 ## 51. Capacity Demand and Infrastructure Integration
 
-**CLOSED**
+**CLOSED --- REVISED**
 
 The core Protos runtime does not provision infrastructure capacity by
 default.
 
-Protos observes runtime state, performs placement/admission decisions,
-and exposes semantic capacity demand.
+Protos observes runtime state, performs semantic placement/admission and
+Group-control decisions, and exposes semantic capacity demand.
 
 Capacity demand may reflect conditions such as:
 
@@ -1507,54 +1703,58 @@ policy, cost, timing, and topology of its environment.
 
 Conceptually:
 
-    Protos runtime
-        |
-        | semantic capacity demand
-        v
-    Capacity Demand API
-        |
-        +--> metrics/OpenMetrics adapter
-        +--> Kubernetes custom/external metrics adapter
-        +--> KEDA-style external scaler
-        +--> Nomad adapter
-        `--> custom Infrastructure Controller
+    application/runtime intent
+            |
+            v
+    Protos semantic control
+            |
+            v
+    capacity demand
+            |
+            v
+    external infrastructure
+            |
+            v
+    new raw capacity
+            |
+            v
+    Protos bootstrap/discovery/membership
+            |
+            v
+    available scheduling capacity
+            |
+            v
+    Actors
 
 Metrics are one possible representation of Protos demand. They are not
 the semantic model itself.
 
-Newly provisioned capacity is incorporated into Protos through the
+Newly provisioned capacity is incorporated into Protos only through the
 runtime's normal bootstrap, discovery, and membership mechanisms.
 
 The Infrastructure Controller does not directly mutate Protos logical
-topology.
+topology or define Actor, Group, Process, Node, Cluster, routing,
+membership, failure, or Authority semantics.
 
-For example, an external orchestrator may create a new workload
-containing a Protos runtime configured with sufficient bootstrap
-information. That runtime then joins the appropriate Protos Node or
-Cluster through normal membership mechanisms.
-
-As new Processes or Nodes become available, Protos may dynamically
-activate the required higher coordination layers.
-
-This preserves pay-as-you-grow.
+A Kubernetes Deployment replica is not a Protos ActorGroup member merely
+because the workload may host Protos runtime capacity. One Process may
+host many Actors, so infrastructure replica cardinality is distinct from
+ActorGroup desired cardinality.
 
 Processes and Nodes may disappear at any time.
 
 Correctness must not depend on graceful removal.
 
-Draining is an optimization for planned capacity removal, not a
-correctness requirement.
+Draining is advisory and opportunistic: it may reduce disruption during
+planned removal, but the runtime must remain correct if a Process or Node
+disappears immediately without draining.
 
-A draining Process or Node may stop accepting new placement and may
-attempt to reduce disruption before infrastructure removal, but
-unexpected loss follows the same fundamental failure model.
-
-Exact Capacity Demand API, infrastructure adapters, scale-up/down
-policy, and draining mechanics remain open.
+Exact Capacity Demand APIs, infrastructure adapters, scale-up/down policy,
+and draining mechanics remain open.
 
 ## 52. Ephemeral Actor Liveness and Explicit Durability
 
-**CLOSED**
+**CLOSED --- REVISED**
 
 Actor liveness is ephemeral by default; durability is explicit.
 
@@ -1579,46 +1779,53 @@ These are not implicit properties of an ordinary Actor.
 
 Protos does not attempt to make every Actor fault tolerant by default.
 
-The basic runtime may restore required service capacity by creating
-replacement Actors, but that does not constitute transparent
+Higher-level runtime mechanisms may restore required service capacity by
+creating replacement Actors, but that does not constitute transparent
 continuation of the failed Actor.
+
+If durable state is later used for recovery, recovery initializes a new
+Actor incarnation from that durable state. It does not resurrect the dead
+Actor identity or ActorRef.
 
 Principle:
 
-> Actor incarnations are disposable. Durability, when required, must
-> live outside the ephemeral incarnation.
+> Actor incarnations are disposable. Durability, when required, must live
+> outside the ephemeral incarnation.
 
 ## 53. Direct ActorRef Versus Stable Group Identity
 
-**CLOSED**
+**CLOSED --- REVISED**
 
-An ActorRef addresses one concrete Actor.
+An ActorRef addresses one concrete Actor incarnation.
 
 If that Actor dies, the ActorRef remains associated with that terminated
-Actor.
-
-It is not rebound to a replacement.
+Actor and is not rebound to a replacement.
 
 If application code keeps a direct ActorRef, it has explicitly chosen to
 communicate with that individual Actor and therefore observes that
 Actor's mortality.
 
 Stable service continuity belongs to a higher-level abstraction such as
-an Actor Group.
+an ActorGroup.
 
 Conceptually:
 
     ActorRef
         -> individual, ephemeral destination
 
-    ActorGroup
-        -> stable logical destination
+    GroupRef
+        -> one stable Group identity
         -> changing membership
 
-Communication directed to a Group may continue across member replacement
-according to Group routing rules.
+    discovery name
+        -> may later resolve to another identity
 
-Communication directed to an individual Actor does not.
+Communication directed to a live Group may continue across member
+replacement according to Group routing rules. Communication directed to
+an individual Actor does not.
+
+Group identity is stable across membership/controller changes but is not
+intrinsically durable across loss of the state that defines the Group.
 
 ## 54. Actors Are Replaced, Never Restarted
 
@@ -1662,19 +1869,20 @@ Principle:
 
 ## 55. Supervision Versus Group Controllers
 
-**CLOSED**
+**CLOSED --- REVISED**
 
-Supervision/failure authority reacts to failures.
+Supervision/failure authority reacts to the failure of one Actor
+incarnation.
 
 Group Controllers maintain desired Group state.
 
 These responsibilities are distinct.
 
 A failure authority may observe an Actor failure and apply failure
-policy.
+policy such as Replace, Stop, Escalate, or Ignore.
 
-A Group Controller observes Group policy and current membership and acts
-when the desired state is not satisfied.
+A Group Controller independently observes Group policy and current
+membership and reconciles when desired state is not satisfied.
 
 For example:
 
@@ -1682,9 +1890,16 @@ For example:
     actual members = 3
         -> Group Controller may create one new Actor
 
-For a Group member, replacement capacity may arise simply because the
-Group Controller observes that desired membership is no longer
-satisfied.
+A failure policy such as Stop terminates or leaves terminated the failed
+Actor incarnation. It does not mean `desired cardinality -= 1` and does
+not suppress independent Group reconciliation.
+
+Conversely, a Group membership deficit does not alter the failure policy
+of the Actor that terminated.
+
+If both failure policy and Group policy request equivalent replacement
+capacity, the runtime may reconcile those intents rather than creating
+redundant replacements.
 
 The replacement is not a continuation of the failed member.
 
@@ -1841,29 +2056,33 @@ accepted the operation.
 
 ## 61. Processes Are Ephemeral Capacity
 
-**CLOSED**
+**CLOSED --- REVISED**
 
 Processes are ephemeral execution capacity, not durable application
 identities.
 
-If a Process dies, the Actors hosted by that Process die.
+If a Process is known to have terminated, every Actor still hosted by
+that Process terminates with it.
 
-Their ActorRefs terminate according to the normal Actor failure
-semantics.
+This inference requires actual Process termination evidence. Node
+unreachability, loss of Cluster membership, routing failure, or partition
+does not by itself prove Process death.
+
+If live Actor migration had already completed before Process death, the
+migrated Actor is no longer hosted by the failed Process and therefore is
+not terminated by that Process failure.
 
 Higher-level mechanisms react independently:
 
 -   Group Controllers may restore desired membership
 -   Failure authorities may apply policy
 -   Capacity-demand signals may increase
--   External Infrastructure Controllers may provision additional
-    capacity
+-   External Infrastructure Controllers may provision additional capacity
 
 A newly created Process is new capacity.
 
-It is not semantically the reincarnation of the Process that
-disappeared, even if external infrastructure considers it a replacement
-workload.
+It is not semantically the reincarnation of the Process that disappeared,
+even if external infrastructure considers it a replacement workload.
 
 Protos does not require resurrection of a particular Process identity.
 
@@ -1893,33 +2112,36 @@ Principle:
 
 ## 63. Cluster Identity Is Independent of Node Identity
 
-**CLOSED**
+**CLOSED --- REVISED**
 
 Cluster identity is a logical coordination-domain identity, independent
-of the identity of its current Nodes.
+of the identity or current number of its Nodes.
 
 Nodes may enter and leave while the Cluster remains the same logical
-domain.
+domain. A Cluster may conceptually have zero current Nodes.
 
 No individual Node is required to be the durable identity anchor for the
 Cluster.
 
-Whether Cluster identity can survive the loss of all members remains
-open.
+Persistence of Cluster identity and authoritative/control state across
+complete loss of runtime membership is explicit/configurable rather than
+intrinsic.
 
-That stronger property depends on the future membership, bootstrap,
-authority, and persistence model.
+If the defining state is durably preserved, later Nodes may participate
+in the same logical Cluster. If all defining state is lost, a later
+bootstrap creates a new Cluster identity rather than resurrecting the old
+one.
 
 The Cluster is therefore different from Actor, Process, and Node
-identities: it represents the logical field in which ephemeral members
-participate.
+identities: it represents the logical coordination field in which
+ephemeral members participate.
 
 ## 64. Loss of Node Membership Does Not Prove Physical Process Death
 
-**CLOSED**
+**CLOSED --- REVISED**
 
 Loss of Node membership removes the Processes hosted by that Node from
-the usable capacity of that Cluster view.
+the usable capacity of the affected Cluster view.
 
 It does not prove that those Processes have physically terminated.
 
@@ -1931,163 +2153,187 @@ Protos therefore keeps separate:
 -   Membership
 -   Reachability
 -   Physical existence
+-   Authority
 
-A Cluster view must not treat Processes behind a lost/unreachable Node
-as usable Cluster capacity unless the relevant membership/authority
-rules permit it.
+A Cluster view must not treat Processes behind a lost/unreachable Node as
+usable Cluster capacity unless the relevant membership, routing, and
+Authority rules permit it.
 
-The behavior of isolated runtime domains is governed by the partition
-and Cluster-authority rules.
+Known Process death may establish termination of Actors still hosted by
+that Process; Node membership loss alone may not.
 
-## 65. Local Execution May Continue Without Cluster Authority
+## 65. Local Execution May Continue Without Higher-Scope Authority
 
-**CLOSED**
+**CLOSED --- REVISED**
 
-Loss of Cluster authority does not imply loss of local execution.
+Loss of Authority in one scope does not imply loss of unrelated local
+execution.
 
-A partitioned or isolated Node may continue operations that do not
-require Cluster authority, including purely local Actor execution, local
-Futures, local I/O, and other valid local computation.
+A partitioned or isolated runtime domain may continue operations that do
+not require the lost Authority, including purely local Actor execution,
+local Futures, local I/O, and other valid local computation.
 
-However, a runtime domain must not perform operations requiring Cluster
-authority unless it can demonstrate that it currently possesses the
-required authority.
+However, a runtime domain must not perform an operation whose correctness
+requires Authority unless it can demonstrate the required currently valid
+Authority for that operation's scope.
 
 Conceptually:
 
-    Cluster authority lost
+    Authority(scope X) lost
         |
-        +-- local Actor execution may continue
-        +-- local Process/Node work may continue
+        +-- unrelated execution may continue
+        +-- non-authoritative work may continue
         |
-        `-- authoritative Cluster decisions are disabled
+        `-- operations requiring Authority(scope X) are disabled
 
 Protos does not choose either extreme:
 
 -   A partition does not automatically kill all local computation.
--   Every partition does not automatically behave as an independent
-    authoritative Cluster.
+-   Every partition does not automatically become independently
+    authoritative.
 
-This allows graceful degradation according to the runtime level actually
-available.
+Being alive or reachable does not imply being authoritative.
 
-## 66. Cluster Authority
+## 66. Authority
 
-**CLOSED**
+**CLOSED --- REVISED**
 
-Cluster authority is the exclusive capability to make authoritative
-decisions within a Cluster authority scope.
+Authority is the exclusive capability required to make an authoritative
+decision within a particular decision scope.
 
-For a particular authoritative decision scope, Protos requires
-exclusivity: conflicting partitions must not both be valid authorities
-for the same exclusive decision.
+For one authoritative invariant and scope, conflicting participants must
+not simultaneously possess valid Authority to make incompatible
+exclusive decisions.
 
-Protos does not prescribe the mechanism used to establish that
-authority.
+Authority is distinct from communication capability:
 
-Possible mechanisms may include:
+    ActorRef / GroupRef
+        = communication capability
 
--   Quorum
--   Consensus
--   Leader election
--   Leases
--   Witnesses
--   External coordination services
--   Other mechanisms providing the required properties
+    Authority
+        = exclusive capability for authoritative decisions
 
-Observation does not necessarily require exclusive authority.
+Possessing an ActorRef or GroupRef does not by itself demonstrate
+Authority.
 
-Authoritative mutations or decisions may include, depending on scope:
+An operation requires Authority only when conflicting concurrent
+decisions within the same scope could violate an authoritative invariant.
 
--   Definitive membership changes
--   Placement ownership
--   Group membership management
--   Replacement decisions
--   Topology-changing operations
+Membership observation, Group membership management, replacement,
+placement, routing, and topology operations are not intrinsically
+authoritative. Particular forms of those operations require Authority
+only when their correctness depends on exclusivity or another explicit
+authoritative invariant.
 
-If a runtime domain cannot demonstrate authority for an operation that
-requires it, it must refrain from performing that authoritative
-operation.
+Examples that may require Authority depending on the policy include:
 
-Failure to prove authority does not automatically stop unrelated local
-computation.
+-   Granting an exclusive writer role
+-   Enforcing a strict singleton or maximum-authoritative-role invariant
+-   Committing a definitive membership decision when conflicting commits
+    would be invalid
+-   Transferring an exclusive lease or fencing token
+-   Other decisions whose conflicting simultaneous validity would violate
+    correctness
 
-## 67. Cluster Authority Is Scoped
+Observation and ordinary convergent reconciliation need not require
+exclusive Authority.
 
-**CLOSED**
+If a runtime domain cannot demonstrate Authority for an operation that
+requires it, it must refrain from performing that authoritative operation.
+Failure to prove Authority does not automatically stop unrelated work.
 
-Cluster authority is scoped, not necessarily global.
+Protos does not prescribe the mechanism used to establish Authority.
+Possible mechanisms may include quorum, consensus, leader election,
+leases, witnesses, external coordination services, or other mechanisms
+providing the required exclusivity properties.
 
-Protos does not require one global "master" that serializes every
-Cluster decision.
+## 67. Authority Is Scoped
 
-Different authority scopes may exist for different responsibilities.
+**CLOSED --- REVISED**
+
+Authority is scoped to the smallest runtime/control domain in which
+conflicting authoritative decisions are possible.
+
+Authority is not necessarily Cluster-global, and using the same
+abstraction in a Cluster does not force local uses to pay Cluster-level
+coordination costs.
 
 Conceptually:
 
-    Cluster membership authority
-    Group G1 control authority
-    Group G2 control authority
-    Placement-domain authority
-    other independent authority scopes
+    local Group entirely inside one Process
+        -> Process-local Authority if exclusivity is required
 
-Exclusivity is required within an authority scope, not across unrelated
-Cluster responsibilities.
+    Group coordinated across Processes of one Node
+        -> Node-scoped Authority if exclusivity is required
+
+    Group coordinated across Nodes
+        -> distributed/Cluster-scoped Authority if exclusivity is required
+
+Different Authority scopes may exist independently for different
+responsibilities.
+
+Exclusivity is required within an Authority scope, not across unrelated
+responsibilities.
 
 The runtime may therefore distribute or shard control responsibilities
 while preserving the rule that conflicting authorities cannot
 simultaneously make the same exclusive decision.
 
-Membership may require special treatment because other authority scopes
-can depend on it, but the exact implementation remains open.
+Principle:
+
+> Authority cost grows with the coordination scope actually required.
 
 ## 68. Controllers Are Ephemeral
 
-**CLOSED**
+**CLOSED --- REVISED**
 
-Controllers are ephemeral.
+Controllers are ephemeral control-plane executors.
 
 Correctness must not depend on the lifetime of the particular controller
-instance that currently exercises an authority.
+instance currently performing reconciliation or exercising Authority.
 
-If a controller disappears, another eligible controller may acquire the
-corresponding authority and continue control operations.
+A Group Controller is not part of Group identity.
 
-The important durable concept is the authority and required control
-state, not the controller instance.
+If a controller disappears, another eligible controller may continue
+control operations, acquiring any required Authority according to the
+rules of that Authority scope.
 
-Any control state required to transfer authority must survive or be
+Control state needed for continued control must survive or be
 reconstructible independently of the controller instance that previously
-held authority.
+held it.
 
-For example, Group desired cardinality, availability policy, or other
-authoritative control information must not exist solely in irreplaceable
-controller RAM if continued control requires that information.
+For example, Group desired cardinality, availability policy, Group
+identity, or other control information that must survive controller
+replacement must not exist solely in irreplaceable controller RAM.
 
-The exact mechanism by which such state survives or is reconstructed
+Such control information is not intrinsically authoritative merely
+because it must survive controller replacement.
+
+The exact mechanism by which control state survives or is reconstructed
 remains open.
 
 Principle:
 
 > The controller is cattle too.
 
-## 69. Authoritative Control State Is Mechanism-Independent
+## 69. Authority and Control State Are Mechanism-Independent
 
-**CLOSED**
+**CLOSED --- REVISED**
 
-Protos specifies the consistency and survivability properties required
-of authoritative control state, not a mandatory storage or consensus
-implementation.
+Protos specifies the consistency, exclusivity, and survivability
+properties required by Authority and control state, not a mandatory
+storage or consensus implementation.
 
-Depending on the active runtime domain, the required mechanism may range
-from ordinary local state to distributed coordination.
+Depending on the active runtime domain and invariant, the required
+mechanism may range from ordinary local state to distributed
+coordination.
 
 Conceptually:
 
     single Process
-        -> local runtime state may be sufficient
+        -> local state may be sufficient
 
-    multiple Processes / Node
+    multiple Processes / one Node
         -> Node-level coordination may be sufficient
 
     distributed Cluster
@@ -2100,19 +2346,18 @@ mechanism.
 No specific technology such as Raft, etcd, or another consensus/store
 implementation is part of Protos semantics at this stage.
 
-The mechanism scales with the active runtime domain.
-
-No distributed coordination mechanism is required when no distributed
-authority exists.
+No distributed coordination mechanism is required merely because Groups
+or multiple Actors exist. Distributed coordination is paid for only when
+an active invariant or durability requirement actually needs it.
 
 This preserves pay-as-you-grow.
 
-## 70. External Authority Mechanisms Do Not Define Protos Semantics
+## 70. External Authority and Infrastructure Mechanisms Do Not Define Protos Semantics
 
-**CLOSED**
+**CLOSED --- REVISED**
 
-Protos may delegate the mechanism used to establish, demonstrate, or
-persist authority to external infrastructure.
+Protos may delegate mechanisms used to establish, demonstrate, or persist
+Authority and control state to external infrastructure.
 
 For example, an implementation may use:
 
@@ -2123,15 +2368,15 @@ For example, an implementation may use:
 -   A Protos-native mechanism
 
 However, external infrastructure does not define the meaning of Protos
-authority.
+Authority or logical topology.
 
 Conceptually:
 
-    authority mechanism
-        may be external
+    external mechanism
+        may establish evidence / persist state / provide raw capacity
 
-    semantic authority
-        belongs to Protos
+    Protos semantics
+        define Actor, Group, membership, routing, failure and Authority
 
 An external orchestrator may help discover instances, establish leases,
 persist control metadata, or provision capacity.
@@ -2140,17 +2385,22 @@ It does not thereby become the semantic definition of:
 
 -   Actor
 -   ActorRef
--   Actor Group
+-   ActorGroup / GroupRef
+-   Process
 -   Protos Node
 -   Protos Cluster
 -   Group membership
 -   Protos routing
 -   Protos failure semantics
--   Protos authority
+-   Protos Authority
 
 For example, a Kubernetes Deployment is not semantically a Protos
 ActorGroup merely because it may provision workloads that host Group
 members.
+
+External infrastructure disappearance is an observed capacity/failure
+event from Protos' perspective, not a direct Protos logical mutation
+performed by the orchestrator.
 
 The same Protos program and runtime model should remain valid across
 standalone execution, Kubernetes, Nomad, or future infrastructure
@@ -2158,29 +2408,31 @@ environments.
 
 ## Open Design Topics
 
-The following topics have been identified but are not yet closed:
+The following topics remain intentionally open. Items whose fundamental
+semantics are already closed are listed only for the API, policy,
+mechanism, or implementation detail that still requires design.
 
 -   Failure-domain discovery and configuration
 -   Exact HA policy API and syntax
--   Exact Group API and syntax
--   Group controller API
--   Group lifecycle
+-   Exact Group/GroupRef API and syntax
+-   Group creation/termination/durability API and ownership mechanics
+-   Group controller API and controller-election mechanics
 -   Group routing policy API
 -   Advanced Group routing policies
 -   Group broadcast and multicast semantics
--   Group membership transition semantics
+-   Group membership transition protocol
 -   Exact `spawn` API and syntax
 -   Actor bootstrap representation
 -   Exact SpawnOperation API
 -   Exact SpawnOperation states
--   SpawnOperation timeout and cancellation semantics
+-   SpawnOperation timeout and cancellation API
 -   Exact current-behavior installation/replacement API
 -   Exact SendOperation API
 -   Exact SendOperation states
 -   Definition of what SendOperation `.value()` means
 -   Delivery acknowledgement levels
 -   Delivery guarantees
--   Retry semantics
+-   Retry API and policies
 -   Message IDs and attempt IDs
 -   Deduplication
 -   Idempotency support
@@ -2194,7 +2446,7 @@ The following topics have been identified but are not yet closed:
 -   Generators and suspendable iteration
 -   Whether Task should become observable
 -   Pub/sub
--   Routers and load balancing
+-   Advanced routers and load-balancing policies
 -   Actor capacity policy
 -   Process capacity provisioning policy
 -   Node capacity provisioning policy
@@ -2202,40 +2454,42 @@ The following topics have been identified but are not yet closed:
 -   Scale-up policy in infrastructure adapters/controllers
 -   Scale-down policy in infrastructure adapters/controllers
 -   Proactive capacity-demand signals
--   Draining Processes and Nodes
--   Infrastructure Controller integration
+-   Draining policy and mechanics
+-   Infrastructure Controller integration APIs
 -   External infrastructure adapters such as Kubernetes or Nomad
 -   Actor graceful shutdown
--   Actor stop semantics
+-   Actor stop API and exact lifecycle mechanics
 -   Actor garbage collection
 -   Monitoring API
 -   Fatal versus non-fatal handler errors
 -   Which errors terminate an Actor
 -   Failure-authority API
--   Process failure detection
--   Node failure detection
--   Network partitions
--   Split-brain behavior
+-   Process failure detection mechanism
+-   Node failure detection mechanism
+-   Network-partition detection and reporting
+-   Split-brain mitigation mechanisms
 -   Cluster membership protocol
--   Cluster authority-scope model
+-   Authority-scope API/model representation
 -   Authority acquisition and transfer
 -   Authority leases/election/consensus implementation
--   Authoritative control-state storage/reconstruction
+-   Authoritative/control-state storage and reconstruction
+-   Fencing-token/API design for strict authoritative roles
 -   Cluster authentication
 -   Placement scoring algorithm
 -   Placement stability and hysteresis
 -   Placement policy priorities
 -   Actor affinity and anti-affinity API
 -   Hard placement constraints
--   Actor rebalancing
--   Actor migration
+-   Rebalancing algorithms and policy
+-   Optional live Actor migration mechanism
 -   Actor persistence
 -   Actor checkpointing
--   State recovery
+-   Durable-state recovery API/mechanism
 -   State replication
 -   Replicated Actor/service semantics
--   ActorRef routing
--   ActorRef persistence semantics, if any
+-   ActorRef routing implementation
+-   ActorRef persistence/serialization semantics, if any
+-   GroupRef persistence/serialization and capability semantics, if any
 -   Service discovery implementation
 -   Physical-locality discovery
 -   Cross-process same-host optimization
@@ -2262,12 +2516,12 @@ The following topics have been identified but are not yet closed:
 -   Resource limits and quotas
 -   Runtime resource-pressure model
 -   Actor resource-cost estimation and learning
--   ActorRef security and authorization
+-   ActorRef/GroupRef capability security and authorization
 -   Remote authentication
 -   Cluster configuration UX
 -   Cluster lazy startup
 -   Node lazy activation
--   Cluster identity after loss of all members
+-   Durable Cluster bootstrap after zero active Nodes
 -   Relationship between logical Protos topology and physical
     infrastructure topology
 -   Module implementation sharing
@@ -2279,5 +2533,5 @@ The following topics have been identified but are not yet closed:
 -   Code availability and versioning across Nodes
 -   Hot code update
 -   NUMA-aware scheduling
--   Application-root versus process-root distinction in distributed
-    deployments
+-   Optional administrative application/service identity for deployment,
+    configuration, observability, or ownership
