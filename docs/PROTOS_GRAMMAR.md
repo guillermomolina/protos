@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 68  
+Document revision: 69  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -680,6 +680,17 @@ super-message-send =
 
 `super` is not a value. Consequently bare `super`, passing `super` as an argument, assigning it to a slot, and extracting `super.member` without invoking it are syntax errors in the core grammar.
 
+## 12.2 Intrinsic References
+
+```ebnf
+intrinsic-reference =
+      "this"
+    | "context"
+    | "args" ;
+```
+
+`this`, `context`, and `args` are intrinsic references, not ordinary identifiers. `true`, `false`, and `null` are literals only (see Literals), and `super` is governed exclusively by `super-message-send` (see Super Message Send); none of them is an intrinsic reference.
+
 ## 13. Parenthesized Expressions
 
 ```ebnf
@@ -994,6 +1005,11 @@ call-suffix =
 
 index-suffix =
     "[", expression, "]" ;
+
+member-expression =
+    primary-expression,
+    { postfix-operation },
+    ".", identifier ;
 ```
 
 Examples:
@@ -1203,6 +1219,73 @@ a + b
 ```
 
 conceptually dispatches the `+` behavior on `a`.
+
+The normative operator/expression hierarchy preserves the existing precedence order:
+
+```ebnf
+binary-expression =
+      logical-or-expression
+    | custom-binary-expression ;
+
+logical-or-expression =
+    logical-and-expression,
+    { "||", logical-and-expression } ;
+
+logical-and-expression =
+    equality-expression,
+    { "&&", equality-expression } ;
+
+equality-expression =
+    comparison-expression,
+    { equality-operator, comparison-expression } ;
+
+equality-operator =
+      "=="
+    | "!="
+    | "==="
+    | "!==" ;
+
+comparison-expression =
+    additive-expression,
+    { comparison-operator, additive-expression } ;
+
+comparison-operator =
+      "<"
+    | "<="
+    | ">"
+    | ">=" ;
+
+additive-expression =
+    multiplicative-expression,
+    { additive-operator, multiplicative-expression } ;
+
+additive-operator =
+      "+"
+    | "-" ;
+
+multiplicative-expression =
+    unary-expression,
+    { multiplicative-operator, unary-expression } ;
+
+multiplicative-operator =
+      "*"
+    | "/"
+    | "%" ;
+
+custom-binary-expression =
+    unary-expression,
+    custom-binary-operator,
+    unary-expression,
+    { custom-binary-operator, unary-expression } ;
+
+unary-expression =
+      unary-operator, unary-expression
+    | postfix-expression ;
+
+unary-operator =
+      "!"
+    | "-" ;
+```
 
 Core precedence, highest to lowest:
 
@@ -1788,7 +1871,7 @@ Core v0.1 defines no special documentation-comment syntax.
 
 ## 39. Compact EBNF
 
-The compact grammar below incorporates the syntax decisions made through revision 68. Semantic validation still applies after parsing. String literal lexical forms are defined normatively in the Literals section and referenced here rather than duplicated.
+The compact grammar below incorporates the syntax decisions made through revision 69. Semantic validation still applies after parsing. String literal lexical forms are defined normatively in the Literals section and referenced here rather than duplicated.
 
 ```ebnf
 program =
