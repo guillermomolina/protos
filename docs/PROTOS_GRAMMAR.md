@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 75  
+Document revision: 78  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -9,6 +9,8 @@ Last updated: 2026-09-02
 ## Prelude Binding Note
 
 Prelude bindings introduce no additional grammar. The shared standard prelude is frozen by runtime semantics. Therefore `name = value` cannot modify a binding found only in the prelude; `name: value` creates a local slot and may explicitly shadow that name.
+
+Freezing is shallow: because the prelude is shared between Actors, any Protos object physically shared through it must be semantically immutable for the duration of that sharing, and mutable standard-library state remains Actor-local.
 
 ## 1. Scope
 
@@ -137,7 +139,7 @@ Bare `super`, `x: super`, `foo(super)`, and method extraction such as `f: super.
 
 This revision does not introduce contextual lexing. The lexer continues to tokenize the seven reserved spellings as their dedicated reserved tokens rather than as ordinary identifier tokens; it does not need to inspect whether a token follows `.` or to reclassify reserved tokens. The parser accepts either an identifier token or one of the seven reserved tokens when parsing `member-name`.
 
-Names provided by the standard prelude, such as `Object`, `Future`, `Number`, `String`, `Map`, or `IdentityMap`, are not reserved words. Error object names are not reserved.
+Names provided by the standard prelude, such as `Object`, `Future`, `Number`, `String`, `Map`, `IdentityMap`, or `Context`, are not reserved words. In particular, the standard prelude prototype `Context` is not a reserved word and is distinct from the reserved intrinsic `context`. Error object names are not reserved.
 
 Core v0.1 defines no additional reserved words such as `if`, `else`, `while`, `for`, `class`, `function`, `try`, `catch`, `throw`, `async`, or `await`.
 
@@ -619,7 +621,7 @@ uses exactly the same slot-creation syntax at module top level as it does elsewh
 
 No `global`, `var`, `let`, `const`, or equivalent declaration form is introduced.
 
-Import/export syntax is intentionally not defined by Core Grammar v0.1 and will be specified with the module system.
+Core Grammar v0.1 defines no dedicated `import` declaration syntax and no `export` declaration syntax or separate export mechanism. `import(specifier)` is an ordinary call/message operation exposed by the standard environment; it yields the module instance, and cross-module access occurs explicitly by obtaining a module instance and accessing its slots through ordinary member lookup. Module identity, caching, initialization states, cycle handling, and host-specific module-specifier resolution are runtime/module-loader semantics rather than grammar rules (see the module rules in `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md`).
 
 ## 7. Expressions
 
@@ -2193,7 +2195,7 @@ Core v0.1 defines no special documentation-comment syntax.
 
 ## 39. Compact EBNF
 
-The compact grammar below incorporates the syntax decisions made through revision 75. Semantic validation still applies after parsing. String literal lexical forms are defined normatively in the Literals section and referenced here rather than duplicated.
+The compact grammar below incorporates the syntax decisions made through revision 78. Semantic validation still applies after parsing. String literal lexical forms are defined normatively in the Literals section and referenced here rather than duplicated.
 
 ```ebnf
 program =
@@ -2679,15 +2681,15 @@ Handler matching by delegation and unwinding behavior are runtime semantics and 
 
 ## Module Import Grammar Note
 
-Core Grammar v0.1 does not require dedicated `import` or `export` syntax.
+Core Grammar v0.1 defines no dedicated `import` declaration syntax and no `export` declaration syntax or separate export mechanism.
 
-A module-loading facility may be exposed through ordinary call/message syntax, for example:
+The module-loading operation is exposed through ordinary call/message syntax, for example:
 
 ```js
 module: import("./module.pt")
 ```
 
-The parser treats the module specifier expression like any other argument expression. Canonical module identity, caching, initialization states, cycle detection, and host-specific resolution are runtime/module-loader semantics rather than grammar rules.
+`import(specifier)` yields the module instance; cross-module access occurs explicitly by obtaining a module instance and accessing its slots through ordinary member lookup. The parser treats the module specifier expression like any other argument expression. Canonical module identity, caching, initialization states, cycle detection, and host-specific resolution are runtime/module-loader semantics rather than grammar rules.
 
 No grammar rule implicitly injects imported bindings into the current lexical scope.
 

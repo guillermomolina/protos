@@ -4,6 +4,20 @@ All notable changes to the Protos language specification will be documented in t
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.78] - 2026-09-02
+
+### Changed
+- Synchronized document revisions: all four canonical documents now carry document revision 78. `PROTOS_LANGUAGE_SPEC.md` 77 -> 78, `PROTOS_RUNTIME_SEMANTICS.md` 76 -> 78, `PROTOS_GRAMMAR.md` 75 -> 78, and `PROTOS_CONCURRENCY_MODEL.md` from its former independent document revision 07 to the common revision 78. Language version remains 0.1.
+- Formalized `Context` as the standard prototype for execution-context objects (design option A). Execution contexts remain ordinary Protos objects with ordinary delegation: an activation context and a `moduleContext` each delegate through `Context` to `Object`. `Context` is a standard prelude prototype, is not a reserved word, and is distinct from the reserved intrinsic pseudo-identifier `context`. Runtime pseudocode no longer refers to an undefined `standardContextPrototype`: activation contexts and module contexts are created with `parent = Context`, and behavior provided by `Context` is inherited through ordinary Protos delegation with no special lookup mechanism.
+- Closed the shared-prelude / shallow-freeze / Actor-isolation hole. New invariant: any Protos object physically shared between Actors through the standard prelude must be semantically immutable for the duration of that sharing, and mutable Protos state reachable through standard facilities must be Actor-local. Freezing the prelude remains shallow and is not by itself sufficient to make objects referenced by its slots safe to share. No deep freeze is introduced; Actor isolation is not weakened; and implementations may physically share immutable implementation artifacts (parsed syntax, bytecode, machine code, immutable metadata, immutable constant data) where sharing is semantically unobservable, without being required to duplicate immutable data unnecessarily.
+- Removed stale export terminology from the module rules. Core v0.1 has no export declarations, no export namespace, no `exports` object, and no separate export mechanism: `import(specifier)` is an ordinary operation exposed by the standard environment, it yields the module instance, and cross-module access occurs explicitly by obtaining a module instance and accessing its slots through ordinary member lookup. The obsolete wording "module/import/export mechanism" and "Import/export syntax is intentionally not defined ... and will be specified with the module system" was replaced consistently. Host-specific resolution of files, packages, standard-library modules, and search paths remains outside Core v0.1.
+- Fixed two Future-composition examples that used the invalid parameterized trailing-closure form `future.then() (value) { ... }`. Both now use an ordinary explicit Closure argument: `future.then(value => { transform(value) })`. Parameterized trailing closures are not restored; trailing-closure syntax remains parameterless and unchanged.
+- Renumbered `PROTOS_RUNTIME_SEMANTICS.md` into a consistent monotonically increasing sequence, resolving the duplicated section numbers 8 (Prefix Operator Lowering / Slot Creation) and 25 (Identity / Semantic Equality). No semantics changed during renumbering.
+
+### Fixed
+- Corrected broken "the language" wording artifacts in `PROTOS_RUNTIME_SEMANTICS.md` (e.g., "a the language object" -> "a language object", "ordinary the language error object" -> "ordinary language error object").
+- `PROTOS_CONCURRENCY_MODEL.md` gains a CLOSED section 72, Standard Prelude Sharing, making the Actor-isolation rule and the standard-prelude rule explicitly agree; the document's module-state section already permitted sharing immutable implementation artifacts.
+
 ## [0.1.77] - 2026-09-02
 
 ### Changed

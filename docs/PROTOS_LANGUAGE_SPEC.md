@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 77  
+Document revision: 78  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -47,7 +47,7 @@ Reserved-word recognition is case-sensitive. Reserved words cannot be used as or
 
 A reserved-word spelling is nevertheless a valid contextual member name in the structural position immediately following a member-access `.`. In that position it denotes an ordinary slot or message name and does not retain its expression-level intrinsic, literal, or special meaning: `obj.true` denotes the member named `"true"`, and `obj.true()` invokes the executable stored in that member. This applies to super message sends as well: `super.true()`, `super.this()`, and `super.super()` are valid super message sends whose message names are respectively `true`, `this`, and `super`. Reserved words remain invalid everywhere the grammar expects `identifier`, including parameter names, rest-parameter names, bare assignment targets, and bare slot-creation targets.
 
-Names from the standard prelude such as `Object`, `Future`, `Number`, `String`, `Map`, or `IdentityMap` are not reserved words.
+Names from the standard prelude such as `Object`, `Future`, `Number`, `String`, `Map`, `IdentityMap`, or `Context` are not reserved words.
 
 ## 1.2 Dynamic Typing
 
@@ -306,6 +306,18 @@ context
 
 There is no separate semantic category called a local variable. Local variables are slots of an execution context.
 
+Execution contexts are ordinary Protos objects. Their standard prototype is `Context`, provided by the standard prelude:
+
+```text
+activationContext
+        ↓
+Context
+        ↓
+Object
+```
+
+`Context` is not a reserved word, and it is distinct from the reserved intrinsic pseudo-identifier `context`, which denotes the current execution context. Behavior provided by `Context` is inherited through ordinary Protos delegation; there is no separate runtime object category for execution contexts and no special lookup mechanism associated with `Context`.
+
 ### Object Construction Is Not a Lexical Capture Scope
 
 An object body executes with the object being constructed as its current slot-creation context, but the object itself does **not** become a lexical environment captured by method closures declared in that body.
@@ -373,9 +385,11 @@ moduleContext
 
 Closures created during module execution capture the module context through the ordinary lexical-context mechanism. No separate global lookup or global assignment rule exists.
 
+Like every execution context, a `moduleContext` delegates through the standard `Context` prototype to `Object` (see Execution Context).
+
 Each module has its own module context. Modules do not implicitly share mutable global state.
 
-Cross-module visibility must be established explicitly by the module/import/export mechanism. Module instance identity, caching, initialization, cycle, and failure semantics are defined in the section Module Loading, Identity, and Cycles; only host-specific module-specifier resolution remains outside Core v0.1.
+Cross-module visibility is established explicitly: a module obtains another module's instance through `import(specifier)` and accesses its top-level bindings as slots of that module instance through ordinary member lookup. Core v0.1 introduces no dedicated import declaration syntax and no export declaration syntax or separate export mechanism. Module instance identity, caching, initialization, cycle, and failure semantics are defined in the section Module Loading, Identity, and Cycles; only host-specific module-specifier resolution remains outside Core v0.1.
 
 Universal language facilities such as core prototypes and standard behavior may be supplied through a shared prelude or root lexical environment. Such facilities remain part of the ordinary context and lookup model rather than introducing a global-variable namespace.
 
@@ -386,6 +400,12 @@ print("hello")     // reads the prelude binding
 print = myPrint     // ERROR: the prelude binding is frozen
 print: myPrint      // OK: creates a module-local binding that shadows it
 ```
+
+Freezing is shallow, so freezing the prelude is not by itself sufficient to make arbitrary objects referenced by its slots safe to share between Actors. The governing invariant is therefore:
+
+> Any Protos object physically shared between Actors through the standard prelude must be semantically immutable for the duration of that sharing. Mutable Protos state reachable through standard facilities must be Actor-local.
+
+The implementation may physically share immutable implementation artifacts — parsed syntax, bytecode, machine code, immutable metadata, and immutable constant data — where the sharing is semantically unobservable. Mutable standard-library or runtime state belongs to the Actor that uses it. This rule does not change the existing shallow-freeze semantics, does not introduce deep freeze, does not weaken Actor isolation, and does not require implementations to duplicate immutable data unnecessarily.
 
 This preserves module isolation: modules may share immutable standard facilities, but they do not acquire shared mutable global state through the prelude.
 
@@ -1624,9 +1644,9 @@ If the Future completed with an error, `value()` signals that error in the waiti
 A Future supports transformation:
 
 ```js
-future.then() (value) {
+future.then(value => {
     transform(value)
-}
+})
 ```
 
 `then` returns another Future.
@@ -1737,7 +1757,7 @@ null is the only absence value.
 
 A missing slot is not null; it is an error.
 
-Execution contexts are objects.
+Execution contexts are objects; their standard prototype is `Context`.
 
 Closures capture lexical contexts by reference.
 
@@ -1767,6 +1787,8 @@ Top-level bindings are slots of a module execution context.
 There is no special global-variable category.
 
 Modules do not implicitly share mutable global state.
+
+Actors share no mutable Protos state; any Protos object physically shared between Actors through the standard prelude is semantically immutable for the duration of that sharing.
 ```
 
 ## Conditional Protocol and Truthiness
@@ -2161,7 +2183,7 @@ math: import("math")
 math.sin(x)
 ```
 
-No ES-module-style static binding declarations, CommonJS `exports`, Python namespaces, or another language's module syntax are introduced. Cross-module visibility remains explicit.
+No ES-module-style static binding declarations, CommonJS `exports`, Python namespaces, or another language's module syntax are introduced. Core v0.1 defines no export declaration syntax and no separate export mechanism: a module's directly observable surface is its top-level binding slots, accessed through the module instance. Cross-module visibility remains explicit.
 
 The exact resolver rules for files, packages, standard-library modules, search paths, and other host-specific sources are outside Core Language v0.1.
 

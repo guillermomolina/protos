@@ -1,7 +1,9 @@
 # Protos Concurrency Model v0.1
 
-Language version: 0.1 Document revision: 07 Status: Draft Last updated:
-2026-09-02
+Language version: 0.1
+Document revision: 07
+Status: Draft
+Last updated: 2026-09-02
 
 # Protos Multithreading Design Ledger v1
 
@@ -2705,6 +2707,38 @@ Principle:
 > wherever the runtime can preserve simple logical isolation, while
 > exposing programmer-visible synchronization machinery only if a future
 > workload proves that the simpler model is fundamentally insufficient.
+
+## 72. Standard Prelude Sharing
+
+**CLOSED**
+
+The standard prelude is shared between Actors and is frozen. Freezing is
+shallow, so freezing the prelude does not by itself make arbitrary
+mutable objects referenced by its slots safe to share between Actors.
+
+Rule:
+
+> Any Protos object physically shared between Actors through the standard
+> prelude must be semantically immutable for the duration of that
+> sharing. Mutable Protos state reachable through standard facilities
+> must be Actor-local.
+
+Consequences:
+
+-   The prelude itself may be physically shared, and its slots may refer
+    to immutable Protos objects.
+-   A prelude slot must not let two Actors share mutable Protos state.
+-   Mutable standard-library or runtime state — such as an Actor's
+    module cache and module instances — belongs to the Actor that uses
+    it.
+-   The implementation may physically share immutable implementation
+    artifacts such as parsed syntax, bytecode, machine code, immutable
+    metadata, and immutable constant data where the sharing is
+    semantically unobservable.
+
+The existing rule that freeze is shallow is unchanged: no deep freeze is
+introduced. Actor isolation is not weakened, and implementations are not
+required to duplicate immutable data unnecessarily.
 
 ## Open Design Topics
 

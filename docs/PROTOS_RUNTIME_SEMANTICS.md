@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 76  
+Document revision: 78  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -16,7 +16,7 @@ The goal is not to mandate an implementation strategy, but to define observable 
 
 ---
 
-## 1. Runtime Concepts
+# 1. Runtime Concepts
 
 The pseudocode assumes the following conceptual runtime entities.
 
@@ -145,7 +145,9 @@ Triple-double quote-run recognition is lexer behavior, not runtime behavior:
 
 Comments are purely lexical: the lexer strips `//` line comments and `/* ... */` block comments, which have whitespace-like token-separation behavior but are not additional horizontal-whitespace code points. They do not produce runtime values, they do not participate in the language object model, and they do not have any special meaning inside String literals. `#` is not a comment delimiter, and no documentation-comment syntax is defined by Core v0.1.
 
-`Object` is the unique root prototype. It has no delegation parent. Every other the language object has exactly one immutable delegation parent, so every delegation chain terminates at `Object`. The absence of a parent on `Object` is structural; it is not represented by `null` or by any other the language object. Reflective structural operations such as `removeSlot(name)`, `close()`, and `freeze()` are ordinary messages provided through `Object`, with runtime primitives implementing their structural effects.
+`Object` is the unique root prototype. It has no delegation parent. Every other language object has exactly one immutable delegation parent, so every delegation chain terminates at `Object`. The absence of a parent on `Object` is structural; it is not represented by `null` or by any other language object. Reflective structural operations such as `removeSlot(name)`, `close()`, and `freeze()` are ordinary messages provided through `Object`, with runtime primitives implementing their structural effects.
+
+`Context` is the standard prototype for execution-context objects, provided by the standard prelude. Execution contexts remain ordinary language objects: an activation context or a `moduleContext` is an ordinary object whose delegation chain runs through `Context` to `Object`, and behavior provided by `Context` is inherited through ordinary Protos delegation. There is no special runtime object category for execution contexts and no special lookup mechanism associated with `Context`.
 
 ---
 
@@ -358,7 +360,7 @@ These operators apply to arbitrary expressions under the normal expression gramm
 
 ---
 
-# 8. Slot Creation
+# 9. Slot Creation
 
 Unqualified creation:
 
@@ -419,7 +421,7 @@ Indexed syntax never reaches this operation: `object[index]: value` is rejected 
 
 ---
 
-# 9. Explicit Member Assignment
+# 10. Explicit Member Assignment
 
 For:
 
@@ -458,7 +460,7 @@ is preserved.
 
 ---
 
-# 10. Unqualified Assignment
+# 11. Unqualified Assignment
 
 For:
 
@@ -502,7 +504,7 @@ function assignName(activation, name, value):
 
 ---
 
-# 11. Message Send
+# 12. Message Send
 
 A receiver-aware message send preserves both the original receiver and the object where the slot was found.
 
@@ -553,7 +555,7 @@ Closure-valued slots receive method semantics because `this` and `methodHome` mu
 
 ---
 
-# 12. Closure Method Invocation
+# 13. Closure Method Invocation
 
 ```text
 function invokeClosureAsMethod(
@@ -594,7 +596,7 @@ this === rex
 
 ---
 
-# 13. Polymorphic Invocation
+# 14. Polymorphic Invocation
 
 A plain call such as:
 
@@ -642,7 +644,7 @@ function invoke(receiver, arguments):
 
 The implementation may specialize these cases directly rather than literally allocating or sending an intermediate `call` message, provided observable semantics are unchanged.
 
-# 14. Closure Creation
+# 15. Closure Creation
 
 When evaluating:
 
@@ -746,7 +748,7 @@ The runtime may assume validated closure parameter metadata. Defensive implement
 
 ---
 
-# 15. Activation Creation and Argument Binding
+# 16. Activation Creation and Argument Binding
 
 The language uses a Smalltalk/Squeak-style **home activation** for `^`.
 
@@ -761,7 +763,7 @@ function createActivation(
     establishReturnHome
 ):
     context = new Object(
-        parent = standardContextPrototype
+        parent = Context
     )
 
     activation = Activation(
@@ -834,7 +836,7 @@ Default expressions therefore observe earlier parameter bindings and the invocat
 
 A method invocation dynamically supplies `receiver` and `methodHome` and establishes a fresh return home. A module-level function closure with no captured return home likewise establishes one. A nested closure preserves its captured home.
 
-# 16. `super`
+# 17. `super`
 
 `super` preserves the original receiver but changes where lookup begins. It is not a runtime object or first-class value. The parser lowers only `super.message(arguments...)` to a super-send operation. Bare `super`, passing it as a value, assigning it, or extracting `super.message` without a call is invalid.
 
@@ -873,7 +875,7 @@ Only the lookup origin changes.
 
 ---
 
-# 17. Normal Return
+# 18. Normal Return
 
 The value of the final expression of an activation is its normal result.
 
@@ -906,7 +908,7 @@ function executeActivation(activation):
 
 ---
 
-# 18. Non-local Return
+# 19. Non-local Return
 
 For:
 
@@ -937,7 +939,7 @@ Only the observable behavior is specified.
 
 ---
 
-# 19. Escaped Closure Return
+# 20. Escaped Closure Return
 
 Example:
 
@@ -960,13 +962,13 @@ The runtime must not silently reinterpret the operation as a local return from `
 
 ---
 
-# 20. Object Construction
+# 21. Object Construction
 
 ```text
 function createObject(parent, body, activation):
     // Source-level object creation always supplies exactly one parent.
     // A bare object literal supplies Object. Only Object itself has no parent.
-    require parent is a the language object
+    require parent is a language object
 
     object = new Object(
         parent = parent,
@@ -1002,7 +1004,7 @@ An implementation may use a specialized construction context provided that obser
 
 ---
 
-# 21. Object Composition
+# 22. Object Composition
 
 For:
 
@@ -1102,7 +1104,7 @@ Because the returned value is an ordinary object, the composition machinery itse
 
 ---
 
-# 22. Removing Local Slots
+# 23. Removing Local Slots
 
 `removeSlot(name)` is an ordinary message inherited from `Object`. Its primitive behavior affects only the receiver's local slot table and never delegates.
 
@@ -1129,7 +1131,7 @@ If a delegated slot with the same name exists, removing the local slot exposes t
 
 ---
 
-# 23. Closing Objects
+# 24. Closing Objects
 
 ```text
 function closeObject(object):
@@ -1153,7 +1155,7 @@ Closing is shallow.
 
 ---
 
-# 24. Freezing Objects
+# 25. Freezing Objects
 
 ```text
 function freezeObject(object):
@@ -1173,7 +1175,7 @@ Freezing is shallow.
 
 ---
 
-# 25. Identity
+# 26. Identity
 
 Identity is a semantic property and must not leak the runtime representation chosen for an object.
 
@@ -1216,7 +1218,7 @@ Triple-double-quoted String evaluation produces a `String` value defined by the 
 
 ---
 
-# 25. Semantic Equality
+# 27. Semantic Equality
 
 ```text
 function semanticEqual(a, b):
@@ -1251,7 +1253,7 @@ The exact internal error object names are not fixed by Core v0.1, but arbitrary 
 
 ---
 
-# 26. Lazy Boolean Operators
+# 28. Lazy Boolean Operators
 
 ```text
 function evaluateAnd(leftExpression, rightExpression, activation):
@@ -1293,7 +1295,7 @@ The right-hand expression is therefore evaluated only if the receiving boolean b
 
 ---
 
-# 27. Error Signaling
+# 29. Error Signaling
 
 Errors are objects.
 
@@ -1325,7 +1327,7 @@ The runtime architecture should not prevent resumable conditions from being adde
 
 ---
 
-# 28. Future Creation
+# 30. Future Creation
 
 Calling:
 
@@ -1374,7 +1376,7 @@ The scheduler implementation is not observable semantics.
 
 ---
 
-# 29. Future Resolution
+# 31. Future Resolution
 
 ```text
 function resolveFuture(future, value):
@@ -1399,7 +1401,7 @@ This performs automatic Future flattening.
 
 ---
 
-# 30. Future Failure
+# 32. Future Failure
 
 ```text
 function failFuture(future, error):
@@ -1414,11 +1416,11 @@ function failFuture(future, error):
 
 There is no separate promise-rejection type.
 
-The stored value is an ordinary the language error object.
+The stored value is an ordinary language error object.
 
 ---
 
-# 31. Waiting for a Future
+# 33. Waiting for a Future
 
 For:
 
@@ -1463,14 +1465,14 @@ Suspending an activation does not imply blocking an OS thread.
 
 ---
 
-# 32. Future Composition
+# 34. Future Composition
 
 For:
 
 ```js
-future.then() (value) {
+future.then(value => {
     transform(value)
-}
+})
 ```
 
 conceptually:
@@ -1516,7 +1518,7 @@ If `transformed` is itself a Future, `resolveFuture` adopts it and flattens the 
 
 ---
 
-# 33. Structured Concurrency
+# 35. Structured Concurrency
 
 Asynchronous work belongs by default to the execution context that created it.
 
@@ -1577,7 +1579,7 @@ The scheduler may implement waiting by suspension rather than by blocking an ope
 
 ---
 
-# 34. Canonical Evaluation Sketch
+# 36. Canonical Evaluation Sketch
 
 A minimal evaluator can be described as:
 
@@ -1721,7 +1723,7 @@ Expression separation is resolved entirely during parsing. The parser-level sepa
 
 ---
 
-# 35. Runtime Boundary
+# 37. Runtime Boundary
 
 The following operations may require implementation primitives:
 
@@ -1741,11 +1743,11 @@ garbage collection
 
 These primitives do not alter the object model.
 
-They are implementation services exposed through ordinary the language objects and messages whenever practical.
+They are implementation services exposed through ordinary language objects and messages whenever practical.
 
 ---
 
-# 36. Design Test
+# 38. Design Test
 
 A proposed new feature should normally be rejected as a new runtime primitive if it can be expressed cleanly using:
 
@@ -1765,7 +1767,7 @@ The runtime should grow only when the language requires behavior that cannot be 
 
 # Module Contexts and Top-Level Bindings
 
-the language has no special global-variable category.
+The language has no special global-variable category.
 
 Every module executes inside a `moduleContext`, which is an ordinary language object. A binding created at the top level of a module is therefore simply a local slot of that module's execution context.
 
@@ -1815,6 +1817,8 @@ print: myPrint      -> create moduleContext.print
 
 Runtime initialization MUST freeze the prelude before executing user modules. `assignName` MUST respect that frozen state and MUST NOT special-case the prelude by mutating it.
 
+Freezing is shallow, so freezing the prelude does not by itself make arbitrary mutable objects referenced by its slots safe to share between Actors. Any Protos object physically shared between Actors through the standard prelude must be semantically immutable for the duration of that sharing; mutable Protos state reachable through standard facilities must be Actor-local. The implementation may physically share immutable implementation artifacts — parsed syntax, bytecode, machine code, immutable metadata, and immutable constant data — where the sharing is semantically unobservable. Mutable standard-library/runtime state belongs to the Actor that uses it. The existing rule that freeze is shallow is unchanged: no deep freeze is introduced, Actor isolation is not weakened, and implementations are not required to duplicate immutable data unnecessarily.
+
 Top-level creation:
 
 ```js
@@ -1830,7 +1834,7 @@ function createModuleContext(preludeContext):
     require preludeContext.state == frozen
 
     return Object(
-        parent = standardContextPrototype,
+        parent = Context,
         state = open
     )
 ```
@@ -1950,7 +1954,7 @@ Core v0.1 does not expose resumable conditions, `resume`, `retry`, or equivalent
 
 ## Module Instances and the Actor-Local Module Cache
 
-Module identity, caching, initialization, cycle handling, and failure are Actor-local. Each Actor owns a module cache keyed by canonical internal module identity. An Actor is an isolated domain of mutable Protos state and execution, with no shared mutable Protos memory between Actors. The module cache and the module instances it holds are part of that Actor's isolated runtime state.
+Module identity, caching, initialization, cycle handling, and failure are Actor-local. Each Actor owns a module cache keyed by canonical internal module identity. An Actor is an isolated domain of mutable Protos state and execution, with no shared mutable Protos memory between Actors. The module cache and the module instances it holds are part of that Actor's isolated runtime state. The broader Actor concurrency model is developed in `PROTOS_CONCURRENCY_MODEL.md`; this section depends only on the isolation and ownership consequences stated here.
 
 Conceptually, the Actor-owned module state is:
 
