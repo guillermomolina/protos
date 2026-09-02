@@ -1,6 +1,6 @@
 # Protos Concurrency Model v0.1
 
-Language version: 0.1 Document revision: 06 Status: Draft Last updated:
+Language version: 0.1 Document revision: 07 Status: Draft Last updated:
 2026-09-02
 
 # Protos Multithreading Design Ledger v1
@@ -73,32 +73,40 @@ Its current behavior is an ordinary Protos object.
 
 ## 3. Future Versus Actor
 
-**CLOSED**
+**CLOSED --- REVISED**
 
 Future and Actor solve different scaling problems.
 
-> A Future scales with the amount of concurrent work.
+> A Future represents an eventual result and scales with the amount of
+> concurrent work.
 
-> An Actor scales with the amount of parallelism and isolation.
+> An Actor provides a persistent isolated domain of mutable state,
+> identity, lifecycle, messaging, and parallel execution relative to
+> other Actors.
 
-Within one Actor, Futures behave conceptually like green threads or
-green tasks.
+Ordinary Future/task execution created within an Actor remains
+Actor-local and cooperative. Such tasks behave conceptually like green
+threads or green tasks and may exist in very large numbers.
 
-An Actor may contain very large numbers of Futures.
+Only one segment of ordinary Actor-local Protos code executes at a time.
+Therefore ordinary Futures inside the same Actor may interleave, but they
+do not execute Actor-local Protos code simultaneously.
 
-However, only one segment of Protos code belonging to an Actor executes
-at a time.
+Protos additionally permits explicit isolated parallel computation as
+defined in Parallel Execution. Such work executes outside the caller's
+mutable Actor domain and may run simultaneously on other CPU carriers.
+Its eventual result may be represented by an ordinary Future without
+making the isolated parallel execution unit a new fundamental public
+identity-bearing object.
 
-Therefore Futures inside the same Actor may interleave, but they do not
-execute Protos code simultaneously.
+Different Actors may also execute simultaneously on different CPU cores.
 
-Different Actors may execute simultaneously on different CPU cores.
-
-An Actor is therefore a logical thread in the language model.
-
-It is not defined as one operating-system thread. Mapping Actors to
-operating-system threads or other carrier mechanisms is a runtime
-implementation decision.
+An Actor is therefore a logical serial domain for its own mutable Protos
+state, not necessarily one operating-system thread and not necessarily
+the smallest unit capable of consuming a CPU core. Mapping Actors,
+Actor-local tasks, and isolated parallel work onto operating-system
+threads or other carrier mechanisms is a runtime implementation
+decision.
 
 ## 4. Actor Isolation
 
@@ -119,6 +127,11 @@ Therefore the normal Actor programming model does not require:
 The runtime may internally use shared memory, concurrent queues,
 atomics, locks, copy-on-write, or other mechanisms as long as those
 mechanisms are not observable through Protos semantics.
+
+The same principle applies to isolated parallel computation: physical
+storage may be shared internally when semantic isolation can still be
+preserved, but arbitrary simultaneously shared mutable Protos identity
+is not introduced merely to obtain CPU parallelism.
 
 ## 5. Actor Turns and Reentrancy
 
@@ -147,6 +160,12 @@ with respect to other work in the same Actor.
 
 The model is therefore sequential but reentrant at explicit suspension
 points.
+
+Explicit isolated parallel computation does not weaken this rule. Code
+executing in such a computation does not execute as another simultaneous
+turn against the Actor's mutable object graph; it crosses a separate
+isolation boundary and may only interact with the Actor through the
+value/result semantics defined for parallel execution.
 
 ## 6. I/O
 
@@ -528,8 +547,8 @@ Actors.
 Buffers retain the same pass-by-value and snapshot semantics as other
 transferable mutable values.
 
-Protos does not initially introduce a special shared mutable Buffer
-exception.
+Protos does not initially introduce a special arbitrary shared mutable
+Buffer exception.
 
 It also does not initially require Rust-like explicit move or borrow
 semantics merely to obtain efficient Buffer transfer.
@@ -537,6 +556,13 @@ semantics merely to obtain efficient Buffer transfer.
 The runtime may specialize Buffer storage aggressively using
 copy-on-write, zero-copy, shared immutable backing, scatter/gather, or
 streaming.
+
+The isolated parallel-execution facility may additionally support
+exclusive mutable partitioning of a Buffer or other suitable value. Such
+partitioning does not create multiple simultaneous mutable aliases to the
+same logical region: each writable logical region has at most one
+parallel owner at a time, even if several disjoint regions share one
+physical backing allocation.
 
 Principle:
 
@@ -638,18 +664,27 @@ Principle:
 
 ## 24. Structured Concurrency
 
-**CLOSED**
+**CLOSED --- REVISED**
 
 The existing structured-concurrency semantics for Futures remain.
 
 Asynchronous child work created inside an execution context is owned by
 that context by default unless explicitly detached.
 
+When an explicit isolated parallel operation creates work whose result
+is represented by a Future, that work participates in the same
+structured ownership, waiting, failure, and cooperative-cancellation
+model unless an API explicitly provides different ownership semantics.
+Its isolated execution does not turn it into an Actor and does not give
+it Actor identity, a mailbox, independent supervision, or independent
+lifecycle semantics.
+
 Actor creation does not automatically establish the same ownership
 relationship.
 
-Structured concurrency therefore governs Futures within an Actor, not
-Actor lifetime in general.
+Structured concurrency therefore governs Future-producing child work,
+including isolated parallel computations, but not Actor lifetime in
+general.
 
 ## 25. Parent Actor Versus Failure Authority
 
@@ -2430,6 +2465,247 @@ The same Protos program and runtime model should remain valid across
 standalone execution, Kubernetes, Nomad, or future infrastructure
 environments.
 
+## 71. Isolated Parallel Execution
+
+**DIRECTION CLOSED, API AND MECHANISMS OPEN**
+
+Protos provides a runtime capability for explicit CPU-parallel
+computation that does not require the programmer to create persistent
+Actors merely to use multiple CPU cores.
+
+This capability fills the semantic gap between Actor-local cooperative
+Future/task execution and persistent Actor isolation.
+
+It does not introduce arbitrary shared mutable Protos memory and does
+not weaken the Actor turn rule.
+
+Conceptually:
+
+    ordinary call
+        |
+        v
+    Actor-local Future / task
+        concurrent, cooperative, same mutable Actor domain
+        |
+        v
+    isolated parallel computation
+        may execute simultaneously on another CPU carrier
+        no persistent identity, mailbox, or independent lifecycle
+        |
+        v
+    Actor
+        persistent isolated mutable state + identity + mailbox + lifecycle
+
+### 71.1 Public Model
+
+The fundamental public abstractions remain Future and Actor unless later
+API design demonstrates that a separately observable parallel-task
+object is necessary.
+
+A parallel operation may therefore return a normal Future representing
+its eventual result. The fact that the computation is eligible to run in
+parallel is an execution property of the explicitly requested operation,
+not a new meaning silently attached to every Future.
+
+In particular, ordinary `closure.future()` semantics are not changed by
+this design. Actor-local Future work remains serialized with other
+Actor-local Protos execution according to the normal Actor turn model.
+
+The runtime may use internal concepts such as parallel jobs, work items,
+worker pools, region capabilities, or work-stealing queues. Such concepts
+are implementation machinery unless separately standardized later.
+
+### 71.2 Explicit Isolation Boundary
+
+Parallel execution crosses an explicit semantic isolation boundary.
+
+Code executing in isolated parallel computation must not receive direct
+mutable aliases into the caller Actor's object graph, execution context,
+module context, `this`, return home, dynamic handlers, pending Futures,
+or other Actor-local mutable runtime state.
+
+A normal Closure captures lexical execution contexts by reference.
+Parallel execution must not silently redefine that Closure to capture by
+value merely because a parallel API was invoked.
+
+Therefore the exact parallel bootstrap/callable representation remains
+open, but it must preserve existing Closure semantics. Safe designs may
+include explicit value inputs, a restricted callable representation,
+runtime validation of capture safety, or another mechanism that does
+not transform ordinary by-reference lexical captures into hidden
+cross-boundary mutable access.
+
+### 71.3 Value and Snapshot Semantics
+
+Values supplied across the isolated parallel boundary have logical
+value/snapshot semantics analogous to other Protos isolation boundaries.
+For mutable values, the parallel computation must observe the logical
+input state established by the parallel operation rather than a live
+mutable alias into the caller Actor.
+
+The exact snapshot point is defined by the eventual parallel API, but it
+must be explicit and deterministic from that API's invocation semantics;
+delayed worker scheduling must not cause the input to drift with later
+Actor-local mutations.
+
+Results cross back by value. Completion, failure, or cooperative
+cancellation resolves the corresponding Future according to the normal
+Future model.
+
+### 71.4 Safe Physical Sharing
+
+Logical isolation does not require eager physical copying.
+
+The runtime may preserve the required semantics through mechanisms such
+as:
+
+-   Copy-on-write
+-   Immutable physical sharing
+-   Shared immutable backing storage
+-   Zero-copy transfer
+-   Page remapping
+-   Storage ownership transfer where semantically invisible
+-   Other equivalent implementation optimizations
+
+The implementation may therefore let multiple parallel computations
+read the same immutable physical storage without producing semantic
+shared mutable identity.
+
+### 71.5 Exclusive Mutable Partitioning
+
+Parallel algorithms may require several CPU cores to modify disjoint
+parts of a large value efficiently. Protos may support this without
+opening arbitrary shared mutable memory.
+
+The governing rule is:
+
+> Physical storage may be shared, but two parallel computations must not
+> simultaneously hold mutable authority over the same logical state.
+
+A suitable Buffer, Array, or future partitionable value may therefore be
+split into logically disjoint writable regions. Several parallel
+computations may operate simultaneously on different regions while the
+runtime guarantees that the writable regions do not overlap.
+
+Conceptually:
+
+    one large physical backing
+        |
+        +-- region A -> exclusive parallel writer A
+        +-- region B -> exclusive parallel writer B
+        +-- region C -> exclusive parallel writer C
+
+The programmer is not required to introduce mutexes, atomics, volatile
+state, memory ordering, or general-purpose borrow checking merely to use
+this model.
+
+The exact region/partition representation, eligibility rules, alias
+validation, merge semantics, and surface API remain open.
+
+### 71.6 Library-Level Parallel Patterns
+
+High-level parallel algorithms should normally be library facilities
+built on the minimal runtime guarantees rather than separate language
+primitives or separate fundamental task kinds.
+
+Examples may include:
+
+-   Parallel map
+-   Parallel filter
+-   Parallel reduce
+-   Parallel search
+-   Parallel sort
+-   Parallel iteration
+-   Partitioned Buffer/Array processing
+-   Parallel pipelines
+
+The exact names and APIs are not decided by this ledger.
+
+A standard or third-party library may choose chunking, reduction trees,
+partition strategy, batching, or algorithm-specific policy while the
+runtime enforces the underlying isolation and scheduling guarantees.
+
+### 71.7 Scheduling and Oversubscription
+
+Requesting many parallel computations does not imply creating the same
+number of operating-system threads.
+
+The runtime owns CPU admission and scheduling for isolated parallel work
+and must be able to multiplex many logical work items over bounded CPU
+carrier resources.
+
+The scheduler may use a shared worker pool, work stealing, locality-aware
+queues, adaptive granularity, inline execution, or other mechanisms.
+
+Parallel eligibility is not a semantic promise that another core will
+always be used. If executing a small operation inline or sequentially is
+more efficient, the runtime may do so provided that all observable
+semantics remain unchanged.
+
+This preserves the pay-for-what-you-use principle and prevents nested or
+multi-Actor parallelism from requiring unbounded operating-system-thread
+creation.
+
+### 71.8 Failure and Cancellation
+
+Failure of an isolated parallel computation fails its result Future
+according to normal Future error semantics. It does not by itself invoke
+Actor supervision or Actor replacement semantics because the parallel
+work is not an Actor.
+
+Cancellation is cooperative and follows Future structured-concurrency
+rules. The exact safe points and runtime cancellation mechanics remain
+implementation/API details.
+
+If the owning structured context or Actor terminates, outstanding
+parallel child work follows the corresponding Future ownership and
+cancellation rules. A completed parallel result does not acquire an
+independent lifetime merely because it was computed on another CPU
+carrier.
+
+### 71.9 Locality and Distribution
+
+The purpose of this facility is efficient CPU parallelism without
+requiring persistent Actor structure.
+
+The initial semantic direction does not require isolated parallel work
+to become a distributed execution abstraction. Process-local execution
+is sufficient to realize the core benefit and avoids imposing remote
+placement, discovery, delivery, and failure semantics on fine-grained
+parallel computation.
+
+A future explicit remote-compute facility may reuse compatible value and
+isolation rules, but remote placement is not implied by the existence of
+parallel execution and remains open.
+
+### 71.10 Architectural Boundary
+
+The runtime/kernel must provide only the mechanisms that libraries cannot
+safely implement on their own, including:
+
+-   Eligibility for true simultaneous CPU execution
+-   Enforcement of isolation from Actor-local mutable state
+-   Safe value/snapshot crossing
+-   Immutable physical sharing where valid
+-   Exclusive mutable partition guarantees where supported
+-   Bounded CPU scheduling/admission
+-   Integration with Future completion, failure, ownership, and
+    cancellation
+
+Higher-level parallel algorithms and policies belong in libraries unless
+they require additional fundamental semantic guarantees.
+
+This design deliberately does not add arbitrary shared mutable memory,
+locks, atomics, memory-order annotations, or Rust-style general ownership
+syntax to normal Protos code.
+
+Principle:
+
+> Protos should permit efficient physical sharing and parallel execution
+> wherever the runtime can preserve simple logical isolation, while
+> exposing programmer-visible synchronization machinery only if a future
+> workload proves that the simpler model is fundamentally insufficient.
+
 ## Open Design Topics
 
 The following topics remain intentionally open. Items whose fundamental
@@ -2469,6 +2745,17 @@ mechanism, or implementation detail that still requires design.
 -   Async streams
 -   Generators and suspendable iteration
 -   Whether Task should become observable
+-   Exact isolated parallel-execution API and bootstrap representation
+-   Parallel callable/capture-safety validation mechanism
+-   Parallel snapshot-point API details
+-   Immutable-sharing eligibility and representation for parallel work
+-   Exclusive mutable partition/region API and representation
+-   Partition overlap/alias validation mechanism
+-   Parallel map/filter/reduce/sort/iteration standard-library APIs
+-   Parallel scheduling, work-stealing, and granularity heuristics
+-   Nested-parallelism admission and fairness
+-   Interaction between isolated parallel work and SIMD/vectorization
+-   Whether remote isolated parallel execution is ever supported
 -   Pub/sub
 -   Advanced routers and load-balancing policies
 -   Actor capacity policy
@@ -2536,7 +2823,7 @@ mechanism, or implementation detail that still requires design.
 -   Clock semantics
 -   Waiting on multiple Futures
 -   Select/race operations
--   CPU-bound Future monopolization
+-   Actor-local CPU-bound Future monopolization
 -   Resource limits and quotas
 -   Runtime resource-pressure model
 -   Actor resource-cost estimation and learning
