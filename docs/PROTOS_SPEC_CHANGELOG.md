@@ -4,6 +4,20 @@ All notable changes to the Protos language specification will be documented in t
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.68] - 2026-09-02
+
+### Changed
+- Closed audit issue C6: removed the duplicate syntactic classification of `true`, `false`, and `null`.
+- `true`, `false`, and `null` are literals only; `this`, `context`, and `args` are intrinsic references only. `primary-expression` continues to contain both `literal` and `intrinsic-reference`, so each of `true`, `false`, and `null` now has exactly one syntactic derivation from `primary-expression`, through `literal`, while `this`, `context`, and `args` remain valid through `intrinsic-reference`.
+- The Compact EBNF `intrinsic-reference` production now contains only `"this"`, `"context"`, and `"args"`.
+- The `literal` production is unchanged and remains `number-literal | string-literal | "true" | "false" | "null"`.
+- `super` remains governed exclusively by `super-message-send` and is not added to `intrinsic-reference`.
+- All seven reserved words (`this`, `context`, `args`, `super`, `true`, `false`, `null`) are unchanged: the lexical reserved-word rules are untouched.
+- No runtime semantics changed: the values produced by these literals and intrinsic references are unchanged.
+
+### Unresolved
+- C3d (broader normative-grammar self-containment beyond the String forms) remains unresolved and is unchanged by this revision.
+
 ## [0.1.67] - 2026-09-02
 
 ### Changed

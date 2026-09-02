@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 67  
+Document revision: 68  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -1788,7 +1788,7 @@ Core v0.1 defines no special documentation-comment syntax.
 
 ## 39. Compact EBNF
 
-The compact grammar below incorporates the syntax decisions made through revision 67. Semantic validation still applies after parsing. String literal lexical forms are defined normatively in the Literals section and referenced here rather than duplicated.
+The compact grammar below incorporates the syntax decisions made through revision 68. Semantic validation still applies after parsing. String literal lexical forms are defined normatively in the Literals section and referenced here rather than duplicated.
 
 ```ebnf
 program =
@@ -1937,10 +1937,7 @@ primary-expression =
 intrinsic-reference =
       "this"
     | "context"
-    | "args"
-    | "null"
-    | "true"
-    | "false" ;
+    | "args" ;
 
 super-message-send =
     "super", ".", identifier, argument-list ;
