@@ -1,9 +1,9 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 61  
+Document revision: 62  
 Status: Draft  
-Last updated: 2026-09-01
+Last updated: 2026-09-02
 
 ## Language Name
 

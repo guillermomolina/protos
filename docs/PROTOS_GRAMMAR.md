@@ -1,9 +1,9 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 61  
+Document revision: 62  
 Status: Draft  
-Last updated: 2026-09-01
+Last updated: 2026-09-02
 
 
 ## Prelude Binding Note
@@ -90,7 +90,7 @@ string-literal =
     | triple-double-quoted-string ;
 ```
 
-Exact number formats are defined separately from the core string escape set.
+Exact number formats are defined separately from the core string escape set; the normative `number-literal` grammar is defined in the Numeric Literals section.
 
 The backslash escape is displayed unambiguously as `\\`.
 
@@ -1682,7 +1682,7 @@ Core v0.1 defines no special documentation-comment syntax.
 
 ## 39. Compact EBNF
 
-The compact grammar below incorporates the syntax decisions made through revision 61. Semantic validation still applies after parsing.
+The compact grammar below incorporates the syntax decisions made through revision 62. Semantic validation still applies after parsing.
 
 ```ebnf
 program =
@@ -1911,6 +1911,85 @@ literal =
     | "true"
     | "false"
     | "null" ;
+
+number-literal =
+      decimal-number-literal
+    | binary-integer-literal
+    | octal-integer-literal
+    | hexadecimal-integer-literal ;
+
+decimal-number-literal =
+      decimal-integer-literal
+    | decimal-float-literal ;
+
+decimal-integer-literal =
+    decimal-digits ;
+
+decimal-float-literal =
+      decimal-fractional-literal, [ decimal-exponent-part ]
+    | decimal-integer-literal, decimal-exponent-part ;
+
+decimal-fractional-literal =
+    decimal-digits, ".", decimal-digits ;
+
+decimal-exponent-part =
+    exponent-marker, [ exponent-sign ], decimal-digits ;
+
+exponent-marker =
+      "e"
+    | "E" ;
+
+exponent-sign =
+      "+"
+    | "-" ;
+
+decimal-digits =
+    decimal-digit, { [ "_" ], decimal-digit } ;
+
+decimal-digit =
+      "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+
+binary-integer-literal =
+    binary-prefix, binary-digits ;
+
+binary-prefix =
+      "0b"
+    | "0B" ;
+
+binary-digits =
+    binary-digit, { [ "_" ], binary-digit } ;
+
+binary-digit =
+      "0"
+    | "1" ;
+
+octal-integer-literal =
+    octal-prefix, octal-digits ;
+
+octal-prefix =
+      "0o"
+    | "0O" ;
+
+octal-digits =
+    octal-digit, { [ "_" ], octal-digit } ;
+
+octal-digit =
+      "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" ;
+
+hexadecimal-integer-literal =
+    hexadecimal-prefix, hexadecimal-digits ;
+
+hexadecimal-prefix =
+      "0x"
+    | "0X" ;
+
+hexadecimal-digits =
+    hexadecimal-digit, { [ "_" ], hexadecimal-digit } ;
+
+hexadecimal-digit =
+      "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+    | "a" | "b" | "c" | "d" | "e" | "f"
+    | "A" | "B" | "C" | "D" | "E" | "F" ;
 ```
 
 A parser may implement the expression portion using recursive descent plus Pratt parsing. Custom symbolic operators form their own precedence domain: mixing them with standard binary operators requires parentheses.
@@ -1922,6 +2001,8 @@ As in the normative grammar, `trailing-closure` may follow a completed `argument
 Indexed assignment is recognized because an `assignment-target` may end in `[ expression ]`; it lowers to `atPut` rather than a slot `Assign`. A `slot-creation-target` may never end in an index suffix, so an indexed `:` has no parse.
 
 Composition is intentionally connected only through `object-body-item`, preserving the contextual meaning of `...`.
+
+The `number-literal` productions above define the valid numeric token forms. Token commitment is governed normatively by the Numeric Literals section: an adjacent continuation that matches no valid numeric form is a lexical error rather than a split into separate tokens, and `1.` and `.5` are not numeric literals.
 
 ## 40. Canonical AST
 
@@ -2218,6 +2299,91 @@ The guaranteed execution of cleanup during scope exit is runtime control-flow se
 
 
 ## Numeric Literals
+
+The normative lexical grammar for `number-literal` is:
+
+```ebnf
+number-literal =
+      decimal-number-literal
+    | binary-integer-literal
+    | octal-integer-literal
+    | hexadecimal-integer-literal ;
+
+decimal-number-literal =
+      decimal-integer-literal
+    | decimal-float-literal ;
+
+decimal-integer-literal =
+    decimal-digits ;
+
+decimal-float-literal =
+      decimal-fractional-literal, [ decimal-exponent-part ]
+    | decimal-integer-literal, decimal-exponent-part ;
+
+decimal-fractional-literal =
+    decimal-digits, ".", decimal-digits ;
+
+decimal-exponent-part =
+    exponent-marker, [ exponent-sign ], decimal-digits ;
+
+exponent-marker =
+      "e"
+    | "E" ;
+
+exponent-sign =
+      "+"
+    | "-" ;
+
+decimal-digits =
+    decimal-digit, { [ "_" ], decimal-digit } ;
+
+decimal-digit =
+      "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+
+binary-integer-literal =
+    binary-prefix, binary-digits ;
+
+binary-prefix =
+      "0b"
+    | "0B" ;
+
+binary-digits =
+    binary-digit, { [ "_" ], binary-digit } ;
+
+binary-digit =
+      "0"
+    | "1" ;
+
+octal-integer-literal =
+    octal-prefix, octal-digits ;
+
+octal-prefix =
+      "0o"
+    | "0O" ;
+
+octal-digits =
+    octal-digit, { [ "_" ], octal-digit } ;
+
+octal-digit =
+      "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" ;
+
+hexadecimal-integer-literal =
+    hexadecimal-prefix, hexadecimal-digits ;
+
+hexadecimal-prefix =
+      "0x"
+    | "0X" ;
+
+hexadecimal-digits =
+    hexadecimal-digit, { [ "_" ], hexadecimal-digit } ;
+
+hexadecimal-digit =
+      "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"
+    | "a" | "b" | "c" | "d" | "e" | "f"
+    | "A" | "B" | "C" | "D" | "E" | "F" ;
+```
+
+The productions above define the complete set of valid numeric literal forms. They do not by themselves define lexical commitment: once a source sequence has begun as a numeric literal, an adjacent continuation that makes the numeric form malformed, or that creates an invalid numeric/identifier boundary, is a lexical error rather than a split into otherwise-valid tokens. The Malformed Numeric Literals and Numeric Token Termination subsection below states these rules normatively.
 
 A leading sign is never part of a numeric literal. Prefix `-` and prefix `!` are ordinary operators, not numeric-literal syntax.
 
