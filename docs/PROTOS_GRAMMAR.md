@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 63  
+Document revision: 64  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -110,7 +110,7 @@ Core v0.1 String escape sequences are exactly:
 
 `\u{HEX}` requires 1 to 6 hexadecimal digits and must denote a valid Unicode scalar value.
 
-Invalid or incomplete escape sequences are syntax errors. Octal escapes are not supported. `\xNN` escapes are not supported.
+Invalid or incomplete escape sequences are lexical errors. Escape validation occurs as part of String literal lexical recognition. Octal escapes are not supported. `\xNN` escapes are not supported.
 
 Single-quoted, double-quoted, and triple-double-quoted String literals use the same escape rules. Triple-double-quoted strings are multiline String literals, not raw strings. Triple-single-quoted strings are not supported.
 
@@ -1682,7 +1682,7 @@ Core v0.1 defines no special documentation-comment syntax.
 
 ## 39. Compact EBNF
 
-The compact grammar below incorporates the syntax decisions made through revision 63. Semantic validation still applies after parsing.
+The compact grammar below incorporates the syntax decisions made through revision 64. Semantic validation still applies after parsing.
 
 ```ebnf
 program =
@@ -2520,7 +2520,7 @@ The standard Protos escape sequences are exactly:
 \u{HEX}
 ```
 
-`\u{HEX}` requires 1 to 6 hexadecimal digits and must denote a valid Unicode scalar value. Invalid or incomplete escape sequences are syntax errors. Octal escapes and `\xNN` escapes are not supported.
+`\u{HEX}` requires 1 to 6 hexadecimal digits and must denote a valid Unicode scalar value. Invalid or incomplete escape sequences are lexical errors. Octal escapes and `\xNN` escapes are not supported.
 
 The same escape rules apply to single-quoted, double-quoted, and triple-double-quoted String literals. Triple-double-quoted strings are multiline String literals, not raw strings:
 

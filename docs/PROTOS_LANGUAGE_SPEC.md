@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 63  
+Document revision: 64  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -2373,7 +2373,7 @@ Core v0.1 defines String literals as ordinary `String` values.
 - The backslash escape is `\\`.
 - The supported escape sequences are exactly: `\\`, `\'`, `\"`, `\n`, `\r`, `\t`, `\b`, `\f`, and `\u{HEX}`.
 - `\u{HEX}` requires 1 to 6 hexadecimal digits and must denote a valid Unicode scalar value.
-- Invalid or incomplete escape sequences are syntax errors.
+- Invalid or incomplete escape sequences are lexical errors.
 - Octal escapes and `\xNN` escapes are not supported.
 - Triple-double-quoted strings are multiline String literals, not raw strings.
 - Triple-single-quoted strings are not supported.
