@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 75  
+Document revision: 76  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -2051,18 +2051,27 @@ function importModule(actor, importerKey, specifier):
     return ensureModuleInstance(actor, key)
 
 
-# Actor startup of the initial module when the host module resolver gives
-# that module an importable canonical identity.
+# Actor startup of the initial module when, at the moment that entry's
+# execution begins, the host module resolver has an importable canonical
+# identity for it. This function always starts an importable initial
+# module through the ordinary cached lifecycle (ensureModuleInstance); it
+# is never used to adopt or re-register an instance that was already
+# executed as a standalone entry point.
 function executeInitialModule(actor, initialModuleKey):
     return ensureModuleInstance(actor, initialModuleKey)
 
 
 # Actor startup of a host entry point that the resolver cannot map to a
-# canonical ModuleKey. Such an entry point has no importable identity and
-# is not registered in the module cache; it executes directly and remains
-# outside the Actor's import namespace. Its moduleContext is still
-# Actor-local. If the host later gives the entry point a canonical
-# identity, executeInitialModule with that key applies.
+# canonical ModuleKey. The choice between executeInitialModule and this
+# standalone path is made when execution of the entry begins and is not
+# revisited later. The instance created here is Actor-local, is not
+# registered in the module cache, has no ModuleKey, and remains outside
+# the Actor's import namespace for its whole life. It is never later
+# adopted as the active cached module instance of any ModuleKey, even if
+# the host's resolution capabilities later change. If equivalent code is
+# later imported through a canonical ModuleKey, ensureModuleInstance
+# consults the Actor-local module cache: a cache miss creates a new,
+# distinct module instance.
 function executeStandaloneEntry(actor, entryModule):
     instance = createModuleContext(frozenPrelude)
     executeModuleBody(entryModule, instance, frozenPrelude)
@@ -2102,7 +2111,9 @@ foo#2 -> INITIALIZING -> READY
 
 with `foo#1 !== foo#2` under ordinary identity comparison. This coexistence is within one Actor and does not violate Actor isolation.
 
-An Actor's initial module is executed by that Actor with the same module-context model: its `moduleContext` is created as above, belongs to that Actor, and is Actor-local rather than process-global. Creating a new Actor does not inherit the creator's module cache or live module contexts. When the host module resolver gives the initial module an importable canonical identity, Actor startup uses `ensureModuleInstance` (through `executeInitialModule`), so the initial module is cached as `INITIALIZING` before its body executes and a cyclic import back to it returns the same instance rather than creating a second one. If the initial module fails to initialize after such registration, the ordinary failure rule applies: the cache entry is removed and no retry is invented as part of Actor startup. A host entry point with no importable canonical identity is executed directly by `executeStandaloneEntry` and is not registered under an invented module identity.
+An Actor's initial module is executed by that Actor with the same module-context model: its `moduleContext` is created as above, belongs to that Actor, and is Actor-local rather than process-global. Creating a new Actor does not inherit the creator's module cache or live module contexts. When, at the moment Actor startup begins, the host module resolver has an importable canonical identity for the initial module, Actor startup uses `ensureModuleInstance` (through `executeInitialModule`), so the initial module is cached as `INITIALIZING` before its body executes and a cyclic import back to it returns the same instance rather than creating a second one. If the initial module fails to initialize after such registration, the ordinary failure rule applies: the cache entry is removed and no retry is invented as part of Actor startup. A host entry point that has no importable canonical identity at that same moment is executed directly by `executeStandaloneEntry` and is not registered under an invented module identity.
+
+The choice between the importable-initial-module path and the standalone path is fixed when execution of the initial entry begins; it is not revisited later. A standalone instance is never later adopted as the active cached module instance of a `ModuleKey`, and later changes to the host's resolution capabilities do not mutate its identity or status. If code equivalent to a previously executed standalone entry later becomes importable under a canonical `ModuleKey`, a subsequent `import()` operates only on the Actor-local module cache: a cache miss creates a new module instance and executes its body through `ensureModuleInstance`. The standalone instance and that later cached instance are distinct objects under `===`, and the module body and its side effects may run again; this is not a double initialization of one module instance, because the standalone instance never occupied that `ModuleKey`. No retroactive cache registration, module-instance adoption, identity mutation, cache migration, source-code deduplication, or rollback is introduced.
 
 Imports are eager by default. Lazy dependency behavior is expressed explicitly using ordinary closures or other language mechanisms rather than by changing import evaluation semantics. The module specifier is an ordinary expression, and `import(specifier)` returns the module instance; it does not introduce names into the importing lexical scope.
 

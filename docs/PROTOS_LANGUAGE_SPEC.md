@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 75  
+Document revision: 76  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -1929,7 +1929,7 @@ READY
 
 A module that is absent from the cache is not loaded in that Actor. A transient failure state may exist internally while a failed initialization is being handled, but a failed initialization must not remain in the cache as a successfully importable module. These states are semantic concepts and are not exposed through a public state-inspection or reflection API.
 
-The same cache-before-execute invariant applies to an Actor's initial module when that module has an importable canonical identity. Before its body executes, the initial module is assigned its canonical `ModuleKey` and inserted into the Actor-local module cache in state `INITIALIZING`; it is not a mutable module instance that exists outside the cache. See The Initial Module of an Actor.
+The same cache-before-execute invariant applies to an Actor's initial module when, at the start of that module's execution, it has an importable canonical identity. Before its body executes, the runtime resolves that canonical `ModuleKey` and inserts the module instance into the Actor-local module cache in state `INITIALIZING`; an importable initial module is not a mutable module instance that exists outside the cache. See The Initial Module of an Actor.
 
 The Actor-local module cache is authoritative for the currently active module instance. Within one Actor, the cache maps canonical identity to the current active module record:
 
@@ -2085,6 +2085,8 @@ The initial module executed by an Actor follows the same conceptual module-conte
 
 The Actor's initial module is executed directly by the Actor that owns it rather than obtained through `import()`. That direct execution does not place the initial module outside the module model when the initial module has an importable canonical identity.
 
+Whether the Actor's initial entry is treated as an importable initial module or as a standalone non-importable entry point is determined when execution of that entry begins; the choice is not revisited while the instance exists. The importable path below always starts a module through the ordinary cached lifecycle and never adopts or re-registers an instance that was already executed as a standalone entry point. Standalone execution is described in Initial Modules Without an Importable Canonical Identity.
+
 If the initial module can be resolved by `import()` to a canonical `ModuleKey`, then before executing its body the runtime:
 
 1. determines or assigns that canonical `ModuleKey`;
@@ -2131,13 +2133,15 @@ If the Actor's initial module was registered in the cache because it has an impo
 
 ### Initial Modules Without an Importable Canonical Identity
 
-Core v0.1 does not require the host to assign a fabricated filesystem or package identity to every possible host entry point. If an Actor's initial module is not importable through the host's module resolver and therefore has no canonical `ModuleKey` reachable by `import()`, it may remain outside the normal import lookup namespace:
+Core v0.1 does not require the host to assign a fabricated filesystem or package identity to every possible host entry point. If, when execution of an Actor's initial entry begins, that entry is not importable through the host's module resolver and therefore has no canonical `ModuleKey` reachable by `import()`, it executes as a standalone entry point and remains outside the normal import lookup namespace. The instance created for that standalone execution:
 
-- it is still Actor-local: it executes in a `moduleContext` belonging to the Actor that launched it, and that mutable `moduleContext` is not shared with another Actor;
-- it must not accidentally alias an imported module, because it has no canonical `ModuleKey` through which an `import()` could address it;
-- if the host does assign it a canonical/importable identity, the rule in The Initial Module of an Actor applies.
+- is Actor-local: it executes in a `moduleContext` belonging to the Actor that launched it, and that mutable `moduleContext` is not shared with another Actor;
+- has no canonical `ModuleKey` and is not registered in the Actor-local module cache, so no `import()` can address it and it never aliases an imported module;
+- is never retroactively assigned a canonical identity or adopted into the module cache, even if the host's resolution capabilities change after that execution began.
 
-No fake registration under an invented import identity is required for such an entry point.
+No fake registration under an invented import identity is required for such an entry point. Whether the Actor's initial entry is importable or standalone is determined when execution of that entry begins and is not recomputed later.
+
+If the host later makes code equivalent to that standalone entry importable under a canonical `ModuleKey`, that does not change the identity or status of the standalone instance already created; the host may add resolution capability, but the standalone instance does not thereby acquire a `ModuleKey`. A subsequent `import()` that resolves to that canonical `ModuleKey` follows the ordinary Actor-local module-cache rules of the previous subsections: on a cache miss the runtime creates a new module instance, caches it as `INITIALIZING`, and executes its body through the lifecycle described in The Initial Module of an Actor. The standalone instance and that later cached instance are therefore distinct objects under `===`, and the module body and its side effects may execute again. This is not a double initialization of a single module instance, because the standalone instance never was the cached module instance for that `ModuleKey`. No retroactive cache registration, module-instance adoption, identity mutation, cache migration, source-code deduplication, or rollback of the standalone execution is introduced.
 
 ### `import()` and Bindings
 
