@@ -1,9 +1,11 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 79  
+Document revision: 80  
 Status: Draft  
 Last updated: 2026-09-02
+
+Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
 
 ## Language Name
 
@@ -396,9 +398,9 @@ Universal language facilities such as core prototypes and standard behavior may 
 The standard prelude is shared but **frozen**. Its slots may be read through ordinary lexical lookup, but unqualified `=` must never mutate a prelude slot. Attempting to modify a binding that resolves only to the frozen prelude signals an assignment error. A module that wants to shadow a prelude binding creates a new local slot with `:`.
 
 ```js
-print("hello")     // reads the prelude binding
-print = myPrint     // ERROR: the prelude binding is frozen
-print: myPrint      // OK: creates a module-local binding that shadows it
+Object             // reads the prelude binding
+Object = myObject   // ERROR: the prelude binding is frozen
+Object: myObject    // OK: creates a module-local binding that shadows it
 ```
 
 Freezing is shallow, so freezing the prelude is not by itself sufficient to make arbitrary objects referenced by its slots safe to share between Actors. The governing invariant is therefore:
@@ -2738,13 +2740,13 @@ Latin1
 Conversion between text and bytes is explicit:
 
 ```js
-bytes.decode(UTF8)
-text.encode(UTF8)
+UTF8.decode(bytes)
+UTF8.encode(text)
 ```
 
 Decoding interprets a byte sequence using the selected encoding and produces a `String`. Encoding converts a `String` into a `Bytes` value using the selected encoding.
 
-Malformed-input handling, replacement policy, strict versus permissive decoding, and the exact standard encoding catalogue remain library/protocol design decisions unless later promoted into Core semantics.
+The standard encoding catalogue, strict/replacement decoding rules, BOM behavior, and text-I/O semantics are defined normatively in `PROTOS_IO_MODEL.md`. Those encoding objects and I/O facilities remain outside the required Core prelude unless another specification explicitly says otherwise.
 
 This follows the same general principle used for numeric endianness:
 

@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 79
+Document revision: 80
 Status: Draft
 Last updated: 2026-09-02
 
@@ -171,7 +171,9 @@ value/result semantics defined for parallel execution.
 
 ## 6. I/O
 
-**CLOSED**
+**CLOSED --- REVISED**
+
+The normative I/O capability, cancellation, lifecycle, text, filesystem, and Process-standard-I/O semantics are defined in `PROTOS_IO_MODEL.md`.
 
 Normal Protos I/O should be non-blocking relative to the Actor and
 should return a Future or another awaitable operation.
@@ -257,6 +259,13 @@ It does not inherit:
 
 Only explicitly supplied initialization values cross the Actor boundary,
 using normal Actor pass-by-value semantics.
+
+Host/Process capabilities are not implicitly inherited from the creator.
+A new Actor receives only capabilities explicitly provisioned at creation
+or explicitly delegated later according to the applicable capability and
+Actor-transfer semantics. The runtime may provision an Actor-local proxy
+or equivalent routed capability rather than sharing a live mutable host
+resource object.
 
 A normal Closure cannot silently carry actor-local lexical captures into
 another Actor.
@@ -887,7 +896,7 @@ advisor may recommend changing Actor boundaries or placement.
 
 **CLOSED --- REVISED**
 
-Every Protos Process begins with a RootActor.
+Every Protos Process begins with a RootActor. Every Protos execution has a Process execution domain even when the RootActor is the only Actor ever created; the Process itself need not imply heavyweight Actor, Node, Cluster, routing, or distributed-runtime infrastructure.
 
 A trivial program may conceptually consist only of:
 
@@ -896,8 +905,12 @@ A trivial program may conceptually consist only of:
         v
     RootActor
 
-The RootActor owns the initial program state, including ordinary
-objects, module state, configuration, and Futures.
+The RootActor owns the initial Actor-local program state, including ordinary
+objects, module state, configuration, and Futures. The Process is the
+custodian of Process-local host authority such as arguments, environment,
+and standard I/O when those facilities are provisioned. Appropriate
+Process capabilities are made available to the RootActor at bootstrap;
+they are not thereby ordinary mutable state owned by the RootActor.
 
 The RootActor is an ordinary Protos Actor, so its initial program is not
 outside the module model merely because it started the Process. When the
@@ -988,10 +1001,11 @@ the concurrency model depends on.
 
 ## 35. Scope Roots
 
-**DIRECTION CLOSED, DETAILS OPEN --- REVISED**
+**CLOSED --- REVISED**
 
-The runtime may expose conceptual root capabilities corresponding to its
-active execution scopes:
+The runtime has one Process execution domain for every Protos execution
+and may expose conceptual root capabilities corresponding to larger active
+execution scopes:
 
     ClusterRoot
         |
@@ -999,15 +1013,16 @@ active execution scopes:
     NodeRoot
         |
         v
-    ProcessRoot
+    Process
         |
         v
     RootActor
 
-Only RootActor is necessarily an ordinary Protos Actor.
+Only RootActor is an ordinary Protos Actor.
 
-ProcessRoot, NodeRoot, and ClusterRoot should normally be runtime services
-or capabilities rather than ordinary Actors.
+Process, NodeRoot, and ClusterRoot are runtime entities/capabilities rather
+than ordinary Actors. Process exists even in the minimal standalone case;
+NodeRoot and ClusterRoot may be absent when their scopes are not active.
 
 Conceptual responsibilities include:
 
@@ -1026,18 +1041,24 @@ NodeRoot:
 -   Node health
 -   Local coordination
 
-ProcessRoot:
+Process:
 
 -   Process lifecycle
 -   Actor management
 -   Root failure authority
 -   Runtime services
+-   Custody of Process-local application-facing host authority, including
+    arguments, environment, and standard I/O when provisioned
 
 RootActor:
 
 -   Application-level mutable state
 -   Application code
 -   Normal Protos execution
+
+Process-local host facilities may be lazy and need not be materialized if
+the application never requests them. Their I/O-facing semantics are defined
+in `PROTOS_IO_MODEL.md`.
 
 A standalone Process does not need active distributed Cluster
 infrastructure.
@@ -1063,7 +1084,7 @@ These may conceptually include:
 -   `parentActor`
 -   `rootActor`
 -   Failure-authority or supervisor capability
--   Process root capability
+-   Process capability
 -   Node root capability
 -   Cluster root capability
 
@@ -1076,27 +1097,33 @@ Actor's mutable object graph.
 
 **CLOSED --- REVISED**
 
-Process is a stronger isolation boundary than Actor.
+A Process is a Protos execution, isolation, and failure domain containing
+one RootActor and any additional Actors hosted in that domain.
 
-It provides an address-space and failure boundary.
+A Protos Process is not normatively an operating-system process or an
+address-space boundary. A standalone launcher may map one Protos Process
+to one operating-system process, while a managed runtime may host Protos
+Processes differently, provided that all Protos isolation and failure
+semantics are preserved.
 
 Actor-to-Actor and Process-to-Process communication use the same
 fundamental pass-by-value message semantics.
 
-Two Protos Processes on the same physical host may communicate using
-optimized mechanisms such as shared memory, mmap, IPC, or local sockets
-only when the runtime has actually established the required physical
-locality and capability.
+Two Protos Processes with established physical locality may communicate
+using optimized mechanisms such as shared memory, mmap, IPC, local
+sockets, or in-runtime transports. Different machines may use network
+transports.
 
-Different machines may use network transports.
-
-The transport must not change observable message value semantics or
-expose cross-process mutable references.
+The transport and physical hosting arrangement must not change observable
+message value semantics or expose cross-Process mutable references.
 
 A Process is ephemeral execution capacity, not a durable application
 identity.
 
-If a Process terminates, the Actors hosted by that Process terminate.
+If a Protos Process terminates, the Actors hosted by that Process
+terminate. Terminating that Process does not semantically require
+terminating an operating-system process that may host other Protos runtime
+services or execution domains.
 
 A later Process is new capacity, not a reincarnation of the previous
 Process.
@@ -1330,7 +1357,7 @@ The Protos execution hierarchy is intrinsic to the runtime:
 Each level coordinates multiple units of the level below when such
 coordination is required.
 
-A Process is a concrete address-space and runtime execution boundary.
+A Process is a concrete Protos runtime execution, isolation, and failure domain. It is not required to map one-to-one to an operating-system process or address space.
 
 A Node coordinates one or more Protos Processes.
 

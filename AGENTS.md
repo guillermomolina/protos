@@ -10,13 +10,17 @@ When behavior is unclear, incomplete, or contradictory, do not invent semantics.
 
 Canonical language specification
 
-The canonical language definition is maintained in:
+The canonical core language definition is maintained in:
 
 - "docs/PROTOS_LANGUAGE_SPEC.md"
 - "docs/PROTOS_GRAMMAR.md"
 - "docs/PROTOS_RUNTIME_SEMANTICS.md"
 
-Treat these documents as the source of truth for language behavior.
+Normative domain models supplement those core documents for semantically substantial standard subsystems. The current normative domain model is:
+
+- "docs/PROTOS_IO_MODEL.md" — observable I/O, text/binary adapter, filesystem-authority, and Process-I/O-bootstrap semantics.
+
+Treat the canonical core documents together with applicable normative domain models as the source of truth for observable language/standard semantics in their respective domains.
 
 `docs/PROTOS_CONCURRENCY_MODEL.md` is also part of the documentation, but with a less complete status: it is a concurrency design ledger, not a canonical language specification document. See "Concurrency design work" below.
 
@@ -27,6 +31,7 @@ The documents have distinct responsibilities:
 - `PROTOS_LANGUAGE_SPEC.md` defines the language model and observable semantics.
 - `PROTOS_GRAMMAR.md` defines lexical structure, syntax, precedence, parsing rules, mandatory desugarings, and the canonical semantic AST.
 - `PROTOS_RUNTIME_SEMANTICS.md` defines executable semantic rules and runtime pseudocode.
+- `PROTOS_IO_MODEL.md` owns observable I/O-domain semantics and should be referenced rather than duplicated when another document only needs an I/O rule.
 
 Do not treat runtime pseudocode as permission to change language semantics.
 

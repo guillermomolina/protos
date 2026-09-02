@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 79  
+Document revision: 80  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -11,6 +11,7 @@ It complements:
 
 - `PROTOS_LANGUAGE_SPEC.md`
 - `PROTOS_GRAMMAR.md`
+- `PROTOS_IO_MODEL.md`
 
 The goal is not to mandate an implementation strategy, but to define observable behavior precisely enough that different interpreters or VMs can behave consistently.
 
@@ -61,7 +62,7 @@ Future
     error
 ```
 
-These fields are conceptual. An implementation may represent them differently.
+These fields are conceptual. An implementation may represent them differently. The I/O-operation commitment state described in `PROTOS_IO_MODEL.md` is not an additional Future state: a Future remains exactly pending, resolved, failed, or cancelled.
 
 **The Lexical Parent of an Execution Context:**
 
