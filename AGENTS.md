@@ -379,3 +379,12 @@ Before completing any coding task that creates, removes, renames, or modifies so
 - if build configuration affecting packaging was changed, verify that `META-INF/LICENSE.TXT` remains included in the distributed JAR.
 
 Do not change licensing terms or make licensing-policy decisions implicitly as part of unrelated work. Report any ambiguity before making such a change.
+
+### Concurrency design work
+
+- `docs/PROTOS_CONCURRENCY_MODEL.md` is a design ledger, not yet a canonical language specification document.
+- Changes to this file do not require entries in `docs/PROTOS_SPEC_CHANGELOG.md` unless and until a decision is promoted into the canonical Protos specification.
+- This document uses its own independent document revision/versioning.
+- `Language version` may track the target language version, but `Document revision` is local to this file and must not be interpreted as the canonical specification revision.
+- When a CLOSED decision from this ledger is incorporated into canonical specification documents, update the affected specification files and record that canonical change in `docs/PROTOS_SPEC_CHANGELOG.md`.
+- Do not treat OPEN, PENDING, or design-only material in this ledger as normative language semantics.
