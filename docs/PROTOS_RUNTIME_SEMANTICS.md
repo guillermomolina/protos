@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 65  
+Document revision: 66  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -114,6 +114,15 @@ The lexer must enforce the following rules for String literals:
 - Triple-double-quoted (`"""..."""`) String literals permit logical source newlines as part of the literal content. Each logical source newline counts as one logical newline for structural processing — delimiter placement, content-line splitting, and indentation normalization — regardless of whether it is spelled `LF`, `CR`, or `CRLF`.
 - Retained source newlines in triple-double-quoted literals preserve their original source code points in the resulting String: `LF` remains U+000A, `CR` remains U+000D, and `CRLF` remains U+000D U+000A. There is no implicit newline normalization of String content.
 - The escape-sequence rules and multiline indentation normalization for triple-double-quoted literals remain unchanged; opening/trailing newline removal removes the complete logical newline sequence.
+
+**String Literal Delimiter Recognition (Lexer Contract):**
+
+Triple-double quote-run recognition is lexer behavior, not runtime behavior:
+
+- Outside a String lexical construct, three consecutive unescaped double-quote characters (`"""`) at the current lexical position begin a triple-double-quoted String; this takes priority over recognizing an ordinary double-quoted String opener at that position. The opening delimiter is exactly three double quotes.
+- Inside a triple-double-quoted String, the first three consecutive unescaped double-quote characters form the closing delimiter, which consumes exactly those three quotes. One or two consecutive unescaped quotes that do not begin a closing delimiter are ordinary content.
+- Any source characters immediately following a closing delimiter, including additional double quotes, are outside the completed String and are lexed normally from that point; there is no greedy rule that consumes a longer quote run as one delimiter, and quote-run decisions are not backtracked.
+- An escaped double quote (`\"`) is String content and does not participate in a closing delimiter.
 
 **Unterminated String Literals (Lexer Contract):**
 

@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 65  
+Document revision: 66  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -133,6 +133,33 @@ The existing incomplete-escape rule is unchanged. If the end of source is reache
 Protos has no separate character literal or character type. `'a'` and `"a"` both evaluate to a String containing the single-character text `a`.
 
 String interpolation is not part of Core v0.1. Inside a String, `${...}` has no special meaning and is treated as ordinary literal text.
+
+**Triple-Double Quote-Run Recognition:**
+
+Outside a String lexical construct, when the lexer is positioned at a double quote and the next three source characters are `"""`, they begin a triple-double-quoted String. This takes priority over recognizing that position as an ordinary double-quoted String opener followed by another double quote. The triple-double opening delimiter is exactly three double quotes, and the lexer consumes exactly those three. Do not reinterpret the first two quotes as an empty ordinary double-quoted String in order to avoid opening a triple-double String.
+
+Inside an open triple-double-quoted String, the first sequence of exactly three consecutive unescaped double-quote characters encountered is the closing delimiter:
+
+- one unescaped `"` that is not the start of `"""` is ordinary String content;
+- two consecutive unescaped `"` characters that are not followed by a third unescaped `"` are ordinary String content;
+- three consecutive unescaped `"` characters form the closing delimiter.
+
+The closing delimiter consumes exactly those three double-quote characters. Any source characters immediately following it, including additional double quotes, are outside the completed String and are lexed normally from that point. There is no rule that greedily consumes a run of four, five, six, or more double quotes as one delimiter, and quote-run decisions are not backtracked.
+
+Escape recognition occurs while scanning String content. An escaped double quote (`\"`) is String content and is not an unescaped quote participating in a closing delimiter; escaping at least one participating double quote prevents three consecutive source quotes from forming a closing delimiter. The `\"` escape keeps its ordinary meaning, and no triple-quote escape is introduced.
+
+Examples:
+
+```text
+""""""          ->   """ + """          one empty triple-double-quoted String token
+"""text""""     ->   """text""" + "     the remaining " begins an ordinary String opener
+"""text"""""    ->   """text""" + ""    the remaining "" form an empty ordinary String
+"""text""""""   ->   """text""" + """   the remaining """ begin another triple-double String
+""""text        ->   """ + "text        the fourth " is the first content character
+"""""text       ->   """ + ""text       the two remaining " are ordinary content
+```
+
+After a closing delimiter, remaining quotes begin the lexical construct the ordinary rules produce from that position. If that construct is a String and the end of source is reached before its required closing delimiter, the complete source is a lexical error under the Unterminated String Literals rules above. A lexically valid sequence of adjacent String tokens that the parser does not accept is a parser syntax error, not a lexical error; Core v0.1 defines no implicit String-literal concatenation.
 
 For triple-double-quoted String literals, indentation normalization is defined as follows:
 
@@ -1690,7 +1717,7 @@ Core v0.1 defines no special documentation-comment syntax.
 
 ## 39. Compact EBNF
 
-The compact grammar below incorporates the syntax decisions made through revision 65. Semantic validation still applies after parsing.
+The compact grammar below incorporates the syntax decisions made through revision 66. Semantic validation still applies after parsing.
 
 ```ebnf
 program =

@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 65  
+Document revision: 66  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -2376,6 +2376,8 @@ Core v0.1 defines String literals as ordinary `String` values.
 - Invalid or incomplete escape sequences are lexical errors.
 - Octal escapes and `\xNN` escapes are not supported.
 - Triple-double-quoted strings are multiline String literals, not raw strings.
+- A triple-double-quoted String starts with exactly three consecutive unescaped double-quote characters (`"""`). When three consecutive double quotes occur at the current lexical position outside a String, triple-double opening recognition takes priority over an ordinary double-quoted String opener.
+- Inside a triple-double-quoted String, the first three consecutive unescaped double-quote characters form the closing delimiter, which consumes exactly those three quotes; one or two consecutive unescaped quotes that do not begin a closing delimiter are ordinary content, quotes remaining after a closing delimiter are lexed normally from that position, and an escaped double quote (`\"`) is content and does not participate in a closing delimiter. Core v0.1 defines no implicit concatenation of adjacent String literals.
 - Triple-single-quoted strings are not supported.
 - String interpolation is not part of Core v0.1.
 - `${...}` has no special meaning inside a String and is treated as literal text.
