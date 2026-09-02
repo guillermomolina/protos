@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 80  
+Document revision: 81  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -203,7 +203,7 @@ ByteWritable {
 }
 ```
 
-`write(bytes)` returns a `Future`.
+`write(bytes)` returns a `Future`. On successful completion, that Future resolves to the receiver.
 
 The argument must be `Bytes`.
 
@@ -245,7 +245,7 @@ Flushable {
 }
 ```
 
-`flush()` returns a `Future`.
+`flush()` returns a `Future`. On successful completion, that Future resolves to the receiver.
 
 `flush()` establishes an output-propagation frontier at invocation time.
 
@@ -285,7 +285,7 @@ Closable {
 }
 ```
 
-`close()` returns a `Future`.
+`close()` returns a `Future`. On successful completion, that Future resolves to the receiver.
 
 Closing begins permanent lifecycle termination of that receiver/resource.
 
@@ -303,7 +303,7 @@ A failed first close does not make the object usable again. The object remains c
 
 Graceful output shutdown or half-close is represented separately by `WriteShutdown`; input half-close is represented by `ReadShutdown`.
 
-Cancellation may cancel the close operation before irreversible lifecycle effects, but cancellation never resurrects or reopens a lifecycle that has already begun irreversible closing.
+Cancellation may cancel the close operation before irreversible resource-release effects. Beginning `close()` nevertheless begins the receiver's permanent closing lifecycle: successful cancellation of the close operation does not restore the receiver to the open state, permit new operations that require the resource to remain open, or otherwise resurrect/reopen the receiver. Cancellation only prevents those close effects that had not yet become irreversible.
 
 ---
 
@@ -429,7 +429,7 @@ Syncable {
 }
 ```
 
-`sync()` returns a `Future`.
+`sync()` returns a `Future`. On successful completion, that Future resolves to the receiver.
 
 `flush()` and `sync()` are distinct:
 
@@ -524,7 +524,7 @@ TextWritable {
 }
 ```
 
-`writeText(text)` returns a `Future`. The argument must be `String`.
+`writeText(text)` returns a `Future`. On successful completion, that Future resolves to the receiver. The argument must be `String`.
 
 The associated encoder converts text to bytes while preserving invocation order. Protos does not require each `writeText()` call to map one-to-one to a single underlying byte write.
 
@@ -588,7 +588,7 @@ A Protos `String` contains valid Unicode text; the encoding layer never introduc
 
 The selected `Encoding` determines interpretation. A BOM never silently changes the selected encoding to another encoding.
 
-For UTF8, UTF16LE, and UTF16BE, an initial matching BOM may be consumed by default. A configuration may explicitly preserve it as U+FEFF.
+For UTF8, UTF16LE, and UTF16BE, an initial matching BOM is consumed by default. A configuration may explicitly preserve it as U+FEFF.
 
 A BOM occurring later in the stream is ordinary U+FEFF text.
 
@@ -665,7 +665,7 @@ writeText(text)
 writeLine(text)
 ```
 
-`writeLine(text)` writes the text followed by LF (`U+000A`) as the canonical Protos line terminator. It does not perform platform-native newline translation.
+`writeLine(text)` returns a `Future` that resolves to the receiver on successful completion. It writes the text followed by LF (`U+000A`) as the canonical Protos line terminator. It does not perform platform-native newline translation.
 
 A TextWriter exposes `Flushable` or `Closable` only when it correctly implements those protocols over its own state. Target capabilities are never inherited automatically.
 
@@ -785,7 +785,7 @@ WriteShutdown {
 }
 ```
 
-Both operations return Futures.
+Both operations return Futures. On successful completion, each operation resolves to its receiver.
 
 ### 19.1 WriteShutdown
 

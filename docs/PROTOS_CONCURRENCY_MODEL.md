@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 80
+Document revision: 81
 Status: Draft
 Last updated: 2026-09-02
 
@@ -1001,7 +1001,7 @@ the concurrency model depends on.
 
 ## 35. Scope Roots
 
-**CLOSED --- REVISED**
+**DIRECTION CLOSED, DETAILS OPEN --- REVISED**
 
 The runtime has one Process execution domain for every Protos execution
 and may expose conceptual root capabilities corresponding to larger active
@@ -1084,11 +1084,12 @@ These may conceptually include:
 -   `parentActor`
 -   `rootActor`
 -   Failure-authority or supervisor capability
--   Process capability
 -   Node root capability
 -   Cluster root capability
 
 The exact names and APIs remain open.
+
+The Process capability is deliberately not part of this implicit-runtime-reference list. An Actor has Process authority only when that capability was explicitly provisioned to the Actor at creation or explicitly delegated later according to the applicable capability-transfer semantics. Provisioning a subordinate Process-local facility does not implicitly grant the whole Process capability.
 
 These values do not provide direct shared-memory access to another
 Actor's mutable object graph.
