@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 78  
+Document revision: 79  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -2322,7 +2322,7 @@ foo(1)
 `b` is bound to `10`, while `args` still contains only the caller-supplied value:
 
 ```text
-args == [1]
+args.size == 1
 ```
 
 A closure may declare one trailing rest parameter:
@@ -2338,11 +2338,12 @@ The rest parameter is bound to an ordinary collection containing the remaining c
 Argument spread is supported at call sites:
 
 ```js
-values: [10, 20, 30]
+pack: (...items) => items
+values: pack(10, 20, 30)
 f(...values)
 ```
 
-which invokes `f` with the elements of `values` as individual positional arguments, preserving their order.
+which invokes `f` with the elements of `values` as individual positional arguments, preserving their order. Here `pack` is a rest-capturing closure: its rest parameter binds the ordinary collection containing `10`, `20`, and `30`, and the spread expands that collection's elements into `f`'s arguments.
 
 These facilities are intended to make invocation forwarding and dynamic arity ordinary language operations:
 
@@ -2356,7 +2357,7 @@ Protocols analogous to Smalltalk block invocation helpers may therefore be imple
 
 ```js
 f.value(10, 20)
-f.values([10, 20])
+f.values(pack(10, 20))
 ```
 
 where such protocol methods delegate to normal invocation. No overload resolution by argument type is introduced by these facilities.
@@ -3077,9 +3078,11 @@ A Future does not retain the creator's dynamic handler stack as an indefinitely 
 
 ## Concurrency Memory Semantics
 
-Core v0.1 permits mutable objects to be shared between concurrent tasks, but does not make unsynchronized conflicting mutation automatically safe.
+Core v0.1 concurrency follows the Actor model: an Actor is a serialized domain of mutable Protos state, and there is no shared mutable Protos memory between Actors. Concurrent execution is organized as follows.
 
-Correct concurrent access to shared mutable state requires explicit synchronization provided by runtime or library protocols.
+- **Actor-local Future/task concurrency.** Ordinary Future/task execution created within an Actor remains Actor-local and cooperative. Only one segment of Actor-local Protos code executes at a time. Tasks may interleave with other Actor-local work only at explicit suspension points; they never execute Protos code simultaneously against the same mutable Actor state, and between suspension points Actor-local state is serialized, so no locks or other explicit synchronization are required to protect it.
+- **Different Actors.** Actors do not share mutable Protos references. Another Actor's mutable state is never accessed by direct reference; it is reached only through Actor communication, which has pass-by-value semantics.
+- **Explicit isolated parallel computation.** The design-ledger facility for explicit isolated parallel computation (whose API remains open) may execute Protos code simultaneously on other CPU carriers, but it crosses an explicit isolation boundary: it does not receive arbitrary live mutable aliases to the calling Actor's object graph, and results cross back by value.
 
 Future completion establishes a visibility boundary:
 
@@ -3105,12 +3108,9 @@ future.value()
 print(state.value)   // observes 42
 ```
 
-Core v0.1 intentionally does not yet specify a full low-level memory model comparable to a platform VM memory model. Implementations must nevertheless preserve the Future completion visibility guarantee and the semantics of explicit synchronization primitives.
+`state.value = 42` is serialized Actor-local work: the Future task and the observing task interleave only at suspension points, and the completion visibility rule guarantees that the observing task sees the write after `future.value()` returns.
 
-
-## Futures and Concurrency
-
-
+Core v0.1 intentionally does not yet specify a full low-level memory model comparable to a platform VM memory model. Implementations must nevertheless preserve the Future completion visibility guarantee, the Actor turn model, and Actor isolation.
 
 ## Core Reflection
 

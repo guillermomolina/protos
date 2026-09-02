@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 78  
+Document revision: 79  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -28,13 +28,14 @@ Object
 
 Activation
     context
-    lexicalParent
-    receiver       // this
-    arguments      // caller-supplied positional arguments
+    lexicalParent   // lexical parent context of `context`; see lexicalParentOf
+    isConstruction  // true only for object-body construction activations
+    receiver        // this
+    arguments       // caller-supplied positional arguments
     methodHome
-    returnHome     // target of ^, optional outside callable execution
-    ownsReturnHome // true only for the invocation that established returnHome
-    parentTask     // optional structured-concurrency owner
+    returnHome      // target of ^, optional outside callable execution
+    ownsReturnHome  // true only for the invocation that established returnHome
+    parentTask      // optional structured-concurrency owner
 
 Closure
     code
@@ -61,6 +62,17 @@ Future
 ```
 
 These fields are conceptual. An implementation may represent them differently.
+
+**The Lexical Parent of an Execution Context:**
+
+`lexicalParentOf(context)` is the conceptual operation returning the immediate lexical parent context of an execution-context object, or `null` when the context has no lexical parent. The association is established when the context begins to be used, and it is a lexical relationship, not a delegation relationship:
+
+- An activation context created by `createActivation` has the closure's captured lexical context as its lexical parent; for every activation, `activation.lexicalParent` holds `lexicalParentOf(activation.context)`.
+- A construction context — the object under construction in `createObject` — has the genuine lexical context chain of the enclosing activation as its lexical parent, so an object under construction is never a lexical parent of anything (see Object Construction and `lexicalContextForClosureCreation`).
+- A `moduleContext` created by `createModuleContext` has the frozen prelude context as its lexical parent, associated when `executeModuleBody` executes the module body in it; it has no lexical parent before that association.
+- The frozen prelude context is the root of the lexical chain: `lexicalParentOf(preludeContext)` is `null`.
+
+Execution contexts delegate through `Context` to `Object`. `Context` is their delegation prototype, never their lexical parent: `lexicalParentOf` and `delegationParent` are different relationships, and the delegation chain `activationContext → Context → Object` is not the lexical chain. `lookupName` and `assignName` traverse lexical contexts only through `lexicalParentOf` and never walk the delegation chain of a context while searching for a bare name.
 
 Identifiers are lexical constructs that must conform to Unicode `XID_Start` and `XID_Continue` properties and must be in Unicode NFC normalization form. The lexer must validate NFC compliance and reject non-NFC identifiers as syntax errors.
 
@@ -289,6 +301,8 @@ function lookupName(activation, name):
     )
 ```
 
+The walk traverses lexical contexts only: `lookupLocal` inspects each context's own slots and `lexicalParentOf` moves to the next lexical context. The delegation chain of a context (`Context` → `Object`) is never searched for a bare name; after the lexical chain is exhausted, lookup continues through the receiver's delegation chain as shown.
+
 A failed lookup never returns `null`.
 
 ---
@@ -502,6 +516,8 @@ function assignName(activation, name, value):
     )
 ```
 
+As in Unqualified Lookup, the walk follows `lexicalParentOf` — the lexical chain — and never the contexts' `Context` → `Object` delegation chain.
+
 ---
 
 # 12. Message Send
@@ -687,12 +703,13 @@ Conceptually:
 
 ```text
 function lexicalContextForClosureCreation(activation):
-    if activation is evaluating an object body
-       and activation.context is the object being constructed:
+    if activation.isConstruction:
         return activation.lexicalParent
 
     return activation.context
 ```
+
+A construction activation is created only by `createObject`, with `context` set to the object being constructed and `lexicalParent` set to `lexicalContextForClosureCreation` of the enclosing activation (see Object Construction). Its `lexicalParent` therefore is already a genuine lexical context — never another object under construction — so this rule skips every enclosing construction context transitively, not merely the nearest one.
 
 Therefore a method closure installed on a prototype captures genuine enclosing lexical contexts, while bare object-state names are resolved later against the dynamic receiver (`this`) and its delegation chain.
 
@@ -789,6 +806,8 @@ function createActivation(
 
     return activation
 ```
+
+The new activation context's delegation parent is `Context`, while its lexical parent — `lexicalParentOf(context)` — is `closure.lexicalContext`, the context captured by the closure at creation. The two relationships are independent: the delegation chain `activationContext → Context → Object` is never used for bare-name lexical lookup.
 
 Parameter binding is conceptually:
 
@@ -977,7 +996,8 @@ function createObject(parent, body, activation):
 
     constructionActivation = Activation(
         context = object,
-        lexicalParent = activation.context,
+        lexicalParent = lexicalContextForClosureCreation(activation),
+        isConstruction = true,
         receiver = object,
         methodHome = null,
         returnHome = activation.returnHome,
@@ -992,7 +1012,7 @@ function createObject(parent, body, activation):
     return object
 ```
 
-This pseudocode expresses the language's uniform context model.
+This pseudocode expresses the language's uniform context model. The construction activation's `context` is the object under construction, so bare-name lookup and unqualified slot creation inside the body operate on that object's own local slots; its `lexicalParent` is the genuine lexical context chain of the enclosing activation (`lexicalContextForClosureCreation`), so the object under construction is neither captured as a lexical environment nor inserted into the lexical chain of closures created in its body.
 
 Object construction evaluates the parent expression and uses the resulting object directly as the immutable delegation parent. No parentability test, classification, or permission check is performed: every successfully evaluated parent expression produces a Protos object, and every Protos object may serve as the delegation parent of another object, including immutable value objects, singleton values such as `true`, `false`, and `null`, and Number or String values such as `42` or `"hello"`.
 
@@ -1609,18 +1629,25 @@ function evaluate(node, activation):
             )
 
         Create(targetExpr?, name, valueExpr):
+            if targetExpr is absent:
+                return createSlot(
+                    target = activation.context,
+                    name = name,
+                    value = evaluate(
+                        valueExpr,
+                        activation
+                    )
+                )
+
+            target = evaluate(
+                targetExpr,
+                activation
+            )
+
             value = evaluate(
                 valueExpr,
                 activation
             )
-
-            target =
-                activation.context
-                if targetExpr is absent
-                else evaluate(
-                    targetExpr,
-                    activation
-                )
 
             return createSlot(
                 target,
@@ -1629,20 +1656,23 @@ function evaluate(node, activation):
             )
 
         Assign(targetExpr?, name, valueExpr):
-            value = evaluate(
-                valueExpr,
-                activation
-            )
-
             if targetExpr is absent:
                 return assignName(
                     activation,
                     name,
-                    value
+                    evaluate(
+                        valueExpr,
+                        activation
+                    )
                 )
 
             target = evaluate(
                 targetExpr,
+                activation
+            )
+
+            value = evaluate(
+                valueExpr,
                 activation
             )
 
@@ -1716,6 +1746,8 @@ function evaluate(node, activation):
 ```
 
 This sketch is intentionally small.
+
+Evaluation is strictly left-to-right wherever operands are evaluated. `Create` and `Assign` evaluate the target expression, when present, before the value expression: `getObject().x = makeValue()` evaluates `getObject()`, then `makeValue()`, then performs the assignment, and explicit slot creation `getObject().x: makeValue()` follows the same order. When no target expression exists, only the value expression is evaluated. Call and message-send arguments are evaluated left-to-right, and Indexed Access Lowering evaluates the receiver, then the index, then the assigned value, in the same left-to-right order.
 
 Most high-level language behavior should be expressed through ordinary objects and message sends rather than by adding evaluator cases.
 
@@ -1857,6 +1889,8 @@ function executeModuleBody(module, moduleContext, preludeContext):
         activation
     )
 ```
+
+`executeModuleBody` associates the frozen `preludeContext` as `lexicalParentOf(moduleContext)`. The module context's delegation chain — `Context` → `Object` — is its delegation chain, not its lexical chain: bare-name lookup reaches the prelude through `lexicalParentOf` only.
 
 Module loading, canonical identity, Actor-local caching, initialization states, cycle handling, and failure semantics are defined later in this document; host-specific resolution and package policy remain outside Core v0.1.
 
@@ -2585,9 +2619,11 @@ return/signal from observer's future.value()
 
 This guarantee applies to SUCCESS, FAILED, and CANCELLED completion with respect to effects that occurred before terminal completion.
 
-Shared mutable objects remain ordinary shared mutable objects. Unsynchronized conflicting concurrent accesses require explicit synchronization; Core v0.1 does not assign race-free semantics to arbitrary data races.
+Ordinary Future/task execution is Actor-local and cooperative: only one segment of Actor-local Protos code executes at a time, tasks interleave with other Actor-local work only at explicit suspension points, and between suspension points Actor-local state is serialized. The visibility guarantee above is what lets a suspended task correctly observe the effects of a completed task, including writes the completed task made to the Actor-local mutable state before completion.
 
-Implementations may map these guarantees to the host VM memory model, locks, atomics, scheduler barriers, or equivalent mechanisms as long as language-level visibility is preserved.
+Different Actors never share mutable Protos references, so no cross-Actor mutable-state visibility rule exists beyond Actor communication semantics. Explicit isolated parallel computation, where provided, may execute Protos code simultaneously on other CPU carriers, but it crosses an isolation boundary, receives no arbitrary live mutable aliases to the calling Actor's state, and returns its result by value, so conflicting concurrent mutation of one Actor's mutable state does not arise.
+
+Implementations may map these guarantees to the host VM memory model, scheduler barriers, or equivalent mechanisms as long as language-level visibility is preserved.
 
 
 
