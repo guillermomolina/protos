@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 70  
+Document revision: 71  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -183,6 +183,8 @@ Object has no delegation parent.
 Every other object has exactly one delegation parent.
 
 Every delegation chain terminates at Object.
+
+Every object may serve as a delegation parent.
 
 A delegation parent cannot change after object creation.
 ```
@@ -989,6 +991,12 @@ function createObject(parent, body, activation):
 ```
 
 This pseudocode expresses the language's uniform context model.
+
+Object construction evaluates the parent expression and uses the resulting object directly as the immutable delegation parent. No parentability test, classification, or permission check is performed: every successfully evaluated parent expression produces a Protos object, and every Protos object may serve as the delegation parent of another object, including immutable value objects, singleton values such as `true`, `false`, and `null`, and Number or String values such as `42` or `"hello"`.
+
+The runtime is not required to allocate a distinct heap object for a value parent such as `42`. The semantic parent may be represented internally using an immediate, tagged, boxed, or heap representation, provided observable delegation behavior is identical.
+
+Delegated lookup through such a parent preserves the original receiver under the ordinary rules of Delegating Object Lookup: if a message sent to an object whose delegation parent is a value object is found through that parent or its ancestors, `this` is the original receiver, not the parent. Construction and lookup semantics are otherwise unchanged.
 
 An implementation may use a specialized construction context provided that observable lookup and creation semantics are identical.
 

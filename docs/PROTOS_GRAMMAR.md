@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 70  
+Document revision: 71  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -867,9 +867,25 @@ animal {
 library.models.animal {
 }
 
+this {
+}
+
 (getPrototype()) {
 }
+
+(true) {
+}
+
+(42) {
+}
+
+("hello") {
+}
 ```
+
+The alternatives are intentionally broad. `this`, `context`, and `args` are valid through `intrinsic-reference`; identifiers and member expressions such as `Object` or `library.models.animal` are valid directly; and a parenthesized expression may compute a parent dynamically. Literals such as `true`, `false`, `null`, numbers, and strings are not themselves `parent-expression` forms, so a literal parent must be written as a parenthesized expression: `(true)`, `(42)`, and `("hello")` are valid while the direct spellings `true`, `42`, and `"hello"` are not.
+
+The grammar determines which source forms can denote a parent expression. Whether an evaluated parent expression is usable as a parent is not a separate grammar or runtime category: every successfully evaluated Protos expression produces a Protos object (see PROTOS_LANGUAGE_SPEC.md), and every Protos object may serve as another object's delegation parent. There is no parentability capability, classification, or secondary validation after evaluation.
 
 ## 16. Closures
 
@@ -1937,7 +1953,7 @@ Core v0.1 defines no special documentation-comment syntax.
 
 ## 39. Compact EBNF
 
-The compact grammar below incorporates the syntax decisions made through revision 70. Semantic validation still applies after parsing. String literal lexical forms are defined normatively in the Literals section and referenced here rather than duplicated.
+The compact grammar below incorporates the syntax decisions made through revision 71. Semantic validation still applies after parsing. String literal lexical forms are defined normatively in the Literals section and referenced here rather than duplicated.
 
 ```ebnf
 program =

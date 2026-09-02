@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 70  
+Document revision: 71  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -116,6 +116,98 @@ slots:
 ```
 
 The delegation parent is fixed at object creation and cannot subsequently be changed. `Object` is the sole exception to the requirement that an object have exactly one parent: it has none.
+
+### Every Object May Serve as a Delegation Parent
+
+Every Protos object may serve as the delegation parent of another object. There is no distinct "prototype object" category and no parentability capability, flag, type, predicate, or hidden classification. "Prototype" describes a role that an object plays when another object delegates to it; it is not a separate kind of object.
+
+The rule applies without exception to ordinary objects, built-in objects, immutable value objects, singleton values, execution-context objects, and every other Protos object. Consequently values such as `this`, `context`, `args`, `true`, `false`, `null`, Number values such as `42`, and String values such as `"hello"` may serve as delegation parents, as may the standard built-in prototype objects such as `Object`, `Number`, `Integer`, `Float`, `String`, and `Boolean`.
+
+Subject to the `parent-expression` grammar (see PROTOS_GRAMMAR.md), all of the following are valid parent expressions:
+
+```js
+this {
+    ...
+}
+
+context {
+    ...
+}
+
+args {
+    ...
+}
+
+(true) {
+    ...
+}
+
+(false) {
+    ...
+}
+
+(null) {
+    ...
+}
+
+(42) {
+    ...
+}
+
+("hello") {
+    ...
+}
+
+(getParent()) {
+    ...
+}
+```
+
+`this`, `context`, and `args` are valid directly as intrinsic references. `true`, `false`, `null`, numbers, and strings are literals and therefore require parentheses: `(true)`, `(42)`, and `("hello")` are valid parent expressions, while the direct forms `true`, `42`, and `"hello"` are not `parent-expression` forms. A parenthesized expression may compute a parent dynamically.
+
+Using an object as a delegation parent does not make the newly created object identical to that parent, and does not automatically give the child the parent's value semantics. For example:
+
+```js
+answer: (42) {
+    description: "the answer"
+}
+```
+
+creates a new ordinary identity-bearing object whose immediate delegation parent is the Number value `42`:
+
+```text
+answer
+    ↓
+42
+    ↓
+... existing delegation chain of 42 ...
+    ↓
+Object
+```
+
+`answer` and `42` are distinct objects, so:
+
+```js
+answer === 42
+```
+
+is false. The fact that `42` is an immutable Number value object with value identity does not transfer Number value identity to `answer`. Likewise, `x: ("hello") { ... }` creates a new object delegating to the String value `"hello"`; `x` does not thereby become the String value `"hello"`. Delegation and value-category membership are distinct concepts.
+
+Message lookup through such a parent follows the ordinary delegation rules. If `answer → 42 → ...` and a message sent to `answer` is found through `42` or its ancestors, the original receiver remains `answer`, exactly as with every other delegated message send. Inherited behavior therefore executes with:
+
+```js
+this === answer
+```
+
+not:
+
+```js
+this === 42
+```
+
+Delegation guarantees lookup, not semantic membership in the parent's built-in value family. This revision introduces no coercion and no value inheritance: `answer + 1` is not specified to behave as numeric `43` merely because `answer` delegates to `42`. Whether inherited behavior can operate on a particular receiver follows the ordinary contract and behavior of the invoked message.
+
+`Object` is special only in the already-defined sense that it is the unique root and therefore has no parent itself. Being the root does not prevent `Object` from serving as the parent of another object; bare `{ ... }` already creates an object whose parent is `Object`.
 
 ## 3. Slot Creation and Modification
 
@@ -1622,6 +1714,8 @@ Object is the unique root object and has no delegation parent.
 Every other object has exactly one delegation parent.
 
 Every delegation chain terminates at Object.
+
+Every object may serve as a delegation parent.
 
 An object's delegation parent cannot change after creation.
 
