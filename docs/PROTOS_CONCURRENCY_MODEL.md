@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 02
+Document revision: 03
 Status: Draft
 Last updated: 2026-09-02
 
@@ -1338,7 +1338,6 @@ The runtime therefore separates:
 
 while allowing all three to use common runtime observations.
 
-
 ## 47. Multi-Objective Placement
 
 **CLOSED**
@@ -1387,14 +1386,16 @@ when the expected benefit sufficiently exceeds its cost.
 Placement may use hard constraints and soft affinity or anti-affinity hints
 when application intent cannot be inferred safely.
 
-
 ## 48. Failure Domains
 
-**OPEN**
+**CLOSED**
 
-Proposed direction:
+Protos models failure domains explicitly but generically.
 
-Protos should model failure domains explicitly but generically.
+A failure domain represents a known shared-fate relationship: failure of the
+domain may simultaneously affect all runtime entities placed within it.
+
+Failure domains are not required to form a strict hierarchy and may overlap.
 
 Process is intrinsically a failure domain because failure of a Process affects
 the Actors hosted by that Process.
@@ -1404,31 +1405,344 @@ such as:
 
 - host;
 - rack;
+- power domain;
 - availability zone;
 - site;
 - infrastructure-specific domains.
 
-Such domains may be discovered from the environment or supplied by
-configuration.
+Such domains may be discovered from the execution environment, topology
+providers, external orchestrators or cloud platforms, or supplied explicitly
+through configuration.
+
+General topology information and failure-domain information are related but
+distinct concepts.
+
+Topology properties describe locality, capabilities, or other characteristics
+that may be useful for placement.
+
+Examples include:
+
+- host;
+- rack;
+- availability zone;
+- NUMA domain;
+- network segment;
+- GPU model.
+
+Failure domains specifically describe shared failure risk.
+
+Examples include:
+
+- Process;
+- physical host;
+- rack;
+- power distribution unit;
+- availability zone.
+
+The same underlying topology information may participate in both models, but
+not every topology property implies shared fate.
 
 Logical Protos topology must not imply physical failure independence.
 
-For example, two Protos Nodes may execute on the same physical host. Unless
-the runtime knows otherwise, placing redundant Actors on those Nodes cannot be
-claimed to provide host-failure tolerance.
+For example, two Protos Nodes may execute on the same physical host. Placing
+redundant Actors on those Nodes does not by itself demonstrate tolerance to
+failure of that host.
 
 Unknown topology means unknown failure independence, not independent failure.
 
-The exact failure-domain model and its relationship with HA placement remain
-OPEN.
+Protos only claims availability guarantees that can be demonstrated from the
+failure-domain information currently known to the runtime.
+
+The exact mechanisms for failure-domain discovery, configuration, and topology
+providers remain open.
+
+## 49. High-Availability Placement Requirements
+
+**CLOSED**
+
+High-availability placement requirements belong primarily to logical groups of
+Actors representing a common service or responsibility rather than to
+individual Actors.
+
+Individual Actors may still have placement constraints such as requirements
+for a particular resource, locality, or isolation boundary.
+
+A group expresses availability intent declaratively.
+
+Conceptually, such intent may include requirements such as:
+
+    desired replicas = 3
+    tolerate one host failure
+    tolerate one availability-zone failure
+
+This is conceptual policy rather than language syntax.
+
+Application code normally expresses the required redundancy or failure
+tolerance rather than selecting concrete Processes, Nodes, hosts, zones, or
+other physical locations.
+
+The scheduler and scaler use the currently known topology and failure-domain
+information to determine placement and capacity requirements.
+
+Availability objectives and mandatory availability requirements are distinct.
+
+By default, an availability objective may be temporarily unsatisfied while the
+service continues operating in a degraded state.
+
+For example, if three Actors are desired with host-failure separation but only
+one known host is currently available, the runtime may still operate the
+Actors while reporting that the requested host-failure tolerance is not
+currently provided.
+
+This may still provide useful protection against narrower failure domains such
+as individual Actor or Process failure.
+
+Availability requirements explicitly declared mandatory may instead prevent
+admission until sufficient independent capacity becomes available.
+
+Such admission remains subject to the normal pending, timeout, cancellation,
+and backpressure mechanisms.
+
+Unsatisfied availability objectives provide useful scaling pressure.
+
+For example, a requirement for host independence that cannot currently be
+satisfied may signal that another independent host failure domain is needed.
+
+As new capacity or topology becomes available, the scheduler may redistribute
+work so that previously degraded availability objectives become satisfied.
+
+For each availability guarantee, the runtime distinguishes conceptually
+between:
+
+    SATISFIED
+        The runtime can demonstrate from known topology and failure-domain
+        information that the guarantee is currently provided.
+
+    UNSATISFIED
+        The runtime has sufficient information to determine that the
+        guarantee is not currently provided.
+
+    UNKNOWN
+        The runtime lacks sufficient information to prove either that the
+        guarantee is provided or that it is not provided.
+
+For example, if the active execution domain contains only one Protos Node, a
+requirement for separation across distinct Protos Nodes is UNSATISFIED.
+
+This does not by itself determine physical host independence because Protos
+Node topology and physical infrastructure topology are distinct.
+
+If the runtime knows that all eligible Processes execute on the same physical
+host, host-failure independence is UNSATISFIED.
+
+If the runtime does not know the physical host relationship, host-failure
+independence is UNKNOWN.
+
+The runtime must never report an availability guarantee as SATISFIED unless it
+can demonstrate that guarantee from the information available to it.
+
+High-availability placement only concerns redundancy, placement, and known
+failure independence.
+
+It does not by itself provide:
+
+- replicated Actor state;
+- persistence;
+- consensus;
+- transactional replication;
+- failover of mutable state;
+- exactly-once processing.
+
+Those mechanisms are separate concerns.
+
+## 50. Runtime Groups
+
+**CLOSED**
+
+Groups are logical policy and management units over homogeneous runtime
+entities.
+
+A Group is not an additional level in the intrinsic runtime hierarchy:
+
+    Actor -> Process -> Node -> Cluster
+
+The hierarchy describes runtime containment and coordination.
+
+Groups describe sets of entities to which common runtime policies apply.
+
+Conceptually, groups may exist for entities at different levels, including:
+
+    Group<Actor>
+    Group<Process>
+    Group<Node>
+
+This notation is conceptual and does not imply generic type syntax in the
+language.
+
+Groups at different runtime levels may expose different capabilities.
+
+For example, Actor groups may participate in application message routing,
+while Process or Node groups may primarily participate in placement, scaling,
+availability, monitoring, or administration.
+
+A Group is not an arbitrary query, tag set, or general-purpose view over the
+runtime.
+
+Its purpose is to define a concrete unit to which common runtime management
+policy applies.
+
+Each group-managed entity belongs to one management Group at its corresponding
+level.
+
+Each grouping level provides an implicit default Group.
+
+Entities for which no specialized policy is requested belong to that default
+Group automatically.
+
+Normal application code therefore does not need to select or configure a
+Group.
+
+Specialized Groups are introduced only when a set of entities requires common
+policy different from the default.
+
+Such policies may include:
+
+- availability requirements;
+- affinity or anti-affinity;
+- placement constraints;
+- scaling;
+- routing;
+- resource policy.
+
+Arbitrary runtime selections, queries, tags, and administrative views, if
+provided, are separate concepts and do not require Group membership semantics.
+
+Group and group controller are distinct concepts.
+
+The Group identifies the managed set and its policy.
+
+A controller may maintain or modify Group membership according to that policy.
+
+Not every Group requires active membership management.
+
+For example, a Group may merely apply a placement or anti-affinity policy to
+Actors created explicitly by the application.
+
+Other Groups may define a desired cardinality.
+
+Conceptually:
+
+    desired members = 3
+
+When desired cardinality is defined, an associated controller may create,
+replace, or remove members in order to maintain that cardinality.
+
+Desired cardinality is optional and is not an intrinsic property of every
+Group.
+
+Group cardinality only specifies the desired number of members.
+
+It does not imply that those members:
+
+- contain identical state;
+- are semantically interchangeable;
+- replicate state;
+- share an event history;
+- provide transparent failover;
+- participate in consensus;
+- provide persistent service state.
+
+State replication and continuity are separate mechanisms.
+
+### ActorGroup Communication
+
+An Actor Group may optionally act as a communication destination.
+
+This capability is lazy and follows the Protos pay-as-you-grow principle.
+
+A Group that is never used as a communication destination does not require
+application-message routing infrastructure merely because the Group exists.
+
+ActorRef semantics remain unchanged:
+
+    ActorRef -> one logical Actor
+
+Communication with an Actor Group instead addresses the logical Group and
+allows its routing policy to select a member.
+
+Normal `send` or `ask` directed to an Actor Group selects exactly one eligible
+member.
+
+Communication to multiple members, such as broadcast, is a distinct explicit
+operation rather than the default Group-send behavior.
+
+The exact member-selection algorithm is policy and runtime dependent.
+
+It may consider information such as:
+
+- current load;
+- mailbox pressure;
+- locality;
+- affinity;
+- resource availability;
+- routing policy.
+
+The concrete Actor destination is selected dynamically as part of routing the
+communication.
+
+The Group therefore retains stable logical identity while its concrete
+membership may change.
+
+Once a particular Actor has accepted a message, the normal Actor message
+delivery and failure semantics apply.
+
+Actor Group communication does not imply transparent retry on another member
+after acceptance and does not introduce exactly-once delivery semantics.
+
+If an Actor Group currently has no eligible member, communication applies
+backpressure rather than silently dropping the message or failing merely
+because capacity is temporarily unavailable.
+
+Conceptually:
+
+    group send
+        -> no eligible member
+        -> pending communication
+        -> eligible member becomes available
+        -> route message
+
+For `send`, the associated SendOperation remains pending according to the
+normal SendOperation rules.
+
+For `ask`, the returned Future remains pending according to the normal Future,
+timeout, and cancellation rules.
+
+Demand for a Group with insufficient eligible membership may provide a signal
+to its controller or to runtime scaling mechanisms.
+
+Sending to a Group does not itself create Actors, Processes, Nodes, or
+infrastructure capacity.
+
+The controller or scaler remains responsible for changing available capacity.
+
+Group routing infrastructure scales with the execution domain actually in use.
+Local Groups need not pay the cost of distributed Group routing, and
+distributed routing machinery need not exist in programs that do not require
+it.
 
 ## Open Design Topics
 
 The following topics have been identified but are not yet closed:
 
-- Failure-domain model
 - Failure-domain discovery and configuration
-- HA placement requirements and policies
+- Exact HA policy API and syntax
+- Exact Group API and syntax
+- Group controller API
+- Group lifecycle
+- Group routing policy API
+- Advanced Group routing policies
+- Group broadcast and multicast semantics
+- Group membership transition semantics
 - Exact `spawn` API and syntax
 - Actor bootstrap representation
 - Exact SpawnOperation API
@@ -1450,8 +1764,10 @@ The following topics have been identified but are not yet closed:
 - Latest-only policies
 - Batching
 - Streaming
+- Async streams
+- Generators and suspendable iteration
+- Whether Task should become observable
 - Pub/sub
-- Actor pools and groups
 - Routers and load balancing
 - Actor autoscaling
 - Process scaling
@@ -1484,6 +1800,8 @@ The following topics have been identified but are not yet closed:
 - Actor persistence
 - Actor checkpointing
 - State recovery
+- State replication
+- Replicated Actor/service semantics
 - ActorRef routing
 - ActorRef persistence
 - Service discovery implementation
