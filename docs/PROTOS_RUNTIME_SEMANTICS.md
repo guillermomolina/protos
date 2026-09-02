@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 64  
+Document revision: 65  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -114,6 +114,13 @@ The lexer must enforce the following rules for String literals:
 - Triple-double-quoted (`"""..."""`) String literals permit logical source newlines as part of the literal content. Each logical source newline counts as one logical newline for structural processing — delimiter placement, content-line splitting, and indentation normalization — regardless of whether it is spelled `LF`, `CR`, or `CRLF`.
 - Retained source newlines in triple-double-quoted literals preserve their original source code points in the resulting String: `LF` remains U+000A, `CR` remains U+000D, and `CRLF` remains U+000D U+000A. There is no implicit newline normalization of String content.
 - The escape-sequence rules and multiline indentation normalization for triple-double-quoted literals remain unchanged; opening/trailing newline removal removes the complete logical newline sequence.
+
+**Unterminated String Literals (Lexer Contract):**
+
+- Reaching the end of source before the required closing delimiter of a single-quoted (`'...'`), double-quoted (`"..."`), or triple-double-quoted (`"""..."""`) String literal is a lexical error.
+- An unterminated String literal never produces a partial String token. The parser never receives a successfully formed String token for the malformed literal, and the lexer must not recover by treating the opening quote as another token, emitting accumulated content as a partial String, splitting the literal into otherwise valid tokens, inserting a closing delimiter, or interpreting the end of source as the closing delimiter.
+- The end-of-source rule applies only when the end of source is reached while String recognition is still active and no earlier lexical error has already terminated recognition. The existing single-line raw-newline rule is unchanged: a logical source newline before the matching closing quote is already a lexical error.
+- The existing incomplete-escape rule is unchanged. If the end of source is reached after a backslash or during an incomplete escape while String recognition is still active, the source is a lexical error and no String token is emitted; no normative priority between an "incomplete escape" and an "unterminated String" classification is required.
 
 **Tokenization Rules:**
 

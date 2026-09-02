@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 64  
+Document revision: 65  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -121,6 +121,14 @@ A logical source newline is one `LF` (U+000A), one `CR` (U+000D), or one `CRLF` 
 Single-quoted and double-quoted String literals are single-line literals. A logical source newline is not permitted inside a single-quoted or double-quoted String literal. Encountering `LF`, `CR`, or `CRLF` before the matching closing quote is a lexical error. Newline characters may be represented in these literals using the existing `\n` and `\r` escape sequences, which denote String content and are distinct from raw source newlines.
 
 Triple-double-quoted String literals are the Core v0.1 syntax for source-level multiline text. Logical source newlines are permitted and are part of the literal content, subject to the multiline indentation normalization rule. Retained source newlines preserve their original source code points in the resulting String: `LF` remains U+000A, `CR` remains U+000D, and `CRLF` remains U+000D U+000A. There is no implicit newline normalization of String content.
+
+**Unterminated String Literals:**
+
+Once String-literal recognition has begun, reaching the end of source before the required closing delimiter is a lexical error. This applies to all three Core v0.1 String forms: single-quoted (`'...'`), double-quoted (`"..."`), and triple-double-quoted (`"""..."""`). An unterminated String literal never produces a partial String token. The lexer must not recover by treating the opening quote as another token, emitting the accumulated content as a partial String, splitting the malformed literal into otherwise valid tokens, implicitly inserting a closing delimiter, or interpreting the end of source as the closing delimiter. The parser never receives a successfully formed String token for an unterminated literal.
+
+The existing raw-newline rule is unchanged: a logical source newline encountered before the matching closing quote in a single-quoted or double-quoted String literal is already a lexical error and terminates String recognition before any end-of-source determination. The end-of-source rule applies when the end of source is reached while String recognition is still active and no earlier lexical error has already terminated recognition.
+
+The existing incomplete-escape rule is unchanged. If the end of source is reached after a backslash or during an incomplete escape while String recognition is still active, the source is a lexical error and no String token is emitted. Core v0.1 does not require a normative priority between an "incomplete escape" classification and an "unterminated String" classification; lexical rejection is the required observable behavior.
 
 Protos has no separate character literal or character type. `'a'` and `"a"` both evaluate to a String containing the single-character text `a`.
 
@@ -1682,7 +1690,7 @@ Core v0.1 defines no special documentation-comment syntax.
 
 ## 39. Compact EBNF
 
-The compact grammar below incorporates the syntax decisions made through revision 64. Semantic validation still applies after parsing.
+The compact grammar below incorporates the syntax decisions made through revision 65. Semantic validation still applies after parsing.
 
 ```ebnf
 program =

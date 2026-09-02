@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 64  
+Document revision: 65  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -2379,6 +2379,7 @@ Core v0.1 defines String literals as ordinary `String` values.
 - Triple-single-quoted strings are not supported.
 - String interpolation is not part of Core v0.1.
 - `${...}` has no special meaning inside a String and is treated as literal text.
+- Reaching the end of source before the required closing delimiter of any supported String literal is a lexical error. This applies to single-quoted (`'...'`), double-quoted (`"..."`), and triple-double-quoted (`"""..."""`) forms, and an unterminated literal never produces a partial String token or a String value.
 
 **Newline Handling in String Literals:**
 
