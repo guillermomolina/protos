@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 62  
+Document revision: 63  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -1682,7 +1682,7 @@ Core v0.1 defines no special documentation-comment syntax.
 
 ## 39. Compact EBNF
 
-The compact grammar below incorporates the syntax decisions made through revision 62. Semantic validation still applies after parsing.
+The compact grammar below incorporates the syntax decisions made through revision 63. Semantic validation still applies after parsing.
 
 ```ebnf
 program =
@@ -1786,6 +1786,18 @@ custom-binary-expression =
     custom-binary-operator,
     unary-expression,
     { custom-binary-operator, unary-expression } ;
+
+custom-binary-operator =
+    symbolic-operator-spelling ;
+
+symbolic-operator-spelling =
+    operator-character,
+    { operator-character } ;
+
+operator-character =
+      "!" | "$" | "%" | "&" | "*" | "+"
+    | "-" | "/" | "<" | "=" | ">" | "?"
+    | "@" | "\\" | "^" | "|" | "~" ;
 
 unary-expression =
       unary-operator, unary-expression
@@ -1993,6 +2005,8 @@ hexadecimal-digit =
 ```
 
 A parser may implement the expression portion using recursive descent plus Pratt parsing. Custom symbolic operators form their own precedence domain: mixing them with standard binary operators requires parentheses.
+
+A `custom-binary-operator` is a `symbolic-operator-spelling` that is not itself a reserved or standard symbolic token. Maximal-munch formation of the complete spelling and reserved-spelling classification are governed normatively by the Custom Operator Lexing rules: the complete maximal spelling is classified as a reserved/standard token when it exactly matches a reserved/standard spelling — including the exact one-character spellings `!` and `^` — and as `CUSTOM_OPERATOR` otherwise.
 
 `layout` denotes one or more consecutive logical `NEWLINE` tokens consumed as continuation inside a necessarily-incomplete delimited construct (see Whitespace and Newlines). It is formatting, not an element separator: commas are the only separators between list elements, and trailing commas are not permitted.
 
@@ -2680,7 +2694,7 @@ Whether the resulting token sequence is syntactically valid is the parser's resp
 
 Any remaining non-empty sequence made exclusively from operator characters may be tokenized as `CUSTOM_OPERATOR`. The characters `.`, `:`, and `;` never participate in a custom operator token.
 
-Conceptually:
+The normative lexical grammar for `custom-binary-operator` is:
 
 ```ebnf
 operator-character =
@@ -2688,11 +2702,14 @@ operator-character =
     | "-" | "/" | "<" | "=" | ">" | "?"
     | "@" | "\\" | "^" | "|" | "~" ;
 
-custom-binary-operator =
+symbolic-operator-spelling =
     operator-character, { operator-character } ;
+
+custom-binary-operator =
+    symbolic-operator-spelling ;
 ```
 
-After token formation, reserved and standard operator spellings are classified according to their dedicated grammar roles rather than as custom operators.
+A `symbolic-operator-spelling` is the candidate maximal symbolic token: the longest non-empty sequence of consecutive `operator-character` code points that can begin at a source position. Classification applies to the complete maximal spelling: it is a `custom-binary-operator` only when it does not exactly match a reserved or standard symbolic token — including the exact one-character spellings `!` and `^` — as defined above. Reserved and standard operator spellings are classified according to their dedicated grammar roles rather than as custom operators.
 
 ## Decoding Policy Grammar Note
 

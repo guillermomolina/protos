@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 62  
+Document revision: 63  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -1324,6 +1324,8 @@ a ** b
 ```
 
 The lexical alphabet is fixed by the language grammar. Modules, imports, runtime objects, or operator declarations cannot extend it.
+
+The formal lexical definition of `custom-binary-operator` — its `operator-character` alphabet, `symbolic-operator-spelling` candidate form, maximal-munch formation, and reserved-spelling classification — is normative in the grammar's Custom Operator Lexing rules.
 
 
 User-defined symbolic binary operators are permitted as ordinary message selectors.
