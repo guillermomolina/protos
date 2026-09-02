@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 66  
+Document revision: 67  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -65,6 +65,10 @@ These fields are conceptual. An implementation may represent them differently.
 Identifiers are lexical constructs that must conform to Unicode `XID_Start` and `XID_Continue` properties and must be in Unicode NFC normalization form. The lexer must validate NFC compliance and reject non-NFC identifiers as syntax errors.
 
 Reserved-word matching is case-sensitive. After lexical identifier recognition, the lexer must check whether the identifier spelling exactly matches one of the seven reserved words: `this`, `context`, `args`, `super`, `true`, `false`, or `null`. If it matches, the lexer tokenizes it as a reserved word token. Otherwise, it is an ordinary identifier token.
+
+**String Literal Lexical Forms:**
+
+The valid lexical token shapes for the three Core v0.1 String forms — single-quoted (`'...'`), double-quoted (`"..."`), and triple-double-quoted (`"""..."""`) — including the `escape-sequence` grammar, are defined formally in `PROTOS_GRAMMAR.md`; that grammar is the source spelling the lexer recognizes for String tokens.
 
 **String Escape Validation:**
 

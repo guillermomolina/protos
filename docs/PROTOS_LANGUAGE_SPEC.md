@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 66  
+Document revision: 67  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -2367,6 +2367,7 @@ This is protocol-based rather than a special numeric/Boolean operator. The opera
 
 Core v0.1 defines String literals as ordinary `String` values.
 
+- The three supported String source forms — single-quoted (`'...'`), double-quoted (`"..."`), and triple-double-quoted (`"""..."""`) — are formally defined by the lexical grammar in `PROTOS_GRAMMAR.md`.
 - Single-quoted and double-quoted forms are equivalent String literals.
 - Protos has no separate character literal or character type. `'a'` and `"a"` both denote a `String` containing the single-character text `a`.
 - Single-quoted, double-quoted, and triple-double-quoted String literals share the same escape rules.

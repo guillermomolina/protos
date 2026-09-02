@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 66  
+Document revision: 67  
 Status: Draft  
 Last updated: 2026-09-02
 
@@ -113,6 +113,77 @@ Core v0.1 String escape sequences are exactly:
 Invalid or incomplete escape sequences are lexical errors. Escape validation occurs as part of String literal lexical recognition. Octal escapes are not supported. `\xNN` escapes are not supported.
 
 Single-quoted, double-quoted, and triple-double-quoted String literals use the same escape rules. Triple-double-quoted strings are multiline String literals, not raw strings. Triple-single-quoted strings are not supported.
+
+**Formal String Token Grammar:**
+
+The following EBNF defines the valid lexical token shapes for the three Core v0.1 String forms. It describes source spelling, not the resulting String value: an escape sequence such as `\n` is two source characters forming one escape and evaluates to String content containing U+000A according to the existing String semantics. Error recovery and diagnostic classification are not part of the valid-token grammar; the invalid/incomplete-escape rule above and the Unterminated String Literals and Triple-Double Quote-Run Recognition rules below govern what happens when String recognition begins but the source does not form a valid String token.
+
+```ebnf
+single-quoted-string =
+    "'", { single-string-item }, "'" ;
+
+single-string-item =
+      escape-sequence
+    | single-string-ordinary-character ;
+
+double-quoted-string =
+    "\"", { double-string-item }, "\"" ;
+
+double-string-item =
+      escape-sequence
+    | double-string-ordinary-character ;
+
+triple-double-quoted-string =
+    "\"\"\"", triple-double-string-content, "\"\"\"" ;
+
+triple-double-string-content =
+    { triple-double-string-item } ;
+
+triple-double-string-item =
+      escape-sequence
+    | triple-double-string-ordinary-character
+    | logical-source-newline
+    | "\""
+    | "\"", "\"" ;
+
+escape-sequence =
+    "\\", escape-continuation ;
+
+escape-continuation =
+      "\\"
+    | "'"
+    | "\""
+    | "n"
+    | "r"
+    | "t"
+    | "b"
+    | "f"
+    | unicode-escape-tail ;
+
+unicode-escape-tail =
+    "u", "{", unicode-hex-digits, "}" ;
+
+unicode-hex-digits =
+    hexadecimal-digit, { hexadecimal-digit } ;
+```
+
+The `single-string-ordinary-character`, `double-string-ordinary-character`, and `triple-double-string-ordinary-character` symbols are lexical metavariables over single source code points, defined exactly as follows:
+
+- `single-string-ordinary-character` denotes any single source code point (Unicode scalar value) that is not `'` (U+0027), not `\` (U+005C), and not part of a logical source newline. Because `LF` (U+000A) and `CR` (U+000D) are excluded individually, the `CRLF` logical newline is excluded as a whole; single-quoted String content therefore contains no raw logical source newline.
+- `double-string-ordinary-character` denotes any single source code point that is not `"` (U+0022), not `\` (U+005C), and not part of a logical source newline, with the same raw-logical-newline exclusion as single-quoted String content.
+- `triple-double-string-ordinary-character` denotes any single source code point that is not `"` (U+0022), not `\` (U+005C), and not part of a logical source newline. Because `LF` (U+000A) and `CR` (U+000D) are excluded individually, the `CRLF` logical newline is excluded as a whole; raw logical source newlines in triple-double String content are recognized exclusively through the separate `logical-source-newline` item below.
+- `logical-source-newline` is the logical source newline defined in the Whitespace and Newlines section: exactly one `LF` (U+000A), one `CR` (U+000D), or one `CRLF` (U+000D U+000A), consumed atomically as one logical newline.
+- `hexadecimal-digit` is the hexadecimal digit production defined in the Numeric Literals section: exactly `0`-`9`, `a`-`f`, and `A`-`F`.
+
+The ordinary-character metavariables place no restriction on other Unicode source code points. Ordinary String text may contain any Unicode source characters subject only to the exclusions above; String content is not ASCII-restricted and is not governed by the identifier `XID_Start`/`XID_Continue` rules.
+
+The valid escape set is exactly the set encoded by `escape-sequence`; there are no other escapes. In particular, `\0`, `\xNN`, octal escapes, named Unicode escapes, and interpolation escapes are not valid escape sequences.
+
+`unicode-hex-digits` contains at least one hexadecimal digit and at most six; a `\u{HEX}` escape with more than six digits is a lexical error. `\u{HEX}` must denote a valid Unicode scalar value: surrogate code points (U+D800..U+DFFF) and values greater than U+10FFFF are invalid. The digit-count and scalar-value restrictions are normative lexical validation rules applied during String recognition.
+
+The `double-quoted-string` production describes the valid ordinary double-quoted token shape. Whether a source position beginning with `"""` opens a triple-double-quoted String or an ordinary double-quoted String is decided by the Triple-Double Quote-Run Recognition rules below; that opening priority is not encoded in this EBNF.
+
+`triple-double-string-content` permits `"` and `""` as content items, but content ends before the first sequence of three consecutive unescaped double-quote characters; that first `"""` is the closing delimiter and consumes exactly those three quotes. A single `"` item is therefore used only when it is not followed by two further unescaped double-quote characters, and a `""` item only when it is not followed by a third unescaped double-quote character. Escaped double quotes (`\"`) are String content and do not participate in closing-delimiter recognition. This is the quote-run rule restated in grammar terms; the authoritative rule is Triple-Double Quote-Run Recognition below.
 
 **Newline Handling:**
 
@@ -1717,7 +1788,7 @@ Core v0.1 defines no special documentation-comment syntax.
 
 ## 39. Compact EBNF
 
-The compact grammar below incorporates the syntax decisions made through revision 66. Semantic validation still applies after parsing.
+The compact grammar below incorporates the syntax decisions made through revision 67. Semantic validation still applies after parsing. String literal lexical forms are defined normatively in the Literals section and referenced here rather than duplicated.
 
 ```ebnf
 program =
@@ -1958,6 +2029,11 @@ literal =
     | "true"
     | "false"
     | "null" ;
+
+string-literal =
+      single-quoted-string
+    | double-quoted-string
+    | triple-double-quoted-string ;
 
 number-literal =
       decimal-number-literal
@@ -2544,7 +2620,7 @@ A String literal denotes a `String` value, not an encoded byte sequence. Protos 
 The standard Protos escape sequences are exactly:
 
 ```text
-\
+\\
 \'
 \"
 \n
