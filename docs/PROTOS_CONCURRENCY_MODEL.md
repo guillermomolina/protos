@@ -1,9 +1,7 @@
 # Protos Concurrency Model v0.1
 
-Language version: 0.1
-Document revision: 03
-Status: Draft
-Last updated: 2026-09-02
+Language version: 0.1 Document revision: 04 Status: Draft Last updated:
+2026-09-02
 
 # Protos Multithreading Design Ledger v1
 
@@ -11,24 +9,31 @@ Last updated: 2026-09-02
 
 **CLOSED**
 
-Protos aims to hide concurrency complexity in a way analogous to how garbage collection hides manual memory management.
+Protos aims to hide concurrency complexity in a way analogous to how
+garbage collection hides manual memory management.
 
 Priorities:
 
-- Ease of use
-- Safety by default
-- Performance
-- Pay for what you use
+-   Ease of use
+-   Safety by default
+-   Performance
+-   Pay for what you use
 
-A simple Protos program must not pay the cost of distributed runtime infrastructure unless it actually uses it.
+A simple Protos program must not pay the cost of distributed runtime
+infrastructure unless it actually uses it.
 
-A small command-line program such as `ls` should start quickly and should not require cluster membership, discovery, network listeners, external configuration, or heavyweight runtime services.
+A small command-line program such as `ls` should start quickly and
+should not require cluster membership, discovery, network listeners,
+external configuration, or heavyweight runtime services.
 
 Guiding rule:
 
-> If normal Protos code requires the programmer to reason about locks, atomics, memory barriers, ownership graphs, or memory ordering, the concurrency model has probably failed.
+> If normal Protos code requires the programmer to reason about locks,
+> atomics, memory barriers, ownership graphs, or memory ordering, the
+> concurrency model has probably failed.
 
-The runtime should absorb as much complexity as possible without sacrificing ordinary execution performance.
+The runtime should absorb as much complexity as possible without
+sacrificing ordinary execution performance.
 
 ## 2. Fundamental Model
 
@@ -36,27 +41,31 @@ The runtime should absorb as much complexity as possible without sacrificing ord
 
 The fundamental programming model remains:
 
-- Objects
-- Slots
-- Closures
-- Delegation
-- Message dispatch
-- `this`
+-   Objects
+-   Slots
+-   Closures
+-   Delegation
+-   Message dispatch
+-   `this`
 
-Actors do not introduce a second object model or a second dispatch system.
+Actors do not introduce a second object model or a second dispatch
+system.
 
-An Actor organizes ordinary Protos objects into an isolated domain containing:
+An Actor organizes ordinary Protos objects into an isolated domain
+containing:
 
-- A private object graph
-- Mutable state
-- A current behavior object
-- A mailbox
-- Futures/tasks
-- Lifecycle state
+-   A private object graph
+-   Mutable state
+-   A current behavior object
+-   A mailbox
+-   Futures/tasks
+-   Lifecycle state
 
 Principle:
 
-> Objects, slots, closures, and dispatch are the molecule. Actors organize those molecules into isolated domains of state, execution, lifecycle, and parallelism.
+> Objects, slots, closures, and dispatch are the molecule. Actors
+> organize those molecules into isolated domains of state, execution,
+> lifecycle, and parallelism.
 
 The Actor itself is not simply another ordinary Protos object.
 
@@ -72,19 +81,24 @@ Future and Actor solve different scaling problems.
 
 > An Actor scales with the amount of parallelism and isolation.
 
-Within one Actor, Futures behave conceptually like green threads or green tasks.
+Within one Actor, Futures behave conceptually like green threads or
+green tasks.
 
 An Actor may contain very large numbers of Futures.
 
-However, only one segment of Protos code belonging to an Actor executes at a time.
+However, only one segment of Protos code belonging to an Actor executes
+at a time.
 
-Therefore Futures inside the same Actor may interleave, but they do not execute Protos code simultaneously.
+Therefore Futures inside the same Actor may interleave, but they do not
+execute Protos code simultaneously.
 
 Different Actors may execute simultaneously on different CPU cores.
 
 An Actor is therefore a logical thread in the language model.
 
-It is not defined as one operating-system thread. Mapping Actors to operating-system threads or other carrier mechanisms is a runtime implementation decision.
+It is not defined as one operating-system thread. Mapping Actors to
+operating-system threads or other carrier mechanisms is a runtime
+implementation decision.
 
 ## 4. Actor Isolation
 
@@ -96,13 +110,15 @@ Ordinary mutable Protos references never cross an Actor boundary.
 
 Therefore the normal Actor programming model does not require:
 
-- Mutexes
-- Locks
-- Volatile variables
-- Atomics
-- Memory barriers
+-   Mutexes
+-   Locks
+-   Volatile variables
+-   Atomics
+-   Memory barriers
 
-The runtime may internally use shared memory, concurrent queues, atomics, locks, copy-on-write, or other mechanisms as long as those mechanisms are not observable through Protos semantics.
+The runtime may internally use shared memory, concurrent queues,
+atomics, locks, copy-on-write, or other mechanisms as long as those
+mechanisms are not observable through Protos semantics.
 
 ## 5. Actor Turns and Reentrancy
 
@@ -110,30 +126,34 @@ The runtime may internally use shared memory, concurrent queues, atomics, locks,
 
 An Actor executes at most one segment or turn of Protos code at a time.
 
-A message handler or task retains exclusive execution within the Actor until it:
-
-- Completes, or
-- Reaches an explicit suspension point.
+A message handler or task retains exclusive execution within the Actor
+until it completes or reaches an explicit suspension point.
 
 For example:
 
     data: socket.read().value()
 
-If `value()` must wait, the current task is suspended and the Actor may execute other runnable work.
+If `value()` must wait, the current task is suspended and the Actor may
+execute other runnable work.
 
-When the suspended task becomes runnable again, its continuation executes in a later turn.
+When the suspended task becomes runnable again, its continuation
+executes in a later turn.
 
-Consequently, Actor-local mutable state may have changed across an explicit suspension point.
+Consequently, Actor-local mutable state may have changed across an
+explicit suspension point.
 
-Between suspension points, Actor-local state is serialized and race-free with respect to other work in the same Actor.
+Between suspension points, Actor-local state is serialized and race-free
+with respect to other work in the same Actor.
 
-The model is therefore sequential but reentrant at explicit suspension points.
+The model is therefore sequential but reentrant at explicit suspension
+points.
 
 ## 6. I/O
 
 **CLOSED**
 
-Normal Protos I/O should be non-blocking relative to the Actor and should return a Future or another awaitable operation.
+Normal Protos I/O should be non-blocking relative to the Actor and
+should return a Future or another awaitable operation.
 
 Suspension remains explicit through operations such as:
 
@@ -141,26 +161,31 @@ Suspension remains explicit through operations such as:
 
 If the result is already available, execution may continue immediately.
 
-If the result is pending, the current task suspends and the Actor may execute other work.
+If the result is pending, the current task suspends and the Actor may
+execute other work.
 
 Ordinary I/O must not transparently introduce hidden suspension points.
 
 Principle:
 
-> Looking at Protos code, the programmer should be able to identify where Actor reentrancy may occur.
+> Looking at Protos code, the programmer should be able to identify
+> where Actor reentrancy may occur.
 
-Internally, an Actor may conceptually receive runnable work from a unified runtime event source containing:
+Internally, an Actor may conceptually receive runnable work from a
+unified runtime event source containing:
 
-- Mailbox messages
-- I/O completions
-- Timers
-- Future resolutions
+-   Mailbox messages
+-   I/O completions
+-   Timers
+-   Future resolutions
 
-An I/O completion is not normally exposed as an ordinary message to the Actor's current behavior.
+An I/O completion is not normally exposed as an ordinary message to the
+Actor's current behavior. Instead, it makes the corresponding suspended
+task runnable.
 
-Instead, it makes the corresponding suspended task runnable.
-
-The implementation may use mechanisms such as epoll, kqueue, io_uring, callbacks, fibers, virtual threads, or other facilities without changing language semantics.
+The implementation may use mechanisms such as epoll, kqueue, io_uring,
+callbacks, fibers, virtual threads, or other facilities without changing
+language semantics.
 
 ## 7. Ordering and Fairness
 
@@ -170,43 +195,48 @@ Messages from the same sender to the same Actor preserve FIFO ordering.
 
 Within one Future or task, normal sequential execution order applies.
 
-No global ordering is guaranteed between unrelated sources of work, including:
+No global ordering is guaranteed between unrelated sources of work,
+including different message senders, I/O completions, timers,
+reactivated Futures, or other independently runnable work.
 
-- Different message senders
-- I/O completions
-- Timers
-- Reactivated Futures
-- Other independently runnable work
+The runtime provides an abstract no-starvation guarantee among runnable
+work that yields control.
 
-The runtime provides an abstract no-starvation guarantee among runnable work that yields control.
+The language does not currently specify a particular round-robin
+algorithm, time quantum, or scheduler implementation.
 
-The language does not currently specify a particular round-robin algorithm, time quantum, or scheduler implementation.
+A Protos computation that runs indefinitely without completing or
+reaching a suspension point may monopolize its Actor.
 
-A Protos computation that runs indefinitely without completing or reaching a suspension point may monopolize its Actor.
-
-Arbitrary preemption of Protos execution is not currently part of the model.
+Arbitrary preemption of Protos execution is not currently part of the
+model.
 
 ## 8. Actor Creation
 
 **CLOSED**
 
-A newly created Actor starts clean with respect to the mutable state of its creator.
+A newly created Actor starts clean with respect to the mutable state of
+its creator.
 
 It does not inherit:
 
-- The creator's live execution context
-- `this`
-- `moduleContext`
-- Return homes
-- Dynamic error handlers
-- Pending Futures
-- Mutable object graph
+-   The creator's live execution context
+-   `this`
+-   `moduleContext`
+-   Return homes
+-   Dynamic error handlers
+-   Pending Futures
+-   Mutable object graph
 
-Only explicitly supplied initialization values cross the Actor boundary, using normal Actor pass-by-value semantics.
+Only explicitly supplied initialization values cross the Actor boundary,
+using normal Actor pass-by-value semantics.
 
-A normal Closure cannot silently carry actor-local lexical captures into another Actor.
+A normal Closure cannot silently carry actor-local lexical captures into
+another Actor.
 
-Actor bootstrap code may use closure-like syntax or code descriptors, but cross-Actor creation must not alter the existing semantics that Closures capture lexical contexts by reference.
+Actor bootstrap code may use closure-like syntax or code descriptors,
+but cross-Actor creation must not alter the existing semantics that
+Closures capture lexical contexts by reference.
 
 The exact bootstrap API and syntax remain open.
 
@@ -227,15 +257,19 @@ The conceptual initial lifecycle is:
         v
     implicit event loop
 
-An Actor processes no external messages until initialization completes successfully.
+An Actor processes no external messages until initialization completes
+successfully.
 
-Messages arriving while the Actor is INITIALIZING may be queued, but they are not dispatched until the Actor reaches READY.
+Messages arriving while the Actor is INITIALIZING may be queued, but
+they are not dispatched until the Actor reaches READY.
 
-If initialization fails with an unhandled error, the Actor never reaches READY.
+If initialization fails with an unhandled error, the Actor never reaches
+READY.
 
 Normal completion of initialization does not terminate the Actor.
 
-Instead, successful initialization transitions the Actor to READY and its implicit event loop begins.
+Instead, successful initialization transitions the Actor to READY and
+its implicit event loop begins.
 
 ## 10. Implicit Event Loop
 
@@ -243,17 +277,13 @@ Instead, successful initialization transitions the Actor to READY and its implic
 
 The Actor event loop is runtime machinery.
 
-Normal Protos Actor code does not require an explicit construct such as:
+Normal Protos Actor code does not require an explicit receive loop.
 
-    while (receive()) {
-        ...
-    }
+The programmer defines behavior. The runtime dispatches Actor turns
+automatically.
 
-The programmer defines behavior.
-
-The runtime dispatches Actor turns automatically.
-
-A lower-level receive/event API may be considered later, but it is not the normal Actor programming model.
+A lower-level receive/event API may be considered later, but it is not
+the normal Actor programming model.
 
 ## 11. Current Behavior
 
@@ -263,17 +293,21 @@ Each Actor has a replaceable current behavior.
 
 The current behavior is an ordinary Protos object.
 
-External messages are dispatched against the behavior that is current when the corresponding Actor turn begins.
+External messages are dispatched against the behavior that is current
+when the corresponding Actor turn begins.
 
-Changing the current behavior affects subsequent turns.
+Changing the current behavior affects subsequent turns. It does not
+alter the receiver or semantics of an activation that is already
+running.
 
-It does not alter the receiver or semantics of an activation that is already running.
-
-Messages already queued in the mailbox are therefore dispatched using the behavior current when their turn begins, not necessarily the behavior that existed when the message was sent.
+Messages already queued in the mailbox are therefore dispatched using
+the behavior current when their turn begins, not necessarily the
+behavior that existed when the message was sent.
 
 An ActorRef identifies the Actor, not its current behavior.
 
-The exact API for installing or replacing the current behavior remains open.
+The exact API for installing or replacing the current behavior remains
+open.
 
 ## 12. Actor Message Dispatch
 
@@ -283,28 +317,22 @@ An external Actor message conceptually consists of:
 
     selector + arguments
 
-The message is dispatched against the Actor's current behavior using the ordinary Protos dispatch rules.
-
-Conceptually:
-
-    worker.ask("resize", image, 800)
-
-causes dispatch equivalent to:
-
-    currentBehavior.resize(image, 800)
+The message is dispatched against the Actor's current behavior using the
+ordinary Protos dispatch rules.
 
 The same normal Protos rules apply:
 
-- Slot lookup
-- Delegation
-- `this`
-- Closure activation
-- Message-not-understood behavior
-- Normal error semantics
+-   Slot lookup
+-   Delegation
+-   `this`
+-   Closure activation
+-   Message-not-understood behavior
+-   Normal error semantics
 
 No second Actor-specific method or message dispatch system exists.
 
-During handler execution, `this` is the current behavior object according to normal Protos activation semantics.
+During handler execution, `this` is the current behavior object
+according to normal Protos activation semantics.
 
 ## 13. send()
 
@@ -312,24 +340,28 @@ During handler execution, `this` is the current behavior object according to nor
 
 `send()` represents one-way Actor communication.
 
-It returns a local identity-bearing communication operation object, provisionally called `SendOperation`.
+It returns a local identity-bearing communication operation object,
+provisionally called `SendOperation`.
 
-A SendOperation represents the logical send and may expose information or operations concerning:
+A SendOperation represents the logical send and may expose information
+or operations concerning:
 
-- Status
-- Progress
-- Waiting
-- Cancellation
-- Retry
-- Attempts
-- Logical message identity
-- Destination
-- Last error
-- Delivery uncertainty
+-   Status
+-   Progress
+-   Waiting
+-   Cancellation
+-   Retry
+-   Attempts
+-   Logical message identity
+-   Destination
+-   Last error
+-   Delivery uncertainty
 
-A SendOperation is communication-specific and is therefore distinct from a generic Future.
+A SendOperation is communication-specific and is therefore distinct from
+a generic Future.
 
-Retry is explicit rather than an invisible default because retrying an uncertain delivery may create duplicates.
+Retry is explicit rather than an invisible default because retrying an
+uncertain delivery may create duplicates.
 
 Protos does not promise exactly-once delivery by default.
 
@@ -343,24 +375,18 @@ The exact SendOperation API and status set remain open.
 
 It returns a Future.
 
-Conceptually:
-
-    future: worker.ask("calculate", input)
-    result: future.value()
-
-The runtime automatically manages the ephemeral reply capability and any required:
-
-- Correlation
-- Routing
-- Reply delivery
+The runtime automatically manages the ephemeral reply capability and any
+required correlation, routing, and reply delivery.
 
 The normal final result of the Actor handler becomes the reply value.
 
 One `ask()` produces one logical response.
 
-Streaming or multi-response communication will use a separate abstraction rather than stretching `ask()` into a streaming protocol.
+Streaming or multi-response communication will use a separate
+abstraction rather than stretching `ask()` into a streaming protocol.
 
-Timeout and cancellation follow the general Future and communication rules.
+Timeout and cancellation follow the general Future and communication
+rules.
 
 A timeout while waiting does not imply that remote work did not execute.
 
@@ -370,25 +396,9 @@ A timeout while waiting does not imply that remote work did not execute.
 
 `send()` and `ask()` use the same Actor message dispatch mechanism.
 
-For `send()`:
+For `send()`, the handler result is ignored.
 
-    message
-        |
-        v
-    normal behavior dispatch
-        |
-        v
-    handler result ignored
-
-For `ask()`:
-
-    message
-        |
-        v
-    same normal behavior dispatch
-        |
-        v
-    handler result resolves caller Future
+For `ask()`, the handler result resolves the caller Future.
 
 There are no separate send handlers and ask handlers.
 
@@ -402,27 +412,32 @@ No ordinary Protos reference crosses an Actor boundary.
 
 Transferability currently follows these rules:
 
-- Number: transferable by value
-- String: transferable by value
-- Boolean: transferable by value
-- null: transferable by value
-- Ordinary mutable object: transferable as a logical value copy
-- Array: transferable as a logical value copy
-- Cyclic object graph: transferable while preserving graph structure and aliasing conceptually
-- ActorRef: transferable as a special communication capability
-- Closure: not transferable
-- Future: not transferable
-- ExecutionContext: not transferable
-- Socket: not transferable
-- Open file: not transferable
-- Native resource: not transferable
-- Java object: not transferable by default
+-   Number: transferable by value
+-   String: transferable by value
+-   Boolean: transferable by value
+-   null: transferable by value
+-   Ordinary mutable object: transferable as a logical value copy
+-   Array: transferable as a logical value copy
+-   Cyclic object graph: transferable while preserving graph structure
+    and aliasing conceptually
+-   ActorRef: transferable as a special communication capability
+-   Closure: not transferable
+-   Future: not transferable
+-   ExecutionContext: not transferable
+-   Socket: not transferable
+-   Open file: not transferable
+-   Native resource: not transferable
+-   Java object: not transferable by default
 
-ActorRef is deliberately transferable because it provides communication capability rather than direct access to another Actor's mutable heap.
+ActorRef is deliberately transferable because it provides communication
+capability rather than direct access to another Actor's mutable heap.
 
-Closures are not transferable because they capture actor-local lexical execution contexts by reference.
+Closures are not transferable because they capture actor-local lexical
+execution contexts by reference.
 
-The destination Actor executes code that it already owns rather than receiving arbitrary executable closures carrying another Actor's lexical environment.
+The destination Actor executes code that it already owns rather than
+receiving arbitrary executable closures carrying another Actor's lexical
+environment.
 
 ## 17. Message Snapshot Time
 
@@ -430,106 +445,71 @@ The destination Actor executes code that it already owns rather than receiving a
 
 A message captures its logical value snapshot at `send()` time.
 
-For example:
-
-    x: (value: 1)
-
-    B.send("foo", x)
-
-    x.value = 2
-
-Actor B conceptually receives the state in which:
-
-    value = 1
-
-even if B does not process the message until much later.
-
-This snapshot rule is semantic.
-
-It does not prescribe when or how the runtime physically copies memory.
+This snapshot rule is semantic. It does not prescribe when or how the
+runtime physically copies memory.
 
 ## 18. Message Transfer Optimizations
 
 **CLOSED**
 
-Pass-by-value is an observable semantic rule, not a requirement to physically duplicate every byte immediately.
+Pass-by-value is an observable semantic rule, not a requirement to
+physically duplicate every byte immediately.
 
 The runtime may use optimizations including:
 
-- Copy-on-write
-- Immutable physical sharing
-- Shared backing storage
-- Shared memory
-- Zero-copy
-- Page remapping
-- Serialization
-- Streaming
-- Scatter/gather I/O
+-   Copy-on-write
+-   Immutable physical sharing
+-   Shared backing storage
+-   Shared memory
+-   Zero-copy
+-   Page remapping
+-   Serialization
+-   Streaming
+-   Scatter/gather I/O
 
-provided that the program observes exactly the semantics of a snapshot taken at send time and cannot observe shared mutable identity between Actors.
+provided that the program observes exactly the semantics of a snapshot
+taken at send time and cannot observe shared mutable identity between
+Actors.
 
 ## 19. Buffers
 
 **CLOSED**
 
-Buffers retain the same pass-by-value and snapshot semantics as other transferable mutable values.
+Buffers retain the same pass-by-value and snapshot semantics as other
+transferable mutable values.
 
-Protos does not initially introduce a special shared mutable Buffer exception.
+Protos does not initially introduce a special shared mutable Buffer
+exception.
 
-It also does not initially require Rust-like explicit move or borrow semantics merely to obtain efficient Buffer transfer.
+It also does not initially require Rust-like explicit move or borrow
+semantics merely to obtain efficient Buffer transfer.
 
-The runtime may specialize Buffer storage aggressively using techniques such as:
-
-- Copy-on-write
-- Zero-copy
-- Shared immutable backing
-- Scatter/gather
-- Streaming
-
-If large Buffer transfer patterns are expensive, the runtime advisor may detect them and suggest architectural changes.
+The runtime may specialize Buffer storage aggressively using
+copy-on-write, zero-copy, shared immutable backing, scatter/gather, or
+streaming.
 
 Principle:
 
-> First optimize automatically what is semantically invisible; require programmer-visible architectural changes only when they materially matter.
+> First optimize automatically what is semantically invisible; require
+> programmer-visible architectural changes only when they materially
+> matter.
 
 ## 20. End-to-End Backpressure
 
 **CLOSED**
 
-Backpressure applies to the complete delivery path, not only to the destination mailbox.
+Backpressure applies to the complete delivery path, not only to the
+destination mailbox.
 
-Conceptually:
+No intermediate queue may grow indefinitely in order to hide a slow
+final consumer.
 
-    sender Actor
-        |
-        v
-    local outbound queue
-        |
-        v
-    transport/channel
-        |
-        v
-    remote ingress
-        |
-        v
-    target mailbox
+Pressure must be capable of propagating back toward the originating
+SendOperation.
 
-No intermediate queue may grow indefinitely in order to hide a slow final consumer.
-
-Pressure must be capable of propagating back toward the originating SendOperation.
-
-This is conceptually similar to TCP flow control, but operates at the Actor/message semantic level rather than being tied to a particular network transport.
-
-The underlying transport may be:
-
-- In-process
-- Shared memory
-- IPC
-- TCP
-- QUIC
-- Another transport
-
-without changing the Actor communication semantics.
+The underlying transport may be in-process, shared memory, IPC, TCP,
+QUIC, or another transport without changing the Actor communication
+semantics.
 
 ## 21. Mailbox Bounds
 
@@ -537,23 +517,18 @@ without changing the Actor communication semantics.
 
 Every Actor mailbox has an effective finite bound.
 
-The bound may be:
-
-- Runtime-managed
-- Explicitly configured
-- Adaptive
-
+The bound may be runtime-managed, explicitly configured, or adaptive,
 but a mailbox is never conceptually an unlimited sink.
 
-When the delivery path cannot currently accept additional messages, `send()` enters backpressure through its SendOperation.
+When the delivery path cannot currently accept additional messages,
+`send()` enters backpressure through its SendOperation.
 
-It does not block an operating-system thread and does not silently discard the message.
+It does not block an operating-system thread and does not silently
+discard the message.
 
-A caller may explicitly choose to wait for progress through the SendOperation.
-
-Special explicit policies such as dropping, latest-only delivery, bounded loss, batching, or telemetry-oriented behavior may be considered later.
-
-They are not the default.
+Special explicit policies such as dropping, latest-only delivery,
+bounded loss, batching, or telemetry-oriented behavior may be considered
+later. They are not the default.
 
 ## 22. Timeouts and Deadlines
 
@@ -561,27 +536,17 @@ They are not the default.
 
 Awaitable operations may support a wait timeout.
 
-A wait timeout affects waiting.
+A wait timeout affects waiting. It does not automatically cancel the
+underlying operation.
 
-It does not automatically cancel the underlying operation.
+A timeout must never be interpreted as proof that an operation did not
+occur.
 
-Conceptually:
+For remote communication, uncertainty may result in a state such as
+`deliveryUnknown`.
 
-    future.value(5s)
-
-means:
-
-> Stop waiting after five seconds if the Future is still unresolved.
-
-It does not mean:
-
-> Guarantee that the underlying work stopped after five seconds.
-
-Communication operations may additionally support delivery deadlines or cancellation where appropriate.
-
-A timeout must never be interpreted as proof that an operation did not occur.
-
-For remote communication, uncertainty may result in a state such as `deliveryUnknown`.
+Communication operations may additionally support delivery deadlines or
+cancellation where appropriate.
 
 The exact APIs remain open.
 
@@ -591,23 +556,19 @@ The exact APIs remain open.
 
 Cancellation is cooperative.
 
-Protos does not arbitrarily interrupt Actor code in the middle of an instruction by injecting asynchronous exceptions.
+Protos does not arbitrarily interrupt Actor code in the middle of an
+instruction by injecting asynchronous exceptions.
 
-Cancellation requests are observed at safe points such as:
-
-- Suspension points
-- Runtime operations
-- Explicit or implicit cooperative checkpoints
+Cancellation requests are observed at safe points such as suspension
+points, runtime operations, or cooperative checkpoints.
 
 Cancelling a Future requests cancellation of its work.
 
-Cancelling a SendOperation attempts to prevent further delivery while that remains safe.
+Cancelling a SendOperation attempts to prevent further delivery while
+that remains safe.
 
-If a message is still in a local queue, cancellation may be able to remove it.
-
-If the message has crossed a boundary where delivery can no longer be determined safely, the result may become `deliveryUnknown`.
-
-If the destination has already accepted the message, cancellation cannot unsend it.
+If the destination has already accepted the message, cancellation cannot
+unsend it.
 
 Principle:
 
@@ -619,233 +580,264 @@ Principle:
 
 The existing structured-concurrency semantics for Futures remain.
 
-Asynchronous child work created inside an execution context is owned by that context by default unless explicitly detached.
+Asynchronous child work created inside an execution context is owned by
+that context by default unless explicitly detached.
 
-Actor creation does not automatically establish the same ownership relationship.
+Actor creation does not automatically establish the same ownership
+relationship.
 
-Actors may live for days, months, or longer than the Actor that originally created them.
+Structured concurrency therefore governs Futures within an Actor, not
+Actor lifetime in general.
 
-Structured concurrency therefore governs Futures within an Actor, not Actor lifetime in general.
-
-## 25. Parent Actor Versus Supervisor
+## 25. Parent Actor Versus Failure Authority
 
 **CLOSED**
 
-Actor creation and Actor supervision are separate relationships.
+Actor creation and Actor failure authority are separate relationships.
 
 `parentActor` identifies the Actor that created the current Actor.
 
-It represents genealogy/origin and provides an initial communication capability toward the creator.
+It represents genealogy/origin and provides an initial communication
+capability toward the creator.
 
 It does not imply ownership or automatic lifecycle propagation.
 
-`supervisorActor` identifies the entity responsible for lifecycle policy.
+The entity with failure authority is responsible for applying failure
+policy. That authority need not be an ordinary Actor.
 
-If Actor A creates Actor B and A later terminates permanently, B does not automatically terminate merely because A was its creator.
+If Actor A creates Actor B and A later terminates, B does not
+automatically terminate merely because A was its creator.
 
-B's parent reference may continue to identify the logical Actor A and communication with it may report that it is terminated or otherwise unavailable.
+Lifecycle consequences are defined by failure policy, not parenthood.
 
-Lifecycle consequences are defined by supervision, not parenthood.
+## 26. Supervision and Failure Authority
 
-## 26. Supervision
+**CLOSED --- REVISED**
 
-**CLOSED**
+Every Actor has a failure authority, but this does not imply a dedicated
+Supervisor Actor.
 
-Every Actor has supervision.
+A runtime root, controller, Actor, or other runtime entity may fulfill
+the supervision role.
 
-A default or root supervisor exists when no explicit supervisor is selected.
-
-When an Actor suffers an unhandled fatal failure, its supervisor receives structured failure information and applies lifecycle policy.
+When an Actor suffers an unhandled fatal failure, its failure authority
+receives or observes structured failure information and applies the
+relevant policy.
 
 Possible policies may include:
 
-- Restart
-- Replace
-- Stop
-- Escalate
-- Ignore
+-   Replace
+-   Stop
+-   Escalate
+-   Ignore
+
+`restart` is not a distinct Actor-lifecycle semantic operation.
+
+Actors are replaced, never restarted.
+
+Replacement creates a new Actor. The replacement does not inherit the
+failed Actor's identity, ActorRef, private mutable heap, pending
+interactions, or mailbox.
 
 The exact policy API remains open.
 
-Restart creates a fresh Actor generation and runs initialization again.
+For a trivial Process containing only its RootActor, no dedicated
+supervisor machinery is required.
 
-The runtime does not automatically reuse the failed Actor's private mutable heap because that state may be inconsistent.
+By default:
 
-## 27. Logical Actor Identity Across Restart
+    RootActor fatal failure
+        -> Process terminates
 
-**CLOSED**
+This preserves the pay-as-you-grow principle.
 
-A supervised restart preserves logical Actor identity and existing ActorRefs.
+## 27. Actor Identity Is Incarnation Identity
+
+**CLOSED --- REVISED**
+
+Actor identity is the identity of one concrete Actor incarnation.
+
+An ActorRef identifies that concrete Actor.
+
+If the Actor terminates, its ActorRef does not become a reference to a
+replacement.
 
 Conceptually:
 
-    ActorRef X
+    Actor A
         |
-        v
-    generation 41
+        +-- ActorRef(A)
         |
-        X crashes
-        |
-        v
-    generation 42
+        X terminates
 
-Existing users of ActorRef X continue to address the same logical Actor.
+    ActorRef(A) -> TERMINATED
 
-Internally, the runtime distinguishes:
+If policy creates a replacement, that replacement is another Actor with
+another ActorRef.
 
-- Logical Actor identity
-- Concrete Actor generation or incarnation
+There is no hidden logical Actor identity spanning multiple
+incarnations.
 
-Generation identity does not need to be part of normal application programming.
+Stable logical service identity belongs to higher-level abstractions
+such as Actor Groups or service discovery, not to an individual Actor.
 
 ## 28. Messages Across Actor Failure
 
-**CLOSED**
+**CLOSED --- REVISED**
 
 Messages that have already been processed retain their effects.
 
-Messages that have definitely not been accepted remain governed by normal SendOperation semantics.
+Messages addressed directly to a terminated Actor are never retargeted
+to another Actor.
 
-Messages that were accepted but remained unprocessed when an Actor generation crashed are not automatically reinjected into the replacement generation by default.
+Messages that have definitely not been accepted remain governed by
+normal SendOperation semantics, but the runtime does not change their
+destination to a replacement.
 
-Automatic reinjection could duplicate effects if the previous generation partially processed the operation before failure.
+Messages accepted by an Actor before it dies are not automatically
+reinjected into another Actor.
+
+Automatic reinjection or transparent retry could duplicate effects if
+the failed Actor partially processed the operation.
 
 Stronger guarantees require explicit mechanisms such as:
 
-- Idempotency
-- Acknowledgements
-- Persistence
-- Deduplication
-- Transactional protocols
+-   Idempotency
+-   Acknowledgements
+-   Persistence
+-   Deduplication
+-   Transactional protocols
 
 These mechanisms remain to be designed.
 
 ## 29. Monitoring Versus Supervision
 
-**CLOSED**
+**CLOSED --- REVISED**
 
-Supervision and monitoring are distinct.
+Supervision/failure authority and monitoring are distinct.
 
-Supervision has authority over Actor lifecycle.
+Failure authority controls or determines the reaction to Actor failure.
 
-Monitoring or watching observes Actor lifecycle without controlling it.
+Monitoring or watching observes lifecycle without controlling it.
 
 SendOperation reports the state of a particular communication operation.
 
 Potential lifecycle observations include:
 
-- Started
-- Ready
-- Failed
-- Restarting
-- Restarted
-- Terminated
-- Unreachable
+-   Started
+-   Ready
+-   Failed
+-   Terminated
+-   Unreachable
+-   Unknown
 
-The exact monitoring API remains open.
+Replacement is the creation of another Actor and is not a lifecycle
+continuation of the terminated Actor.
 
 For distributed Actors:
 
-    FAILED != UNREACHABLE
+    TERMINATED != UNREACHABLE != UNKNOWN
 
-A network partition or routing failure cannot by itself prove that a remote Actor has terminated.
+A network partition or routing failure cannot by itself prove that a
+remote Actor has terminated.
 
 ## 30. Runtime Health and Watchdog
 
-**CLOSED**
+**CLOSED --- REVISED**
 
 The runtime provides inexpensive always-on health information.
 
-The mandatory fast path must remain O(1), non-blocking, and free from global coordination.
+The mandatory fast path must remain O(1), non-blocking, and free from
+global coordination.
 
 Always-on information may include:
 
-- Actor lifecycle state
-- Approximate progress epoch
-- Mailbox depth
-- Failure count
-- Supervisor/root ownership
-- A small number of counters
+-   Actor lifecycle state
+-   Approximate progress epoch
+-   Mailbox depth
+-   Failure count
+-   Failure authority/root ownership
+-   A small number of counters
 
 More expensive analysis should use sampling or optional instrumentation.
 
-Examples include:
-
-- Detailed latency analysis
-- Hotspot detection
-- Long-turn profiling
-- Future-stall analysis
-- Communication-pattern analysis
-
 The runtime must not silently repair arbitrary mutable Actor state.
 
-Strong recovery replaces the isolated execution domain and runs initialization again.
+If policy requires continued capacity or service membership after
+failure, replacement creates a fresh Actor rather than repairing the
+failed Actor's heap.
 
 ## 31. Runtime Advisor
 
 **CLOSED AS DIRECTION**
 
-The runtime may provide an advisor capable of detecting problematic patterns such as:
+The runtime may provide an advisor capable of detecting problematic
+patterns such as:
 
-- Long-running Actor turns
-- Mailbox saturation
-- Stuck Futures
-- Resource saturation
-- CPU-heavy work inside an I/O-oriented Actor
-- Excessive large-value transfers
-- Poor Actor placement
-- Communication hotspots
+-   Long-running Actor turns
+-   Mailbox saturation
+-   Stuck Futures
+-   Resource saturation
+-   CPU-heavy work inside an I/O-oriented Actor
+-   Excessive large-value transfers
+-   Poor Actor placement
+-   Communication hotspots
 
-The advisor may provide stronger instrumentation in development environments while production can retain cheap health monitoring and self-healing with expensive profiling disabled or sampled.
+When an optimization is semantically invisible, the runtime should
+prefer applying it automatically.
 
-When an optimization is semantically invisible, the runtime should prefer applying it automatically.
-
-For example, a large transfer may automatically use copy-on-write or zero-copy.
-
-If repeated transfers remain architecturally expensive, the advisor may recommend changing Actor boundaries or placement.
+If repeated transfers or placement remain architecturally expensive, the
+advisor may recommend changing Actor boundaries or placement.
 
 ## 32. Root Actor
 
-**CLOSED**
+**CLOSED --- REVISED**
 
-Every Protos process begins with a Root Actor.
+Every Protos Process begins with a RootActor.
 
 A trivial program may conceptually consist only of:
 
     Process
         |
         v
-    Root Actor
+    RootActor
 
-The Root Actor owns the initial program state, including ordinary objects, module state, configuration, and Futures.
+The RootActor owns the initial program state, including ordinary
+objects, module state, configuration, and Futures.
 
-Within the Root Actor, ordinary state access uses normal Protos semantics and does not incur Actor message-passing overhead.
+Within the RootActor, ordinary state access uses normal Protos semantics
+and does not incur Actor message-passing overhead.
 
-Creating additional Actors explicitly introduces new isolation and parallelism boundaries.
+If the RootActor suffers a fatal unhandled failure in this minimal
+configuration, the Process terminates.
 
-If a program never creates another Actor, the runtime or JIT may optimize away unnecessary Actor infrastructure.
+No dedicated Supervisor Actor, Group controller, distributed membership
+service, or other unnecessary runtime machinery is required.
+
+Creating additional Actors explicitly introduces new isolation and
+parallelism boundaries.
+
+If a program never creates another Actor, the runtime or JIT may
+optimize away unnecessary Actor infrastructure.
 
 ## 33. Global State
 
 **CLOSED**
 
-Protos does not introduce a special shared mutable global-state exception.
+Protos does not introduce a special shared mutable global-state
+exception.
 
-State that is conceptually global to a simple program can initially remain ordinary mutable state owned by the Root Actor.
+State that is conceptually global to a simple program can initially
+remain ordinary mutable state owned by the RootActor.
 
-If additional Actors require access to that state, they communicate with the Root Actor through Actor communication.
-
-As an application grows, responsibilities may be moved into specialized Actors such as:
-
-- Cache Actors
-- Database Actors or pools
-- Metrics Actors
-- Session Actors
-- Other domain-specific Actors
+If additional Actors require access to that state, they communicate with
+the RootActor through Actor communication.
 
 Principle:
 
-> Global state starts as Root Actor local state and becomes distributed only when the application introduces parallelism or isolation boundaries.
+> Global state starts as RootActor-local state and becomes distributed
+> only when the application introduces parallelism or isolation
+> boundaries.
 
 ## 34. Actor Module State
 
@@ -855,22 +847,20 @@ Each Actor has its own logical module registry and module contexts.
 
 Actors do not inherit mutable module contexts from their creator.
 
-If two Actors import the same module, mutable module-level state is logically separate in each Actor.
+If two Actors import the same module, mutable module-level state is
+logically separate in each Actor.
 
-The runtime may physically share immutable implementation artifacts such as:
+The runtime may physically share immutable implementation artifacts such
+as compiled code, immutable metadata, frozen core objects, or shared
+prelude implementation, provided that the sharing is not observable as
+shared mutable Protos state.
 
-- Compiled code
-- Immutable metadata
-- Frozen core objects
-- Shared prelude implementation
-
-provided that the sharing is not observable as shared mutable Protos state.
-
-A module singleton is therefore logically per Actor unless a future explicit distributed abstraction says otherwise.
+A module singleton is therefore logically per Actor unless a future
+explicit distributed abstraction says otherwise.
 
 ## 35. Scope Roots
 
-**CLOSED**
+**CLOSED --- REVISED**
 
 The distributed runtime has the conceptual hierarchy:
 
@@ -887,212 +877,229 @@ The distributed runtime has the conceptual hierarchy:
 
 Only RootActor is necessarily an ordinary Protos Actor.
 
-ProcessRoot, NodeRoot, and ClusterRoot should normally be runtime services or capabilities rather than ordinary Actors.
-
-This avoids making essential runtime infrastructure dependent on a potentially saturated mailbox or hung Protos Actor.
+ProcessRoot, NodeRoot, and ClusterRoot should normally be runtime
+services or capabilities rather than ordinary Actors.
 
 Conceptual responsibilities include:
 
 ClusterRoot:
 
-- Cluster membership
-- Discovery
-- Placement
-- Cluster health
+-   Cluster membership
+-   Discovery
+-   Placement coordination
+-   Cluster health
+-   Cluster authority facilities when required
 
 NodeRoot:
 
-- Node resources
-- Local processes
-- Node health
-- Local transport
+-   Node resources
+-   Local Processes
+-   Node health
+-   Local coordination
 
 ProcessRoot:
 
-- Process lifecycle
-- Actor management
-- Root supervision
-- Runtime services
+-   Process lifecycle
+-   Actor management
+-   Root failure authority
+-   Runtime services
 
 RootActor:
 
-- Application-level mutable state
-- Application code
-- Normal Protos execution
+-   Application-level mutable state
+-   Application code
+-   Normal Protos execution
 
-A standalone process does not need active distributed cluster infrastructure.
+A standalone Process does not need active distributed Cluster
+infrastructure.
 
-NodeRoot and ClusterRoot facilities should be lazy or absent when they are not needed.
+NodeRoot and ClusterRoot facilities should be lazy or absent when they
+are not needed.
 
 ## 36. Actor Runtime Context References
 
-**CLOSED AS DIRECTION**
+**CLOSED AS DIRECTION --- REVISED**
 
-An Actor may have access to a minimal set of implicit runtime references or capabilities without inheriting mutable state.
+An Actor may have access to a minimal set of implicit runtime references
+or capabilities without inheriting mutable state.
 
 These may conceptually include:
 
-- `selfActor`
-- `parentActor`
-- `rootActor`
-- `supervisorActor`
-- Process root capability
-- Node root capability
-- Cluster root capability
+-   `selfActor`
+-   `parentActor`
+-   `rootActor`
+-   Failure-authority or supervisor capability
+-   Process root capability
+-   Node root capability
+-   Cluster root capability
 
 The exact names and APIs remain open.
 
-These values are capabilities or references to execution/runtime domains.
-
-They do not provide direct shared-memory access to another Actor's mutable object graph.
-
-Creator and supervisor remain distinct concepts.
+These values do not provide direct shared-memory access to another
+Actor's mutable object graph.
 
 ## 37. Process Boundary
 
-**CLOSED**
+**CLOSED --- REVISED**
 
 Process is a stronger isolation boundary than Actor.
 
 It provides an address-space and failure boundary.
 
-Actor-to-Actor and Process-to-Process communication use the same fundamental pass-by-value message semantics.
+Actor-to-Actor and Process-to-Process communication use the same
+fundamental pass-by-value message semantics.
 
-Two Protos processes on the same machine may communicate using optimized mechanisms such as:
-
-- Shared memory
-- mmap
-- IPC
-- Local sockets
+Two Protos Processes on the same physical host may communicate using
+optimized mechanisms such as shared memory, mmap, IPC, or local sockets
+only when the runtime has actually established the required physical
+locality and capability.
 
 Different machines may use network transports.
 
-The transport must not change observable message value semantics or expose cross-process mutable references.
+The transport must not change observable message value semantics or
+expose cross-process mutable references.
 
-Failure of a remote process or communication channel does not automatically terminate the local process.
+A Process is ephemeral execution capacity, not a durable application
+identity.
+
+If a Process terminates, the Actors hosted by that Process terminate.
+
+A later Process is new capacity, not a reincarnation of the previous
+Process.
+
+Failure of a remote Process or communication channel does not
+automatically terminate a local Process.
 
 ## 38. Node
 
-**CLOSED**
+**CLOSED --- REVISED**
 
-A Node is a logical member of the Protos distributed runtime capable of hosting one or more Protos processes.
+A Node is a logical, ephemeral member of the Protos distributed runtime
+capable of coordinating one or more Protos Processes.
 
 Conceptually:
 
     Node
         |
         +-- Process
-        |
         +-- Process
-        |
-        +-- Process
+        `-- Process
 
-A Node commonly corresponds to a machine, VM, or container host, but this is not a strict language requirement.
+A Protos Node does not semantically correspond to a physical machine,
+VM, container host, Kubernetes Node, or other infrastructure identity.
 
-Node is primarily a scope for:
+Multiple Protos Nodes may exist on one physical host, and infrastructure
+may map Protos Nodes to physical resources in different ways.
 
-- Placement
-- Resources
-- Membership
-- Host-level health
-- Local transport
-- Host-level failure
+Node is primarily a logical scope for:
 
-Multiple administratively independent Protos Nodes could theoretically exist on one physical machine.
+-   Process coordination
+-   Placement
+-   Resources
+-   Membership
+-   Runtime health
+-   Routing and transport coordination
 
-If a Node becomes unreachable, remote Actors on that Node become UNKNOWN or UNREACHABLE before the runtime can legitimately conclude that they are dead.
+Physical host topology and host-level failure are separate
+topology/failure-domain information and must not be inferred from Node
+identity.
 
-Network partition must not be confused with confirmed Actor failure.
+Node identity does not survive loss, removal, or replacement.
+
+If a Node disappears and later equivalent capacity joins, the new member
+is another Node.
+
+Infrastructure identity does not imply Protos Node identity.
+
+If a Node becomes unreachable, remote entities become UNKNOWN or
+UNREACHABLE before the runtime can legitimately conclude that they are
+terminated.
 
 ## 39. Cluster
 
-**DIRECTION CLOSED, DETAILS OPEN**
+**DIRECTION CLOSED, DETAILS OPEN --- REVISED**
 
-The cluster provides distributed scope across Nodes.
+A Cluster is the logical distributed coordination domain across Protos
+Nodes.
 
-It is expected eventually to support concepts such as:
+Cluster identity is independent of the identity of its current Nodes.
 
-- Membership
-- Discovery
-- Routing
-- Placement
-- Node health
-- Resource awareness
-- Failure detection
-- Recovery
-- Rebalancing
+Nodes may join, leave, fail, or be replaced while the logical Cluster
+remains the same coordination domain.
 
-Important details remain open, including:
+Cluster functionality may include:
 
-- Node failure semantics
-- Network partitions
-- Split-brain handling
-- Membership protocol
-- Placement
-- Rebalancing
-- Actor migration
-- Persistent Actor state
-- Recovery policy
-- Consensus requirements
+-   Membership
+-   Discovery
+-   Routing
+-   Placement
+-   Node health
+-   Resource awareness
+-   Failure detection
+-   Group/controller coordination
+-   Authority
+-   Rebalancing
 
-Cluster functionality must remain lazy and must not impose distributed-runtime costs on ordinary standalone programs.
+Whether Cluster identity can survive the loss of all members remains
+open and depends on the future bootstrap, membership, authority, and
+persistence model.
+
+Cluster functionality must remain lazy and must not impose
+distributed-runtime costs on ordinary standalone programs.
 
 ## 40. ActorRef
 
-**CLOSED**
+**CLOSED --- REVISED**
 
-ActorRef is an opaque logical communication capability.
+ActorRef is an opaque communication capability identifying exactly one
+concrete Actor.
 
 It is not:
 
-- A pointer
-- A host and port
-- A URL
-- A physical process identifier
-- A Node address
+-   A pointer
+-   A host and port
+-   A URL
+-   A physical Process identifier
+-   A Node address
+-   A stable service identity
 
-ActorRef identifies a logical Actor independently of its current physical location.
+ActorRef identity is independent of physical placement but not
+independent of Actor lifetime.
 
-The runtime may internally maintain routing metadata, generation information, and location information.
+An Actor may move if migration is eventually supported without changing
+its ActorRef, provided it remains the same Actor.
 
-Existing ActorRefs may continue to work across supervised restart and, where supported, Actor movement.
+If the Actor terminates, the ActorRef identifies a terminated Actor and
+is never transparently rebound to a replacement.
 
-Possessing an ActorRef does not imply that the target Actor is currently reachable.
+Possessing an ActorRef does not imply that the target Actor is currently
+reachable.
 
 ## 41. Actor Discovery
 
-**CLOSED AS DIRECTION**
+**CLOSED AS DIRECTION --- REVISED**
 
-Logical Actor identity and service naming are separate.
+Actor identity and stable service naming are separate.
 
-ActorRef represents logical identity/capability.
+ActorRef represents one concrete Actor identity/capability.
 
-A service name represents a resolvable alias.
-
-Conceptually:
-
-    service name
-        |
-        v
-    ActorRef or Actor group
+A service name or Actor Group may represent a stable logical destination
+whose concrete Actor membership can change.
 
 Discovery must be pluggable.
 
-The Protos language semantics must not hard-code infrastructure such as:
+The Protos language semantics must not hard-code DNS, Consul,
+Kubernetes, or a specific service registry.
 
-- DNS
-- Consul
-- Kubernetes
-- A specific service registry
+Those mechanisms may implement discovery without becoming part of the
+language model.
 
-Those mechanisms may implement discovery without becoming part of the language model.
+## 42. Automatic Actor Placement and Capacity
 
-## 42. Automatic Actor Placement and Capacity Scaling
+**CLOSED --- REVISED**
 
-**CLOSED**
-
-The normal programmer creates a logical Actor without selecting its physical
-location.
+The normal programmer creates a logical Actor without selecting its
+physical location.
 
 Conceptually:
 
@@ -1100,95 +1107,73 @@ Conceptually:
 
 means:
 
-> Create this logical Actor.
+> Create this Actor.
 
 It does not normally mean:
 
-> Create this Actor in this Process, on this Node, or on this physical host.
+> Create this Actor in this Process, on this Node, or on this physical
+> host.
 
-The runtime scheduler determines placement automatically within the currently
-active execution domain and currently available capacity.
+The runtime scheduler determines placement automatically within the
+currently active execution domain and currently available capacity.
 
 Conceptually:
 
-- If only the current Process is active, the Actor is placed in that Process.
-- If a Node coordinates multiple available Processes, the Actor may be placed
-  in any suitable Process within that Node.
-- If a Cluster coordinates multiple Nodes and Processes, the Actor may be
-  placed in any suitable location within that Cluster.
+-   If only the current Process is active, the Actor is placed in that
+    Process.
+-   If a Node coordinates multiple available Processes, the Actor may be
+    placed in any suitable Process within that Node.
+-   If a Cluster coordinates multiple Nodes and Processes, the Actor may
+    be placed in any suitable location within that Cluster.
 
-The same Actor creation code therefore scales according to the runtime domain
-that is already active.
+The same Actor creation code therefore scales according to the runtime
+domain that is already active.
 
-Normal `spawn()` does not itself create or activate higher runtime domains or
-new infrastructure capacity.
+Normal `spawn()` does not itself create or activate higher runtime
+domains or new infrastructure capacity.
 
 In particular, `spawn()` does not by itself:
 
-- start another Process;
-- create or activate a Node;
-- create or join a Cluster;
-- provision a machine, VM, container, or infrastructure workload.
+-   start another Process;
+-   create or activate a Node;
+-   create or join a Cluster;
+-   provision a machine, VM, container, Pod, or infrastructure workload.
 
-Scheduling and scaling are separate responsibilities.
+Scheduling and infrastructure capacity provisioning are separate
+responsibilities.
 
 > Scheduling decides where to place work within existing capacity.
 
-> Scaling decides how much capacity exists.
+> Capacity provisioning decides how much execution/infrastructure
+> capacity exists.
 
-The Actor scheduler uses capacity that is already available.
+The Protos scheduler uses capacity that is already available.
 
-Separate runtime or infrastructure mechanisms may increase or decrease that
-capacity.
+The core Protos runtime does not provision infrastructure capacity by
+default.
 
-For example:
+External or explicitly integrated infrastructure mechanisms may create
+or remove Processes, Nodes, Pods, VMs, machines, or other workload
+units.
 
-- a Process scaler may create or remove Protos Processes;
-- a Node scaler or infrastructure manager may create or remove Protos Nodes;
-- Kubernetes, Nomad, or another external orchestrator may provision or remove
-  infrastructure workload units;
-- Cluster membership determines which active Nodes participate in distributed
-  placement.
+Cluster membership determines which active Protos Nodes participate in
+distributed placement.
 
-The scheduler may consider factors such as:
+The scheduler may consider CPU/runnable pressure, memory, communication
+locality, affinity, resources, health, network cost, failure domains,
+and placement stability.
 
-- CPU and runnable-work pressure;
-- memory availability and pressure;
-- communication locality;
-- Actor affinity and anti-affinity;
-- resource requirements;
-- runtime health;
-- network cost;
-- observed communication patterns;
-- failure domains;
-- placement stability.
-
-Physical topology remains observable for diagnostics, administration, and
-optimization, but it is not normally part of application logic or Actor
-identity.
-
-Advanced hard constraints or soft placement hints may exist for exceptional
-cases such as:
-
-- requirement for a GPU or another special resource;
-- requirement for a non-transferable local resource;
-- requirement to remain inside a particular isolation boundary;
-- affinity or anti-affinity requirements;
-- high-availability placement requirements.
-
-Such constraints are secondary mechanisms rather than mandatory arguments to
-normal Actor creation.
-
-Scale-up, scale-down, draining, Actor migration, rebalancing, and the exact
-interaction with external infrastructure managers remain open.
+Physical topology remains observable for diagnostics, administration,
+and optimization, but it is not normally part of application logic or
+Actor identity.
 
 ## 43. Spawn Backpressure
 
-**CLOSED**
+**CLOSED --- REVISED**
 
-If the scheduler cannot admit a new Actor within the currently available
-capacity and placement policies, Actor creation applies backpressure rather
-than failing immediately or forcing unlimited oversubscription.
+If the scheduler cannot admit a new Actor within currently available
+capacity and placement policies, Actor creation applies backpressure
+rather than failing immediately or forcing unlimited oversubscription.
 
 Conceptually:
 
@@ -1199,18 +1184,21 @@ Conceptually:
         -> Actor initialization
         -> READY
 
-A pending SpawnOperation may be waited on, cancelled, or subject to a timeout.
+A pending SpawnOperation may be waited on, cancelled, or subject to a
+timeout.
 
-Actor capacity does not imply one CPU or other fixed resource reservation per
-Actor. Many Actors may share the same Process.
+Actor capacity does not imply one CPU or other fixed resource
+reservation per Actor. Many Actors may share the same Process.
 
-Scheduling and scaling remain separate concerns:
+The scheduler places Actors using capacity that already exists.
 
-- the scheduler places Actors using capacity that already exists;
-- a scaler may react to pending demand or resource pressure by provisioning
-  additional capacity;
-- spawn itself does not create Processes, Nodes, or Clusters.
+Pending demand may contribute to Protos capacity-demand signals.
 
+An external or explicitly integrated Infrastructure Controller may react
+by provisioning additional capacity.
+
+`spawn()` itself does not create Processes, Nodes, Clusters, Pods, VMs,
+or machines.
 
 ## 44. Hierarchical Runtime Domains
 
@@ -1232,111 +1220,78 @@ A Node coordinates one or more Protos Processes.
 
 A Cluster coordinates multiple Protos Nodes.
 
-External infrastructure managers such as Kubernetes may provision, place,
-restart, or scale the physical infrastructure in which Protos runtime domains
-execute, but they do not replace Protos runtime membership, ActorRef routing,
-health, or logical coordination.
+External infrastructure managers may provision, place, restart, or scale
+physical workloads, but they do not replace Protos runtime membership,
+ActorRef routing, health, or logical coordination.
 
-For example, a Kubernetes deployment may choose to map each Pod to a Protos
-Node containing a single Protos Process. Kubernetes may place two such Pods on
-the same physical machine or on different machines without changing their
-Protos topology.
+Physical co-location must never be inferred solely from Protos logical
+topology.
 
-Physical co-location must therefore never be inferred solely from Protos
-logical topology.
+Optimizations depending on physical locality must only be used when the
+runtime can establish that the required locality or capability actually
+exists.
 
-Optimizations that depend on physical locality, such as shared-memory
-transport, must only be used when the runtime can establish that the required
-locality or capability actually exists.
-
-The hierarchy is pay-for-what-you-use: levels that are unnecessary for the
-active execution domain need not incur distributed-runtime machinery.
+The hierarchy is pay-for-what-you-use: levels unnecessary for the active
+execution domain need not incur distributed-runtime machinery.
 
 ## 45. Dynamic Actor Capacity and Placement
 
 **CLOSED**
 
-Actor capacity is primarily dynamic rather than based on fixed declarative
-resource reservations.
+Actor capacity is primarily dynamic rather than based on fixed
+declarative resource reservations.
 
 Normal Actors are not expected to declare Kubernetes-like CPU or memory
 requests.
 
-Placement occurs conceptually in two stages.
+Placement occurs conceptually in two stages:
 
-First, hard feasibility filtering removes destinations where the Actor cannot
-be admitted. Examples may include:
+1.  Hard feasibility filtering.
+2.  Scoring of feasible destinations using dynamic runtime information.
 
-- unavailable or draining Process;
-- hard memory or resource limit;
-- incompatible runtime or code;
-- required special resource;
-- isolation or placement constraint.
+Hard constraints may include unavailable/draining Process, hard
+memory/resource limit, incompatible runtime/code, required special
+resource, or isolation/placement constraint.
 
-Second, the scheduler scores feasible destinations using dynamic runtime
-information such as:
+Scoring may consider CPU/runnable pressure, memory pressure, scheduler
+latency, mailbox pressure, communication locality, affinity, resource
+locality, and failure domains.
 
-- CPU and runnable-work pressure;
-- memory pressure;
-- scheduler latency;
-- mailbox pressure;
-- communication locality;
-- affinity;
-- resource locality;
-- failure domains.
+Manual resource requirements and placement constraints may exist when
+genuinely required but are exceptional.
 
-Manual resource requirements and placement constraints may exist for cases
-where they are genuinely required, but are exceptional rather than the normal
-Actor programming model.
-
-The runtime may learn from observed Actor behaviour instead of requiring the
-programmer to predict resource consumption in advance.
+The runtime may learn from observed Actor behaviour instead of requiring
+the programmer to predict resource consumption in advance.
 
 ## 46. Adaptive Admission Control
 
-**CLOSED**
+**CLOSED --- REVISED**
 
-The ability to technically fit another Actor and the desirability of admitting
-more work are distinct concepts.
+The ability to technically fit another Actor and the desirability of
+admitting more work are distinct concepts.
 
-Soft resource pressure normally affects placement scoring and provides a
-signal for proactive scaling.
+Soft resource pressure normally affects placement scoring and
+contributes to proactive capacity-demand signals.
 
-When pressure becomes sufficiently severe, the runtime may temporarily stop
-admitting additional Actors, causing their SpawnOperations to remain pending
-and applying backpressure.
+When pressure becomes sufficiently severe, the runtime may temporarily
+stop admitting additional Actors, causing SpawnOperations to remain
+pending and applying backpressure.
 
-Admission decisions are adaptive and multidimensional. They may consider
-runtime information such as:
-
-- runnable work;
-- CPU pressure;
-- memory pressure;
-- scheduler latency;
-- mailbox growth;
-- I/O suspension;
-- allocation pressure;
-- communication pressure.
+Admission decisions are adaptive and multidimensional.
 
 No fixed CPU, memory, or utilization threshold is part of the language
 semantics.
 
-For example, high CPU utilization alone does not necessarily mean that a
-Process is overloaded. A runtime with healthy scheduling latency and many
-Actors suspended on I/O may still be able to admit additional Actors.
-
-Scaling should not wait until admission is refused.
-
-Increasing resource pressure may proactively signal the scaler so that new
-capacity can be provisioned before SpawnOperations need to be backpressured.
-
-The runtime therefore separates:
+The runtime separates conceptually:
 
     placement pressure
-    scaling pressure
+    capacity-demand pressure
     admission pressure
 
 while allowing all three to use common runtime observations.
+
+Capacity demand should be observable before admission is necessarily
+refused, allowing infrastructure mechanisms to react proactively.
 
 ## 47. Multi-Objective Placement
 
@@ -1344,47 +1299,26 @@ while allowing all three to use common runtime observations.
 
 Protos does not define a universal PACK or SPREAD placement strategy.
 
-Placement is multi-objective and balances several distinct goals.
+Placement is multi-objective and balances:
 
-Performance and scalability may favor:
+-   Performance and scalability
+-   Availability and resilience
+-   Efficiency
+-   Stability
 
-- distributing runnable CPU work;
-- exploiting additional execution capacity;
-- reducing scheduler pressure;
-- preserving communication locality;
-- exploiting cache, memory, NUMA, or transport locality where known.
+Actors that communicate heavily may be placed together when locality is
+more valuable, while independent CPU-intensive Actors may be spread to
+exploit parallel execution.
 
-Availability and resilience may favor:
-
-- separating failure domains;
-- anti-affinity between redundant components;
-- reducing failure blast radius;
-- preserving required redundancy.
-
-Efficiency may favor:
-
-- consolidation;
-- improved resource utilization;
-- leaving capacity that can be scaled down.
-
-Stability favors avoiding unnecessary placement changes.
-
-PACK and SPREAD are therefore consequences of workload characteristics and
-policy rather than fundamental Protos scheduling policies.
-
-Actors that communicate heavily may be placed together when locality is more
-valuable, while independent CPU-intensive Actors may be spread to exploit
-parallel execution.
-
-High-availability requirements may intentionally override the placement that
-would otherwise be optimal for performance.
+High-availability requirements may intentionally override
+performance-optimal placement.
 
 The scheduler should not continuously chase a theoretically optimal
-placement. Placement stability has value, and rebalancing should occur only
-when the expected benefit sufficiently exceeds its cost.
+placement. Rebalancing should occur only when expected benefit
+sufficiently exceeds cost.
 
-Placement may use hard constraints and soft affinity or anti-affinity hints
-when application intent cannot be inferred safely.
+Placement may use hard constraints and soft affinity or anti-affinity
+hints when application intent cannot be inferred safely.
 
 ## 48. Failure Domains
 
@@ -1392,172 +1326,79 @@ when application intent cannot be inferred safely.
 
 Protos models failure domains explicitly but generically.
 
-A failure domain represents a known shared-fate relationship: failure of the
-domain may simultaneously affect all runtime entities placed within it.
+A failure domain represents a known shared-fate relationship: failure of
+the domain may simultaneously affect all runtime entities placed within
+it.
 
-Failure domains are not required to form a strict hierarchy and may overlap.
+Failure domains are not required to form a strict hierarchy and may
+overlap.
 
-Process is intrinsically a failure domain because failure of a Process affects
-the Actors hosted by that Process.
+Process is intrinsically a failure domain because failure of a Process
+affects the Actors hosted by that Process.
 
-Additional physical or infrastructure failure domains may include concepts
-such as:
+Additional physical or infrastructure failure domains may include host,
+rack, power domain, availability zone, site, or infrastructure-specific
+domains.
 
-- host;
-- rack;
-- power domain;
-- availability zone;
-- site;
-- infrastructure-specific domains.
-
-Such domains may be discovered from the execution environment, topology
-providers, external orchestrators or cloud platforms, or supplied explicitly
-through configuration.
-
-General topology information and failure-domain information are related but
-distinct concepts.
-
-Topology properties describe locality, capabilities, or other characteristics
-that may be useful for placement.
-
-Examples include:
-
-- host;
-- rack;
-- availability zone;
-- NUMA domain;
-- network segment;
-- GPU model.
-
-Failure domains specifically describe shared failure risk.
-
-Examples include:
-
-- Process;
-- physical host;
-- rack;
-- power distribution unit;
-- availability zone.
-
-The same underlying topology information may participate in both models, but
-not every topology property implies shared fate.
+General topology information and failure-domain information are related
+but distinct concepts.
 
 Logical Protos topology must not imply physical failure independence.
 
-For example, two Protos Nodes may execute on the same physical host. Placing
-redundant Actors on those Nodes does not by itself demonstrate tolerance to
-failure of that host.
+Unknown topology means unknown failure independence, not independent
+failure.
 
-Unknown topology means unknown failure independence, not independent failure.
-
-Protos only claims availability guarantees that can be demonstrated from the
+Protos only claims availability guarantees that can be demonstrated from
 failure-domain information currently known to the runtime.
 
-The exact mechanisms for failure-domain discovery, configuration, and topology
-providers remain open.
+The exact mechanisms for failure-domain discovery, configuration, and
+topology providers remain open.
 
 ## 49. High-Availability Placement Requirements
 
-**CLOSED**
+**CLOSED --- REVISED**
 
-High-availability placement requirements belong primarily to logical groups of
-Actors representing a common service or responsibility rather than to
-individual Actors.
+High-availability placement requirements belong primarily to logical
+groups of Actors representing a common service or responsibility rather
+than to individual Actors.
 
-Individual Actors may still have placement constraints such as requirements
-for a particular resource, locality, or isolation boundary.
+A Group expresses availability intent declaratively, for example:
 
-A group expresses availability intent declaratively.
-
-Conceptually, such intent may include requirements such as:
-
-    desired replicas = 3
+    desired members = 3
     tolerate one host failure
     tolerate one availability-zone failure
 
-This is conceptual policy rather than language syntax.
+Application code normally expresses required redundancy or failure
+tolerance rather than selecting concrete Processes, Nodes, hosts, zones,
+or physical locations.
 
-Application code normally expresses the required redundancy or failure
-tolerance rather than selecting concrete Processes, Nodes, hosts, zones, or
-other physical locations.
+The scheduler uses known topology/failure-domain information for
+placement.
 
-The scheduler and scaler use the currently known topology and failure-domain
-information to determine placement and capacity requirements.
+The Protos capacity-demand model may express additional independent
+capacity required to satisfy availability objectives.
 
-Availability objectives and mandatory availability requirements are distinct.
+Availability objectives and mandatory availability requirements are
+distinct.
 
-By default, an availability objective may be temporarily unsatisfied while the
-service continues operating in a degraded state.
-
-For example, if three Actors are desired with host-failure separation but only
-one known host is currently available, the runtime may still operate the
-Actors while reporting that the requested host-failure tolerance is not
-currently provided.
-
-This may still provide useful protection against narrower failure domains such
-as individual Actor or Process failure.
-
-Availability requirements explicitly declared mandatory may instead prevent
-admission until sufficient independent capacity becomes available.
-
-Such admission remains subject to the normal pending, timeout, cancellation,
-and backpressure mechanisms.
-
-Unsatisfied availability objectives provide useful scaling pressure.
-
-For example, a requirement for host independence that cannot currently be
-satisfied may signal that another independent host failure domain is needed.
-
-As new capacity or topology becomes available, the scheduler may redistribute
-work so that previously degraded availability objectives become satisfied.
-
-For each availability guarantee, the runtime distinguishes conceptually
-between:
+Availability status is conceptually:
 
     SATISFIED
-        The runtime can demonstrate from known topology and failure-domain
-        information that the guarantee is currently provided.
-
     UNSATISFIED
-        The runtime has sufficient information to determine that the
-        guarantee is not currently provided.
-
     UNKNOWN
-        The runtime lacks sufficient information to prove either that the
-        guarantee is provided or that it is not provided.
 
-For example, if the active execution domain contains only one Protos Node, a
-requirement for separation across distinct Protos Nodes is UNSATISFIED.
+The runtime must never report an availability guarantee as SATISFIED
+unless it can demonstrate that guarantee from available information.
 
-This does not by itself determine physical host independence because Protos
-Node topology and physical infrastructure topology are distinct.
+High-availability placement does not by itself provide replicated Actor
+state, persistence, consensus, transactional replication, failover of
+mutable state, or exactly-once processing.
 
-If the runtime knows that all eligible Processes execute on the same physical
-host, host-failure independence is UNSATISFIED.
-
-If the runtime does not know the physical host relationship, host-failure
-independence is UNKNOWN.
-
-The runtime must never report an availability guarantee as SATISFIED unless it
-can demonstrate that guarantee from the information available to it.
-
-High-availability placement only concerns redundancy, placement, and known
-failure independence.
-
-It does not by itself provide:
-
-- replicated Actor state;
-- persistence;
-- consensus;
-- transactional replication;
-- failover of mutable state;
-- exactly-once processing.
-
-Those mechanisms are separate concerns.
+Actor liveness is ephemeral by default; durability is explicit.
 
 ## 50. Runtime Groups
 
-**CLOSED**
+**CLOSED --- REVISED**
 
 Groups are logical policy and management units over homogeneous runtime
 entities.
@@ -1566,283 +1407,877 @@ A Group is not an additional level in the intrinsic runtime hierarchy:
 
     Actor -> Process -> Node -> Cluster
 
-The hierarchy describes runtime containment and coordination.
-
-Groups describe sets of entities to which common runtime policies apply.
-
-Conceptually, groups may exist for entities at different levels, including:
+Conceptually, groups may exist for entities at different levels:
 
     Group<Actor>
     Group<Process>
     Group<Node>
 
-This notation is conceptual and does not imply generic type syntax in the
-language.
+This notation is conceptual and does not imply generic type syntax.
 
-Groups at different runtime levels may expose different capabilities.
-
-For example, Actor groups may participate in application message routing,
-while Process or Node groups may primarily participate in placement, scaling,
-availability, monitoring, or administration.
-
-A Group is not an arbitrary query, tag set, or general-purpose view over the
-runtime.
-
-Its purpose is to define a concrete unit to which common runtime management
-policy applies.
-
-Each group-managed entity belongs to one management Group at its corresponding
-level.
-
-Each grouping level provides an implicit default Group.
-
-Entities for which no specialized policy is requested belong to that default
-Group automatically.
-
-Normal application code therefore does not need to select or configure a
+Each group-managed entity belongs to one management Group at its
+corresponding level. Each grouping level provides an implicit default
 Group.
 
-Specialized Groups are introduced only when a set of entities requires common
-policy different from the default.
+Specialized Groups are introduced only when a set of entities requires
+policy different from the default, such as availability, affinity,
+placement, scaling/capacity policy, routing, or resource policy.
 
-Such policies may include:
-
-- availability requirements;
-- affinity or anti-affinity;
-- placement constraints;
-- scaling;
-- routing;
-- resource policy.
-
-Arbitrary runtime selections, queries, tags, and administrative views, if
-provided, are separate concepts and do not require Group membership semantics.
-
-Group and group controller are distinct concepts.
+Group and Group Controller are distinct concepts.
 
 The Group identifies the managed set and its policy.
 
-A controller may maintain or modify Group membership according to that policy.
+A Group Controller may maintain or modify Group membership according to
+that policy.
 
 Not every Group requires active membership management.
 
-For example, a Group may merely apply a placement or anti-affinity policy to
-Actors created explicitly by the application.
+A Group may define desired cardinality.
 
-Other Groups may define a desired cardinality.
-
-Conceptually:
-
-    desired members = 3
-
-When desired cardinality is defined, an associated controller may create,
-replace, or remove members in order to maintain that cardinality.
-
-Desired cardinality is optional and is not an intrinsic property of every
-Group.
-
-Group cardinality only specifies the desired number of members.
-
-It does not imply that those members:
-
-- contain identical state;
-- are semantically interchangeable;
-- replicate state;
-- share an event history;
-- provide transparent failover;
-- participate in consensus;
-- provide persistent service state.
-
-State replication and continuity are separate mechanisms.
+Desired cardinality only specifies the desired number of members. It
+does not imply identical state, state replication, shared history,
+transparent failover, consensus, or persistent service state.
 
 ### ActorGroup Communication
 
 An Actor Group may optionally act as a communication destination.
 
-This capability is lazy and follows the Protos pay-as-you-grow principle.
+This capability is lazy and follows the Protos pay-as-you-grow
+principle.
 
-A Group that is never used as a communication destination does not require
-application-message routing infrastructure merely because the Group exists.
+ActorRef semantics are:
 
-ActorRef semantics remain unchanged:
+    ActorRef -> one concrete Actor
 
-    ActorRef -> one logical Actor
+Communication with an Actor Group instead addresses the logical Group
+and allows its routing policy to select a member.
 
-Communication with an Actor Group instead addresses the logical Group and
-allows its routing policy to select a member.
+Normal `send` or `ask` directed to an Actor Group selects exactly one
+eligible member.
 
-Normal `send` or `ask` directed to an Actor Group selects exactly one eligible
-member.
+Broadcast/multicast is a distinct explicit operation.
 
-Communication to multiple members, such as broadcast, is a distinct explicit
-operation rather than the default Group-send behavior.
+The Group retains stable logical identity while concrete membership may
+change.
 
-The exact member-selection algorithm is policy and runtime dependent.
+While the Group still owns routing responsibility and no concrete Actor
+has accepted an operation, it may wait for capacity or choose another
+eligible member.
 
-It may consider information such as:
+Once a particular Actor has accepted a message, normal Actor
+delivery/failure semantics apply.
 
-- current load;
-- mailbox pressure;
-- locality;
-- affinity;
-- resource availability;
-- routing policy.
+Actor Group communication does not imply transparent retry on another
+member after acceptance and does not introduce exactly-once delivery
+semantics.
 
-The concrete Actor destination is selected dynamically as part of routing the
-communication.
+If an Actor Group currently has no eligible member, communication
+applies backpressure.
 
-The Group therefore retains stable logical identity while its concrete
-membership may change.
-
-Once a particular Actor has accepted a message, the normal Actor message
-delivery and failure semantics apply.
-
-Actor Group communication does not imply transparent retry on another member
-after acceptance and does not introduce exactly-once delivery semantics.
-
-If an Actor Group currently has no eligible member, communication applies
-backpressure rather than silently dropping the message or failing merely
-because capacity is temporarily unavailable.
-
-Conceptually:
-
-    group send
-        -> no eligible member
-        -> pending communication
-        -> eligible member becomes available
-        -> route message
-
-For `send`, the associated SendOperation remains pending according to the
-normal SendOperation rules.
-
-For `ask`, the returned Future remains pending according to the normal Future,
-timeout, and cancellation rules.
-
-Demand for a Group with insufficient eligible membership may provide a signal
-to its controller or to runtime scaling mechanisms.
+Demand for a Group with insufficient eligible membership may contribute
+to capacity-demand signals.
 
 Sending to a Group does not itself create Actors, Processes, Nodes, or
 infrastructure capacity.
 
-The controller or scaler remains responsible for changing available capacity.
+## 51. Capacity Demand and Infrastructure Integration
 
-Group routing infrastructure scales with the execution domain actually in use.
-Local Groups need not pay the cost of distributed Group routing, and
-distributed routing machinery need not exist in programs that do not require
-it.
+**CLOSED**
+
+The core Protos runtime does not provision infrastructure capacity by
+default.
+
+Protos observes runtime state, performs placement/admission decisions,
+and exposes semantic capacity demand.
+
+Capacity demand may reflect conditions such as:
+
+-   Pending SpawnOperations
+-   Group demand with insufficient eligible members
+-   Resource pressure
+-   Hard placement/resource constraints
+-   Unsatisfied availability objectives
+-   Missing independent failure-domain capacity
+
+Capacity demand is information, not an imperative provisioning order.
+
+An external or explicitly integrated Infrastructure Controller decides
+whether and how to satisfy that demand according to the capabilities,
+policy, cost, timing, and topology of its environment.
+
+Conceptually:
+
+    Protos runtime
+        |
+        | semantic capacity demand
+        v
+    Capacity Demand API
+        |
+        +--> metrics/OpenMetrics adapter
+        +--> Kubernetes custom/external metrics adapter
+        +--> KEDA-style external scaler
+        +--> Nomad adapter
+        `--> custom Infrastructure Controller
+
+Metrics are one possible representation of Protos demand. They are not
+the semantic model itself.
+
+Newly provisioned capacity is incorporated into Protos through the
+runtime's normal bootstrap, discovery, and membership mechanisms.
+
+The Infrastructure Controller does not directly mutate Protos logical
+topology.
+
+For example, an external orchestrator may create a new workload
+containing a Protos runtime configured with sufficient bootstrap
+information. That runtime then joins the appropriate Protos Node or
+Cluster through normal membership mechanisms.
+
+As new Processes or Nodes become available, Protos may dynamically
+activate the required higher coordination layers.
+
+This preserves pay-as-you-grow.
+
+Processes and Nodes may disappear at any time.
+
+Correctness must not depend on graceful removal.
+
+Draining is an optimization for planned capacity removal, not a
+correctness requirement.
+
+A draining Process or Node may stop accepting new placement and may
+attempt to reduce disruption before infrastructure removal, but
+unexpected loss follows the same fundamental failure model.
+
+Exact Capacity Demand API, infrastructure adapters, scale-up/down
+policy, and draining mechanics remain open.
+
+## 52. Ephemeral Actor Liveness and Explicit Durability
+
+**CLOSED**
+
+Actor liveness is ephemeral by default; durability is explicit.
+
+An Actor may die at any time.
+
+The programming model must not assume that an Actor incarnation, its
+hosting Process, or its hosting Node will live indefinitely.
+
+If an Actor dies, its private mutable state dies with it unless that
+state was explicitly externalized through a durability mechanism.
+
+Possible future durability mechanisms may include:
+
+-   Persistent state
+-   Checkpointing
+-   Event logs
+-   Replication
+-   External databases
+-   Other recoverable storage
+
+These are not implicit properties of an ordinary Actor.
+
+Protos does not attempt to make every Actor fault tolerant by default.
+
+The basic runtime may restore required service capacity by creating
+replacement Actors, but that does not constitute transparent
+continuation of the failed Actor.
+
+Principle:
+
+> Actor incarnations are disposable. Durability, when required, must
+> live outside the ephemeral incarnation.
+
+## 53. Direct ActorRef Versus Stable Group Identity
+
+**CLOSED**
+
+An ActorRef addresses one concrete Actor.
+
+If that Actor dies, the ActorRef remains associated with that terminated
+Actor.
+
+It is not rebound to a replacement.
+
+If application code keeps a direct ActorRef, it has explicitly chosen to
+communicate with that individual Actor and therefore observes that
+Actor's mortality.
+
+Stable service continuity belongs to a higher-level abstraction such as
+an Actor Group.
+
+Conceptually:
+
+    ActorRef
+        -> individual, ephemeral destination
+
+    ActorGroup
+        -> stable logical destination
+        -> changing membership
+
+Communication directed to a Group may continue across member replacement
+according to Group routing rules.
+
+Communication directed to an individual Actor does not.
+
+## 54. Actors Are Replaced, Never Restarted
+
+**CLOSED**
+
+`restart` is not a distinct semantic continuation of an Actor.
+
+When policy requires continued service after an Actor dies, the runtime
+creates another Actor.
+
+Conceptually:
+
+    Actor A
+        X
+
+    replacement policy
+        |
+        v
+
+    Actor B
+
+Actor B may use the same behavior, bootstrap code, configuration, or
+role, but it is another Actor.
+
+It has:
+
+-   A new Actor identity
+-   A new ActorRef
+-   Fresh private state
+-   Fresh initialization
+-   No inherited mailbox
+-   No inherited pending interactions
+
+Administrative tooling may use the word "restart" informally, but
+semantically the operation is termination followed by creation of
+another Actor.
+
+Principle:
+
+> Actors are replaced, never restarted.
+
+## 55. Supervision Versus Group Controllers
+
+**CLOSED**
+
+Supervision/failure authority reacts to failures.
+
+Group Controllers maintain desired Group state.
+
+These responsibilities are distinct.
+
+A failure authority may observe an Actor failure and apply failure
+policy.
+
+A Group Controller observes Group policy and current membership and acts
+when the desired state is not satisfied.
+
+For example:
+
+    desired members = 4
+    actual members = 3
+        -> Group Controller may create one new Actor
+
+For a Group member, replacement capacity may arise simply because the
+Group Controller observes that desired membership is no longer
+satisfied.
+
+The replacement is not a continuation of the failed member.
+
+The runtime may optimize supervision and Group control together
+internally, but the semantic responsibilities remain distinct.
+
+## 56. Failure Authority Is Pay-As-You-Grow
+
+**CLOSED**
+
+Every Actor has a failure authority, but this does not imply a dedicated
+Supervisor Actor or separate runtime machinery.
+
+The failure authority may be provided by the nearest
+runtime/root/controller relationship already required by the active
+execution domain.
+
+For the minimal program:
+
+    Process
+        |
+        `-- RootActor
+
+the default fatal-failure behavior is:
+
+    RootActor fatal failure
+        -> Process terminates
+
+No additional Actor, mailbox, controller, or distributed service is
+required merely to supervise the RootActor.
+
+As applications introduce more Actors, Groups, Nodes, or Cluster
+coordination, richer failure-policy machinery may become active only
+where required.
+
+Supervisor is therefore a semantic role, not necessarily an Actor.
+
+This follows the pay-as-you-grow principle.
+
+## 57. Outstanding Direct Interactions Die With the Actor
+
+**CLOSED**
+
+Actor death terminates direct outstanding interactions with that Actor.
+
+Replacement does not inherit them.
+
+For a direct `ask`, if Protos can determine that the destination Actor
+has terminated before producing the reply, the returned Future fails
+according to the communication failure semantics.
+
+The runtime does not transparently find a replacement and replay the
+request.
+
+For Group-addressed communication, routing may choose another member
+only while the Group still owns routing responsibility and no concrete
+Actor has accepted the operation.
+
+Once a concrete Actor has accepted an operation, its subsequent death
+does not cause transparent replay against another Actor.
+
+## 58. Rerouting Belongs to Group Addressing
+
+**CLOSED**
+
+Messages addressed directly to a terminated Actor are never retargeted
+to another Actor.
+
+This remains true even if the runtime can prove that a particular
+message had not yet been accepted by the Actor before termination.
+
+The destination of that operation was the concrete ActorRef, not
+"whoever replaces it."
+
+The SendOperation may distinguish states such as
+definitely-not-delivered, delivery-unknown, accepted, failed, or other
+future statuses, but none of those states authorize implicit destination
+substitution.
+
+For Actor Group communication, the Group may choose or re-choose an
+eligible member while routing responsibility still belongs to the Group
+and no concrete Actor has accepted the operation.
+
+Principle:
+
+> Rerouting is a property of Group addressing, never of ActorRef failure
+> recovery.
+
+## 59. Termination, Unreachability, and Unknown State
+
+**CLOSED**
+
+Actor termination is a known fact.
+
+Unreachability is an observation.
+
+Unknown means that the runtime lacks sufficient information to determine
+the Actor's current state.
+
+Conceptually:
+
+    TERMINATED
+        The runtime has sufficient evidence that this Actor incarnation no longer exists.
+
+    UNREACHABLE
+        The runtime currently cannot communicate with the Actor.
+
+    UNKNOWN
+        The runtime lacks sufficient information to determine its state.
+
+Therefore:
+
+    UNREACHABLE != TERMINATED
+
+and:
+
+    UNKNOWN != TERMINATED
+
+A timeout, network partition, routing failure, or missing heartbeat does
+not by itself prove Actor termination.
+
+Protos never equates unreachability with termination without sufficient
+evidence.
+
+The exact failure-detection and membership mechanisms used to establish
+such evidence remain open.
+
+## 60. Unreachability Applies Backpressure
+
+**CLOSED**
+
+Temporary unreachability applies backpressure; it does not by itself
+terminate or retarget an operation.
+
+For a direct send to an Actor that is currently unreachable:
+
+    send
+        -> PENDING / backpressured
+        -> target reachable again: delivery may continue
+        -> target known TERMINATED: operation fails
+        -> deadline expires: deadline/failure semantics apply
+        -> caller cancels: cancellation semantics apply
+
+This does not imply unbounded buffering.
+
+End-to-end bounded queues and backpressure remain in force.
+
+Unreachability does not authorize retry against a replacement or
+redirection to another Actor.
+
+For Group communication, another member may be selected only while the
+Group still owns routing responsibility and no concrete Actor has
+accepted the operation.
+
+## 61. Processes Are Ephemeral Capacity
+
+**CLOSED**
+
+Processes are ephemeral execution capacity, not durable application
+identities.
+
+If a Process dies, the Actors hosted by that Process die.
+
+Their ActorRefs terminate according to the normal Actor failure
+semantics.
+
+Higher-level mechanisms react independently:
+
+-   Group Controllers may restore desired membership
+-   Failure authorities may apply policy
+-   Capacity-demand signals may increase
+-   External Infrastructure Controllers may provision additional
+    capacity
+
+A newly created Process is new capacity.
+
+It is not semantically the reincarnation of the Process that
+disappeared, even if external infrastructure considers it a replacement
+workload.
+
+Protos does not require resurrection of a particular Process identity.
+
+## 62. Nodes Are Ephemeral Runtime Members
+
+**CLOSED**
+
+Nodes are ephemeral runtime members.
+
+Node identity does not survive loss, removal, or replacement.
+
+Infrastructure identity does not imply Protos Node identity.
+
+If Node N1 disappears and later equivalent capacity joins as N2, N2 is
+another Protos Node.
+
+A physical VM, host, container, Kubernetes resource, or other
+infrastructure identity may be long-lived or pet-like without making the
+corresponding Protos Node identity durable.
+
+Before membership/failure detection has sufficient evidence of loss, an
+unreachable Node remains distinct from a known removed/lost Node.
+
+Principle:
+
+> Node is cattle too.
+
+## 63. Cluster Identity Is Independent of Node Identity
+
+**CLOSED**
+
+Cluster identity is a logical coordination-domain identity, independent
+of the identity of its current Nodes.
+
+Nodes may enter and leave while the Cluster remains the same logical
+domain.
+
+No individual Node is required to be the durable identity anchor for the
+Cluster.
+
+Whether Cluster identity can survive the loss of all members remains
+open.
+
+That stronger property depends on the future membership, bootstrap,
+authority, and persistence model.
+
+The Cluster is therefore different from Actor, Process, and Node
+identities: it represents the logical field in which ephemeral members
+participate.
+
+## 64. Loss of Node Membership Does Not Prove Physical Process Death
+
+**CLOSED**
+
+Loss of Node membership removes the Processes hosted by that Node from
+the usable capacity of that Cluster view.
+
+It does not prove that those Processes have physically terminated.
+
+A Node or its Processes may continue executing while isolated by a
+network partition or membership disagreement.
+
+Protos therefore keeps separate:
+
+-   Membership
+-   Reachability
+-   Physical existence
+
+A Cluster view must not treat Processes behind a lost/unreachable Node
+as usable Cluster capacity unless the relevant membership/authority
+rules permit it.
+
+The behavior of isolated runtime domains is governed by the partition
+and Cluster-authority rules.
+
+## 65. Local Execution May Continue Without Cluster Authority
+
+**CLOSED**
+
+Loss of Cluster authority does not imply loss of local execution.
+
+A partitioned or isolated Node may continue operations that do not
+require Cluster authority, including purely local Actor execution, local
+Futures, local I/O, and other valid local computation.
+
+However, a runtime domain must not perform operations requiring Cluster
+authority unless it can demonstrate that it currently possesses the
+required authority.
+
+Conceptually:
+
+    Cluster authority lost
+        |
+        +-- local Actor execution may continue
+        +-- local Process/Node work may continue
+        |
+        `-- authoritative Cluster decisions are disabled
+
+Protos does not choose either extreme:
+
+-   A partition does not automatically kill all local computation.
+-   Every partition does not automatically behave as an independent
+    authoritative Cluster.
+
+This allows graceful degradation according to the runtime level actually
+available.
+
+## 66. Cluster Authority
+
+**CLOSED**
+
+Cluster authority is the exclusive capability to make authoritative
+decisions within a Cluster authority scope.
+
+For a particular authoritative decision scope, Protos requires
+exclusivity: conflicting partitions must not both be valid authorities
+for the same exclusive decision.
+
+Protos does not prescribe the mechanism used to establish that
+authority.
+
+Possible mechanisms may include:
+
+-   Quorum
+-   Consensus
+-   Leader election
+-   Leases
+-   Witnesses
+-   External coordination services
+-   Other mechanisms providing the required properties
+
+Observation does not necessarily require exclusive authority.
+
+Authoritative mutations or decisions may include, depending on scope:
+
+-   Definitive membership changes
+-   Placement ownership
+-   Group membership management
+-   Replacement decisions
+-   Topology-changing operations
+
+If a runtime domain cannot demonstrate authority for an operation that
+requires it, it must refrain from performing that authoritative
+operation.
+
+Failure to prove authority does not automatically stop unrelated local
+computation.
+
+## 67. Cluster Authority Is Scoped
+
+**CLOSED**
+
+Cluster authority is scoped, not necessarily global.
+
+Protos does not require one global "master" that serializes every
+Cluster decision.
+
+Different authority scopes may exist for different responsibilities.
+
+Conceptually:
+
+    Cluster membership authority
+    Group G1 control authority
+    Group G2 control authority
+    Placement-domain authority
+    other independent authority scopes
+
+Exclusivity is required within an authority scope, not across unrelated
+Cluster responsibilities.
+
+The runtime may therefore distribute or shard control responsibilities
+while preserving the rule that conflicting authorities cannot
+simultaneously make the same exclusive decision.
+
+Membership may require special treatment because other authority scopes
+can depend on it, but the exact implementation remains open.
+
+## 68. Controllers Are Ephemeral
+
+**CLOSED**
+
+Controllers are ephemeral.
+
+Correctness must not depend on the lifetime of the particular controller
+instance that currently exercises an authority.
+
+If a controller disappears, another eligible controller may acquire the
+corresponding authority and continue control operations.
+
+The important durable concept is the authority and required control
+state, not the controller instance.
+
+Any control state required to transfer authority must survive or be
+reconstructible independently of the controller instance that previously
+held authority.
+
+For example, Group desired cardinality, availability policy, or other
+authoritative control information must not exist solely in irreplaceable
+controller RAM if continued control requires that information.
+
+The exact mechanism by which such state survives or is reconstructed
+remains open.
+
+Principle:
+
+> The controller is cattle too.
+
+## 69. Authoritative Control State Is Mechanism-Independent
+
+**CLOSED**
+
+Protos specifies the consistency and survivability properties required
+of authoritative control state, not a mandatory storage or consensus
+implementation.
+
+Depending on the active runtime domain, the required mechanism may range
+from ordinary local state to distributed coordination.
+
+Conceptually:
+
+    single Process
+        -> local runtime state may be sufficient
+
+    multiple Processes / Node
+        -> Node-level coordination may be sufficient
+
+    distributed Cluster
+        -> stronger coordination may be required
+
+Possible implementations may include replicated consensus state, a
+durable store, leases, an external authority service, or a Protos-native
+mechanism.
+
+No specific technology such as Raft, etcd, or another consensus/store
+implementation is part of Protos semantics at this stage.
+
+The mechanism scales with the active runtime domain.
+
+No distributed coordination mechanism is required when no distributed
+authority exists.
+
+This preserves pay-as-you-grow.
+
+## 70. External Authority Mechanisms Do Not Define Protos Semantics
+
+**CLOSED**
+
+Protos may delegate the mechanism used to establish, demonstrate, or
+persist authority to external infrastructure.
+
+For example, an implementation may use:
+
+-   Kubernetes Lease or API primitives
+-   Nomad coordination facilities
+-   Consul or another coordination service
+-   A cloud coordination service
+-   A Protos-native mechanism
+
+However, external infrastructure does not define the meaning of Protos
+authority.
+
+Conceptually:
+
+    authority mechanism
+        may be external
+
+    semantic authority
+        belongs to Protos
+
+An external orchestrator may help discover instances, establish leases,
+persist control metadata, or provision capacity.
+
+It does not thereby become the semantic definition of:
+
+-   Actor
+-   ActorRef
+-   Actor Group
+-   Protos Node
+-   Protos Cluster
+-   Group membership
+-   Protos routing
+-   Protos failure semantics
+-   Protos authority
+
+For example, a Kubernetes Deployment is not semantically a Protos
+ActorGroup merely because it may provision workloads that host Group
+members.
+
+The same Protos program and runtime model should remain valid across
+standalone execution, Kubernetes, Nomad, or future infrastructure
+environments.
 
 ## Open Design Topics
 
 The following topics have been identified but are not yet closed:
 
-- Failure-domain discovery and configuration
-- Exact HA policy API and syntax
-- Exact Group API and syntax
-- Group controller API
-- Group lifecycle
-- Group routing policy API
-- Advanced Group routing policies
-- Group broadcast and multicast semantics
-- Group membership transition semantics
-- Exact `spawn` API and syntax
-- Actor bootstrap representation
-- Exact SpawnOperation API
-- Exact SpawnOperation states
-- SpawnOperation timeout and cancellation semantics
-- Exact current-behavior installation/replacement API
-- Exact SendOperation API
-- Exact SendOperation states
-- Definition of what SendOperation `.value()` means
-- Delivery acknowledgement levels
-- Delivery guarantees
-- Retry semantics
-- Message IDs and attempt IDs
-- Deduplication
-- Idempotency support
-- Persistent messaging
-- Special mailbox policies
-- Drop policies
-- Latest-only policies
-- Batching
-- Streaming
-- Async streams
-- Generators and suspendable iteration
-- Whether Task should become observable
-- Pub/sub
-- Routers and load balancing
-- Actor autoscaling
-- Process scaling
-- Node scaling
-- Scale-up policy
-- Scale-down policy
-- Proactive scaling signals
-- Draining Processes and Nodes
-- Interaction between Protos scaling and external infrastructure managers
-- External infrastructure adapters such as Kubernetes or Nomad
-- Actor graceful shutdown
-- Actor stop semantics
-- Actor garbage collection
-- Monitoring API
-- Fatal versus non-fatal handler errors
-- Which errors terminate an Actor
-- Node failure
-- Process failure handling
-- Network partitions
-- Split-brain behavior
-- Cluster membership protocol
-- Cluster authentication
-- Placement scoring algorithm
-- Placement stability and hysteresis
-- Placement policy priorities
-- Actor affinity and anti-affinity API
-- Hard placement constraints
-- Actor rebalancing
-- Actor migration
-- Actor persistence
-- Actor checkpointing
-- State recovery
-- State replication
-- Replicated Actor/service semantics
-- ActorRef routing
-- ActorRef persistence
-- Service discovery implementation
-- Physical-locality discovery
-- Cross-process same-host optimization
-- Shared-memory transport eligibility and lifecycle
-- Transport selection and switching
-- Message serialization format
-- Serialization versioning
-- Schema evolution
-- Non-transferable resource capabilities
-- Foreign-resource proxies
-- Java interoperability isolation
-- Java static mutable state
-- Native global state
-- Blocking foreign calls
-- Blocking-operation offload
-- Non-local return across Actor boundaries
-- Dynamic error handlers across Actor boundaries
-- Future ownership interaction with Actor lifecycle
-- Timers
-- Clock semantics
-- Waiting on multiple Futures
-- Select/race operations
-- CPU-bound Future monopolization
-- Resource limits and quotas
-- Runtime resource-pressure model
-- Actor resource-cost estimation and learning
-- ActorRef security and authorization
-- Remote authentication
-- Cluster configuration UX
-- Cluster lazy startup
-- Node lazy activation
-- Relationship between logical Protos topology and physical infrastructure topology
-- Module implementation sharing
-- Behavior requirements before READY
-- Runtime metrics architecture
-- Scheduler/advisor interaction
-- Scheduler/scaler interaction
-- Code identity for remote Actor bootstrap
-- Code availability and versioning across Nodes
-- Hot code update
-- NUMA-aware scheduling
-- Application-root versus process-root distinction in distributed deployments
+-   Failure-domain discovery and configuration
+-   Exact HA policy API and syntax
+-   Exact Group API and syntax
+-   Group controller API
+-   Group lifecycle
+-   Group routing policy API
+-   Advanced Group routing policies
+-   Group broadcast and multicast semantics
+-   Group membership transition semantics
+-   Exact `spawn` API and syntax
+-   Actor bootstrap representation
+-   Exact SpawnOperation API
+-   Exact SpawnOperation states
+-   SpawnOperation timeout and cancellation semantics
+-   Exact current-behavior installation/replacement API
+-   Exact SendOperation API
+-   Exact SendOperation states
+-   Definition of what SendOperation `.value()` means
+-   Delivery acknowledgement levels
+-   Delivery guarantees
+-   Retry semantics
+-   Message IDs and attempt IDs
+-   Deduplication
+-   Idempotency support
+-   Persistent messaging
+-   Special mailbox policies
+-   Drop policies
+-   Latest-only policies
+-   Batching
+-   Streaming
+-   Async streams
+-   Generators and suspendable iteration
+-   Whether Task should become observable
+-   Pub/sub
+-   Routers and load balancing
+-   Actor capacity policy
+-   Process capacity provisioning policy
+-   Node capacity provisioning policy
+-   Capacity Demand API
+-   Scale-up policy in infrastructure adapters/controllers
+-   Scale-down policy in infrastructure adapters/controllers
+-   Proactive capacity-demand signals
+-   Draining Processes and Nodes
+-   Infrastructure Controller integration
+-   External infrastructure adapters such as Kubernetes or Nomad
+-   Actor graceful shutdown
+-   Actor stop semantics
+-   Actor garbage collection
+-   Monitoring API
+-   Fatal versus non-fatal handler errors
+-   Which errors terminate an Actor
+-   Failure-authority API
+-   Process failure detection
+-   Node failure detection
+-   Network partitions
+-   Split-brain behavior
+-   Cluster membership protocol
+-   Cluster authority-scope model
+-   Authority acquisition and transfer
+-   Authority leases/election/consensus implementation
+-   Authoritative control-state storage/reconstruction
+-   Cluster authentication
+-   Placement scoring algorithm
+-   Placement stability and hysteresis
+-   Placement policy priorities
+-   Actor affinity and anti-affinity API
+-   Hard placement constraints
+-   Actor rebalancing
+-   Actor migration
+-   Actor persistence
+-   Actor checkpointing
+-   State recovery
+-   State replication
+-   Replicated Actor/service semantics
+-   ActorRef routing
+-   ActorRef persistence semantics, if any
+-   Service discovery implementation
+-   Physical-locality discovery
+-   Cross-process same-host optimization
+-   Shared-memory transport eligibility and lifecycle
+-   Transport selection and switching
+-   Message serialization format
+-   Serialization versioning
+-   Schema evolution
+-   Non-transferable resource capabilities
+-   Foreign-resource proxies
+-   Java interoperability isolation
+-   Java static mutable state
+-   Native global state
+-   Blocking foreign calls
+-   Blocking-operation offload
+-   Non-local return across Actor boundaries
+-   Dynamic error handlers across Actor boundaries
+-   Future ownership interaction with Actor lifecycle
+-   Timers
+-   Clock semantics
+-   Waiting on multiple Futures
+-   Select/race operations
+-   CPU-bound Future monopolization
+-   Resource limits and quotas
+-   Runtime resource-pressure model
+-   Actor resource-cost estimation and learning
+-   ActorRef security and authorization
+-   Remote authentication
+-   Cluster configuration UX
+-   Cluster lazy startup
+-   Node lazy activation
+-   Cluster identity after loss of all members
+-   Relationship between logical Protos topology and physical
+    infrastructure topology
+-   Module implementation sharing
+-   Behavior requirements before READY
+-   Runtime metrics architecture
+-   Scheduler/advisor interaction
+-   Scheduler/capacity-demand interaction
+-   Code identity for remote Actor bootstrap
+-   Code availability and versioning across Nodes
+-   Hot code update
+-   NUMA-aware scheduling
+-   Application-root versus process-root distinction in distributed
+    deployments
