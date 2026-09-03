@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 175
+Document revision: 176
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3752,6 +3752,42 @@ cannot be overridden. It is exactly the Boolean complement of `identical`,
 including all Core value-identity rules such as numeric-family identity, String
 value identity, canonical Booleans, `null`, Float NaN identity, and signed-zero
 identity.
+
+### Standard Map equality and hash dispatch
+
+Standard `Map` and `IdentityMap` do not override the ordinary `Object` equality
+and hash semantics with entry traversal.
+
+Conceptually, when no user-defined override shadows the standard behavior:
+
+```text
+function standardMapEquals(map, other):
+    return map === other
+
+function standardMapHash(map):
+    return identityHashOf(map)
+```
+
+The same conceptual behavior applies to `IdentityMap`.
+
+These operations inspect no keyed-entry state and invoke no key or value
+protocol. In particular, standard Map equality/hash does not call
+`findMapEntry`, `findIdentityMapEntry`, `hash`, `==`, `each`, or any equivalent
+entry-enumeration operation merely because the receiver is a Map.
+
+Mutation, insertion, removal, mapped-value replacement, `close()`, and
+`freeze()` therefore do not alter the standard Map object's equality/hash class.
+The ordinary execution-scoped stability guarantee of `identityHashOf` is the
+relevant default hash guarantee.
+
+Implementations may inline these inherited defaults or avoid installing
+Map-specific method bodies entirely. What is observable is that the standard
+Map prototypes add no structural equality/hash behavior. A user-defined
+ordinary `==` or `hash` override remains ordinary message dispatch and may
+choose different semantics subject to the existing general protocol contracts.
+
+This rule introduces no recursive traversal, cycle detector, snapshot,
+collection lock, or callback scope for ordinary Map equality/hash.
 
 ### Map keyed-state mutation and object state
 

@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 175
+Document revision: 176
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3722,6 +3722,61 @@ It returns canonical `true` exactly when `a === b` is false, and canonical
 Therefore overriding `==` or `!=` cannot change `===` or `!==`, and overriding
 ordinary equality cannot change identity-sensitive mechanisms such as
 `IdentityMap`.
+
+### Standard Map equality and hashing
+
+`Map` and `IdentityMap` are identity-bearing mutable objects. The standard Map
+prototypes do not introduce structural collection equality or structural
+collection hashing.
+
+Unless a program deliberately overrides the ordinary protocols, both standard
+Map kinds use the ordinary `Object` defaults:
+
+```text
+map1 == map2
+    -> map1 === map2
+
+map.hash()
+    -> identityHashOf(map)
+```
+
+Consequently two distinct Maps remain unequal under standard `==` even when
+they currently contain the same associations in the same insertion order, and
+even when their keys and values compare equal. The same rule applies to two
+distinct `IdentityMap` objects.
+
+Standard Map equality and hashing therefore do not:
+
+- enumerate or compare entries;
+- invoke key `hash` or `==` protocols;
+- invoke equality or hashing on stored values;
+- depend on insertion order, current capacity, physical table layout, or
+  recorded entry hashes;
+- recurse through Maps stored as keys or values;
+- change merely because a Map is closed or frozen.
+
+This keeps the standard `hash` of a Map stable for that Map's semantic identity
+during the current execution even while the Map's contents mutate. A standard
+Map may therefore itself be used as a normal `Map` key without its own content
+mutation silently changing its default equality/hash class.
+
+The word "identity" in `IdentityMap` describes how that collection matches its
+keys. It does not grant `IdentityMap` a second object-identity relation and does
+not cause two distinct IdentityMaps with identical entries to compare equal.
+
+`==` and `hash` remain ordinary customizable messages. A program may define
+structural or domain-specific Map comparison and hashing deliberately, but such
+overrides are then governed by the existing general contracts: custom equality
+must return the required Boolean result where applicable, and keys intended for
+ordinary associative behavior must satisfy equality/hash coherence and the
+existing stability rules. Such customization does not affect `===`,
+`identityHashOf`, or `IdentityMap` key matching.
+
+Core intentionally does not provide an implicit deep Map equality institution.
+A library that wants structural, recursive, order-sensitive, order-insensitive,
+cycle-aware, or application-specific collection comparison must expose that
+policy explicitly rather than making ordinary mutable Map identity depend on
+entry traversal.
 
 ### Standard `Map.atPut` result
 

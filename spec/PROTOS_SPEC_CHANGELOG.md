@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.176] - 2026-09-03
+
+### Fixed
+- Defined the standard equality/hash behavior of `Map` and `IdentityMap`
+  explicitly as the ordinary identity-based `Object` defaults rather than
+  leaving structural collection equality/hashing to implementations.
+- Made distinct Maps unequal under standard `==` even when their current
+  associations are structurally alike, and made standard Map `hash()` use
+  `identityHashOf` without traversing entries.
+- Prevented ordinary Map mutation, insertion order, recorded hashes, cycles,
+  or key/value callbacks from affecting the default Map equality/hash class.
+- Preserved ordinary user overrides while keeping `===`, `identityHashOf`,
+  and `IdentityMap` key matching primitive and unaffected.
+- Avoided hidden deep-comparison policy, recursive traversal, snapshots,
+  cycle detectors, or collection locks in the default protocol.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 176.
+  No grammar, Actor/Future, or I/O semantics change.
+
 ## [0.1.175] - 2026-09-03
 
 ### Fixed
