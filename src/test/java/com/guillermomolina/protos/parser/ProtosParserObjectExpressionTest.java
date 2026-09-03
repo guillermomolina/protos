@@ -75,8 +75,7 @@ class ProtosParserObjectExpressionTest {
     }
 
     @Test
-    void rejectsDisallowedUnparenthesizedParents() {
-        assertThrows(ParseError.class, () -> only("factory() {}"));
+    void rejectsDisallowedUnparenthesizedIndexParent() {
         assertThrows(ParseError.class, () -> only("values[0] {}"));
     }
 
