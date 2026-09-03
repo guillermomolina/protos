@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.121] - 2026-09-03
+
+### Fixed
+- Defined an unhandled initialization error as a fatal failure of that Actor
+  incarnation rather than an Actor that remains indefinitely non-READY.
+- Defined the fate of messages accepted while an Actor is INITIALIZING.
+- Prohibited dispatch, transfer, or transparent replay of those accepted
+  operations after initialization failure.
+- Reused the ordinary pre-acceptance and Messages Across Actor Failure rules
+  rather than creating initialization-specific delivery semantics.
+- Defined accepted `request()` operations lost to initialization failure to use
+  the existing `RequestOutcomeUncertain` outcome.
+- Clarified that a replacement Actor has fresh initialization/mailbox state and
+  never inherits accepted messages from the failed incarnation.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 121.
+
 ## [0.1.120] - 2026-09-03
 
 ### Fixed

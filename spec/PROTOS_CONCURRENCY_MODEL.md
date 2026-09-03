@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 120
+Document revision: 121
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -394,8 +394,26 @@ successfully.
 Messages arriving while the Actor is INITIALIZING may be queued, but
 they are not dispatched until the Actor reaches READY.
 
-If initialization fails with an unhandled error, the Actor never reaches
-READY.
+If initialization fails with an unhandled error, that is an unhandled fatal
+failure of that Actor incarnation. The Actor never reaches READY and instead
+terminates. Its failure authority observes the failure and applies the ordinary
+Actor-failure policy.
+
+Initialization failure does not create a special message-delivery universe.
+Operations not yet accepted by the Actor remain governed by the ordinary
+pre-acceptance routing, failure, cancellation, and uncertainty rules.
+
+Any message already accepted into the INITIALIZING Actor's ownership but not yet
+dispatched is an accepted-but-not-completed operation lost with that Actor
+incarnation. It is never dispatched after the initialization failure and is never
+transparently transferred or replayed to a replacement Actor. Its sender-visible
+outcome follows the ordinary Messages Across Actor Failure rules; in particular,
+an accepted `request()` that cannot produce a normal reply fails with
+`RequestOutcomeUncertain`.
+
+A replacement created by failure policy is a fresh Actor incarnation. It starts
+with its own initialization and mailbox state and does not inherit accepted
+messages from the failed incarnation.
 
 Normal completion of initialization does not terminate the Actor.
 
@@ -1032,7 +1050,9 @@ processing. It is distinct from handler start and handler completion.
 
 If an accepted-but-not-completed operation is lost because the Actor
 fails, Protos does not transparently replay it against a replacement,
-because doing so could duplicate effects.
+because doing so could duplicate effects. This includes operations already
+accepted while that Actor was INITIALIZING if initialization ends in an
+unhandled fatal failure.
 
 If the runtime cannot determine whether acceptance occurred before a
 failure or partition, delivery is uncertain. Uncertainty does not imply
