@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.136] - 2026-09-03
+
+### Fixed
+- Defined permanent release custody transfer when `close()` begins: a failed
+  close never gives the program an open/retryable resource back through the
+  same receiver.
+- Made explicit that close failure does not portably prove whether a backend
+  resource is still open or already released when the backend reports an
+  uncertain release outcome.
+- Prohibited blind retry of native close/release using an identifier that might
+  already have been released and reused for an unrelated resource.
+- Allowed a native retry only when backend state/contract establishes that the
+  identifier still denotes the same resource and retry is safe.
+- Kept residual backend release state and bookkeeping under implementation/host
+  custody rather than requiring a later program `close()` call for safety.
+- Clarified that stronger effects such as durability remain separate protocols
+  such as `sync()` rather than being inferred from close success/failure.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 136. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.135] - 2026-09-03
 
 ### Fixed

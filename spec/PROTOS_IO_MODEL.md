@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 135
+Document revision: 136
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -354,6 +354,16 @@ Close is logically idempotent. A call made while closing observes the same close
 `close()` does not imply `flush()` or `sync()` unless a more specific receiver protocol explicitly requires such behavior.
 
 A failed close does not make the object usable again. The object remains permanently failed/unusable. Later `close()` calls observe that failed close lifecycle and fail consistently with that outcome; they do not begin a fresh lifecycle or pretend that closure succeeded.
+
+Invoking `close()` also permanently transfers program-facing release custody of the receiver's underlying resource to that close lifecycle. After close begins, the program never regains an open/retryable resource through the same receiver merely because close later fails.
+
+A failed close does not, by itself, prove either that the backend resource remained open or that every backend release effect completed. Some backends can report a release/flush error after making the native resource identifier unusable; others can report an error while the native resource's release state is uncertain. That backend distinction is not promoted into a portable Protos reopen-or-retry state.
+
+When backend release state is uncertain, an implementation must not blindly retry a native close/release operation using an identifier that might already have been released and reused for an unrelated resource. A native retry is permitted only when the implementation can establish from the backend contract/state that the identifier still denotes the same resource and that retrying release cannot affect an unrelated resource.
+
+Any backend resource or release bookkeeping that remains after a failed close remains under implementation/host custody, not program custody. It cannot be exposed again through the failed receiver, transferred from that receiver, or require a later program `close()` call to make the original lifecycle safe. The implementation may retain only the internal state needed to honor the backend's safe cleanup rules; such state does not create a second Protos close lifecycle.
+
+Therefore a close failure means that the receiver could not establish the complete successful-close contract, not that the program has obtained a portable guarantee about whether an external/native endpoint is still open. Programs that require an effect stronger than close provides, such as durable file state, must use the corresponding explicit protocol such as `sync()` before close.
 
 Graceful output shutdown or half-close is represented separately by `WriteShutdown`; input half-close is represented by `ReadShutdown`.
 
@@ -1365,6 +1375,7 @@ Socket in v0.1 is only an already-provisioned endpoint I/O shape; socket creatio
 Wrapped capabilities do not propagate automatically.
 Wrapping does not imply lifecycle ownership.
 Invoking close commits permanent lifecycle termination; close itself cannot subsequently become cancelled.
+A failed close never returns release custody to the program and never authorizes blind native-close retry; uncertain residual backend release state remains implementation/host custody.
 
 flush != sync != close != shutdownWrite
 Invoking read/write shutdown commits permanent termination of that direction; cancellation cannot reopen it, and a failed shutdown does not create a fresh retry lifecycle.
