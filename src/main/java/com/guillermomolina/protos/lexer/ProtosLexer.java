@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.lexer;
 
-import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -25,42 +24,45 @@ import java.util.Map;
 /**
  * Lexer for the Protos Core v0.1 lexical grammar.
  *
- * <p>The lexer is deliberately position-independent: parser context never changes token
- * classification. In particular, reserved words keep their dedicated token types after member
- * access, and complete symbolic operator spellings are classified only after maximal munch.</p>
+ * <p>
+ * The lexer is deliberately position-independent: parser context never changes
+ * token
+ * classification. In particular, reserved words keep their dedicated token
+ * types after member
+ * access, and complete symbolic operator spellings are classified only after
+ * maximal munch.
+ * </p>
  */
 public final class ProtosLexer {
     private static final Map<String, TokenType> RESERVED_WORDS = Map.of(
-        "this", TokenType.THIS,
-        "context", TokenType.CONTEXT,
-        "args", TokenType.ARGS,
-        "super", TokenType.SUPER,
-        "true", TokenType.TRUE,
-        "false", TokenType.FALSE,
-        "null", TokenType.NULL
-    );
+            "this", TokenType.THIS,
+            "context", TokenType.CONTEXT,
+            "args", TokenType.ARGS,
+            "super", TokenType.SUPER,
+            "true", TokenType.TRUE,
+            "false", TokenType.FALSE,
+            "null", TokenType.NULL);
 
     private static final Map<String, TokenType> STANDARD_SYMBOLIC_TOKENS = Map.ofEntries(
-        Map.entry("=>", TokenType.FAT_ARROW),
-        Map.entry("=", TokenType.EQUALS),
-        Map.entry("==", TokenType.DOUBLE_EQUALS),
-        Map.entry("===", TokenType.TRIPLE_EQUALS),
-        Map.entry("!=", TokenType.NOT_EQUALS),
-        Map.entry("!==", TokenType.NOT_EQUALS_2),
-        Map.entry("<=", TokenType.LESS_EQUAL),
-        Map.entry(">=", TokenType.GREATER_EQUAL),
-        Map.entry("&&", TokenType.AND),
-        Map.entry("||", TokenType.OR),
-        Map.entry("+", TokenType.PLUS),
-        Map.entry("-", TokenType.MINUS),
-        Map.entry("*", TokenType.STAR),
-        Map.entry("/", TokenType.SLASH),
-        Map.entry("%", TokenType.PERCENT),
-        Map.entry("<", TokenType.LESS),
-        Map.entry(">", TokenType.GREATER),
-        Map.entry("!", TokenType.BANG),
-        Map.entry("^", TokenType.CARET)
-    );
+            Map.entry("=>", TokenType.FAT_ARROW),
+            Map.entry("=", TokenType.EQUALS),
+            Map.entry("==", TokenType.DOUBLE_EQUALS),
+            Map.entry("===", TokenType.TRIPLE_EQUALS),
+            Map.entry("!=", TokenType.NOT_EQUALS),
+            Map.entry("!==", TokenType.NOT_EQUALS_2),
+            Map.entry("<=", TokenType.LESS_EQUAL),
+            Map.entry(">=", TokenType.GREATER_EQUAL),
+            Map.entry("&&", TokenType.AND),
+            Map.entry("||", TokenType.OR),
+            Map.entry("+", TokenType.PLUS),
+            Map.entry("-", TokenType.MINUS),
+            Map.entry("*", TokenType.STAR),
+            Map.entry("/", TokenType.SLASH),
+            Map.entry("%", TokenType.PERCENT),
+            Map.entry("<", TokenType.LESS),
+            Map.entry(">", TokenType.GREATER),
+            Map.entry("!", TokenType.BANG),
+            Map.entry("^", TokenType.CARET));
 
     private final String source;
     private int pos;
@@ -148,7 +150,7 @@ public final class ProtosLexer {
         }
 
         String spelling = source.substring(start, pos);
-        if (!Normalizer.isNormalized(spelling, Normalizer.Form.NFC)) {
+        if (!UnicodeXid.isNfc(spelling)) {
             throw error("Identifier is not in Unicode NFC: '" + spelling + "'", start);
         }
 
@@ -382,7 +384,8 @@ public final class ProtosLexer {
             } else if (line.startsWith(prefix)) {
                 result.append(line, prefix.length(), line.length());
             } else {
-                throw error("Triple-double-quoted String line does not match closing-delimiter indentation", literalStart);
+                throw error("Triple-double-quoted String line does not match closing-delimiter indentation",
+                        literalStart);
             }
 
             if (newlineStart < 0) {
@@ -583,8 +586,8 @@ public final class ProtosLexer {
             case 8 -> codePoint >= '0' && codePoint <= '7';
             case 10 -> isDecimalDigit(codePoint);
             case 16 -> isDecimalDigit(codePoint)
-                || codePoint >= 'a' && codePoint <= 'f'
-                || codePoint >= 'A' && codePoint <= 'F';
+                    || codePoint >= 'a' && codePoint <= 'f'
+                    || codePoint >= 'A' && codePoint <= 'F';
             default -> false;
         };
     }
@@ -681,11 +684,15 @@ public final class ProtosLexer {
         return "'" + Character.toString(codePoint) + "' (U+" + String.format("%04X", codePoint) + ")";
     }
 
-    private record EscapeResult(int codePoint, int nextIndex) {}
+    private record EscapeResult(int codePoint, int nextIndex) {
+    }
 
-    private record StructuralIndentation(String prefix, int trailingLineStart) {}
+    private record StructuralIndentation(String prefix, int trailingLineStart) {
+    }
 
     public static final class LexicalError extends RuntimeException {
+        private static final long serialVersionUID = 1L;
+
         public LexicalError(String message) {
             super(message);
         }

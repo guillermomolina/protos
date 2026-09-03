@@ -17,97 +17,19 @@
 
 package com.guillermomolina.protos.lexer;
 
-import java.text.Normalizer;
-
-/** Unicode XID_Start/XID_Continue recognition derived from the JDK Unicode database. */
+/** Unicode 17.0.0 XID and NFC operations used by the Core v0.1 lexer. */
 final class UnicodeXid {
     private UnicodeXid() {}
 
     static boolean isStart(int codePoint) {
-        if (!isIdStart(codePoint)) {
-            return false;
-        }
-        String normalized = Normalizer.normalize(Character.toString(codePoint), Normalizer.Form.NFKC);
-        if (normalized.isEmpty()) {
-            return false;
-        }
-
-        int index = 0;
-        int first = normalized.codePointAt(index);
-        if (!isIdStart(first)) {
-            return false;
-        }
-        index += Character.charCount(first);
-
-        while (index < normalized.length()) {
-            int current = normalized.codePointAt(index);
-            if (!isIdContinue(current)) {
-                return false;
-            }
-            index += Character.charCount(current);
-        }
-        return true;
+        return UnicodeData17.isXidStart(codePoint);
     }
 
     static boolean isContinue(int codePoint) {
-        if (!isIdContinue(codePoint)) {
-            return false;
-        }
-        String normalized = Normalizer.normalize(Character.toString(codePoint), Normalizer.Form.NFKC);
-        if (normalized.isEmpty()) {
-            return false;
-        }
-
-        for (int index = 0; index < normalized.length();) {
-            int current = normalized.codePointAt(index);
-            if (!isIdContinue(current)) {
-                return false;
-            }
-            index += Character.charCount(current);
-        }
-        return true;
+        return UnicodeData17.isXidContinue(codePoint);
     }
 
-    private static boolean isIdStart(int codePoint) {
-        int type = Character.getType(codePoint);
-        return switch (type) {
-            case Character.UPPERCASE_LETTER,
-                 Character.LOWERCASE_LETTER,
-                 Character.TITLECASE_LETTER,
-                 Character.MODIFIER_LETTER,
-                 Character.OTHER_LETTER,
-                 Character.LETTER_NUMBER -> true;
-            default -> isOtherIdStart(codePoint);
-        };
-    }
-
-    private static boolean isIdContinue(int codePoint) {
-        if (isIdStart(codePoint)) {
-            return true;
-        }
-        int type = Character.getType(codePoint);
-        return switch (type) {
-            case Character.NON_SPACING_MARK,
-                 Character.COMBINING_SPACING_MARK,
-                 Character.DECIMAL_DIGIT_NUMBER,
-                 Character.CONNECTOR_PUNCTUATION -> true;
-            default -> isOtherIdContinue(codePoint);
-        };
-    }
-
-    private static boolean isOtherIdStart(int codePoint) {
-        return codePoint == 0x1885
-            || codePoint == 0x1886
-            || codePoint == 0x2118
-            || codePoint == 0x212E
-            || codePoint == 0x309B
-            || codePoint == 0x309C;
-    }
-
-    private static boolean isOtherIdContinue(int codePoint) {
-        return codePoint == 0x00B7
-            || codePoint == 0x0387
-            || codePoint >= 0x1369 && codePoint <= 0x1371
-            || codePoint == 0x19DA;
+    static boolean isNfc(String text) {
+        return UnicodeNfc17.isNormalized(text);
     }
 }
