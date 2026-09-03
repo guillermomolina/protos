@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 87
+Document revision: 88
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -295,21 +295,25 @@ Closable {
 
 Closing begins permanent lifecycle termination of that receiver/resource.
 
+Invoking `close()` is itself the irreversible semantic commitment boundary for the close operation: the receiver enters its permanent closing lifecycle before `close()` returns its Future. Because that observable lifecycle transition cannot be rolled back, the close Future cannot subsequently become `cancelled`. A cancellation request may stop an activation from waiting for close according to the ordinary Future/structured-concurrency rules, but it does not cancel or reverse the already-committed close operation.
+
 Once closing begins, the receiver accepts no new operation that requires the resource to remain open.
 
-Operations that have already committed are not undone. Pending uncommitted operations may be cancelled or failed as required to complete closure.
+Closure-induced termination of an operation is distinct from cancellation of that operation. A previously pending uncommitted operation that is prevented from proceeding because close began fails with an error indicating that the receiver/resource is closing or closed; close does not report that operation as `cancelled`. If an independent cancellation request for that operation satisfies its own cancellation contract before closure wins, that operation may instead become `cancelled`.
+
+Operations that had already committed when closing began are not rolled back and are never rewritten as cancelled merely because of close. They may complete successfully or fail according to their operation contract, including any already-permitted partial external effect.
+
+Successful close completion requires every operation accepted before closing to have reached a terminal Future state and the receiver's required resource-release work to have completed successfully. Close need not wait for a pending operation to succeed: it may cause that operation to fail as specified above. This rule prevents a successful close from leaving accepted I/O operations indefinitely pending.
 
 Successful close completion means that the receiver/resource is permanently released or unusable according to its lifecycle contract.
 
-Close is logically idempotent: a call made while closing or after successful close does not begin an independent second close operation. Exact Future-object identity across repeated calls is not required.
+Close is logically idempotent. A call made while closing observes the same close lifecycle rather than beginning an independent second close operation; a call made after successful close succeeds without beginning another release. Exact Future-object identity across repeated calls is not required, but calls observing one close lifecycle must not disagree about whether that lifecycle ultimately succeeded or failed.
 
 `close()` does not imply `flush()` or `sync()` unless a more specific receiver protocol explicitly requires such behavior.
 
-A failed first close does not make the object usable again. The object remains closing/failed/unusable, and a later `close()` may reflect the existing failure rather than pretending that closure succeeded.
+A failed close does not make the object usable again. The object remains permanently failed/unusable. Later `close()` calls observe that failed close lifecycle and fail consistently with that outcome; they do not begin a fresh lifecycle or pretend that closure succeeded.
 
 Graceful output shutdown or half-close is represented separately by `WriteShutdown`; input half-close is represented by `ReadShutdown`.
-
-Cancellation may cancel the close operation before irreversible resource-release effects. Beginning `close()` nevertheless begins the receiver's permanent closing lifecycle: successful cancellation of the close operation does not restore the receiver to the open state, permit new operations that require the resource to remain open, or otherwise resurrect/reopen the receiver. Cancellation only prevents those close effects that had not yet become irreversible.
 
 ---
 
@@ -1138,6 +1142,7 @@ Successful cancellation before commitment preserves zero observable effect.
 Capabilities are orthogonal Traits.
 Wrapped capabilities do not propagate automatically.
 Wrapping does not imply lifecycle ownership.
+Invoking close commits permanent lifecycle termination; close itself cannot subsequently become cancelled.
 
 flush != sync != close != shutdownWrite
 EOF != unavailable capability != I/O failure

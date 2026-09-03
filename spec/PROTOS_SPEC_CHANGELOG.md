@@ -4,6 +4,23 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.88] - 2026-09-03
+
+### Fixed
+- Made `Closable.close()` lifecycle semantics deterministic: invoking `close()`
+  commits permanent lifecycle termination, so the close Future cannot later
+  report `cancelled`.
+- Removed implementation freedom over pending operations displaced by close:
+  closure-induced termination fails them as closing/closed; an independent
+  cancellation may still win under that operation's own cancellation contract.
+- Required successful close to leave no previously accepted I/O operation
+  pending and repeated close calls to observe one consistent lifecycle outcome.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 88. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.87] - 2026-09-03
 
 ### Fixed
