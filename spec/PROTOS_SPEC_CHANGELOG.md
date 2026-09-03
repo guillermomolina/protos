@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.179] - 2026-09-03
+
+### Fixed
+- Defined the semantic boundary between separately opened File capabilities
+  that alias the same underlying filesystem resource.
+- Preserved independent Protos ordering and lifecycle domains for each File even
+  when the host identifies their underlying resource as the same inode, file
+  object, or equivalent identity.
+- Explicitly declined to promise portable cross-File ordering, atomicity,
+  visibility latency, or byte-level non-interleaving unless a stronger concrete
+  protocol provides such guarantees.
+- Prevented host-reported resource identity from silently becoming a global
+  Protos ordering primitive.
+- Clarified that cross-capability observations remain governed by the
+  underlying Filesystem resource semantics while each File's own Protos
+  contract remains normative.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 179. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.178] - 2026-09-03
 
 ### Fixed
