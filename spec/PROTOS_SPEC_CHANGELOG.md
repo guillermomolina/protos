@@ -4,6 +4,33 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.151] - 2026-09-03
+
+### Fixed
+- Defined object reachability as separate from I/O lifecycle: becoming
+  unreachable or GC-eligible does not semantically invoke `close()`.
+- Prohibited programs from relying on GC, reference-count transitions, heap
+  pressure, safepoints, or finalizer timing for deterministic resource release.
+- Required deterministic release effects to come from explicit lifecycle
+  mechanisms such as `close()` or a separately normative structured-cleanup
+  facility.
+- Allowed best-effort reclamation of unreachable native/backend resources only
+  as implementation/host cleanup, not as a second Protos close lifecycle.
+- Prohibited such cleanup from executing arbitrary Protos user code, fabricating
+  close outcomes, or surfacing close errors to unrelated code.
+- Made externally visible timing of emergency unreachable-resource reclamation
+  explicitly non-portable, so lock/descriptor/socket release cannot be used as
+  synchronization without explicit close.
+- Clarified that owning wrappers do not close owned targets merely because the
+  wrapper becomes unreachable.
+- Kept resource-exhaustion behavior from abandoned resources outside portable
+  reclamation-timing guarantees.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 151. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.150] - 2026-09-03
 
 ### Fixed

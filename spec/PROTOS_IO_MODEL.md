@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 150
+Document revision: 151
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -364,6 +364,18 @@ When backend release state is uncertain, an implementation must not blindly retr
 Any backend resource or release bookkeeping that remains after a failed close remains under implementation/host custody, not program custody. It cannot be exposed again through the failed receiver, transferred from that receiver, or require a later program `close()` call to make the original lifecycle safe. The implementation may retain only the internal state needed to honor the backend's safe cleanup rules; such state does not create a second Protos close lifecycle.
 
 Therefore a close failure means that the receiver could not establish the complete successful-close contract, not that the program has obtained a portable guarantee about whether an external/native endpoint is still open. Programs that require an effect stronger than close provides, such as durable file state, must use the corresponding explicit protocol such as `sync()` before close.
+
+Object reachability is not a lifecycle operation. A `Closable` receiver becoming unreachable, losing its last ordinary Protos reference, or becoming eligible for implementation garbage collection does not semantically invoke `close()`, does not establish a close frontier, and does not produce a close Future or close success/failure outcome.
+
+Portable programs therefore cannot rely on garbage-collection timing, reference-count transitions, VM safepoints, heap pressure, process placement, or implementation finalizers/cleaners to release an I/O resource at a particular time or before another observable operation. When deterministic release matters, the program must use the resource's explicit lifecycle mechanism, such as `close()`, directly or through whatever structured cleanup facility is normatively defined elsewhere.
+
+An implementation may perform best-effort reclamation of unreachable backend/native resources to prevent implementation leaks. Such reclamation is implementation/host cleanup, not a second Protos close lifecycle. Its timing is non-portable, it must not execute arbitrary Protos user code, and it must not fabricate a successful `close()` result, surface a close error to unrelated code, or make a later-reachable Protos receiver appear closed.
+
+If backend reclamation itself has externally visible consequences, such as releasing a host lock, descriptor, pipe endpoint, or socket endpoint, the timing of those consequences after the Protos receiver has become unreachable is deliberately outside portable Protos semantics. A program that requires those consequences before some later action must arrange explicit lifecycle termination rather than using loss of reachability as synchronization.
+
+Explicit ownership does not change this rule. In particular, an owning wrapper closes its owned target when the wrapper's explicit close lifecycle requires it; merely abandoning or making the wrapper unreachable does not semantically invoke that lifecycle or provide a deterministic target-release guarantee.
+
+Resource exhaustion caused by resources that a program leaves without explicit lifecycle termination is likewise not a portable scheduling or reclamation guarantee. An implementation may reclaim unreachable backend resources earlier or later, but it must not turn that implementation policy into a Protos-visible finalizer protocol.
 
 Graceful output shutdown or half-close is represented separately by `WriteShutdown`; input half-close is represented by `ReadShutdown`.
 
@@ -1440,6 +1452,7 @@ Wrapped capabilities do not propagate automatically.
 Wrapping does not imply lifecycle ownership.
 Invoking close commits permanent lifecycle termination; close itself cannot subsequently become cancelled.
 A failed close never returns release custody to the program and never authorizes blind native-close retry; uncertain residual backend release state remains implementation/host custody.
+Object unreachability/GC never semantically invokes close; deterministic resource release requires an explicit lifecycle operation, while best-effort unreachable-resource reclamation remains non-portable implementation/host cleanup.
 
 flush != sync != close != shutdownWrite
 Invoking read/write shutdown commits permanent termination of that direction; cancellation cannot reopen it, and a failed shutdown does not create a fresh retry lifecycle.
