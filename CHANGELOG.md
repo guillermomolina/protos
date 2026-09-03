@@ -13,6 +13,7 @@ For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_
 
 ### Changed
 
+- Updated GitHub Actions CI to current supported `actions/checkout` and `actions/setup-java` major versions.
 - Relicensed Protos from the Server Side Public License (SSPL) v1 to the OSI-approved Adaptive Public License 1.0 (APL-1.0). The complete license, including the completed Exhibit A, is in [LICENSE.TXT](LICENSE.TXT).
 - Project implementation version changed from `0.1.6-SNAPSHOT` to `0.2.0-SNAPSHOT`.
 
