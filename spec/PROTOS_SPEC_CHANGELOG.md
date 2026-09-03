@@ -4,6 +4,22 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.135] - 2026-09-03
+
+### Fixed
+- Clarified that the pre-comparison `hash` phase of a Map search does not
+  suspend an already-active same-Map comparison restriction established by
+  an enclosing equality callback.
+- Prevented nested same-Map lookups from using their `hash` callback to mutate
+  the Map and bypass the reentrant-mutation rule.
+- Preserved ordinary outermost behavior: when no enclosing comparison scope
+  exists, query-key `hash` effects still complete before candidate traversal
+  and may mutate the target Map according to ordinary semantics.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 135.
+  No grammar, Actor/Future, or I/O semantics change.
+
 ## [0.1.134] - 2026-09-03
 
 ### Fixed

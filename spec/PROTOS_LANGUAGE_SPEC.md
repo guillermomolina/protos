@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 134
+Document revision: 135
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3756,12 +3756,24 @@ the comparison may continue and return a Boolean in the ordinary way. If the
 error escapes the comparison, the outer Map operation fails. No Map-entry
 mutation attempted while the restriction was active has occurred.
 
-The query key's `hash` call happens before candidate comparison begins. Effects
-performed by `hash`, including mutations of the target Map, complete according
-to ordinary semantics before the search examines its candidate entries.
-Consequently the candidate search observes the Map state that exists after the
-query hash has returned. The Map's own requested mutation, if any, still occurs
-only after key search succeeds as specified elsewhere.
+The query key's `hash` call happens before that search enters any of its own
+candidate-comparison scopes. In the ordinary outermost case, effects performed
+by `hash`, including mutations of the target Map, complete according to ordinary
+semantics before the search examines its candidate entries. Consequently the
+candidate search observes the Map state that exists after the query hash has
+returned.
+
+This does not suspend an already-active comparison restriction. If an outer
+comparison scope for that same Map is already active — for example because a
+key's `==` implementation performs a nested read-only lookup on the same Map —
+the nested lookup's `hash` call executes while that outer scope remains active.
+Any attempt by that `hash` behavior to mutate the same Map therefore signals the
+ordinary reentrant-mutation `Error` before mutation. A `hash` call is exempt only
+from a comparison scope that would otherwise be created by its own search; it
+does not escape comparison scopes established by enclosing operations.
+
+The Map's own requested mutation, if any, still occurs only after key search
+succeeds as specified elsewhere.
 
 Mutation of key objects during `hash` or `==` remains governed by the existing
 mutable-key rules: the query hash is computed once, stored entries retain their

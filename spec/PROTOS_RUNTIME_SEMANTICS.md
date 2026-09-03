@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 134
+Document revision: 135
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3537,9 +3537,21 @@ candidate comparison:
 queryHash = requireHashResult(send(queryKey, "hash", []))
 ```
 
-No comparison restriction is active merely because this hash call belongs to a
-Map operation. If that user-defined `hash` behavior mutates the target Map, those
-effects occur before the subsequent candidate traversal and are visible to it.
+No new comparison restriction is entered merely because this hash call belongs
+to the current Map operation. In an outermost search, where
+`mapComparisonDepth(map) == 0` on entry to the hash call, user-defined `hash`
+behavior may therefore mutate the target Map according to ordinary semantics;
+those effects occur before the subsequent candidate traversal and are visible to
+it.
+
+An outer comparison scope may already be active, however. If
+`mapComparisonDepth(map) > 0` because the current search was invoked from within
+an equality callback for that same Map, the hash call does not clear, mask, or
+suspend that scope. Any keyed-entry mutation attempted by the hash behavior is
+checked by `requireMapEntryMutationAllowed(map)` and signals the ordinary
+reentrant-mutation Error before mutation. Nested searches therefore cannot use
+their pre-comparison hash phase to bypass an enclosing same-Map comparison
+restriction.
 
 The candidate traversal then uses `compareMapCandidate`:
 
