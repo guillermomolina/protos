@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.165] - 2026-09-03
+
+### Fixed
+- Closed a second-order Map object-state hole caused by callback-capable
+  key search: an initial open/not-frozen check no longer authorizes a later
+  keyed-entry mutation after `hash` or `==` changes the Map state.
+- Required `atPut` to revalidate state immediately before replacing a
+  matched value; a callback-induced `freeze()` therefore prevents the
+  replacement while callback-induced `close()` still permits replacement.
+- Kept the existing post-search insertion check authoritative, so a
+  callback-induced `close()` or `freeze()` prevents a no-match insertion.
+- Required keyed-entry removal to check permission both before search and
+  again immediately before removing a matched entry.
+- Preserved completed callback effects, existing Map comparison guards, and
+  callback-free IdentityMap optimization freedom without adding locks,
+  snapshots, or transactions.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 165.
+  Updated 3 canonical runtime entry-update path(s). No grammar,
+  Actor/Future, or I/O semantics change.
+
 ## [0.1.164] - 2026-09-03
 
 ### Fixed

@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 164
+Document revision: 165
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -4005,6 +4005,49 @@ allocations, boxes, or immediate-value encodings.
 This rule does not require a particular hash-table representation or a physical
 linear scan. An implementation may use any indexing strategy that produces the
 same observable matching, update, removal, and insertion-order behavior.
+
+### Map state transitions during key search
+
+The object-state checks above are semantic checks at the point where the
+corresponding keyed-entry mutation is about to occur; an earlier successful
+check does not grant permission that survives later user code.
+
+This matters for normal `Map`, because key search can execute user-defined
+`hash` and `==` behavior. The existing outermost-hash rule permits ordinary
+effects before candidate traversal, and comparison callbacks may perform
+ordinary operations that do not themselves mutate the Map's keyed-entry state.
+Those effects may include calling `close()` or `freeze()` on the Map.
+
+Therefore a standard mutating Map operation must revalidate the receiver state
+after every user-code phase that can precede its own keyed-entry mutation:
+
+- `atPut(key, value)` still rejects a Map that is already frozen before key
+  search, preserving the existing fail-before-callback rule;
+- after a successful matching search, immediately before replacing the matched
+  entry's value, `atPut` checks the then-current Map state again. Replacement is
+  permitted only while the Map is open or closed; if a key callback froze the
+  Map, the operation signals an `Error` before replacing the value;
+- on the no-match path, the existing insertion check occurs after key search and
+  therefore uses the then-current state. A callback that closes or freezes the
+  Map prevents insertion;
+- a keyed-entry removal checks removal permission before key search as already
+  specified and, if a matching entry is found, checks again immediately before
+  removing it. A callback that closes or freezes the Map therefore prevents the
+  removal.
+
+State changes already completed by user behavior are ordinary effects and are
+not rolled back merely because the outer Map operation subsequently fails.
+Likewise, key-search effects other than the denied keyed-entry mutation remain
+completed.
+
+`IdentityMap` key search executes no user-defined callback, so the same
+point-of-mutation rule normally observes the same state as its initial check.
+Implementations may elide a redundant recheck when they can prove that no
+semantic operation between the checks can change the receiver state.
+
+No lock, transaction, snapshot, or reservation of future mutation permission is
+introduced. The rule simply applies the receiver's actual state at the semantic
+mutation point.
 
 ### Reentrant mutation during `Map` key comparison
 

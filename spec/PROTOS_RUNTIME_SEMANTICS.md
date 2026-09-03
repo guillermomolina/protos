@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 164
+Document revision: 165
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3698,9 +3698,9 @@ function mapAtPut(map, queryKey, value):
     )
 
     if entry != NOT_FOUND:
+        requireMapMayAttemptAtPut(map)
         entry.value = value
         return value
-
     requireMapMayInsert(map)
 
     appendEntry(
@@ -3720,9 +3720,12 @@ only the no-match insertion path fails.
 `IdentityMap.atPut` follows the same state ordering but uses primitive
 `identityHashOf` / semantic identity search instead of user callbacks.
 
-A standard keyed-entry removal first performs `requireMapMayRemove(map)`.
-Therefore closed/frozen removal fails before key search. Open-state removal uses
-the already specified deterministic normal-Map or IdentityMap search.
+A standard keyed-entry removal performs `requireMapMayRemove(map)` before key
+search and, if a matching entry is to be removed, performs the same check again
+immediately before removal. Therefore a Map that is already closed/frozen fails
+before key search, while a Map that becomes closed/frozen during callback-capable
+search cannot bypass the later state transition. Open-state removal otherwise
+uses the already specified deterministic normal-Map or IdentityMap search.
 
 Read-only keyed operations do not consult these mutation guards merely because
 the receiver is closed or frozen.
@@ -3731,6 +3734,71 @@ The state applies only to the receiver's own keyed-entry structure and values.
 No recursive close/freeze of keys or values occurs. Implementations may encode
 Map state and entry storage differently provided these failure points and
 observable protocol calls are preserved.
+
+### Revalidation of Map state after callback-capable search
+
+Map object-state permission is not a capability captured by an earlier check.
+For any keyed-entry mutation, the receiver must satisfy the required state at
+the semantic mutation point.
+
+Normal `Map` search may execute Protos code through `hash` and `==`. That code
+may change the Map from `open` to `closed` or `frozen` without directly changing
+keyed-entry state. Consequently an implementation must not hoist the initial
+state check across callback-capable search as though the result remained valid.
+
+For standard `Map.atPut`, the observable ordering is equivalent to:
+
+```text
+requireMapMayAttemptAtPut(map)
+
+queryHash = requireHashResult(
+    send(queryKey, "hash", [])
+)
+
+entry = findMapEntryUsingKnownQueryHash(
+    map,
+    queryKey,
+    queryHash
+)
+
+if entry != NOT_FOUND:
+    requireMapMayAttemptAtPut(map)
+    entry.value = value
+    return value
+
+requireMapMayInsert(map)
+append the new entry
+return value
+```
+
+The second `requireMapMayAttemptAtPut` is a fresh state observation. A Map that
+became frozen during `hash` or `==` therefore cannot be updated merely because it
+was not frozen when `atPut` began. A Map that became closed may still replace an
+existing entry but cannot take the insertion path.
+
+For keyed-entry removal, the semantic ordering is equivalently:
+
+```text
+requireMapMayRemove(map)
+entry = deterministic key search
+
+if entry is to be removed:
+    requireMapMayRemove(map)
+    remove entry
+```
+
+The first check preserves immediate failure for an already closed/frozen Map;
+the second prevents a callback-induced close/freeze from being bypassed after
+search.
+
+These rechecks occur before the Map's own mutation and do not undo effects
+already performed by user `hash`/`==` behavior. They also do not add a new
+reentrant-mutation scope. Existing comparison guards, hash-phase rules, and
+error propagation continue to apply independently.
+
+`IdentityMap` uses primitive callback-free identity search. It follows the same
+point-of-mutation state requirement, although a runtime may optimize away a
+provably redundant recheck.
 
 ### Deterministic `Map` key search
 
@@ -3771,9 +3839,9 @@ function mapAtPut(map, queryKey, value):
     )
 
     if entry != NOT_FOUND:
+        requireMapMayAttemptAtPut(map)
         entry.value = value
         return value
-
     requireMapMayInsert(map)
 
     appendEntry(
@@ -3868,9 +3936,9 @@ function identityMapAtPut(map, key, value):
     entry = findIdentityMapEntry(map, key)
 
     if entry != NOT_FOUND:
+        requireMapMayAttemptAtPut(map)
         entry.value = value
         return value
-
     requireMapMayInsert(map)
 
     identityHash = requireIdentityHashResult(identityHashOf(key))
