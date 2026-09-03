@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.157] - 2026-09-03
+
+### Fixed
+- Replaced the ambiguous `shutdownRead()` "wins the ordering race" wording with
+  one receiver-visible read-shutdown cutover point.
+- Required read results committed before cutover to survive and every accepted
+  but still-uncommitted read at cutover to complete as local EOF (`null`).
+- Clarified that read shutdown intentionally terminates earlier pending,
+  uncommitted reads rather than waiting behind them like write shutdown.
+- Prevented host/native callback scheduling from deciding whether a read belongs
+  before or after the shutdown boundary.
+- Preserved the absence of a global cross-Actor arrival order: routing/admission
+  may determine which competing operation reaches the receiver first, but the
+  established cutover is stable.
+- Allowed bytes obtained internally before result commitment to be discarded by
+  shutdown without later escaping through the terminated receiver.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 157. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.156] - 2026-09-03
 
 ### Fixed

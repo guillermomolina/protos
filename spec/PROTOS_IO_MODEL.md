@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 156
+Document revision: 157
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -1069,7 +1069,13 @@ Invoking `shutdownRead()` is itself the irreversible commitment boundary for the
 
 Buffered or future input may be discarded by read shutdown. Once read shutdown begins, no new read is accepted as an ordinary data-producing operation.
 
-A pending uncommitted read whose data/EOF/error result has not committed when shutdown wins the ordering race completes with `null`; it does not remain pending indefinitely and is not reported as `cancelled` merely because shutdown occurred. A read that has already committed a `Bytes`, EOF, or error result retains that committed result.
+Read shutdown has a receiver-visible cutover point: the irreversible transition into `read-shutting-down`. The outcome of every read competing with shutdown is determined relative to that cutover, not by which host/native completion callback happens to run first.
+
+A read whose `Bytes`, EOF, or error result committed before the read-shutdown cutover retains that committed result. A read accepted before shutdown but still uncommitted at the cutover completes with `null`; it does not remain pending indefinitely, consume/disclose buffered input after the cutover, or become `cancelled` merely because shutdown occurred. Thus invoking `shutdownRead()` while an earlier read Future is still pending intentionally terminates that uncommitted read rather than waiting behind it as `shutdownWrite()` waits behind preceding writes.
+
+For operations issued through independently progressing Actors or Actor-safe proxies, routing/admission may determine whether a competing read commits before the shutdown request reaches the receiver's cutover. Protos defines no global cross-Actor arrival order. Once the receiver has established the cutover, however, host scheduling cannot retroactively move an uncommitted read to the pre-shutdown side or expose bytes that were discarded by shutdown.
+
+Internal/native reads may already have obtained bytes before cutover without having committed a Protos read result. Those bytes may be discarded as part of read shutdown; they must not later escape through the terminated receiver merely because backend work completed before or after the shutdown call. No restoration to a separately accessible underlying source is implied unless a stronger wrapper/source protocol explicitly provides it.
 
 After read shutdown begins, later ordinary reads return `null`, including while the shutdown Future is still pending. This local EOF-like result reflects the receiver's terminated input direction and does not claim remote EOF.
 
@@ -1467,6 +1473,7 @@ Object unreachability/GC never semantically invokes close; deterministic resourc
 
 flush != sync != close != shutdownWrite
 Invoking read/write shutdown commits permanent termination of that direction; cancellation cannot reopen it, and a failed shutdown does not create a fresh retry lifecycle.
+Read shutdown has an explicit cutover: read results committed before it survive, while every accepted but uncommitted read becomes local EOF (`null`); host callback timing cannot decide the boundary.
 A failed sync may leave an unknown subset durable, but does not itself poison the receiver; a later successful sync covers its entire later frontier without replaying logical data changes.
 A failed flush never authorizes duplicate replay; an output wrapper with unknowable downstream progress becomes unusable unless a stronger protocol makes exact recovery possible.
 EOF != unavailable capability != I/O failure
