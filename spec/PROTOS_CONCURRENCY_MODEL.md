@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 112
+Document revision: 113
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -547,10 +547,52 @@ One `ask()` produces one logical response.
 Streaming or multi-response communication will use a separate
 abstraction rather than stretching `ask()` into a streaming protocol.
 
-Timeout and cancellation follow the general Future and communication
-rules.
+Because `ask()` exposes an ordinary four-state Future rather than the richer
+`SendOperation`, communication uncertainty must map deterministically into that
+Future instead of creating a fifth Future state.
 
-A timeout while waiting does not imply that remote work did not execute.
+This concurrency domain therefore defines the standard error prototype
+`AskOutcomeUncertain`, delegating directly to `Error`. It denotes that the ask
+cannot produce its normal reply and Protos cannot guarantee that the remote
+request had no effect. The ask Future completes `failed(AskOutcomeUncertain)`
+when, for example:
+
+- acceptance may or may not have occurred and the runtime cannot determine which;
+- acceptance is known to have occurred but the destination terminates before a
+  reply is produced;
+- a reply becomes unavailable after remote handling may already have produced
+  effects and the caller cannot determine the handler's normal result.
+
+`AskOutcomeUncertain` describes caller-visible uncertainty, not an assertion that
+the request definitely executed and not permission for transparent retry.
+Libraries may build idempotency, deduplication, or application-level retry policy
+above it.
+
+A failure known to have prevented concrete-Actor acceptance is an ordinary failed
+Future according to the communication failure rules and is not
+`AskOutcomeUncertain`. Conversely, once acceptance is known to have occurred,
+failure to obtain a normal reply must not be reported as though non-delivery were
+proved.
+
+Cancellation has a separate deterministic mapping. Before concrete-Actor
+acceptance, cancellation may win the delivery race; if the runtime establishes
+that acceptance did not occur, the ask Future may become `cancelled`. Once
+acceptance is known, cancellation can abandon the caller's wait/reply capability
+and the ask Future may become `cancelled`, but it cannot unsend the request or
+imply that remote effects did not occur. A later reply to an already-cancelled
+ask is discarded and cannot change the terminal Future state.
+
+If cancellation races with delivery and the runtime cannot determine whether
+acceptance occurred, the Future fails with `AskOutcomeUncertain` rather than
+becoming `cancelled`, because `cancelled` must not erase delivery uncertainty.
+
+A reply and cancellation race is resolved by the first terminal transition of the
+ask Future. Once resolved, failed, or cancelled, later reply/cancellation events
+cannot rewrite that terminal state.
+
+A wait timeout affects only the wait under the general timeout rule. It does not
+itself complete, fail, or cancel the ask Future, and it does not imply that remote
+work did not execute.
 
 ## 15. send() and ask() Share Delivery and Dispatch
 
@@ -779,7 +821,9 @@ unsend it.
 
 If the runtime cannot determine whether acceptance occurred,
 cancellation may end in an uncertain delivery state rather than assuming
-that the message was cancelled before delivery.
+that the message was cancelled before delivery. For `ask()`, whose public result
+is an ordinary Future and therefore has no uncertain terminal state, this outcome
+is represented by failure with the standard `AskOutcomeUncertain` error.
 
 Principle:
 
@@ -2172,8 +2216,15 @@ Actor death terminates direct outstanding interactions with that Actor.
 Replacement does not inherit them.
 
 For a direct `ask`, if Protos can determine that the destination Actor
-has terminated before producing the reply, the returned Future fails
-according to the communication failure semantics.
+terminated before accepting the request, the returned Future fails according to
+the ordinary communication failure semantics.
+
+If acceptance occurred, or may have occurred and Protos cannot prove otherwise,
+termination before a normal reply makes the returned Future fail with
+`AskOutcomeUncertain`. This includes an Actor turn that ends in an unhandled fatal
+failure after accepting the ask: the caller is not automatically given the
+destination's internal failure object as though it were a normal reply, and the
+runtime does not pretend that the accepted request had no effects.
 
 The runtime does not transparently find a replacement and replay the
 request.

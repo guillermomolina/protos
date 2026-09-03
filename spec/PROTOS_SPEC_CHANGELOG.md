@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.113] - 2026-09-03
+
+### Fixed
+- Defined how `ask()` maps communication uncertainty into its ordinary
+  four-state Future without inventing a fifth Future state.
+- Added the standard `AskOutcomeUncertain` error prototype for cases where no
+  normal reply is available and remote effects cannot be ruled out.
+- Distinguished definite pre-acceptance failure from uncertain or known
+  post-acceptance loss of the reply.
+- Defined cancellation before acceptance, cancellation after acceptance,
+  cancellation/acceptance races, late replies, and reply/cancellation terminal
+  races.
+- Kept wait timeout separate from cancellation and from ask-Future completion.
+- Defined Actor termination after accepted/possibly accepted asks as
+  `AskOutcomeUncertain` rather than pretending non-delivery or transparently
+  replaying the request.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 113.
+
 ## [0.1.112] - 2026-09-03
 
 ### Fixed
