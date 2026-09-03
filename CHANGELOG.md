@@ -28,6 +28,7 @@ For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_
 
 ### Changed
 
+- Restored the canonical NEWLINE token value after adding source-aware token occurrences.
 - Fixed source-aware newline token occurrence emission so canonical NEWLINE lexemes remain valid Java Strings.
 - Updated GitHub Actions CI to current supported `actions/checkout` and `actions/setup-java` major versions.
 - Relicensed Protos from the Server Side Public License (SSPL) v1 to the OSI-approved Adaptive Public License 1.0 (APL-1.0). The complete license, including the completed Exhibit A, is in [LICENSE.TXT](LICENSE.TXT).
