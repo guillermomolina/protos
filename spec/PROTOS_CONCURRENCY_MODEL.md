@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 171
+Document revision: 172
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -631,6 +631,25 @@ required correlation, routing, and reply delivery.
 
 The normal final result of the Actor handler becomes the reply value.
 
+Reply formation is an Actor-boundary value transfer, not generic local Future
+resolution. The handler's normal result is first interpreted as the value graph
+to be transferred under the Pass-by-Value Between Actors rules. Only a
+successfully formed transferable reply value may then resolve the caller's
+request Future.
+
+Consequently, if the handler's normal result is itself a `Future`, that result is
+not automatically flattened, awaited, adopted, or linked to the caller's request
+Future. `Future` is non-transferable across Actor boundaries, so such a normal
+handler result fails the request Future with `NonTransferableValue` under the
+ordinary reply-transfer rule.
+
+This is intentionally different from local `resolveFuture(destination, sourceFuture)`
+flattening. Local Future adoption never creates a cross-Actor adoption edge and
+does not override Actor transferability. A handler that wants its eventual local
+Future result to become the reply must explicitly observe that Future in the
+handler's own execution, for example through the ordinary explicit suspension
+operation `.value()`, and return the resulting transferable value.
+
 One `request()` produces one logical response.
 
 Streaming or multi-response communication will use a separate
@@ -786,6 +805,12 @@ value is non-transferable:
 The same rule applies to the reply value of `request()`: if the handler's normal
 result cannot form a transferable reply graph, the request Future fails with
 `NonTransferableValue`; no partial reply is exposed to the requester.
+
+Reply transferability is checked before the caller's request Future is resolved.
+In particular, a handler-returned `Future` is a non-transferable reply value, not
+an instruction to invoke generic Future flattening across the Actor boundary.
+No runtime may create an adoption edge from the caller's request Future to a
+callee-local Future merely because both abstractions use Future objects.
 
 Implementations may validate eagerly, serialize incrementally, use copy-on-write,
 or use another representation, but must behave as though the complete logical

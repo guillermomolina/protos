@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.172] - 2026-09-03
+
+### Fixed
+- Clarified that `request()` reply formation performs Actor-boundary value
+  transfer before resolving the caller's request Future.
+- Closed the ambiguity between generic local Future flattening and the rule that
+  `Future` values are non-transferable across Actors.
+- Defined a handler-returned Future as a non-transferable reply value that fails
+  the request Future with `NonTransferableValue`.
+- Prohibited cross-Actor Future adoption edges created implicitly by request/reply
+  machinery.
+- Preserved explicit suspension: a handler that wants to reply with an eventual
+  local Future result must explicitly observe it and return the resulting
+  transferable value.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 172.
+
 ## [0.1.171] - 2026-09-03
 
 ### Fixed
