@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.137] - 2026-09-03
+
+### Fixed
+- Made `GroupRef` explicitly transferable through ordinary Actor/Process
+  pass-by-value message transfer.
+- Defined transferred GroupRefs as preserving the same concrete Group target and
+  the same effective communication capability/restrictions without authority
+  amplification.
+- Clarified that GroupRef transfer copies/transfers only the communication
+  capability, never mutable membership, routing, controller, policy, or
+  control-plane state.
+- Preserved the existing distinction between GroupRef object identity and Group
+  identity, allowing implementation-local reference representations.
+- Defined that transferred GroupRefs do not extend Group lifetime and never
+  retarget after Group termination or discovery-name rebinding.
+- Aligned GroupRef with the complete transfer-graph capability rule already used
+  by ActorRef.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 137.
+
 ## [0.1.136] - 2026-09-03
 
 ### Fixed

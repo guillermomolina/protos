@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 136
+Document revision: 137
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -709,6 +709,7 @@ Transferability currently follows these rules:
 -   Cyclic object graph: transferable while preserving graph structure
     and aliasing conceptually
 -   ActorRef: transferable as a special communication capability
+-   GroupRef: transferable as a special communication capability
 -   Closure: not transferable
 -   Future: not transferable
 -   ExecutionContext: not transferable
@@ -717,8 +718,14 @@ Transferability currently follows these rules:
 -   Native resource: not transferable
 -   Java object: not transferable by default
 
-ActorRef is deliberately transferable because it provides communication
-capability rather than direct access to another Actor's mutable heap.
+ActorRef and GroupRef are deliberately transferable because they provide
+communication capabilities rather than direct access to another Actor's or
+Group's mutable runtime/control state.
+
+Transferring either reference preserves the same logical communication target
+and the capability restrictions carried by that reference. Transfer does not
+amplify authority, expose the target's mutable heap/control state, or turn the
+reference into ownership of its target.
 
 Closures are not transferable because they capture actor-local lexical
 execution contexts by reference.
@@ -740,9 +747,10 @@ their contents happen to be equal.
 
 An edge to a value whose normative semantics permit cross-Actor sharing or
 capability transfer is handled by that value's own rule rather than by copying
-the referent's mutable implementation state. `ActorRef` is the Core example:
-the communication capability crosses, not the target Actor's heap. Likewise,
-semantically immutable standard-prelude objects may be physically shared when
+the referent's mutable implementation state. `ActorRef` and `GroupRef` are the
+Core communication-capability examples: the capability crosses, not the target
+Actor heap or Group control/membership state. Likewise, semantically immutable
+standard-prelude objects may be physically shared when
 the existing prelude-sharing rule permits it; that optimization must remain
 unobservable.
 
@@ -2000,6 +2008,25 @@ objects.
 A GroupRef may carry a restricted communication capability for its Group.
 Group identity is independent of the permissions carried by a particular
 GroupRef. Authority remains a separate capability.
+
+GroupRef is transferable through ordinary Actor/Process message value transfer.
+The transferred value denotes the same concrete Group identity and preserves the
+same effective communication capability and restrictions as the source GroupRef.
+Transfer cannot grant broader communication permission and cannot implicitly
+grant Group, Cluster, role, fencing, or other Authority.
+
+Transfer of a GroupRef does not copy or expose mutable Group membership,
+controller, routing-cache, policy, or control-plane state. A receiving runtime
+may materialize a distinct local GroupRef representation; because GroupRef object
+identity is not Group identity and global interning is not required, such
+representation differences are unobservable except through the already-defined
+GroupRef communication semantics.
+
+Receiving or retaining a transferred GroupRef does not extend the Group's
+lifetime. The existing rule that remote GroupRefs do not keep a Group alive
+continues to apply. If that Group later terminates, every transferred GroupRef
+remains bound to that terminated Group identity and never retargets to a Group
+later created or discovered under the same name.
 
 A GroupRef is location-transparent and remains associated with the same
 Group across member creation, removal, replacement, temporary empty
