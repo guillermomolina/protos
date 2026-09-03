@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.160] - 2026-09-03
+
+### Fixed
+- Defined one logical input-consumption ordering domain for outstanding
+  `ByteReadable.read` operations on the same logical receiver.
+- Preserved reads issued sequentially by one Actor in that Actor's invocation
+  order even while earlier read Futures remain pending.
+- Defined genuinely concurrent cross-Actor reads as having no predetermined
+  relative order, while requiring routing/admission to establish one stable
+  order once chosen.
+- Prevented a later chosen read from bypassing an earlier chosen pending read to
+  consume earlier bytes merely because a host/native operation completes first.
+- Applied the same rule explicitly to standard input delegated through distinct
+  Actor-local proxies.
+- Kept native syscall overlap, buffering, prefetch, and routing as implementation
+  freedoms when they cannot change logical byte/EOF/failure assignment.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 160. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.159] - 2026-09-03
 
 ### Fixed

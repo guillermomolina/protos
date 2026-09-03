@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 159
+Document revision: 160
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -185,7 +185,13 @@ I/O errors fail the Future and are distinct from EOF.
 
 If data remains before EOF, that data is returned before EOF is reported. Once EOF has been observed, subsequent reads return `null` unless an operation such as seeking changes the sequence state.
 
-Multiple outstanding reads against the same logical receiver consume the sequence in invocation order.
+Multiple outstanding reads against the same logical receiver share one input-consumption ordering domain.
+
+When reads have a Protos-defined invocation order, that order is preserved. In particular, reads issued sequentially by one Actor consume/evaluate the input sequence in that Actor's invocation order even when earlier read Futures remain pending.
+
+Reads that are genuinely concurrent because they originate from independently progressing Actors through Actor-safe routing/proxies have no predetermined relative order merely from host scheduling. The receiver/routing layer may choose either read first when admitting the competing requests. Once it chooses their relative order, that order is stable: the chosen earlier read owns the next logical input opportunity according to its own `read(maxBytes)` semantics, and a later chosen read cannot bypass it to consume bytes that precede the earlier read's result.
+
+The chosen order concerns logical input consumption, not native syscall start/completion order. Implementations may overlap host operations, prefetch, route, or buffer internally when those mechanisms cannot change which ordered Protos read receives each byte, EOF, or failure.
 
 ### 5.1 ByteReadable cancellation and failure
 
@@ -1403,7 +1409,9 @@ Different Actors may therefore hold distinct Actor-local capability objects that
 
 The runtime may optimize same-Process access aggressively. No observable message hop through RootActor or another ordinary Actor is required merely because Process is the semantic custodian of the capability.
 
-Process-local standard input, when delegated to multiple Actors, denotes one underlying input sequence unless a stronger host capability says otherwise. Competing consumers are serialized/routed consistently with the capability contract; bytes are not duplicated merely because multiple Actors can request input.
+Process-local standard input, when delegated to multiple Actors, denotes one underlying logical input sequence unless a stronger host capability says otherwise. Distinct Actor-local proxies for that stdin therefore share the `ByteReadable` input-consumption ordering domain rather than creating independent streams.
+
+Each Actor's own read invocation order is preserved. Reads issued concurrently by independently progressing Actors have no predetermined cross-Actor order; routing/admission may choose either request first, but once chosen that relative order is stable and determines which request receives the next logical input. Bytes, EOF, and failures are not duplicated or reassigned merely because requests arrived through different proxies or native completions occurred in a different host order.
 
 Delegated capability objects that denote the same standard output denote one logical output flow even when different Actors hold distinct Actor-local proxies. Each Actor's write invocation order is preserved. Writes issued concurrently by independent Actors have no predetermined cross-Actor order, but the routed output flow chooses one stable order for them; successful writes are not byte-interleaved merely because they arrived through different proxies.
 
@@ -1491,6 +1499,7 @@ A failed sync may leave an unknown subset durable, but does not itself poison th
 A failed flush never authorizes duplicate replay; an output wrapper with unknowable downstream progress becomes unusable unless a stronger protocol makes exact recovery possible.
 EOF != unavailable capability != I/O failure
 A failed ByteReadable read consumes zero observable bytes and leaves the logical sequence position unchanged; any bytes already obtained are preserved for later logical reading.
+Distinct Actor-local proxies for one ByteReadable input sequence share one consumption-ordering domain: per-Actor invocation order is preserved, while genuinely concurrent cross-Actor reads are initially unordered but stably ordered once admitted.
 ByteSeekable seek operations are failure-atomic with respect to logical position; failed or successfully cancelled seeks leave that position unchanged.
 
 Path is a value, not filesystem authority.
