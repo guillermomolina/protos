@@ -20,741 +20,672 @@ package com.guillermomolina.protos.lexer;
 import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
 /**
- * Core v0.1 lexer implementation.
+ * Lexer for the Protos Core v0.1 lexical grammar.
  *
- * Implements lexical analysis according to PROTOS_GRAMMAR.md Core v0.1.
- * Supports:
- * - Unicode identifiers with XID_Start/XID_Continue properties and NFC validation
- * - Numeric literals: decimal, hex (0x), binary (0b), octal (0o) with digit separators and exponents
- * - String literals: single-quoted, double-quoted, triple-double-quoted with escape sequences
- * - Comments: line comments and block comments
- * - Operators: standard operators and custom symbolic operators with maximal-munch tokenization
- * - Lexical errors: invalid escapes, unterminated strings/comments, non-NFC identifiers, etc.
+ * <p>The lexer is deliberately position-independent: parser context never changes token
+ * classification. In particular, reserved words keep their dedicated token types after member
+ * access, and complete symbolic operator spellings are classified only after maximal munch.</p>
  */
 public final class ProtosLexer {
-    // Reserved words (case-sensitive)
-    private static final Set<String> RESERVED_WORDS = Set.of(
-        "this", "context", "args", "super", "true", "false", "null"
+    private static final Map<String, TokenType> RESERVED_WORDS = Map.of(
+        "this", TokenType.THIS,
+        "context", TokenType.CONTEXT,
+        "args", TokenType.ARGS,
+        "super", TokenType.SUPER,
+        "true", TokenType.TRUE,
+        "false", TokenType.FALSE,
+        "null", TokenType.NULL
     );
 
-    // Standard/reserved operator tokens (must be recognized before custom operators)
-    private static final Set<String> STANDARD_OPERATORS = Set.of(
-        "=>", "=", "==", "===", "!=", "!==", "<=", ">=", "&&", "||",
-        "+", "-", "*", "/", "%", "<", ">", "!"
+    private static final Map<String, TokenType> STANDARD_SYMBOLIC_TOKENS = Map.ofEntries(
+        Map.entry("=>", TokenType.FAT_ARROW),
+        Map.entry("=", TokenType.EQUALS),
+        Map.entry("==", TokenType.DOUBLE_EQUALS),
+        Map.entry("===", TokenType.TRIPLE_EQUALS),
+        Map.entry("!=", TokenType.NOT_EQUALS),
+        Map.entry("!==", TokenType.NOT_EQUALS_2),
+        Map.entry("<=", TokenType.LESS_EQUAL),
+        Map.entry(">=", TokenType.GREATER_EQUAL),
+        Map.entry("&&", TokenType.AND),
+        Map.entry("||", TokenType.OR),
+        Map.entry("+", TokenType.PLUS),
+        Map.entry("-", TokenType.MINUS),
+        Map.entry("*", TokenType.STAR),
+        Map.entry("/", TokenType.SLASH),
+        Map.entry("%", TokenType.PERCENT),
+        Map.entry("<", TokenType.LESS),
+        Map.entry(">", TokenType.GREATER),
+        Map.entry("!", TokenType.BANG),
+        Map.entry("^", TokenType.CARET)
     );
-
-    // Custom operator alphabet (fixed character set)
-    private static final String CUSTOM_OPERATOR_CHARS = "!$%&*+-/<=>?@\\^|~";
 
     private final String source;
     private int pos;
 
     public ProtosLexer(String source) {
         this.source = source == null ? "" : source;
-        this.pos = 0;
     }
 
     public List<Token> tokenize() {
         List<Token> tokens = new ArrayList<>();
 
-        while (pos < source.length()) {
-            char current = peek();
+        while (!atEnd()) {
+            int codePoint = codePointAt(pos);
 
-            // Handle whitespace (except newlines)
-            if (isWhitespaceNotNewline(current)) {
-                skipWhitespace();
+            if (isHorizontalWhitespace(codePoint)) {
+                skipHorizontalWhitespace();
                 continue;
             }
 
-            // Handle newlines as significant tokens
-            if (isNewline(current)) {
-                tokens.add(readNewline());
+            if (isLogicalNewlineStart(codePoint)) {
+                consumeLogicalNewline();
+                tokens.add(new Token(TokenType.NEWLINE, "\n"));
                 continue;
             }
 
-            // Handle comments
-            if (current == '/' && peekAhead(1) == '/') {
+            if (startsWith("//")) {
                 skipLineComment();
                 continue;
             }
 
-            if (current == '/' && peekAhead(1) == '*') {
+            if (startsWith("/*")) {
                 skipBlockComment();
                 continue;
             }
 
-            // Handle identifiers and reserved words
-            if (isIdentifierStart(current)) {
-                tokens.add(readIdentifierOrKeyword());
+            if (codePoint == '_' || UnicodeXid.isStart(codePoint)) {
+                tokens.add(readIdentifierOrReservedWord());
                 continue;
             }
 
-            // Handle numbers
-            if (Character.isDigit(current)) {
+            if (isDecimalDigit(codePoint)) {
                 tokens.add(readNumber());
                 continue;
             }
 
-            // Handle strings
-            if (current == '"') {
-                tokens.add(readString());
+            if (codePoint == '\'') {
+                tokens.add(readQuotedString('\''));
                 continue;
             }
 
-            if (current == '\'') {
-                tokens.add(readSingleQuotedString());
+            if (codePoint == '"') {
+                tokens.add(startsWith("\"\"\"") ? readTripleDoubleQuotedString() : readQuotedString('"'));
                 continue;
             }
 
-            // Handle punctuation and operators
-            Token token = readPunctuationOrOperator();
-            if (token != null) {
-                tokens.add(token);
+            Token structural = readStructuralToken();
+            if (structural != null) {
+                tokens.add(structural);
                 continue;
             }
 
-            // Unexpected character
-            throw new LexicalError("Unexpected character at position " + pos + ": '" + current + "'");
+            if (isOperatorCharacter(codePoint)) {
+                tokens.add(readSymbolicToken());
+                continue;
+            }
+
+            throw error("Unexpected source character " + printableCodePoint(codePoint), pos);
         }
 
         tokens.add(new Token(TokenType.EOF, ""));
         return tokens;
     }
 
-    // ============ Whitespace and Newlines ============
-
-    private boolean isWhitespaceNotNewline(char c) {
-        return c == ' ' || c == '\t' || c == '\f';
-    }
-
-    private boolean isNewline(char c) {
-        return c == '\n' || c == '\r';
-    }
-
-    private void skipWhitespace() {
-        while (pos < source.length() && isWhitespaceNotNewline(peek())) {
-            pos++;
-        }
-    }
-
-    private Token readNewline() {
-        char current = peek();
-        if (current == '\r') {
-            pos++;
-            // Handle \r\n as single newline
-            if (pos < source.length() && peek() == '\n') {
-                pos++;
-            }
-        } else if (current == '\n') {
-            pos++;
-        }
-        return new Token(TokenType.NEWLINE, "\n");
-    }
-
-    // ============ Comments ============
-
-    private void skipLineComment() {
-        // Skip //
-        pos += 2;
-        // Skip until newline or EOF
-        while (pos < source.length() && peek() != '\n' && peek() != '\r') {
-            pos++;
-        }
-    }
-
-    private void skipBlockComment() {
-        // Skip /*
-        pos += 2;
-        // Skip until */
-        while (pos < source.length()) {
-            if (peek() == '*' && peekAhead(1) == '/') {
-                pos += 2;
-                return;
-            }
-            pos++;
-        }
-        // Unterminated block comment
-        throw new LexicalError("Unterminated block comment");
-    }
-
-    // ============ Identifiers and Reserved Words ============
-
-    private boolean isIdentifierStart(char c) {
-        return c == '_' || Character.isUnicodeIdentifierStart(c);
-    }
-
-    private boolean isIdentifierContinue(char c) {
-        return Character.isUnicodeIdentifierPart(c);
-    }
-
-    private Token readIdentifierOrKeyword() {
+    private Token readIdentifierOrReservedWord() {
         int start = pos;
-        while (pos < source.length() && isIdentifierContinue(peek())) {
-            pos++;
+        int first = codePointAt(pos);
+        advanceCodePoint(first);
+
+        while (!atEnd()) {
+            int codePoint = codePointAt(pos);
+            if (codePoint != '_' && !UnicodeXid.isContinue(codePoint)) {
+                break;
+            }
+            advanceCodePoint(codePoint);
         }
 
-        String lexeme = source.substring(start, pos);
-
-        // Validate NFC normalization
-        String nfc = Normalizer.normalize(lexeme, Normalizer.Form.NFC);
-        if (!lexeme.equals(nfc)) {
-            throw new LexicalError("Identifier at position " + start + " is not in NFC normalization form: '" + lexeme + "'");
+        String spelling = source.substring(start, pos);
+        if (!Normalizer.isNormalized(spelling, Normalizer.Form.NFC)) {
+            throw error("Identifier is not in Unicode NFC: '" + spelling + "'", start);
         }
 
-        // Check if it's a reserved word
-        if (RESERVED_WORDS.contains(lexeme)) {
-            return switch (lexeme) {
-                case "this" -> new Token(TokenType.THIS, lexeme);
-                case "context" -> new Token(TokenType.CONTEXT, lexeme);
-                case "args" -> new Token(TokenType.ARGS, lexeme);
-                case "super" -> new Token(TokenType.SUPER, lexeme);
-                case "null" -> new Token(TokenType.NULL, lexeme);
-                case "true" -> new Token(TokenType.TRUE, lexeme);
-                case "false" -> new Token(TokenType.FALSE, lexeme);
-                default -> new Token(TokenType.IDENTIFIER, lexeme); // Should not happen
-            };
-        }
-
-        return new Token(TokenType.IDENTIFIER, lexeme);
+        TokenType reserved = RESERVED_WORDS.get(spelling);
+        return new Token(reserved == null ? TokenType.IDENTIFIER : reserved, spelling);
     }
-
-    // ============ Numeric Literals ============
 
     private Token readNumber() {
         int start = pos;
 
-        // Check for radix prefix
-        String prefix = "";
-        if (pos < source.length() && peek() == '0' && pos + 1 < source.length()) {
-            char nextChar = peekAhead(1);
-            if (nextChar == 'x' || nextChar == 'X') {
-                prefix = source.substring(pos, pos + 2);
-                pos += 2;
-            } else if (nextChar == 'b' || nextChar == 'B') {
-                prefix = source.substring(pos, pos + 2);
-                pos += 2;
-            } else if (nextChar == 'o' || nextChar == 'O') {
-                prefix = source.substring(pos, pos + 2);
-                pos += 2;
-            }
+        if (startsWith("0x") || startsWith("0X")) {
+            pos += 2;
+            readRadixDigits(start, 16);
+            validateRadixNumberTermination(start);
+            return new Token(TokenType.NUMBER, source.substring(start, pos));
+        }
+        if (startsWith("0b") || startsWith("0B")) {
+            pos += 2;
+            readRadixDigits(start, 2);
+            validateRadixNumberTermination(start);
+            return new Token(TokenType.NUMBER, source.substring(start, pos));
+        }
+        if (startsWith("0o") || startsWith("0O")) {
+            pos += 2;
+            readRadixDigits(start, 8);
+            validateRadixNumberTermination(start);
+            return new Token(TokenType.NUMBER, source.substring(start, pos));
         }
 
-        // Read digits for the integer part
-        if (!readDigitsForPrefix(prefix)) {
-            throw new LexicalError("Incomplete numeric literal at position " + start);
+        readDecimalDigits(start);
+
+        if (!atEnd() && codePointAt(pos) == '.' && hasDecimalDigitAfterDot()) {
+            pos++;
+            readDecimalDigits(start);
         }
 
-        boolean isFloat = false;
-
-        // For decimal numbers, check for decimal point and exponent
-        if (prefix.isEmpty()) {
-            // Check for decimal point
-            if (pos < source.length() && peek() == '.' && pos + 1 < source.length() && Character.isDigit(peekAhead(1))) {
-                isFloat = true;
-                pos++; // consume .
-                if (!readDigits()) {
-                    throw new LexicalError("Invalid decimal point in numeric literal at position " + start);
-                }
-            }
-
-            // Check for exponent
-            if (pos < source.length() && (peek() == 'e' || peek() == 'E')) {
-                isFloat = true;
-                pos++; // consume e/E
-                // Optional sign
-                if (pos < source.length() && (peek() == '+' || peek() == '-')) {
-                    pos++;
-                }
-                // Read exponent digits
-                if (!readDigits()) {
-                    throw new LexicalError("Invalid exponent in numeric literal at position " + start);
-                }
-            }
-        }
-
-        String lexeme = source.substring(start, pos);
-        return new Token(TokenType.NUMBER, lexeme);
-    }
-
-    private boolean readDigitsForPrefix(String prefix) {
-        if (prefix.isEmpty()) {
-            return readDigits();
-        }
-
-        // For prefixed numbers, ensure at least one digit
-        int count = 0;
-        while (pos < source.length()) {
-            char c = peek();
-            if (c == '_') {
-                // Check that _ is not at start or end, and not consecutive
-                if (count == 0 || pos + 1 >= source.length() || peekAhead(1) == '_') {
-                    return count > 0; // Stop, but don't consume the _
-                }
-                pos++; // consume separator
-                continue;
-            }
-
-            if (isDigitForPrefix(prefix, c)) {
+        if (!atEnd() && (codePointAt(pos) == 'e' || codePointAt(pos) == 'E')) {
+            pos++;
+            if (!atEnd() && (codePointAt(pos) == '+' || codePointAt(pos) == '-')) {
                 pos++;
-                count++;
-                continue;
             }
-            break;
+            if (atEnd() || !isDecimalDigit(codePointAt(pos))) {
+                throw error("Incomplete decimal exponent", start);
+            }
+            readDecimalDigits(start);
         }
-        return count > 0;
+
+        validateNumericIdentifierBoundary(start);
+        return new Token(TokenType.NUMBER, source.substring(start, pos));
     }
 
-    private boolean readDigits() {
-        int count = 0;
-        while (pos < source.length()) {
-            char c = peek();
-            if (c == '_') {
-                // Check that _ is not at start or end, and not consecutive
-                if (count == 0 || pos + 1 >= source.length() || peekAhead(1) == '_') {
-                    return count > 0; // Stop if we've read something
-                }
-                pos++; // consume separator
-                continue;
-            }
+    private void readDecimalDigits(int literalStart) {
+        readSeparatedDigits(literalStart, 10);
+    }
 
-            if (Character.isDigit(c)) {
+    private void readRadixDigits(int literalStart, int radix) {
+        if (atEnd() || !isDigitForRadix(codePointAt(pos), radix)) {
+            throw error("Radix prefix is not followed by a valid base-" + radix + " digit", literalStart);
+        }
+        readSeparatedDigits(literalStart, radix);
+    }
+
+    private void readSeparatedDigits(int literalStart, int radix) {
+        boolean consumedDigit = false;
+
+        while (!atEnd() && isDigitForRadix(codePointAt(pos), radix)) {
+            consumedDigit = true;
+            advanceCodePoint(codePointAt(pos));
+
+            if (!atEnd() && codePointAt(pos) == '_') {
+                int underscore = pos;
                 pos++;
-                count++;
-                continue;
+                if (atEnd() || !isDigitForRadix(codePointAt(pos), radix)) {
+                    throw error("Invalid '_' placement in numeric literal", underscore);
+                }
             }
-            break;
         }
-        return count > 0;
+
+        if (!consumedDigit) {
+            throw error("Numeric literal requires at least one digit", literalStart);
+        }
     }
 
-    private boolean isDigitForPrefix(String prefix, char c) {
-        return switch (prefix.toLowerCase()) {
-            case "0x" -> Character.isDigit(c) || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
-            case "0b" -> c == '0' || c == '1';
-            case "0o" -> c >= '0' && c <= '7';
-            default -> Character.isDigit(c);
-        };
+    private void validateRadixNumberTermination(int literalStart) {
+        if (atEnd()) {
+            return;
+        }
+
+        int next = codePointAt(pos);
+        if (next == '.' && hasDecimalDigitAfterDot()) {
+            throw error("Radix-prefixed floating-point literals are not supported", literalStart);
+        }
+
+        if (next == '_' || isDecimalDigit(next) || UnicodeXid.isStart(next) || UnicodeXid.isContinue(next)) {
+            throw error("Invalid continuation after radix-prefixed numeric literal", pos);
+        }
     }
 
-    // ============ String Literals ============
+    private void validateNumericIdentifierBoundary(int literalStart) {
+        if (atEnd()) {
+            return;
+        }
 
-    private Token readString() {
+        int next = codePointAt(pos);
+        if (next == '_' || UnicodeXid.isStart(next) || UnicodeXid.isContinue(next)) {
+            throw error("Identifier cannot begin immediately after a numeric literal", literalStart);
+        }
+    }
+
+    private boolean hasDecimalDigitAfterDot() {
+        int afterDot = pos + 1;
+        return afterDot < source.length() && isDecimalDigit(codePointAt(afterDot));
+    }
+
+    private Token readQuotedString(char delimiter) {
         int start = pos;
-        pos++; // consume opening "
+        pos++;
+        StringBuilder value = new StringBuilder();
 
-        // Check for triple-quoted string
-        if (pos + 1 < source.length() && peek() == '"' && peekAhead(1) == '"') {
-            pos += 2; // consume "" to complete """
-            return readTripleQuotedString(start);
-        }
+        while (!atEnd()) {
+            int codePoint = codePointAt(pos);
 
-        // Single or double-quoted string
-        StringBuilder sb = new StringBuilder();
-        while (pos < source.length()) {
-            char c = peek();
-
-            if (c == '"') {
-                pos++; // consume closing "
-                return new Token(TokenType.STRING, sb.toString());
-            }
-
-            if (c == '\n' || c == '\r') {
-                throw new LexicalError("Unterminated string literal: newline not allowed in single/double-quoted strings at position " + start);
-            }
-
-            if (c == '\\') {
-                sb.appendCodePoint(readEscapeSequence(start));
-                continue;
-            }
-
-            sb.append(c);
-            pos++;
-        }
-
-        throw new LexicalError("Unterminated string literal starting at position " + start);
-    }
-
-    private Token readSingleQuotedString() {
-        int start = pos;
-        pos++; // consume opening '
-
-        StringBuilder sb = new StringBuilder();
-        while (pos < source.length()) {
-            char c = peek();
-
-            if (c == '\'') {
-                pos++; // consume closing '
-                return new Token(TokenType.STRING, sb.toString());
-            }
-
-            if (c == '\n' || c == '\r') {
-                throw new LexicalError("Unterminated string literal: newline not allowed in single/double-quoted strings at position " + start);
-            }
-
-            if (c == '\\') {
-                sb.appendCodePoint(readEscapeSequence(start));
-                continue;
-            }
-
-            sb.append(c);
-            pos++;
-        }
-
-        throw new LexicalError("Unterminated string literal starting at position " + start);
-    }
-
-    private Token readTripleQuotedString(int start) {
-        // At this point, we've consumed """ and pos is at the first character after
-        StringBuilder sb = new StringBuilder();
-
-        // Skip leading newline if immediately after """
-        if (pos < source.length() && peek() == '\n') {
-            pos++;
-        } else if (pos < source.length() && peek() == '\r') {
-            pos++;
-            if (pos < source.length() && peek() == '\n') {
+            if (codePoint == delimiter) {
                 pos++;
+                return new Token(TokenType.STRING, value.toString());
             }
-        }
-
-        // Read content until """
-        while (pos + 2 < source.length()) {
-            if (peek() == '"' && peekAhead(1) == '"' && peekAhead(2) == '"') {
-                pos += 3; // consume """
-
-                // Remove trailing newline if preceded by indentation-only line
-                String content = sb.toString();
-                if (content.endsWith("\n") || content.endsWith("\r")) {
-                    // Check if the line before the closing """ contains only whitespace
-                    int lastNewline = Math.max(content.lastIndexOf('\n'), content.lastIndexOf('\r'));
-                    if (lastNewline >= 0) {
-                        String lastLine = content.substring(lastNewline + 1);
-                        if (lastLine.matches("[ \\t]*")) {
-                            // Remove the trailing newline and indentation
-                            content = content.substring(0, lastNewline + 1);
-                            // Now check if this is the only content
-                            String trimmed = content.replaceAll("[ \\t]+\\n", "\n").replaceAll("[ \\t]+\\r\\n", "\r\n");
-                            if (trimmed.endsWith("\n") || trimmed.endsWith("\r")) {
-                                // Remove this final newline
-                                if (trimmed.endsWith("\r\n")) {
-                                    content = trimmed.substring(0, trimmed.length() - 2);
-                                } else {
-                                    content = trimmed.substring(0, trimmed.length() - 1);
-                                }
-                            }
-                        }
-                    }
-                }
-
-                // Apply indentation normalization
-                content = normalizeTripleQuotedIndentation(content);
-
-                return new Token(TokenType.STRING, content);
+            if (isLogicalNewlineStart(codePoint)) {
+                throw error("Raw logical newline is not allowed in a single-line String literal", start);
             }
-
-            char c = peek();
-            if (c == '\\') {
-                sb.appendCodePoint(readEscapeSequence(start));
+            if (codePoint == '\\') {
+                appendDecodedEscape(value, start);
                 continue;
             }
+            if (!Character.isValidCodePoint(codePoint) || isUnpairedSurrogateAt(pos)) {
+                throw error("String literal contains a non-scalar Unicode value", pos);
+            }
 
-            sb.append(c);
-            pos++;
+            value.appendCodePoint(codePoint);
+            advanceCodePoint(codePoint);
         }
 
-        // Handle EOF without closing """
-        if (pos < source.length() && peek() == '"') {
-            throw new LexicalError("Unterminated triple-quoted string starting at position " + start);
-        }
-
-        throw new LexicalError("Unterminated triple-quoted string starting at position " + start);
+        throw error("Unterminated String literal", start);
     }
 
-    private String normalizeTripleQuotedIndentation(String content) {
-        String[] lines = content.split("\n", -1);
-        if (lines.length <= 1) {
+    private Token readTripleDoubleQuotedString() {
+        int start = pos;
+        pos += 3;
+        int contentStart = pos;
+        int closingStart = findTripleDoubleClosingDelimiter(start);
+
+        String rawContent = source.substring(contentStart, closingStart);
+        String normalizedRawContent = normalizeTripleDoubleIndentation(rawContent, start);
+        String value = decodeTripleDoubleContent(normalizedRawContent, start);
+
+        pos = closingStart + 3;
+        return new Token(TokenType.STRING, value);
+    }
+
+    private int findTripleDoubleClosingDelimiter(int literalStart) {
+        int scan = pos;
+
+        while (scan < source.length()) {
+            if (source.startsWith("\"\"\"", scan)) {
+                return scan;
+            }
+
+            int codePoint = codePointAt(scan);
+            if (codePoint == '\\') {
+                scan = validateAndSkipEscape(scan, literalStart);
+                continue;
+            }
+            if (isUnpairedSurrogateAt(scan)) {
+                throw error("String literal contains a non-scalar Unicode value", scan);
+            }
+            scan += Character.charCount(codePoint);
+        }
+
+        throw error("Unterminated triple-double-quoted String literal", literalStart);
+    }
+
+    private String normalizeTripleDoubleIndentation(String raw, int literalStart) {
+        StructuralIndentation structural = structuralIndentation(raw);
+        String content = raw;
+
+        if (structural != null) {
+            content = content.substring(0, structural.trailingLineStart());
+        }
+
+        int leadingNewlineLength = logicalNewlineLengthAt(content, 0);
+        if (leadingNewlineLength > 0) {
+            content = content.substring(leadingNewlineLength);
+        }
+
+        if (structural == null) {
             return content;
         }
 
-        // Find minimum indentation of non-empty lines
-        int minIndent = Integer.MAX_VALUE;
-        for (int i = 0; i < lines.length; i++) {
-            String line = lines[i];
-            if (line.isEmpty() || line.matches("[ \\t]*")) {
-                continue; // Empty line doesn't contribute to min indent
-            }
-            int indent = 0;
-            for (char c : line.toCharArray()) {
-                if (c == ' ' || c == '\t') {
-                    indent++;
-                } else {
-                    break;
-                }
-            }
-            minIndent = Math.min(minIndent, indent);
+        return removeStructuralIndentation(content, structural.prefix(), literalStart);
+    }
+
+    private StructuralIndentation structuralIndentation(String raw) {
+        int lineStart = lastLogicalLineStart(raw);
+        if (lineStart < 0) {
+            return null;
         }
 
-        if (minIndent == Integer.MAX_VALUE || minIndent == 0) {
-            return content; // No common indentation to remove
+        String trailingLine = raw.substring(lineStart);
+        if (!isIndentationOnly(trailingLine)) {
+            return null;
         }
 
-        // Remove common indentation
-        StringBuilder result = new StringBuilder();
-        for (int i = 0; i < lines.length; i++) {
-            String line = lines[i];
-            if (line.isEmpty() || line.matches("[ \\t]*")) {
-                result.append(line);
+        int precedingNewlineStart = precedingLogicalNewlineStart(raw, lineStart);
+        if (precedingNewlineStart < 0) {
+            return null;
+        }
+
+        return new StructuralIndentation(trailingLine, precedingNewlineStart);
+    }
+
+    private String removeStructuralIndentation(String content, String prefix, int literalStart) {
+        StringBuilder result = new StringBuilder(content.length());
+        int lineStart = 0;
+
+        while (lineStart <= content.length()) {
+            int newlineStart = nextLogicalNewlineStart(content, lineStart);
+            int lineEnd = newlineStart < 0 ? content.length() : newlineStart;
+            String line = content.substring(lineStart, lineEnd);
+
+            if (isIndentationOnly(line)) {
+                // Blank logical content lines contribute no incidental indentation.
+            } else if (line.startsWith(prefix)) {
+                result.append(line, prefix.length(), line.length());
             } else {
-                // Remove minIndent characters from start
-                result.append(line.substring(Math.min(minIndent, line.length())));
+                throw error("Triple-double-quoted String line does not match closing-delimiter indentation", literalStart);
             }
-            if (i < lines.length - 1) {
-                result.append("\n");
+
+            if (newlineStart < 0) {
+                break;
             }
+
+            int newlineLength = logicalNewlineLengthAt(content, newlineStart);
+            result.append(content, newlineStart, newlineStart + newlineLength);
+            lineStart = newlineStart + newlineLength;
         }
 
         return result.toString();
     }
 
-    private int readEscapeSequence(int stringStart) {
-        pos++; // consume backslash
-        if (pos >= source.length()) {
-            throw new LexicalError("Unterminated escape sequence in string at position " + stringStart);
+    private String decodeTripleDoubleContent(String raw, int literalStart) {
+        StringBuilder value = new StringBuilder(raw.length());
+        int scan = 0;
+
+        while (scan < raw.length()) {
+            int codePoint = raw.codePointAt(scan);
+            if (codePoint == '\\') {
+                EscapeResult escape = decodeEscapeAt(raw, scan, literalStart);
+                value.appendCodePoint(escape.codePoint());
+                scan = escape.nextIndex();
+                continue;
+            }
+            if (isUnpairedSurrogateAt(raw, scan)) {
+                throw error("String literal contains a non-scalar Unicode value", literalStart);
+            }
+            value.appendCodePoint(codePoint);
+            scan += Character.charCount(codePoint);
         }
 
-        char escaped = peek();
-        pos++;
+        return value.toString();
+    }
 
+    private void appendDecodedEscape(StringBuilder value, int literalStart) {
+        EscapeResult result = decodeEscapeAt(source, pos, literalStart);
+        value.appendCodePoint(result.codePoint());
+        pos = result.nextIndex();
+    }
+
+    private int validateAndSkipEscape(int slashIndex, int literalStart) {
+        return decodeEscapeAt(source, slashIndex, literalStart).nextIndex();
+    }
+
+    private EscapeResult decodeEscapeAt(String text, int slashIndex, int literalStart) {
+        int next = slashIndex + 1;
+        if (next >= text.length()) {
+            throw error("Incomplete String escape", literalStart);
+        }
+
+        char escaped = text.charAt(next);
         return switch (escaped) {
-            case '\\' -> '\\';
-            case '\'' -> '\'';
-            case '"' -> '"';
-            case 'n' -> '\n';
-            case 'r' -> '\r';
-            case 't' -> '\t';
-            case 'b' -> '\b';
-            case 'f' -> '\f';
-            case 'u' -> readUnicodeEscape(stringStart);
-            default -> throw new LexicalError("Invalid escape sequence \\" + escaped + " in string at position " + stringStart);
+            case '\\' -> new EscapeResult('\\', next + 1);
+            case '\'' -> new EscapeResult('\'', next + 1);
+            case '"' -> new EscapeResult('"', next + 1);
+            case 'n' -> new EscapeResult('\n', next + 1);
+            case 'r' -> new EscapeResult('\r', next + 1);
+            case 't' -> new EscapeResult('\t', next + 1);
+            case 'b' -> new EscapeResult('\b', next + 1);
+            case 'f' -> new EscapeResult('\f', next + 1);
+            case 'u' -> decodeUnicodeEscape(text, next + 1, literalStart);
+            default -> throw error("Invalid String escape '\\" + escaped + "'", slashIndex);
         };
     }
 
-    private int readUnicodeEscape(int stringStart) {
-        // Expect a braced Unicode escape with 1-6 hexadecimal digits
-        if (pos >= source.length() || peek() != '{') {
-            throw new LexicalError("Invalid unicode escape: expected \\u{ at position " + (pos - 1));
+    private EscapeResult decodeUnicodeEscape(String text, int braceIndex, int literalStart) {
+        if (braceIndex >= text.length() || text.charAt(braceIndex) != '{') {
+            throw error("Unicode escape requires '{' after \\u", literalStart);
         }
-        pos++; // consume {
 
-        int hexStart = pos;
-        int hexValue = 0;
-        int hexCount = 0;
+        int digitsStart = braceIndex + 1;
+        int scan = digitsStart;
+        int digitCount = 0;
+        int value = 0;
 
-        while (pos < source.length() && hexCount < 6) {
-            char c = peek();
-            if (c == '}') {
-                break;
+        while (scan < text.length() && isAsciiHexDigit(text.charAt(scan))) {
+            if (++digitCount > 6) {
+                throw error("Unicode escape contains more than six hexadecimal digits", literalStart);
             }
-
-            int digit = Character.digit(c, 16);
-            if (digit < 0) {
-                throw new LexicalError("Invalid hex digit in unicode escape at position " + pos);
-            }
-
-            hexValue = hexValue * 16 + digit;
-            hexCount++;
-            pos++;
+            value = value * 16 + Character.digit(text.charAt(scan), 16);
+            scan++;
         }
 
-        if (pos >= source.length() || peek() != '}') {
-            throw new LexicalError("Unterminated unicode escape: expected } at position " + pos);
+        if (digitCount == 0 || scan >= text.length() || text.charAt(scan) != '}') {
+            throw error("Malformed Unicode escape", literalStart);
+        }
+        if (!Character.isValidCodePoint(value) || value >= 0xD800 && value <= 0xDFFF) {
+            throw error("Unicode escape does not denote a Unicode scalar value", literalStart);
         }
 
-        if (hexCount == 0 || hexCount > 6) {
-            throw new LexicalError("Invalid unicode escape: 1-6 hex digits required");
-        }
-
-        // Validate that it's a valid Unicode scalar value
-        if (hexValue > 0x10FFFF || (hexValue >= 0xD800 && hexValue <= 0xDFFF)) {
-            throw new LexicalError("Invalid Unicode scalar value in escape at position " + hexStart);
-        }
-
-        pos++; // consume }
-        return hexValue;
+        return new EscapeResult(value, scan + 1);
     }
 
-    // ============ Punctuation and Operators ============
-
-    private Token readPunctuationOrOperator() {
-        char current = peek();
-
-        // Single-character punctuation (must not be part of multi-char tokens)
-        if (current == '(') {
-            pos++;
-            return new Token(TokenType.LPAREN, "(");
-        }
-        if (current == ')') {
-            pos++;
-            return new Token(TokenType.RPAREN, ")");
-        }
-        if (current == '{') {
-            pos++;
-            return new Token(TokenType.LBRACE, "{");
-        }
-        if (current == '}') {
-            pos++;
-            return new Token(TokenType.RBRACE, "}");
-        }
-        if (current == '[') {
-            pos++;
-            return new Token(TokenType.LBRACKET, "[");
-        }
-        if (current == ']') {
-            pos++;
-            return new Token(TokenType.RBRACKET, "]");
-        }
-        if (current == ',') {
-            pos++;
-            return new Token(TokenType.COMMA, ",");
-        }
-        if (current == ';') {
-            pos++;
-            return new Token(TokenType.SEMICOLON, ";");
-        }
-
-        // Check for ellipsis before period
-        if (current == '.' && pos + 2 < source.length() && peekAhead(1) == '.' && peekAhead(2) == '.') {
+    private Token readStructuralToken() {
+        if (startsWith("...")) {
             pos += 3;
             return new Token(TokenType.ELLIPSIS, "...");
         }
 
-        // Dot (must come after ellipsis check)
-        if (current == '.') {
-            pos++;
-            return new Token(TokenType.DOT, ".");
+        int codePoint = codePointAt(pos);
+        TokenType type = switch (codePoint) {
+            case '(' -> TokenType.LPAREN;
+            case ')' -> TokenType.RPAREN;
+            case '{' -> TokenType.LBRACE;
+            case '}' -> TokenType.RBRACE;
+            case '[' -> TokenType.LBRACKET;
+            case ']' -> TokenType.RBRACKET;
+            case '.' -> TokenType.DOT;
+            case ',' -> TokenType.COMMA;
+            case ':' -> TokenType.COLON;
+            case ';' -> TokenType.SEMICOLON;
+            default -> null;
+        };
+
+        if (type == null) {
+            return null;
         }
 
-        // Colon
-        if (current == ':') {
-            pos++;
-            return new Token(TokenType.COLON, ":");
-        }
-
-        // Handle caret (non-local return)
-        if (current == '^') {
-            pos++;
-            return new Token(TokenType.CARET, "^");
-        }
-
-        // Multi-character operators with maximal munch
-        return readOperatorWithMaximalMunch();
+        pos++;
+        return new Token(type, Character.toString(codePoint));
     }
 
-    private Token readOperatorWithMaximalMunch() {
+    private Token readSymbolicToken() {
         int start = pos;
-
-        // Try to read the longest possible operator token
-        String longestOp = null;
-        int longestLen = 0;
-
-        // Check for 3-character operators first
-        if (pos + 3 <= source.length()) {
-            String threeChar = source.substring(pos, pos + 3);
-            if (STANDARD_OPERATORS.contains(threeChar)) {
-                longestOp = threeChar;
-                longestLen = 3;
-            }
+        while (!atEnd() && isOperatorCharacter(codePointAt(pos))) {
+            advanceCodePoint(codePointAt(pos));
         }
 
-        // Check for 2-character operators
-        if (pos + 2 <= source.length()) {
-            String twoChar = source.substring(pos, pos + 2);
-            if (STANDARD_OPERATORS.contains(twoChar) && longestLen < 2) {
-                longestOp = twoChar;
-                longestLen = 2;
-            }
-        }
-
-        // Check for 1-character operators
-        if (longestLen == 0) {
-            String oneChar = source.substring(pos, pos + 1);
-            if (STANDARD_OPERATORS.contains(oneChar)) {
-                longestOp = oneChar;
-                longestLen = 1;
-            }
-        }
-
-        // If we found a standard operator, return it
-        if (longestOp != null) {
-            pos += longestLen;
-            return createOperatorToken(longestOp);
-        }
-
-        // Try to read custom operator (if first char is valid operator char)
-        if (pos < source.length() && isCustomOperatorCharacter(peek())) {
-            // But first check if it might start a standard operator we missed
-            // (This shouldn't happen if our checks above are complete)
-            while (pos < source.length() && isCustomOperatorCharacter(peek())) {
-                pos++;
-            }
-            String customOp = source.substring(start, pos);
-            return new Token(TokenType.CUSTOM_OPERATOR, customOp);
-        }
-
-        return null;
+        String spelling = source.substring(start, pos);
+        TokenType standard = STANDARD_SYMBOLIC_TOKENS.get(spelling);
+        return new Token(standard == null ? TokenType.CUSTOM_OPERATOR : standard, spelling);
     }
 
-    private Token createOperatorToken(String op) {
-        return switch (op) {
-            case "=>" -> new Token(TokenType.FAT_ARROW, op);
-            case "=" -> new Token(TokenType.EQUALS, op);
-            case "==" -> new Token(TokenType.DOUBLE_EQUALS, op);
-            case "===" -> new Token(TokenType.TRIPLE_EQUALS, op);
-            case "!=" -> new Token(TokenType.NOT_EQUALS, op);
-            case "!==" -> new Token(TokenType.NOT_EQUALS_2, op);
-            case "<=" -> new Token(TokenType.LESS_EQUAL, op);
-            case ">=" -> new Token(TokenType.GREATER_EQUAL, op);
-            case "&&" -> new Token(TokenType.AND, op);
-            case "||" -> new Token(TokenType.OR, op);
-            case "+" -> new Token(TokenType.PLUS, op);
-            case "-" -> new Token(TokenType.MINUS, op);
-            case "*" -> new Token(TokenType.STAR, op);
-            case "/" -> new Token(TokenType.SLASH, op);
-            case "%" -> new Token(TokenType.PERCENT, op);
-            case "<" -> new Token(TokenType.LESS, op);
-            case ">" -> new Token(TokenType.GREATER, op);
-            case "!" -> new Token(TokenType.BANG, op);
-            default -> new Token(TokenType.CUSTOM_OPERATOR, op);
+    private void skipHorizontalWhitespace() {
+        while (!atEnd() && isHorizontalWhitespace(codePointAt(pos))) {
+            advanceCodePoint(codePointAt(pos));
+        }
+    }
+
+    private void skipLineComment() {
+        pos += 2;
+        while (!atEnd() && !isLogicalNewlineStart(codePointAt(pos))) {
+            advanceCodePoint(codePointAt(pos));
+        }
+    }
+
+    private void skipBlockComment() {
+        int start = pos;
+        pos += 2;
+        int end = source.indexOf("*/", pos);
+        if (end < 0) {
+            throw error("Unterminated block comment", start);
+        }
+        pos = end + 2;
+    }
+
+    private void consumeLogicalNewline() {
+        if (source.charAt(pos) == '\r' && pos + 1 < source.length() && source.charAt(pos + 1) == '\n') {
+            pos += 2;
+        } else {
+            pos++;
+        }
+    }
+
+    private boolean startsWith(String spelling) {
+        return source.startsWith(spelling, pos);
+    }
+
+    private boolean atEnd() {
+        return pos >= source.length();
+    }
+
+    private int codePointAt(int index) {
+        return source.codePointAt(index);
+    }
+
+    private void advanceCodePoint(int codePoint) {
+        pos += Character.charCount(codePoint);
+    }
+
+    private static boolean isHorizontalWhitespace(int codePoint) {
+        return codePoint == ' ' || codePoint == '\t';
+    }
+
+    private static boolean isLogicalNewlineStart(int codePoint) {
+        return codePoint == '\n' || codePoint == '\r';
+    }
+
+    private static boolean isDecimalDigit(int codePoint) {
+        return codePoint >= '0' && codePoint <= '9';
+    }
+
+    private static boolean isDigitForRadix(int codePoint, int radix) {
+        return switch (radix) {
+            case 2 -> codePoint == '0' || codePoint == '1';
+            case 8 -> codePoint >= '0' && codePoint <= '7';
+            case 10 -> isDecimalDigit(codePoint);
+            case 16 -> isDecimalDigit(codePoint)
+                || codePoint >= 'a' && codePoint <= 'f'
+                || codePoint >= 'A' && codePoint <= 'F';
+            default -> false;
         };
     }
 
-    private boolean isCustomOperatorCharacter(char c) {
-        return CUSTOM_OPERATOR_CHARS.indexOf(c) >= 0;
+    private static boolean isAsciiHexDigit(char c) {
+        return c >= '0' && c <= '9' || c >= 'a' && c <= 'f' || c >= 'A' && c <= 'F';
     }
 
-    // ============ Utility Methods ============
+    private static boolean isOperatorCharacter(int codePoint) {
+        return switch (codePoint) {
+            case '!', '$', '%', '&', '*', '+', '-', '/', '<', '=', '>', '?', '@', '\\', '^', '|', '~' -> true;
+            default -> false;
+        };
+    }
 
-    private char peek() {
-        if (pos >= source.length()) {
-            return '\0';
+    private static boolean isIndentationOnly(String text) {
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c != ' ' && c != '\t') {
+                return false;
+            }
         }
-        return source.charAt(pos);
+        return true;
     }
 
-    private char peekAhead(int offset) {
-        int targetPos = pos + offset;
-        if (targetPos >= source.length()) {
-            return '\0';
+    private static int lastLogicalLineStart(String text) {
+        for (int i = text.length() - 1; i >= 0; i--) {
+            char c = text.charAt(i);
+            if (c == '\n') {
+                return i + 1;
+            }
+            if (c == '\r') {
+                return i + 1;
+            }
         }
-        return source.charAt(targetPos);
+        return -1;
     }
 
-    // ============ Exception Class ============
+    private static int precedingLogicalNewlineStart(String text, int lineStart) {
+        if (lineStart <= 0) {
+            return -1;
+        }
+        int previous = lineStart - 1;
+        if (text.charAt(previous) == '\n' && previous > 0 && text.charAt(previous - 1) == '\r') {
+            return previous - 1;
+        }
+        if (text.charAt(previous) == '\n' || text.charAt(previous) == '\r') {
+            return previous;
+        }
+        return -1;
+    }
 
-    public static class LexicalError extends RuntimeException {
+    private static int nextLogicalNewlineStart(String text, int from) {
+        for (int i = from; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (c == '\n' || c == '\r') {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    private static int logicalNewlineLengthAt(String text, int index) {
+        if (index < 0 || index >= text.length()) {
+            return 0;
+        }
+        char c = text.charAt(index);
+        if (c == '\r') {
+            return index + 1 < text.length() && text.charAt(index + 1) == '\n' ? 2 : 1;
+        }
+        return c == '\n' ? 1 : 0;
+    }
+
+    private boolean isUnpairedSurrogateAt(int index) {
+        return isUnpairedSurrogateAt(source, index);
+    }
+
+    private static boolean isUnpairedSurrogateAt(String text, int index) {
+        char c = text.charAt(index);
+        if (Character.isHighSurrogate(c)) {
+            return index + 1 >= text.length() || !Character.isLowSurrogate(text.charAt(index + 1));
+        }
+        return Character.isLowSurrogate(c);
+    }
+
+    private LexicalError error(String message, int offset) {
+        return new LexicalError(message + " at UTF-16 source offset " + offset);
+    }
+
+    private static String printableCodePoint(int codePoint) {
+        if (Character.isISOControl(codePoint) || Character.isWhitespace(codePoint)) {
+            return String.format("U+%04X", codePoint);
+        }
+        return "'" + Character.toString(codePoint) + "' (U+" + String.format("%04X", codePoint) + ")";
+    }
+
+    private record EscapeResult(int codePoint, int nextIndex) {}
+
+    private record StructuralIndentation(String prefix, int trailingLineStart) {}
+
+    public static final class LexicalError extends RuntimeException {
         public LexicalError(String message) {
             super(message);
         }

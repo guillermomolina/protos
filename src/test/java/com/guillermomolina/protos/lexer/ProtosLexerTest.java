@@ -24,367 +24,465 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ProtosLexerTest {
-
     @Test
-    void lexesIdentifiersIntrinsicsAndBlockStructure() {
-        List<Token> tokens = new ProtosLexer("this.context: value = 42\nprint(true)").tokenize();
-
-        assertEquals(
-            List.of(
-                new Token(TokenType.THIS, "this"),
-                new Token(TokenType.DOT, "."),
-                new Token(TokenType.CONTEXT, "context"),
-                new Token(TokenType.COLON, ":"),
-                new Token(TokenType.IDENTIFIER, "value"),
-                new Token(TokenType.EQUALS, "="),
-                new Token(TokenType.NUMBER, "42"),
-                new Token(TokenType.NEWLINE, "\n"),
-                new Token(TokenType.IDENTIFIER, "print"),
-                new Token(TokenType.LPAREN, "("),
-                new Token(TokenType.TRUE, "true"),
-                new Token(TokenType.RPAREN, ")"),
-                new Token(TokenType.EOF, "")
-            ),
-            tokens
+    void lexesExactlyTheSevenReservedWords() {
+        assertTypes(
+            "this context args super true false null",
+            TokenType.THIS,
+            TokenType.CONTEXT,
+            TokenType.ARGS,
+            TokenType.SUPER,
+            TokenType.TRUE,
+            TokenType.FALSE,
+            TokenType.NULL,
+            TokenType.EOF
         );
     }
 
     @Test
-    void lexesStringsFloatsAndCustomOperators() {
-        List<Token> tokens = new ProtosLexer("name: \"Guille\"\npi: 3.14\na @ b\na === b\nhex: 0xFF\nmask: 0b1010_0101").tokenize();
-
-        assertEquals(
-            List.of(
-                new Token(TokenType.IDENTIFIER, "name"),
-                new Token(TokenType.COLON, ":"),
-                new Token(TokenType.STRING, "Guille"),
-                new Token(TokenType.NEWLINE, "\n"),
-                new Token(TokenType.IDENTIFIER, "pi"),
-                new Token(TokenType.COLON, ":"),
-                new Token(TokenType.NUMBER, "3.14"),
-                new Token(TokenType.NEWLINE, "\n"),
-                new Token(TokenType.IDENTIFIER, "a"),
-                new Token(TokenType.CUSTOM_OPERATOR, "@"),
-                new Token(TokenType.IDENTIFIER, "b"),
-                new Token(TokenType.NEWLINE, "\n"),
-                new Token(TokenType.IDENTIFIER, "a"),
-                new Token(TokenType.TRIPLE_EQUALS, "==="),
-                new Token(TokenType.IDENTIFIER, "b"),
-                new Token(TokenType.NEWLINE, "\n"),
-                new Token(TokenType.IDENTIFIER, "hex"),
-                new Token(TokenType.COLON, ":"),
-                new Token(TokenType.NUMBER, "0xFF"),
-                new Token(TokenType.NEWLINE, "\n"),
-                new Token(TokenType.IDENTIFIER, "mask"),
-                new Token(TokenType.COLON, ":"),
-                new Token(TokenType.NUMBER, "0b1010_0101"),
-                new Token(TokenType.EOF, "")
-            ),
-            tokens
+    void standardAndRuntimeNamesRemainOrdinaryIdentifiers() {
+        assertTypes(
+            "Object Context Boolean Number Integer Float String Closure Future Array Map IdentityMap Bytes Process This",
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.EOF
         );
     }
 
     @Test
-    void rejectsUnterminatedString() {
-        ProtosLexer lexer = new ProtosLexer("\"unterminated");
-
-        assertThrows(ProtosLexer.LexicalError.class, lexer::tokenize);
-    }
-
-    @Test
-    void lexesSingleQuotedStrings() {
-        List<Token> tokens = new ProtosLexer("x: 'hello'").tokenize();
-
+    void reservedWordsAreNotContextuallyReclassifiedAfterDot() {
         assertEquals(
             List.of(
-                new Token(TokenType.IDENTIFIER, "x"),
-                new Token(TokenType.COLON, ":"),
-                new Token(TokenType.STRING, "hello"),
-                new Token(TokenType.EOF, "")
+                token(TokenType.IDENTIFIER, "obj"),
+                token(TokenType.DOT, "."),
+                token(TokenType.TRUE, "true"),
+                token(TokenType.DOT, "."),
+                token(TokenType.SUPER, "super"),
+                token(TokenType.EOF, "")
             ),
-            tokens
+            lex("obj.true.super")
         );
     }
 
     @Test
-    void lexesTripleQuotedStrings() {
-        List<Token> tokens = new ProtosLexer("text: \"\"\"hello\nworld\"\"\"").tokenize();
-
+    void lexesUnicodeXidIdentifiersAndUnderscore() {
         assertEquals(
             List.of(
-                new Token(TokenType.IDENTIFIER, "text"),
-                new Token(TokenType.COLON, ":"),
-                new Token(TokenType.STRING, "hello\nworld"),
-                new Token(TokenType.EOF, "")
+                token(TokenType.IDENTIFIER, "_private"),
+                token(TokenType.IDENTIFIER, "café"),
+                token(TokenType.IDENTIFIER, "año"),
+                token(TokenType.IDENTIFIER, "π"),
+                token(TokenType.IDENTIFIER, "日本語"),
+                token(TokenType.IDENTIFIER, "x2"),
+                token(TokenType.EOF, "")
             ),
-            tokens
+            lex("_private café año π 日本語 x2")
         );
     }
 
     @Test
-    void lexesComments() {
-        List<Token> tokens = new ProtosLexer("x: 1 // comment\ny: 2").tokenize();
+    void rejectsNonNfcIdentifierInsteadOfNormalizingIt() {
+        assertThrows(ProtosLexer.LexicalError.class, () -> lex("cafe\u0301"));
+    }
 
+    @Test
+    void javaSpecificCurrencyIdentifierCharactersAreNotProtosIdentifierCharacters() {
         assertEquals(
             List.of(
-                new Token(TokenType.IDENTIFIER, "x"),
-                new Token(TokenType.COLON, ":"),
-                new Token(TokenType.NUMBER, "1"),
-                new Token(TokenType.NEWLINE, "\n"),
-                new Token(TokenType.IDENTIFIER, "y"),
-                new Token(TokenType.COLON, ":"),
-                new Token(TokenType.NUMBER, "2"),
-                new Token(TokenType.EOF, "")
+                token(TokenType.CUSTOM_OPERATOR, "$"),
+                token(TokenType.IDENTIFIER, "name"),
+                token(TokenType.EOF, "")
             ),
-            tokens
+            lex("$name")
         );
     }
 
     @Test
-    void lexesBlockComments() {
-        List<Token> tokens = new ProtosLexer("x: 1 /* comment */ y: 2").tokenize();
-
+    void onlySpaceAndTabAreHorizontalWhitespace() {
         assertEquals(
-            List.of(
-                new Token(TokenType.IDENTIFIER, "x"),
-                new Token(TokenType.COLON, ":"),
-                new Token(TokenType.NUMBER, "1"),
-                new Token(TokenType.IDENTIFIER, "y"),
-                new Token(TokenType.COLON, ":"),
-                new Token(TokenType.NUMBER, "2"),
-                new Token(TokenType.EOF, "")
-            ),
-            tokens
+            List.of(token(TokenType.IDENTIFIER, "a"), token(TokenType.IDENTIFIER, "b"), token(TokenType.EOF, "")),
+            lex("a \t b")
+        );
+        assertThrows(ProtosLexer.LexicalError.class, () -> lex("a\fb"));
+        assertThrows(ProtosLexer.LexicalError.class, () -> lex("a\u00A0b"));
+        assertThrows(ProtosLexer.LexicalError.class, () -> lex("a\u2028b"));
+        assertThrows(ProtosLexer.LexicalError.class, () -> lex("a\uFEFFb"));
+    }
+
+    @Test
+    void lfCrAndCrLfEachProduceOneLogicalNewlineToken() {
+        assertTypes(
+            "a\nb\rc\r\nd",
+            TokenType.IDENTIFIER,
+            TokenType.NEWLINE,
+            TokenType.IDENTIFIER,
+            TokenType.NEWLINE,
+            TokenType.IDENTIFIER,
+            TokenType.NEWLINE,
+            TokenType.IDENTIFIER,
+            TokenType.EOF
         );
     }
 
     @Test
-    void rejectsUnterminatedBlockComment() {
-        ProtosLexer lexer = new ProtosLexer("x: 1 /* unterminated comment");
-
-        assertThrows(ProtosLexer.LexicalError.class, lexer::tokenize);
-    }
-
-    @Test
-    void lexesEllipsis() {
-        List<Token> tokens = new ProtosLexer("(...args) => { ... items }").tokenize();
-
-        assertEquals(
-            List.of(
-                new Token(TokenType.LPAREN, "("),
-                new Token(TokenType.ELLIPSIS, "..."),
-                new Token(TokenType.ARGS, "args"),
-                new Token(TokenType.RPAREN, ")"),
-                new Token(TokenType.FAT_ARROW, "=>"),
-                new Token(TokenType.LBRACE, "{"),
-                new Token(TokenType.ELLIPSIS, "..."),
-                new Token(TokenType.IDENTIFIER, "items"),
-                new Token(TokenType.RBRACE, "}"),
-                new Token(TokenType.EOF, "")
-            ),
-            tokens
+    void lineCommentLeavesItsTerminatingNewlineForTheParser() {
+        assertTypes(
+            "a // comment\nb",
+            TokenType.IDENTIFIER,
+            TokenType.NEWLINE,
+            TokenType.IDENTIFIER,
+            TokenType.EOF
         );
     }
 
     @Test
-    void lexesCaretOperator() {
-        List<Token> tokens = new ProtosLexer("^ value").tokenize();
-
-        assertEquals(
-            List.of(
-                new Token(TokenType.CARET, "^"),
-                new Token(TokenType.IDENTIFIER, "value"),
-                new Token(TokenType.EOF, "")
-            ),
-            tokens
+    void blockCommentConsumesEmbeddedNewlines() {
+        assertTypes(
+            "a /* one\r\ntwo\rthree */ b",
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.EOF
         );
     }
 
     @Test
-    void lexesExponents() {
-        List<Token> tokens = new ProtosLexer("x: 1e10\ny: 1.5e-3").tokenize();
+    void rejectsUnterminatedBlockCommentAndHashCommentSyntax() {
+        assertThrows(ProtosLexer.LexicalError.class, () -> lex("/* never closes"));
+        assertThrows(ProtosLexer.LexicalError.class, () -> lex("# not a comment"));
+    }
 
+    @Test
+    void lexesStructuralPunctuation() {
         assertEquals(
             List.of(
-                new Token(TokenType.IDENTIFIER, "x"),
-                new Token(TokenType.COLON, ":"),
-                new Token(TokenType.NUMBER, "1e10"),
-                new Token(TokenType.NEWLINE, "\n"),
-                new Token(TokenType.IDENTIFIER, "y"),
-                new Token(TokenType.COLON, ":"),
-                new Token(TokenType.NUMBER, "1.5e-3"),
-                new Token(TokenType.EOF, "")
+                token(TokenType.LPAREN, "("),
+                token(TokenType.RPAREN, ")"),
+                token(TokenType.LBRACE, "{"),
+                token(TokenType.RBRACE, "}"),
+                token(TokenType.LBRACKET, "["),
+                token(TokenType.RBRACKET, "]"),
+                token(TokenType.ELLIPSIS, "..."),
+                token(TokenType.DOT, "."),
+                token(TokenType.DOT, "."),
+                token(TokenType.COMMA, ","),
+                token(TokenType.COLON, ":"),
+                token(TokenType.SEMICOLON, ";"),
+                token(TokenType.EOF, "")
             ),
-            tokens
+            lex("(){}[].....,:;")
         );
     }
 
     @Test
-    void lexesOctalNumbers() {
-        List<Token> tokens = new ProtosLexer("x: 0o77").tokenize();
-
+    void classifiesCompleteMaximalSymbolicSpellings() {
         assertEquals(
             List.of(
-                new Token(TokenType.IDENTIFIER, "x"),
-                new Token(TokenType.COLON, ":"),
-                new Token(TokenType.NUMBER, "0o77"),
-                new Token(TokenType.EOF, "")
+                token(TokenType.BANG, "!"),
+                token(TokenType.CUSTOM_OPERATOR, "!!"),
+                token(TokenType.CARET, "^"),
+                token(TokenType.CUSTOM_OPERATOR, "^^"),
+                token(TokenType.TRIPLE_EQUALS, "==="),
+                token(TokenType.CUSTOM_OPERATOR, "===="),
+                token(TokenType.NOT_EQUALS_2, "!=="),
+                token(TokenType.CUSTOM_OPERATOR, "!===@"),
+                token(TokenType.EOF, "")
             ),
-            tokens
+            lex("! !! ^ ^^ === ==== !== !===@")
         );
     }
 
     @Test
-    void lexesEscapeSequences() {
-        List<Token> tokens = new ProtosLexer("s: \"hello\\nworld\"").tokenize();
-
-        assertEquals(
-            List.of(
-                new Token(TokenType.IDENTIFIER, "s"),
-                new Token(TokenType.COLON, ":"),
-                new Token(TokenType.STRING, "hello\nworld"),
-                new Token(TokenType.EOF, "")
-            ),
-            tokens
+    void lexesEveryStandardSymbolicTokenWhenItIsTheCompleteSpelling() {
+        assertTypes(
+            "=> = == === != !== <= >= && || + - * / % < > ! ^",
+            TokenType.FAT_ARROW,
+            TokenType.EQUALS,
+            TokenType.DOUBLE_EQUALS,
+            TokenType.TRIPLE_EQUALS,
+            TokenType.NOT_EQUALS,
+            TokenType.NOT_EQUALS_2,
+            TokenType.LESS_EQUAL,
+            TokenType.GREATER_EQUAL,
+            TokenType.AND,
+            TokenType.OR,
+            TokenType.PLUS,
+            TokenType.MINUS,
+            TokenType.STAR,
+            TokenType.SLASH,
+            TokenType.PERCENT,
+            TokenType.LESS,
+            TokenType.GREATER,
+            TokenType.BANG,
+            TokenType.CARET,
+            TokenType.EOF
         );
     }
 
     @Test
-    void lexesUnicodeEscapes() {
-        List<Token> tokens = new ProtosLexer("s: \"\\u{0041}\"").tokenize();
-
+    void dotColonAndSemicolonNeverJoinCustomOperators() {
         assertEquals(
             List.of(
-                new Token(TokenType.IDENTIFIER, "s"),
-                new Token(TokenType.COLON, ":"),
-                new Token(TokenType.STRING, "A"),
-                new Token(TokenType.EOF, "")
+                token(TokenType.CUSTOM_OPERATOR, "@@"),
+                token(TokenType.DOT, "."),
+                token(TokenType.CUSTOM_OPERATOR, "??"),
+                token(TokenType.COLON, ":"),
+                token(TokenType.CUSTOM_OPERATOR, "~~"),
+                token(TokenType.SEMICOLON, ";"),
+                token(TokenType.CUSTOM_OPERATOR, "\\\\"),
+                token(TokenType.EOF, "")
             ),
-            tokens
+            lex("@@.??:~~;\\\\")
         );
     }
 
     @Test
-    void rejectsInvalidEscapeSequence() {
-        ProtosLexer lexer = new ProtosLexer("s: \"\\q\"");
-
-        assertThrows(ProtosLexer.LexicalError.class, lexer::tokenize);
-    }
-
-    @Test
-    void rejectsInvalidUnicodeEscape() {
-        ProtosLexer lexer = new ProtosLexer("s: \"\\u{GGGGGG}\"");
-
-        assertThrows(ProtosLexer.LexicalError.class, lexer::tokenize);
-    }
-
-    @Test
-    void rejectsNonNFCIdentifier() {
-        // Precomposed é (U+00E9) vs decomposed e + combining acute (U+0065 + U+0301)
-        String nonNFC = "caf\u0065\u0301"; // café in NFD form
-        ProtosLexer lexer = new ProtosLexer(nonNFC + ": 1");
-
-        assertThrows(ProtosLexer.LexicalError.class, lexer::tokenize);
-    }
-
-    @Test
-    void lexesNotEqualsOperators() {
-        List<Token> tokens = new ProtosLexer("a != b\nc !== d").tokenize();
-
+    void lexesDecimalIntegerFractionAndExponentForms() {
         assertEquals(
             List.of(
-                new Token(TokenType.IDENTIFIER, "a"),
-                new Token(TokenType.NOT_EQUALS, "!="),
-                new Token(TokenType.IDENTIFIER, "b"),
-                new Token(TokenType.NEWLINE, "\n"),
-                new Token(TokenType.IDENTIFIER, "c"),
-                new Token(TokenType.NOT_EQUALS_2, "!=="),
-                new Token(TokenType.IDENTIFIER, "d"),
-                new Token(TokenType.EOF, "")
+                token(TokenType.NUMBER, "0"),
+                token(TokenType.NUMBER, "007"),
+                token(TokenType.NUMBER, "1_000_000"),
+                token(TokenType.NUMBER, "3.14"),
+                token(TokenType.NUMBER, "1.2_5"),
+                token(TokenType.NUMBER, "1e10"),
+                token(TokenType.NUMBER, "1E+10"),
+                token(TokenType.NUMBER, "1.5e-3"),
+                token(TokenType.EOF, "")
             ),
-            tokens
+            lex("0 007 1_000_000 3.14 1.2_5 1e10 1E+10 1.5e-3")
         );
     }
 
     @Test
-    void lexesCustomOperators() {
-        List<Token> tokens = new ProtosLexer("a |> b @@ c").tokenize();
-
+    void lexesBinaryOctalAndHexIntegerForms() {
         assertEquals(
             List.of(
-                new Token(TokenType.IDENTIFIER, "a"),
-                new Token(TokenType.CUSTOM_OPERATOR, "|>"),
-                new Token(TokenType.IDENTIFIER, "b"),
-                new Token(TokenType.CUSTOM_OPERATOR, "@@"),
-                new Token(TokenType.IDENTIFIER, "c"),
-                new Token(TokenType.EOF, "")
+                token(TokenType.NUMBER, "0b1010_0101"),
+                token(TokenType.NUMBER, "0B1"),
+                token(TokenType.NUMBER, "0o77"),
+                token(TokenType.NUMBER, "0O7_0"),
+                token(TokenType.NUMBER, "0xFF"),
+                token(TokenType.NUMBER, "0XCA_FE"),
+                token(TokenType.EOF, "")
             ),
-            tokens
+            lex("0b1010_0101 0B1 0o77 0O7_0 0xFF 0XCA_FE")
         );
     }
 
     @Test
-    void lexesDoublePeriodsAsTwoDots() {
-        List<Token> tokens = new ProtosLexer("a .. b").tokenize();
-
+    void oneDotAndLeadingDotFiveAreTokenBoundariesNotFloatSpellings() {
+        assertEquals(
+            List.of(token(TokenType.NUMBER, "1"), token(TokenType.DOT, "."), token(TokenType.EOF, "")),
+            lex("1.")
+        );
+        assertEquals(
+            List.of(token(TokenType.DOT, "."), token(TokenType.NUMBER, "5"), token(TokenType.EOF, "")),
+            lex(".5")
+        );
         assertEquals(
             List.of(
-                new Token(TokenType.IDENTIFIER, "a"),
-                new Token(TokenType.DOT, "."),
-                new Token(TokenType.DOT, "."),
-                new Token(TokenType.IDENTIFIER, "b"),
-                new Token(TokenType.EOF, "")
+                token(TokenType.NUMBER, "1"),
+                token(TokenType.DOT, "."),
+                token(TokenType.IDENTIFIER, "to"),
+                token(TokenType.LPAREN, "("),
+                token(TokenType.NUMBER, "10"),
+                token(TokenType.RPAREN, ")"),
+                token(TokenType.EOF, "")
             ),
-            tokens
+            lex("1.to(10)")
         );
     }
 
     @Test
-    void lexesLeadingZerosInDecimals() {
-        List<Token> tokens = new ProtosLexer("x: 007").tokenize();
+    void rejectsMalformedCommittedNumericSequences() {
+        for (String source : List.of(
+            "0x", "0xG", "0b2", "0o8", "0b10.5", "0o17.25",
+            "2e", "2e+", "2e-", "1__2", "1_", "0x_FF", "123abc"
+        )) {
+            assertThrows(ProtosLexer.LexicalError.class, () -> lex(source), source);
+        }
+    }
 
+    @Test
+    void radixMemberAccessDotRemainsStructuralWhenNotFollowedByDecimalDigit() {
         assertEquals(
             List.of(
-                new Token(TokenType.IDENTIFIER, "x"),
-                new Token(TokenType.COLON, ":"),
-                new Token(TokenType.NUMBER, "007"),
-                new Token(TokenType.EOF, "")
+                token(TokenType.NUMBER, "0xFF"),
+                token(TokenType.DOT, "."),
+                token(TokenType.IDENTIFIER, "size"),
+                token(TokenType.EOF, "")
             ),
-            tokens
+            lex("0xFF.size")
         );
     }
 
     @Test
-    void doesNotTreatTrailingOrLeadingDotAsPartOfNumber() {
+    void leadingSignsAreOperatorsNotPartOfNumbers() {
         assertEquals(
             List.of(
-                new Token(TokenType.NUMBER, "1"),
-                new Token(TokenType.DOT, "."),
-                new Token(TokenType.EOF, "")
+                token(TokenType.MINUS, "-"),
+                token(TokenType.NUMBER, "1"),
+                token(TokenType.PLUS, "+"),
+                token(TokenType.NUMBER, "2"),
+                token(TokenType.EOF, "")
             ),
-            new ProtosLexer("1.").tokenize()
-        );
-
-        assertEquals(
-            List.of(
-                new Token(TokenType.DOT, "."),
-                new Token(TokenType.NUMBER, "5"),
-                new Token(TokenType.EOF, "")
-            ),
-            new ProtosLexer(".5").tokenize()
+            lex("-1 +2")
         );
     }
 
     @Test
-    void lexesSupplementaryUnicodeEscape() {
-        List<Token> tokens = new ProtosLexer("\"\\u{1F600}\"").tokenize();
-
+    void singleAndDoubleQuotedStringsUseTheSameEscapeSet() {
         assertEquals(
             List.of(
-                new Token(TokenType.STRING, "\uD83D\uDE00"),
-                new Token(TokenType.EOF, "")
+                token(TokenType.STRING, "a\nA'\"\\\t\b\f\r"),
+                token(TokenType.STRING, "a\nA'\"\\\t\b\f\r"),
+                token(TokenType.EOF, "")
             ),
-            tokens
+            lex("'a\\n\\u{41}\\'\\\"\\\\\\t\\b\\f\\r' \"a\\n\\u{41}\\'\\\"\\\\\\t\\b\\f\\r\"")
         );
+    }
+
+    @Test
+    void unicodeEscapeSupportsSupplementaryScalarValues() {
+        assertEquals(
+            List.of(token(TokenType.STRING, "😀"), token(TokenType.EOF, "")),
+            lex("\"\\u{1F600}\"")
+        );
+    }
+
+    @Test
+    void rejectsInvalidIncompleteAndNonScalarEscapes() {
+        for (String source : List.of(
+            "\"\\q\"",
+            "\"\\x41\"",
+            "\"\\0\"",
+            "\"\\u{}\"",
+            "\"\\u{1234567}\"",
+            "\"\\u{D800}\"",
+            "\"\\u{110000}\"",
+            "\"\\u{41\"",
+            "\"\\"
+        )) {
+            assertThrows(ProtosLexer.LexicalError.class, () -> lex(source), source);
+        }
+    }
+
+    @Test
+    void rawLogicalNewlineIsRejectedInSingleLineStrings() {
+        assertThrows(ProtosLexer.LexicalError.class, () -> lex("'a\nb'"));
+        assertThrows(ProtosLexer.LexicalError.class, () -> lex("\"a\r\nb\""));
+    }
+
+    @Test
+    void tripleDoubleStringPreservesSourceNewlineSpellings() {
+        assertEquals(
+            List.of(token(TokenType.STRING, "a\nb\rc\r\nd"), token(TokenType.EOF, "")),
+            lex("\"\"\"a\nb\rc\r\nd\"\"\"")
+        );
+    }
+
+    @Test
+    void tripleDoubleOpeningAndClosingNewlineRulesApply() {
+        assertEquals(
+            List.of(token(TokenType.STRING, "alpha\nbeta"), token(TokenType.EOF, "")),
+            lex("\"\"\"\nalpha\nbeta\n\"\"\"")
+        );
+    }
+
+    @Test
+    void tripleDoubleClosingDelimiterDefinesExactStructuralIndentation() {
+        String source = "\"\"\"\n\t alpha\n\t   beta\n\t \n\t \"\"\"";
+        assertEquals(
+            List.of(token(TokenType.STRING, "alpha\n  beta\n"), token(TokenType.EOF, "")),
+            lex(source)
+        );
+    }
+
+    @Test
+    void tripleDoubleIndentationMismatchIsLexicalError() {
+        String source = "\"\"\"\n  alpha\n beta\n  \"\"\"";
+        assertThrows(ProtosLexer.LexicalError.class, () -> lex(source));
+    }
+
+    @Test
+    void tripleDoubleContentFlowingIntoClosingDelimiterIsNotIndentNormalized() {
+        String source = "\"\"\"\n  alpha\n    beta\"\"\"";
+        assertEquals(
+            List.of(token(TokenType.STRING, "  alpha\n    beta"), token(TokenType.EOF, "")),
+            lex(source)
+        );
+    }
+
+    @Test
+    void tripleDoubleEscapedQuoteDoesNotCloseLiteral() {
+        assertEquals(
+            List.of(token(TokenType.STRING, "a\"\"b"), token(TokenType.EOF, "")),
+            lex("\"\"\"a\\\"\"b\"\"\"")
+        );
+    }
+
+    @Test
+    void firstThreeUnescapedQuotesCloseTripleStringWithoutGreedyRunConsumption() {
+        assertThrows(ProtosLexer.LexicalError.class, () -> lex("\"\"\"x\"\"\"\""));
+    }
+
+    @Test
+    void interpolationLookingTextIsOrdinaryStringContent() {
+        assertEquals(
+            List.of(token(TokenType.STRING, "${value}"), token(TokenType.EOF, "")),
+            lex("\"${value}\"")
+        );
+    }
+
+    @Test
+    void representativeProtosFragmentProducesStableTokenStream() {
+        assertEquals(
+            List.of(
+                token(TokenType.IDENTIFIER, "map"),
+                token(TokenType.LBRACKET, "["),
+                token(TokenType.STRING, "answer"),
+                token(TokenType.RBRACKET, "]"),
+                token(TokenType.EQUALS, "="),
+                token(TokenType.NUMBER, "42"),
+                token(TokenType.NEWLINE, "\n"),
+                token(TokenType.LPAREN, "("),
+                token(TokenType.IDENTIFIER, "x"),
+                token(TokenType.RPAREN, ")"),
+                token(TokenType.FAT_ARROW, "=>"),
+                token(TokenType.IDENTIFIER, "x"),
+                token(TokenType.CUSTOM_OPERATOR, "|>"),
+                token(TokenType.IDENTIFIER, "transform"),
+                token(TokenType.LPAREN, "("),
+                token(TokenType.RPAREN, ")"),
+                token(TokenType.EOF, "")
+            ),
+            lex("map['answer'] = 42\n(x) => x |> transform()")
+        );
+    }
+
+    private static List<Token> lex(String source) {
+        return new ProtosLexer(source).tokenize();
+    }
+
+    private static Token token(TokenType type, String lexeme) {
+        return new Token(type, lexeme);
+    }
+
+    private static void assertTypes(String source, TokenType... expected) {
+        List<TokenType> actual = lex(source).stream().map(Token::type).toList();
+        assertEquals(List.of(expected), actual);
     }
 }
