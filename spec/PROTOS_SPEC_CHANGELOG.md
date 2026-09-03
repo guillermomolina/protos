@@ -4,6 +4,22 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.134] - 2026-09-03
+
+### Fixed
+- Removed stale normative wording that described `IdentityMap` in terms of the
+  overridable `identityHash` message after semantic identity hashing had already
+  been moved to the primitive `identityHashOf` operation.
+- Made all `IdentityMap` machinery wording consistently refer to
+  `identityHashOf` together with primitive `===`.
+- Preserved the separate ordinary `identityHash()` convenience message for
+  explicit source-level dispatch only; no observable semantics are changed from
+  the already-defined primitive identity-hash boundary.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 134.
+  No grammar, Actor/Future, or I/O semantics change.
+
 ## [0.1.133] - 2026-09-03
 
 ### Fixed

@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 133
+Document revision: 134
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3713,7 +3713,7 @@ different matching semantics must expose a distinct protocol rather than rely
 on implementation-specific `Map` internals.
 
 `IdentityMap` is unchanged. Its matching operation is based on `===` and
-`identityHash`, not this `Map` `==` protocol.
+`identityHashOf`, not this `Map` `==` protocol.
 
 This rule intentionally does not turn general user-defined `==` into an
 equivalence relation. If user code defines asymmetric equality, `Map` remains

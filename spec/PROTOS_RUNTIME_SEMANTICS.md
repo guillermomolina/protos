@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 133
+Document revision: 134
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3475,10 +3475,10 @@ is outside the correctly-behaving-key guarantee; this section does not require
 automatic repair or reindexing and does not permit host/runtime memory
 corruption.
 
-`IdentityMap` continues to use semantic identity and `identityHash` and does not
+`IdentityMap` continues to use semantic identity and `identityHashOf` and does not
 use `findMapEntry`.
 
-`IdentityMap` uses primitive semantic identity (`===`) together with a stable `identityHash`.
+`IdentityMap` uses primitive semantic identity (`===`) together with a stable `identityHashOf`.
 
 `hash` values need only be valid within the current execution. The runtime may salt hashes per process. Persisted hash values must therefore not rely on the ordinary `hash` protocol.
 
