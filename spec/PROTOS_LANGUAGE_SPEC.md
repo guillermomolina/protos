@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 104
+Document revision: 105
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -2822,11 +2822,31 @@ executes `cleanup` whenever execution leaves the protected scope, whether by:
 
 - normal completion,
 - non-local return with `^`,
-- error signaling and unwind.
+- error signaling and unwind,
+- cooperative cancellation unwind.
 
-If `cleanup` completes normally, the original completion or control transfer continues unchanged.
+Cleanup is part of the unwind that triggered it, not fresh ordinary execution
+subject to re-delivery of that same control transfer. In particular, once a
+pending cancellation request has been honored and cancellation unwind has begun,
+that already-honored request is not observed again at suspension boundaries
+reached while running `ensure` cleanup for that unwind. Cleanup may therefore
+perform ordinary asynchronous operations and suspend while releasing resources.
 
-If `cleanup` signals an error, that new error becomes the active control transfer. Any previously active return or error unwind is abandoned in favor of the newly signaled error.
+This shielding is only from the cancellation request already being delivered by
+the current unwind. It is not a general cancellation-masking facility and does
+not turn failures or independently observed Future outcomes into successful
+cleanup. An implementation may represent this with masking, a cancellation phase,
+or other machinery, but the distinction must be unobservable.
+
+If `cleanup` completes normally, the original completion or control transfer
+continues unchanged. For cancellation unwind, cancellation resumes after cleanup
+and the task's Future reaches the cancelled state only after all applicable
+cleanup has completed.
+
+If `cleanup` signals an error, that new error becomes the active control transfer.
+Any previously active return, error unwind, or cancellation unwind is abandoned
+in favor of the newly signaled error. Thus a cleanup failure during cancellation
+makes the task fail with that cleanup error rather than complete as cancelled.
 
 A future resumable-condition mechanism is compatible with this rule: a condition that is handled and resumed without leaving the protected scope does not trigger cleanup merely because it was signaled.
 

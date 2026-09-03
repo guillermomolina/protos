@@ -4,6 +4,22 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.105] - 2026-09-03
+
+### Fixed
+- Defined cooperative cancellation as an `ensure`-triggering unwind.
+- Prevented an already-honored cancellation request from re-triggering at
+  suspension boundaries inside cleanup for that same unwind.
+- Allowed asynchronous `ensure` cleanup to suspend while releasing resources.
+- Defined cleanup-error precedence over cancellation: cleanup failure replaces
+  cancellation and fails the task Future.
+- Preserved structured cleanup completion before cancellation becomes terminal.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 105.
+
 ## [0.1.104] - 2026-09-03
 
 ### Fixed

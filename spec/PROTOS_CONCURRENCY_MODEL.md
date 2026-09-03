@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 104
+Document revision: 105
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -782,6 +782,16 @@ whether an owner completes normally cannot depend on whether some previous read 
 a child Future happened to observe its failure. The Future remains an ordinary
 eventual-result object whose terminal outcome is stable and may be observed more
 than once.
+
+Cancellation unwind includes the task's applicable `ensure` cleanup.
+Once a cancellation request has been honored and has begun that unwind, the same
+request is not re-delivered at suspension boundaries reached by cleanup for that
+unwind. This permits resource cleanup to suspend without being immediately
+cancelled by the cancellation it is already handling. If cleanup fails, that
+failure replaces the cancellation transfer and the task fails; if cleanup
+completes, cancellation continues and the Future becomes cancelled only after
+cleanup is complete. This rule does not create a general user-visible
+cancellation-mask facility.
 
 When an explicit isolated parallel operation creates work whose result
 is represented by a Future, that work participates in the same

@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 104
+Document revision: 105
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2719,11 +2719,44 @@ Cleanup runs when the protected scope is exited by:
 normal completion
 non-local return (^)
 error unwind
+cancellation unwind
 ```
 
-If cleanup returns normally, the original completion or control transfer continues.
+For cancellation, honoring the request converts that request into the active
+control transfer before cleanup starts. Suspension points reached while executing
+cleanup for that unwind do not re-observe the same already-honored cancellation
+request:
 
-If cleanup signals an error, the cleanup error becomes the active control transfer. A previously active non-local return or error unwind does not continue past that point.
+```text
+function runCleanupDuringUnwind(cleanup, controlTransfer):
+    if controlTransfer is Cancellation:
+        suppressRedeliveryOf(controlTransfer.request)
+
+    try:
+        invoke(cleanup)
+    catch cleanupError:
+        return ErrorTransfer(cleanupError)
+    finally:
+        if controlTransfer is Cancellation:
+            stopSuppressingRedeliveryOf(controlTransfer.request)
+
+    return controlTransfer
+```
+
+`suppressRedeliveryOf` is conceptual, not prescribed runtime machinery. It does
+not suppress ordinary errors, failures from cleanup operations, or explicit
+observation of some other Future's terminal result. Its only required effect is
+that the cancellation request whose delivery caused the current unwind cannot
+interrupt its own `ensure` cleanup at a later suspension boundary.
+
+If cleanup returns normally, the original completion or control transfer continues.
+For cancellation, the Future becomes `CANCELLED` only after every applicable
+cleanup scope has completed.
+
+If cleanup signals an error, the cleanup error becomes the active control transfer.
+A previously active non-local return, error unwind, or cancellation unwind does
+not continue past that point. A cleanup error during cancellation therefore fails
+the task Future rather than completing it as cancelled.
 
 This behavior uses the same general runtime machinery that tracks non-local control transfer and dynamic handlers, but resumable conditions are not required for Core v0.1.
 
