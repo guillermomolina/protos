@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.204] - 2026-09-03
+
+### Fixed
+- Defined `readLine(maxBytes)` byte accounting for stateful and multibyte
+  encodings in terms of the encoded source interval for the current line.
+- Required every valid pre-terminator source octet to count, including
+  state/shift/control octets that produce no Unicode scalar value.
+- Excluded the encoded LF/CR/CRLF terminator extent itself and avoided charging
+  decoder state bytes consumed before the current line begins a second time.
+- Prevented stateful encodings from bypassing the safety bound with arbitrarily
+  many non-text-emitting shift/control sequences.
+- Defined line-too-long versus decoding-error precedence for valid state-only
+  input without relying on converter-specific notions of which byte "belongs"
+  to a character.
+- Preserved implementation freedom for buffering and converter internals while
+  making the observable byte-boundary result independent of those internals.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 204. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.203] - 2026-09-03
 
 ### Fixed

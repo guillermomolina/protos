@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 203
+Document revision: 204
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -883,9 +883,19 @@ This ordering is a logical TextReader property, not a requirement to execute one
 
 Core v0.1 imposes no universal arbitrary fixed line limit.
 
-`readLine(maxBytes)` provides an explicit safety bound. `maxBytes` must be an Integer greater than zero and counts input octets belonging to the line content, excluding the line terminator.
+`readLine(maxBytes)` provides an explicit safety bound. `maxBytes` must be an Integer greater than zero.
 
-If the line content exceeds the limit, the Future fails and no fragment is returned as a successful line.
+The bound is measured over the encoded source octets consumed for the current line before its decoded line terminator begins, not merely over octets that map one-to-one to returned Unicode characters. After the TextReader's initial stream setup for the selected Encoding has been consumed (for example an initial BOM that the Encoding itself consumes), the byte budget for a line starts immediately after the previous line terminator's complete encoded extent, or at the first remaining source octet for the first line.
+
+Every source octet consumed by the decoder in that interval counts toward `maxBytes`, including octets that only change or maintain decoder state and produce no Unicode scalar value. This is required for stateful encodings: shift/escape/control sequences cannot be inserted without bound while evading a supposedly byte-bounded line operation.
+
+The encoded extent that produces the terminating LF or CR does not count toward the line-content budget. For CRLF, neither the encoded extent producing CR nor the immediately following encoded extent producing LF counts. Decoder-control octets consumed before the decoder can produce the terminating character remain part of the pre-terminator interval and therefore count; implementations do not get to classify such octets differently based on converter internals.
+
+If EOF occurs without a terminator, every remaining source octet consumed for that final unterminated line after its line-budget start counts, including non-text-emitting state-control octets. Bytes that were already consumed before the current line-budget start because they established decoder state for an earlier line are not charged again to the new line.
+
+If the counted pre-terminator interval exceeds `maxBytes`, the Future fails and no fragment is returned as a successful line. The limit is therefore a bound on encoded source consumption attributable to the current line-framing interval, independent of whether the selected Encoding is stateless, multibyte, or stateful.
+
+`readLine(maxBytes)` bounds all valid encoded source octets consumed in the current pre-terminator line interval, including state-only bytes, while excluding the encoded terminator itself and bytes consumed before that line begins.
 
 A line-too-long failure permanently fails the `TextReader`'s text-reading side. The reader does not implicitly scan/discard the remainder of the overlong line, search for a later terminator, or attempt to recover a next-line boundary.
 
@@ -901,9 +911,11 @@ Failure of the `TextReader` does not by itself close, fail, or transfer ownershi
 
 Line construction is determined in logical input order after decoding under the selected `Encoding`; buffering and read-ahead do not change which condition belongs to the current line operation.
 
-For `readLine(maxBytes)`, decoding validity is established for each next encoded character before the source octets of that character are counted as line content. If decoding that character fails, the operation fails with the decoding error rather than treating malformed octets as valid content merely to reach the size limit.
+For `readLine(maxBytes)`, decoding validity is established in logical source order. A malformed sequence fails with the decoding error if that failure is established before the byte budget has already been exceeded by validly consumed pre-terminator source octets; an implementation must not pretend malformed octets were valid content merely to manufacture an earlier size failure.
 
-After a valid non-terminator character is decoded, all source octets belonging to that character count toward the current line's content. If that makes the content count exceed `maxBytes`, the line-too-long condition is established immediately. The implementation need not read or decode later input merely to discover another possible error. An I/O or decoding failure that is encountered before the limit has been established remains the failure of the current operation.
+Valid decoder input that changes state without producing a Unicode scalar still advances the current line's byte budget as soon as those octets have been validly consumed in the pre-terminator interval. Likewise, when a valid non-terminator character is decoded, every source octet in its consumed encoded extent has already contributed to that same budget.
+
+As soon as validly consumed pre-terminator source octets make the count exceed `maxBytes`, the line-too-long condition is established. The implementation need not read or decode later input merely to discover another possible error or terminator. An I/O or decoding failure encountered before the limit has been established remains the failure of the current operation.
 
 LF terminates the current line immediately. CR also terminates the current line immediately. If the next decoded character is LF, that LF is consumed as the second character of the same CRLF terminator; otherwise it belongs to the following input. Determining whether an LF follows CR does not make the already-complete line depend on later input: EOF, an I/O failure, or a decoding failure encountered after the terminating CR is observed belongs to subsequent reading rather than retroactively failing the completed line.
 
