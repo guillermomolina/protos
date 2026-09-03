@@ -4,6 +4,22 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.111] - 2026-09-03
+
+### Fixed
+- Defined `slotNames()` to return local slot names in canonical ascending
+  lexicographic Unicode-scalar order rather than implementation-dependent slot
+  table, object-shape, hash, or creation order.
+- Defined the returned Array as a snapshot of the local slot-name set.
+- Kept delegated slots excluded and made remove/recreate history irrelevant to
+  reflection ordering.
+- Preserved implementation freedom to keep any internal slot layout and sort
+  only when reflection requires it.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 111.
+  No grammar, concurrency, Future, or I/O semantics change.
+
 ## [0.1.110] - 2026-09-03
 
 ### Fixed

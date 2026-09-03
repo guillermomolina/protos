@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 110
+Document revision: 111
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3618,6 +3618,42 @@ hasSlot(name)
 
 slotNames()
     returns the names of the receiver's local slots.
+
+### Deterministic `slotNames()` ordering
+
+`slotNames()` returns an `Array` containing every local slot name exactly once
+in ascending lexicographic order of the slot-name String's Unicode scalar-value
+sequence.
+
+The comparison is performed directly on the semantic String contents:
+the first differing Unicode scalar value determines the order; if one sequence
+is an exact prefix of the other, the shorter sequence comes first. No locale,
+collation table, host string comparator, source declaration order, object shape,
+hash-table order, insertion history, or implementation-specific slot layout
+participates.
+
+For example, if an object has the local slot names `"z"`, `"a"`, and `"aa"`,
+`slotNames()` returns them in the order:
+
+```text
+["a", "aa", "z"]
+```
+
+The rule applies uniformly to slots created by ordinary `:`, composition,
+runtime-provided standard behavior, or any other normative slot-creation
+mechanism. Removing and later recreating a slot does not create a distinct
+reflection position because creation history is not part of this ordering.
+
+The returned `Array` is a snapshot of the receiver's local slot-name set at the
+time `slotNames()` performs its reflective observation. Subsequent slot
+creation, removal, or renaming-like library behavior does not retroactively
+change that already-returned Array.
+
+This ordering rule intentionally does not prescribe the receiver's internal slot
+storage order. Implementations may use shapes, hash tables, compact arrays,
+sorted tables, or any other representation; sorting may be performed lazily
+only when reflection requires it. Ordinary non-reflective object access pays no
+semantic ordering cost.
 
 slotValue(name)
     returns the value stored in the receiver's local slot;

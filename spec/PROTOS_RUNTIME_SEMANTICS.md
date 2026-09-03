@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 110
+Document revision: 111
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3245,6 +3245,44 @@ hasSlot(name)
 
 slotNames()
     enumerate receiver.localSlots only
+
+### `slotNames()` ordering
+
+Conceptually, reflection over local slot names behaves as:
+
+```text
+function slotNames(receiver):
+    names = snapshotOfLocalSlotNames(receiver)
+
+    sort names by ascending lexicographic Unicode-scalar sequence
+
+    return Array(names)
+```
+
+For two slot-name Strings `a` and `b`, comparison is:
+
+```text
+function compareSlotName(a, b):
+    for corresponding Unicode scalar values x, y:
+        if x < y: return BEFORE
+        if x > y: return AFTER
+
+    if lengthInScalars(a) < lengthInScalars(b): return BEFORE
+    if lengthInScalars(a) > lengthInScalars(b): return AFTER
+    return SAME
+```
+
+`SAME` can occur only for the same semantic slot-name String, and a local object
+cannot contain two distinct local slots with the same name.
+
+The snapshot is taken from the receiver's local slots only. Delegated slots are
+not included. Mutating the receiver after the snapshot has been produced does
+not mutate the returned Array implicitly.
+
+The pseudocode specifies observable ordering, not representation. The runtime
+need not keep local slots physically sorted and need not maintain insertion-order
+metadata merely for reflection. Any implementation is conforming if the
+returned names are observably equivalent to this canonical order.
 
 slotValue(name)
     read receiver.localSlots[name] only
