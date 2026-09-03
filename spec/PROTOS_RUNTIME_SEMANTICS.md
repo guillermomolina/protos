@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 155
+Document revision: 156
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -1793,7 +1793,45 @@ function honorCancellation(task):
         return
 
     complete task.future as CANCELLED
+
+
+function recordFutureCancellationRequest(future):
+    if future.state != pending:
+        return
+
+    if future.cancellationRequested:
+        return
+
+    future.cancellationRequested = true
+
+    if future.adoptedSource != none:
+        cancelPendingAdoption(future)
+        return
+
+    if future.task != none and future.task is suspended:
+        scheduler.makeRunnableLater(future.task)
 ```
+
+`recordFutureCancellationRequest` is conceptual runtime bookkeeping, not a new
+language-visible Future operation. Every Core path that requests cancellation of
+a Future uses this same semantic operation.
+
+The transition from no request to a pending cancellation request is idempotent.
+For a task that is already suspended, recording that first request makes the task
+runnable so the existing before-resume cancellation boundary can honor it. For a
+Future that is currently adopting another Future, adoption is itself the
+cancellation-aware pending operation, so the request may complete the destination
+as cancelled through `cancelPendingAdoption` without executing Protos code.
+
+If neither case applies, the request remains recorded for the task or
+producer-specific cancellation boundary that already governs that Future. In
+particular, a non-task I/O Future is not made cancelled merely by this helper; its
+producer still follows the applicable I/O commitment/cancellation contract.
+
+This bookkeeping does not introduce an additional ordinary-code cancellation
+safe point. Waking an already-suspended task and observing cancellation in a
+normatively cancellation-aware adoption are consequences of the portable rules
+already defined above.
 
 A task that is already suspended is also cancellation-runnable. Recording a
 cancellation request for that task must arrange for the task to become eligible
@@ -1911,7 +1949,11 @@ function adoptFuture(destination, source):
                 wakeWaiters(destination)
             })
 
-            observeAdoptionCancellation(destination)
+            // A request may already have been recorded before adoption became
+            // the destination's pending producer. Do not require a later edge.
+            if destination.cancellationRequested:
+                cancelPendingAdoption(destination)
+
             return
 
 
@@ -1927,16 +1969,20 @@ function adoptionChainReaches(start, target):
     return false
 
 
-function observeAdoptionCancellation(destination):
-    // Adoption is itself a cancellation-aware pending operation.
-    // If cancellation is requested while adoption remains pending, the runtime
-    // may schedule this bookkeeping transition without executing Protos code.
-    onCancellationRequest(destination, () => {
-        if destination.state == pending and destination.adoptedSource != none:
-            destination.adoptedSource = none
-            destination.state = cancelled
-            wakeWaiters(destination)
-    })
+function cancelPendingAdoption(destination):
+    // Runtime bookkeeping only; no Protos code executes here.
+    if destination.state != pending:
+        return
+
+    if destination.adoptedSource == none:
+        return
+
+    if not destination.cancellationRequested:
+        return
+
+    destination.adoptedSource = none
+    destination.state = cancelled
+    wakeWaiters(destination)
 ```
 
 Automatic Future flattening therefore means outcome adoption, not ownership,
@@ -2134,8 +2180,7 @@ function registerChildTask(parentActivation, task):
     task.detached = false
 
 function requestCooperativeCancellation(task):
-    if task.future.state == pending:
-        task.future.cancellationRequested = true
+    recordFutureCancellationRequest(task.future)
 ```
 
 The task/Future link is conceptual runtime bookkeeping. It does not add a
@@ -3877,9 +3922,7 @@ Conceptually:
 
 ```text
 function cancel(future):
-    if future.state == pending:
-        future.cancellationRequested = true
-
+    recordFutureCancellationRequest(future)
     return future
 ```
 

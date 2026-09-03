@@ -4,6 +4,31 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.156] - 2026-09-03
+
+### Fixed
+- Unified Core Future cancellation-request recording through one conceptual
+  runtime operation used by both `Future.cancel()` and structured cancellation.
+- Aligned executable pseudocode with the normative rule that cancelling an
+  already-suspended task makes that task runnable for cancellation.
+- Prevented repeated cancellation requests from scheduling duplicate semantic
+  cancellation events.
+- Removed the undefined edge-trigger-like `onCancellationRequest` dependency
+  from Future adoption.
+- Defined pending Future adoption to observe a cancellation request whether the
+  request is recorded before or after adoption installs its dependency, avoiding
+  a lost-cancellation race.
+- Preserved downstream-only adoption cancellation: cancelling the destination
+  never cancels the adopted source.
+- Preserved producer-specific cancellation for non-task Futures such as I/O;
+  recording a request does not itself invent a cancelled outcome where the
+  producer's commitment contract does not permit one.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 156.
+
 ## [0.1.155] - 2026-09-03
 
 ### Fixed
