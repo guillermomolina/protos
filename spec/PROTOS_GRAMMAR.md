@@ -1,9 +1,9 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 81  
+Document revision: 82  
 Status: Draft  
-Last updated: 2026-09-02
+Last updated: 2026-09-03
 
 
 ## Prelude Binding Note
@@ -35,6 +35,18 @@ x | y     alternative
 ## 2. Identifiers
 
 Protos identifiers are Unicode-aware and case-sensitive.
+
+### 2.1 Normative Unicode Version
+
+Core v0.1 adopts **The Unicode Standard, Version 17.0.0** as its normative Unicode repertoire and property version.
+
+Every Unicode character property used normatively by Core v0.1 is interpreted according to Unicode 17.0.0 unless this specification explicitly states otherwise. In particular, the `XID_Start` and `XID_Continue` properties used by identifier recognition are those defined by Unicode 17.0.0.
+
+Identifier NFC conformance is determined by Unicode Normalization Form C as defined by the Unicode normalization specification applicable to Unicode 17.0.0.
+
+The Unicode database, normalization implementation, or character-property tables supplied by a host runtime, standard library, operating system, virtual machine, or implementation platform are not part of Protos semantics. An implementation may use such facilities only when their observable result is equivalent to the normative Unicode 17.0.0 rules required by Core v0.1.
+
+The normative Unicode version is fixed for a Protos language version. Changing it changes the lexical language accepted by Protos and therefore requires a language-version change; a document-revision update alone must not change the normative Unicode version.
 
 An identifier must begin with:
 - `_` (underscore), OR
