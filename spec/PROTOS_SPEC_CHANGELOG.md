@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.138] - 2026-09-03
+
+### Fixed
+- Defined deterministic `IdentityMap` key search using primitive `identityHashOf`
+  and `===`, independent of physical hash-table layout.
+- Defined existing-key update to replace only the value while retaining the
+  representative key and insertion position.
+- Defined removal followed by reinsertion of the same semantic key as a new
+  insertion at the end of observable insertion order.
+- Applied the same identity-key search semantics to lookup, containment,
+  removal, and indexed insertion/update while preserving implementation
+  freedom for physical hashing and caching.
+- Kept `IdentityMap` matching free of ordinary Protos callback dispatch and
+  separate from normal `Map` equality-callback reentrancy semantics.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 138.
+  No grammar, Actor/Future, or I/O semantics change.
+
 ## [0.1.137] - 2026-09-03
 
 ### Fixed

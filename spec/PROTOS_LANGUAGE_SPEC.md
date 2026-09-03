@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 137
+Document revision: 138
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3728,6 +3728,56 @@ The ordinary `hash` operation is not required to be stable across separate proce
 `IdentityMap` follows the same insertion-order rule unless a more specialized collection explicitly documents otherwise.
 
 
+
+### Deterministic `IdentityMap` key semantics
+
+`IdentityMap` uses semantic identity rather than ordinary equality. Its logical
+key search is:
+
+```text
+queryIdentityHash = identityHashOf(queryKey)
+
+for each stored entry in insertion order:
+    if entry.recordedIdentityHash == queryIdentityHash:
+        if queryKey === entry.key:
+            match that entry and stop
+
+no entry matches
+```
+
+Both `identityHashOf` and `===` in this algorithm are the primitive,
+non-overridable semantic operations already defined for identity-sensitive
+machinery. No `identityHash`, `hash`, `==`, or other user-overridable message is
+sent while finding an `IdentityMap` key.
+
+Each newly inserted entry logically records the semantic identity hash obtained
+for its key. Because semantic identity hashes are stable for the lifetime
+required by the identity-hash contract, an implementation may recompute,
+cache, reduce, or store this information differently when the difference is not
+observable; the algorithm above defines matching behavior, not physical table
+layout.
+
+For indexed insertion or update, if a matching entry already exists, only that
+entry's value is replaced. Its representative key and insertion position are
+retained. If no entry matches, a new entry containing the supplied key and value
+is appended at the end of insertion order.
+
+Removal by key removes the matching entry. A later insertion of the same
+semantic key after that removal is a new insertion and therefore appears at the
+end of insertion order.
+
+The same identity-key search rule applies to direct lookup, `containsKey`,
+removal by key, indexed insertion/update, and any later standard `IdentityMap`
+operation defined in terms of finding a key.
+
+Identity-hash collisions do not make distinct semantic identities match.
+Conversely, two values that are semantically identical under `===` denote the
+same `IdentityMap` key even if an implementation represents them using different
+allocations, boxes, or immediate-value encodings.
+
+This rule does not require a particular hash-table representation or a physical
+linear scan. An implementation may use any indexing strategy that produces the
+same observable matching, update, removal, and insertion-order behavior.
 
 ### Reentrant mutation during `Map` key comparison
 

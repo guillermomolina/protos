@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 137
+Document revision: 138
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3484,6 +3484,61 @@ use `findMapEntry`.
 
 Map iteration preserves insertion order as an observable collection property.
 
+
+### Deterministic `IdentityMap` key search and update
+
+Identity-keyed lookup is conceptually:
+
+```text
+function findIdentityMapEntry(map, queryKey):
+    queryIdentityHash = requireIdentityHashResult(identityHashOf(queryKey))
+
+    for entry in map.entriesInInsertionOrder:
+        if entry.recordedIdentityHash == queryIdentityHash:
+            if semanticIdentity(queryKey, entry.key):
+                return entry
+
+    return NOT_FOUND
+```
+
+`semanticIdentity(a, b)` is the primitive operation implementing `a === b`.
+Neither it nor `identityHashOf` performs user-message dispatch.
+
+For a new `IdentityMap` entry, the logical `recordedIdentityHash` is the exact
+semantic Integer result used by the search contract. Physical implementations
+may use reduced hashes, buckets, cached identity hashes, or other internal
+representations provided that collisions are resolved according to primitive
+semantic identity and the observable result is equivalent to the algorithm
+above.
+
+Indexed insertion/update behaves conceptually as:
+
+```text
+function identityMapAtPut(map, key, value):
+    entry = findIdentityMapEntry(map, key)
+
+    if entry != NOT_FOUND:
+        entry.value = value
+        return value
+
+    identityHash = requireIdentityHashResult(identityHashOf(key))
+    append entry(key, value, identityHash) to map insertion order
+    return value
+```
+
+An implementation need not literally compute `identityHashOf(key)` twice on the
+no-match path: it may retain the already validated query identity hash from the
+search and store that exact mathematical Integer as the entry's logical
+recorded identity hash.
+
+Updating an existing entry does not replace its key and does not move it in
+insertion order. Removing an entry removes its insertion-order position; if the
+same semantic key is inserted later, the new entry is appended at the end.
+
+All standard `IdentityMap` operations that find a key use
+`findIdentityMapEntry` semantics. The primitive operations involved execute no
+ordinary Protos callbacks, so the normal `Map` equality-callback reentrancy
+mechanism is neither needed nor invoked for `IdentityMap` key matching.
 
 ### Reentrant Map mutation during equality callbacks
 
