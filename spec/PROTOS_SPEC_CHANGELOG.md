@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.178] - 2026-09-03
+
+### Fixed
+- Defined a receiver-visible `close()` lifecycle cutover for operations that
+  require the resource to remain open.
+- Closed the ambiguity between concurrent I/O operations and `close()` when
+  different Actors access the same logical receiver through Actor-safe proxies.
+- Required a stable routing/admission choice for genuinely concurrent operation
+  versus close, preventing host/native scheduling from retroactively moving an
+  operation across the close cutover.
+- Preserved the existing distinction between close-induced operation failure and
+  operation cancellation, and preserved already-committed effects.
+- Made the lifecycle cutover a property of the logical receiver rather than
+  proxy object identity.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 178.
+
 ## [0.1.177] - 2026-09-03
 
 ### Fixed

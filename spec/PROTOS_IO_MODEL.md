@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 177
+Document revision: 178
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -377,7 +377,36 @@ Invoking `close()` is itself the irreversible semantic commitment boundary for t
 
 Once closing begins, the receiver accepts no new operation that requires the resource to remain open.
 
-Closure-induced termination of an operation is distinct from cancellation of that operation. A previously pending uncommitted operation that is prevented from proceeding because close began fails with an error indicating that the receiver/resource is closing or closed; close does not report that operation as `cancelled`. If an independent cancellation request for that operation satisfies its own cancellation contract before closure wins, that operation may instead become `cancelled`.
+`close()` has a receiver-visible lifecycle cutover point: the irreversible transition
+into the closing lifecycle. Operations that require the receiver to remain open and
+`close()` are ordered relative to that cutover rather than by host/native completion
+timing.
+
+When an operation and `close()` have a Protos-defined order, that order is
+preserved. In particular, an operation issued earlier on the same logical receiver
+is admitted before a later close even when its Future is still pending. That
+accepted operation retains the opportunity to reach its normal terminal outcome,
+and close waits for it or causes it to fail according to the ordinary close rules.
+
+An operation ordered after the close cutover is not accepted as resource work: it
+fails with the receiver/resource closing-or-closed error and has no operation
+effect. It does not race the close by starting a later native/backend operation
+merely because host scheduling happens to run it first.
+
+For an operation and `close()` that are genuinely concurrent because they originate
+from independently progressing Actors through Actor-safe proxies, Protos defines no
+predetermined cross-Actor arrival order. Routing/admission may choose either
+request first. If the operation is admitted first, it becomes a preceding accepted
+operation and close waits for or terminates it under the ordinary close contract; if
+close establishes the cutover first, the competing operation is rejected. Once that
+relative order is chosen, host scheduling cannot retroactively move the operation
+across the cutover.
+
+The cutover is a logical receiver-lifecycle property shared by Actor-local proxies
+that denote the same receiver. It does not require one native operation at a time
+and does not make proxy object identity an ordering primitive.
+
+Closure-induced termination of an operation is distinct from cancellation of that operation. A previously pending uncommitted operation that is prevented from proceeding because close won fails with an error indicating that the receiver/resource is closing or closed; close does not report that operation as `cancelled`. If an independent cancellation request for that operation satisfies its own cancellation contract before closure wins, that operation may instead become `cancelled`.
 
 Operations that had already committed when closing began are not rolled back and are never rewritten as cancelled merely because of close. They may complete successfully or fail according to their operation contract, including any already-permitted partial external effect.
 
