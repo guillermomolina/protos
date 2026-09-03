@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 193
+Document revision: 194
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -1519,6 +1519,14 @@ If an already acquired standard stream later encounters a broken pipe, host fail
 
 Availability of each standard stream is established at Process bootstrap and remains semantically stable for the Process lifetime. A host may internally redirect or replace implementation resources only when the observable capability contract remains the same.
 
+The standardized `process.stdin()`, `process.stdout()`, `process.stderr()`, and corresponding `*Encoding()` accessors are synchronous capability/configuration lookups over that already-established Process bootstrap state. They do not perform a new external acquisition whose completion may wait, and invoking them does not introduce hidden Protos suspension.
+
+An implementation may lazily allocate an ordinary local wrapper, proxy, descriptor object, or other representation when one of these accessors is called, but that materialization must itself be non-waiting in the semantic sense required here. If making a usable standard-stream binding available would require an operation that can wait — for example negotiating a remote service, waiting for a device, opening a deferred external endpoint, or performing another asynchronous host acquisition — that work belongs to Process-host/bootstrap provisioning or to a separately specified asynchronous capability-acquisition protocol. It must not be hidden inside these non-Future accessors.
+
+Failure of one of these accessors therefore reports only the already-established unavailability or invalid bootstrap configuration applicable to that binding. It is not a delayed asynchronous attempt to discover whether the host can eventually obtain a stream.
+
+Standard-stream accessors are non-waiting lookups over bootstrap-established bindings; pay-as-you-grow may defer local representation allocation, but not a potentially waiting external acquisition behind a non-Future call.
+
 Each available standard-stream binding denotes one Process-local logical byte stream for the Process lifetime. Repeated calls to `process.stdin()`, `process.stdout()`, or `process.stderr()` do not create fresh independent input sequences or output-ordering domains.
 
 The runtime may return the same capability object on repeated access or distinct Actor-local/view/proxy objects. Physical object identity is not normative. Every capability obtained for one standard-input binding participates in that binding's single `ByteReadable` input-consumption ordering domain. Every capability obtained for one standard-output or standard-error binding participates in that binding's single logical `ByteWritable` output flow and its ordering/backpressure semantics.
@@ -1596,6 +1604,8 @@ This ordering does not impose a global scheduler order between Actors and does n
 The existence of a Process, the RootActor, or a standardized Process API does not require eager construction of every I/O facility.
 
 A runtime may lazily materialize standard-stream wrappers, encoders, proxies, routing services, buffers, or host adapters only when the relevant capability is requested or delegated.
+
+Such laziness is representation laziness, not permission for hidden waiting. Work performed on the synchronous Process standard-stream/encoding accessor path must be locally completable without awaiting external readiness. Potentially waiting provisioning remains outside that accessor path as defined by the standard-stream availability rules above.
 
 A program that never uses stdin/stdout/stderr need not pay for Protos-level standard-stream adapters merely because the host could provide those streams.
 

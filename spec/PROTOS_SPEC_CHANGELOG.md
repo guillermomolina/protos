@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.194] - 2026-09-03
+
+### Fixed
+- Defined Process standard-stream and standard-stream-encoding accessors as
+  synchronous, non-waiting lookups over bootstrap-established bindings.
+- Prohibited hidden external acquisition, readiness waits, remote negotiation,
+  or other potentially suspending provisioning behind those non-Future calls.
+- Kept pay-as-you-grow representation laziness: implementations may still defer
+  local wrapper/proxy/descriptor allocation when that work is non-waiting.
+- Required potentially waiting standard-stream provisioning to occur in
+  Process-host/bootstrap machinery or through a separately specified
+  asynchronous acquisition protocol.
+- Clarified that accessor failure observes already-established unavailability
+  or invalid bootstrap configuration rather than launching a delayed discovery
+  of eventual host availability.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 194. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.193] - 2026-09-03
 
 ### Closed
