@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 147
+Document revision: 148
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3524,15 +3524,31 @@ to semantic identity (`===`): if `a === b`, their `identityHash` values must be
 the same during that execution. The converse is not required; identity-hash
 collisions are permitted.
 
-For an identity-bearing object, `identityHash` remains stable for that object's
-lifetime within the current execution. For Core value-identity categories,
-semantically identical values receive equal identity hashes independently of
-boxing, allocation, interning, or representation. Neither `hash` nor
-`identityHash` is required to be stable across separate process executions.
+For an identity-bearing object, `identityHashOf` remains stable for that
+object's lifetime within the current Protos execution. For Core value-identity
+categories, semantically identical values receive equal identity hashes
+independently of boxing, allocation, interning, representation, Actor placement,
+worker placement, operating-system process, or machine placement within that
+same Protos execution.
+
+The observable standard identity-hash domain is the Protos execution, not a host
+process. Separate Protos executions need not choose the same identity hashes.
+Within one Protos execution, host placement alone must not change the
+`identityHashOf` result of a semantic value whose identity is preserved.
+
+This does not require a global mutable identity-hash registry or a global lock.
+For value-identity categories an implementation may derive identity hashes from
+semantic identity plus immutable execution-scoped configuration. For
+identity-bearing objects it may allocate or cache identity hashes locally where
+the object lives, provided the object's required semantic identity and lifetime
+rules are preserved. An Actor pass-by-value copy that is a new identity-bearing
+object is not required to retain the source object's identity hash merely because
+its copied state is equal.
 
 Persistent, distributed, cryptographic, or interoperable hashing requires a
-separate explicit algorithm/protocol. Ordinary `hash` and `identityHash` do not
-define a persistent object identifier or externally stable fingerprint.
+separate explicit algorithm/protocol. Ordinary `hash`, `identityHash()`, and
+`identityHashOf` do not define a persistent object identifier or externally
+stable fingerprint.
 
 ### Identity-hash dispatch boundary
 

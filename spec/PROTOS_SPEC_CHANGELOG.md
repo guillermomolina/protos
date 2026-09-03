@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.148] - 2026-09-03
+
+### Fixed
+- Removed stale host-process wording that contradicted the newly defined
+  Protos-execution scope of observable standard hashes.
+- Defined `identityHashOf` for Core value-identity categories on the same
+  Protos-execution semantic scope, preventing Actor/process/worker/machine
+  placement from changing the identity hash of the same semantic value.
+- Preserved local identity-hash allocation/caching for identity-bearing
+  objects and clarified that pass-by-value copies with new identity need not
+  preserve the source object's identity hash.
+- Avoided any requirement for a global mutable identity-hash registry or
+  global lock; immutable execution-scoped configuration remains sufficient
+  for value-identity hashing.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 148.
+  No grammar, Actor/Future, or I/O semantics change.
+
 ## [0.1.147] - 2026-09-03
 
 ### Fixed

@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 147
+Document revision: 148
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3366,9 +3366,24 @@ a === b  =>  identityHash(a) == identityHash(b)
 ```
 
 An identity-bearing object's standard identity hash is stable for its lifetime
-during one execution. Value-identity objects derive identity-hash behavior from
-their semantic identity rather than from transient boxing/allocation identity.
-Collisions remain permitted.
+during one Protos execution. Value-identity objects derive identity-hash
+behavior from their semantic identity rather than from transient
+boxing/allocation identity. Collisions remain permitted.
+
+The observable identity-hash domain is the Protos execution rather than an
+operating-system process, worker, thread, Actor placement, or machine. For a
+Core value-identity category, evaluating `identityHashOf` for the same semantic
+identity at different host placements within the same Protos execution must
+produce the same semantic Integer. Separate Protos executions need not produce
+the same Integer.
+
+No global mutable identity-hash registry or global lock is implied. Immutable
+execution-scoped configuration may determine value-identity hashes, while
+identity-bearing objects may use local cached/assigned hashes when their
+identity does not cross the relevant isolation boundary. If pass-by-value
+transfer creates a distinct identity-bearing destination object, the source and
+destination are different semantic identities and no identity-hash equality is
+required between them.
 
 The internal error names above are pseudocode notation unless another normative
 specification explicitly defines them as standard error prototypes; the
