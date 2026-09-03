@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 198
+Document revision: 199
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3270,6 +3270,87 @@ No runtime lowering exists for indexed slot creation: `receiver[index]: value` i
 
 Consistent with the existing assignment-expression rule, indexed assignment evaluates to the value written. The return value of the underlying `atPut` message is not the value of the indexed assignment expression.
 
+
+## Standard Array Indexed-State Semantics
+
+Standard Array primitives operate on receiver-owned dense indexed state.
+
+Conceptually:
+
+```text
+function requireArrayReceiver(receiver):
+    if not ownsStandardArrayIndexedState(receiver):
+        signal an Error for incompatible standard Array receiver
+
+    return receiver
+
+function requireArrayIndex(array, index):
+    if not isSemanticIntegerValue(index):
+        signal an Error for invalid Array index
+
+    i = mathematicalIntegerValue(index)
+
+    if i < 0 or i >= arrayIndexedLength(array):
+        signal an Error for Array index out of bounds
+
+    return i
+```
+
+These predicates are semantic runtime checks, not message sends. In particular,
+`requireArrayReceiver` does not test delegation ancestry, and
+`requireArrayIndex` does not invoke conversion, `hash`, equality, parsing, or
+host integer coercion.
+
+The standard read is equivalent to:
+
+```text
+function standardArrayAt(receiver, index):
+    array = requireArrayReceiver(receiver)
+    i = requireArrayIndex(array, index)
+    return arrayIndexedElement(array, i)
+```
+
+The standard update is equivalent to:
+
+```text
+function standardArrayAtPut(receiver, index, value):
+    array = requireArrayReceiver(receiver)
+
+    if array.state == frozen:
+        signal FrozenObject(array)
+
+    i = requireArrayIndex(array, index)
+
+    setArrayIndexedElement(array, i, value)
+    return value
+```
+
+`setArrayIndexedElement` replaces one existing element. It never changes the
+Array's indexed length, creates a sparse position, appends, inserts, removes, or
+shifts another element.
+
+A closed Array permits this replacement because no indexed structural growth or
+removal occurs. A frozen Array does not. The frozen-state check precedes index
+validation so a standard `atPut` whose receiver cannot be mutated does not
+perform later Array-index validation work. Receiver and argument expressions
+have already been evaluated by ordinary call evaluation before the standard
+method begins, and those earlier effects are not rolled back.
+
+The indexed state is separate from `receiver.localSlots`. Ordinary slot
+creation/removal does not create/remove Array elements, and Array element
+replacement does not mutate a local slot merely because an Integer or String
+could also be used as some application-level slot name.
+
+Implementations may represent dense Array state with contiguous storage,
+segmented storage, persistent structures, specialized element layouts, or other
+internal forms. They may use host-sized indices internally after the semantic
+Integer has passed the normative range check, but host integer width,
+overflow/wrapping, storage layout, and capacity must remain unobservable.
+
+This runtime rule introduces no Array construction surface, resizing primitive,
+slice object, iterator object, or extra identity relation. Standard Array
+equality/hash continue to use the ordinary default identity semantics unless
+user code explicitly overrides the ordinary messages.
 
 ## Invocation Argument Binding
 

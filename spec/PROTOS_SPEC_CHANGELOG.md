@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.199] - 2026-09-03
+
+### Fixed
+- Defined standard Array indexed state as receiver-owned, finite, dense, and
+  zero-based at each observation point.
+- Defined `Array.at` / `atPut` to accept exact semantic Integer indices only and
+  to fail on negative or out-of-range indices without coercion or wrapping.
+- Defined standard `Array.atPut` as replacement of an existing element only,
+  with no implicit append, growth, holes, shifting, or length change.
+- Defined incompatible inherited/copied Array methods to fail rather than
+  borrowing ancestor storage or granting hidden Array state.
+- Defined open/closed/frozen interaction for Array element replacement and kept
+  standard Array equality/hash on the existing identity defaults.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 199.
+  Only `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain
+  normative semantic content in this revision.
+
 ## [0.1.198] - 2026-09-03
 
 ### Fixed

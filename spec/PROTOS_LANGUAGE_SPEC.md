@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 198
+Document revision: 199
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -2678,6 +2678,99 @@ object.foo[index]: value
 
 `object.foo` and `object["foo"]` are not equivalent unless the object's own `at` implementation deliberately makes them behave that way. Reflection facilities, if they provide dynamic slot access or creation, remain separate from `[]`.
 
+
+## Standard Array Indexed Semantics
+
+A standard `Array` is an identity-bearing object with receiver-owned indexed
+element state. Its indexed contents are distinct from its ordinary local slots,
+in the same sense that standard Map entries are distinct from ordinary slots.
+
+At any observation point, an Array's indexed state is a finite dense sequence of
+element references with logical indices:
+
+```text
+0, 1, 2, ... length - 1
+```
+
+Core v0.1 defines no holes and no negative-from-end indexing for standard
+Arrays.
+
+The standard indexed read:
+
+```js
+array.at(index)
+```
+
+requires `index` to be a semantic `Integer`. Any Integer family is accepted
+according to its mathematical Integer value; no Float-to-Integer conversion,
+String parsing, truncation, wrapping, or host-sized coercion is performed. The
+Integer must satisfy:
+
+```text
+0 <= index < current Array length
+```
+
+Otherwise the operation signals an `Error`. A successful `at(index)` returns the
+exact element object stored at that position.
+
+The standard indexed update:
+
+```js
+array.atPut(index, value)
+```
+
+has the same Integer and bounds requirement and replaces exactly the existing
+element at that index. Standard `Array.atPut` does not append, grow the Array,
+create a hole, shift elements, or otherwise change the Array's indexed length.
+A successful call returns the exact `value` object supplied to it.
+
+Consequently bracket syntax has the same standard Array behavior:
+
+```js
+array[index]          // standard array.at(index)
+array[index] = value  // standard array.atPut(index, value)
+```
+
+while retaining the existing syntax-level rule that indexed assignment itself
+evaluates to `value`.
+
+Standard Array indexed behavior operates only on an original receiver that owns
+standard Array indexed state. Delegation, copying, aliasing, composition, or
+otherwise obtaining a standard Array method does not confer Array element
+storage on an ordinary object and does not redirect the operation to an
+ancestor's Array state. An incompatible receiver signals an `Error` before
+performing Array-indexed work.
+
+Array element replacement follows the ordinary object state boundary:
+
+```text
+open Array
+    -> existing elements may be replaced
+
+closed Array
+    -> existing elements may still be replaced
+
+frozen Array
+    -> element replacement is prohibited
+```
+
+Closing or freezing remains shallow and does not close or freeze element
+objects. For `atPut`, a receiver already frozen when the standard method begins
+signals an `Error` before index validation or element mutation. A closed Array
+still validates the index and may replace the existing element.
+
+Read-only `at` remains available on open, closed, and frozen Arrays.
+
+This section defines the standard semantics of Array indexed state and the
+already-existing `at` / `atPut` protocol. It does not add Array literal syntax,
+a constructor API, insertion/removal selectors, slicing, negative indexing,
+automatic growth, or a second collection hierarchy. Such facilities require
+their own explicit contracts if standardized later.
+
+Standard Array `==` and `hash` remain governed by the existing Core default:
+without an explicit user override, Arrays use semantic object identity and
+`identityHashOf`; element contents are not traversed merely for equality or
+hashing.
 
 ## Invocation Arguments, Defaults, Rest, and Spread
 
