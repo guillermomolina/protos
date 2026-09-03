@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.129] - 2026-09-03
+
+### Fixed
+- Added a portable cancellation-observation boundary before the first ordinary
+  Protos instruction of every newly created asynchronous task.
+- Defined cancellation requested before a `then()` continuation starts to cancel
+  that continuation before inspecting the source result or invoking `transform`.
+- Prevented scheduler timing from making a never-started cancelled continuation
+  execute observable Protos side effects in one implementation but not another.
+- Preserved the existing rule that, after first task execution begins, ordinary
+  non-suspending code does not gain hidden cancellation checkpoints.
+- Kept `then()` cancellation downstream-only: cancelling the destination still
+  does not cancel or change ownership of the source Future.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 129.
+
 ## [0.1.128] - 2026-09-03
 
 ### Fixed

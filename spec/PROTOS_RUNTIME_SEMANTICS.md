@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 128
+Document revision: 129
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -1717,6 +1717,12 @@ Cancellation of Future-producing work is cooperative. The portable observation
 boundaries are conceptualized as follows:
 
 ```text
+function beforeFirstProtosExecution(task):
+    if task.future.cancellationRequested:
+        honorCancellation(task)
+    else:
+        beginProtosExecution(task)
+
 function beforeExplicitSuspension(task):
     if task.future.cancellationRequested:
         honorCancellation(task)
@@ -1941,6 +1947,13 @@ scheduler representation. A task-backed Future and its producing task denote one
 cooperative cancellation target: requesting cancellation through either
 structured ownership or `future.cancel()` sets the same request observed by that
 task at portable cancellation boundaries.
+
+Before a newly created asynchronous task executes its first ordinary Protos
+instruction, `beforeFirstProtosExecution(task)` is mandatory. This is a semantic
+task-lifecycle boundary, not an implementation-selected VM/JIT safepoint. A
+cancellation request already pending at that boundary is honored before the task
+body can produce ordinary Protos effects. After first execution begins, ordinary
+non-suspending code acquires no extra cancellation checkpoints from this rule.
 
 A Future produced by a non-task facility such as an I/O operation may have no
 `task`; its producer observes `future.cancellationRequested` according to that

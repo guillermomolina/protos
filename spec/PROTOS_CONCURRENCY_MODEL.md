@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 128
+Document revision: 129
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -237,6 +237,20 @@ cancelling the destination requests cancellation of the continuation but does no
 cancel the source Future, and detaching the destination detaches only the
 continuation task. Neither operation changes ownership or lifetime of the source
 Future.
+
+The first execution of every newly created asynchronous task is a portable
+cancellation-observation boundary before any ordinary Protos code in that task
+executes. Therefore, if the destination of `then()` has a pending cancellation
+request before its continuation begins its first turn, that request is honored
+before inspecting the source outcome or invoking `transform`; the destination
+becomes cancelled and `transform` is not invoked. This rule prevents scheduler
+timing from deciding whether a never-started continuation nevertheless performs
+ordinary Protos side effects.
+
+Once a task has begun ordinary Protos execution, no additional cancellation
+boundary is implied merely by method calls, closure invocation, allocations, loop
+back-edges, or other non-suspending execution. The existing explicit-suspension,
+resume, and cancellation-aware-operation boundaries remain unchanged.
 
 No additional total ordering is introduced between independent continuations.
 
