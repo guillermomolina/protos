@@ -31,6 +31,8 @@ import com.guillermomolina.protos.parser.ast.SurfaceIntrinsic;
 import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
 import com.guillermomolina.protos.parser.ast.SurfaceMember;
 import com.guillermomolina.protos.parser.ast.SurfaceNonLocalReturn;
+import com.guillermomolina.protos.parser.ast.SurfaceObject;
+import com.guillermomolina.protos.parser.ast.SurfaceObjectItem;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.parser.ast.SurfaceSuperSend;
@@ -250,6 +252,11 @@ public final class ProtosParser {
                 continue;
             }
 
+            if (cursor.at(TokenType.LBRACE) && isParentExpression(expression)) {
+                expression = parseObjectBody(expression);
+                continue;
+            }
+
             return expression;
         }
     }
@@ -270,9 +277,70 @@ public final class ProtosParser {
             case CONTEXT -> intrinsic(SurfaceIntrinsic.Kind.CONTEXT);
             case ARGS -> intrinsic(SurfaceIntrinsic.Kind.ARGS);
             case SUPER -> parseSuperMessageSend();
+            case LBRACE -> parseObjectBody(null);
             case LPAREN -> parseParenthesized();
             default -> throw ParseError.expected("a primary expression", token);
         };
+    }
+
+    private SurfaceExpression parseObjectBody(SurfaceExpression parent) {
+        int start = parent == null
+                ? cursor.current().span().startOffset()
+                : parent.span().startOffset();
+
+        cursor.consume(TokenType.LBRACE, "'{'");
+        consumeNewlines();
+        List<SurfaceObjectItem> items = new ArrayList<>();
+
+        if (!cursor.at(TokenType.RBRACE)) {
+            parseObjectBodyLine(items);
+
+            while (cursor.at(TokenType.NEWLINE)) {
+                consumeNewlines();
+                if (!cursor.at(TokenType.RBRACE)) {
+                    parseObjectBodyLine(items);
+                }
+            }
+        }
+
+        TokenOccurrence close = cursor.consume(TokenType.RBRACE, "'}'");
+        return new SurfaceObject(
+                java.util.Optional.ofNullable(parent),
+                items,
+                new SourceSpan(start, close.span().endOffset()));
+    }
+
+    private void parseObjectBodyLine(List<SurfaceObjectItem> items) {
+        items.add(parseObjectBodyItem());
+
+        while (cursor.at(TokenType.SEMICOLON)) {
+            cursor.advance();
+            items.add(parseObjectBodyItem());
+        }
+    }
+
+    private SurfaceObjectItem parseObjectBodyItem() {
+        boolean composition = false;
+        int start = cursor.current().span().startOffset();
+
+        if (cursor.at(TokenType.ELLIPSIS)) {
+            composition = true;
+            start = cursor.advance().span().startOffset();
+            consumeContinuationNewlines();
+        }
+
+        SurfaceExpression expression = parseExpressionFoundation();
+        return new SurfaceObjectItem(
+                composition,
+                expression,
+                new SourceSpan(start, expression.span().endOffset()));
+    }
+
+    private boolean isParentExpression(SurfaceExpression expression) {
+        return expression instanceof SurfaceName
+                || expression instanceof SurfaceIntrinsic
+                || expression instanceof SurfaceMember
+                || expression instanceof SurfaceGroup;
     }
 
     private SurfaceExpression parseSuperMessageSend() {
