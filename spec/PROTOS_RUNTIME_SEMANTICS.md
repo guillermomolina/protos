@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 163
+Document revision: 164
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2045,6 +2045,45 @@ function failFuture(future, error):
 
     wakeWaiters(future)
 ```
+
+`wakeWaiters(future)` is conceptual runtime bookkeeping with the following
+observable contract:
+
+```text
+function wakeWaiters(future):
+    waiters = future.waiters
+    future.waiters = empty
+
+    for each waiter in waiters:
+        scheduler.makeRunnableLater(waiter)
+```
+
+Every task suspended by `awaitFutureValue(future, ...)` is one waiter on that
+Future. When the Future makes its first terminal transition, every waiter that
+was still registered for that Future becomes eligible to resume; no waiter is
+skipped merely because another waiter was also registered.
+
+Clearing the waiter registration before making waiters runnable is semantic
+bookkeeping: once the Future is terminal, no task remains a pending waiter on
+that Future. A waiter that was independently cancelled before this wake-up may
+already have been removed or made inert according to the cancellation rules;
+such a waiter must not execute ordinary Protos code merely because a stale
+registration is later encountered.
+
+The operation is idempotent with respect to terminal Future state: there is one
+wake-up event for the Future's terminal transition, and later attempts to wake
+the same terminal Future do not enqueue duplicate semantic resumptions.
+
+Implementations may use intrusive lists, callbacks, waiter nodes, queues,
+condition variables, or another representation. They must release or make
+inert the Future's waiter registrations after terminal transition so that a
+terminal Future does not retain suspended-task continuation state indefinitely.
+A program-held reference to a task/Future remains governed by ordinary object
+reachability; this rule concerns runtime waiter bookkeeping only.
+
+A waiter becoming runnable does not imply that it will execute immediately, and
+it does not bypass the existing before-resume cancellation boundary or the
+weak-fairness rule.
 
 There is no separate promise-rejection type.
 

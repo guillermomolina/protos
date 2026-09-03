@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.164] - 2026-09-03
+
+### Fixed
+- Defined the observable runtime contract of `wakeWaiters(future)`.
+- Required all still-registered waiters of a Future's first terminal transition
+  to become eligible for resumption.
+- Required waiter registrations to be cleared or made inert after terminal
+  transition so terminal Futures do not retain suspended-task continuations
+  indefinitely.
+- Prevented duplicate semantic resumption from repeated terminal wake-up
+  bookkeeping.
+- Clarified that wake-up makes a waiter runnable but does not bypass cancellation
+  observation or weak-fairness scheduling.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 164.
+
 ## [0.1.163] - 2026-09-03
 
 ### Fixed
