@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.215] - 2026-09-03
+
+### Fixed
+- Defined `Array.size` as the exact semantic Integer count of current indexed
+  elements, independent of host index width or representation.
+- Defined every invocation's `args` as a fresh frozen standard Array containing
+  exactly the caller-supplied positional arguments in source order.
+- Defined each rest-parameter binding as its own fresh frozen standard Array of
+  the remaining caller-supplied positional arguments.
+- Made argument/rest Array identity explicit so implementations cannot
+  observably reuse one shared empty or content-equal collection object.
+- Preserved shallow aliasing of argument objects while eliminating a separate
+  implementation-selected argument-collection kind.
+- Preserved optimization freedom through scalar replacement and virtual Arrays
+  when fresh identity, frozen behavior, ordering, `at`, `size`, and `each`
+  semantics remain observable as specified.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 215.
+  Only `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain
+  normative semantic content in this revision.
+
 ## [0.1.214] - 2026-09-03
 
 ### Fixed

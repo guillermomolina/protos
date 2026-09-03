@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 214
+Document revision: 215
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -2772,6 +2772,29 @@ without an explicit user override, Arrays use semantic object identity and
 `identityHashOf`; element contents are not traversed merely for equality or
 hashing.
 
+### Standard Array size
+
+The standard `Array.size` operation returns a semantic `Integer` equal to the
+receiver's current indexed element count.
+
+For an Array whose indexed positions are:
+
+```text
+0, 1, 2, ... length - 1
+```
+
+the result is exactly the mathematical Integer `length`. Core does not require a
+particular fixed-width Integer family and does not permit host-size overflow,
+wrapping, saturation, or truncation to alter the result.
+
+`size` is a read-only observation. It does not invoke element behavior, does not
+traverse or copy the elements merely to establish the semantic result, and does
+not mutate the Array. It is available for open, closed, and frozen Arrays.
+
+The existing standard Array receiver-domain rule applies: an object that merely
+delegates to an Array or obtains the standard `size` behavior does not thereby
+own Array indexed state.
+
 ### Standard Array iteration
 
 The standard iteration selector for `Array` is:
@@ -2837,7 +2860,7 @@ iteration snapshots.
 
 ## Invocation Arguments, Defaults, Rest, and Spread
 
-Every invocation exposes the arguments supplied by the caller as an ordinary immutable collection through the reserved intrinsic `args`.
+Every invocation exposes the arguments supplied by the caller through the reserved intrinsic `args`.
 
 `args` is not an ordinary writable identifier and cannot be shadowed by a parameter or local slot.
 
@@ -2888,7 +2911,7 @@ foo: (first, ...rest) => {
 }
 ```
 
-The rest parameter is bound to an ordinary collection containing the remaining caller-supplied arguments.
+The rest parameter is bound to the standard invocation-argument collection defined below, containing the remaining caller-supplied arguments.
 
 Argument spread is supported at call sites:
 
@@ -3230,6 +3253,40 @@ The general rule is:
 ```
 
 This rule is semantic and must not depend on boxing, allocation, host references, or implementation-specific representation.
+
+### Invocation argument collections are frozen Arrays
+
+The ordinary immutable collection exposed by `args` is specifically a **fresh
+frozen standard `Array`** created for that invocation.
+
+Its indexed elements are exactly the caller-supplied positional argument
+objects, after evaluation and in source order. Its `size` is therefore the
+number of caller-supplied positional arguments. Default-parameter substitution
+does not append or replace elements in `args`.
+
+Each invocation has a distinct `args` Array identity, including zero-argument
+invocations. An implementation may avoid a physical allocation when escape,
+identity, reflection, and all other observable behavior remain exactly as if the
+fresh frozen Array existed.
+
+A rest parameter is likewise bound to a fresh frozen standard Array containing
+exactly the remaining caller-supplied positional argument objects, in order.
+The rest Array is a distinct object from that invocation's `args` Array even
+when their contents happen to be the same, and distinct rest bindings created by
+different invocations are distinct objects.
+
+Because these objects are standard Arrays, their read behavior follows the
+standard Array contracts for `at`, `size`, and `each`. Because they are frozen,
+standard `atPut`, ordinary slot mutation, slot creation/removal, and any other
+mutation prohibited by frozen-object semantics fail normally.
+
+Freezing is shallow: mutable argument objects are not frozen merely because a
+reference to them occurs in `args` or a rest Array. Parameter bindings and the
+argument Arrays therefore refer to the same supplied argument objects; no
+deep-copy or alias isolation is introduced.
+
+This uses the existing Array and frozen-object mechanisms rather than defining a
+second privileged argument-collection object model.
 
 ## Parameter Name Uniqueness
 

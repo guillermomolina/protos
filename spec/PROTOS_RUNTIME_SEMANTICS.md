@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 214
+Document revision: 215
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3645,10 +3645,64 @@ f(...values)
 
 becomes a normal invocation whose outgoing argument vector contains the elements produced by the spread operation.
 
-The runtime may optimize argument vectors, rest collections, and `args` views, but observable semantics must remain those of ordinary immutable collections.
+The runtime may optimize argument vectors, rest Arrays, and `args` Arrays, but observable semantics must remain those of the frozen standard Arrays defined above.
 
 No dispatch by argument type is implied. These mechanisms support dynamic arity, forwarding, and user-defined helper protocols without introducing method-overload resolution.
 
+
+## Invocation argument Array representation
+
+The conceptual `immutableArgumentCollection(values)` operation used by
+activation creation and rest-parameter binding produces a fresh standard Array
+whose indexed elements are exactly `values` in order, then freezes that Array
+before exposing it to Protos code.
+
+Conceptually:
+
+```text
+function immutableArgumentCollection(values):
+    array = newStandardArrayWithElements(values)
+    freeze(array)
+    return array
+```
+
+`newStandardArrayWithElements` creates receiver-owned standard Array indexed
+state and a fresh Array identity. `freeze(array)` has the ordinary shallow
+frozen-object meaning.
+
+Consequently:
+
+```text
+activation.arguments
+```
+
+is a fresh frozen standard Array for each activation, and every rest binding
+created by `bindParametersLeftToRight` is another fresh frozen standard Array.
+No `args` Array aliases the Array object of another invocation, and a rest Array
+does not reuse the current activation's `args` identity.
+
+The runtime may scalar-replace, virtualize, cache backing storage, or otherwise
+avoid allocating a concrete Array object when those optimizations preserve
+fresh semantic identity if observed, standard Array lookup/receiver behavior,
+frozen mutation failure, element identity, ordering, `size`, and `each`.
+
+Standard Array size is conceptually:
+
+```text
+function standardArraySize(receiver):
+    array = requireArrayReceiver(receiver)
+
+    return semanticIntegerFromMathematicalValue(
+        arrayIndexedLength(array)
+    )
+```
+
+The operation performs no element-message dispatch. Internal host-sized lengths
+or indexes are permitted only when they preserve the exact mathematical Integer
+result and cannot make overflow, truncation, or saturation observable.
+
+Argument Arrays contain object references, not copied argument values.
+Shallow freezing therefore does not freeze or copy mutable argument objects.
 
 ## Polymorphic Call Protocol and Default Construction (Normative Detail)
 
