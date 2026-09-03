@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.212] - 2026-09-03
+
+### Fixed
+- Defined the initial logical sequence position of every newly opened standard
+  File with position-sensitive read/write behavior as byte offset zero.
+- Applied the same rule across existing/create/createNew, preserve/truncate, and
+  positioned/append open configurations.
+- Clarified that append mode changes each write's placement to current EOF but
+  does not initialize the File's Protos logical position at EOF.
+- Prevented host/runtime append helpers or native cursors with different initial
+  positions from leaking platform-dependent first-read, first-position, or
+  post-open sequencing behavior.
+- Kept the rule representation-independent: implementations may use positional
+  I/O, virtual cursors, or native cursor adjustment when the observable logical
+  position remains zero.
+- Required backends unable to provide or emulate the standard initial position
+  not to expose a position-sensitive standard File with a host-selected cursor.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 212. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.211] - 2026-09-03
 
 ### Fixed

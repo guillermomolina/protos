@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 211
+Document revision: 212
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -1126,7 +1126,17 @@ Unrelated external writers or independently authorized operations may change the
 
 A read+append handle may seek for reading. Append writes nevertheless retain append placement semantics.
 
-The initial logical position is zero even for append mode.
+Every successful standard `File` open whose read/write behavior uses a logical sequence position establishes that position as zero before the `File` result commits. This is independent of `existing`/`create`/`createNew`, `preserve`/`truncate`, and `positioned`/`append` choices.
+
+The zero position is a Protos logical-position guarantee, not a requirement that the backend's native cursor already has that value. An implementation may use positional I/O, a virtual cursor, a native handle whose cursor is initialized differently, or another representation, but the first position-sensitive Protos operation must observe the same state as if the File's logical position had begun at zero.
+
+Append mode does not change this initialization rule. An append write still chooses its placement from the current file end independently of the stored logical position and then updates that logical position according to the append-contribution rules above. Thus opening in append mode does not itself seek the Protos logical position to EOF, even on a host API or standard library whose append-opening helper happens to do so internally.
+
+Likewise, truncate-on-open establishing file size zero does not create a distinct initial-position rule: the returned File's logical position is zero because every standard positioned File begins there, not because truncation happened to make EOF zero.
+
+A backend or host adapter that cannot provide or emulate this initial logical-position state must not expose a standard File whose operations depend on that position while leaking an implementation-selected starting cursor.
+
+A newly opened standard File begins at logical byte position zero whenever it has position-sensitive read/write behavior; append changes each write's placement, not the File's initial logical position.
 
 The standard Protos append contract does not promise stronger non-interleaving with unrelated external writers than the backend can provide.
 
