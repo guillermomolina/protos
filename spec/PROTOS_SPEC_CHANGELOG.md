@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.119] - 2026-09-03
+
+### Fixed
+- Replaced implementation-defined `TextReader` recovery after line-too-long,
+  decoding, or underlying I/O failure with a deterministic failed text-reading
+  lifecycle.
+- Prohibited implicit draining/scanning to a later line boundary after an
+  overlong line, avoiding hidden unbounded work and backend-dependent recovery.
+- Required later `readText()`/`readLine()` calls on a failed TextReader to fail
+  without consuming additional source input.
+- Kept successful cancellation non-poisoning and preserved the separate
+  cancellation/rebuffering contract.
+- Preserved wrapper ownership boundaries: TextReader failure does not itself
+  close or poison the wrapped byte source, and close/release remains available.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 119. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.118] - 2026-09-03
 
 ### Fixed

@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 118
+Document revision: 119
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -709,7 +709,15 @@ Core v0.1 imposes no universal arbitrary fixed line limit.
 
 If the line content exceeds the limit, the Future fails and no fragment is returned as a successful line.
 
-After a line-too-long, decoding, or I/O failure, v0.1 does not guarantee that the same reader can recover and continue from a defined next-line boundary; the reader may become failed/unusable.
+A line-too-long failure permanently fails the `TextReader`'s text-reading side. The reader does not implicitly scan/discard the remainder of the overlong line, search for a later terminator, or attempt to recover a next-line boundary.
+
+A decoding or underlying I/O failure encountered while a `TextReader` is constructing a `readText()` or `readLine()` result likewise permanently fails that reader's text-reading side. This deterministic wrapper failure rule is independent of whether the wrapped byte source itself remains usable.
+
+After the text-reading side has failed, subsequent `readText()` and `readLine()` operations fail without consuming additional input from the wrapped source. Core v0.1 defines no recovery/reset operation that resumes text decoding on the same `TextReader`.
+
+Successful cancellation is not such a failure and does not poison the reader; the cancellation rules below preserve the logical input sequence.
+
+Failure of the `TextReader` does not by itself close, fail, or transfer ownership of its wrapped byte source. `close()` remains permitted when the reader exposes `Closable`, and an owning reader still performs its explicit release obligations according to the wrapper lifecycle rules.
 
 ### 16.2 Deterministic line framing and error precedence
 
@@ -1265,6 +1273,7 @@ The central invariants of the v0.1 I/O model are:
 Binary I/O is byte-oriented.
 String never implies an encoding.
 readLine result, limit, decoding-error, and I/O-error precedence follows logical decoded input order and is independent of buffering/read-ahead.
+A TextReader line-too-long, decoding, or underlying I/O failure permanently fails its text-reading side; there is no implicit drain or recovery-to-next-line behavior.
 
 I/O that may wait returns Future.
 I/O introduces no hidden Protos suspension point.
