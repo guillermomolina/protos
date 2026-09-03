@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 149
+Document revision: 150
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -1790,6 +1790,35 @@ function honorCancellation(task):
     run all applicable ensure cleanup
     complete task.future as CANCELLED
 ```
+
+A task that is already suspended is also cancellation-runnable. Recording a
+cancellation request for that task must arrange for the task to become eligible
+for scheduling even when the condition named by the original suspension remains
+pending.
+
+Conceptually, a suspension therefore has two independent reasons to make its
+task runnable:
+
+```text
+original suspension condition becomes ready
+task cancellation is requested
+```
+
+The latter reason affects only the suspended task. It does not invoke
+`cancel()` on an awaited Future and does not alter the awaited producer.
+
+When the task is selected after either reason, `beforeResumeIntoProtos(task)` is
+applied before the suspended operation can deliver a successful result or
+execute further ordinary Protos code. Consequently, a cancellation request that
+is pending at that resume boundary wins for the consumer even if the original
+condition also became ready. A later completion of the awaited Future remains
+that Future's own completion and cannot re-enter or rewrite the cancelled
+consumer task.
+
+Implementations may remove the cancelled task's waiter registration eagerly or
+leave inert bookkeeping until source completion, provided this cannot retain
+unbounded dead waiters and cannot execute Protos code after the task has
+cancelled.
 
 An operation whose normative contract is cancellation-aware may invoke the
 equivalent of `honorCancellation` while its underlying work is pending, subject to

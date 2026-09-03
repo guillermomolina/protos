@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 149
+Document revision: 150
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -934,6 +934,32 @@ already occurred, before that task resumes ordinary Protos execution. An operati
 whose normative contract is cancellation-aware may additionally observe a request
 while its underlying work is pending, subject to that operation's commitment and
 effect rules.
+
+A cancellation request made while a task is already suspended must make that
+task eligible to resume for cancellation without waiting for the condition that
+originally suspended it to complete. Otherwise structured cancellation could
+wait forever for a child suspended on a Future, timer, I/O operation, or other
+condition that never becomes ready.
+
+This cancellation wake-up resumes only the waiting task's control flow. It does
+not by itself cancel, fail, complete, or otherwise modify the Future or other
+condition being awaited, and it does not request cancellation of an upstream
+producer. Multiple tasks may wait on the same Future without cancellation of one
+waiter affecting the others or the Future itself.
+
+The existing resume boundary remains authoritative. If a task was suspended and
+its cancellation request is pending when it is selected to resume into Protos,
+cancellation is honored before the suspended operation can return a successful
+result or execute further ordinary Protos code. Thus, if awaited completion made
+the task runnable but cancellation became pending before that resume boundary,
+the consumer observes cancellation; the awaited Future retains its own terminal
+outcome unchanged. If the task already crossed the resume boundary and completed
+the suspension operation before cancellation was requested, that completed
+observation is not retroactively rewritten.
+
+This is a prompt cancellation guarantee for the suspended consumer, not upstream
+cancellation propagation. Producer-specific cancellation remains explicit
+through that producer's own Future or capability contract.
 
 Ordinary non-suspending execution does not acquire hidden cancellation points from
 method calls, allocations, loop back-edges, interpreter/JIT polls, garbage

@@ -4,6 +4,30 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.150] - 2026-09-03
+
+### Fixed
+- Defined cancellation of an already-suspended task to make that task runnable
+  for cancellation without waiting for its original suspension condition.
+- Prevented structured cancellation from becoming permanently stuck solely
+  because a child is suspended on a Future, timer, I/O operation, or other
+  condition that never becomes ready.
+- Defined suspended-consumer cancellation as downstream-only: waking/cancelling
+  the waiter does not implicitly cancel or otherwise modify the awaited Future or
+  its producer.
+- Defined the resume race through the existing portable resume boundary:
+  cancellation pending at that boundary is honored before a successful suspended
+  result can be delivered to consumer code.
+- Clarified that awaited Future completion remains stable and cannot re-enter or
+  rewrite a consumer task that has cancelled.
+- Permitted eager waiter removal or inert bookkeeping while forbidding unbounded
+  retention of dead waiters.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 150.
+
 ## [0.1.149] - 2026-09-03
 
 ### Fixed
