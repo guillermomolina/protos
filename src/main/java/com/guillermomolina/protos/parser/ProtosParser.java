@@ -30,6 +30,8 @@ import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
 import com.guillermomolina.protos.parser.ast.SurfaceMember;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
+import com.guillermomolina.protos.parser.ast.SurfaceUnary;
+import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.source.SourceSpan;
 import java.util.ArrayList;
 import java.util.List;
@@ -74,7 +76,69 @@ public final class ProtosParser {
     }
 
     private SurfaceExpression parseExpressionFoundation() {
+        return parseLogicalOrFoundation();
+    }
+
+    private SurfaceExpression parseLogicalOrFoundation() {
+        return parseLeftAssociative(this::parseLogicalAndFoundation, TokenType.OR);
+    }
+
+    private SurfaceExpression parseLogicalAndFoundation() {
+        return parseLeftAssociative(this::parseEqualityFoundation, TokenType.AND);
+    }
+
+    private SurfaceExpression parseEqualityFoundation() {
+        return parseLeftAssociative(this::parseComparisonFoundation,
+                TokenType.DOUBLE_EQUALS, TokenType.TRIPLE_EQUALS,
+                TokenType.NOT_EQUALS, TokenType.NOT_EQUALS_2);
+    }
+
+    private SurfaceExpression parseComparisonFoundation() {
+        return parseLeftAssociative(this::parseAdditiveFoundation,
+                TokenType.LESS, TokenType.LESS_EQUAL, TokenType.GREATER, TokenType.GREATER_EQUAL);
+    }
+
+    private SurfaceExpression parseAdditiveFoundation() {
+        return parseLeftAssociative(this::parseMultiplicativeFoundation, TokenType.PLUS, TokenType.MINUS);
+    }
+
+    private SurfaceExpression parseMultiplicativeFoundation() {
+        return parseLeftAssociative(this::parseUnaryFoundation, TokenType.STAR, TokenType.SLASH, TokenType.PERCENT);
+    }
+
+    private SurfaceExpression parseUnaryFoundation() {
+        if (cursor.at(TokenType.BANG) || cursor.at(TokenType.MINUS)) {
+            TokenOccurrence operator = cursor.advance();
+            consumeContinuationNewlines();
+            SurfaceExpression operand = parseUnaryFoundation();
+            return new SurfaceUnary(operator.token().lexeme(), operand,
+                    new SourceSpan(operator.span().startOffset(), operand.span().endOffset()));
+        }
         return parsePostfixFoundation();
+    }
+
+    private SurfaceExpression parseLeftAssociative(
+            java.util.function.Supplier<SurfaceExpression> operandParser, TokenType... operators) {
+        SurfaceExpression expression = operandParser.get();
+        while (atAny(operators)) {
+            TokenOccurrence operator = cursor.advance();
+            consumeContinuationNewlines();
+            SurfaceExpression right = operandParser.get();
+            expression = new SurfaceBinary(expression, operator.token().lexeme(), right,
+                    new SourceSpan(expression.span().startOffset(), right.span().endOffset()));
+        }
+        return expression;
+    }
+
+    private boolean atAny(TokenType... types) {
+        for (TokenType type : types) {
+            if (cursor.at(type)) return true;
+        }
+        return false;
+    }
+
+    private void consumeContinuationNewlines() {
+        while (cursor.at(TokenType.NEWLINE)) cursor.advance();
     }
 
     private SurfaceExpression parsePostfixFoundation() {

@@ -14,21 +14,17 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
-
 package com.guillermomolina.protos.parser.ast;
 
 import com.guillermomolina.protos.source.SourceSpan;
+import java.util.Objects;
 
-public sealed interface SurfaceExpression
-        permits SurfaceLiteral,
-                SurfaceName,
-                SurfaceIntrinsic,
-                SurfaceSequence,
-                SurfaceGroup,
-                SurfaceMember,
-                SurfaceCall,
-                SurfaceIndex,
-                SurfaceUnary,
-                SurfaceBinary {
-    SourceSpan span();
+public record SurfaceBinary(SurfaceExpression left, String operator, SurfaceExpression right, SourceSpan span)
+        implements SurfaceExpression {
+    public SurfaceBinary {
+        Objects.requireNonNull(left, "left");
+        Objects.requireNonNull(operator, "operator");
+        Objects.requireNonNull(right, "right");
+        Objects.requireNonNull(span, "span");
+    }
 }
