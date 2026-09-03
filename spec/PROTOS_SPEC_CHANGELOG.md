@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.98] - 2026-09-03
+
+### Fixed
+- Defined deterministic `readLine(maxBytes)` precedence between line-length,
+  decoding, I/O, EOF, and terminator conditions independently of buffering and
+  read-ahead strategy.
+- Required decoding validity of each next encoded character to be established
+  before its source octets count as valid line content for the size bound.
+- Defined CR as an immediate line terminator while still consuming a following LF
+  as part of CRLF, without allowing later EOF/errors to retroactively fail the
+  completed CR-terminated line.
+- Required read-ahead across a completed line to preserve following bytes and
+  deferred errors for subsequent reads.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 98. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.97] - 2026-09-03
 
 ### Fixed

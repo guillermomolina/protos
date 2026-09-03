@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 97
+Document revision: 98
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -677,7 +677,21 @@ If the line content exceeds the limit, the Future fails and no fragment is retur
 
 After a line-too-long, decoding, or I/O failure, v0.1 does not guarantee that the same reader can recover and continue from a defined next-line boundary; the reader may become failed/unusable.
 
-### 16.2 Cancellation
+### 16.2 Deterministic line framing and error precedence
+
+Line construction is determined in logical input order after decoding under the selected `Encoding`; buffering and read-ahead do not change which condition belongs to the current line operation.
+
+For `readLine(maxBytes)`, decoding validity is established for each next encoded character before the source octets of that character are counted as line content. If decoding that character fails, the operation fails with the decoding error rather than treating malformed octets as valid content merely to reach the size limit.
+
+After a valid non-terminator character is decoded, all source octets belonging to that character count toward the current line's content. If that makes the content count exceed `maxBytes`, the line-too-long condition is established immediately. The implementation need not read or decode later input merely to discover another possible error. An I/O or decoding failure that is encountered before the limit has been established remains the failure of the current operation.
+
+LF terminates the current line immediately. CR also terminates the current line immediately. If the next decoded character is LF, that LF is consumed as the second character of the same CRLF terminator; otherwise it belongs to the following input. Determining whether an LF follows CR does not make the already-complete line depend on later input: EOF, an I/O failure, or a decoding failure encountered after the terminating CR is observed belongs to subsequent reading rather than retroactively failing the completed line.
+
+An implementation that reads ahead across a completed line must preserve any following bytes, EOF state, or deferred error so that the next operation observes the same logical input sequence and failure ordering.
+
+These rules define result/error precedence, not an implementation requirement to decode one character or perform one underlying read at a time.
+
+### 16.3 Cancellation
 
 A pending line read may be cancelled only before its result commits. Bytes already pulled internally must be preserved/rebuffered so successful cancellation consumes no observable input from the reader.
 
@@ -1175,6 +1189,7 @@ The central invariants of the v0.1 I/O model are:
 ```text
 Binary I/O is byte-oriented.
 String never implies an encoding.
+readLine result, limit, decoding-error, and I/O-error precedence follows logical decoded input order and is independent of buffering/read-ahead.
 
 I/O that may wait returns Future.
 I/O introduces no hidden Protos suspension point.
