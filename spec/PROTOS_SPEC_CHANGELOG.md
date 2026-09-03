@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.106] - 2026-09-03
+
+### Fixed
+- Made the Runtime Future/Task conceptual model internally consistent with the
+  already-normative structured-concurrency and cancellation semantics.
+- Linked every task-backed Future to its producing Task and vice versa.
+- Registered ordinary `closure.future()` work with its creating activation,
+  matching the existing structured-ownership rule.
+- Made `future.cancel()` and structured child cancellation feed the same
+  Future-owned cooperative cancellation request observed at portable task
+  cancellation boundaries.
+- Linked `then()` continuation Tasks back to their destination Futures.
+- Clarified that non-task Future producers such as I/O operations may use the
+  same Future cancellation-request state under their own domain contracts.
+- Made cancellation requests on already-terminal Futures semantically inert.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 106.
+
 ## [0.1.105] - 2026-09-03
 
 ### Fixed

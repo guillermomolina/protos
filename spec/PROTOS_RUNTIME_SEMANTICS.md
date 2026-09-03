@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 105
+Document revision: 106
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -59,10 +59,17 @@ SlotReference
     owner
     name
 
+Task
+    owner                  // structured-concurrency owner, or none when detached
+    detached               // structured-lifetime participation
+    future                 // Future representing this task's eventual outcome
+
 Future
-    state          // pending, resolved, failed, cancelled
+    state                  // pending, resolved, failed, cancelled
     value
     error
+    cancellationRequested  // cooperative request flag while pending
+    task                   // producing Task when task-backed; otherwise none
 ```
 
 These fields are conceptual. An implementation may represent them differently. The I/O-operation commitment state described in `PROTOS_IO_MODEL.md` is not an additional Future state: a Future remains exactly pending, resolved, failed, or cancelled.
@@ -1689,6 +1696,14 @@ function executeAsFuture(closure, parentActivation):
         }
     )
 
+    future.task = task
+    task.future = future
+
+    registerChildTask(
+        parentActivation,
+        task
+    )
+
     scheduler.schedule(task)
 
     return future
@@ -1703,13 +1718,13 @@ boundaries are conceptualized as follows:
 
 ```text
 function beforeExplicitSuspension(task):
-    if task.cancellationRequested:
+    if task.future.cancellationRequested:
         honorCancellation(task)
     else:
         suspend(task)
 
 function beforeResumeIntoProtos(task):
-    if task.cancellationRequested:
+    if task.future.cancellationRequested:
         honorCancellation(task)
     else:
         resumeProtosExecution(task)
@@ -1717,7 +1732,7 @@ function beforeResumeIntoProtos(task):
 function honorCancellation(task):
     unwind current asynchronous activation
     run all applicable ensure cleanup
-    complete its Future as CANCELLED
+    complete task.future as CANCELLED
 ```
 
 An operation whose normative contract is cancellation-aware may invoke the
@@ -1880,6 +1895,8 @@ function futureThen(source, transformClosure, callerActivation):
     )
 
     destination.task = continuationTask
+    continuationTask.future = destination
+
     registerChildTask(
         callerActivation,
         continuationTask
@@ -1912,7 +1929,22 @@ function registerChildTask(parentActivation, task):
     parentActivation.childTasks.add(task)
     task.owner = parentActivation
     task.detached = false
+
+function requestCooperativeCancellation(task):
+    if task.future.state == pending:
+        task.future.cancellationRequested = true
 ```
+
+The task/Future link is conceptual runtime bookkeeping. It does not add a
+language-visible slot to `Future` or `Task`, and it does not require a particular
+scheduler representation. A task-backed Future and its producing task denote one
+cooperative cancellation target: requesting cancellation through either
+structured ownership or `future.cancel()` sets the same request observed by that
+task at portable cancellation boundaries.
+
+A Future produced by a non-task facility such as an I/O operation may have no
+`task`; its producer observes `future.cancellationRequested` according to that
+facility's normative cancellation/commitment contract.
 
 A parent activation cannot reach terminal completion while it owns non-detached child tasks.
 
@@ -3062,7 +3094,9 @@ Conceptually:
 
 ```text
 function cancel(future):
-    future.cancellationRequested = true
+    if future.state == pending:
+        future.cancellationRequested = true
+
     return future
 ```
 
