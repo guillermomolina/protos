@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 117
+Document revision: 118
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3522,6 +3522,52 @@ Protocol violations cannot cause host-language memory unsafety or corruption of
 the Protos runtime. They also do not authorize implementation-dependent
 exceptions, aborts, nontermination, silent reindexing, or other behavior that
 would differ from the deterministic `Map` search/update rules.
+
+
+### Default equality and hash behavior
+
+`Object` provides the default ordinary `==` and `hash` behavior for receivers
+that do not provide more specific behavior through ordinary delegation.
+
+The default `==` behavior is semantic identity:
+
+```text
+defaultObjectEquals(a, b) = (a === b)
+```
+
+Therefore two distinct ordinary identity-bearing objects compare unequal by
+default even if they currently contain the same slots, while two references to
+the same ordinary object compare equal. No structural slot comparison,
+delegation-chain comparison, prototype comparison, serialization comparison, or
+host-representation comparison is implied.
+
+The default `hash` behavior returns the receiver's semantic identity hash:
+
+```text
+defaultObjectHash(a) = identityHashOf(a)
+```
+
+Consequently the inherited defaults satisfy the normal Map contract:
+
+```text
+a == b  =>  a.hash == b.hash
+```
+
+without requiring per-object user code.
+
+Both are ordinary messages exposed through the object model. A more specific
+object or prototype may override `==` and/or `hash` through ordinary slots. If
+custom `==` behavior makes two non-identical values equal, the programmer or
+library defining that behavior is responsible for providing coherent `hash`
+behavior as already required by the Map contract.
+
+Overriding ordinary `==` does not change `===`. Overriding ordinary `hash` does
+not change `identityHashOf` or `IdentityMap`.
+
+The default does not make `==` globally symmetric, transitive, or reflexive for
+all user-defined behavior. Those properties follow only where the specific
+equality protocol in use guarantees them. The default inherited behavior itself
+has the corresponding properties because it delegates to semantic identity.
 
 ### Deterministic `Map` key matching
 

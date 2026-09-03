@@ -4,6 +4,22 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.118] - 2026-09-03
+
+### Fixed
+- Defined `Object`'s default ordinary `==` behavior as semantic identity (`===`).
+- Defined `Object`'s default ordinary `hash` behavior as `identityHashOf(this)`.
+- Ensured ordinary objects are usable as normal Map keys without implicit
+  structural equality or structural hashing.
+- Kept `==`/`hash` overrideable as ordinary messages while preserving
+  non-overridable `===`, `identityHashOf`, and `IdentityMap` semantics.
+- Made custom equality/hash coherence remain the responsibility of the behavior
+  that overrides the defaults.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 118.
+  No grammar, Actor/Future, or I/O semantics change.
+
 ## [0.1.117] - 2026-09-03
 
 ### Fixed

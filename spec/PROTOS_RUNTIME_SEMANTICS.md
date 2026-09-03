@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 117
+Document revision: 118
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3130,6 +3130,49 @@ nor any observationally equivalent overridable dispatch.
 Implementations may cache or lazily assign internal identity-hash data, provided
 that cache state is not Protos-visible and does not change the required semantic
 result.
+
+### Default Object equality and hashing
+
+The standard behavior inherited from `Object` is conceptually:
+
+```text
+Object.==(other):
+    return this === other
+
+Object.hash():
+    return identityHashOf(this)
+```
+
+These are ordinary message-level behaviors backed by primitive semantic
+operations. Ordinary lookup and overriding rules apply to the message slots
+themselves.
+
+The `===` operation in the default equality implementation is primitive semantic
+identity and performs no overridable equality dispatch. The
+`identityHashOf(this)` operation in the default hash implementation is the
+primitive non-overridable identity-hash operation defined above.
+
+An override of `==` or `hash` affects ordinary sends of that message and
+therefore normal `Map` behavior as specified. It does not mutate or redefine the
+primitive `===` or `identityHashOf` operations and therefore cannot alter
+`IdentityMap` identity semantics.
+
+For a receiver that inherits both defaults:
+
+```text
+send(a, "==", [b]) == true
+```
+
+if and only if:
+
+```text
+a === b
+```
+
+and equal default-`==` receivers necessarily obtain equal default hashes.
+
+No enumeration of local slots, traversal of delegation parents, deep graph
+comparison, or structural hashing is part of these defaults.
 
 ### Deterministic `Map` key search
 
