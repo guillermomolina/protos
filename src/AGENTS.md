@@ -73,6 +73,42 @@ the existing abstraction genuinely owns the responsibility. Do not overload an
 abstraction with unrelated responsibilities merely to avoid adding a justified
 new layer.
 
+## Code quality
+
+Code must be clean, idiomatic, understandable, and maintainable.
+
+New or modified code MUST NOT introduce linter, compiler, static-analysis, or
+formatting errors in the affected scope. Follow the project's established style
+and tool configuration rather than inventing local conventions.
+
+Prefer clear code over clever code. Names should communicate intent, control
+flow should remain understandable, and unnecessary duplication or incidental
+complexity should be avoided.
+
+Do not suppress warnings merely to make tooling pass. A suppression is
+acceptable only when the warning is genuinely inapplicable, the suppression is
+narrowly scoped, and its reason is clear.
+
+## Documentation quality
+
+Document code enough to make its intent, invariants, public contracts, and
+non-obvious decisions understandable, but do not over-document self-evident
+implementation details.
+
+Document especially when relevant:
+
+- public APIs and externally relevant contracts;
+- non-obvious invariants;
+- semantic constraints inherited from the Protos specification;
+- concurrency, ownership, lifecycle, visibility, or synchronization assumptions;
+- surprising implementation choices and why they exist.
+
+Do not add comments that merely restate the code. Prefer expressive names and
+straightforward structure when the code can reasonably explain itself.
+
+Comments and documentation must remain accurate. Stale or misleading
+documentation is worse than no documentation.
+
 ## Optimization discipline
 
 Correct generic semantics come first. Optimize only after the semantic path is
@@ -82,7 +118,13 @@ An optimization that requires observable special cases, semantic weakening, or
 additional language restrictions is a language-design proposal, not an
 implementation optimization.
 
-## Tests
+## Verification and tests
+
+For source changes, follow the root static-verification rules: run the narrowest
+applicable formatter, linter, compiler check, or static analysis for the
+modified scope unless doing so is unavailable or unreasonably expensive.
+
+Static verification does not imply running tests.
 
 Follow the root rule that tests run only when explicitly requested. When tests
 are part of the task, use them to validate specified semantics, not historical

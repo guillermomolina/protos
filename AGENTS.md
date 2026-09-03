@@ -110,7 +110,7 @@ model, not foreign subsystems attached to it.
 ### Generality must be earned
 
 Do not add abstraction merely in the name of generality. A design earns
-Generality by surviving substantially different realistic use cases with the
+generality by surviving substantially different realistic use cases with the
 same small set of semantics. Prefer the simplest abstraction that solves the
 motivating problem, composes with existing mechanisms, survives unrelated
 scenarios, and does not impose significant cost on simpler programs.
@@ -187,7 +187,13 @@ behavior do not define Protos semantics.
 
 ### The specification defines Protos
 
-`spec/` defines Protos. Everything else implements, tests, explains, or uses it.
+The normative specifications under `spec/` define Protos. Everything else
+implements, tests, explains, records, or uses them.
+
+Not every file under `spec/` is normative. Design ledgers, changelogs, agent
+instructions, OPEN/PENDING material, and exploratory documents do not become
+language semantics merely by residing under `spec/`.
+
 If implementation, tests, documentation, or historical behavior disagree with
 normative specification, investigate the contradiction rather than silently
 choosing the implementation.
@@ -213,6 +219,34 @@ They are not authority over Protos. Familiarity and popularity are subordinate
 to coherence with the Protos universe.
 
 <!-- END PROTOS DESIGN PHILOSOPHY -->
+
+## Scoped agent instructions
+
+Before reading, editing, reviewing, or generating files in a repository
+subtree, check for an `AGENTS.md` governing that subtree and apply it together
+with this repository-root file.
+
+In particular:
+
+- work under `spec/` is additionally governed by `spec/AGENTS.md`;
+- work under `src/` is additionally governed by `src/AGENTS.md`.
+
+More specific instructions may add or refine rules for their scope, but they do
+not silently discard repository-wide requirements.
+
+## Unresolved language-design questions
+
+When a request raises an unresolved question about what Protos should mean,
+treat it as language-design work before treating it as implementation work.
+
+Apply the specification-design process in `spec/AGENTS.md`: research relevant
+prior art, compare alternatives and trade-offs, test them against the Protos
+design philosophy, attempt to falsify candidate designs, and recommend the best
+Protos semantics before implementation begins.
+
+Do not bypass this process merely because the original request was phrased as
+"implement X".
+
 
 Canonical language specification
 
@@ -402,6 +436,28 @@ When tests are requested, run only those directly relevant to the current change
 
 Do not repeatedly rerun failing tests without first understanding and changing the likely cause.
 
+Static verification
+
+For source-code changes, run the narrowest applicable formatter, linter,
+compiler check, or static-analysis command needed to verify the modified scope,
+unless the check is unavailable, would be expensive, or would require starting
+a long-running process.
+
+Static verification is distinct from test execution and does not override the
+rule that tests run only when the user explicitly requests them.
+
+New or modified code must not introduce linter, compiler, static-analysis, or
+formatting errors in the affected scope.
+
+Do not claim a source change is clean if the applicable static checks were not
+run. Report which checks were run, which were not run, and why.
+
+A clean build achieved only by suppressing applicable warnings is not the same
+as clean code. Do not add suppressions merely to make tooling pass; use narrowly
+scoped suppressions only when the warning is genuinely inapplicable and the
+reason is defensible.
+
+
 Testing philosophy
 
 Tests should validate Protos semantics rather than implementation accidents.
@@ -521,6 +577,7 @@ At the end of a coding task, summarize:
 - which files were changed
 - whether the specification was affected
 - whether tests were run
+- which formatter, linter, compiler, or static-analysis checks were run, and any applicable checks that were not run
 - any remaining ambiguity, limitation, or follow-up that is directly relevant to the requested task
 - whether license compliance was checked when source files were added or modified
 

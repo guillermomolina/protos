@@ -156,8 +156,13 @@ A substantive design recommendation should normally make clear:
 
 ## Specification authority
 
-`spec/` defines Protos. The implementation, tests, examples, README, and other
-documentation do not override normative semantics.
+Normative documents under `spec/` define Protos. The implementation, tests,
+examples, README, and other documentation do not override normative semantics.
+
+Not every file in this tree is normative. Design ledgers, changelogs, agent
+instructions, OPEN/PENDING material, and exploratory documents are inputs to the
+design process or records of it; they do not become language semantics merely by
+residing under `spec/`.
 
 Do not redesign language semantics to make the current implementation easier.
 Do not change normative behavior merely to satisfy existing tests. Do not infer
