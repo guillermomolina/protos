@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 102
+Document revision: 103
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -304,6 +304,10 @@ Cancelling a flush never cancels or undoes preceding writes. A flush may be canc
 
 A flush may fail after partial propagation; failure does not imply rollback.
 
+For one ordered output flow, partial propagation of a failed flush is itself ordered: it may advance the frontier through some prefix of the output that preceded the flush, but it does not propagate later bytes while leaving an earlier hole in that same logical flow.
+
+Ordinary `Flushable.flush()` does not expose how far a failed flush propagated. A receiver that nevertheless retains exact internal knowledge of its own propagation progress may remain usable and may allow a later flush to continue from the unpropagated remainder. Such continuation must not duplicate bytes/effects already propagated merely because the earlier flush Future failed.
+
 A standard output adapter that exposes `Flushable` propagates flush through the output layers that the adapter itself owns or semantically controls, without inventing durability guarantees beyond those layers.
 
 ---
@@ -374,6 +378,12 @@ Closing or abandoning a reading adapter does not restore bytes that the adapter 
 Core v0.1 defines no universal `detach()` or adapter `reset(target)` operation.
 
 If wrapper finalization fails during close, close fails and the wrapper remains unusable. If the wrapper owns its underlying resource, required resource release is still attempted even when wrapper finalization fails; the overall close still fails.
+
+An output wrapper must not guess downstream progress after a propagation failure. In particular, if the wrapper delegates buffered output through an ordinary `ByteWritable.write` that fails and the downstream contract does not reveal enough progress to determine which prefix was accepted, the wrapper cannot safely reconstruct its remaining buffered suffix. In that state the wrapper's output side becomes permanently failed/unusable rather than retrying bytes that may already have been accepted, discarding bytes that may not have been accepted, or changing their order.
+
+A stronger downstream protocol may permit recovery only when it provides sufficient semantic information for the wrapper to determine its exact remaining output without ambiguity. This is a protocol property, not an implementation guess based on host-specific error codes or buffering behavior.
+
+Failure of the wrapper's output side does not transfer ownership of the wrapped target and does not by itself close that target. An owning wrapper still follows its explicit close/release obligations.
 
 Capabilities and lifecycle ownership propagate explicitly, never automatically.
 
@@ -1234,6 +1244,7 @@ Wrapping does not imply lifecycle ownership.
 Invoking close commits permanent lifecycle termination; close itself cannot subsequently become cancelled.
 
 flush != sync != close != shutdownWrite
+A failed flush never authorizes duplicate replay; an output wrapper with unknowable downstream progress becomes unusable unless a stronger protocol makes exact recovery possible.
 EOF != unavailable capability != I/O failure
 
 Path is a value, not filesystem authority.

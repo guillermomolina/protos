@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.103] - 2026-09-03
+
+### Fixed
+- Defined failed-flush propagation as ordered progress through a prefix of the
+  flush frontier rather than permitting holes or later-output reordering.
+- Prohibited a later flush from duplicating output/effects already propagated by
+  an earlier failed flush.
+- Closed the generic buffering-adapter recovery ambiguity: when an underlying
+  ordinary `ByteWritable.write` fails without revealing enough progress to know
+  the exact remaining suffix, the wrapper output side becomes failed/unusable
+  instead of guessing, replaying, or dropping bytes.
+- Allowed recovery only through a stronger downstream protocol that exposes
+  sufficient semantic progress, without depending on host-specific error lore.
+- Preserved wrapper ownership rules: output failure does not implicitly close or
+  transfer ownership of the wrapped target.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 103. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.102] - 2026-09-03
 
 ### Fixed
