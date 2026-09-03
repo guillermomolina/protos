@@ -179,6 +179,47 @@ class ProtosLexerTest {
     }
 
     @Test
+    void lineCommentAtEndOfFileConsumesOnlyTheComment() {
+        assertEquals(
+            List.of(token(TokenType.IDENTIFIER, "a"), token(TokenType.EOF, "")),
+            lex("a // comment")
+        );
+    }
+
+    @Test
+    void lineCommentLeavesCrAndCrLfTerminatorsForNewlineTokenization() {
+        assertTypes(
+            "a // comment\rb // comment\r\nc",
+            TokenType.IDENTIFIER,
+            TokenType.NEWLINE,
+            TokenType.IDENTIFIER,
+            TokenType.NEWLINE,
+            TokenType.IDENTIFIER,
+            TokenType.EOF
+        );
+    }
+
+    @Test
+    void blockCommentsCloseAtFirstDelimiterAndDoNotNest() {
+        assertEquals(
+            List.of(
+                token(TokenType.IDENTIFIER, "a"),
+                token(TokenType.IDENTIFIER, "b"),
+                token(TokenType.EOF, "")
+            ),
+            lex("a /* outer /* inner */ b")
+        );
+    }
+
+    @Test
+    void commentDelimitersInsideStringsAreOrdinaryStringContent() {
+        assertEquals(
+            List.of(token(TokenType.STRING, "// /* */"), token(TokenType.EOF, "")),
+            lex("\"// /* */\"")
+        );
+    }
+
+    @Test
     void blockCommentConsumesEmbeddedNewlines() {
         assertTypes(
             "a /* one\r\ntwo\rthree */ b",
