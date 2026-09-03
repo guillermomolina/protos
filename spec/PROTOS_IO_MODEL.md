@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 99
+Document revision: 100
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -918,6 +918,22 @@ Protos does not require mutable Process-global current-working-directory state. 
 
 An "absolute" Path is absolute within the namespace of the Filesystem interpreting it; it does not necessarily denote an operating-system root.
 
+### 20.1 Filesystem authority confinement
+
+A `Filesystem` operation must resolve every supplied `Path` entirely within the authority represented by that `Filesystem` capability.
+
+Path syntax or backend name-resolution behavior cannot enlarge that authority. In particular, parent traversal, absolute-path forms, symbolic links, reparse points, aliases, mount/redirection mechanisms, or other backend indirections must not cause an operation to access a resource outside the capability's authorized namespace.
+
+A relative path is resolved from the Filesystem's configured base, but successful resolution may move only within that same authorized namespace. An absolute Path is resolved from the Filesystem's namespace root, not from any ambient host root.
+
+If resolving a path would cross the Filesystem authority boundary, the operation fails. Protos does not silently reinterpret an escaping path as ambient host access, does not fall back to a Process-global current directory, and does not obtain broader authority merely because the host API used internally would permit it.
+
+Confinement applies to the complete resolution operation, not only to lexical preprocessing of `.` or `..`. An implementation must remain confined in the presence of backend indirections and concurrent namespace changes. If it cannot establish that the requested resolution stays within authority because of a race or backend limitation, the operation fails rather than proceeding with uncertain authority.
+
+This rule does not require host ancestry to define the namespace. A virtual, mounted, remote, or otherwise mediated Filesystem may deliberately include resources that are not descendants of one host directory. The invariant is capability authority: every resource reached by resolution must belong to the namespace that the `Filesystem` is authorized to expose.
+
+Path normalization, component/equality rules, and host-native path conversion remain separate questions; none of them may weaken this authority boundary.
+
 The minimum filesystem operation closed by this model is `open`. Existence queries, metadata/stat, remove, mkdir, rename, symlink operations, directory iteration, and richer namespace operations remain outside this I/O revision.
 
 ---
@@ -1214,6 +1230,7 @@ EOF != unavailable capability != I/O failure
 Path is a value, not filesystem authority.
 URL is a value, not resource-access authority.
 Filesystem carries filesystem authority.
+Path resolution through a Filesystem is confined to that capability's authorized namespace; path syntax or backend indirection cannot escape into ambient authority.
 filesystem.open may report cancelled only before any portable create/truncate effect and before File-result commitment.
 A failed committed open does not compensate by deleting an already-created target or restoring already-truncated content.
 

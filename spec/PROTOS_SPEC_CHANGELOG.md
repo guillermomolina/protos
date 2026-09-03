@@ -4,6 +4,24 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.100] - 2026-09-03
+
+### Fixed
+- Made Filesystem authority confinement normative for complete path resolution,
+  rather than relying only on lexical path interpretation.
+- Required parent traversal, absolute forms, symlinks/reparse points, aliases,
+  mounts/redirections, and other backend indirections not to escape the
+  authorized Filesystem namespace.
+- Required uncertain confinement under races or backend limitations to fail
+  rather than fall back to ambient host authority.
+- Kept virtual, mounted, remote, and mediated filesystems valid by defining the
+  boundary in terms of capability authority rather than host-directory ancestry.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 100. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.99] - 2026-09-03
 
 ### Fixed
