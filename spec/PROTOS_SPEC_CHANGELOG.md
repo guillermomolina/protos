@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.208] - 2026-09-03
+
+### Closed
+- Closed `Node failure detection mechanism` for Core v0.1.
+- Defined that communication loss and failure-detector suspicion cannot by
+  themselves establish authoritative Node `TERMINATED`.
+- Prohibited implementation-specific heartbeat, phi, retry, grace-period,
+  infrastructure-probe, or host-status thresholds from changing Core-visible
+  Node lifecycle.
+- Preserved reversible `UNREACHABLE`/`UNKNOWN` state for remote Node
+  communication loss.
+- Kept Node incarnation identity stable across transient connectivity loss.
+- Kept Cluster membership removal, partition downing, fencing, and split-brain
+  resolution separate and explicitly outside this Core closure.
+- Required any future distributed failure detector to separate suspicion from
+  an authoritative downing/removal decision and to define its authority and
+  consequences normatively.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 208.
+
 ## [0.1.207] - 2026-09-03
 
 ### Fixed

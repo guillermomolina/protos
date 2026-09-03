@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 207
+Document revision: 208
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2488,6 +2488,40 @@ cancelled or becomes terminal before acceptance.
 Admission eligibility is not Actor-task runnability. Making a delivery
 operation admission-eligible therefore does not create an Actor turn and does
 not weaken the existing definition of scheduler weak fairness.
+
+
+### Node termination knowledge
+
+Core treats remote Node failure suspicion separately from authoritative
+termination:
+
+```text
+function classifyRemoteNodeAfterCommunicationLoss(nodeRef):
+    if authoritativeNodeTerminationAlreadyKnown(nodeRef):
+        return TERMINATED
+
+    if communicationCurrentlyUnavailable(nodeRef):
+        return UNREACHABLE
+
+    return UNKNOWN
+```
+
+`authoritativeNodeTerminationAlreadyKnown` is lifecycle or membership knowledge
+established by an already-defined normative authority. It is not satisfied
+merely by a heartbeat timeout, phi value, retry limit, transport exception,
+host probe, container status, or infrastructure event.
+
+Core v0.1 therefore has no transition of the form:
+
+```text
+failureDetectorSuspects(nodeRef)
+    -> TERMINATED
+```
+
+A future distributed facility may add a suspicion detector and a distinct
+downing/removal decision only through its own normative contract. Merely
+suspecting a Node must remain reversible and must not itself retarget ActorRefs,
+terminate hosted remote entities, or authorize replacement.
 
 
 ### Process termination knowledge

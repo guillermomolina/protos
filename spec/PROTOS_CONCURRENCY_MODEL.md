@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 207
+Document revision: 208
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -2082,6 +2082,72 @@ If a Node becomes unreachable, remote entities become UNKNOWN or
 UNREACHABLE before the runtime can legitimately conclude that they are
 terminated.
 
+## 38A. Node Failure Knowledge Boundary
+
+**CLOSED**
+
+Core v0.1 does not define or require an automatic distributed failure detector
+that turns loss of contact with a remote Node into authoritative Node
+termination.
+
+A runtime may know that a Node incarnation has ended when that fact is
+established by lifecycle authority already inside the runtime's custody. For
+example, a runtime that is itself terminating a local Node incarnation may know
+when that termination has completed. This is direct lifecycle knowledge, not
+failure detection inferred from remote silence.
+
+For a Node known only through distributed communication, the following evidence
+is insufficient by itself to establish `TERMINATED`:
+
+- missed heartbeats or probes;
+- transport disconnect, reset, or refusal;
+- routing failure;
+- timeout;
+- inability to reconnect;
+- host, VM, container, pod, or infrastructure reachability failure;
+- loss of every currently known Process connection hosted by that Node; or
+- any implementation-selected elapsed-time, retry-count, or suspicion threshold.
+
+Such evidence may establish or maintain `UNREACHABLE` or `UNKNOWN` under the
+existing distributed-state distinction. It must not fabricate terminal
+lifecycle knowledge.
+
+Core therefore defines no implementation-selectable heartbeat interval, phi
+threshold, retry count, grace period, lease duration, infrastructure probe, or
+host-specific rule whose expiry changes a remote Node incarnation to
+`TERMINATED`.
+
+Node identity remains incarnation identity. If connectivity is later restored
+to the same still-live Node incarnation, Core must not have killed that
+incarnation merely because a detector timeout expired. If equivalent capacity
+appears as a new Node incarnation, that new Node remains distinct under the
+existing identity rule.
+
+This boundary deliberately does not decide Cluster membership removal,
+partition downing, quorum policy, fencing, split-brain resolution, or authority
+for declaring a member permanently removed. Those are separate distributed
+coordination mechanisms and remain governed by their own sections and open
+design topics.
+
+A future normative Cluster/distributed-runtime facility may define a failure
+detector and a separate authoritative downing/removal decision. If it does, it
+must specify at least:
+
+- what evidence produces suspicion or `UNREACHABLE`;
+- what authority may convert suspicion into an irreversible membership or
+  lifecycle decision;
+- the incarnation/epoch being decided;
+- partition and stale-observer behavior;
+- fencing or equivalent protection against two live sides both acting as the
+  same authority; and
+- consequences for hosted Processes, ActorRefs, monitoring, routing, and
+  replacement.
+
+Until such a facility exists, the absence of automatic Node failure detection in
+Core is normative rather than an implementation gap. Internal health telemetry
+may use arbitrary heuristics provided those heuristics do not alter Core-visible
+Node, Process, ActorRef, monitoring, messaging, or replacement semantics.
+
 ## 39. Cluster
 
 **DIRECTION CLOSED, DETAILS OPEN --- REVISED**
@@ -3761,7 +3827,6 @@ mechanism, or implementation detail that still requires design.
 -   Draining policy and mechanics
 -   Infrastructure Controller integration APIs
 -   External infrastructure adapters such as Kubernetes or Nomad
--   Node failure detection mechanism
 -   Network-partition detection and reporting
 -   Split-brain mitigation mechanisms
 -   Cluster membership protocol
