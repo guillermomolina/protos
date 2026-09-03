@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.122] - 2026-09-03
+
+### Fixed
+- Defined invocation of `shutdownWrite()` and `shutdownRead()` as the irreversible
+  commitment boundary for permanent termination of the corresponding direction.
+- Prevented Future cancellation or shutdown failure from reopening a direction
+  after its shutdown lifecycle has begun.
+- Defined deterministic interaction with pending reads: uncommitted reads lose
+  the race to read shutdown as local EOF (`null`), while committed results remain
+  unchanged.
+- Defined post-failure and repeated half-close behavior as one idempotent
+  lifecycle rather than implementation-dependent retries.
+- Kept input and output half-close lifecycles independent unless a stronger
+  concrete protocol explicitly couples them.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 122. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.121] - 2026-09-03
 
 ### Fixed

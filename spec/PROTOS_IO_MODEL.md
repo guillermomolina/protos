@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 121
+Document revision: 122
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -902,31 +902,39 @@ Both operations return Futures. On successful completion, each operation resolve
 
 `shutdownWrite()` permanently ends the receiver's output direction without closing its input direction or necessarily closing the whole resource.
 
-It establishes an end-of-output frontier after writes invoked before it. Those writes retain the opportunity to complete, and shutdown waits behind them.
+Invoking `shutdownWrite()` is itself the irreversible commitment boundary for the output-direction lifecycle. Before the returned Future is observable, the receiver has entered a permanent write-shutting-down state and accepts no new writes. That transition cannot be rolled back, so the shutdown Future cannot subsequently become `cancelled`. Cancellation of an activation waiting for it does not cancel or reopen the committed shutdown lifecycle.
 
-Once write shutdown begins, no new writes are accepted.
+`shutdownWrite()` establishes an end-of-output frontier after writes invoked before it. Those writes retain the opportunity to complete, and shutdown waits behind them.
 
-Successful completion means that the underlying resource accepted the end-of-output frontier after preceding output. It does not mean the peer application consumed the data.
+Successful completion means that every required preceding output operation reached the outcome required for a clean frontier and that the underlying resource accepted the end-of-output frontier after that preceding output. It does not mean the peer application consumed the data.
 
 There is no universal implied flush. A wrapper that exposes `WriteShutdown` must first correctly finalize/propagate its own output state before propagating shutdown to the underlying output direction.
 
-If required preceding output fails, a pending graceful write shutdown fails rather than pretending that a clean end-of-output was established.
+If required preceding output fails, or if establishment of the end-of-output frontier itself fails, the shutdown Future fails rather than pretending that a clean end-of-output was established. The output direction remains permanently unavailable to new writes; failure never reopens it.
 
-Write shutdown is logically idempotent.
+Write shutdown is logically idempotent. Calls made while shutdown is pending observe the same lifecycle rather than beginning independent shutdown attempts. After successful shutdown, later calls succeed without establishing another end-of-output frontier. After failed shutdown, later calls fail consistently with that failed lifecycle and do not retry the frontier or reopen output. Exact Future-object identity is not required.
+
+Input capability and input lifecycle remain unaffected except where a stronger concrete protocol explicitly couples them.
 
 ### 19.2 ReadShutdown
 
 `shutdownRead()` permanently terminates the receiver's willingness to receive input without closing unrelated capabilities.
 
-Buffered or future input may be discarded by read shutdown.
+Invoking `shutdownRead()` is itself the irreversible commitment boundary for the input-direction lifecycle. Before the returned Future is observable, the receiver has entered a permanent read-shutting-down state. That transition cannot be rolled back, so the shutdown Future cannot subsequently become `cancelled`. Cancellation of an activation waiting for it does not cancel or reopen the committed shutdown lifecycle.
 
-After successful read shutdown, future reads return `null`.
+Buffered or future input may be discarded by read shutdown. Once read shutdown begins, no new read is accepted as an ordinary data-producing operation.
 
-Pending uncommitted reads may complete with `null` if shutdown wins their commitment race. A read that has already committed a `Bytes` result remains that committed read.
+A pending uncommitted read whose data/EOF/error result has not committed when shutdown wins the ordering race completes with `null`; it does not remain pending indefinitely and is not reported as `cancelled` merely because shutdown occurred. A read that has already committed a `Bytes`, EOF, or error result retains that committed result.
 
-Remote EOF and local read shutdown are distinct events even though later ordinary reads may return `null` in both states.
+After read shutdown begins, later ordinary reads return `null`, including while the shutdown Future is still pending. This local EOF-like result reflects the receiver's terminated input direction and does not claim remote EOF.
 
-Read shutdown is logically idempotent.
+If underlying/backend work required to establish or release the read-shutdown state fails, the shutdown Future may fail, but the input direction remains permanently unavailable for ordinary reading; failure never reopens it.
+
+Read shutdown is logically idempotent. Calls made while shutdown is pending observe the same lifecycle. After successful shutdown, later calls succeed without performing another shutdown. After failed shutdown, later calls fail consistently with that failed lifecycle and do not start a fresh shutdown attempt. Exact Future-object identity is not required.
+
+Remote EOF and local read shutdown are distinct events even though ordinary reads after either condition may return `null`.
+
+Output capability and output lifecycle remain unaffected except where a stronger concrete protocol explicitly couples them.
 
 ### 19.3 Whole-resource close
 
@@ -1294,6 +1302,7 @@ Wrapping does not imply lifecycle ownership.
 Invoking close commits permanent lifecycle termination; close itself cannot subsequently become cancelled.
 
 flush != sync != close != shutdownWrite
+Invoking read/write shutdown commits permanent termination of that direction; cancellation cannot reopen it, and a failed shutdown does not create a fresh retry lifecycle.
 A failed sync may leave an unknown subset durable, but does not itself poison the receiver; a later successful sync covers its entire later frontier without replaying logical data changes.
 A failed flush never authorizes duplicate replay; an output wrapper with unknowable downstream progress becomes unusable unless a stronger protocol makes exact recovery possible.
 EOF != unavailable capability != I/O failure
