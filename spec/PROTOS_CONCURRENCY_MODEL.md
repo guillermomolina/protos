@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 199
+Document revision: 200
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -413,6 +413,51 @@ cancelled or otherwise made ineligible, and execution repeatedly returns to a
 runtime scheduling point capable of selecting work in that item's scheduling
 scope, that work item must eventually receive an execution turn. Later-arriving
 runnable work must not postpone such a continuously runnable item forever.
+
+Admission/backpressure liveness is a separate obligation from runnable-task
+fairness. A pre-acceptance `send()` or `request()` operation that is waiting
+only for delivery-path admission is not runnable Actor work, but it must not be
+starved merely because later delivery attempts keep arriving.
+
+A pending delivery operation is **continuously admission-eligible** when, from
+some point onward, all semantic prerequisites other than the availability of an
+admission opportunity remain satisfied in its current routing/admission scope,
+the operation is not cancelled or otherwise terminal, and admission
+opportunities for that scope continue to occur.
+
+If a delivery operation remains continuously admission-eligible and admission
+opportunities repeatedly occur in a scope capable of admitting it, the runtime
+must eventually either:
+
+- advance that operation across the applicable acceptance boundary; or
+- make the operation terminal for an independently defined semantic reason,
+  such as cancellation, destination termination, routing failure, or delivery
+  uncertainty.
+
+Later-arriving operations must not consume recurring admission opportunities in
+a way that postpones a continuously admission-eligible operation forever.
+
+For operations from the same originating Actor incarnation to the same concrete
+Actor, this admission rule composes with same-sender FIFO: a later still-live
+delivery attempt must not cross concrete-Actor acceptance ahead of an earlier
+still-live attempt from that sender merely because both experienced
+backpressure. Cancellation or terminal failure of the earlier operation removes
+that ordering constraint; an explicit retry takes its ordinary new issuance
+position.
+
+ActorGroup routing does not gain Group-wide FIFO from this rule. A Group
+operation may be routed or re-routed according to the existing Group rules, and
+different operations may still reach different members. The fairness obligation
+only prevents a continuously eligible pending operation from being bypassed
+forever while its applicable routing/admission scope repeatedly has an
+opportunity to make progress.
+
+This is weak admission fairness, not a throughput or latency contract. It does
+not require equal producer shares, round-robin admission, a fixed queue
+discipline, a bounded number of bypasses, a wall-clock deadline, or progress
+while no compatible admission opportunity occurs. Operations whose eligibility
+repeatedly appears and disappears do not receive a strong-fairness guarantee.
+
 
 The same weak-fairness obligation applies to selection among live Actors that
 remain continuously runnable when execution repeatedly returns to a scheduling

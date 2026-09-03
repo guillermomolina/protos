@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.200] - 2026-09-03
+
+### Fixed
+- Closed an admission-starvation hole left outside runnable scheduler fairness.
+- Added weak fairness for continuously admission-eligible `send()` and
+  `request()` operations under recurring compatible admission opportunities.
+- Required later arrivals not to bypass such an operation forever.
+- Made same-sender FIFO explicit across backpressure for still-live operations
+  targeting the same concrete Actor.
+- Preserved ActorGroup routing freedom without introducing Group-wide FIFO.
+- Kept admission fairness distinct from Actor-task runnability and avoided
+  mandating queue structure, round-robin scheduling, equal shares, or latency
+  bounds.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 200.
+
 ## [0.1.199] - 2026-09-03
 
 ### Fixed

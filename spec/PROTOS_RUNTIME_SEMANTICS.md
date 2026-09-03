@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 199
+Document revision: 200
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2458,6 +2458,38 @@ Conceptually, Actor termination while its hosting runtime can still execute
 cleanup includes:
 
 ```text
+### Actor delivery admission fairness
+
+Actor delivery backpressure has a liveness obligation distinct from runnable
+task scheduling. Conceptually:
+
+```text
+function considerAdmission(scope):
+    candidates = liveDeliveryOperationsEligibleForAdmission(scope)
+
+    choose some candidate subject to:
+        no candidate that remains continuously admission-eligible
+        may be bypassed forever while compatible admission
+        opportunities repeatedly occur
+
+    if candidate exists:
+        advance candidate according to the ordinary routing and
+        concrete-Actor acceptance rules
+```
+
+The choice mechanism is intentionally unspecified. It may use FIFO queues,
+fair semaphores, rotating producer queues, tickets, aging, or another strategy.
+
+For the same sender incarnation and same concrete Actor, the chooser must also
+preserve the existing issuance FIFO among still-live operations. This
+admission-order constraint ends for an earlier operation when that operation is
+cancelled or becomes terminal before acceptance.
+
+Admission eligibility is not Actor-task runnability. Making a delivery
+operation admission-eligible therefore does not create an Actor turn and does
+not weaken the existing definition of scheduler weak fairness.
+
+
 ### Actor lifecycle observation
 
 `ActorRef.termination()` is represented conceptually as a non-task-backed
