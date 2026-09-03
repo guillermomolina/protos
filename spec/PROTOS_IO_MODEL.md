@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 127
+Document revision: 128
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -437,7 +437,19 @@ When a `ByteWritable` write on such a receiver fails after contributing a prefix
 
 Seeking after EOF re-enables reading according to the new position.
 
-Cancellation before seek commitment leaves the position unchanged. Once the position change commits, cancellation cannot undo it.
+Standard `seek(position)`, `seekBy(offset)`, and `seekToEnd()` are failure-atomic with respect to the receiver's logical sequence position. If a seek Future fails, that seek operation leaves the logical position exactly as it was immediately before that seek's ordered evaluation.
+
+For `seekBy(offset)`, the base position used to compute the target is the logical position established by all earlier ordered position-affecting operations when this seek reaches its evaluation point. For `seekToEnd()`, the target is the sequence end applicable at that same ordered evaluation point. A later independent size/content change does not retroactively change an already committed seek result.
+
+A seek commits only when its complete logical position change has been established. Once committed, cancellation cannot undo it and that seek completes successfully rather than reporting failure after exposing the requested position change.
+
+Cancellation before seek commitment leaves the logical position unchanged. Failure before commitment likewise leaves it unchanged. An implementation whose backend cursor moved tentatively before the Protos seek failed or was cancelled must restore, virtualize, or otherwise reconcile that cursor so subsequent Protos operations observe the unchanged logical position.
+
+This guarantee concerns the logical position belonging to the `ByteSeekable` receiver. It does not require one native seek call, nor does it prohibit speculative backend work that remains unobservable.
+
+A backend that cannot provide or emulate this failure-atomic logical-position contract must not expose the standard `ByteSeekable` capability merely because it has a host cursor API with weaker failure semantics.
+
+A failed `position()` query has no position-changing effect.
 
 `ByteSeekable` does not imply `ByteSized`.
 
@@ -1328,6 +1340,7 @@ A failed sync may leave an unknown subset durable, but does not itself poison th
 A failed flush never authorizes duplicate replay; an output wrapper with unknowable downstream progress becomes unusable unless a stronger protocol makes exact recovery possible.
 EOF != unavailable capability != I/O failure
 A failed ByteReadable read consumes zero observable bytes and leaves the logical sequence position unchanged; any bytes already obtained are preserved for later logical reading.
+ByteSeekable seek operations are failure-atomic with respect to logical position; failed or successfully cancelled seeks leave that position unchanged.
 
 Path is a value, not filesystem authority.
 Portable Path identity is structural: rootedness plus ordered components; Filesystem lookup identity, host syntax, and resource identity are separate.

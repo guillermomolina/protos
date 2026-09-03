@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.128] - 2026-09-03
+
+### Fixed
+- Defined `seek`, `seekBy`, and `seekToEnd` as failure-atomic with respect to the
+  receiver's logical sequence position.
+- Required failed and successfully cancelled seeks to leave logical position
+  unchanged even when a backend cursor moved tentatively.
+- Defined `seekBy` and `seekToEnd` targets at the seek's ordered evaluation point
+  so concurrent/earlier position or size effects cannot be interpreted
+  differently by independent implementations.
+- Defined seek commitment only when the complete logical position change is
+  established; after commitment the seek succeeds rather than exposing the new
+  position behind a failed Future.
+- Required implementations to restore, virtualize, or reconcile weaker backend
+  cursor behavior, or else not expose standard `ByteSeekable`.
+- Clarified that a failed `position()` query has no position-changing effect.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 128. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.127] - 2026-09-03
 
 ### Fixed
