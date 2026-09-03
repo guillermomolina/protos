@@ -497,6 +497,63 @@ class ProtosLexerTest {
     }
 
     @Test
+    void stringContentIsNotIdentifierNormalized() {
+        String decomposed = "cafe\u0301";
+        assertEquals(
+            List.of(token(TokenType.STRING, decomposed), token(TokenType.EOF, "")),
+            lex("\"" + decomposed + "\"")
+        );
+    }
+
+    @Test
+    void ordinaryStringContentAcceptsSupplementaryUnicodeScalars() {
+        assertEquals(
+            List.of(token(TokenType.STRING, "😀"), token(TokenType.EOF, "")),
+            lex("\"😀\"")
+        );
+    }
+
+    @Test
+    void tripleSingleQuotesHaveNoSpecialLexicalMeaning() {
+        assertEquals(
+            List.of(
+                token(TokenType.STRING, ""),
+                token(TokenType.STRING, ""),
+                token(TokenType.EOF, "")
+            ),
+            lex("''''")
+        );
+    }
+
+    @Test
+    void tripleDoubleQuoteRunBoundariesRemainExactWhenFollowingStringsAreCompleted() {
+        assertEquals(
+            List.of(
+                token(TokenType.STRING, "text"),
+                token(TokenType.STRING, "x"),
+                token(TokenType.EOF, "")
+            ),
+            lex("\"\"\"text\"\"\"\"x\"")
+        );
+        assertEquals(
+            List.of(
+                token(TokenType.STRING, "text"),
+                token(TokenType.STRING, "x"),
+                token(TokenType.EOF, "")
+            ),
+            lex("\"\"\"text\"\"\"\"\"\"x\"\"\"")
+        );
+        assertEquals(
+            List.of(token(TokenType.STRING, "\"x"), token(TokenType.EOF, "")),
+            lex("\"\"\"\"x\"\"\"")
+        );
+        assertEquals(
+            List.of(token(TokenType.STRING, "\"\"x"), token(TokenType.EOF, "")),
+            lex("\"\"\"\"\"x\"\"\"")
+        );
+    }
+
+    @Test
     void interpolationLookingTextIsOrdinaryStringContent() {
         assertEquals(
             List.of(token(TokenType.STRING, "${value}"), token(TokenType.EOF, "")),
