@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 212
+Document revision: 213
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2488,6 +2488,43 @@ cancelled or becomes terminal before acceptance.
 Admission eligibility is not Actor-task runnability. Making a delivery
 operation admission-eligible therefore does not create an Actor turn and does
 not weaken the existing definition of scheduler weak fairness.
+
+
+### Core split-brain safety
+
+Core has no automatic partition winner or downing strategy. Runtime control
+therefore reduces split-brain safety to Authority checks:
+
+```text
+function authorizeDuringReachabilityLoss(operation):
+    if not operation.requiresAuthority:
+        return ordinarySemanticEligibility(operation)
+
+    if demonstrateCurrentAuthority(operation.authorityScope):
+        return ALLOW
+
+    return DENY
+```
+
+`DENY` means the authoritative operation does not occur. It does not by itself
+terminate the local Process/Node, terminate the remote side, acquire replacement
+Authority, or convert unreachability into termination.
+
+A Core runtime must not contain a semantic shortcut such as:
+
+```text
+if partitionSuspected:
+    winner = chooseMajorityOrOldestOrLocalSide()
+    down(otherSide)
+```
+
+unless a future normative facility explicitly defines that policy and the
+Authority/fencing guarantees that make its decision valid.
+
+After reachability returns, ordinary communication and control may resume only
+according to the identities, membership decisions, Authority state, and
+operation outcomes that actually survived; Core performs no implicit state
+merge or uncertain-message replay.
 
 
 ### Network-partition reporting

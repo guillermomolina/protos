@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.213] - 2026-09-03
+
+### Closed
+- Closed `Split-brain mitigation mechanisms` for Core v0.1 by defining that
+  Core has no automatic partition winner or implementation-selected downing
+  strategy.
+- Reduced Core split-brain safety to the existing scoped Authority invariant:
+  non-authoritative work may continue, while an operation requiring Authority
+  must not proceed unless current valid Authority can be demonstrated.
+- Prohibited majority/oldest/local-side/time-based heuristics from silently
+  granting Authority or terminating the opposite partition.
+- Defined that Core performs no implicit partition-healing state merge,
+  uncertain-message replay, identity rewrite, or remote-side replacement.
+- Kept Cluster membership, Authority acquisition/transfer, quorum/consensus,
+  leases, fencing, and explicit future split-brain policies as separate
+  mechanisms requiring their own normative contracts.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 213.
+
 ## [0.1.212] - 2026-09-03
 
 ### Fixed

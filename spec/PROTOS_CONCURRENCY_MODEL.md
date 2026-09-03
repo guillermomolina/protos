@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 212
+Document revision: 213
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -2192,6 +2192,65 @@ reporting.
 Thus Core's portable observable report for ambiguous communication loss is
 reachability knowledge, not guessed network topology.
 
+## 38C. Core Split-Brain Safety Boundary
+
+**CLOSED**
+
+Core v0.1 does not define an automatic split-brain resolver, partition winner,
+majority side, oldest side, static quorum, lease-majority strategy, or
+implementation-selected downing policy.
+
+When distributed communication is lost, Core safety follows the existing
+Authority rule rather than inventing a universal partition policy:
+
+```text
+operation does not require Authority
+    -> may continue if all of its other semantic prerequisites hold
+
+operation requires Authority(scope)
+    and currently valid Authority(scope) can be demonstrated
+    -> may proceed
+
+operation requires Authority(scope)
+    and currently valid Authority(scope) cannot be demonstrated
+    -> must not proceed
+```
+
+Consequently, a partitioned runtime domain does not become authoritative merely
+because it is still executing, has more Nodes, has an older Node, retains a
+particular infrastructure identity, or has waited for an implementation-defined
+timeout.
+
+Core also does not automatically terminate, down, fence, restart, replace, or
+remove the opposite side of an ambiguous partition. Those are authoritative
+control decisions when correctness depends on exclusivity and therefore require
+a separately defined mechanism capable of demonstrating the required Authority.
+
+This deliberately favors portable safety over hidden availability policy. A
+partition may make some authoritative operations unavailable while unrelated
+local computation continues under the existing rule. Core provides no guarantee
+that every partition can continue making progress for operations whose
+correctness requires distributed exclusivity.
+
+When connectivity heals, the same still-live incarnations may resume ordinary
+communication if no independent authoritative membership or lifecycle decision
+has removed or terminated them. Core itself performs no partition-healing
+reconciliation that rewrites identity, replays uncertain messages, or merges
+divergent mutable Actor state.
+
+This rule does not claim that arbitrary application effects on two isolated
+sides can be automatically reconciled. Applications and future distributed
+facilities that require exclusive external side effects, singleton writers,
+durable replicated state, or other non-convergent invariants must use an
+Authority/fencing mechanism whose semantics cover those effects.
+
+A future Cluster facility may standardize a split-brain resolver or one or more
+explicit policies. Such a facility must define its decision scope, evidence,
+Authority acquisition, fencing, stale-holder behavior, membership consequences,
+recovery after healing, and interaction with Processes, Actors, Groups,
+messages, and external effects. Until then, implementations must not silently
+choose a split-brain/downing strategy as Core semantics.
+
 ## 39. Cluster
 
 **DIRECTION CLOSED, DETAILS OPEN --- REVISED**
@@ -3871,7 +3930,6 @@ mechanism, or implementation detail that still requires design.
 -   Draining policy and mechanics
 -   Infrastructure Controller integration APIs
 -   External infrastructure adapters such as Kubernetes or Nomad
--   Split-brain mitigation mechanisms
 -   Cluster membership protocol
 -   Authority-scope API/model representation
 -   Authority acquisition and transfer
