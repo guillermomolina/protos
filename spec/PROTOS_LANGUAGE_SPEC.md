@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 82  
+Document revision: 83  
 Status: Draft  
 Last updated: 2026-09-03
 
@@ -1308,7 +1308,55 @@ enemy:  { ...positionable }
 
 Composition does not introduce a delegation relationship and never modifies the receiving object's parent. After successful composition, the contributed slots behave exactly as local slots of the receiving object.
 
-Composition order does not resolve conflicts. If multiple composed objects provide the same slot name, the composition is invalid unless the receiving object explicitly declares that slot locally in its own body. The position of that explicit declaration relative to the composition expressions is irrelevant.
+Composition order does not resolve conflicts. Explicit local slot declarations
+directly contained in the receiving object body structurally reserve their names
+for those declarations, independently of textual position. A composition item
+does not contribute a source slot whose name is reserved in this way.
+
+The reservation is not itself a slot or binding. It does not make the name
+visible before its declaration executes, does not shadow lexical or delegated
+lookup, and has no observable value. Its only semantic effect is to exclude that
+name from composition contributions while this object body is being constructed.
+
+Object-body items execute strictly from left to right. Each completed item is
+visible to subsequent items, and no later item changes the meaning or effects of
+an earlier evaluation.
+
+For example:
+
+```js
+base: {
+    x: 1
+}
+
+a: {
+    ...base
+    y: x
+}
+```
+
+When `y: x` executes, `x` has already been contributed by `...base`, so `y`
+receives the value `1`.
+
+By contrast:
+
+```js
+b: {
+    ...base
+    y: x
+    x: 42
+}
+```
+
+The direct declaration `x: 42` reserves `x` for the receiving object. Therefore
+`...base` does not contribute its `x` binding. When `y: x` executes, the local
+`x` declaration has not executed yet, so that reservation has no effect on
+lookup: `x` is resolved by the ordinary lookup rules as they stand at that
+point, and lookup signals an error if no other binding is available. The later
+`x: 42` declaration cannot retroactively affect that earlier lookup.
+
+A local declaration therefore resolves composition conflicts structurally
+without introducing temporal precedence between composition sources:
 
 ```js
 walker:  { move: () => { ... } }
@@ -1318,19 +1366,57 @@ duck: {
     ...walker
     ...swimmer
 
-    move: () => { ... }   // explicitly resolves the conflict
+    move: () => { ... }
 }
 ```
 
-The same conflict rule applies to every slot; there is no special distinction between method-like closure slots and state slots. A local declaration has priority over composed contributions, composed contributions must agree on uniqueness, and ordinary delegation is considered only after local/composed slots have been established.
+Both composed `move` bindings are excluded because `move` is reserved by the
+direct local declaration. The declaration creates the receiving object's
+`move` slot when its body item executes.
+
+For names that are not reserved by a direct local declaration, composition is
+incremental. A unique contributed binding becomes a local slot of the receiving
+object when that composition item successfully completes and is immediately
+visible to subsequent body items.
+
+If a later composition item would contribute a non-reserved name that already
+exists locally on the receiving object, the composition item signals a
+composition conflict. Composition order never selects a winner.
+
+Each individual composition item is atomic with respect to structural changes
+to the receiving object. The source expression is evaluated first under the
+ordinary left-to-right evaluation rules. The runtime then determines all
+effective local-slot contributions from that source, excluding reserved names,
+and validates the complete contribution set before adding any of those slots.
+If any effective contribution conflicts, that composition item adds none of its
+slots. Effects that occurred while evaluating the source expression are not
+rolled back.
+
+The order in which a source object's local slots are represented or enumerated
+therefore cannot affect whether composition succeeds, which conflict is
+semantically present, or which subset of the source is installed.
+
+The same conflict rule applies to every slot; there is no special distinction
+between method-like closure slots and state slots. Ordinary delegation is
+considered only after the local state visible at the point of lookup.
 
 Conceptually:
 
 ```text
-explicit local slot > unique composed slot > delegated lookup
+explicit local declaration reserves its name
+        ↓
+composition contributes only unreserved names
+        ↓
+a unique contribution becomes local when its item completes
+        ↓
+a second non-reserved local contribution is an error
+        ↓
+delegated lookup applies only when no local binding is present
 ```
 
-This avoids composition-order precedence, method resolution orders, diamond inheritance, and multiple `super` chains while preserving structural flattening.
+This avoids composition-order precedence, method resolution orders, diamond
+inheritance, deferred whole-body composition resolution, and multiple `super`
+chains while preserving structural flattening and left-to-right evaluation.
 
 ### Composition Views: `without` and `alias`
 

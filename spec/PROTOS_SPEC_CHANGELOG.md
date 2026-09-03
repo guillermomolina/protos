@@ -4,6 +4,39 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.83] - 2026-09-03
+
+### Fixed
+- Defined object-composition visibility during construction. Object-body items
+  execute strictly left to right, and a successfully completed composition item
+  makes its unique effective contributions immediately visible to subsequent
+  body items. Later body items never retroactively affect earlier evaluation.
+- Replaced deferred whole-body composition resolution with structural
+  reservation of names declared directly by the receiving object body. A direct
+  local slot declaration reserves its name against composition independently of
+  textual position, but the reservation is not a binding and does not affect
+  lookup before the declaration executes.
+- Made each composition item atomic with respect to target structural mutation.
+  The source expression is evaluated first; all effective contributions are
+  then validated before any are installed. A conflict therefore cannot leave a
+  partially composed target, and source-slot enumeration order cannot become
+  observable through partial installation.
+- Clarified that composition has neither first-wins nor last-wins semantics.
+  Non-reserved contributions that collide with an existing local target slot
+  signal `CompositionConflict`.
+
+### Changed
+- Simplified the executable composition model in
+  `PROTOS_RUNTIME_SEMANTICS.md`: implementations no longer conceptually collect
+  all composition contributions and defer final slot resolution until after the
+  object body. Composition may be performed incrementally while preserving the
+  structural priority of direct local declarations.
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 83. No grammar,
+  concurrency-model, or I/O-model semantics change in this revision.
+
+
 ## [0.1.82] - 2026-09-03
 
 ### Changed

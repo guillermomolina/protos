@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 82  
+Document revision: 83  
 Status: Draft  
 Last updated: 2026-09-03
 
@@ -1005,6 +1005,9 @@ function createObject(parent, body, activation):
         ownsReturnHome = false
     )
 
+    constructionActivation.compositionReservedNames =
+        compositionReservedNames(body)
+
     evaluateSequence(
         body,
         constructionActivation
@@ -1044,46 +1047,110 @@ composition is structural flattening of local slot bindings. A composition sourc
 
 A `...source` form is a **composition item**: a contextual object-body item recognized by the parser only inside an object body. It is not a general expression form. Recognizing a composition item is purely a parsing matter: it introduces no new runtime value kind and no new runtime operation. The item's source is an ordinary expression evaluated under ordinary expression semantics, and composition items are separated from other object-body items by the same logical-`NEWLINE`/inline-`;` rules as ordinary expressions.
 
-The runtime must distinguish three things while constructing an object:
+Before evaluating an object body, the runtime conceptually determines the set
+of slot names created by direct local slot-creation items of that body:
 
 ```text
-explicitLocalDeclarations
-composedContributionsByName
-the final local slot table
+function compositionReservedNames(body):
+    names = emptySet
+
+    for each direct item in body:
+        if item is Create(
+            targetExpr = null,
+            name = name,
+            valueExpr = ...
+        ):
+            names.add(name)
+
+    return names
 ```
 
-Each composition expression evaluates its source normally and records that source's local slot bindings:
+This inspection is structural. It does not evaluate any expression, create any
+slot, invoke any operation, or make a reserved name visible to lookup.
+
+An implementation need not materialize this set at runtime. It may encode the
+same information in parsed or compiled representation provided that observable
+behavior is identical.
+
+The `compositionReservedNames` associated with the construction activation are
+conceptual construction state. They are not observable slots of the Activation
+or of the object under construction.
+
+A composition item is evaluated as follows:
 
 ```text
-function collectComposition(source, construction):
+function evaluateComposition(sourceExpr, activation):
+    require activation.isConstruction
+
+    source = evaluate(sourceExpr, activation)
     requireObject(source)
 
+    target = activation.context
+    reserved = activation.compositionReservedNames
+    effectiveSlots = emptyCollection
+
+    // Validation phase. No target slot is changed here.
     for each local slot in source:
-        construction.composedContributions[slot.name].append(slot.value)
+        if reserved contains slot.name:
+            continue
+
+        if lookupLocal(target, slot.name) != NOT_FOUND:
+            signal CompositionConflict(
+                target = target,
+                name = slot.name
+            )
+
+        effectiveSlots.append(slot)
+
+    if effectiveSlots is not empty and target.state != open:
+        if target.state == frozen:
+            signal FrozenObject(target)
+
+        signal ClosedObject(target)
+
+    // Installation phase. Validation has succeeded for the whole item.
+    for each slot in effectiveSlots:
+        target.localSlots[slot.name] = slot.value
+
+    return target
 ```
 
-The slot **binding** is copied; `slot.value` itself is not cloned. If two receivers compose a slot whose value is the same mutable object, both resulting local slots initially refer to that same object.
+The source expression is evaluated exactly once. Effects caused by evaluating
+that expression occur before composition validation and are not rolled back if
+composition later fails.
 
-Explicit local declarations in the receiving object are recorded independently of textual order. After the complete body has been evaluated sufficiently to determine its composition contributions and explicit local declarations, the final slots are resolved per name:
+The composition item's structural effect on the target is atomic: either every
+effective contribution from that item is installed or none is. Consequently
+the source object's internal slot-enumeration order is not observable through
+partial installation.
 
-```text
-function resolveComposedSlot(construction, name):
-    if construction.hasExplicitLocalDeclaration(name):
-        return construction.explicitLocalValue(name)
+The conceptual validation and installation phases do not require a particular
+implementation strategy. Inspecting a local slot binding invokes no Protos
+code, so an implementation may preflight and install by any equivalent
+mechanism. It need not copy the source's slot table or allocate
+`effectiveSlots` when the same observable atomic result can be guaranteed
+otherwise.
 
-    contributions = construction.composedContributions[name]
+A reserved name is ignored only by composition. Reservation does not create a
+slot and does not participate in `lookupLocal`, `lookupSlot`, `lookupName`,
+assignment, reflection, or delegation. Until the explicit declaration executes,
+ordinary lookup behaves exactly as if no reservation existed.
 
-    if contributions.count == 1:
-        return contributions[0]
+After a successful composition item, each installed binding is an ordinary
+local slot of the target and is immediately visible to subsequent object-body
+items.
 
-    if contributions.count > 1:
-        signal CompositionConflict(
-            target = construction.target,
-            name = name
-        )
-```
+The slot **binding** is copied; `slot.value` itself is not cloned. If two
+receivers compose a slot whose value is the same mutable object, both resulting
+local slots initially refer to that same object.
 
-Thus an explicit local declaration has priority over any composed contribution and resolves a collision between multiple sources. In the absence of an explicit local declaration, two or more contributions with the same name are an error. Source order never selects a winner.
+If a non-reserved contribution would collide with an already local target slot,
+the entire composition item signals `CompositionConflict` before installing any
+of its contributions. No first-wins or last-wins rule exists.
+
+Direct local declarations retain the ordinary `:` semantics when they execute.
+The structural reservation merely prevents composition from occupying the
+declaration's name beforehand; it does not perform the declaration early.
 
 The rule is uniform for closure-valued slots, immutable values, mutable objects, and all other slot contents. Composition never changes `target.parent` and adds no alternate lookup path. Once construction succeeds, composed slots are ordinary local slots of `target`.
 
