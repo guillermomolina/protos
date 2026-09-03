@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.140] - 2026-09-03
+
+### Fixed
+- Defined invocation-time capture of the complete semantic configuration for
+  `filesystem.open`.
+- Prevented later mutation of a mutable options builder/object from changing an
+  already-invoked open's access, creation, truncation, append, or resulting File
+  capability shape.
+- Required option-combination validation to use the captured configuration.
+- Kept option capture separate from I/O commitment so snapshotting configuration
+  does not itself prevent cancellation before filesystem effects or File-result
+  commitment.
+- Made the rule representation-neutral and prohibited hidden caller-visible
+  borrow/freeze requirements while an open Future is pending.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 140. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.139] - 2026-09-03
 
 ### Fixed

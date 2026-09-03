@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 139
+Document revision: 140
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -867,6 +867,16 @@ write placement:
 
 Exact construction/spelling of the options object is outside this document.
 
+`filesystem.open(path, options)` captures the complete semantic open configuration at invocation time, before the operation may remain pending, wait for another operation, or begin host/backend I/O. The captured configuration consists of the access, creation, initial-content, and write-placement choices defined above.
+
+Later mutation of an ordinary object, collection, builder, or other library value that was used to express `options` cannot change the configuration of an already-invoked open. Each open invocation captures its own configuration independently.
+
+This is a semantic value capture, not a requirement to eagerly copy a particular public options object. An implementation or standard library may use immutable option values, builders, compact flags, copy-on-write state, or another representation. It must not impose a hidden caller-visible borrow/freeze/"do not mutate until the Future completes" rule merely to keep an open's configuration stable.
+
+Capturing the configuration does not itself commit any filesystem effect and does not by itself prevent cancellation. The ordinary open commitment rules below still determine when creation, truncation, or File-result custody makes cancellation impossible.
+
+Validation of access/creation/initial-content/write-placement combinations is performed against that captured configuration. A later mutation of the value originally used to express the options cannot turn an invalid captured open into a valid one, change a valid captured open into a destructive one, alter its access rights, or otherwise change its eventual File capability shape.
+
 At least read or write access is required.
 
 Append requires write access.
@@ -1402,6 +1412,7 @@ URL is a value, not resource-access authority.
 Filesystem carries filesystem authority.
 Path resolution through a Filesystem is confined to that capability's authorized namespace; path syntax or backend indirection cannot escape into ambient authority.
 filesystem.open may report cancelled only before any portable create/truncate effect and before File-result commitment.
+filesystem.open captures its complete semantic option configuration at invocation; later mutation of an options builder/value cannot change access, creation, truncation, append, or capability outcome.
 A failed committed open does not compensate by deleting an already-created target or restoring already-truncated content.
 
 A Protos Process is an execution domain, not an OS process.
