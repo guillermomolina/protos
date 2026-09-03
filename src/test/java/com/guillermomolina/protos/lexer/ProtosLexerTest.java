@@ -123,6 +123,36 @@ class ProtosLexerTest {
     }
 
     @Test
+    void rejectsEveryIllustrativeNonWhitespaceCodePointOutsideLexicalConstructs() {
+        for (String source : List.of(
+            "a\u000Bb",
+            "a\u000Cb",
+            "a\u0085b",
+            "a\u00A0b",
+            "a\u1680b",
+            "a\u2000b",
+            "a\u200Ab",
+            "a\u2028b",
+            "a\u2029b",
+            "a\u202Fb",
+            "a\u205Fb",
+            "a\u3000b",
+            "a\uFEFFb"
+        )) {
+            assertThrows(ProtosLexer.LexicalError.class, () -> lex(source), source);
+        }
+    }
+
+    @Test
+    void whitespaceLikeUnicodeCodePointsRemainOrdinaryStringContent() {
+        String value = "\u000B\u000C\u0085\u00A0\u1680\u2000\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF";
+        assertEquals(
+            List.of(token(TokenType.STRING, value), token(TokenType.EOF, "")),
+            lex("\"" + value + "\"")
+        );
+    }
+
+    @Test
     void lfCrAndCrLfEachProduceOneLogicalNewlineToken() {
         assertTypes(
             "a\nb\rc\r\nd",
@@ -384,6 +414,33 @@ class ProtosLexerTest {
     void rawLogicalNewlineIsRejectedInSingleLineStrings() {
         assertThrows(ProtosLexer.LexicalError.class, () -> lex("'a\nb'"));
         assertThrows(ProtosLexer.LexicalError.class, () -> lex("\"a\r\nb\""));
+    }
+
+    @Test
+    void unterminatedSingleDoubleAndTripleStringsAreLexicalErrors() {
+        for (String source : List.of(
+            "'text",
+            "\"text",
+            "\"\"\"text"
+        )) {
+            assertThrows(ProtosLexer.LexicalError.class, () -> lex(source), source);
+        }
+    }
+
+    @Test
+    void tripleDoubleQuoteRunsFollowExactLexicalBoundaries() {
+        assertEquals(
+            List.of(token(TokenType.STRING, ""), token(TokenType.EOF, "")),
+            lex("\"\"\"\"\"\"")
+        );
+        assertEquals(
+            List.of(
+                token(TokenType.STRING, "text"),
+                token(TokenType.STRING, ""),
+                token(TokenType.EOF, "")
+            ),
+            lex("\"\"\"text\"\"\"\"\"")
+        );
     }
 
     @Test
