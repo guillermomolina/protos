@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.125] - 2026-09-03
+
+### Fixed
+- Defined the existing no-starvation promise as weak fairness over continuously
+  runnable eligible work.
+- Defined when Actor-local continuations and accepted mailbox messages count as
+  runnable for the fairness rule.
+- Extended the same weak-fairness obligation to continuously runnable live
+  Actors at scheduler-selection boundaries.
+- Defined that later-arriving work cannot starve a continuously runnable item.
+- Explicitly excluded equal-share, round-robin, bounded-latency, bounded-turn,
+  and strong-fairness guarantees.
+- Scoped the liveness guarantee to situations where execution continues to
+  regain applicable scheduler control, preserving the existing non-preemptive
+  semantics of a non-yielding Protos segment.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 125.
+
 ## [0.1.124] - 2026-09-03
 
 ### Fixed

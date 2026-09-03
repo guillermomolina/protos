@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 124
+Document revision: 125
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -323,17 +323,51 @@ from the same sender to the same Group may be routed to different Actors
 and therefore have no ordering guarantee relative to each other beyond
 the ordering guarantees of any concrete Actor that receives them.
 
-The runtime provides an abstract no-starvation guarantee among runnable
-work that yields control.
+The runtime provides an abstract no-starvation guarantee for runnable work,
+defined as **weak fairness**.
 
-The language does not currently specify a particular round-robin
-algorithm, time quantum, or scheduler implementation.
+A work item is runnable for this rule only when all semantic prerequisites for
+its next Protos turn are satisfied. Examples include an Actor-local task
+continuation whose awaited condition has completed and an accepted mailbox
+message eligible for dispatch. Work still waiting for I/O, a Future, a timer,
+backpressure relief, routing, acceptance, or another semantic prerequisite is
+not runnable merely because it exists.
 
-A Protos computation that runs indefinitely without completing or
-reaching a suspension point may monopolize its Actor.
+If a work item belonging to a live Actor remains continuously runnable, is not
+cancelled or otherwise made ineligible, and execution repeatedly returns to a
+runtime scheduling point capable of selecting work in that item's scheduling
+scope, that work item must eventually receive an execution turn. Later-arriving
+runnable work must not postpone such a continuously runnable item forever.
 
-Arbitrary preemption of Protos execution is not currently part of the
-model.
+The same weak-fairness obligation applies to selection among live Actors that
+remain continuously runnable when execution repeatedly returns to a scheduling
+point capable of selecting among those Actors. An implementation may organize
+scheduling hierarchically, use work stealing, per-Actor queues, priorities that
+preserve this guarantee, or another mechanism; those choices are not observable
+semantics.
+
+Weak fairness does not require equal CPU shares, round-robin order, a bounded
+number of intervening turns, a wall-clock latency bound, or any ordering between
+otherwise unrelated runnable items. A runtime may execute one runnable item many
+times before another provided the latter is not postponed forever.
+
+Work that repeatedly becomes runnable and non-runnable is not covered by a
+strong-fairness guarantee merely because it becomes runnable infinitely often.
+No such strong-fairness guarantee is currently part of Core.
+
+This liveness rule assumes that Protos execution continues to regain applicable
+scheduler control. It cannot make progress while a currently executing
+non-preemptible Protos segment monopolizes the only carrier capable of running
+the affected scope, nor can it override external host or operating-system
+failure to schedule the Protos process itself.
+
+The language does not specify a particular round-robin algorithm, time quantum,
+scheduler queue structure, carrier mapping, or work-stealing policy.
+
+A Protos computation that runs indefinitely without completing or reaching a
+suspension point may monopolize its Actor and may occupy its current carrier
+indefinitely. Arbitrary preemption of ordinary Protos execution is not currently
+part of the model.
 
 ## 8. Actor Creation
 
