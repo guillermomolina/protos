@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 86
+Document revision: 87
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -1270,20 +1270,67 @@ Freezing is shallow.
 
 Identity is a semantic property and must not leak the runtime representation chosen for an object.
 
-Built-in immutable value objects use value identity. In v0.1 this includes at least `Number`, `String`, `Boolean`, and `null`. Ordinary identity-bearing objects use an individual identity token or an equivalent runtime mechanism.
+Core v0.1 has a closed set of value-identity categories. Only semantic Number
+values, String values, the canonical Boolean values, and `null` use value
+identity. Every other object uses individual object identity.
 
 Conceptually:
 
 ```text
+function coreValueIdentityKind(value):
+    if isSemanticNumberValue(value):
+        return NUMBER_VALUE
+
+    if isSemanticStringValue(value):
+        return STRING_VALUE
+
+    if value === canonicalTrue or value === canonicalFalse:
+        return BOOLEAN_VALUE
+
+    if value === canonicalNull:
+        return NULL_VALUE
+
+    return NONE
+
+
 function identical(a, b):
-    if isBuiltInValueObject(a) or isBuiltInValueObject(b):
-        if valueIdentityKind(a) != valueIdentityKind(b):
+    aKind = coreValueIdentityKind(a)
+    bKind = coreValueIdentityKind(b)
+
+    if aKind != NONE or bKind != NONE:
+        if aKind != bKind:
             return false
 
         return sameSemanticValue(a, b)
 
     return sameObjectIdentity(a, b)
 ```
+
+The predicates above are semantic classification, not delegation tests.
+Delegating to a Number, String, Boolean, or `null` value does not make an
+ordinary child object a member of that value family.
+
+`isSemanticNumberValue` includes the numeric families defined by the numeric
+model. Numeric `sameSemanticValue` follows the already-defined numeric identity
+rules: semantic numeric family participates in `===`, and Float NaN and signed
+zero follow their dedicated identity rules.
+
+`isSemanticStringValue` compares the String semantic value defined by the
+String model; allocation, interning, rope/flat representation, encoding choice,
+or storage sharing is not observable through identity.
+
+The Boolean and `null` cases denote their canonical language values, not the
+standard prototype objects named `Boolean` or any other ordinary object.
+
+Immutability does not imply value identity. Closing or freezing an ordinary
+object never changes its identity category. Interning, canonicalization,
+boxing/unboxing, pointer tagging, deduplication, serialization strategy, or
+other implementation machinery likewise cannot convert an identity-bearing
+object into a value-identity object or vice versa.
+
+The classification is normative and exhaustive for Core v0.1. Implementations
+must not introduce implementation-specific value-identity kinds.
+
 
 Consequences include:
 

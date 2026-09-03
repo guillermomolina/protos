@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 86
+Document revision: 87
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -1458,7 +1458,19 @@ a === b  // false
 a === c  // true
 ```
 
-Some built-in immutable objects have **value identity**. For these objects, the semantic value itself determines identity rather than a particular allocation. In v0.1 this includes at least `Number`, `String`, `Boolean`, and `null`.
+Some Core values have **value identity**: their semantic value determines
+identity rather than a particular allocation. The Core v0.1 value-identity set
+is closed and consists exactly of:
+
+- numeric values in the `Number` family;
+- `String` values;
+- the canonical Boolean values `true` and `false`;
+- the canonical `null` value.
+
+No implementation, host platform, optimization, standard-library extension, or
+ordinary Protos program may add another Core v0.1 value-identity category.
+Future language versions may extend this set only by an explicit normative
+language change.
 
 ```js
 1 === 1                    // true
@@ -1467,6 +1479,26 @@ Some built-in immutable objects have **value identity**. For these objects, the 
 true === true              // true
 null === null              // true
 ```
+
+Being immutable, closed, frozen, interned, canonicalized, structurally equal,
+or backed by the same host representation does not by itself grant value
+identity. Every object outside the closed set above has individual object
+identity.
+
+In particular, ordinary objects, closed or frozen ordinary objects, Closures,
+Arrays, Maps, Futures, errors, execution contexts, module instances, and
+standard prototype objects remain identity-bearing objects unless a normative
+rule explicitly places the value itself in one of the closed value-identity
+families above.
+
+Delegation does not transfer value identity. An ordinary object whose parent is
+a Number, String, Boolean, or `null` value remains an ordinary identity-bearing
+object, as already required by the delegation rules.
+
+`===` is non-overridable, so user code cannot opt an object into value identity
+by defining equality behavior. `==` remains the customizable protocol for
+semantic equality.
+
 
 `Number` objects are immutable value objects.
 

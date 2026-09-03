@@ -4,6 +4,33 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.87] - 2026-09-03
+
+### Fixed
+- Closed the Core v0.1 value-identity classification. Value identity now applies
+  exactly to Number values, String values, the canonical Boolean values, and
+  `null`; every other object has individual object identity.
+- Removed the previous "includes at least" wording that allowed independent
+  implementations to invent additional value-identity categories and therefore
+  disagree on observable `===` results.
+- Clarified that immutability, `close()`, `freeze()`, interning,
+  canonicalization, host representation, and delegation to a value object do
+  not grant value identity.
+- Clarified that standard prototype objects, Closures, collections, Futures,
+  errors, contexts, module instances, and other objects remain identity-bearing
+  unless a future normative language revision explicitly adds a new
+  value-identity family.
+
+### Changed
+- Made the runtime identity classifier exhaustive and semantic rather than
+  implementation-extensible. Numeric and String identity continue to use their
+  existing family-specific semantic rules.
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 87. No syntax,
+  concurrency-model, or I/O-model semantics change in this revision.
+
+
 ## [0.1.86] - 2026-09-03
 
 ### Fixed

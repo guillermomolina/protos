@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 86
+Document revision: 87
 Status: Draft  
 Last updated: 2026-09-03
 ## Prelude Binding Note
@@ -1717,7 +1717,12 @@ Identity:
 a === b
 ```
 
-is a non-overridable runtime identity operation. Its result is defined by the language semantics rather than by physical allocation or host-language reference identity. Built-in immutable value objects such as `Number`, `String`, `Boolean`, and `null` use value identity; ordinary identity-bearing objects use individual object identity.
+is a non-overridable runtime identity operation. Its result is defined by the language semantics rather than by physical allocation or host-language reference identity. The Core v0.1 value-identity categories are a closed semantic set: Number
+values, String values, the canonical Boolean values, and `null` use value
+identity; every other object uses individual object identity. This
+classification is not extensible by implementations or libraries and is
+independent of allocation, interning, freezing, delegation, or host
+representation.
 
 Examples:
 
