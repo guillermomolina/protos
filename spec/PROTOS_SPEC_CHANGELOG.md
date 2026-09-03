@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.181] - 2026-09-03
+
+### Fixed
+- Defined `flush()` as a logical propagation frontier within one ordered output
+  flow rather than leaving write/flush inclusion to native scheduling.
+- Required writes ordered before a flush to belong to that flush frontier and
+  prevented successful flush completion from omitting such accepted output.
+- Defined genuinely concurrent cross-Actor write/flush requests as initially
+  unordered, with routing/admission choosing a stable relative order.
+- Required the chosen order to determine whether the competing write is covered
+  by the flush or is later output outside that frontier.
+- Kept the frontier local to the logical output flow without introducing a
+  global Actor memory-ordering or synchronization primitive.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 181. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.180] - 2026-09-03
 
 ### Fixed

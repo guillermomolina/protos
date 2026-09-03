@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 180
+Document revision: 181
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -329,7 +329,17 @@ Flushable {
 
 `flush()` establishes an output-propagation frontier at invocation time.
 
+The frontier is a logical position in the ordered output flow. Writes and `flush()` operations that target the same logical output flow are ordered relative to that frontier rather than by host/native completion timing.
+
+When a write and `flush()` have a Protos-defined order, that order is preserved. A write ordered before a flush belongs to that flush frontier: the flush cannot complete successfully while omitting that write's committed output merely because the write is still pending in an implementation queue. Conversely, a write ordered after the flush frontier is not required to be propagated by that flush.
+
+For a write and `flush()` that are genuinely concurrent because they originate from independently progressing Actors through Actor-safe proxies, Protos defines no predetermined cross-Actor arrival order. Routing/admission may choose either request first. If the write is admitted before the flush frontier, it belongs to that flush frontier; if the flush frontier is established first, the competing write is later output and is not covered by that flush. Once the relative order is chosen, host scheduling cannot retroactively move the write across the frontier.
+
+A successful flush therefore establishes the required propagation frontier for exactly the output that was logically ordered before it. It does not establish a global memory-ordering or synchronization relation between unrelated Actors, and it does not force later writes to wait for the flush unless their own output ordering or a stronger protocol requires that relationship.
+
 Successful completion means that output committed to the receiver before that frontier has been propagated through buffering controlled by that receiver to the receiver's defined underlying output boundary.
+
+A flush frontier is ordered within one logical output flow: writes ordered before it are covered, writes ordered after it are not, and genuinely concurrent cross-Actor write/flush requests are stably ordered by routing/admission.
 
 `flush()` does not terminate the output sequence and does not imply durable persistence, remote application receipt, or physical terminal presentation.
 
