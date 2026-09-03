@@ -28,6 +28,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceIndex;
 import com.guillermomolina.protos.parser.ast.SurfaceIntrinsic;
 import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
 import com.guillermomolina.protos.parser.ast.SurfaceMember;
+import com.guillermomolina.protos.parser.ast.SurfaceNonLocalReturn;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.parser.ast.SurfaceUnary;
@@ -76,6 +77,15 @@ public final class ProtosParser {
     }
 
     private SurfaceExpression parseExpressionFoundation() {
+        if (cursor.at(TokenType.CARET)) {
+            TokenOccurrence caret = cursor.advance();
+            consumeContinuationNewlines();
+            SurfaceExpression expression = parseExpressionFoundation();
+            return new SurfaceNonLocalReturn(
+                    expression,
+                    new SourceSpan(caret.span().startOffset(), expression.span().endOffset()));
+        }
+
         SurfaceExpression expression = parseLogicalOrFoundation();
 
         if (!cursor.at(TokenType.CUSTOM_OPERATOR)) {
