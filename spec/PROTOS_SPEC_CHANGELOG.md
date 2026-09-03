@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.205] - 2026-09-03
+
+### Fixed
+- Repaired the normative paragraph boundary in filesystem creation semantics
+  after the `existing` race-free-selection change was integrated.
+- Removed wording that accidentally attached `create`'s absent-target behavior
+  to the summary sentence for `existing`, which could be read as allowing
+  `creation: existing` to create a missing target.
+- Restored the intended disjoint semantics: `existing` selects an already
+  existing resource or fails; `create` selects an existing resource or creates
+  one when absent.
+- Preserved the already-defined race-free selection, confinement, stable File
+  binding, and concurrent namespace-operation rules without introducing a new
+  filesystem mechanism.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 205. Only
+  `PROTOS_IO_MODEL.md` gains normative corrective content in this revision.
+
+
 ## [0.1.204] - 2026-09-03
 
 ### Fixed
