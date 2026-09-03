@@ -4,6 +4,23 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.110] - 2026-09-03
+
+### Fixed
+- Defined the sender used by concrete-Actor FIFO ordering as the originating
+  Actor incarnation rather than an Actor-local task, Future, activation, or turn.
+- Defined same-sender ordering by Protos-visible communication invocation order
+  within that originating Actor.
+- Defined explicitly initiated retry attempts to take their ordering position
+  when the retry is initiated rather than reclaiming an earlier queue position.
+- Prevented host/runtime/bootstrap activity from accidentally acquiring an
+  Actor sender identity and hidden ordering guarantees.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 110.
+
 ## [0.1.109] - 2026-09-03
 
 ### Fixed

@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 109
+Document revision: 110
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -287,6 +287,30 @@ language semantics.
 
 Messages from the same sender to the same concrete Actor preserve FIFO
 ordering.
+
+For ordinary Actor messaging, the sender is the **originating Actor
+incarnation**, not the individual Actor-local task, Future, activation, or turn
+that happens to invoke `send()` or `ask()`. All Actor-local work executing inside
+one Actor therefore shares that Actor's sender identity for this ordering rule.
+
+For two delivery attempts issued from one Actor incarnation to the same concrete
+destination Actor, their order is the Protos-visible invocation order in the
+originating Actor. Because Actor-local Protos execution is serialized between
+explicit suspension points, this issuance order is well-defined even when
+different Actor-local tasks interleave.
+
+A retry that is explicitly initiated after an earlier delivery attempt has
+failed, become uncertain, or otherwise requires retry is ordered at the point
+that retry attempt is initiated. Retry does not regain the earlier attempt's
+former queue position and does not force later already-issued operations to wait
+behind an indefinitely retried logical operation. This does not change the
+logical message identity or snapshot rules of the communication operation.
+
+Runtime, host, bootstrap, or infrastructure activity that is not itself execution
+inside a Protos Actor does not silently acquire the identity of some Actor for
+FIFO purposes. Unless another normative domain explicitly defines such activity
+as one ordered sender, independently generated operations from those sources have
+no same-sender ordering guarantee.
 
 Within one Future or task, normal sequential execution order applies.
 
