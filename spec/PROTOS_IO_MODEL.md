@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 146
+Document revision: 147
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -507,7 +507,15 @@ A backend that cannot provide or emulate this failure-atomic contract must not e
 
 This failure-atomicity rule concerns effects attributable to the truncate operation itself. It does not freeze the resource against independently authorized concurrent writers or other operations; such independent changes retain their own ordering/authority semantics and may change the resource before or after the truncate's commitment point.
 
-Operations whose results depend on the same sequence contents, size, or position preserve the logical invocation ordering required by the concrete receiver.
+For one logical byte-sequence receiver, operations exposed by that receiver whose result or effect depends on the same sequence contents, size, or shared logical position participate in one sequence-state ordering domain. This includes, when the receiver exposes them, ordinary reads, positioned writes, append writes, `position()`, seeks, `size()`, `truncate()`, and durability/propagation frontiers whose contracts refer to preceding receiver changes.
+
+When such operations have a Protos-defined invocation order, that order is preserved even when their Futures are simultaneously pending. Therefore a `size()` invoked after an earlier ordered write observes the sequence state including whatever contribution that write has committed before the size query reaches evaluation; it does not bypass the earlier write merely because the write Future is still pending. Likewise, a later ordered `truncate()` does not race ahead of an earlier write, and a later ordered `seekToEnd()` or `size()` uses the sequence state established by all earlier ordered sequence-state operations at its evaluation point.
+
+A failed or cancelled earlier operation contributes exactly the state change allowed by that operation's own contract before the next ordered operation is evaluated. For example, a cancelled/failed ordinary read contributes no sequence-position change, a failed positioned or append write may contribute its permitted byte prefix and corresponding logical-position aftermath, and a failed `truncate()` contributes no truncate-induced size/content change.
+
+Operations that are genuinely concurrent because they originate from independently progressing Actors through Actor-safe routing/proxies have no predetermined relative order merely from host scheduling. The receiver/routing layer may choose either operation first, but once their relative order is chosen it is stable for all sequence-state effects and observations attributable to those operations.
+
+This rule does not serialize unrelated receivers, does not impose one native syscall at a time, and does not freeze the underlying file or sequence against independently authorized external actors/processes/backends. Implementations may pipeline, speculate, buffer, batch, or use positional/native APIs without a shared host cursor, provided the observable Protos sequence-state order is preserved.
 
 ---
 

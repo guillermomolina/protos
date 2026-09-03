@@ -4,6 +4,31 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.147] - 2026-09-03
+
+### Fixed
+- Replaced the vague concrete-receiver ordering sentence for `ByteSized` /
+  `Truncatable` with one normative sequence-state ordering domain.
+- Required reads, writes, append writes, position/seeks, size, truncate, and
+  relevant flush/sync frontiers on one logical byte-sequence receiver to
+  preserve every Protos-defined invocation order.
+- Required `size()` after an earlier ordered write to observe the state produced
+  by that write before the size query's evaluation, rather than bypassing a
+  still-pending Future.
+- Required later truncate/seek/size operations to evaluate against all earlier
+  ordered sequence-state effects.
+- Composed the shared ordering rule with each operation's existing
+  cancellation/failure aftermath instead of inventing rollback.
+- Defined genuinely concurrent Actor-routed sequence operations as unordered
+  initially but stably ordered once the receiver/routing layer chooses.
+- Preserved implementation freedom for pipelining, batching, speculative work,
+  positional native APIs, and external independently authorized changes.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 147. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.146] - 2026-09-03
 
 ### Fixed
