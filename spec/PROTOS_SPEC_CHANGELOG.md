@@ -4,6 +4,30 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.197] - 2026-09-03
+
+### Fixed
+- Defined filesystem `create` as one race-free open-or-create selection rather
+  than leaving an observable existence-check/acquisition gap to implementations.
+- Required an existing target at the selection point to be opened and an absent
+  target to be created and selected as one semantic operation.
+- Prevented helper-primitive races from leaking as spurious already-exists or
+  not-found failures when the standard open-or-create operation has a valid
+  result.
+- Allowed genuinely concurrent namespace changes to determine the namespace
+  state seen at the operation's selection point without imposing a global
+  filesystem order.
+- Applied the stable File-resource binding rule immediately after resource
+  selection so later namespace changes cannot retarget the resulting File or
+  this open's truncate-on-open effect.
+- Required backends that cannot provide or emulate the race-free invariant
+  together with Filesystem confinement to reject standard `create` semantics.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 197. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.196] - 2026-09-03
 
 ### Closed

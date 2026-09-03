@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 196
+Document revision: 197
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -1058,9 +1058,15 @@ Invalid combinations fail open.
 
 `existing` requires the target to exist.
 
-`create` opens an existing target or creates it when absent.
+`create` is one race-free open-or-create selection at the Filesystem/backend semantic boundary. At that selection point, if the target exists, the operation selects and opens that existing resource; if the target is absent, the operation creates and selects the new resource. The standard operation must not expose an implementation gap between an existence probe and acquisition/creation in which a competing namespace change can turn an otherwise valid `create` into a spurious already-exists/not-found outcome or cause it to acquire a resource different from the one selected by its own open-or-create decision.
+
+This guarantee does not impose a predetermined winner among genuinely concurrent namespace operations. Another authorized operation may create, remove, rename, or replace the target before the `create` operation's selection point, and that namespace state may determine which resource this open selects. Once this open has selected its resource, the stable File-resource binding rules apply: later namespace changes do not retarget the resulting File or any truncate-on-open effect belonging to this open.
+
+An implementation may realize `create` with one backend primitive or by emulation, but any emulation must preserve the same race-free semantic result. In particular, a probe-then-exclusive-create sequence must recover from a concurrent creator by selecting the then-existing target when that is the result a single standard open-or-create operation requires, rather than leaking the helper primitive's race as a Protos-visible failure. If a backend cannot provide or emulate this invariant while also preserving Filesystem confinement, it must not expose standard `create` semantics for that resource.
 
 `createNew` creates a new target and fails if the target already exists. The existence check and creation are one race-free/atomic creation operation at the backend's semantic boundary.
+
+Standard `create` is an atomic/race-free open-or-create selection, not a portable existence-check-then-create recipe; concurrent namespace changes may determine the selected state before the selection point, but implementation helper races must not become observable results.
 
 ### 18.2 Truncate-on-open
 
