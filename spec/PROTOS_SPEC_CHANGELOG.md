@@ -4,6 +4,32 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.209] - 2026-09-03
+
+### Fixed
+- Closed the TextWriter failure-frontier ambiguity for later outstanding ordered
+  text writes when an earlier committed write can still poison the wrapper.
+- Prohibited a later text write from making target-visible output before every
+  earlier ordered text write has reached an aftermath that leaves the writer
+  usable for later output.
+- Allowed speculative validation, encoding, checkpointing, staging, and other
+  reversible pipelining while keeping irreversible byte contribution ordered
+  behind the predecessor's failure frontier.
+- Required permanent predecessor failure to make later outstanding and new text
+  writes fail with zero contribution of their own and no committed encoder-state
+  advance.
+- Prevented proxy routing and backend/native completion timing from deciding
+  whether bytes from a later text write escape after an earlier writer-poisoning
+  failure.
+- Preserved recovery through a stronger downstream protocol only when that
+  protocol supplies enough semantic information to establish exact remaining
+  output and encoder/output state.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 209. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.208] - 2026-09-03
 
 ### Closed

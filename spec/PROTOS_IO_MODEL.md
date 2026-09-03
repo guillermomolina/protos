@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 208
+Document revision: 209
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -996,7 +996,17 @@ Cancellation may win only while the operation can still preserve both zero targe
 
 An underlying output failure after commitment follows the ordinary `ByteWritable` and wrapper-failure rules. In particular, the target may already contain a prefix of the operation's encoded byte sequence, and a TextWriter must not guess how much downstream progress occurred. When exact remaining output cannot be known, its output side becomes permanently failed/unusable as specified by the wrapper lifecycle rules.
 
-A successfully completed text write commits its resulting encoder state for later ordered text writes. A successfully cancelled text write and a text write that fails during pre-output encoding validation do not advance that state.
+An ordered later text-write operation must not cross its own target-visible output commitment boundary while an earlier ordered text-write operation can still terminate in a way that permanently fails this TextWriter's output side. The implementation may validate, encode, checkpoint, or stage the later operation speculatively, but irreversible contribution of that later operation to the byte target waits until every earlier ordered text write has reached an aftermath that leaves the TextWriter usable for later output.
+
+Therefore, if an earlier ordered text write permanently fails the TextWriter's output side, every later outstanding `writeText()` or `writeLine()` operation in that same logical ordering domain fails without contributing any bytes of its own to the target and without advancing committed encoder state. Such an operation cannot bypass the failed predecessor merely because its encoding validation completed, its bytes were staged, it came through another Actor-safe proxy, or backend scheduling would otherwise let its native write run first. New text-write invocations after the permanent output failure likewise fail without target contribution.
+
+This is a commitment-ordering constraint, not a prohibition on pipelining. Work whose effects remain reversible/unobservable may overlap freely. It also does not require waiting for unrelated receivers or flows. The constraint exists only between ordered operations of the same TextWriter and only up to the point needed to keep a possible permanent predecessor failure from making later target-visible output implementation-dependent.
+
+A stronger downstream protocol that lets the TextWriter recover from an underlying failure is compatible with this rule only when the wrapper can determine its exact remaining output and encoder/output state under that stronger protocol. Recovery may complete the earlier logical text operation or otherwise establish a precisely specified usable aftermath before a later text write commits. Host error codes, guessed native write counts, or implementation-specific buffering knowledge that is not part of the downstream protocol cannot justify releasing the later operation across this failure frontier.
+
+A successfully completed text write commits its resulting encoder state for later ordered text writes. A successfully cancelled text write and a text write that fails during pre-output encoding validation do not advance that state. A text write whose downstream failure permanently fails the writer establishes no usable encoder-state starting point for later text output, because later text writes are rejected by that failed lifecycle.
+
+Later TextWriter operations may be staged speculatively but cannot make target-visible output while an earlier ordered text write can still poison the writer; permanent predecessor failure makes all later outstanding/new text writes fail with zero own contribution.
 
 A TextWriter exposes `Flushable` or `Closable` only when it correctly implements those protocols over its own state. Target capabilities are never inherited automatically.
 
