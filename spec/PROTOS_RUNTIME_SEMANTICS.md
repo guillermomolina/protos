@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 210
+Document revision: 211
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3948,6 +3948,83 @@ Implementations may cache grapheme boundaries, specialize common ASCII/Latin tex
 
 Encoded text representations are ordinary objects whose mutability is protocol-defined. The runtime must not infer writability merely from the fact that an object contains bytes or represents text.
 
+
+### Exact standard String indexing runtime semantics
+
+Standard String size and indexing use Unicode 17.0.0 default extended grapheme
+clusters as defined by UAX #29 revision 47.
+
+Conceptually:
+
+```text
+function standardStringGraphemeBoundaries(receiver):
+    text = requireSemanticFamilyReceiver(
+        receiver,
+        isSemanticStringValue
+    )
+
+    return unicode17DefaultExtendedGraphemeBoundaries(
+        semanticUnicodeScalarSequence(text)
+    )
+
+function standardStringSize(receiver):
+    boundaries = standardStringGraphemeBoundaries(receiver)
+
+    return semanticIntegerFromMathematicalValue(
+        numberOfGraphemeIntervals(boundaries)
+    )
+
+function standardStringAt(receiver, index):
+    text = requireSemanticFamilyReceiver(
+        receiver,
+        isSemanticStringValue
+    )
+
+    if not isSemanticIntegerValue(index):
+        signal an Error for invalid String index
+
+    i = mathematicalIntegerValue(index)
+
+    boundaries = unicode17DefaultExtendedGraphemeBoundaries(
+        semanticUnicodeScalarSequence(text)
+    )
+
+    if i < 0 or i >= numberOfGraphemeIntervals(boundaries):
+        signal an Error for String index out of bounds
+
+    scalars = exactScalarSubsequenceForInterval(
+        semanticUnicodeScalarSequence(text),
+        boundaries[i]
+    )
+
+    return semanticStringFromExactScalarSequence(scalars)
+```
+
+The Unicode segmentation operation is semantic runtime machinery, not a user
+message. It performs no normalization, case folding, locale lookup, text
+replacement, encoding conversion, or host-dependent tailoring.
+
+`semanticStringFromExactScalarSequence` constructs the same semantic String
+value category already defined by Core. It must preserve the selected scalar
+sequence exactly. Interning, ropes, slices, shared backing storage, compact
+encodings, or other representations are permitted when they do not change that
+sequence or the value-identity result.
+
+The conceptual boundary representation is not observable and need not be
+allocated eagerly. An implementation may cache grapheme boundaries, maintain
+indexes, specialize ASCII, or compute boundaries lazily. Cached data must be
+semantically equivalent to Unicode 17.0.0 UAX #29 revision 47 and must not
+silently change when the host Unicode/ICU tables are upgraded.
+
+String-size results are exact semantic Integers. Internal host-sized counters or
+indexes may be used only after the implementation has preserved the full
+mathematical result and all observable range checks; overflow, saturation, or
+wrapping is not a conforming substitute.
+
+Standard String provides no in-place indexed mutation primitive. Generic
+indexed assignment still lowers to ordinary `atPut`; if ordinary lookup does
+not provide a user-defined applicable behavior, the operation fails through the
+normal protocol/lookup rules rather than mutating String storage.
 
 ### Standard Bytes indexed-state semantics
 

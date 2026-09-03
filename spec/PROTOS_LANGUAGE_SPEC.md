@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 210
+Document revision: 211
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3762,6 +3762,89 @@ MappedText
 
 These names are illustrative; Core v0.1 does not require this exact library taxonomy.
 
+
+### Exact standard String indexing semantics
+
+Core v0.1 uses the **default extended grapheme-cluster** boundary rules of
+Unicode Standard Annex #29, Unicode Text Segmentation, as synchronized with
+**The Unicode Standard, Version 17.0.0** (UAX #29 revision 47), for standard
+`String.size` and `String.at`.
+
+These are the untailored default Unicode rules. A host locale, ICU version,
+operating-system text service, rendering engine, editor convention, language-
+specific tailoring, or later Unicode release must not change Core-visible
+String boundaries. Implementations may use such facilities only when they
+produce exactly the Unicode 17.0.0 default extended-grapheme-cluster result.
+
+For a String whose exact semantic value is the scalar sequence `S`, let:
+
+```text
+G = defaultExtendedGraphemeClusters17(S)
+```
+
+where concatenating the scalar sequences of the elements of `G`, in order,
+reconstructs `S` exactly. Segmentation does not normalize, case-fold, replace,
+or otherwise alter the String's scalar values.
+
+The standard `size` result is:
+
+```text
+String.size -> semantic Integer equal to length(G)
+```
+
+The result is an exact semantic `Integer`; Core does not require a fixed-width
+Integer family or host-sized representation.
+
+The standard indexed read:
+
+```js
+text.at(index)
+text[index]
+```
+
+requires `index` to be a semantic `Integer`. Any Integer family is accepted
+according to its mathematical Integer value. No Float-to-Integer conversion,
+String parsing, truncation, wrapping, modulo reduction, or host-sized coercion
+is performed.
+
+The index must satisfy:
+
+```text
+0 <= index < text.size
+```
+
+Otherwise the operation signals an `Error`.
+
+A successful read returns a `String` whose semantic scalar sequence is exactly
+the scalar subsequence forming `G[index]`. The returned String is not normalized
+or rewritten. Therefore indexing preserves the exact-scalar String model even
+when the selected grapheme contains several scalars.
+
+For example, if:
+
+```text
+S = U+0065 U+0301
+```
+
+and Unicode 17.0.0 default extended-grapheme segmentation treats that sequence
+as one cluster, then `text.size` is `1` and `text[0]` is the two-scalar String
+`U+0065 U+0301`, not an implicitly normalized U+00E9 String.
+
+Standard String indexing behavior applies only to an original receiver that is
+a semantic String value. Delegating to a String value or String prototype does
+not confer String semantic membership. An incompatible receiver that invokes
+the standard behavior signals an `Error` under the existing semantic-family
+receiver rule.
+
+`String` is immutable and Core defines no standard indexed mutation behavior
+that changes a String in place. Bracket assignment does not acquire a hidden
+String mutation primitive merely because bracket-read syntax is supported.
+User-defined objects remain free to define their own ordinary `atPut` protocol.
+
+This rule defines only the already-visible `String.size` and `String.at`
+semantics. It does not standardize the illustrative `graphemes()`,
+`codePoints()`, normalization, locale-sensitive segmentation, collation, or
+text-editing protocols mentioned elsewhere.
 
 ## Maps, Hashing, and Key Equality
 

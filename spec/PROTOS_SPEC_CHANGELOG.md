@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.211] - 2026-09-03
+
+### Fixed
+- Defined standard String indexing and `size` with the untailored Unicode 17.0.0
+  default extended-grapheme-cluster rules from UAX #29 revision 47.
+- Defined `String.size` to return the exact semantic Integer grapheme count.
+- Defined `String.at` to accept exact semantic Integer indices only, reject
+  negative/out-of-range/coerced indices, and return the exact scalar subsequence
+  forming the selected grapheme cluster as a String.
+- Prohibited host locale, ICU/Unicode upgrades, normalization, rendering
+  tailoring, and internal encoding representation from changing Core-visible
+  String boundaries.
+- Kept String immutable and made explicit that bracket-read support does not
+  imply a hidden standard in-place `atPut` mutation protocol.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 211.
+  Only `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain
+  normative semantic content in this revision.
+
 ## [0.1.210] - 2026-09-03
 
 ### Closed
