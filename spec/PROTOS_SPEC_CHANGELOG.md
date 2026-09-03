@@ -4,6 +4,24 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.186] - 2026-09-03
+
+### Fixed
+- Defined a uniform default equality/hash rule for identity-bearing Core objects
+  that have no explicitly specialized normative behavior.
+- Required such objects to use semantic identity for standard `==` and
+  `identityHashOf` for standard `hash`.
+- Prevented built-in containers, buffers, Futures, errors, contexts, modules,
+  prototypes, and other identity-bearing objects from acquiring
+  implementation-selected structural/content equality or hashing.
+- Preserved explicit specializations such as Number hashing and ordinary
+  user-defined `==` / `hash` overrides.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 186.
+  Only `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain
+  normative semantic content in this revision.
+
 ## [0.1.185] - 2026-09-03
 
 ### Fixed

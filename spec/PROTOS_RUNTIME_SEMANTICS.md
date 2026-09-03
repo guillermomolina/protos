@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 185
+Document revision: 186
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3838,6 +3838,44 @@ candidate-order and no-key-snapshot rules apply.
 
 This permits arbitrary internal lookup structures while keeping search-control
 state fixed and mutable Protos object state live.
+
+### Default equality and hashing for identity-bearing Core objects
+
+For every identity-bearing Core object whose standard behavior is not given an
+explicit specialized equality/hash rule, the runtime uses the ordinary
+`Object`-level defaults.
+
+Conceptually:
+
+```text
+function standardIdentityBearingEquals(receiver, other):
+    return receiver === other
+
+function standardIdentityBearingHash(receiver):
+    return identityHashOf(receiver)
+```
+
+An implementation must not select structural or content-derived standard
+equality/hashing merely because the receiver is represented internally as a
+container, buffer, closure, Future, error, context, module, prototype, or other
+built-in runtime object.
+
+No entry/element/slot traversal, recursive comparison, cycle detector,
+serialization, content hash, or mutation-sensitive recomputation is introduced
+unless another normative rule explicitly requires it.
+
+This is a semantic default, not a requirement to install distinct method bodies
+on every standard prototype. An implementation may inherit, inline, or
+specialize the ordinary `Object` behavior internally provided the observable
+result is identical.
+
+Explicit normative specializations continue to take precedence. In particular,
+standard Number hashing follows the numeric-equality coherence rule already
+defined by Core, while the explicit Map/IdentityMap default is an instance of
+this identity-bearing rule rather than a separate identity relation.
+
+User-defined ordinary `==` and `hash` behavior remains normal Protos message
+dispatch and may intentionally replace these defaults.
 
 ### Standard Map equality and hash dispatch
 
