@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.185] - 2026-09-03
+
+### Fixed
+- Defined `sync()` as a logical durability frontier within the receiver's
+  existing sequence-state ordering domain.
+- Required receiver changes ordered before a sync frontier to be covered by a
+  successful sync even when their Futures were still pending in implementation
+  queues.
+- Defined genuinely concurrent cross-Actor change/sync requests as initially
+  unordered, with routing/admission choosing a stable relative order.
+- Required that stable order to determine whether a competing receiver change
+  belongs to the sync frontier or is later state outside it.
+- Kept sync local to the logical receiver: it does not create a global
+  durability or Actor-memory barrier across independently opened aliasing Files.
+- Allowed a backend to persist extra later/independent state as an
+  implementation side effect without promoting that extra persistence into a
+  portable Protos ordering guarantee.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 185. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.184] - 2026-09-03
 
 ### Fixed

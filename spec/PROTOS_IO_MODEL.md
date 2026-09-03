@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 184
+Document revision: 185
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -642,6 +642,18 @@ Syncable {
 - `sync()` establishes a durable-state frontier over receiver changes ordered before it.
 
 Successful `sync()` completion guarantees that changes to the receiver ordered before that frontier have reached the durable-storage boundary defined by that receiver/backend.
+
+The sync frontier is a logical position in the receiver's sequence-state ordering domain. Receiver changes and `sync()` operations that participate in that same domain are ordered relative to the frontier rather than by host/native start or completion timing.
+
+When a receiver change and `sync()` have a Protos-defined order, that order is preserved. A change ordered before the sync belongs to that durability frontier: successful sync completion cannot omit the durable effect required for that change merely because its Future was still pending in an implementation queue when `sync()` was invoked. A change ordered after the frontier is not required to be durable when that sync completes.
+
+For a receiver change and `sync()` that are genuinely concurrent because they originate from independently progressing Actors through Actor-safe proxies for the same logical receiver, Protos defines no predetermined cross-Actor arrival order. Routing/admission may choose either operation first. If the change is admitted before the sync frontier, it belongs to that frontier; if the sync frontier is established first, the competing change is later state and is outside that sync. Once the relative order is chosen, host scheduling cannot retroactively move the change across the durability frontier.
+
+A successful sync therefore covers exactly the receiver changes logically ordered before its frontier under the receiver's existing sequence-state semantics. It does not create a global durability barrier across independently opened Files merely because they alias the same underlying resource, does not establish a general Actor memory-ordering relation, and does not make later independent changes part of the completed frontier.
+
+A backend may durably persist later or independently originated changes as a side effect of its synchronization mechanism. Such extra persistence is not a portable guarantee of that sync and cannot be used to infer a Protos ordering relation that the logical receiver did not define.
+
+A sync frontier is ordered within one receiver's sequence-state domain: changes ordered before it are covered, later changes are not required to be durable, and genuinely concurrent cross-Actor change/sync requests are stably ordered by routing/admission.
 
 For a standard local file, `sync()` means the strongest ordinary file synchronization offered for preserving the resulting file state, including file content and metadata necessary to preserve that state.
 
