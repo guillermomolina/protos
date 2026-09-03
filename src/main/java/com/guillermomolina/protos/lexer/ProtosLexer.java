@@ -102,8 +102,7 @@ public final class ProtosLexer {
             if (isLogicalNewlineStart(codePoint)) {
                 int start = pos;
                 consumeLogicalNewline();
-                tokens.add(occurrence(new Token(TokenType.NEWLINE, "
-"), start));
+                tokens.add(occurrence(new Token(TokenType.NEWLINE, "\\n"), start));
                 continue;
             }
 
