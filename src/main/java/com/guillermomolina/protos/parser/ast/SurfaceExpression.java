@@ -34,6 +34,7 @@ public sealed interface SurfaceExpression
                 SurfaceSlotCreation,
                 SurfaceAssignment,
                 SurfaceSuperSend,
-                SurfaceObject {
+                SurfaceObject,
+                SurfaceClosure {
     SourceSpan span();
 }

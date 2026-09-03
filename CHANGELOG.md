@@ -8,6 +8,7 @@ For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_
 
 ### Added
 
+- Added closure surface AST integration and deterministic parsing for closure parameters, defaults, rest parameters, and braced or expression bodies.
 - Added parser support for object expressions, parent expressions, and contextual object composition items.
 - Added parser support for structural super message sends without making `super` a first-class expression.
 - Added parsing for slot creation and assignment with grammar-defined target restrictions.

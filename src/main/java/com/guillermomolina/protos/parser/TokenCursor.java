@@ -47,6 +47,40 @@ final class TokenCursor {
                 && tokens.get(index + 1).token().type() == type;
     }
 
+    boolean matchingParenthesisFollowedBy(TokenType type) {
+        if (!at(TokenType.LPAREN)) {
+            return false;
+        }
+
+        int depth = 0;
+        for (int offset = index; offset < tokens.size(); offset++) {
+            TokenType tokenType = tokens.get(offset).token().type();
+
+            if (tokenType == TokenType.LPAREN) {
+                depth++;
+                continue;
+            }
+
+            if (tokenType == TokenType.RPAREN) {
+                depth--;
+                if (depth == 0) {
+                    return offset + 1 < tokens.size()
+                            && tokens.get(offset + 1).token().type() == type;
+                }
+                if (depth < 0) {
+                    return false;
+                }
+                continue;
+            }
+
+            if (tokenType == TokenType.EOF) {
+                return false;
+            }
+        }
+
+        return false;
+    }
+
     TokenOccurrence consume(TokenType type, String expectation) {
         if (!at(type)) {
             throw ParseError.expected(expectation, current());

@@ -24,6 +24,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceArgument;
 import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
 import com.guillermomolina.protos.parser.ast.SurfaceSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
 import com.guillermomolina.protos.parser.ast.SurfaceIndex;
@@ -33,6 +34,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceMember;
 import com.guillermomolina.protos.parser.ast.SurfaceNonLocalReturn;
 import com.guillermomolina.protos.parser.ast.SurfaceObject;
 import com.guillermomolina.protos.parser.ast.SurfaceObjectItem;
+import com.guillermomolina.protos.parser.ast.SurfaceParameter;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.parser.ast.SurfaceSuperSend;
@@ -40,7 +42,10 @@ import com.guillermomolina.protos.parser.ast.SurfaceUnary;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.source.SourceSpan;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Optional;
+import java.util.Set;
 
 public final class ProtosParser {
     private final TokenCursor cursor;
@@ -270,6 +275,9 @@ public final class ProtosParser {
             case FALSE -> literal(SurfaceLiteral.Kind.FALSE);
             case NULL -> literal(SurfaceLiteral.Kind.NULL);
             case IDENTIFIER -> {
+                if (cursor.nextAt(TokenType.FAT_ARROW)) {
+                    yield parseBareParameterClosure();
+                }
                 cursor.advance();
                 yield new SurfaceName(token.token().lexeme(), token.span());
             }
@@ -278,9 +286,139 @@ public final class ProtosParser {
             case ARGS -> intrinsic(SurfaceIntrinsic.Kind.ARGS);
             case SUPER -> parseSuperMessageSend();
             case LBRACE -> parseObjectBody(null);
-            case LPAREN -> parseParenthesized();
+            case LPAREN -> cursor.matchingParenthesisFollowedBy(TokenType.FAT_ARROW)
+                    ? parseParameterListClosure()
+                    : parseParenthesized();
             default -> throw ParseError.expected("a primary expression", token);
         };
+    }
+
+    private SurfaceExpression parseBareParameterClosure() {
+        TokenOccurrence parameter = cursor.consume(TokenType.IDENTIFIER, "a closure parameter");
+        SurfaceParameter surfaceParameter = new SurfaceParameter(
+                parameter.token().lexeme(),
+                Optional.empty(),
+                false,
+                parameter.span());
+        cursor.consume(TokenType.FAT_ARROW, "'=>'");
+        return parseClosureBody(List.of(surfaceParameter), parameter.span().startOffset());
+    }
+
+    private SurfaceExpression parseParameterListClosure() {
+        TokenOccurrence open = cursor.consume(TokenType.LPAREN, "'('");
+        consumeNewlines();
+
+        List<SurfaceParameter> parameters = new ArrayList<>();
+        Set<String> parameterNames = new HashSet<>();
+
+        if (!cursor.at(TokenType.RPAREN)) {
+            if (cursor.at(TokenType.ELLIPSIS)) {
+                addParameter(parameters, parameterNames, parseRestParameter());
+            } else {
+                addParameter(parameters, parameterNames, parseParameter());
+
+                while (cursor.at(TokenType.COMMA)) {
+                    cursor.advance();
+                    consumeNewlines();
+
+                    if (cursor.at(TokenType.ELLIPSIS)) {
+                        addParameter(parameters, parameterNames, parseRestParameter());
+                        break;
+                    }
+
+                    addParameter(parameters, parameterNames, parseParameter());
+                }
+            }
+
+            consumeNewlines();
+        }
+
+        cursor.consume(TokenType.RPAREN, "')'");
+        cursor.consume(TokenType.FAT_ARROW, "'=>'");
+        return parseClosureBody(parameters, open.span().startOffset());
+    }
+
+    private SurfaceParameter parseParameter() {
+        TokenOccurrence name = cursor.consume(TokenType.IDENTIFIER, "a parameter name");
+
+        if (!cursor.at(TokenType.EQUALS)) {
+            return new SurfaceParameter(
+                    name.token().lexeme(),
+                    Optional.empty(),
+                    false,
+                    name.span());
+        }
+
+        cursor.advance();
+        consumeContinuationNewlines();
+        SurfaceExpression defaultValue = parseExpressionFoundation();
+        return new SurfaceParameter(
+                name.token().lexeme(),
+                Optional.of(defaultValue),
+                false,
+                new SourceSpan(name.span().startOffset(), defaultValue.span().endOffset()));
+    }
+
+    private SurfaceParameter parseRestParameter() {
+        TokenOccurrence spread = cursor.consume(TokenType.ELLIPSIS, "'...'");
+        TokenOccurrence name = cursor.consume(TokenType.IDENTIFIER, "a rest parameter name");
+        return new SurfaceParameter(
+                name.token().lexeme(),
+                Optional.empty(),
+                true,
+                new SourceSpan(spread.span().startOffset(), name.span().endOffset()));
+    }
+
+    private void addParameter(
+            List<SurfaceParameter> parameters,
+            Set<String> parameterNames,
+            SurfaceParameter parameter) {
+        if (!parameterNames.add(parameter.name())) {
+            throw ParseError.expected("a unique parameter name", cursor.current());
+        }
+        parameters.add(parameter);
+    }
+
+    private SurfaceExpression parseClosureBody(
+            List<SurfaceParameter> parameters, int startOffset) {
+        consumeContinuationNewlines();
+
+        if (cursor.at(TokenType.LBRACE)) {
+            TokenOccurrence open = cursor.advance();
+            consumeNewlines();
+            List<SurfaceExpression> expressions = new ArrayList<>();
+
+            if (!cursor.at(TokenType.RBRACE)) {
+                parseExpressionLine(expressions);
+
+                while (cursor.at(TokenType.NEWLINE)) {
+                    consumeNewlines();
+                    if (!cursor.at(TokenType.RBRACE)) {
+                        parseExpressionLine(expressions);
+                    }
+                }
+            }
+
+            TokenOccurrence close = cursor.consume(TokenType.RBRACE, "'}'");
+            SourceSpan bodySpan = expressions.isEmpty()
+                    ? new SourceSpan(open.span().endOffset(), close.span().startOffset())
+                    : new SourceSpan(
+                            expressions.get(0).span().startOffset(),
+                            expressions.get(expressions.size() - 1).span().endOffset());
+
+            return new SurfaceClosure(
+                    parameters,
+                    new SurfaceSequence(expressions, bodySpan),
+                    false,
+                    new SourceSpan(startOffset, close.span().endOffset()));
+        }
+
+        SurfaceExpression expression = parseExpressionFoundation();
+        return new SurfaceClosure(
+                parameters,
+                new SurfaceSequence(List.of(expression), expression.span()),
+                true,
+                new SourceSpan(startOffset, expression.span().endOffset()));
     }
 
     private SurfaceExpression parseObjectBody(SurfaceExpression parent) {
