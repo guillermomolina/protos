@@ -438,16 +438,22 @@ Do not repeatedly rerun failing tests without first understanding and changing t
 
 Static verification
 
-For source-code changes, run the narrowest applicable formatter, linter,
+For source-code changes, run the narrowest applicable formatter check, linter,
 compiler check, or static-analysis command needed to verify the modified scope,
 unless the check is unavailable, would be expensive, or would require starting
 a long-running process.
 
-Static verification is distinct from test execution and does not override the
-rule that tests run only when the user explicitly requests them.
+Prefer dedicated validation/check modes over commands that rewrite files or
+perform broader build phases. Static verification MUST NOT implicitly run tests
+when tests were not explicitly requested. Formatting tools must not introduce
+unrelated formatting changes.
 
-New or modified code must not introduce linter, compiler, static-analysis, or
-formatting errors in the affected scope.
+If an applicable verification command would also execute tests, use a non-test
+alternative or report that the check was not run.
+
+New or modified code must not introduce compiler, static-analysis, lint, or
+formatting diagnostics that indicate correctness, type-safety, maintainability,
+or project-style problems in the affected scope.
 
 Do not claim a source change is clean if the applicable static checks were not
 run. Report which checks were run, which were not run, and why.
@@ -456,7 +462,6 @@ A clean build achieved only by suppressing applicable warnings is not the same
 as clean code. Do not add suppressions merely to make tooling pass; use narrowly
 scoped suppressions only when the warning is genuinely inapplicable and the
 reason is defensible.
-
 
 Testing philosophy
 
