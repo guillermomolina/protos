@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 162
+Document revision: 163
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -202,6 +202,14 @@ If cancellation wins before commitment, the operation consumes no bytes from the
 A failed ordinary `ByteReadable.read` also consumes zero bytes from the receiver's observable input sequence. Failure is therefore not a partial-read result hidden behind a failed Future.
 
 If an implementation has already obtained bytes from an operating-system, host, or downstream source before the Protos read is cancelled or fails, those bytes must be preserved or rebuffered whenever they belong to that read's logical input position. They remain the earliest unread bytes of the observable sequence and must be returned by later successful reads before newer source bytes that follow them.
+
+`read(maxBytes)` also bounds implementation-controlled speculative retention associated with that logical input flow. A standard `ByteReadable` implementation must have an effective finite bound on unread bytes, native-read results, bookkeeping, or equivalent state retained solely because it chose to read ahead beyond the bytes currently needed to satisfy accepted Protos reads. The numeric bound is implementation-specific and is not portable Protos behavior.
+
+The `maxBytes` argument limits only the successful result of one read, not necessarily the size of one native/backend operation. A receiver may use larger native reads, prefetch, batching, shared buffers, or other bounded read-ahead strategies. However, repeatedly invoking a small bounded Protos read against an open-ended source must not by itself authorize unbounded growth of Protos-managed unread speculative state.
+
+Data retained because it is semantically required by already accepted higher-level operations is governed by those operations' own resource semantics. For example, an unbounded `readLine()` layered above a `ByteReadable` may necessarily accumulate an arbitrarily long line; that is not permission for the underlying `ByteReadable` itself to accumulate an independently unbounded additional speculative suffix.
+
+This finite-retention requirement concerns state controlled by the Protos receiver/runtime. It does not constrain buffering performed independently by a host kernel, filesystem cache, remote peer, device, or separately authorized backend outside the receiver's managed retention.
 
 For a receiver whose reads share a logical sequence position, cancellation or failure leaves that logical position unchanged. An implementation whose backend position advanced while obtaining bytes that are subsequently preserved must virtualize, rebuffer, reposition, or otherwise reconcile the backend so later Protos operations observe the unchanged logical position.
 
@@ -840,9 +848,9 @@ Conversely, an explicitly bounded operation such as `readLine(maxBytes)` does no
 
 Likewise, `readText()` chunk boundaries remain implementation-selectable, but that freedom is not permission to require an ever-growing implementation-chosen chunk before completing an otherwise progress-capable read. A standard TextReader must be able to choose finite chunks and apply backpressure through pending reads rather than turning an open-ended source into unbounded Protos-managed speculative retention.
 
-The same principle applies to standard `BufferedReader` and other standard read adapters: buffering capacity may be fixed, adaptive, or downstream-informed, and may change over time, but implementation-controlled unread read-ahead retained by one logical reader/flow must remain effectively finite unless additional retained data is semantically required by outstanding program operations.
+This is the text/adapter specialization of the general `ByteReadable` finite speculative-retention rule. Standard `BufferedReader` and other standard read adapters may use fixed, adaptive, or downstream-informed buffering, but each layer must preserve the same distinction between semantically required operation state and independently chosen speculative read-ahead.
 
-This requirement constrains Protos-managed retention, not the amount of data a host kernel, remote peer, filesystem cache, or independently authorized underlying source may buffer outside the Protos reader. It also does not require one native read at a time or prohibit prefetch, vectorized I/O, decoder batching, or bounded pipelining.
+The requirement constrains Protos-managed retention, not the amount of data a host kernel, remote peer, filesystem cache, or independently authorized underlying source may buffer outside the Protos reader. It also does not require one native read at a time or prohibit prefetch, vectorized I/O, decoder batching, or bounded pipelining.
 
 This guarantee is about the TextReader's logical text sequence. As with ordinary read-ahead, it does not promise to restore the separately accessible wrapped byte source's native/logical cursor to the position it had before the wrapper performed internal reads; abandoning or closing the wrapper retains the wrapper-lifecycle rule that already-consumed source bytes are not restored.
 
@@ -1499,6 +1507,7 @@ A failed sync may leave an unknown subset durable, but does not itself poison th
 A failed flush never authorizes duplicate replay; an output wrapper with unknowable downstream progress becomes unusable unless a stronger protocol makes exact recovery possible.
 EOF != unavailable capability != I/O failure
 A failed ByteReadable read consumes zero observable bytes and leaves the logical sequence position unchanged; any bytes already obtained are preserved for later logical reading.
+Every standard ByteReadable has a finite effective bound on Protos-managed unread state retained solely by implementation-chosen read-ahead; maxBytes need not equal a native read size, but bounded reads cannot create unbounded speculative retention.
 Distinct Actor-local proxies for one ByteReadable input sequence share one consumption-ordering domain: per-Actor invocation order is preserved, while genuinely concurrent cross-Actor reads are initially unordered but stably ordered once admitted.
 ByteReadable cancellation/failure preservation follows that same established input order; it does not reintroduce a nonexistent global cross-Actor invocation order.
 ByteSeekable seek operations are failure-atomic with respect to logical position; failed or successfully cancelled seeks leave that position unchanged.
