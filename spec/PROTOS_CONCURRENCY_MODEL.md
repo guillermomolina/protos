@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 209
+Document revision: 210
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -2148,6 +2148,50 @@ Core is normative rather than an implementation gap. Internal health telemetry
 may use arbitrary heuristics provided those heuristics do not alter Core-visible
 Node, Process, ActorRef, monitoring, messaging, or replacement semantics.
 
+## 38B. Network-Partition Knowledge and Reporting Boundary
+
+**CLOSED**
+
+Core v0.1 does not expose `NETWORK_PARTITION` as a distinct proven lifecycle or
+reachability state.
+
+From one distributed runtime domain, loss of communication with another domain
+is not sufficient to distinguish a network partition from remote pause,
+transport failure, routing failure, overload, local connectivity failure, or
+remote failure. Core therefore reports only the knowledge it can justify:
+`UNREACHABLE` or `UNKNOWN`, subject to the existing reachability rules.
+
+An implementation may internally diagnose that a partition is likely, and
+administrative telemetry may describe transport observations or suspicion.
+Such diagnostics must not change Core-visible lifecycle, membership, Authority,
+ActorRef, monitoring, messaging, or replacement semantics merely because the
+implementation labels the condition a partition.
+
+Core also defines no implementation-specific partition timeout after which
+`UNREACHABLE` becomes a stronger state. Elapsed time does not turn inability to
+communicate into proof of the cause of that inability.
+
+This rule is symmetric with respect to partitions: two sides may simultaneously
+observe the other as unreachable. Neither observation grants Authority over the
+other side, proves that the other side terminated, or permits a conflicting
+exclusive decision that the observer could not otherwise authorize.
+
+If communication is restored without an authoritative membership/lifecycle
+decision having ended the relevant incarnation, ordinary communication may
+resume with that same still-live identity. Core does not create a new Node,
+Process, or Actor incarnation merely because reachability was temporarily lost.
+
+A future distributed coordination facility may expose richer partition
+reporting or topology diagnostics. If it claims that a partition is
+authoritatively identified rather than merely suspected, it must define the
+evidence, observation scope, staleness rules, and consequences. Split-brain
+resolution, membership removal, fencing, quorum decisions, and Authority
+acquisition remain separate mechanisms and are not implied by partition
+reporting.
+
+Thus Core's portable observable report for ambiguous communication loss is
+reachability knowledge, not guessed network topology.
+
 ## 39. Cluster
 
 **DIRECTION CLOSED, DETAILS OPEN --- REVISED**
@@ -3827,7 +3871,6 @@ mechanism, or implementation detail that still requires design.
 -   Draining policy and mechanics
 -   Infrastructure Controller integration APIs
 -   External infrastructure adapters such as Kubernetes or Nomad
--   Network-partition detection and reporting
 -   Split-brain mitigation mechanisms
 -   Cluster membership protocol
 -   Authority-scope API/model representation

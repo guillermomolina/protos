@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.210] - 2026-09-03
+
+### Closed
+- Closed `Network-partition detection and reporting` for Core v0.1.
+- Defined that Core has no proven `NETWORK_PARTITION` semantic state: ambiguous
+  communication loss is reported as `UNREACHABLE` or `UNKNOWN`.
+- Prohibited implementation-specific partition timeouts and diagnostics from
+  changing lifecycle, membership, Authority, ActorRef, monitoring, messaging,
+  or replacement semantics.
+- Defined that symmetric partition suspicion grants neither side Authority and
+  does not prove remote termination.
+- Preserved identity across transient reachability loss when no independent
+  authoritative decision ended or removed the incarnation.
+- Kept split-brain resolution, membership removal, fencing, quorum decisions,
+  and Authority acquisition as separate open distributed mechanisms.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 210.
+
 ## [0.1.209] - 2026-09-03
 
 ### Fixed

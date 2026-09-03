@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 209
+Document revision: 210
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2488,6 +2488,40 @@ cancelled or becomes terminal before acceptance.
 Admission eligibility is not Actor-task runnability. Making a delivery
 operation admission-eligible therefore does not create an Actor turn and does
 not weaken the existing definition of scheduler weak fairness.
+
+
+### Network-partition reporting
+
+Core runtime classification must not infer a special semantic partition state
+from communication loss:
+
+```text
+function reportDistributedCommunicationLoss(remoteScope):
+    if authoritativeTerminationAlreadyKnown(remoteScope):
+        return TERMINATED
+
+    if communicationCurrentlyUnavailable(remoteScope):
+        return UNREACHABLE
+
+    return UNKNOWN
+```
+
+An internal detector may additionally record diagnostics such as
+`partitionSuspected`, transport errors, probe history, or topology evidence.
+Those diagnostics are non-semantic unless a future normative facility defines
+otherwise.
+
+In particular, Core has no transition of the form:
+
+```text
+unreachableFor >= implementationPartitionThreshold
+    -> NETWORK_PARTITION
+    -> acquireAuthorityOrTerminateRemoteSide
+```
+
+Restored communication may make the remote scope reachable again when no
+independent authoritative decision has ended or removed the relevant
+incarnation.
 
 
 ### Node termination knowledge
