@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 132
+Document revision: 133
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -795,7 +795,25 @@ writeText(text)
 writeLine(text)
 ```
 
-`writeLine(text)` returns a `Future` that resolves to the receiver on successful completion. It writes the text followed by LF (`U+000A`) as the canonical Protos line terminator. It does not perform platform-native newline translation.
+Both operations return `Future` values resolving to the receiver on successful completion.
+
+Each `writeText(text)` invocation is one ordered logical text-write operation. `writeLine(text)` is likewise one logical text-write operation whose text payload is `text` followed by LF (`U+000A`). The LF is therefore part of the same operation for encoding validation and ordering; another operation on that TextWriter does not interleave between the text and its line terminator.
+
+`writeLine(text)` uses LF as the canonical Protos line terminator and does not perform platform-native newline translation.
+
+Before any byte belonging to one of these operations becomes observable at the byte target's output boundary, the TextWriter must establish that the operation's complete text payload is encodable under the writer's current per-flow encoder state and configured error policy.
+
+If that encoding step fails, the text-write Future fails with zero bytes from that operation contributed to the target, and the TextWriter's encoder state remains as it was immediately before that operation's ordered evaluation. An encoding failure by itself does not poison the TextWriter; a later text-write operation may proceed from that unchanged encoder state.
+
+This encoding-failure atomicity does not require eager allocation of the complete encoded byte sequence. An implementation may validate, checkpoint encoder state, encode in a reversible staging representation, perform a dry run, or use another strategy, provided no target-visible bytes or committed encoder-state change from the operation precede successful validation of the complete text payload.
+
+After complete encoding validation succeeds, the operation has one logical encoded byte sequence and one resulting encoder state determined from the encoder state at that operation's ordered evaluation point. The implementation may deliver that logical byte sequence through one or more underlying byte writes; the mapping from one text write to native/underlying write calls remains non-observable.
+
+Cancellation may win only while the operation can still preserve both zero target-visible byte contribution and the pre-operation encoder state. Once the first irreversible output effect of the operation occurs at the target's semantic output boundary, the text-write operation is committed and cancellation cannot make it observably disappear.
+
+An underlying output failure after commitment follows the ordinary `ByteWritable` and wrapper-failure rules. In particular, the target may already contain a prefix of the operation's encoded byte sequence, and a TextWriter must not guess how much downstream progress occurred. When exact remaining output cannot be known, its output side becomes permanently failed/unusable as specified by the wrapper lifecycle rules.
+
+A successfully completed text write commits its resulting encoder state for later ordered text writes. A successfully cancelled text write and a text write that fails during pre-output encoding validation do not advance that state.
 
 A TextWriter exposes `Flushable` or `Closable` only when it correctly implements those protocols over its own state. Target capabilities are never inherited automatically.
 
@@ -1325,6 +1343,7 @@ Binary I/O is byte-oriented.
 String never implies an encoding.
 readLine result, limit, decoding-error, and I/O-error precedence follows logical decoded input order and is independent of buffering/read-ahead.
 A TextReader line-too-long, decoding, or underlying I/O failure permanently fails its text-reading side; there is no implicit drain or recovery-to-next-line behavior.
+TextWriter encoding failure is pre-output failure-atomic: it emits zero bytes and preserves encoder state; writeLine text plus LF is one ordered logical text-write operation.
 Successful cancellation of readText/readLine consumes zero logical text and preserves decoder/framing state; internal read-ahead may be retained but cannot become text loss, duplication, or reordering.
 
 I/O that may wait returns Future.

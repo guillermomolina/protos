@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.133] - 2026-09-03
+
+### Fixed
+- Defined `TextWriter.writeText` and `writeLine` as ordered logical text-write
+  operations, with `writeLine` text plus LF forming one non-interleaved operation.
+- Required complete encoding validation before any byte from a text-write
+  operation becomes observable at the target.
+- Made strict encoding failure failure-atomic: it contributes zero output bytes
+  and preserves the pre-operation per-flow encoder state.
+- Kept this guarantee representation-neutral: implementations may validate,
+  checkpoint, dry-run, or stage encoding without requiring one native write or
+  mandatory eager full-output allocation.
+- Defined text-write cancellation to win only while both zero output contribution
+  and the pre-operation encoder state can still be preserved.
+- Reused the existing ByteWritable/wrapper unknown-progress rules for downstream
+  failures after output commitment rather than inventing TextWriter-specific
+  retry heuristics.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 133. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.132] - 2026-09-03
 
 ### Fixed
