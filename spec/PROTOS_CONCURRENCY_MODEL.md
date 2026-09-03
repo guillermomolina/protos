@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 188
+Document revision: 189
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -1227,6 +1227,64 @@ A graceful stop is not Actor failure. It does not by itself invoke failure polic
 though an unhandled fatal error occurred. Group desired-state reconciliation remains
 independent: if a Group still requires capacity, its controller may create a new
 member, which is a new Actor incarnation with a new ActorRef.
+
+## 24B. Actor Lifetime Is Not Reachability Garbage Collection
+
+**CLOSED**
+
+Actor lifetime is explicit runtime lifecycle, not ordinary object reachability.
+
+A live Actor incarnation is not automatically terminated merely because the
+runtime can no longer find an ordinary Protos reference, `ActorRef`, local
+variable, message payload, Group membership entry, monitor, discovery binding,
+or other application-level reference that currently names it.
+
+Likewise, loss of the last presently known `ActorRef` is not evidence that the
+Actor is unreachable from all current or future runtime participants. In a
+distributed system such a proof would require global coordination, would race
+with in-flight capability transfer and discovery, and would make Actor lifetime
+depend on implementation-specific reference tracking.
+
+Therefore Core v0.1 defines no reachability-based Actor garbage collection and
+no idle-time or memory-pressure rule that silently terminates a live Actor
+incarnation. An implementation must not reclaim a live Actor by treating it as
+ordinary garbage, nor may it synthesize graceful stop, fatal failure, or
+replacement merely because the Actor appears unused.
+
+A live Actor ends only through an already-defined lifecycle cause, including an
+explicit termination request, unhandled fatal failure and resulting policy,
+known termination of the containing Process, or another future mechanism whose
+normative contract explicitly terminates that incarnation.
+
+This rule does not require terminated Actor implementation state to remain in
+memory forever. Once an Actor is TERMINATED, the runtime may reclaim its private
+heap, mailbox storage, task bookkeeping, routing state, monitoring metadata,
+tombstones, or other implementation data as soon as doing so cannot change any
+remaining Protos-observable behavior.
+
+In particular, an `ActorRef` to a terminated incarnation must continue to denote
+that terminated incarnation and must never retarget to a replacement, but the
+runtime need not preserve the terminated Actor's former mutable heap merely to
+implement that reference. It may represent terminal identity using compact
+metadata, distributed routing knowledge, a tombstone, or any other mechanism
+that preserves the existing ActorRef, communication-failure, monitoring, and
+identity semantics.
+
+The amount, placement, retention duration, and compaction strategy of such
+post-termination metadata are implementation choices except where another
+normative contract makes particular information observable.
+
+This distinction preserves both sides of Protos' resource model:
+
+- live semantic resources are not destroyed by hidden reachability heuristics;
+- dead implementation storage is not kept alive merely because the language
+  exposes stable identity for a terminated Actor.
+
+If a future higher-level abstraction wants Orleans-like idle activation
+collection, virtual identity, passivation/reactivation, or durable service
+activation, it must define that lifecycle explicitly. Such an abstraction must
+not retroactively change the semantics of a concrete Protos Actor incarnation
+or `ActorRef`.
 
 ## 25. Parent Actor Versus Failure Authority
 
@@ -3389,7 +3447,6 @@ mechanism, or implementation detail that still requires design.
 -   Draining policy and mechanics
 -   Infrastructure Controller integration APIs
 -   External infrastructure adapters such as Kubernetes or Nomad
--   Actor garbage collection
 -   Monitoring API
 -   Fatal versus non-fatal handler errors
 -   Which errors terminate an Actor

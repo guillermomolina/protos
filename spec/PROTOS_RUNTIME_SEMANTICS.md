@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 188
+Document revision: 189
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2420,6 +2420,29 @@ Conceptually, Actor termination while its hosting runtime can still execute
 cleanup includes:
 
 ```text
+### Actor storage reclamation after termination
+
+Actor lifecycle termination and implementation storage reclamation are distinct.
+
+Conceptually:
+
+```text
+function mayReclaimActorImplementationState(actor):
+    require actor.lifecycle == TERMINATED
+    require reclaiming state preserves all remaining observable
+            ActorRef, identity, monitoring, routing, and communication semantics
+    return true
+```
+
+There is no corresponding `mayCollectLiveActorBecauseUnreferenced` operation in
+Core v0.1. Ordinary object-graph reachability, absence of known ActorRefs,
+idle-time heuristics, and memory pressure are not Actor termination causes.
+
+An implementation may replace a terminated Actor's full runtime representation
+with compact terminal metadata when that substitution is observationally
+equivalent.
+
+
 ### Actor graceful-stop lifecycle cutover
 
 The concurrency model's graceful-stop cutover is represented conceptually as:

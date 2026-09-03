@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.189] - 2026-09-03
+
+### Closed
+- Closed `Actor garbage collection`.
+- Defined live Actor lifetime as explicit lifecycle rather than ordinary
+  reachability garbage collection.
+- Prohibited hidden termination from loss of known ActorRefs, idleness, or
+  memory-pressure heuristics.
+- Allowed post-termination Actor implementation state to be reclaimed or
+  compacted once remaining ActorRef, identity, monitoring, routing, and
+  communication semantics are preserved.
+- Kept virtual-actor/passivation models as possible future higher-level
+  abstractions rather than changing concrete Actor incarnation semantics.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 189.
+
 ## [0.1.188] - 2026-09-03
 
 ### Fixed
