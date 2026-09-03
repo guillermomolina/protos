@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 101
+Document revision: 102
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -256,9 +256,15 @@ While a write is still pending and no irreversible output effect has occurred, i
 
 The first irreversible output effect commits the operation. After commitment the write cannot be cancelled as though nothing happened.
 
-A committed write may remain incomplete and may subsequently fail. In that case a prefix may already be externally observable.
+For a captured write sequence of length `N`, a failed write contributes exactly one contiguous prefix of that sequence of some length `k` where `0 <= k <= N`. It contributes no byte after the first byte it did not contribute. `k = 0` means failure occurred before any output effect; `k > 0` means the write committed before failing. Failure is permitted even when `k = N` if the receiver cannot truthfully report successful completion despite the whole logical sequence having become observable at its output boundary.
 
-Core v0.1 does not require exposing the committed byte count after such a failure.
+The value of `k` is not exposed by ordinary `ByteWritable.write`. Therefore a failed write does not prove that zero bytes were written and does not make automatic retry of the whole captured sequence semantically safe.
+
+Invocation ordering still applies across failure. Any contribution from a later write on the same logical output flow occurs after the failed write's contributed prefix; bytes from a later write do not fill holes inside, precede, or interleave with that prefix.
+
+A committed prefix remains part of the logical output flow. If the receiver remains usable and later `flush()`, `sync()`, position-sensitive operations, or other ordered operations apply to that output, they observe the committed prefix as preceding output/effect according to their own contracts.
+
+A write failure does not by itself semantically close the receiver or create a universal poisoned state. A later operation is evaluated against the receiver's actual protocol and backend state and may succeed or fail accordingly. A concrete receiver may define stronger failure/lifecycle behavior when that behavior is part of its observable contract.
 
 ---
 
@@ -403,6 +409,8 @@ Seeking beyond the current end is allowed unless the concrete resource cannot re
 Reading beyond the current EOF returns `null`. A later write beyond the end may grow a concrete resource according to that resource's write semantics.
 
 Reads, writes, and seeks that affect one shared sequence position are ordered in invocation order.
+
+When a `ByteWritable` write on such a receiver fails after contributing a prefix of length `k`, the shared logical position advances exactly by the committed contribution that the receiver's positioned-write semantics place into the sequence. A later ordered position-sensitive operation therefore starts from the post-prefix logical position, not from the pre-write position merely because the write's Future failed.
 
 `position()` is asynchronous for uniform no-hidden-suspension semantics even when a concrete implementation can answer immediately.
 
@@ -1212,6 +1220,7 @@ I/O introduces no hidden Protos suspension point.
 
 ByteWritable.write captures its Bytes value snapshot at invocation.
 Later mutation of the caller's Bytes cannot change that write.
+A failed ByteWritable write contributes one contiguous prefix of its captured sequence; failure does not reveal that prefix length or make whole-write retry safe.
 Pending writes remain subject to finite end-to-end admission; write snapshots do not authorize unbounded retained output.
 Distinct proxies for one logical output flow share its ordering domain; concurrent successful writes are ordered as whole logical byte sequences, not byte-interleaved.
 

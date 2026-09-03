@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.102] - 2026-09-03
+
+### Fixed
+- Defined the observable contribution of a failed `ByteWritable.write` as one
+  contiguous prefix of the captured write sequence, including the possible
+  zero-length and full-length-prefix cases.
+- Made failed-write ordering explicit so later writes cannot precede, fill holes
+  inside, or byte-interleave with the failed write's committed prefix.
+- Clarified that ordinary `write` does not expose the committed prefix length,
+  so failure never makes whole-write retry automatically safe.
+- Defined shared-position advancement after partial failed writes and preserved
+  committed prefixes for later ordered flush/sync/position-sensitive operations.
+- Clarified that write failure alone does not implicitly close or universally
+  poison a `ByteWritable`; later operations follow the concrete receiver state.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 102. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.101] - 2026-09-03
 
 ### Fixed
