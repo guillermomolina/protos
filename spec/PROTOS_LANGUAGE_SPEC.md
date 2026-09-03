@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 167
+Document revision: 168
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -4005,6 +4005,52 @@ allocations, boxes, or immediate-value encodings.
 This rule does not require a particular hash-table representation or a physical
 linear scan. An implementation may use any indexing strategy that produces the
 same observable matching, update, removal, and insertion-order behavior.
+
+### Standard keyed removal
+
+The standard keyed-removal selector for `Map` and `IdentityMap` is:
+
+```js
+map.remove(key)
+```
+
+It removes exactly the entry selected by the receiver's existing deterministic
+key-search semantics and returns that entry's previously stored value.
+
+If key search completes normally and no entry matches, `remove(key)` signals an
+`Error`. It does not return `null`, `false`, a hidden sentinel, or another
+ordinary value to represent absence. A mapping whose stored value is `null`
+therefore remains distinguishable from an absent mapping.
+
+Conceptually:
+
+```text
+map.remove(key)
+    matching entry -> remove entry, return previous stored value
+    no match       -> Error
+```
+
+The same result contract applies to `IdentityMap.remove(key)`, using primitive
+identity-key matching.
+
+`remove(key)` is a mutating standard Map operation and therefore follows the
+existing open/closed/frozen rules and state-revalidation rules:
+
+- an already closed or frozen Map signals before key search;
+- on an open normal Map, permitted key search may execute user-defined `hash`
+  and `==` behavior;
+- if such behavior closes or freezes the Map before the actual removal, the
+  operation signals before removing the matched entry;
+- successful removal returns the exact stored value object that belonged to the
+  removed entry.
+
+Effects already performed by key-search callbacks are not rolled back if the
+outer removal later fails.
+
+`containsKey(key)` remains the non-failing way to ask whether a key is present.
+Libraries that want remove-if-present, default-return, or conditional-removal
+behavior may expose distinct ordinary protocols rather than overloading the
+standard `remove(key)` absence result.
 
 ### Map state transitions during key search
 

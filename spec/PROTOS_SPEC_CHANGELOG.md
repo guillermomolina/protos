@@ -4,6 +4,23 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.168] - 2026-09-03
+
+### Fixed
+- Defined `remove(key)` as the standard keyed-removal selector for `Map`
+  and `IdentityMap`.
+- Required successful removal to return the exact previously stored value.
+- Required a successful no-match search to signal an Error rather than
+  returning `null`, `false`, or an implementation sentinel.
+- Composed removal with the existing deterministic key search,
+  open/closed/frozen failure timing, and post-callback state revalidation.
+- Preserved `containsKey(key)` as the non-failing presence query and kept
+  `NOT_FOUND` strictly internal to runtime control flow.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 168.
+  No grammar, Actor/Future, or I/O semantics change.
+
 ## [0.1.167] - 2026-09-03
 
 ### Fixed

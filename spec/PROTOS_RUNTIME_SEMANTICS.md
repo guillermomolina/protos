@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 167
+Document revision: 168
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3792,6 +3792,62 @@ The state applies only to the receiver's own keyed-entry structure and values.
 No recursive close/freeze of keys or values occurs. Implementations may encode
 Map state and entry storage differently provided these failure points and
 observable protocol calls are preserved.
+
+### Standard keyed removal operation
+
+Standard normal-Map keyed removal is conceptually:
+
+```text
+function mapRemove(map, key):
+    requireMapMayRemove(map)
+
+    entry = findMapEntry(map, key)
+
+    if entry == NOT_FOUND:
+        signal an Error for missing Map key
+
+    requireMapMayRemove(map)
+
+    value = entry.value
+    remove entry from map insertion order
+    return value
+```
+
+Standard IdentityMap keyed removal is conceptually:
+
+```text
+function identityMapRemove(map, key):
+    requireMapMayRemove(map)
+
+    entry = findIdentityMapEntry(map, key)
+
+    if entry == NOT_FOUND:
+        signal an Error for missing IdentityMap key
+
+    requireMapMayRemove(map)
+
+    value = entry.value
+    remove entry from map insertion order
+    return value
+```
+
+The first state check preserves the existing rule that an already closed or
+frozen Map fails before key search. The second check is a fresh observation at
+the semantic mutation point and prevents callback-capable normal-Map search from
+bypassing a `close()` or `freeze()` performed by `hash` or `==`.
+
+A successful call returns the exact value object stored in the removed entry
+immediately before removal. The entry's key, recorded hash, and insertion-order
+position cease to belong to the Map once removal commits. A later insertion of
+the same semantic key is a new insertion at the end, as already specified.
+
+If search completes with `NOT_FOUND`, the operation signals an `Error`; the
+internal `NOT_FOUND` marker never escapes as a Protos value. No ordinary
+storable object, including `null` or `false`, is an absence result.
+
+Normal-Map key-search effects remain ordinary effects and are not rolled back.
+IdentityMap search remains callback-free. No snapshot, transaction, or hidden
+retry is introduced.
 
 ### Revalidation of Map state after callback-capable search
 
