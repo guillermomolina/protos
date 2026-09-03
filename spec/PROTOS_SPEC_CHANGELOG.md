@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.188] - 2026-09-03
+
+### Fixed
+- Distinguished an absent Environment binding from a Protos lookup String that
+  cannot be losslessly represented as one valid native environment-variable
+  name.
+- Required both `Environment.get(name)` and `contains(name)` to fail for an
+  unrepresentable/invalid native query name instead of returning `null` or
+  `false`.
+- Required query-name validation to occur before value decoding and ordinary
+  lookup-result selection.
+- Prohibited lossy replacement, truncation, normalization, delimiter
+  reinterpretation, or implementation-selected conversion from silently
+  changing the lookup name.
+- Kept the concrete native name repertoire host-dependent while making the
+  portable failure-vs-absence distinction deterministic.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 188. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.187] - 2026-09-03
 
 ### Closed

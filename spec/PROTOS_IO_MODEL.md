@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 187
+Document revision: 188
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -1420,9 +1420,19 @@ environment.each(block)
 
 `name` must be a Protos `String`.
 
-`get(name)` returns the String value when the named variable exists and is representable as valid Protos Unicode text. It returns `null` when the variable is absent. It signals an error when the variable exists but its value cannot be represented as a valid Protos String.
+A lookup name must also be losslessly representable as exactly one valid native environment-variable name in the represented Environment's native name domain. If the supplied String cannot be represented there — for example because the native environment format forbids one of its characters, uses a representation that cannot encode the String losslessly, or would require truncation, replacement, normalization, delimiter reinterpretation, or another lossy transformation — both `get(name)` and `contains(name)` signal a query-name representation/validity error.
 
-`contains(name)` returns whether the variable exists according to the represented environment's native name-identity rules. It does not need to decode the variable's value merely to determine existence; therefore an existing entry with a non-Unicode value still makes `contains(name)` return `true` when its name is representable and matches.
+Such a failure is not absence. `get(name)` must not return `null`, and `contains(name)` must not return `false`, merely because an implementation cannot express the requested Protos String as a native environment name. The failure is determined before value decoding or ordinary lookup-result selection.
+
+If the String is a valid representable native name, lookup then uses the represented environment's native name-identity rules. Native case-insensitive comparison where applicable is an identity rule, not permission to apply implementation-selected Unicode normalization or lossy case conversion before entering the native name domain.
+
+This rule deliberately leaves the concrete native name repertoire at the host/environment boundary. Protos does not require POSIX byte-name rules, Windows environment-block rules, or any particular native encoding as universal language semantics. It does require implementations representing the same native environment to agree that an unrepresentable query is an error rather than silently treating it as a missing binding.
+
+`get(name)` returns the String value when the named variable exists and is representable as valid Protos Unicode text. It returns `null` when the variable is absent after a valid representable-name lookup. It signals an error when the variable exists but its value cannot be represented as a valid Protos String.
+
+`contains(name)` returns whether the variable exists according to the represented environment's native name-identity rules after the query name has passed the representation/validity check above. It does not need to decode the variable's value merely to determine existence; therefore an existing entry with a non-Unicode value still makes `contains(name)` return `true` when its name is representable and matches.
+
+Environment lookup distinguishes an absent valid native name from a Protos String that cannot be losslessly represented as one native environment-variable name; the latter makes both get and contains fail rather than returning null/false.
 
 `each(block)` invokes the block with `(name, value)` String pairs. Iteration order among valid entries is unspecified.
 
