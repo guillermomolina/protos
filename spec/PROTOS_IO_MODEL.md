@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 216
+Document revision: 217
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -1089,6 +1089,20 @@ Write access alone does not imply create or truncate.
 Append alone does not imply create.
 
 Invalid combinations fail open.
+
+Multiple `filesystem.open` invocations do not form one ordered namespace-operation stream merely because they use the same `Filesystem` capability, equal `Path` values, or one Actor invokes them sequentially without awaiting an earlier Future. `Filesystem` carries namespace authority; it is not a mutable sequence cursor whose independent acquisitions are implicitly serialized in caller invocation order.
+
+Accordingly, after two valid open operations have both been invoked and remain simultaneously pending, Protos does not define which operation reaches its own namespace selection/commitment point first unless another normative dependency already establishes that order. This remains true when the opens use equal Paths and their effects can interact, such as `createNew` racing `existing`, two `createNew` operations, or an open with `truncate` racing another acquisition.
+
+Each open still individually obeys its race-free selection, creation, confinement, stable-resource-binding, cancellation, and commitment rules. Once one open commits a namespace/content effect, another open that reaches its selection point later observes the namespace/resource state then applicable under the Filesystem/backend semantics. Protos does not permit an implementation to rewrite an already-selected File merely to manufacture caller-order serialization afterward.
+
+A program that requires one open's terminal result or committed effects to precede a later acquisition establishes that dependency through ordinary Protos sequencing: it waits for the first operation's Future to reach the required terminal outcome before invoking the dependent open, or uses a future explicit higher-level protocol whose normative contract supplies the needed ordering. Merely retaining both Futures or invoking both calls from one Actor without such a dependency does not establish it.
+
+An implementation may internally serialize some or all opens for a backend when doing so cannot change outcomes allowed by this rule, but that queueing policy is not portable Protos ordering. Conversely, implementations may perform independent opens concurrently, batch them, or use backend-native asynchronous acquisition. No global Filesystem lock, per-Path queue, or same-Actor namespace FIFO is required solely by the standard `open` protocol.
+
+This rule concerns ordering among distinct open operations. It does not weaken the stable ordering domains of a `File` after acquisition, the cross-File append-placement invariant for append operations selecting the same underlying resource, or any stronger future Filesystem operation that explicitly defines its own transaction/order domain.
+
+Standard Filesystem opens are independent asynchronous acquisitions: same Filesystem, same Path, or same-Actor invocation does not by itself order their namespace selection/commitment points; dependencies must be established explicitly.
 
 ### 18.1 Creation
 

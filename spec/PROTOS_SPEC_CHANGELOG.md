@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.217] - 2026-09-03
+
+### Fixed
+- Defined distinct `filesystem.open` calls as independent asynchronous namespace
+  acquisitions rather than an implicit per-Filesystem or per-Path FIFO.
+- Clarified that same-Actor sequential invocation without awaiting an earlier
+  open does not order the opens' namespace selection/commitment points.
+- Defined interacting pending opens, including createNew/existing, concurrent
+  createNew, and truncate-on-open cases, by each operation's own race-free
+  selection and commitment point.
+- Required programs needing acquisition dependency to establish it explicitly
+  through ordinary Future sequencing or a stronger normative protocol.
+- Preserved implementation freedom to serialize, batch, or overlap opens when
+  that machinery does not create stronger portable ordering.
+- Avoided requiring a global Filesystem lock, per-Path queue, or same-Actor
+  namespace FIFO while preserving post-open File ordering and append-placement
+  guarantees.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 217. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.216] - 2026-09-03
 
 ### Closed
