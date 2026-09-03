@@ -477,6 +477,34 @@ class ProtosLexerTest {
     }
 
     @Test
+    void uppercaseRadixPrefixesCommitToTheirRadixGrammar() {
+        for (String source : List.of(
+            "0X",
+            "0XG",
+            "0B",
+            "0B2",
+            "0O",
+            "0O8"
+        )) {
+            assertThrows(ProtosLexer.LexicalError.class, () -> lex(source), source);
+        }
+    }
+
+    @Test
+    void exponentCommitmentIsCaseInsensitive() {
+        for (String source : List.of(
+            "2E",
+            "2E+",
+            "2E-",
+            "1.5E",
+            "1.5E+",
+            "1.5E-"
+        )) {
+            assertThrows(ProtosLexer.LexicalError.class, () -> lex(source), source);
+        }
+    }
+
+    @Test
     void decimalDigitSeparatorsApplyAcrossFractionAndExponentParts() {
         assertEquals(
             List.of(
