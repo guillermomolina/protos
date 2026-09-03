@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 126
+Document revision: 127
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -911,6 +911,13 @@ when it cannot change the Protos-observable point at which cancellation takes
 effect.
 
 Cancelling a Future requests cancellation of its work.
+
+`Future.cancel()` is an idempotent request operation and returns the same Future
+object on every call. If the Future is already terminal, `cancel()` is a no-op
+with respect to Future state and outcome and still returns that Future. For a
+pending Future, returning normally means only that the cancellation request was
+recorded; it does not assert that cancellation has already taken effect or that
+the eventual terminal state must be `cancelled`.
 
 Cancelling a SendOperation attempts to prevent further delivery while
 that remains safe.

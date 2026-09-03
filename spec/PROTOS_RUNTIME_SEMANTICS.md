@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 126
+Document revision: 127
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3384,7 +3384,21 @@ function cancel(future):
     return future
 ```
 
-The exact return value of `cancel()` may be refined by the standard protocol, but cancellation request is not an unsafe immediate kill.
+`Future.cancel()` returns that same Future object. This return value is normative,
+not implementation-defined.
+
+Cancellation request is idempotent while the Future remains pending: repeated
+calls do not create additional cancellation events or change the identity of the
+cancellation target. Calling `cancel()` after the Future is already resolved,
+failed, or cancelled does not change its terminal state, value, or error and
+still returns that same Future.
+
+A successful method call means only that the cancellation request has been
+recorded when the Future was pending; it does not mean that cancellation has
+already been observed, that the Future will necessarily end in `cancelled`, or
+that effects already committed by the producing operation can be reversed.
+Cancellation remains cooperative and follows the producer's normative
+cancellation/commitment rules.
 
 Cancellation observation follows the portable Future-cancellation boundaries
 defined above. This section does not create a second category of runtime-selected

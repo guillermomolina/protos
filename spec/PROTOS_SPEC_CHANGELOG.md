@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.127] - 2026-09-03
+
+### Fixed
+- Made the observable return value of `Future.cancel()` normative: it returns
+  the same Future object.
+- Defined repeated cancellation requests on a pending Future as idempotent.
+- Defined `cancel()` on resolved, failed, or already-cancelled Futures as a
+  state-preserving no-op that still returns the same Future.
+- Clarified that a normal return from `cancel()` acknowledges request recording,
+  not successful cancellation, a guaranteed `cancelled` terminal state, or
+  reversal of already-committed effects.
+- Removed the implementation-defined escape hatch that allowed the standard
+  protocol to choose a different `cancel()` result.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 127.
+
 ## [0.1.126] - 2026-09-03
 
 ### Fixed
