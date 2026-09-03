@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 202
+Document revision: 203
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3409,6 +3409,57 @@ This runtime rule introduces no Array construction surface, resizing primitive,
 slice object, iterator object, or extra identity relation. Standard Array
 equality/hash continue to use the ordinary default identity semantics unless
 user code explicitly overrides the ordinary messages.
+
+### Standard Array iteration runtime semantics
+
+Standard `Array.each(block)` validates the original receiver as a standard Array
+and then captures a shallow logical snapshot of the receiver's indexed element
+references in ascending index order before invoking user code.
+
+Conceptually:
+
+```text
+function standardArrayEach(receiver, block):
+    array = requireArrayReceiver(receiver)
+    requireClosure(block)
+
+    snapshot = snapshotArrayElements(array)
+
+    for element in snapshot from first to last:
+        invoke(block, [element])
+
+    return array
+```
+
+`snapshotArrayElements` captures exactly the element references stored at
+indices `0 .. arrayIndexedLength(array) - 1` at the snapshot point. It performs
+no user-message dispatch and invokes no equality, hashing, conversion, or
+element protocol.
+
+The snapshot is shallow. Mutating an element object does not replace the
+snapshot reference. Replacing an indexed element in the Array after snapshot
+capture does not rewrite that already-captured reference.
+
+No standard Array mutation restriction is active merely because `each` is
+running. A callback or another Actor-local task may invoke `atPut` on the same
+Array when the existing state rules permit it. If such replacement succeeds,
+later callbacks in the current `each` still receive the references captured by
+the snapshot rather than re-reading current Array indexed state.
+
+If a callback suspends, `snapshot` remains part of the suspended continuation's
+logical state. The Actor scheduler remains free to run other work. No lock,
+condition wait, mutation guard, or scheduler exclusion is introduced by Array
+iteration.
+
+Normal callback return proceeds to the next snapshot element. Error unwind,
+non-local return, cancellation unwind, or another ordinary control transfer
+that leaves the `each` invocation stops traversal immediately; no later element
+is invoked, and prior effects are not rolled back.
+
+The pseudocode does not require materializing a second Array. Implementations may
+retain immutable/versioned storage, copy references lazily, use copy-on-write,
+or employ another strategy provided that every callback observes exactly the
+element reference captured for its snapshot position.
 
 ## Invocation Argument Binding
 

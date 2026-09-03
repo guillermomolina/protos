@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.203] - 2026-09-03
+
+### Fixed
+- Defined standard `Array.each(block)` as deterministic ascending-index
+  iteration over a shallow element-reference snapshot captured before callbacks.
+- Defined same-Array element replacement during callbacks or suspension as
+  permitted when ordinary Array state rules allow it, without changing the
+  current iteration snapshot.
+- Required `each` to return the receiver after normal completion and to stop
+  immediately on error or ordinary non-local unwind without rolling back prior
+  effects.
+- Prohibited hidden Array-wide iteration locks, mutation guards, and scheduler
+  dependencies while preserving implementation freedom for snapshot storage.
+- Applied the existing standard Array receiver-domain rule to `each`.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 203.
+  Only `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain
+  normative semantic content in this revision.
+
 ## [0.1.202] - 2026-09-03
 
 ### Closed

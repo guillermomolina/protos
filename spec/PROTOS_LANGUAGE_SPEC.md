@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 202
+Document revision: 203
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -2771,6 +2771,69 @@ Standard Array `==` and `hash` remain governed by the existing Core default:
 without an explicit user override, Arrays use semantic object identity and
 `identityHashOf`; element contents are not traversed merely for equality or
 hashing.
+
+### Standard Array iteration
+
+The standard iteration selector for `Array` is:
+
+```js
+array.each(block)
+```
+
+`block` must be a Closure accepting the ordinary invocation shape used by the
+program. The standard operation invokes it once with one argument for each
+Array element.
+
+At the start of `each`, after ordinary receiver and argument evaluation and
+after standard Array receiver validation, the operation establishes a shallow
+logical snapshot of the receiver's current indexed element sequence. Snapshot
+order is ascending Array index order:
+
+```text
+0, 1, 2, ... snapshotLength - 1
+```
+
+Each snapshot element is the exact object stored at that Array position at the
+snapshot point. `each` then invokes `block` once for every snapshot element, in
+that order, passing only that element object as the callback argument.
+
+If every callback returns normally, `each` returns the original Array receiver.
+
+The snapshot is shallow. It does not clone, freeze, or otherwise isolate element
+objects. Mutating a mutable element through any ordinary reference remains
+ordinary mutation of that element and is visible normally.
+
+Replacing an Array element after the snapshot has been established does not
+change the value visited for that snapshot position. Likewise, any future
+standard operation that changes Array length cannot retroactively add or remove
+visits from an already-established `each` snapshot unless that future operation
+is explicitly specified to do so.
+
+The callback may replace elements of the same Array through `atPut` whenever
+that mutation is otherwise permitted by the Array's open/closed/frozen state.
+Such replacement does not alter the current iteration snapshot. Mutations of
+other objects likewise remain ordinary effects.
+
+If a callback reaches an explicit suspension point, the Actor may execute other
+runnable Actor-local work. Other work may read or mutate the Array according to
+the ordinary Array and Actor rules; `each` introduces no Array-wide lock,
+mutation prohibition, or hidden scheduling dependency. When the callback
+resumes, the current `each` invocation continues with its already-established
+snapshot.
+
+If a callback signals an error or exits the `each` invocation through an
+ordinary non-local control transfer, no later snapshot element is visited.
+Effects already completed by earlier callbacks are not rolled back.
+
+The standard Array receiver-domain rule applies: inheriting, copying, composing,
+aliasing, or otherwise obtaining the standard `each` behavior does not confer
+Array indexed state on an incompatible receiver.
+
+An implementation need not allocate an eager copied Array merely to implement
+the snapshot. Persistent element storage, versioned views, copy-on-write state,
+or another representation is valid when the observable shallow-snapshot
+behavior is identical. Arrays that are never iterated pay no semantic cost for
+iteration snapshots.
 
 ## Invocation Arguments, Defaults, Rest, and Spread
 
