@@ -4,6 +4,23 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.155] - 2026-09-03
+
+### Fixed
+- Defined missing-key lookup for standard `Map` and `IdentityMap`: `at(key)`
+  signals an Error after a successful no-match search rather than returning
+  `null`, `false`, or an implementation sentinel.
+- Defined `containsKey(key)` as the non-failing presence query returning
+  canonical `true`/`false` independently of the stored value.
+- Made mappings to `null`, `false`, and every other ordinary Protos object
+  observably distinct from key absence.
+- Kept pseudocode `NOT_FOUND` strictly internal and preserved existing
+  normal-Map hash/equality effects and IdentityMap callback-free search.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 155.
+  No grammar, Actor/Future, or I/O semantics change.
+
 ## [0.1.154] - 2026-09-03
 
 ### Fixed

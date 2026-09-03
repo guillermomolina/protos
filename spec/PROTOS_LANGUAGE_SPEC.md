@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 154
+Document revision: 155
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3763,6 +3763,44 @@ fixes only the standard `Map` and `IdentityMap` protocol results.
 If key search, hashing, equality, receiver validation, or the mutation itself
 signals an error, `atPut` has no normal return. Existing rules for effects and
 Map mutation before failure remain unchanged.
+
+### Standard Map missing-key semantics
+
+For the standard `Map` and `IdentityMap` protocols, indexed lookup through
+`at(key)` requires a matching entry. If the key search completes normally and no
+entry matches, `at(key)` signals an `Error`; it does not return `null`, `false`,
+a hidden sentinel, or another ordinary value to represent absence.
+
+This rule is necessary because every Protos object, including `null`, is a valid
+stored Map value. A mapping whose value is `null` is present and is observably
+different from an absent mapping.
+
+`containsKey(key)` is the non-failing presence query. If its key search completes
+normally, it returns canonical `true` exactly when a matching entry exists and
+canonical `false` otherwise. It does not retrieve or interpret the mapped value,
+so a key mapped to `null`, `false`, or any other value is still present.
+
+Conceptually:
+
+```text
+map.at(key)
+    matching entry -> entry.value
+    no match       -> Error
+
+map.containsKey(key)
+    matching entry -> true
+    no match       -> false
+```
+
+Hashing, equality, and identity-key matching remain exactly those already
+specified for the receiver's Map kind. If a required `hash`, `==`, identity-hash
+operation, or other key-search step signals, that error propagates; the
+missing-key rule applies only after a search completes normally with no match.
+
+Core introduces no special absence value and does not reserve any ordinary
+object as an out-of-band Map result. Libraries that want lookup-with-default,
+optional-result, or `ifAbsent` behavior may expose a distinct ordinary protocol
+without changing standard `at(key)` semantics.
 
 ### Deterministic `Map` key matching
 

@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 154
+Document revision: 155
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3710,6 +3710,64 @@ All standard `IdentityMap` operations that find a key use
 `findIdentityMapEntry` semantics. The primitive operations involved execute no
 ordinary Protos callbacks, so the normal `Map` equality-callback reentrancy
 mechanism is neither needed nor invoked for `IdentityMap` key matching.
+
+### Standard Map lookup and presence results
+
+After the existing deterministic key-search operation completes, standard normal
+Map lookup is conceptually:
+
+```text
+function mapAt(map, key):
+    entry = findMapEntry(map, key)
+
+    if entry == NOT_FOUND:
+        signal an Error for missing Map key
+
+    return entry.value
+```
+
+and presence testing is:
+
+```text
+function mapContainsKey(map, key):
+    entry = findMapEntry(map, key)
+
+    if entry == NOT_FOUND:
+        return false
+
+    return true
+```
+
+For `IdentityMap`, the corresponding operations use
+`findIdentityMapEntry(map, key)` and have the same result rules:
+
+```text
+function identityMapAt(map, key):
+    entry = findIdentityMapEntry(map, key)
+
+    if entry == NOT_FOUND:
+        signal an Error for missing IdentityMap key
+
+    return entry.value
+
+function identityMapContainsKey(map, key):
+    entry = findIdentityMapEntry(map, key)
+
+    if entry == NOT_FOUND:
+        return false
+
+    return true
+```
+
+`NOT_FOUND` in this pseudocode is implementation notation for control flow and is
+not a Protos object or language-level value. It must never escape from these
+operations. In particular, neither `null` nor another storable object is used as
+an absence sentinel.
+
+The lookup and presence operations perform no collection mutation of their own.
+Any effects or errors caused by the underlying normal-Map `hash`/`==` protocol
+remain governed by the existing deterministic search and reentrancy rules.
+`IdentityMap` search remains callback-free as already specified.
 
 ### Reentrant Map mutation during equality callbacks
 
