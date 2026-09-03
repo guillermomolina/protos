@@ -564,6 +564,52 @@ class ProtosLexerTest {
     }
 
     @Test
+    void structuralDelimitersAndNewlinesTerminateNumericTokens() {
+        assertEquals(
+            List.of(
+                token(TokenType.NUMBER, "1"),
+                token(TokenType.LPAREN, "("),
+                token(TokenType.NUMBER, "2"),
+                token(TokenType.RPAREN, ")"),
+                token(TokenType.NUMBER, "3"),
+                token(TokenType.LBRACKET, "["),
+                token(TokenType.NUMBER, "4"),
+                token(TokenType.RBRACKET, "]"),
+                token(TokenType.NUMBER, "5"),
+                token(TokenType.LBRACE, "{"),
+                token(TokenType.NUMBER, "6"),
+                token(TokenType.RBRACE, "}"),
+                token(TokenType.NUMBER, "7"),
+                token(TokenType.COLON, ":"),
+                token(TokenType.NUMBER, "8"),
+                token(TokenType.NEWLINE, "\n"),
+                token(TokenType.NUMBER, "9"),
+                token(TokenType.EOF, "")
+            ),
+            lex("1(2) 3[4] 5{6} 7:8\n9")
+        );
+    }
+
+    @Test
+    void standardAndCustomOperatorsTerminateNumericTokens() {
+        assertEquals(
+            List.of(
+                token(TokenType.NUMBER, "1"),
+                token(TokenType.FAT_ARROW, "=>"),
+                token(TokenType.NUMBER, "2"),
+                token(TokenType.NUMBER, "3"),
+                token(TokenType.CUSTOM_OPERATOR, "@@"),
+                token(TokenType.NUMBER, "4"),
+                token(TokenType.NUMBER, "5"),
+                token(TokenType.AND, "&&"),
+                token(TokenType.NUMBER, "6"),
+                token(TokenType.EOF, "")
+            ),
+            lex("1=>2 3@@4 5&&6")
+        );
+    }
+
+    @Test
     void radixMemberAccessDotRemainsStructuralWhenNotFollowedByDecimalDigit() {
         assertEquals(
             List.of(
