@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 181
+Document revision: 182
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3752,6 +3752,36 @@ cannot be overridden. It is exactly the Boolean complement of `identical`,
 including all Core value-identity rules such as numeric-family identity, String
 value identity, canonical Booleans, `null`, Float NaN identity, and signed-zero
 identity.
+
+### Map key-state visibility during search
+
+Map lookup fixes the candidate sequence and lookup hash state without cloning
+or freezing mutable key objects.
+
+Conceptually:
+
+```text
+candidates = candidate sequence fixed for this lookup
+queryHash = the single hash result obtained for the query key
+storedHash = the recorded hash associated with each stored candidate
+```
+
+User code executed by equality comparison may mutate the query key, a stored
+key, or other reachable state. Such mutations are not rolled back or hidden.
+A later candidate comparison observes the current state at that point.
+
+The runtime must not:
+
+- recompute a stored candidate's recorded hash because its object state changed;
+- recompute the query hash after equality code mutates the query key;
+- restart or reorder the candidate sequence because a key was mutated;
+- create a semantic snapshot of mutable key objects for the lookup.
+
+Identity lookup performs no user equality callback, but the same fixed
+candidate-order and no-key-snapshot rules apply.
+
+This permits arbitrary internal lookup structures while keeping search-control
+state fixed and mutable Protos object state live.
 
 ### Standard Map equality and hash dispatch
 

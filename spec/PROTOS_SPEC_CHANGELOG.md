@@ -4,6 +4,21 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.182] - 2026-09-03
+
+### Fixed
+- Defined Map key-search state as fixed control state without snapshotting
+  mutable key objects.
+- Defined visibility of mutations performed during equality callbacks to later
+  candidate comparisons.
+- Prohibited implicit stored-key hash recomputation, query-hash recomputation,
+  lookup restart, candidate reordering, and semantic key snapshots.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 182.
+  Only `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain
+  normative semantic content in this revision.
+
 ## [0.1.181] - 2026-09-03
 
 ### Fixed

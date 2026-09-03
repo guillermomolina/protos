@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 181
+Document revision: 182
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3602,6 +3602,34 @@ A `Map` entry retains the hash recorded when that entry was first inserted.
 Subsequent mutation of the stored key, mutation of state consulted by its
 `hash`/`==` behavior, or any other change does not recompute that recorded hash,
 move the entry, replace its representative key, or cause automatic reindexing.
+
+### Map key-state visibility during search
+
+Map lookup fixes the candidate sequence and the lookup hash information, but it
+does not snapshot the mutable state of key objects.
+
+During one normal `Map` lookup:
+
+- the candidate sequence is fixed for that lookup;
+- a stored key's recorded hash is not recomputed merely because user code
+  mutates that key;
+- the query key's single `hash` result is the hash used by that lookup;
+- mutations performed by equality code remain ordinary visible mutations;
+- later candidate comparisons observe the current state of the relevant objects;
+- the lookup does not restore, clone, freeze, or otherwise snapshot key objects;
+- mutation does not restart or reorder the lookup and does not silently trigger
+  another query-key hash.
+
+This distinguishes fixed search-control state from live object state. An
+implementation must not copy mutable key objects merely to make lookup easier
+to implement.
+
+For identity lookup, no user equality callback is performed. The same fixed
+candidate-order and no-key-snapshot rules nevertheless apply.
+
+Implementations may use hash tables, ordered arrays, trees, or other internal
+representations, provided the specified candidate order, hash behavior, and
+visibility of intervening mutations are preserved.
 
 Every later key search continues to use the deterministic matching algorithm
 defined below: compute the query key's current hash once, consider only entries
