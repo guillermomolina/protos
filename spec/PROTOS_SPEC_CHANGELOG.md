@@ -4,6 +4,24 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.184] - 2026-09-03
+
+### Fixed
+- Defined the receiver domain of standard `Map` and `IdentityMap` keyed
+  behavior in terms of receiver-owned keyed-entry state rather than delegation.
+- Made inherited/copied standard Map methods fail on incompatible receivers
+  before hashing, equality callbacks, identity-key search, snapshot capture, or
+  keyed-entry mutation.
+- Prevented delegation from borrowing ancestor Map entries or lazily granting
+  hidden associative storage to ordinary child objects.
+- Preserved ordinary user-defined behavior and explicitly generic standard
+  behavior without introducing a class hierarchy or second delegation model.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 184.
+  Only `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain
+  normative semantic content in this revision.
+
 ## [0.1.183] - 2026-09-03
 
 ### Fixed

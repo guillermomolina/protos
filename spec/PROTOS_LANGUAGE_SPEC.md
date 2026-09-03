@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 183
+Document revision: 184
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3602,6 +3602,57 @@ A `Map` entry retains the hash recorded when that entry was first inserted.
 Subsequent mutation of the stored key, mutation of state consulted by its
 `hash`/`==` behavior, or any other change does not recompute that recorded hash,
 move the entry, replace its representative key, or cause automatic reindexing.
+
+### Standard Map receiver domain
+
+Standard `Map` and `IdentityMap` keyed behavior operates on keyed-entry state
+owned by the original receiver. Ordinary delegation can make a standard Map
+method visible to another object, but delegation alone does not create, copy,
+borrow, or redirect keyed-entry state.
+
+A standard keyed behavior whose contract requires normal-Map state is applicable
+only when the original receiver owns standard normal-`Map` keyed-entry state.
+Likewise, a standard behavior whose contract requires `IdentityMap` state is
+applicable only when the original receiver owns standard `IdentityMap`
+keyed-entry state, unless that behavior is explicitly specified as generic over
+both standard Map kinds.
+
+This applies to the standard keyed protocols defined by Core, including `at`,
+`atPut`, `containsKey`, `remove`, `each`, and any other standard behavior whose
+normative semantics inspect or mutate the receiver's keyed-entry state.
+
+For an incompatible receiver, invocation signals an `Error` after ordinary
+receiver/argument evaluation and ordinary message lookup have selected the
+behavior, but before the behavior performs keyed-state work. In particular, the
+failing invocation performs no key `hash`, no key `==`, no `identityHashOf`
+operation for key search, no iteration-snapshot capture, and no keyed-entry
+mutation.
+
+Failure does not resume lookup at a more distant slot with the same name.
+Lookup remains ordinary delegation lookup; receiver-domain validation belongs
+to the selected standard behavior's contract.
+
+Consequently, if an ordinary object delegates to a Map object, Map prototype, or
+another object exposing standard Map methods, that object does not thereby
+become a Map and does not gain hidden associative storage:
+
+```text
+ordinaryChild -> someMapOrMapPrototype -> ...
+
+ordinaryChild.at(key)
+    -> Error if the selected standard behavior requires Map keyed-entry state
+       that ordinaryChild does not own
+```
+
+Copying, aliasing, composing, or otherwise reusing a standard Map method does not
+confer Map keyed-entry state either. User-defined behavior remains ordinary
+Protos behavior and may intentionally implement a wider receiver contract.
+
+This rule does not introduce a second delegation relation or a class/type
+hierarchy. It makes explicit the receiver-owned semantic state already required
+by standard keyed collections and prevents implementations from borrowing an
+ancestor's entries, allocating hidden storage on first inherited use, or making
+delegation itself grant collection membership.
 
 ### Map key-state visibility during search
 

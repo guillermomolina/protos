@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 183
+Document revision: 184
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3752,6 +3752,62 @@ cannot be overridden. It is exactly the Boolean complement of `identical`,
 including all Core value-identity rules such as numeric-family identity, String
 value identity, canonical Booleans, `null`, Float NaN identity, and signed-zero
 identity.
+
+### Standard Map receiver validation
+
+Standard keyed collection primitives validate that the original receiver owns
+the keyed-entry state required by the selected standard behavior.
+
+Conceptually:
+
+```text
+function requireNormalMapReceiver(receiver):
+    if not ownsStandardNormalMapState(receiver):
+        signal an Error for incompatible standard Map receiver
+
+    return receiver
+
+function requireIdentityMapReceiver(receiver):
+    if not ownsStandardIdentityMapState(receiver):
+        signal an Error for incompatible standard IdentityMap receiver
+
+    return receiver
+```
+
+The predicates above are semantic receiver-state classifiers, not Protos message
+sends and not delegation tests. An object does not satisfy them merely because
+its parent is a Map, because lookup found a method on a Map-related ancestor, or
+because a standard method closure was copied onto it.
+
+A standard Map operation conceptually validates its receiver before any
+keyed-entry-specific work. For example:
+
+```text
+function standardMapAt(receiver, key):
+    map = requireNormalMapReceiver(receiver)
+    return mapAt(map, key)
+
+function standardIdentityMapAt(receiver, key):
+    map = requireIdentityMapReceiver(receiver)
+    return identityMapAt(map, key)
+```
+
+The same boundary applies to standard `atPut`, `containsKey`, `remove`, `each`,
+and other standard keyed-state behavior. Where one standard behavior is
+explicitly specified as generic over both Map kinds, it may validate the
+corresponding union of receiver domains instead of one kind.
+
+Receiver validation occurs after ordinary evaluation and lookup but before
+hashing, equality callbacks, identity hashing for key search, keyed-state
+permission checks, iteration snapshot capture, or keyed-entry mutation.
+Therefore an incompatible receiver cannot trigger those standard Map effects.
+
+Implementations may encode the required keyed-entry state using object layout,
+side tables, specialized representations, capabilities, or other internal
+mechanisms. They must not make ancestor storage become the receiver's storage,
+must not lazily manufacture standard Map state merely because an inherited
+standard method was invoked, and must not expose the physical representation as
+a second observable notion of collection membership.
 
 ### Map key-state visibility during search
 
