@@ -554,10 +554,23 @@ public final class ProtosParser {
         }
 
         TokenOccurrence close = cursor.consume(TokenType.RPAREN, "')'");
+        int endOffset = close.span().endOffset();
+
+        if (cursor.at(TokenType.LBRACE)) {
+            SurfaceClosure trailingClosure = (SurfaceClosure) parseClosureBody(
+                    List.of(),
+                    cursor.current().span().startOffset());
+            arguments.add(new SurfaceArgument(
+                    false,
+                    trailingClosure,
+                    trailingClosure.span()));
+            endOffset = trailingClosure.span().endOffset();
+        }
+
         return new SurfaceCall(
                 receiver,
                 arguments,
-                new SourceSpan(receiver.span().startOffset(), close.span().endOffset()));
+                new SourceSpan(receiver.span().startOffset(), endOffset));
     }
 
     private SurfaceArgument parseArgument() {
