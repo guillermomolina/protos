@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 174
+Document revision: 175
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -154,6 +154,28 @@ PENDING
 ```
 
 An operation that has crossed its irreversible semantic commitment boundary cannot later be made observably as though it had been cancelled before that boundary.
+
+Actor termination participates in this same rule. If an Actor incarnation
+terminates while an asynchronous I/O operation that it initiated is still
+pending, termination records a cancellation request on that operation's Future.
+That request has exactly the same strength as an explicit `Future.cancel()` for
+the operation: cancellation wins only while the operation's own contract still
+permits a cancelled outcome.
+
+Actor termination is not implicit `close()`, `flush()`, `sync()`, or shutdown of
+the receiver. It does not revoke a Process-local stream merely because one Actor
+was using it, and it does not roll back output or other effects that had already
+committed. If producer/backend work must continue after the Actor has terminated
+in order to honor an already-committed operation or perform safe cancellation,
+that residual work remains under runtime/producer custody; it may not execute
+ordinary Protos code in the terminated Actor.
+
+Conversely, an uncommitted pending operation must not be allowed to continue
+merely because an implementation failed to associate its non-task-backed Future
+with the Actor that initiated it. This matters in particular for shared logical
+flows: cancellation of a dead Actor's uncommitted read preserves the ordinary
+zero-consumption rule rather than allowing that dead Actor to consume future
+input solely as a scheduler/runtime artifact.
 
 The exact internal mechanism used to preserve this contract is implementation-defined.
 

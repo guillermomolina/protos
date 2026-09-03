@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 174
+Document revision: 175
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2420,16 +2420,26 @@ Conceptually, Actor termination while its hosting runtime can still execute
 cleanup includes:
 
 ```text
-function cancelActorLocalTasksForTermination(actor):
+function cancelActorLocalWorkForTermination(actor):
     tasks = all pending Actor-local tasks in actor
         // includes tasks detached from activation ownership
+
+    producerFutures = all pending non-task-backed Futures
+        representing asynchronous operations initiated by actor
 
     for each task in tasks:
         requestCooperativeCancellation(task)
 
+    for each future in producerFutures:
+        recordFutureCancellationRequest(future)
+
     for each task in tasks:
         awaitTerminalCompletion(task)
         // ordinary cancellation unwind and applicable ensure cleanup complete
+
+    // Actor termination does not wait merely for producerFutures to become
+    // terminal. Their producers retain only the custody needed to obey their
+    // own cancellation/commitment contracts.
 ```
 
 Once Actor termination has begun, those tasks are not ordinary surviving work.
@@ -2437,6 +2447,14 @@ They may receive execution only as required to observe the already-requested
 cancellation at the existing portable boundaries and to run the corresponding
 unwind/`ensure` cleanup. No task is re-parented to another Actor, the RootActor,
 or the Process.
+
+The producer-Future cancellation pass is distinct from task cleanup. It does not
+execute arbitrary Protos code in the terminating Actor, does not close an I/O
+receiver, and does not revoke or destroy a Process-level capability. If a
+producer has already committed an external effect or crossed a communication
+acceptance boundary, the producer continues only under its own existing semantic
+contract. A later producer completion does not resurrect the Actor or schedule
+ordinary code in its dead execution domain.
 
 If cleanup completes normally, the task Future reaches `cancelled`; if cleanup
 signals an error, the existing cleanup-supersedes-cancellation rule makes that

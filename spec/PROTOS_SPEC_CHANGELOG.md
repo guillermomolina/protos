@@ -4,6 +4,31 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.175] - 2026-09-03
+
+### Fixed
+- Defined Actor termination as a cancellation-request boundary for pending
+  Actor-originated asynchronous operations represented by non-task-backed
+  Futures, including applicable I/O and communication operations.
+- Prevented dead Actors from leaving uncommitted producer operations running
+  solely because those Futures had no producing `Task`.
+- Preserved producer-specific commitment semantics: Actor termination cannot
+  roll back committed I/O effects, unsend accepted messages, or invent stronger
+  cancellation than the operation already supports.
+- Kept Actor termination liveness bounded to task cleanup: termination requests
+  producer cancellation but does not generally wait for every producer Future
+  to become terminal.
+- Clarified that residual committed/cancellation backend work remains under
+  runtime/producer custody and cannot resurrect or execute ordinary Protos code
+  in the terminated Actor.
+- Clarified that Actor termination is not implicit I/O close/flush/sync/shutdown
+  and does not revoke Process-local shared stream capabilities.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 175.
+
 ## [0.1.174] - 2026-09-03
 
 ### Fixed

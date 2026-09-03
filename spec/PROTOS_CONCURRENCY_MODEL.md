@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 174
+Document revision: 175
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -1096,10 +1096,27 @@ incarnation whose mutable state and serial execution domain it uses.
 When termination of an Actor incarnation begins while its hosting runtime remains
 able to execute Protos cleanup, every pending Actor-local task belonging to that
 incarnation receives a cooperative cancellation request, including detached
-tasks. The incarnation stops accepting or dispatching new ordinary message work;
-task execution that occurs thereafter is limited to reaching the existing
-portable cancellation boundaries and performing the cancellation unwind and
-applicable `ensure` cleanup required to terminate those tasks.
+tasks.
+
+Termination also records a cancellation request on every still-pending
+non-task-backed Future representing an asynchronous operation initiated by that
+Actor incarnation. This includes, when applicable, I/O-operation Futures and
+communication-operation Futures such as `request()`. Actor termination is
+therefore a cancellation-request boundary for outstanding Actor-originated
+asynchronous operations; it is not permission for such operations to continue
+or disappear according to implementation accident.
+
+This Actor-lifecycle request does not invent stronger cancellation than the
+producer already provides. An operation that can still satisfy its ordinary
+cancellation contract may become cancelled. An operation that has already crossed
+its commitment/acceptance boundary keeps the effects and outcome constraints of
+its own protocol; Actor termination cannot roll those effects back, convert them
+into pre-commit cancellation, or transparently retry them.
+
+The incarnation stops accepting or dispatching new ordinary message work. Task
+execution that occurs thereafter is limited to reaching the existing portable
+cancellation boundaries and performing the cancellation unwind and applicable
+`ensure` cleanup required to terminate those tasks.
 
 A detached task is never silently re-parented to the RootActor, Process, a
 replacement Actor, or another runtime scope merely so it can continue running
@@ -1107,6 +1124,14 @@ after its Actor terminates. Its Future follows the ordinary cancellation-unwind
 rule: successful cleanup permits the Future to become `cancelled`; a cleanup
 failure makes that Future `failed` with the cleanup error. Replacement creates a
 fresh Actor execution domain and inherits none of these tasks.
+
+Actor termination waits for the required cancellation unwind of Actor-local
+tasks, but does not generally wait for every non-task-backed producer Future to
+become terminal. Once the cancellation request has been recorded, any residual
+producer/backend work that cannot yet terminate safely remains under
+runtime/producer custody and may proceed only as allowed by that operation's
+existing commitment and cancellation rules. No continuation of the terminated
+Actor is resumed merely to observe such a later outcome.
 
 Termination cleanup may itself suspend and therefore has no bounded-time liveness
 guarantee. Catastrophic loss of the Process, runtime, or underlying execution
