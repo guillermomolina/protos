@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.132] - 2026-09-03
+
+### Fixed
+- Defined `adoptFuture` and made Future flattening a complete normative
+  outcome-adoption operation rather than undefined runtime pseudocode.
+- Defined resolved, failed, and cancelled adopted-source propagation.
+- Made adoption one-way: destination cancellation, ownership, and detachment do
+  not propagate to the adopted source.
+- Made pending Future adoption cancellation-aware so a destination can complete
+  cancelled after its initiating task body has returned.
+- Defined source-completion versus destination-cancellation races by the first
+  terminal transition of the destination.
+- Added conceptual `adoptedSource` bookkeeping without adding a fifth Future
+  state or a language-visible slot.
+- Defined direct and transitive adoption cycles to fail with the standard
+  `FutureResolutionCycle` error instead of remaining indefinitely pending.
+- Required adoption bookkeeping not to execute ordinary Protos code inline.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 132.
+
 ## [0.1.131] - 2026-09-03
 
 ### Fixed

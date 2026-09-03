@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 131
+Document revision: 132
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -70,6 +70,7 @@ Future
     error
     cancellationRequested  // cooperative request flag while pending
     task                   // producing Task when task-backed; otherwise none
+    adoptedSource          // pending Future whose outcome is being adopted, or none
 ```
 
 These fields are conceptual. An implementation may represent them differently. The I/O-operation commitment state described in `PROTOS_IO_MODEL.md` is not an additional Future state: a Future remains exactly pending, resolved, failed, or cancelled.
@@ -1772,9 +1773,123 @@ function resolveFuture(future, value):
     future.value = value
 
     wakeWaiters(future)
+
+
+function adoptFuture(destination, source):
+    if destination.state != pending:
+        signal InvalidFutureState()
+
+    if destination === source or adoptionChainReaches(source, destination):
+        failFuture(
+            destination,
+            FutureResolutionCycle
+        )
+        return
+
+    switch source.state:
+        case resolved:
+            destination.state = resolved
+            destination.value = source.value
+            wakeWaiters(destination)
+            return
+
+        case failed:
+            destination.state = failed
+            destination.error = source.error
+            wakeWaiters(destination)
+            return
+
+        case cancelled:
+            destination.state = cancelled
+            wakeWaiters(destination)
+            return
+
+        case pending:
+            destination.adoptedSource = source
+
+            onFutureCompletion(source, terminalResult => {
+                // Runtime bookkeeping only; no Protos code runs inline here.
+                if destination.state != pending:
+                    return
+
+                destination.adoptedSource = none
+
+                switch terminalResult.state:
+                    case resolved:
+                        destination.state = resolved
+                        destination.value = terminalResult.value
+
+                    case failed:
+                        destination.state = failed
+                        destination.error = terminalResult.error
+
+                    case cancelled:
+                        destination.state = cancelled
+
+                wakeWaiters(destination)
+            })
+
+            observeAdoptionCancellation(destination)
+            return
+
+
+function adoptionChainReaches(start, target):
+    current = start
+
+    while current != none and current.state == pending:
+        if current === target:
+            return true
+
+        current = current.adoptedSource
+
+    return false
+
+
+function observeAdoptionCancellation(destination):
+    // Adoption is itself a cancellation-aware pending operation.
+    // If cancellation is requested while adoption remains pending, the runtime
+    // may schedule this bookkeeping transition without executing Protos code.
+    onCancellationRequest(destination, () => {
+        if destination.state == pending and destination.adoptedSource != none:
+            destination.adoptedSource = none
+            destination.state = cancelled
+            wakeWaiters(destination)
+    })
 ```
 
-This performs automatic Future flattening.
+Automatic Future flattening therefore means outcome adoption, not ownership,
+identity, or cancellation adoption.
+
+While `destination` adopts a pending `source`, `destination.state` remains
+`pending`; `adoptedSource` is conceptual runtime bookkeeping and is not a fifth
+Future state or a language-visible slot.
+
+The adopted source's terminal outcome is mirrored exactly: resolution uses the
+same resolved value, failure uses the same error object, and source cancellation
+cancels the destination. No Protos transformation or handler is invoked merely
+to propagate that terminal outcome.
+
+Adoption is one-way. Cancelling the destination while adoption is pending may
+cancel the destination but never requests cancellation of the source and never
+changes the source's ownership or detachment. Likewise, detaching a task-backed
+destination does not detach or re-parent the adopted source.
+
+Adoption is a normative cancellation-aware pending operation. Therefore a
+cancellation request on an adopting destination can be honored even though the
+task body that initiated adoption has already returned. If source completion and
+destination cancellation race, the first terminal transition of the destination
+wins; later bookkeeping observes the terminal state and has no effect.
+
+Future-adoption cycles are invalid. Direct self-adoption and any transitive
+pending adoption that would make the destination reachable from the source's
+adoption chain fail the destination with the standard `FutureResolutionCycle`
+error prototype, which delegates directly to `Error`. A cycle must not be left as
+an implementation-dependent permanently pending Future.
+
+No adoption callback executes ordinary Protos code inline. Implementations may
+represent the dependency with callbacks, waiter lists, graph nodes, or another
+mechanism, provided the observable outcome, cancellation direction, cycle
+handling, and terminal-state rules above are preserved.
 
 ---
 
