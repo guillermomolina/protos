@@ -67,6 +67,52 @@ Search for:
 Construct counterexamples when possible. A design that works only for its
 motivating example is probably too narrow for the language core.
 
+## Trace downstream consequences
+
+Before accepting a semantic change, actively trace its second-order effects
+through the rest of the language.
+
+Do not evaluate a proposal only at the point where it is introduced. Ask what
+existing guarantees, abstractions, invariants, and implementation freedoms may
+change because of it.
+
+For each proposed semantic change, inspect relevant consequences for:
+
+- lookup, delegation, slot creation, assignment, and object construction;
+- evaluation order and visibility of effects;
+- closures, contexts, invocation, `this`, `super`, and non-local return;
+- errors, cleanup, cancellation, and failure propagation;
+- identity, equality, hashing, reflection, and observable ordering;
+- mutability, aliasing, ownership, and shared state;
+- concurrency, suspension, synchronization, blocking, and progress;
+- Actor isolation and cross-boundary transfer;
+- memory retention, lifetime, copying, and allocation pressure;
+- scalability from trivial programs to highly concurrent or distributed systems;
+- security boundaries, authority, capability leakage, and unintended access;
+- portability and host/platform dependencies;
+- optimization freedom and whether an implementation detail becomes observable;
+- interactions with existing and plausible future abstractions.
+
+Construct concrete counterexamples where possible.
+
+In particular, ask:
+
+> If this rule changes, what previously valid reasoning stops being valid?
+
+> What new state, coordination, blocking, copying, retention, or synchronization
+> might an implementation now require?
+
+> Can this create a scalability cliff or security boundary that is invisible in
+> the motivating example?
+
+> Can another existing feature observe the change in an unexpected way?
+
+> Does fixing the local problem move ambiguity or complexity somewhere else?
+
+A design is not ready merely because the motivating example works. Its
+downstream consequences must be understood well enough that the change does not
+silently damage unrelated parts of the language.
+
 ## Stress-test beyond the motivating domain
 
 Once a candidate abstraction is coherent, test it mentally against substantially
@@ -129,15 +175,18 @@ For an unresolved language-design question, work in this order:
 8. Check interaction with objects, slots, delegation, lookup, assignment,
    contexts, closures, calls, mutation, errors, I/O, and concurrency as
    applicable.
-9. Stress-test the proposal across different domains and scales.
-10. Try to falsify the design with counterexamples.
-11. Check the "pay only for what you use" property for simple programs.
-12. Remove assumptions specific to Truffle, GraalVM, the JVM, Windows, Linux,
+9. Trace second-order consequences through existing invariants and mechanisms,
+   including scalability, security, memory, blocking, lifetime, aliasing,
+   concurrency, and implementation freedom.
+10. Stress-test the proposal across different domains and scales.
+11. Try to falsify the design with counterexamples.
+12. Check the "pay only for what you use" property for simple programs.
+13. Remove assumptions specific to Truffle, GraalVM, the JVM, Windows, Linux,
     POSIX, parser technology, or the current implementation unless they are
     explicitly part of the intended semantics.
-13. State the semantics precisely enough for independent implementation.
-14. Resolve grammar ambiguity structurally before adding new syntax categories.
-15. Only then design syntax and implementation strategy.
+14. State the semantics precisely enough for independent implementation.
+15. Resolve grammar ambiguity structurally before adding new syntax categories.
+16. Only then design syntax and implementation strategy.
 
 If a genuine design choice remains after this process, present the alternatives,
 trade-offs, recommendation, and consequences instead of silently choosing.
