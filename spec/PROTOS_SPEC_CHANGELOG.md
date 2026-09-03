@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.143] - 2026-09-03
+
+### Fixed
+- Removed the contradiction between the general File capability-shape rule and
+  section 18.4's unconditional `ByteSeekable`/`ByteSized`/`Truncatable`
+  requirements.
+- Made read/write open mode guarantee only the corresponding `ByteReadable` /
+  `ByteWritable` access capability plus `Closable`.
+- Made `ByteSeekable`, `ByteSized`, `Truncatable`, and `Syncable` conditional on
+  the backend being able to satisfy each protocol's normative semantics.
+- Clarified that truncate-on-open support does not imply later `Truncatable`
+  support on the returned File.
+- Required a File's exposed capability set to remain stable for that File's
+  lifetime rather than varying according to whether an individual operation
+  happens to be usable at the moment.
+- Prohibited advertising an optional protocol merely because the host has a
+  similarly named primitive when its normative Protos contract cannot be met.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 143. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.142] - 2026-09-03
 
 ### Fixed

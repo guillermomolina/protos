@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 142
+Document revision: 143
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -937,13 +937,25 @@ Writes invoked on the same receiver still preserve their required invocation ord
 
 ### 18.4 File capabilities by mode
 
-A standard readable File exposes `ByteReadable`, `ByteSeekable`, `ByteSized`, and `Closable`.
+Open mode determines the access capabilities that a successful standard `File` must expose; backend semantics determine which orthogonal optional file capabilities can additionally be exposed honestly.
 
-A standard writable File exposes `ByteWritable`, `ByteSeekable`, `ByteSized`, `Truncatable`, and `Closable`.
+A readable File exposes `ByteReadable` and `Closable`.
 
-A read/write File exposes the union of the corresponding capabilities.
+A writable File exposes `ByteWritable` and `Closable`.
+
+A read/write File exposes both `ByteReadable` and `ByteWritable`, plus `Closable`.
+
+`ByteSeekable` is additionally exposed only when the backend can provide or emulate the standard logical-position and failure-atomic seek contract.
+
+`ByteSized` is additionally exposed only when the backend can provide the standard current-size query semantics for that file resource.
+
+`Truncatable` is additionally exposed only for a writable File whose backend can provide or emulate the standard failure-atomic truncate contract. Support for truncate-on-open does not by itself imply that the returned File can support later `Truncatable.truncate` operations.
 
 `Syncable` is additionally exposed when the backend provides the required durability semantics.
+
+Thus open access mode is a lower bound on the File's access authority, not a promise that every backend implements every orthogonal random-access/size/truncate/durability protocol. The capability set of the returned File must remain stable for that File's lifetime; an implementation does not add or remove these Traits merely because a particular invocation would succeed or fail at the current moment.
+
+This rule is the concrete `File` specialization of the general capability principle in section 13: a concrete object exposes only protocols it can correctly implement. It also means that a backend must not satisfy section 18.4 by exposing a protocol whose normative guarantees it cannot meet and then failing every operation merely because a host API has weaker semantics.
 
 A raw File is not required to expose `Flushable`.
 
@@ -1410,6 +1422,7 @@ Path is a value, not filesystem authority.
 Portable Path identity is structural: rootedness plus ordered components; Filesystem lookup identity, host syntax, and resource identity are separate.
 URL is a value, not resource-access authority.
 Filesystem carries filesystem authority.
+File access mode guarantees ByteReadable/ByteWritable as requested, while ByteSeekable, ByteSized, Truncatable, and Syncable are exposed only when that backend can meet each protocol's normative contract.
 Path resolution through a Filesystem is confined to that capability's authorized namespace; path syntax or backend indirection cannot escape into ambient authority.
 filesystem.open may report cancelled only before any portable create/truncate effect and before File-result commitment.
 filesystem.open captures its complete semantic option configuration at invocation; later mutation of an options builder/value cannot change access, creation, truncation, append, or capability outcome.
