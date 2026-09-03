@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 122
+Document revision: 123
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2845,6 +2845,53 @@ Int32(1) === UInt32(1)  -> false
 The implementation may use optimized paths, but it must preserve this distinction between exact numeric equality and numeric-family-sensitive identity.
 
 Special Float identity/equality rules for NaN and signed zero are defined separately.
+
+### Numeric hash normalization
+
+The standard Number-family hash operation is conceptually based on a canonical
+numeric equality key:
+
+```text
+function standardNumericHash(number):
+    key = numericHashKey(number)
+    return processLocalHashInteger(key)
+```
+
+`numericHashKey` is representation-independent and must satisfy:
+
+```text
+numericEquals(a, b) == true
+    => numericHashKey(a) == numericHashKey(b)
+```
+
+for every pair of Core Number values.
+
+For finite values, the key represents the exact mathematical numeric value. It
+must not contain the semantic numeric family, fixed-width Integer prototype,
+signedness, boxing identity, source spelling, or host storage representation.
+
+Consequently exact cross-family equalities share one key, including Integer
+values and exactly equal binary64 Float values. Positive and negative Float zero
+also share one key.
+
+All Core Float NaN semantic values use one distinguished numeric hash key.
+`numericEquals(NaN, NaN)` remains false; this special key exists only to prevent
+hidden IEEE NaN representation details from leaking through standard hashing.
+
+`processLocalHashInteger` returns a semantic Integer and may use per-execution
+salting or randomization. It need not be injective: collisions between unequal
+numeric keys are valid. It must nevertheless be stable for a given numeric key
+for the duration of the execution.
+
+This abstract operation does not require conversion of an exact Integer through
+binary64 and must not introduce rounding merely to hash it. Implementations may
+use any optimized representation or mixing strategy that preserves the
+specified equality classes and observable Integer-result contract.
+
+The standard Number-family `hash` message uses `standardNumericHash(this)`;
+it does not inherit the identity-based `Object.hash()` result for semantic
+Number values. Identity-sensitive machinery continues to use
+`identityHashOf(number)` instead.
 
 ## Float NaN Semantic Identity
 

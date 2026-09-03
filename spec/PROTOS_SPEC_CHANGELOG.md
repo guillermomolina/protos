@@ -4,6 +4,24 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.123] - 2026-09-03
+
+### Fixed
+- Defined Number-family `hash` behavior by numeric semantic equality rather than
+  by the identity-based `Object.hash` default.
+- Required equal numeric values to have equal normal hashes across Integer,
+  fixed-width Integer, and Float families.
+- Required `0.0` and `-0.0` to share a normal hash while preserving their
+  distinct semantic identities.
+- Prevented Float NaN payload/representation details from leaking through
+  standard hashing by assigning all Core NaNs one normal numeric hash class.
+- Preserved per-execution hash salting, legal collisions, exact-Integer hashing,
+  and separate `identityHashOf` semantics for `IdentityMap`.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 123.
+  No grammar, Actor/Future, or I/O semantics change.
+
 ## [0.1.122] - 2026-09-03
 
 ### Fixed

@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 122
+Document revision: 123
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -2897,6 +2897,55 @@ This yields the general distinction:
 ```
 
 Special floating-point cases such as NaN and signed zero are specified separately.
+
+
+### Numeric hash coherence
+
+Number-family values provide standard `hash` behavior specialized for numeric
+semantic equality rather than inheriting `Object`'s identity-based default hash.
+
+For all Core numeric values `a` and `b`:
+
+```text
+if a == b:
+    a.hash == b.hash
+```
+
+This guarantee applies across numeric families. In particular:
+
+```text
+1.hash == 1.0.hash
+UInt8(1).hash == Int32(1).hash
+0.0.hash == (-0.0).hash
+```
+
+whenever the corresponding numeric `==` comparison is true.
+
+The semantic hash input for a finite Number is its exact mathematical numeric
+value, not its semantic numeric family, storage width, signedness, boxing,
+machine representation, or source spelling. Therefore an Integer and a Float
+that compare equal numerically must enter the same normal-`Map` hash class even
+though they are not semantically identical under `===`.
+
+Float signed zero has one normal numeric hash class because `0.0 == -0.0` is
+true, despite the existing identity distinction between the two zeros.
+
+Core Float NaN values have one standard normal-hash class within an execution.
+This is not an equality claim: NaN remains unequal under `==`, including to
+itself. The canonical NaN hash requirement only prevents IEEE payload, signaling
+state, boxing, or host representation from becoming observable through the
+standard hash protocol.
+
+The exact Integer returned by standard numeric `hash` is intentionally not fixed
+across separate executions. An implementation may salt or randomize numeric
+hashing per execution, and unequal numeric values may collide. Within one
+execution, however, the result for an immutable numeric value is stable and the
+cross-family equality implication above is mandatory.
+
+Standard numeric `hash` must not be implemented as `identityHashOf(this)`,
+because semantic numeric identity distinguishes some values that numeric `==`
+intentionally equates. `IdentityMap` remains unaffected and continues to use
+`identityHashOf` together with `===`.
 
 ## Float Special Values and Identity
 
