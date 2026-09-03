@@ -8,6 +8,7 @@ For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_
 
 ### Added
 
+- Expanded lexer conformance coverage for raw Unicode scalar handling across every Core String form, including rejection of unpaired surrogates.
 - Expanded lexer conformance coverage for numeric termination at structural delimiters, logical newlines, and standard and custom operators.
 - Expanded lexer conformance coverage for uppercase radix-prefix commitment and case-insensitive exponent completion errors.
 - Expanded lexer conformance coverage for malformed numeric/identifier adjacency across ASCII, reserved-word, underscore, and Unicode identifier continuations.

@@ -928,6 +928,34 @@ class ProtosLexerTest {
     }
 
     @Test
+    void rawSupplementaryScalarIsAcceptedInEveryStringForm() {
+        String scalar = "😀";
+        assertEquals(
+            List.of(
+                token(TokenType.STRING, scalar),
+                token(TokenType.STRING, scalar),
+                token(TokenType.STRING, scalar),
+                token(TokenType.EOF, "")
+            ),
+            lex("'" + scalar + "' \"" + scalar + "\" \"\"\"" + scalar + "\"\"\"")
+        );
+    }
+
+    @Test
+    void rawUnpairedSurrogatesAreRejectedInEveryStringForm() {
+        for (char surrogate : new char[] { (char) 0xD800, (char) 0xDC00 }) {
+            String nonScalar = Character.toString(surrogate);
+            for (String source : List.of(
+                "'" + nonScalar + "'",
+                "\"" + nonScalar + "\"",
+                "\"\"\"" + nonScalar + "\"\"\""
+            )) {
+                assertThrows(ProtosLexer.LexicalError.class, () -> lex(source));
+            }
+        }
+    }
+
+    @Test
     void ordinaryStringContentAcceptsSupplementaryUnicodeScalars() {
         assertEquals(
             List.of(token(TokenType.STRING, "😀"), token(TokenType.EOF, "")),
