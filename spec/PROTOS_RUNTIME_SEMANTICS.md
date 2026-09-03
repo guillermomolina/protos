@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 160
+Document revision: 161
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3615,6 +3615,84 @@ including all Core value-identity rules such as numeric-family identity, String
 value identity, canonical Booleans, `null`, Float NaN identity, and signed-zero
 identity.
 
+### Map keyed-state mutation and object state
+
+Standard `Map` and `IdentityMap` keyed-entry mutation observes the receiver's
+ordinary `open` / `closed` / `frozen` state.
+
+Conceptually:
+
+```text
+function requireMapMayAttemptAtPut(map):
+    if map.state == frozen:
+        signal FrozenObject(map)
+
+function requireMapMayInsert(map):
+    if map.state == frozen:
+        signal FrozenObject(map)
+
+    if map.state == closed:
+        signal ClosedObject(map)
+
+function requireMapMayRemove(map):
+    if map.state == frozen:
+        signal FrozenObject(map)
+
+    if map.state == closed:
+        signal ClosedObject(map)
+```
+
+Normal Map insertion/update is therefore equivalent to:
+
+```text
+function mapAtPut(map, queryKey, value):
+    requireMapMayAttemptAtPut(map)
+
+    queryHash = requireHashResult(
+        send(queryKey, "hash", [])
+    )
+
+    entry = findMapEntryUsingKnownQueryHash(
+        map,
+        queryKey,
+        queryHash
+    )
+
+    if entry != NOT_FOUND:
+        entry.value = value
+        return value
+
+    requireMapMayInsert(map)
+
+    appendEntry(
+        map,
+        key = queryKey,
+        value = value,
+        recordedHash = queryHash
+    )
+
+    return value
+```
+
+A frozen Map therefore fails before user-defined key-search protocol executes.
+A closed Map must search, because update of an existing entry remains permitted;
+only the no-match insertion path fails.
+
+`IdentityMap.atPut` follows the same state ordering but uses primitive
+`identityHashOf` / semantic identity search instead of user callbacks.
+
+A standard keyed-entry removal first performs `requireMapMayRemove(map)`.
+Therefore closed/frozen removal fails before key search. Open-state removal uses
+the already specified deterministic normal-Map or IdentityMap search.
+
+Read-only keyed operations do not consult these mutation guards merely because
+the receiver is closed or frozen.
+
+The state applies only to the receiver's own keyed-entry structure and values.
+No recursive close/freeze of keys or values occurs. Implementations may encode
+Map state and entry storage differently provided these failure points and
+observable protocol calls are preserved.
+
 ### Deterministic `Map` key search
 
 The abstract search operation used by normal `Map` is:
@@ -3641,6 +3719,8 @@ The entry hash is conceptually recorded when that entry is first inserted:
 
 ```text
 function mapAtPut(map, queryKey, value):
+    requireMapMayAttemptAtPut(map)
+
     queryHash = requireHashResult(
         send(queryKey, "hash", [])
     )
@@ -3655,6 +3735,8 @@ function mapAtPut(map, queryKey, value):
         entry.value = value
         return value
 
+    requireMapMayInsert(map)
+
     appendEntry(
         map,
         key = queryKey,
@@ -3663,7 +3745,6 @@ function mapAtPut(map, queryKey, value):
     )
 
     return value
-```
 
 `findMapEntryUsingKnownQueryHash` performs exactly the insertion-order
 candidate comparison described by `findMapEntry` without sending `hash` to the
@@ -3743,16 +3824,19 @@ Indexed insertion/update behaves conceptually as:
 
 ```text
 function identityMapAtPut(map, key, value):
+    requireMapMayAttemptAtPut(map)
+
     entry = findIdentityMapEntry(map, key)
 
     if entry != NOT_FOUND:
         entry.value = value
         return value
 
+    requireMapMayInsert(map)
+
     identityHash = requireIdentityHashResult(identityHashOf(key))
     append entry(key, value, identityHash) to map insertion order
     return value
-```
 
 An implementation need not literally compute `identityHashOf(key)` twice on the
 no-match path: it may retain the already validated query identity hash from the

@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 160
+Document revision: 161
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3801,6 +3801,69 @@ Core introduces no special absence value and does not reserve any ordinary
 object as an out-of-band Map result. Libraries that want lookup-with-default,
 optional-result, or `ifAbsent` behavior may expose a distinct ordinary protocol
 without changing standard `at(key)` semantics.
+
+### Standard Map interaction with `close()` and `freeze()`
+
+`Map` and `IdentityMap` are ordinary objects and participate in the existing
+open/closed/frozen object-state model. Their keyed-entry state is receiver-owned
+mutable state even though indexed entries are not object slots.
+
+For the standard Map protocols:
+
+```text
+open Map
+    may insert entries
+    may remove entries
+    may replace values of existing entries
+
+closed Map
+    may not insert entries
+    may not remove entries
+    may replace values of existing entries
+
+frozen Map
+    may not insert entries
+    may not remove entries
+    may not replace values of existing entries
+```
+
+The same rules apply to `IdentityMap`.
+
+Closing or freezing a Map is shallow. It changes mutation permissions on that
+Map's own keyed-entry state and ordinary local slots; it does not close or freeze
+stored keys or values and does not change their identity, equality, or hash
+behavior.
+
+Read-only Map operations, including `at(key)` and `containsKey(key)`, remain
+available on closed and frozen Maps and use the same deterministic key-search
+semantics.
+
+For `atPut(key, value)`, state validation is ordered as follows after ordinary
+receiver/argument evaluation:
+
+- if the Map is frozen, the operation signals an `Error` before invoking the
+  key's `hash`, `==`, or any other key-search callback, because no successful
+  keyed-entry mutation is permitted;
+- if the Map is open, ordinary key search runs and the operation may either
+  replace a matched entry's value or append a new entry;
+- if the Map is closed, ordinary key search runs because replacing an existing
+  entry is still permitted. A match may have its value replaced; a no-match
+  result signals an `Error` before appending a new entry.
+
+For a standard operation whose purpose is removal of a keyed entry, a closed or
+frozen Map signals an `Error` before beginning key search because that operation
+cannot perform a permitted keyed-entry mutation in either state. An open Map
+uses the ordinary key-search and removal rules.
+
+These state checks do not roll back receiver/argument-evaluation effects that
+occurred before the standard Map method begins. Where key search is permitted,
+its ordinary `hash`/`==` effects and errors remain governed by the existing Map
+rules.
+
+This is a standard collection contract, not a change to indexed syntax.
+User-defined `atPut` or other indexed protocols remain ordinary behavior and are
+not automatically constrained by Map-specific keyed-state rules merely because
+they use bracket syntax.
 
 ### Deterministic `Map` key matching
 

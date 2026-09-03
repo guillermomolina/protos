@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.161] - 2026-09-03
+
+### Fixed
+- Defined how standard `Map` and `IdentityMap` keyed-entry mutation composes
+  with the existing open/closed/frozen object-state model.
+- Made closed Maps permit replacement of existing mapped values while
+  rejecting entry insertion and removal; frozen Maps reject every keyed-entry
+  mutation.
+- Defined deterministic failure timing: frozen `atPut` fails before key
+  search, closed `atPut` searches because update may succeed, and closed/frozen
+  keyed removal fails before search.
+- Kept `close()`/`freeze()` shallow: keys and values are not recursively
+  closed or frozen, and read-only lookup/presence operations remain valid.
+- Preserved ordinary user-defined indexed protocols; these state rules are
+  the standard Map/IdentityMap contract rather than syntax-wide magic.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 161.
+  No grammar, Actor/Future, or I/O semantics change.
+
 ## [0.1.160] - 2026-09-03
 
 ### Fixed
