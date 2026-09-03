@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 192
+Document revision: 193
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2458,6 +2458,43 @@ Conceptually, Actor termination while its hosting runtime can still execute
 cleanup includes:
 
 ```text
+### Unhandled Actor-turn failure
+
+Conceptually, every ordinary Actor turn has an outer runtime boundary:
+
+```text
+function runActorTurn(actor, turn):
+    try:
+        execute(turn)
+    on Error error escaping outermost dynamic handler boundary:
+        failActorIncarnation(actor, error)
+```
+
+`failActorIncarnation` is lifecycle failure, not ordinary Future failure of the
+turn. It records structured failure information for the Actor's failure
+authority, prevents subsequent ordinary turns for that incarnation, and invokes
+the existing Actor-termination cancellation/cleanup machinery.
+
+A distinct asynchronous task retains the existing rule:
+
+```text
+function runAsyncTask(task):
+    try:
+        value = execute(task.body)
+        resolveFuture(task.future, value)
+    on Error error:
+        failFuture(task.future, error)
+```
+
+The task error does not additionally call `failActorIncarnation`. If some later
+Actor turn observes `task.future` and that observation re-signals the error,
+`runActorTurn` handles fatality only if the re-signaled error escapes that later
+turn unhandled.
+
+Cancellation follows `honorCancellation` and is not routed through the
+unhandled-`Error` fatality branch.
+
+
 ### Actor storage reclamation after termination
 
 Actor lifecycle termination and implementation storage reclamation are distinct.

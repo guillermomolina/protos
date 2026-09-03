@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.193] - 2026-09-03
+
+### Closed
+- Closed `Fatal versus non-fatal handler errors` and `Which errors terminate an Actor`.
+- Defined fatality structurally: any `Error` escaping the outermost dynamic
+  handler boundary of an ordinary Actor turn is fatal to that Actor incarnation.
+- Defined handled errors as non-fatal unless later execution triggers another
+  lifecycle cause.
+- Preserved asynchronous task isolation: an unhandled child-task error fails its
+  Future and becomes Actor-fatal only if later observation re-signals the error
+  and it escapes an Actor turn unhandled.
+- Kept cancellation distinct from fatal error semantics.
+- Preserved accepted-request uncertainty instead of exposing a destination's
+  internal unhandled error as an implicit reply.
+- Rejected implementation-specific fatal-error whitelists and error-name/type
+  taxonomies.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 193.
+
 ## [0.1.192] - 2026-09-03
 
 ### Fixed

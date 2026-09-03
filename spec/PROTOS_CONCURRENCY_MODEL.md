@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 192
+Document revision: 193
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -1285,6 +1285,64 @@ collection, virtual identity, passivation/reactivation, or durable service
 activation, it must define that lifecycle explicitly. Such an abstraction must
 not retroactively change the semantics of a concrete Protos Actor incarnation
 or `ActorRef`.
+
+## 24C. Unhandled Errors Are Fatal to the Actor Incarnation
+
+**CLOSED**
+
+Core does not define a separate taxonomy of "fatal handler errors" and
+"non-fatal handler errors". The semantic distinction is instead whether an
+`Error` is handled before it escapes the current Actor turn.
+
+If an `Error` escapes the outermost dynamic error-handling boundary of an
+ordinary Actor turn, that is an **unhandled fatal failure of that Actor
+incarnation**. This rule applies uniformly to message-handler turns and other
+ordinary Actor-local task turns. The Actor enters failure termination, its
+failure authority observes structured failure information, and the already
+defined Actor-failure, cancellation, accepted-work-loss, request-uncertainty,
+cleanup, replacement, and ActorRef rules apply.
+
+An `Error` that is handled within the turn is not an Actor failure merely
+because it occurred. After the handler resumes, substitutes a value, retries,
+transforms the error, or otherwise completes according to the ordinary Protos
+error semantics, Actor execution continues normally unless the resulting code
+itself triggers another lifecycle cause.
+
+This rule does not make asynchronous child-task failure implicitly fatal to the
+Actor. A distinct asynchronous task records its unhandled error in its Future
+under the existing Future rules. Such a failure affects the Actor incarnation
+only if ordinary Protos execution later observes that failed Future and the
+re-signaled `Error` then escapes an Actor turn unhandled.
+
+Cancellation is not converted into an Actor fatal error by this rule.
+Cancellation continues to follow the existing cooperative cancellation and
+cleanup semantics. Likewise, communication failure, timeout, request
+uncertainty, or an I/O-operation failure only becomes an Actor fatal failure if
+it is represented as an `Error` in ordinary Actor execution and that `Error`
+escapes the Actor turn unhandled.
+
+For `send()`, an unhandled handler error therefore fails the destination Actor
+incarnation even though `send()` has no reply result. For `request()`, the same
+destination failure occurs, and sender-visible outcome remains governed by the
+existing acceptance rule: once the request was accepted, failure before a
+normal reply yields `RequestOutcomeUncertain`; the destination's internal error
+object is not sent to the requester as an implicit reply.
+
+Initialization remains the same rule applied to the initialization turn:
+an unhandled initialization `Error` is fatal to that Actor incarnation and the
+Actor never reaches READY.
+
+Core does not assign special fatality to particular `Error` delegation
+subtrees, names, implementation exceptions, Java throwable classes, resource
+errors, arithmetic errors, lookup errors, or programmer-defined errors. A
+future abstraction may define an explicit lifecycle mechanism that terminates
+an Actor, but ordinary error fatality remains based on unhandled escape rather
+than an implementation-specific error whitelist.
+
+This choice preserves local reasoning: application code may recover from any
+ordinary Protos `Error` it intentionally handles, while an error that leaves a
+turn without a defined recovery path cannot silently preserve possibly
+inconsistent Actor-local mutable state.
 
 ## 25. Parent Actor Versus Failure Authority
 
@@ -3448,8 +3506,6 @@ mechanism, or implementation detail that still requires design.
 -   Infrastructure Controller integration APIs
 -   External infrastructure adapters such as Kubernetes or Nomad
 -   Monitoring API
--   Fatal versus non-fatal handler errors
--   Which errors terminate an Actor
 -   Failure-authority API
 -   Process failure detection mechanism
 -   Node failure detection mechanism
