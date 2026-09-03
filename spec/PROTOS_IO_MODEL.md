@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 129
+Document revision: 130
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -764,11 +764,23 @@ An implementation that reads ahead across a completed line must preserve any fol
 
 These rules define result/error precedence, not an implementation requirement to decode one character or perform one underlying read at a time.
 
-### 16.3 Cancellation
+### 16.3 TextReader cancellation
 
-A pending line read may be cancelled only before its result commits. Bytes already pulled internally must be preserved/rebuffered so successful cancellation consumes no observable input from the reader.
+Cancellation semantics apply uniformly to `readText()`, `readLine()`, and `readLine(maxBytes)` on a `TextReader`.
 
-A line result commits when the complete result has been determined by a terminator or by EOF with remaining content.
+A pending text-read operation may become `cancelled` only before its own result or failure commits and only while the reader can preserve the operation's zero-consumption cancellation contract.
+
+When cancellation succeeds, that operation consumes no text from the `TextReader`'s observable decoded input sequence and does not make the reader failed. A later text-read operation observes the same remaining decoded text and line-framing state that it would have observed if the cancelled operation had not consumed a result.
+
+Bytes already obtained from the wrapped `ByteReadable`, decoded characters already produced internally, incomplete encoded-character state, BOM/decoder state, and read-ahead beyond a prospective result may remain buffered inside the TextReader. The implementation need not physically roll its decoder or wrapped byte source backward, but it must retain, rebuffer, virtualize, or otherwise reconcile that internal progress so it cannot cause text loss, duplication, reordering, a changed line boundary, or a spurious decoding error after successful cancellation.
+
+This guarantee is about the TextReader's logical text sequence. As with ordinary read-ahead, it does not promise to restore the separately accessible wrapped byte source's native/logical cursor to the position it had before the wrapper performed internal reads; abandoning or closing the wrapper retains the wrapper-lifecycle rule that already-consumed source bytes are not restored.
+
+For `readLine()` and `readLine(maxBytes)`, a line result commits when the complete result has been determined by a terminator or by EOF with remaining content.
+
+For `readText()`, a result commits when the complete non-empty String chunk chosen for that operation, or the `null` EOF result, has been determined. The existing freedom in `readText()` chunk boundaries does not weaken the rule that a successfully cancelled operation consumes zero logical text.
+
+Once a text result, decoding failure, or underlying I/O failure has committed for the operation, cancellation cannot replace that outcome. A committed decoding or I/O failure follows the permanent TextReader failure lifecycle defined above.
 
 ---
 
@@ -1313,6 +1325,7 @@ Binary I/O is byte-oriented.
 String never implies an encoding.
 readLine result, limit, decoding-error, and I/O-error precedence follows logical decoded input order and is independent of buffering/read-ahead.
 A TextReader line-too-long, decoding, or underlying I/O failure permanently fails its text-reading side; there is no implicit drain or recovery-to-next-line behavior.
+Successful cancellation of readText/readLine consumes zero logical text and preserves decoder/framing state; internal read-ahead may be retained but cannot become text loss, duplication, or reordering.
 
 I/O that may wait returns Future.
 I/O introduces no hidden Protos suspension point.

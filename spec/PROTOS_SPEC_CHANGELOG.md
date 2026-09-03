@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.130] - 2026-09-03
+
+### Fixed
+- Extended TextReader cancellation semantics from line reads to all standard
+  text-reading operations, including `readText()`.
+- Required successful cancellation to consume zero logical text and preserve the
+  remaining decoded sequence and line-framing state.
+- Required internally fetched bytes, decoded characters, partial encoded
+  characters, decoder/BOM state, and read-ahead to be retained/reconciled rather
+  than becoming text loss, duplication, reordering, or a spurious later error.
+- Clarified that zero-consumption applies at the TextReader logical-text layer;
+  ordinary wrapper read-ahead does not imply rewinding a separately accessible
+  wrapped byte source.
+- Defined `readText()` result commitment consistently with its intentionally
+  unspecified chunk boundaries, while keeping successful cancellation
+  non-poisoning and committed I/O/decoding failures subject to the existing
+  permanent TextReader failure lifecycle.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 130. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.129] - 2026-09-03
 
 ### Fixed
