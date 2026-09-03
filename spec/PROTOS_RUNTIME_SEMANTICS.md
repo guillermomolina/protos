@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 98
+Document revision: 99
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2895,13 +2895,22 @@ function cancel(future):
 
 The exact return value of `cancel()` may be refined by the standard protocol, but cancellation request is not an unsafe immediate kill.
 
-Cancellation-aware execution checks the request at safe points. When honored:
+Cancellation observation follows the portable Future-cancellation boundaries
+defined above. This section does not create a second category of runtime-selected
+safe points. In particular, implementation polling, call boundaries, allocations,
+loop back-edges, JIT/VM safepoints, garbage-collection points, and host calls must
+not make cancellation observable unless they coincide with a portable cancellation
+boundary.
+
+When cancellation is honored:
 
 ```text
-unwind current asynchronous activation
-run all applicable ensure cleanup
-complete Future as CANCELLED
+honorCancellation(task)
 ```
+
+performs the already-defined cancellation unwind: the current asynchronous
+activation unwinds, all applicable `ensure` cleanup runs, and its Future completes
+as `CANCELLED`.
 
 A later:
 

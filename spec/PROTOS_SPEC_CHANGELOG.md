@@ -4,6 +4,22 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.99] - 2026-09-03
+
+### Fixed
+- Removed the remaining normative references to implementation-defined Future
+  cancellation "safe points" from the older Language and Runtime cancellation
+  sections.
+- Made those older sections explicitly refer to the portable cancellation
+  boundaries already defined by the concurrency model.
+- Prevented an implementation from treating VM/JIT/GC/allocation/call/loop
+  checkpoints as additional observable cancellation points.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 99.
+
 ## [0.1.98] - 2026-09-03
 
 ### Fixed

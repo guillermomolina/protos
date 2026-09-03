@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 98
+Document revision: 99
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3367,7 +3367,13 @@ future.cancel()
 
 `cancel()` requests cancellation; it does not forcibly terminate an arbitrary running activation.
 
-A task observes cancellation only at runtime-defined safe points or through cancellation-aware operations. When cancellation becomes effective, the task exits through the normal unwind machinery so that `ensure` cleanup executes.
+A task observes cancellation only at the portable cancellation boundaries defined
+for Future-producing asynchronous execution above, including mandatory explicit
+suspension boundaries and normatively cancellation-aware operations. Runtime,
+interpreter, JIT, GC, allocation, call, and loop checkpoints are not additional
+language-level cancellation boundaries merely because an implementation uses them
+internally. When cancellation becomes effective, the task exits through the normal
+unwind machinery so that `ensure` cleanup executes.
 
 A cancelled Future completes in the cancelled state. Observing its result:
 
