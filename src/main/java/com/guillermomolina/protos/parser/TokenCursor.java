@@ -42,6 +42,11 @@ final class TokenCursor {
         return current().token().type() == type;
     }
 
+    boolean nextAt(TokenType type) {
+        return index + 1 < tokens.size()
+                && tokens.get(index + 1).token().type() == type;
+    }
+
     TokenOccurrence consume(TokenType type, String expectation) {
         if (!at(type)) {
             throw ParseError.expected(expectation, current());

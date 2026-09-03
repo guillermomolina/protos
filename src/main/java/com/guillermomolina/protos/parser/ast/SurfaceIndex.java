@@ -18,15 +18,16 @@
 package com.guillermomolina.protos.parser.ast;
 
 import com.guillermomolina.protos.source.SourceSpan;
+import java.util.Objects;
 
-public sealed interface SurfaceExpression
-        permits SurfaceLiteral,
-                SurfaceName,
-                SurfaceIntrinsic,
-                SurfaceSequence,
-                SurfaceGroup,
-                SurfaceMember,
-                SurfaceCall,
-                SurfaceIndex {
-    SourceSpan span();
+public record SurfaceIndex(
+        SurfaceExpression receiver,
+        SurfaceExpression index,
+        SourceSpan span)
+        implements SurfaceExpression {
+    public SurfaceIndex {
+        Objects.requireNonNull(receiver, "receiver");
+        Objects.requireNonNull(index, "index");
+        Objects.requireNonNull(span, "span");
+    }
 }

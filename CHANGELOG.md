@@ -8,6 +8,7 @@ For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_
 
 ### Added
 
+- Extended the parser foundation with parenthesized expressions, member access, calls, indexing, argument spread, and leading-dot continuation.
 - Added the first deterministic parser foundation with source-aware errors and a portable surface AST.
 - Added source-aware lexer token occurrences with portable half-open source spans as parser infrastructure.
 - Expanded lexer conformance coverage for raw Unicode scalar handling across every Core String form, including rejection of unpaired surrogates.

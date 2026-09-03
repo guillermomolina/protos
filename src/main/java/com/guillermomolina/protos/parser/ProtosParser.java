@@ -20,9 +20,14 @@ package com.guillermomolina.protos.parser;
 import com.guillermomolina.protos.lexer.ProtosLexer;
 import com.guillermomolina.protos.lexer.TokenOccurrence;
 import com.guillermomolina.protos.lexer.TokenType;
+import com.guillermomolina.protos.parser.ast.SurfaceArgument;
+import com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
+import com.guillermomolina.protos.parser.ast.SurfaceGroup;
+import com.guillermomolina.protos.parser.ast.SurfaceIndex;
 import com.guillermomolina.protos.parser.ast.SurfaceIntrinsic;
 import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
+import com.guillermomolina.protos.parser.ast.SurfaceMember;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.source.SourceSpan;
@@ -45,18 +50,49 @@ public final class ProtosParser {
         consumeNewlines();
 
         if (!cursor.at(TokenType.EOF)) {
-            expressions.add(parsePrimaryFoundation());
+            expressions.add(parseExpressionFoundation());
 
             while (cursor.at(TokenType.NEWLINE)) {
                 consumeNewlines();
                 if (!cursor.at(TokenType.EOF)) {
-                    expressions.add(parsePrimaryFoundation());
+                    expressions.add(parseExpressionFoundation());
                 }
             }
         }
 
         cursor.consume(TokenType.EOF, "end of source");
         return new SurfaceSequence(expressions, sequenceSpan(expressions));
+    }
+
+    private SurfaceExpression parseExpressionFoundation() {
+        return parsePostfixFoundation();
+    }
+
+    private SurfaceExpression parsePostfixFoundation() {
+        SurfaceExpression expression = parsePrimaryFoundation();
+
+        while (true) {
+            if (cursor.at(TokenType.NEWLINE) && cursor.nextAt(TokenType.DOT)) {
+                cursor.advance();
+            }
+
+            if (cursor.at(TokenType.DOT)) {
+                expression = parseMemberSuffix(expression);
+                continue;
+            }
+
+            if (cursor.at(TokenType.LPAREN)) {
+                expression = parseCallSuffix(expression);
+                continue;
+            }
+
+            if (cursor.at(TokenType.LBRACKET)) {
+                expression = parseIndexSuffix(expression);
+                continue;
+            }
+
+            return expression;
+        }
     }
 
     private SurfaceExpression parsePrimaryFoundation() {
@@ -74,8 +110,89 @@ public final class ProtosParser {
             case THIS -> intrinsic(SurfaceIntrinsic.Kind.THIS);
             case CONTEXT -> intrinsic(SurfaceIntrinsic.Kind.CONTEXT);
             case ARGS -> intrinsic(SurfaceIntrinsic.Kind.ARGS);
+            case LPAREN -> parseParenthesized();
             default -> throw ParseError.expected("a primary expression", token);
         };
+    }
+
+    private SurfaceExpression parseParenthesized() {
+        TokenOccurrence open = cursor.consume(TokenType.LPAREN, "'('");
+        consumeNewlines();
+        SurfaceExpression expression = parseExpressionFoundation();
+        consumeNewlines();
+        TokenOccurrence close = cursor.consume(TokenType.RPAREN, "')'");
+        return new SurfaceGroup(
+                expression,
+                new SourceSpan(open.span().startOffset(), close.span().endOffset()));
+    }
+
+    private SurfaceExpression parseMemberSuffix(SurfaceExpression receiver) {
+        cursor.consume(TokenType.DOT, "'.'");
+        TokenOccurrence name = consumeMemberName();
+        return new SurfaceMember(
+                receiver,
+                name.token().lexeme(),
+                new SourceSpan(receiver.span().startOffset(), name.span().endOffset()));
+    }
+
+    private TokenOccurrence consumeMemberName() {
+        TokenType type = cursor.current().token().type();
+        return switch (type) {
+            case IDENTIFIER, THIS, CONTEXT, ARGS, SUPER, TRUE, FALSE, NULL -> cursor.advance();
+            default -> throw ParseError.expected("a member name", cursor.current());
+        };
+    }
+
+    private SurfaceExpression parseCallSuffix(SurfaceExpression receiver) {
+        cursor.consume(TokenType.LPAREN, "'('");
+        consumeNewlines();
+        List<SurfaceArgument> arguments = new ArrayList<>();
+
+        if (!cursor.at(TokenType.RPAREN)) {
+            arguments.add(parseArgument());
+            consumeNewlines();
+
+            while (cursor.at(TokenType.COMMA)) {
+                cursor.advance();
+                consumeNewlines();
+                arguments.add(parseArgument());
+                consumeNewlines();
+            }
+        }
+
+        TokenOccurrence close = cursor.consume(TokenType.RPAREN, "')'");
+        return new SurfaceCall(
+                receiver,
+                arguments,
+                new SourceSpan(receiver.span().startOffset(), close.span().endOffset()));
+    }
+
+    private SurfaceArgument parseArgument() {
+        boolean spread = false;
+        int start = cursor.current().span().startOffset();
+
+        if (cursor.at(TokenType.ELLIPSIS)) {
+            spread = true;
+            start = cursor.advance().span().startOffset();
+        }
+
+        SurfaceExpression expression = parseExpressionFoundation();
+        return new SurfaceArgument(
+                spread,
+                expression,
+                new SourceSpan(start, expression.span().endOffset()));
+    }
+
+    private SurfaceExpression parseIndexSuffix(SurfaceExpression receiver) {
+        cursor.consume(TokenType.LBRACKET, "'['");
+        consumeNewlines();
+        SurfaceExpression index = parseExpressionFoundation();
+        consumeNewlines();
+        TokenOccurrence close = cursor.consume(TokenType.RBRACKET, "']'");
+        return new SurfaceIndex(
+                receiver,
+                index,
+                new SourceSpan(receiver.span().startOffset(), close.span().endOffset()));
     }
 
     private SurfaceLiteral literal(SurfaceLiteral.Kind kind) {
