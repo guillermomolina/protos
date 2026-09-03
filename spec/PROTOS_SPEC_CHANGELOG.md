@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.114] - 2026-09-03
+
+### Fixed
+- Defined the `hash` protocol result domain as semantic `Integer` rather than
+  leaving Map consumers free to accept host integers, Floats, or arbitrary
+  objects.
+- Defined invalid hash-result handling before Map mutation and prohibited
+  implicit truncation, masking, host-word-size coercion, or Float conversion.
+- Defined logical Map recorded hashes as exact mathematical Integer values while
+  preserving implementation-private bounded reductions for table layout.
+- Defined `identityHash` to return semantic `Integer`, remain stable within one
+  execution, and satisfy `a === b => identityHash(a) == identityHash(b)`.
+- Kept collisions legal and ordinary hash/identityHash explicitly
+  non-persistent across executions.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 114.
+  No grammar, Actor/Future, or I/O semantics change.
+
 ## [0.1.113] - 2026-09-03
 
 ### Fixed

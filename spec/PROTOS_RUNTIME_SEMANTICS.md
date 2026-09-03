@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 113
+Document revision: 114
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3020,6 +3020,66 @@ unspecified logic-error behavior or Java-style unspecified mutable-key behavior:
 no host/runtime memory corruption is permitted, and the implementation may not
 substitute arbitrary failure, abort, nontermination, or implementation-specific
 lookup results for the specified abstract algorithm.
+
+### Hash result validation
+
+Normal `Map` semantics use a validated semantic Integer hash value.
+
+Conceptually:
+
+```text
+function requireHashResult(value):
+    if not isSemanticIntegerValue(value):
+        signal InvalidHashResult(value)
+
+    return mathematicalIntegerValue(value)
+```
+
+`isSemanticIntegerValue` uses the language's semantic Integer classification,
+not delegation. An ordinary object whose parent is an Integer value is therefore
+not accepted merely because lookup through that parent finds Integer behavior.
+
+`mathematicalIntegerValue` denotes the exact mathematical Integer represented by
+the semantic Integer value. The implementation may keep the original Integer
+object, a normalized internal integer, or another equivalent representation.
+It must not expose host word size, signed overflow, truncation, masking, or
+modulo reduction through Map behavior.
+
+The conceptual `recordedHash` stored with a Map entry is this validated exact
+Integer value. Internal bucket selection may derive an implementation-private
+bounded hash/index from it, but collisions in that internal reduction do not
+change which entries are logical hash candidates: logical candidacy remains
+equality of the validated mathematical Integer hash values defined by the
+deterministic Map search algorithm.
+
+If validation fails, the consuming Map operation signals before mutating the Map.
+Side effects performed by evaluating the key's `hash` message are not rolled
+back.
+
+`identityHash` has the same result-domain validation:
+
+```text
+function requireIdentityHashResult(value):
+    if not isSemanticIntegerValue(value):
+        signal InvalidIdentityHashResult(value)
+
+    return mathematicalIntegerValue(value)
+```
+
+For the standard semantic identity-hash operation:
+
+```text
+a === b  =>  identityHash(a) == identityHash(b)
+```
+
+An identity-bearing object's standard identity hash is stable for its lifetime
+during one execution. Value-identity objects derive identity-hash behavior from
+their semantic identity rather than from transient boxing/allocation identity.
+Collisions remain permitted.
+
+The internal error names above are pseudocode notation unless another normative
+specification explicitly defines them as standard error prototypes; the
+normative requirement is that an invalid hash result signals an `Error`.
 
 ### Deterministic `Map` key search
 

@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 113
+Document revision: 114
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3385,6 +3385,55 @@ The required contract is:
 ```text
 a == b  =>  a.hash == b.hash
 ```
+
+### Hash Result Contract
+
+The language-level `hash` protocol returns a semantic `Integer` value.
+
+A `Map` operation that consumes a key's `hash` result must validate that result
+before using it. Any semantic `Integer` value is valid, including fixed-width
+Integer-family values; the protocol does not require one particular Integer
+representation, width, signedness, or implementation layout. A Float, String,
+Boolean, `null`, ordinary identity-bearing object, or an object that merely
+delegates to an Integer value is not an Integer hash result.
+
+No implicit conversion, truncation, masking, modulo reduction, host-word-size
+coercion, or Float-to-Integer conversion is part of the language protocol. An
+implementation may reduce or mix a valid Integer internally for its own table
+layout only if that reduction is unobservable and preserves the specified
+`Map` matching semantics.
+
+If a `Map` key's `hash` behavior returns a non-Integer value, the Map operation
+signals an error before performing its own Map mutation. Effects already
+performed while evaluating the user-defined `hash` behavior are ordinary
+effects and are not rolled back.
+
+For correctly behaving hashable values, repeated `hash` observations during one
+execution must be stable whenever the state relevant to `==`/`hash` has not
+changed, and:
+
+```text
+a == b  =>  a.hash == b.hash
+```
+
+The equality in the hash contract compares the mathematical Integer hash values;
+different semantic Integer families representing the same mathematical Integer
+therefore satisfy the contract.
+
+`identityHash` likewise produces a semantic `Integer`. It is the hash companion
+to semantic identity (`===`): if `a === b`, their `identityHash` values must be
+the same during that execution. The converse is not required; identity-hash
+collisions are permitted.
+
+For an identity-bearing object, `identityHash` remains stable for that object's
+lifetime within the current execution. For Core value-identity categories,
+semantically identical values receive equal identity hashes independently of
+boxing, allocation, interning, or representation. Neither `hash` nor
+`identityHash` is required to be stable across separate process executions.
+
+Persistent, distributed, cryptographic, or interoperable hashing requires a
+separate explicit algorithm/protocol. Ordinary `hash` and `identityHash` do not
+define a persistent object identifier or externally stable fingerprint.
 
 Stable `hash`/`==` behavior remains the correctness contract for keys whose
 programmer intends ordinary associative-map behavior. Core nevertheless defines
