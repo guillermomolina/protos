@@ -361,6 +361,7 @@ public final class ProtosParser {
 
     private SurfaceParameter parseRestParameter() {
         TokenOccurrence spread = cursor.consume(TokenType.ELLIPSIS, "'...'");
+        consumeContinuationNewlines();
         TokenOccurrence name = cursor.consume(TokenType.IDENTIFIER, "a rest parameter name");
         return new SurfaceParameter(
                 name.token().lexeme(),
@@ -580,6 +581,7 @@ public final class ProtosParser {
         if (cursor.at(TokenType.ELLIPSIS)) {
             spread = true;
             start = cursor.advance().span().startOffset();
+            consumeContinuationNewlines();
         }
 
         SurfaceExpression expression = parseExpressionFoundation();

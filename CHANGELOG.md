@@ -51,6 +51,9 @@ For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_
 - Protos Core language version remains 0.1.
 - No language semantics changed.
 
+### Fixed
+
+- Fixed parser newline continuation after `...` in spread arguments and rest parameters, matching the grammar's necessarily-incomplete construct rule.
 ## [0.1.6-SNAPSHOT] - 2026-08-31
 
 ### Added
