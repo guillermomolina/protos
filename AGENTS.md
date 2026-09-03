@@ -8,21 +8,227 @@ The project deliberately separates language design from implementation. The impl
 
 When behavior is unclear, incomplete, or contradictory, do not invent semantics. Report the ambiguity and ask for a design decision.
 
+<!-- BEGIN PROTOS DESIGN PHILOSOPHY -->
+## Protos design philosophy
+
+These principles apply to the whole repository. They constrain language design,
+implementation architecture, libraries, tests, and documentation.
+
+### Build a small universe, not a collection of features
+
+Protos aims for a small conceptual foundation from which powerful behavior can
+emerge. Minimize total conceptual complexity, not the number of named concepts.
+A new abstraction is justified when it removes more independent rules, special
+cases, or overloaded responsibilities than it introduces.
+
+### Prefer mechanisms over institutions
+
+Prefer general mechanisms from which higher-level abstractions can be built over
+adding each useful abstraction as a permanent language-level category. Do not
+promote a common pattern to a primitive merely because it is familiar or useful.
+Programs should build institutions inside the Protos universe whenever the
+existing mechanisms can express them naturally.
+
+### No pets
+
+Avoid individually privileged objects, values, contexts, constructs, or runtime
+entities. Behavior should follow from semantic properties and general rules, not
+from identity-based exceptions.
+
+Prefer:
+
+    Any object satisfying X behaves as Y.
+
+over:
+
+    This particular object behaves as Y.
+
+Magic objects, privileged instances, distinguished roots, well-known singleton
+entities, or identity checks must earn their existence through fundamental
+semantics, not implementation convenience. Internal optimizations may recognize
+specific objects only when observable behavior remains unchanged.
+
+### Ordinary things should remain ordinary
+
+Language facilities should remain ordinary participants in the object model
+wherever possible. Do not create parallel semantic universes for contexts,
+callables, built-ins, libraries, or runtime facilities when ordinary Protos
+mechanisms can represent them.
+
+### General rules beat special cases
+
+Prefer rules that explain multiple behaviors naturally. Treat "except when",
+"only for this object", "normally, but", and similar clauses as design smells.
+Exceptions are sometimes necessary, but they require semantic justification.
+Implementation convenience is not sufficient justification.
+
+### Preserve orthogonality and composability
+
+Features should compose through their existing semantics. A new feature should
+not normally require pairwise special rules with objects, slots, delegation,
+lookup, assignment, contexts, closures, calls, errors, mutation, concurrency, or
+shared state. A large interaction matrix is evidence that the abstraction may be
+wrong.
+
+### Semantic distinctions should remain visible
+
+Do not collapse semantically different operations merely because their
+implementations are similar. If operations have different invariants, effects,
+lookup behavior, or failure modes, that distinction should remain visible where
+it improves reasoning. Do not make the runtime guess programmer intent.
+
+### Fail where the invariant is violated
+
+Invalid operations should fail at the point where the language invariant is
+violated. Do not silently turn errors into absence or fallback behavior merely
+for convenience. `null` is not a universal substitute for failure.
+
+### Pay only for what you use
+
+Protos must be useful from a trivial single-threaded `hello world` to highly
+concurrent and very large deployments without imposing the cost of unused
+capability.
+
+Support for concurrency, distribution, clustering, isolation, scheduling, or
+other advanced facilities must not impose unnecessary conceptual, syntactic,
+runtime, memory, synchronization, or coordination cost on programs that do not
+use them.
+
+Simple things must stay simple; complex things must remain possible; programs
+should pay only for the complexity they actually use.
+
+### Scale by composition, not by changing universes
+
+Protos should scale by composing the same underlying mechanisms rather than by
+requiring a fundamentally different programming model at larger scale. New
+layers are justified when they resolve a real semantic, lifecycle, isolation, or
+scalability boundary while preserving the simplicity of lower layers.
+
+The best scaling abstractions should feel like missing pieces of the existing
+model, not foreign subsystems attached to it.
+
+### Generality must be earned
+
+Do not add abstraction merely in the name of generality. A design earns
+Generality by surviving substantially different realistic use cases with the
+same small set of semantics. Prefer the simplest abstraction that solves the
+motivating problem, composes with existing mechanisms, survives unrelated
+scenarios, and does not impose significant cost on simpler programs.
+
+### Minimize shared mutable state
+
+Minimize shared mutable state in both language semantics and library design.
+Prefer local state, immutability, isolation, ownership, message passing, or
+other less-coupled mechanisms when they provide equivalent semantics. Narrow
+the scope and lifetime of state that genuinely must be shared. Avoid global
+mutable state.
+
+The default question is:
+
+    Can this state remain local?
+
+If yes, keep it local.
+
+### Prefer independence over coordination
+
+When several semantically valid designs exist, prefer the one that allows the
+most independent progress and requires the least necessary blocking and
+coordination. Avoid serializing unrelated work merely because serialization is
+easier to implement.
+
+This does not mean mandatory asynchrony or lock-free algorithms at any cost. A
+simple synchronous operation on local state can be preferable to additional
+concurrency machinery. Minimize total coordination and complexity, not the raw
+number of locks.
+
+### Respect qualitative thresholds
+
+Not all changes of size one have the same conceptual cost. Crossing from zero
+instances of a mechanism to one instance can change the nature of the language.
+Treat the first reserved word, privileged entity, implicit conversion, hidden
+heuristic, platform-dependent semantic branch, or similar new category as an
+architectural decision.
+
+The distance from 0 to 1 may be greater than the distance from 1 to 10.
+
+### Preserve global language properties
+
+Before accepting an apparently local change, ask whether it creates a category
+of thing that Protos previously did not have. Protect global properties such as
+the absence of reserved words or unnecessary privileged entities unless the
+benefit clearly justifies crossing that qualitative threshold.
+
+### Solve ambiguity structurally before adding syntax
+
+When syntax is ambiguous, first try to resolve the ambiguity by making the
+grammar more precise, using existing delimiters, structural rules, or explicit
+formal disambiguation. Do not add keywords, punctuation, or markers solely to
+make parsing easier. Parser convenience is not sufficient reason to expand the
+surface language.
+
+### Keep platform differences at the boundary
+
+Define portable semantics wherever a coherent portable abstraction exists.
+Operating-system, host-runtime, JVM, Windows, Linux, or POSIX differences should
+not leak unnecessarily into the core language model. Encapsulate genuine host
+differences behind explicit system boundaries and capabilities.
+
+Portability does not mean designing to the weakest common denominator. Define
+the strongest coherent portable abstraction Protos can guarantee; when a
+capability is genuinely platform-specific, make that dependence explicit rather
+than accidental.
+
+### Semantics before syntax; semantics before implementation
+
+First define the capability, semantics, invariants, interactions, failure
+behavior, and concurrency implications. Only then design syntax and
+implementation. Truffle, GraalVM, the JVM, the parser, tests, or current runtime
+behavior do not define Protos semantics.
+
+### The specification defines Protos
+
+`spec/` defines Protos. Everything else implements, tests, explains, or uses it.
+If implementation, tests, documentation, or historical behavior disagree with
+normative specification, investigate the contradiction rather than silently
+choosing the implementation.
+
+### Observable behavior matters; machinery does not
+
+Specify observable semantics precisely without unnecessarily prescribing
+implementation machinery. Implementations may change representation, caching,
+compilation, scheduling, dispatch, storage, or other internals as long as
+observable Protos semantics remain unchanged.
+
+### Concurrency is language semantics
+
+Real multithreading and shared-state behavior must have explicit Protos
+semantics where observable. "The JVM handles it" is not a Protos concurrency or
+memory model.
+
+### Learn from precedent; do not be ruled by it
+
+Other languages, runtimes, specifications, research, and implementations are
+evidence. They reveal known solutions, failures, edge cases, and trade-offs.
+They are not authority over Protos. Familiarity and popularity are subordinate
+to coherence with the Protos universe.
+
+<!-- END PROTOS DESIGN PHILOSOPHY -->
+
 Canonical language specification
 
 The canonical core language definition is maintained in:
 
-- "docs/PROTOS_LANGUAGE_SPEC.md"
-- "docs/PROTOS_GRAMMAR.md"
-- "docs/PROTOS_RUNTIME_SEMANTICS.md"
+- "spec/PROTOS_LANGUAGE_SPEC.md"
+- "spec/PROTOS_GRAMMAR.md"
+- "spec/PROTOS_RUNTIME_SEMANTICS.md"
 
 Normative domain models supplement those core documents for semantically substantial standard subsystems. The current normative domain model is:
 
-- "docs/PROTOS_IO_MODEL.md" — observable I/O, text/binary adapter, filesystem-authority, and Process-I/O-bootstrap semantics.
+- "spec/PROTOS_IO_MODEL.md" — observable I/O, text/binary adapter, filesystem-authority, and Process-I/O-bootstrap semantics.
 
 Treat the canonical core documents together with applicable normative domain models as the source of truth for observable language/standard semantics in their respective domains.
 
-`docs/PROTOS_CONCURRENCY_MODEL.md` is also part of the documentation, but with a less complete status: it is a concurrency design ledger, not a canonical language specification document. See "Concurrency design work" below.
+`spec/PROTOS_CONCURRENCY_MODEL.md` is also part of the documentation, but with a less complete status: it is a concurrency design ledger, not a canonical language specification document. See "Concurrency design work" below.
 
 Before implementing or modifying syntax, parsing, object semantics, invocation, lookup, control flow, errors, concurrency, built-in protocols, or other observable language behavior, inspect the relevant specification sections first.
 
@@ -389,8 +595,8 @@ Do not change licensing terms or make licensing-policy decisions implicitly as p
 
 ### Concurrency design work
 
-- `docs/PROTOS_CONCURRENCY_MODEL.md` is part of the documentation, but with a less complete status than the canonical specification documents: it is a design ledger that mixes CLOSED decisions with OPEN, PENDING, and design-only material.
+- `spec/PROTOS_CONCURRENCY_MODEL.md` is part of the documentation, but with a less complete status than the canonical specification documents: it is a design ledger that mixes CLOSED decisions with OPEN, PENDING, and design-only material.
 - All documentation documents share the `Document revision` number. This document carries that common revision and has no independent revision or versioning scheme.
-- Record every change to this file in `docs/PROTOS_SPEC_CHANGELOG.md`, like changes to the canonical specification documents.
-- When a CLOSED decision from this ledger is incorporated into canonical specification documents, update the affected specification files and record that canonical change in `docs/PROTOS_SPEC_CHANGELOG.md`.
+- Record every change to this file in `spec/PROTOS_SPEC_CHANGELOG.md`, like changes to the canonical specification documents.
+- When a CLOSED decision from this ledger is incorporated into canonical specification documents, update the affected specification files and record that canonical change in `spec/PROTOS_SPEC_CHANGELOG.md`.
 - Do not treat OPEN, PENDING, or design-only material in this ledger as normative language semantics.

@@ -2,7 +2,7 @@
 
 All notable changes to the Protos implementation project will be documented in this file.
 
-For specification changes, see [docs/PROTOS_SPEC_CHANGELOG.md](docs/PROTOS_SPEC_CHANGELOG.md).
+For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
 ## [0.2.0-SNAPSHOT] - 2026-09-01
 
@@ -34,13 +34,13 @@ For specification changes, see [docs/PROTOS_SPEC_CHANGELOG.md](docs/PROTOS_SPEC_
 
 - The lexer implementation is still under specification-compliance review.
 - Unicode identifier handling requires further review for exact `XID_Start` and `XID_Continue` compliance.
-- Specification changes are documented separately in [docs/PROTOS_SPEC_CHANGELOG.md](docs/PROTOS_SPEC_CHANGELOG.md).
+- Specification changes are documented separately in [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
 ## [0.1.5-SNAPSHOT] - 2026-08-31
 
 ### Notes
 - No implementation changes in this session.
-- Specification changes documented in [docs/PROTOS_SPEC_CHANGELOG.md](docs/PROTOS_SPEC_CHANGELOG.md).
+- Specification changes documented in [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
 ## [0.1.4-SNAPSHOT] - 2026-08-31
 
@@ -63,4 +63,4 @@ For specification changes, see [docs/PROTOS_SPEC_CHANGELOG.md](docs/PROTOS_SPEC_
 - Documented the chosen license in the project README for this version.
 
 ### Notes
-- Specification changes documented in [docs/PROTOS_SPEC_CHANGELOG.md](docs/PROTOS_SPEC_CHANGELOG.md).
+- Specification changes documented in [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
