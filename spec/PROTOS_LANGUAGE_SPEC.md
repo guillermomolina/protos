@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 96
+Document revision: 97
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -1834,6 +1834,35 @@ future: work.future()
 ```
 
 Asynchrony belongs to **the execution of a closure**, not to its definition.
+
+### Cancellation of asynchronous execution
+
+A Future-producing task may be asked to cancel through the ordinary Future
+cancellation operation. Cancellation is cooperative: requesting cancellation does
+not forcibly terminate arbitrary running Protos code.
+
+Cancellation observation is portable rather than implementation-selected. Every
+explicit suspension point is a mandatory cancellation observation boundary. If a
+cancellation request is pending when a task would suspend, or when suspended work
+would otherwise resume into ordinary Protos code, the task observes cancellation
+before executing further ordinary Protos code.
+
+An operation whose normative contract is cancellation-aware may also observe a
+pending cancellation request while its underlying work is pending, subject to that
+operation's own commitment and effect rules.
+
+Ordinary non-suspending Protos execution is not an implicit cancellation
+checkpoint. Method calls, allocations, loop back-edges, interpreter polls, JIT
+safepoints, garbage-collection points, host calls, or other implementation-defined
+runtime boundaries do not by themselves make cancellation observable. Consequently,
+CPU-bound code that reaches no explicit suspension point or cancellation-aware
+operation may complete normally despite an outstanding cancellation request.
+
+When cancellation becomes effective, the task exits through the ordinary unwind
+machinery, so applicable `ensure` cleanup runs before its Future reaches the
+cancelled terminal state. An implementation may poll cancellation more frequently
+internally only when doing so cannot change the Protos-observable cancellation
+boundary.
 
 ## 28. Future Resolution
 

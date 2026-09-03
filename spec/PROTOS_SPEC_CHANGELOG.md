@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.97] - 2026-09-03
+
+### Fixed
+- Replaced implementation-defined Future cancellation safepoints with portable
+  cancellation-observation boundaries.
+- Made every explicit suspension point a mandatory cancellation boundary and
+  required pending cancellation to be observed before suspended work resumes
+  ordinary Protos execution.
+- Defined that normatively cancellation-aware operations may observe cancellation
+  while pending, subject to their commitment/effect rules.
+- Excluded method calls, allocations, loop back-edges, VM/JIT polls, GC points,
+  host calls, and other implementation machinery from becoming hidden observable
+  cancellation points.
+- Preserved cooperative cancellation: CPU-bound code with no explicit suspension or
+  cancellation-aware operation may finish normally despite a pending request.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 97.
+
 ## [0.1.96] - 2026-09-03
 
 ### Fixed

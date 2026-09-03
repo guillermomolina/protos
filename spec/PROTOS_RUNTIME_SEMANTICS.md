@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 96
+Document revision: 97
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -1641,6 +1641,40 @@ function executeAsFuture(closure, parentActivation):
 ```
 
 The scheduler implementation is not observable semantics.
+
+### Future cancellation
+
+Cancellation of Future-producing work is cooperative. The portable observation
+boundaries are conceptualized as follows:
+
+```text
+function beforeExplicitSuspension(task):
+    if task.cancellationRequested:
+        honorCancellation(task)
+    else:
+        suspend(task)
+
+function beforeResumeIntoProtos(task):
+    if task.cancellationRequested:
+        honorCancellation(task)
+    else:
+        resumeProtosExecution(task)
+
+function honorCancellation(task):
+    unwind current asynchronous activation
+    run all applicable ensure cleanup
+    complete its Future as CANCELLED
+```
+
+An operation whose normative contract is cancellation-aware may invoke the
+equivalent of `honorCancellation` while its underlying work is pending, subject to
+that operation's commitment/effect rules.
+
+Ordinary non-suspending execution must not observe cancellation merely because the
+implementation reaches a call boundary, allocation poll, loop back-edge, VM/JIT
+safepoint, garbage-collection point, host call, or other runtime checkpoint.
+Carrier interruption and internal polling are implementation mechanisms only; they
+must not introduce an additional Protos-observable cancellation point.
 
 ---
 

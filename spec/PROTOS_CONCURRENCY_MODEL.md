@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 96
+Document revision: 97
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -722,8 +722,25 @@ Cancellation is cooperative.
 Protos does not arbitrarily interrupt Actor code in the middle of an
 instruction by injecting asynchronous exceptions.
 
-Cancellation requests are observed at safe points such as suspension
-points, runtime operations, or cooperative checkpoints.
+Cancellation requests are observed at portable cancellation boundaries,
+not at implementation-selected runtime safepoints.
+
+Every explicit suspension point is a mandatory cancellation observation boundary.
+A pending request is observed before the task suspends or, if suspension has
+already occurred, before that task resumes ordinary Protos execution. An operation
+whose normative contract is cancellation-aware may additionally observe a request
+while its underlying work is pending, subject to that operation's commitment and
+effect rules.
+
+Ordinary non-suspending execution does not acquire hidden cancellation points from
+method calls, allocations, loop back-edges, interpreter/JIT polls, garbage
+collection, host calls, or similar runtime machinery. CPU-bound Protos code that
+does not explicitly suspend or enter a cancellation-aware operation may therefore
+complete normally after cancellation was requested.
+
+An implementation may use additional internal polling or carrier interruption only
+when it cannot change the Protos-observable point at which cancellation takes
+effect.
 
 Cancelling a Future requests cancellation of its work.
 
