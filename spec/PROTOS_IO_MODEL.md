@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 153
+Document revision: 154
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -411,6 +411,16 @@ Closing or abandoning a reading adapter does not restore bytes that the adapter 
 Core v0.1 defines no universal `detach()` or adapter `reset(target)` operation.
 
 If wrapper finalization fails during close, close fails and the wrapper remains unusable. If the wrapper owns its underlying resource, required resource release is still attempted even when wrapper finalization fails; the overall close still fails.
+
+Wrapper close has deterministic failure precedence following the mandated close order. A failure established while finalizing/propagating the wrapper's own state is the primary failure of that wrapper close lifecycle. Required close of an owned target is still invoked after that failure, but a later failure of the owned target's close lifecycle does not replace the already-established wrapper-finalization failure as the portable failure reported by the wrapper close.
+
+If wrapper finalization/propagation succeeds and the required close of an owned target fails, that target-close failure is the failure of the wrapper close lifecycle.
+
+This rule deliberately does not introduce a universal aggregate-error or suppressed-error protocol. An implementation may preserve later cleanup failures for diagnostics through facilities whose semantics are separately defined, but portable Protos code must observe the primary failure selected above rather than an implementation-dependent choice between sibling cleanup errors.
+
+When wrapper finalization has already failed, the wrapper close Future need not remain pending solely to wait for a subsequently invoked owned-target close lifecycle to reach its terminal state. Invoking the owned target's `close()` transfers that target's release custody to its own close lifecycle under the ordinary `Closable` rules. The wrapper may then report its already-established primary failure while the target close continues under implementation/runtime custody. This does not reopen either object, does not permit retry through the wrapper, and does not weaken any explicit requirement of a stronger concrete wrapper contract.
+
+Conversely, an implementation must not omit the required owned-target close merely to report the wrapper-finalization failure sooner. Before the wrapper close Future exposes that failure, the owned target's close lifecycle must at least have been invoked and permanently committed according to `Closable`; no later program action is required to start that release.
 
 An output wrapper must not guess downstream progress after a propagation failure. In particular, if the wrapper delegates buffered output through an ordinary `ByteWritable.write` that fails and the downstream contract does not reveal enough progress to determine which prefix was accepted, the wrapper cannot safely reconstruct its remaining buffered suffix. In that state the wrapper's output side becomes permanently failed/unusable rather than retrying bytes that may already have been accepted, discarding bytes that may not have been accepted, or changing their order.
 
@@ -1450,6 +1460,7 @@ Capabilities are orthogonal Traits.
 Socket in v0.1 is only an already-provisioned endpoint I/O shape; socket creation, addressing, DNS, and network authority are outside this model and are never ambient by implication.
 Wrapped capabilities do not propagate automatically.
 Wrapping does not imply lifecycle ownership.
+Owning-wrapper close uses deterministic first-failure precedence in mandated close order: wrapper finalization failure remains primary, while owned-target close is still committed and any later target-close failure cannot replace it.
 Invoking close commits permanent lifecycle termination; close itself cannot subsequently become cancelled.
 A failed close never returns release custody to the program and never authorizes blind native-close retry; uncertain residual backend release state remains implementation/host custody.
 Object unreachability/GC never semantically invokes close; deterministic resource release requires an explicit lifecycle operation, while best-effort unreachable-resource reclamation remains non-portable implementation/host cleanup.

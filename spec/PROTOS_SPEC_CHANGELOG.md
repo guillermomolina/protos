@@ -4,6 +4,32 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.154] - 2026-09-03
+
+### Fixed
+- Defined deterministic failure precedence for explicit owning-wrapper close.
+- Made wrapper finalization/propagation failure the primary wrapper-close failure
+  when it occurs before the mandated owned-target close step.
+- Required the owned target's close lifecycle to still be invoked and committed
+  before exposing that wrapper-finalization failure.
+- Prevented a later owned-target close failure from replacing an already
+  established wrapper-finalization failure.
+- Defined target-close failure as the wrapper-close failure when wrapper
+  finalization succeeds.
+- Avoided introducing a universal aggregate/suppressed-error institution;
+  secondary cleanup failures may be retained only through separately specified
+  diagnostic facilities.
+- Allowed the wrapper close Future to report its established primary failure
+  after owned-target close has been committed, without waiting solely for that
+  target close lifecycle to become terminal.
+- Kept release custody with the target's ordinary `Closable` lifecycle and
+  prohibited skipping owned-target close for fail-fast behavior.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 154. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.153] - 2026-09-03
 
 ### Fixed
