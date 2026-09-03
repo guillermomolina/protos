@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 88
+Document revision: 89
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -188,6 +188,33 @@ executing in such a computation does not execute as another simultaneous
 turn against the Actor's mutable object graph; it crosses a separate
 isolation boundary and may only interact with the Actor through the
 value/result semantics defined for parallel execution.
+
+### Future `then()` continuations
+
+A call to `future.then(transform)` creates a distinct continuation task and a
+destination Future. The continuation is asynchronous work created by the
+activation that calls `then`, and therefore belongs to that activation under the
+ordinary structured-concurrency rule unless the destination Future is detached.
+
+Completion of the source Future only makes the continuation runnable. It does not
+execute the transformation closure inline, reentrantly, or inside the task or Actor
+turn that completes the source Future. This remains true when the source Future was
+already terminal when `then()` was called.
+
+The continuation executes as ordinary task work in the Actor/execution domain of
+the activation that created it. A resolved source invokes the transformation with
+the source value; a failed source fails the destination with the same error without
+invoking the transformation; a cancelled source cancels the destination without
+invoking the transformation. A Future returned by the transformation is flattened
+through the ordinary Future-resolution rule.
+
+Cancellation and detachment are downstream-only for this composition edge:
+cancelling the destination requests cancellation of the continuation but does not
+cancel the source Future, and detaching the destination detaches only the
+continuation task. Neither operation changes ownership or lifetime of the source
+Future.
+
+No additional total ordering is introduced between independent continuations.
 
 ## 6. I/O
 

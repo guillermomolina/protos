@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 88
+Document revision: 89
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -1665,39 +1665,66 @@ future.then(value => {
 conceptually:
 
 ```text
-function futureThen(source, transformClosure):
+function futureThen(source, transformClosure, callerActivation):
     destination = new Future(
         state = pending
     )
 
-    onFutureCompletion(source, result => {
+    continuationTask = scheduler.createTask(
+        owner = callerActivation,
+        body = () => {
+            switch source.state:
+                case failed:
+                    failFuture(
+                        destination,
+                        source.error
+                    )
+                    return
 
-        if result is failure:
-            failFuture(
-                destination,
-                result.error
-            )
+                case cancelled:
+                    if destination.state == pending:
+                        destination.state = cancelled
+                        wakeWaiters(destination)
+                    return
 
-            return
+                case resolved:
+                    try:
+                        transformed = invoke(
+                            transformClosure,
+                            [source.value]
+                        )
 
-        try:
-            transformed = invoke(
-                transformClosure,
-                [result.value]
-            )
+                        resolveFuture(
+                            destination,
+                            transformed
+                        )
 
-            resolveFuture(
-                destination,
-                transformed
-            )
+                    catch error:
+                        failFuture(
+                            destination,
+                            error
+                        )
 
-        catch error:
-            failFuture(
-                destination,
-                error
-            )
+                case pending:
+                    signal InvalidFutureContinuationState()
+        }
+    )
+
+    destination.task = continuationTask
+    registerChildTask(
+        callerActivation,
+        continuationTask
+    )
+
+    onFutureCompletion(source, terminalResult => {
+        // Runtime bookkeeping only. This callback must not invoke Protos code.
+        scheduler.makeRunnableLater(
+            continuationTask
+        )
     })
 
+    // Even if source was already terminal, makeRunnableLater must not run the
+    // continuation inline in this call.
     return destination
 ```
 

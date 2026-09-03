@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.89] - 2026-09-03
+
+### Fixed
+- Closed the observable execution-context and ownership ambiguity of `Future.then()`.
+  A `then` call now creates a distinct structured continuation task owned by the
+  activation that calls `then`, unless the destination Future is detached.
+- Defined non-reentrant continuation execution: source completion only makes the
+  continuation runnable and never invokes the transform inline, including when
+  the source Future is already terminal at the `then()` call.
+- Defined terminal-state propagation: resolved sources invoke the transform,
+  failed sources fail the destination without invoking it, and cancelled sources
+  cancel the destination without invoking it.
+- Defined downstream-only cancellation and detachment for composition: cancelling
+  or detaching the destination continuation does not cancel, detach, or otherwise
+  alter the source Future.
+- Preserved automatic Future flattening and avoided imposing any new global order
+  between independent continuations.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 89.
+
 ## [0.1.88] - 2026-09-03
 
 ### Fixed
