@@ -73,7 +73,7 @@ class ProtosParserPostfixFoundationTest {
         assertEquals(2, call.arguments().size());
         assertEquals(false, call.arguments().get(0).spread());
         assertEquals(true, call.arguments().get(1).spread());
-        assertEquals(new SourceSpan(0, 26), call.span());
+        assertEquals(new SourceSpan(0, 25), call.span());
     }
 
     @Test
