@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 165
+Document revision: 166
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2059,9 +2059,12 @@ function wakeWaiters(future):
 ```
 
 Every task suspended by `awaitFutureValue(future, ...)` is one waiter on that
-Future. When the Future makes its first terminal transition, every waiter that
-was still registered for that Future becomes eligible to resume; no waiter is
-skipped merely because another waiter was also registered.
+Future. Waiter registration and the Future's first terminal transition obey the
+atomic race rule defined by `suspendOnPendingFuture`: a completion cannot fall
+into a gap between observing `pending` and installing the waiter. When the Future
+makes its first terminal transition, every waiter that was still registered for
+that Future becomes eligible to resume; no waiter is skipped merely because
+another waiter was also registered.
 
 Clearing the waiter registration before making waiters runnable is semantic
 bookkeeping: once the Future is terminal, no task remains a pending waiter on
@@ -2121,9 +2124,9 @@ function awaitFutureValue(future, activation):
             )
 
         case pending:
-            scheduler.suspend(
-                activation,
-                until = future
+            suspendOnPendingFuture(
+                future,
+                activation
             )
 
             return awaitFutureValue(
@@ -2131,6 +2134,61 @@ function awaitFutureValue(future, activation):
                 activation
             )
 ```
+
+Conceptually:
+
+```text
+function suspendOnPendingFuture(future, activation):
+    task = currentTaskOf(activation)
+
+    // This is the ordinary explicit-suspension cancellation boundary.
+    if task.future.cancellationRequested:
+        honorCancellation(task)
+        return
+
+    atomically with respect to future's first terminal transition:
+        if future.state != pending:
+            return
+
+        registerWaiter(
+            future,
+            task
+        )
+
+        mark task suspended waiting on future
+```
+
+The atomic region above specifies an observable race property, not a required
+locking mechanism. There is no interval in which `awaitFutureValue` has decided
+to wait because the Future appeared pending but the Future can complete without
+either observing the registered waiter or causing the attempted suspension to
+notice that completion.
+
+Equivalently, every conforming implementation must ensure one of these outcomes:
+
+```text
+Future terminal transition happens first
+    -> the consumer does not remain suspended on that Future
+
+waiter registration happens first
+    -> that terminal transition includes the consumer in wakeWaiters(future)
+```
+
+A runtime may implement this with a lock, compare-and-set state, generation
+counter, register-then-recheck protocol, or another mechanism. Spurious internal
+wake-ups are permitted only when they remain semantically invisible; lost
+terminal notifications are not.
+
+The registration is for the current task continuation, not an arbitrary
+activation object. If cancellation was already pending at the explicit
+suspension boundary, cancellation is honored instead of installing a live
+Future waiter. A cancellation request that arrives after that boundary follows
+the existing cancellation-runnable rules and cannot strand a registered waiter.
+
+Returning from `suspendOnPendingFuture` because the Future was already terminal
+does not itself execute user code or consume the result. `awaitFutureValue`
+re-enters the normal state switch, which returns or signals the stable terminal
+outcome.
 
 Suspending an activation does not imply blocking an OS thread.
 

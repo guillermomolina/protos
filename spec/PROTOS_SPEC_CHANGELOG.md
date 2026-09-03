@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.166] - 2026-09-03
+
+### Fixed
+- Closed the lost-wakeup race between observing a pending Future and registering
+  the current task as a waiter.
+- Defined Future waiter registration and the first terminal transition as one
+  semantic race: either completion wins and no suspension persists, or waiter
+  registration wins and completion wakes that waiter.
+- Required the explicit-suspension cancellation boundary to run before installing
+  a live Future waiter.
+- Allowed locks, CAS, generation counters, register-then-recheck, or equivalent
+  implementation strategies while forbidding observable lost notifications.
+- Preserved stable Future observation by re-entering the ordinary Future-state
+  switch after a wait or a completion-won race.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 166.
+
 ## [0.1.165] - 2026-09-03
 
 ### Fixed
