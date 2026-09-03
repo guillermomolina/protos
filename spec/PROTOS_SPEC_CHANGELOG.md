@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.124] - 2026-09-03
+
+### Fixed
+- Closed the accidental networking-semantics gap around the standard `Socket`
+  capability shape by defining it only as an already-provisioned connected
+  byte-stream endpoint.
+- Made socket creation, connect/bind/listen/accept, datagram addressing, DNS/name
+  resolution, transport configuration, and network-authority acquisition
+  explicitly outside the v0.1 I/O model.
+- Prevented possession of one Socket from implying authority to create sibling
+  sockets, reconnect elsewhere, resolve names, inspect ambient network state, or
+  bypass Process-host policy.
+- Required a future networking model to make authority and host-dependent
+  namespace behavior explicit rather than inheriting BSD/POSIX, WinSock, Java,
+  or ambient DNS behavior as Protos semantics.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 124. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.123] - 2026-09-03
 
 ### Fixed

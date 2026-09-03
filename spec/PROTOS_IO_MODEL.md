@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 123
+Document revision: 124
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -46,6 +46,9 @@ The following are intentionally outside this I/O model:
 - exact standard-library namespace/import spellings;
 - exact error prototype names where this document only requires that an error be signaled;
 - filesystem operations beyond those explicitly defined here;
+- network authority acquisition and policy;
+- socket creation, `connect`, `bind`, `listen`, `accept`, datagram addressing, and transport-configuration APIs;
+- DNS/name resolution and the relationship between names, addresses, and network authority;
 - a general incremental encoder/decoder feed/reset API;
 - `print` and the exact object textual-representation protocol.
 
@@ -546,6 +549,12 @@ A `PipeReader` exposes `ByteReadable` and `Closable`.
 A `PipeWriter` exposes `ByteWritable` and `Closable`.
 
 A `Socket` exposes `ByteReadable`, `ByteWritable`, `ReadShutdown`, `WriteShutdown`, and `Closable`.
+
+In this document, `Socket` describes the I/O/lifecycle capability shape of an already-provisioned connected byte-stream endpoint. It does **not** imply a standardized ambient socket constructor, ambient network namespace, or authority to create, connect, bind, listen, accept, resolve names, or select arbitrary remote/local addresses.
+
+Possessing such a Socket transfers only the capabilities exposed by that endpoint. It does not implicitly transfer a broader capability to create sibling sockets, reconnect elsewhere, perform DNS/name resolution, inspect the host network namespace, or bypass the Process host's network policy.
+
+A future networking domain model may define creation/listening/datagram/address/name-resolution facilities. Those facilities must make network authority and any host-dependent namespace behavior explicit and must compose with the I/O protocols defined here. Until such a model exists, implementations must not treat host APIs such as BSD/POSIX sockets, Java networking, WinSock, or ambient DNS as portable Protos semantics merely because an already-provisioned Socket object exists.
 
 A `BufferedReader(source)` requires a `ByteReadable` source and exposes `ByteReadable` over its own buffered state. It may read ahead.
 
@@ -1297,6 +1306,7 @@ COMMITTED is an I/O-operation concept, not a Future state.
 Successful cancellation before commitment preserves zero observable effect.
 
 Capabilities are orthogonal Traits.
+Socket in v0.1 is only an already-provisioned endpoint I/O shape; socket creation, addressing, DNS, and network authority are outside this model and are never ambient by implication.
 Wrapped capabilities do not propagate automatically.
 Wrapping does not imply lifecycle ownership.
 Invoking close commits permanent lifecycle termination; close itself cannot subsequently become cancelled.
