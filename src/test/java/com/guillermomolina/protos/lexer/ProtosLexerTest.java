@@ -689,6 +689,42 @@ class ProtosLexerTest {
     }
 
     @Test
+    void tripleDoubleCrOpeningAndClosingNewlinesAreRemovedAtomically() {
+        String source = "\"\"\"\ralpha\rbeta\r\"\"\"";
+        assertEquals(
+            List.of(token(TokenType.STRING, "alpha\rbeta"), token(TokenType.EOF, "")),
+            lex(source)
+        );
+    }
+
+    @Test
+    void tripleDoubleCrLfOpeningAndClosingNewlinesAreRemovedAtomically() {
+        String source = "\"\"\"\r\nalpha\r\nbeta\r\n\"\"\"";
+        assertEquals(
+            List.of(token(TokenType.STRING, "alpha\r\nbeta"), token(TokenType.EOF, "")),
+            lex(source)
+        );
+    }
+
+    @Test
+    void tripleDoubleStringsUseTheSameCoreEscapeSet() {
+        assertEquals(
+            List.of(
+                token(TokenType.STRING, "a\nA\t\"\\'"),
+                token(TokenType.EOF, "")
+            ),
+            lex("\"\"\"a\\n\\u{41}\\t\\\"\\\\\\'\"\"\"")
+        );
+        for (String source : List.of(
+            "\"\"\"\\q\"\"\"",
+            "\"\"\"\\x41\"\"\"",
+            "\"\"\"\\u{}\"\"\""
+        )) {
+            assertThrows(ProtosLexer.LexicalError.class, () -> lex(source), source);
+        }
+    }
+
+    @Test
     void tripleDoubleClosingDelimiterDefinesExactStructuralIndentation() {
         String source = "\"\"\"\n\t alpha\n\t   beta\n\t \n\t \"\"\"";
         assertEquals(
