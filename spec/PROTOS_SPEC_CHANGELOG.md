@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.162] - 2026-09-03
+
+### Fixed
+- Removed stale `ByteReadable` cancellation/failure wording that still claimed
+  all pending reads were globally ordered by invocation.
+- Made preservation after cancellation/failure follow the same input-consumption
+  order already defined for the receiver: Protos invocation order where one
+  exists, otherwise the stable routing/admission order chosen for genuinely
+  concurrent cross-Actor reads.
+- Prevented section 5.1 from contradicting the cross-Actor ordering semantics
+  introduced for shared ByteReadable receivers.
+- Preserved the existing no-bypass rule for bytes retained after a failed or
+  cancelled earlier read.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 162. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.161] - 2026-09-03
 
 ### Fixed

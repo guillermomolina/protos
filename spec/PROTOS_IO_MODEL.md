@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 161
+Document revision: 162
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -205,7 +205,7 @@ If an implementation has already obtained bytes from an operating-system, host, 
 
 For a receiver whose reads share a logical sequence position, cancellation or failure leaves that logical position unchanged. An implementation whose backend position advanced while obtaining bytes that are subsequently preserved must virtualize, rebuffer, reposition, or otherwise reconcile the backend so later Protos operations observe the unchanged logical position.
 
-Pending reads are logically ordered by invocation. Cancelling or failing an earlier read does not allow a later outstanding read to consume bytes that the earlier outcome was required to preserve before those bytes are again available in logical order.
+Pending reads retain the logical input-consumption order established above. For reads with a Protos-defined invocation order, that is the preserved invocation order; for genuinely concurrent cross-Actor reads, it is the stable order chosen by routing/admission. Cancelling or failing the earlier read in that established order does not allow a later outstanding read to consume bytes that the earlier outcome was required to preserve before those bytes are again available in logical order.
 
 A later seek or other operation that explicitly changes the receiver's sequence state may make preserved read-ahead irrelevant according to that operation's normal semantics; this is not permission to expose an intermediate host position or to duplicate preserved bytes.
 
@@ -1500,6 +1500,7 @@ A failed flush never authorizes duplicate replay; an output wrapper with unknowa
 EOF != unavailable capability != I/O failure
 A failed ByteReadable read consumes zero observable bytes and leaves the logical sequence position unchanged; any bytes already obtained are preserved for later logical reading.
 Distinct Actor-local proxies for one ByteReadable input sequence share one consumption-ordering domain: per-Actor invocation order is preserved, while genuinely concurrent cross-Actor reads are initially unordered but stably ordered once admitted.
+ByteReadable cancellation/failure preservation follows that same established input order; it does not reintroduce a nonexistent global cross-Actor invocation order.
 ByteSeekable seek operations are failure-atomic with respect to logical position; failed or successfully cancelled seeks leave that position unchanged.
 
 Path is a value, not filesystem authority.
