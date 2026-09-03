@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 206
+Document revision: 207
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3880,6 +3880,100 @@ Implementations may cache grapheme boundaries, specialize common ASCII/Latin tex
 
 Encoded text representations are ordinary objects whose mutability is protocol-defined. The runtime must not infer writability merely from the fact that an object contains bytes or represents text.
 
+
+### Standard Bytes indexed-state semantics
+
+Standard Bytes primitives operate on receiver-owned finite dense octet state.
+
+Conceptually:
+
+```text
+function requireBytesReceiver(receiver):
+    if not ownsStandardBytesState(receiver):
+        signal an Error for incompatible standard Bytes receiver
+
+    return receiver
+
+function requireBytesIndex(bytes, index):
+    if not isSemanticIntegerValue(index):
+        signal an Error for invalid Bytes index
+
+    i = mathematicalIntegerValue(index)
+
+    if i < 0 or i >= bytesLength(bytes):
+        signal an Error for Bytes index out of bounds
+
+    return i
+
+function requireOctetValue(value):
+    if not isSemanticIntegerValue(value):
+        signal an Error for invalid byte value
+
+    n = mathematicalIntegerValue(value)
+
+    if n < 0 or n > 255:
+        signal an Error for byte value out of range
+
+    return n
+```
+
+These are semantic checks, not user-message sends. They perform no conversion,
+parsing, equality, hashing, text decoding, or host-integer coercion.
+
+The standard read is equivalent to:
+
+```text
+function standardBytesAt(receiver, index):
+    bytes = requireBytesReceiver(receiver)
+    i = requireBytesIndex(bytes, index)
+
+    return semanticIntegerFromMathematicalValue(
+        byteAt(bytes, i)
+    )
+```
+
+`byteAt` yields the stored octet's mathematical value in `0 .. 255`.
+`semanticIntegerFromMathematicalValue` does not require a particular fixed-width
+Integer family and must not expose host byte signedness.
+
+The standard update is equivalent to:
+
+```text
+function standardBytesAtPut(receiver, index, value):
+    bytes = requireBytesReceiver(receiver)
+
+    if bytes.state == frozen:
+        signal FrozenObject(bytes)
+
+    i = requireBytesIndex(bytes, index)
+    octet = requireOctetValue(value)
+
+    setByteAt(bytes, i, octet)
+    return value
+```
+
+`setByteAt` replaces one existing octet only. It does not append, resize, create
+holes, shift bytes, mutate ordinary local slots, or reinterpret the octet as
+text.
+
+The frozen-state check precedes index and byte-value validation because no
+successful byte mutation is possible on a frozen receiver. Receiver and
+argument expressions have already been evaluated under ordinary call
+evaluation; their prior effects are not rolled back.
+
+A closed Bytes object permits replacement because indexed length and structure
+do not change. A frozen Bytes object does not. Read-only access is unaffected by
+open/closed/frozen state.
+
+Implementations may store bytes in signed host byte types, unsigned host byte
+types, packed words, native buffers, segmented storage, copy-on-write storage,
+or other forms. Host signedness, alignment, endian order of wider machine words,
+capacity, and storage representation must not change the observable octet value
+or index semantics.
+
+This rule adds no resizing or construction surface. Standard Bytes equality and
+hashing remain the ordinary identity-based defaults unless user code explicitly
+overrides those ordinary messages.
 
 ## Map and Hash Runtime Semantics
 

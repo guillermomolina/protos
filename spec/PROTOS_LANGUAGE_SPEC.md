@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 206
+Document revision: 207
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3607,6 +3607,105 @@ The resulting String is conceptually:
 "one\n       \ntwo"
 ```
 
+
+### Standard Bytes indexed semantics
+
+A standard `Bytes` object is an identity-bearing mutable object with
+receiver-owned byte-sequence state. Its byte contents are distinct from its
+ordinary local slots.
+
+At any observation point, standard Bytes state is a finite dense sequence of
+octets with logical indices:
+
+```text
+0, 1, 2, ... byteLength - 1
+```
+
+Each stored octet has the mathematical value range `0 .. 255`. Bytes carry no
+implicit text, character, signed-integer, Unicode, or host-native interpretation.
+
+The standard indexed read:
+
+```js
+bytes.at(index)
+```
+
+requires `index` to be a semantic `Integer`. Any Integer family is accepted by
+its mathematical Integer value. No Float-to-Integer conversion, String parsing,
+truncation, wrapping, modulo reduction, or host-sized coercion is performed.
+The index must satisfy:
+
+```text
+0 <= index < current byteLength
+```
+
+Otherwise the operation signals an `Error`.
+
+A successful read returns a semantic `Integer` whose mathematical value is the
+stored octet value in `0 .. 255`. Core does not require one fixed-width Integer
+family such as `UInt8` for this result; observable correctness is the exact
+mathematical Integer value.
+
+The standard indexed update:
+
+```js
+bytes.atPut(index, value)
+```
+
+requires the same valid semantic Integer index and additionally requires
+`value` to be a semantic `Integer` with mathematical value in `0 .. 255`.
+Invalid value objects and out-of-range Integers signal an `Error`; the standard
+operation never truncates, masks, wraps, takes modulo 256, parses text, or
+coerces a Float.
+
+A successful `atPut` replaces exactly the existing octet at that position,
+changes no other position, leaves the byte-sequence length unchanged, and
+returns the exact `value` object supplied to the invocation.
+
+Consequently:
+
+```js
+bytes[index]          // standard bytes.at(index)
+bytes[index] = value  // standard bytes.atPut(index, value)
+```
+
+use those same contracts, while indexed assignment itself retains the general
+language rule that the assignment expression evaluates to the assigned value.
+
+Standard Bytes indexed behavior applies only to an original receiver that owns
+standard Bytes byte-sequence state. Delegation, copying, aliasing, composition,
+or otherwise obtaining a standard Bytes method does not confer byte storage on
+an ordinary object and does not redirect access to an ancestor's Bytes state.
+An incompatible receiver signals an `Error` before byte-indexed work.
+
+Byte replacement follows the ordinary object-state boundary:
+
+```text
+open Bytes
+    -> existing octets may be replaced
+
+closed Bytes
+    -> existing octets may still be replaced
+
+frozen Bytes
+    -> octet replacement is prohibited
+```
+
+Closing or freezing is shallow. For standard `atPut`, a receiver already frozen
+when the standard method begins signals an `Error` before index/value
+validation or byte mutation. A closed Bytes object still validates the index
+and value and may replace an existing octet. Read-only `at` remains available
+on open, closed, and frozen Bytes.
+
+This rule defines only the already-existing standard indexed protocol. It does
+not introduce byte literals, resizing, append, insert/remove, slicing, numeric
+endianness, text decoding, or a second binary-buffer hierarchy. Such facilities
+require explicit protocols if standardized separately.
+
+Standard Bytes `==` and `hash` remain governed by the existing Core default for
+identity-bearing objects. Two distinct Bytes objects do not become equal merely
+because their current octets are equal, and ordinary standard hashing does not
+traverse byte contents.
 
 ## String Indexing, Mutability, and Encoded Representations
 

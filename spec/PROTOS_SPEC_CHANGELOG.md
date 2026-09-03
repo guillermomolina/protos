@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.207] - 2026-09-03
+
+### Fixed
+- Defined standard Bytes indexed state as receiver-owned, finite, dense,
+  zero-based octet storage.
+- Defined `Bytes.at` to require an exact semantic Integer index and to return
+  the stored octet as an exact semantic Integer in `0 .. 255`.
+- Defined `Bytes.atPut` to require an in-range Integer index and Integer byte
+  value in `0 .. 255`, rejecting truncation, masking, wrapping, parsing, and
+  implicit conversion.
+- Defined standard byte replacement as fixed-length existing-position mutation,
+  with receiver-domain and open/closed/frozen behavior parallel to other
+  receiver-owned indexed state.
+- Kept Bytes equality/hash identity-based and separated raw-octet semantics from
+  text, host byte signedness, endianness, and storage representation.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 207.
+  Only `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain
+  normative semantic content in this revision.
+
 ## [0.1.206] - 2026-09-03
 
 ### Closed
