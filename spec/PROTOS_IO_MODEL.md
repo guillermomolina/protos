@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 176
+Document revision: 177
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -1025,9 +1025,23 @@ The standard Protos append contract does not promise stronger non-interleaving w
 
 Writes invoked on the same receiver still preserve their required invocation ordering.
 
-### 18.4 File capabilities by mode
+### 18.4 File resource identity and capabilities by mode
+
+A successful `filesystem.open(path, options)` binds the returned `File` to the concrete filesystem resource selected by that open operation. The `Path` used to open it is not a continuing lookup instruction and is not the identity of the returned `File`.
+
+After successful open, subsequent namespace changes do not retarget the `File`. Renaming, removing, replacing, relinking, or otherwise changing the directory entry used to reach an already-open resource does not make that `File` begin referring to the newly named or newly created resource. Operations on the `File` continue to apply to the resource selected by the successful open, subject to that resource's own backend semantics and to independently authorized changes to that resource's contents.
+
+Conversely, opening the same `Path` again is a new resource-acquisition operation. The resulting `File` is a distinct capability with its own lifecycle and, when applicable, its own logical sequence position. Two `File` values obtained by separate successful opens are not required to share a cursor, buffering state, lifecycle, shutdown state, or I/O ordering domain merely because their opens used equal `Path` values.
+
+Two separately opened `File` capabilities may nevertheless refer to the same underlying resource according to the Filesystem's namespace semantics, including through aliases such as hard links or other backend-equivalent names. Such aliasing does not merge the Protos `File` objects or create a new global ordering domain. Observable interactions between independently opened capabilities are governed by the resource/backend semantics and the Protos ordering rules for each logical receiver, not by `Path` equality.
+
+If the backend cannot maintain a stable binding from the successful open to the selected resource for the lifetime of the returned `File`, or cannot otherwise emulate the required stable-resource semantics, it must not expose that resource as the standard `File` capability merely because the host API returned a handle-like value.
+
+This rule does not require exposing a portable numeric inode, file ID, handle, descriptor, or other host identity token. Resource identity is a semantic property of the open `File` capability and remains distinct from portable `Path` equality.
 
 Open mode determines the access capabilities that a successful standard `File` must expose; backend semantics determine which orthogonal optional file capabilities can additionally be exposed honestly.
+
+A successful File open binds the File to the selected resource rather than to a continuing Path lookup; later namespace changes do not retarget it, while separate opens remain separate capabilities even when they select the same underlying resource.
 
 A readable File exposes `ByteReadable` and `Closable`.
 

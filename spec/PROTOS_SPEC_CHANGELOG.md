@@ -4,6 +4,31 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.177] - 2026-09-03
+
+### Fixed
+- Defined successful `File` open as a binding to the concrete filesystem
+  resource selected by that open operation rather than to a continuing Path
+  lookup.
+- Required namespace changes after open, including rename, removal,
+  replacement, relinking, or equivalent directory-entry changes, not to
+  retarget an already-open standard `File`.
+- Distinguished separate successful opens as separate File capabilities with
+  independent lifecycle, cursor, buffering, shutdown, and logical ordering
+  state unless a stronger protocol explicitly couples them.
+- Allowed separately opened Files to select the same underlying resource through
+  filesystem aliases without merging their Protos capabilities or inventing a
+  global ordering domain.
+- Kept resource identity semantic and opaque: no portable inode, file ID,
+  descriptor, handle, or other host identity token is introduced.
+- Required a backend that cannot preserve or emulate stable resource binding
+  not to expose the weaker host handle as a standard `File` capability.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 177. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.176] - 2026-09-03
 
 ### Fixed
