@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 130
+Document revision: 131
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3727,6 +3727,50 @@ The ordinary `hash` operation is not required to be stable across separate proce
 
 `IdentityMap` follows the same insertion-order rule unless a more specialized collection explicitly documents otherwise.
 
+
+
+### Reentrant mutation during `Map` key comparison
+
+A normal `Map` search may execute user-defined `==` behavior while it is
+examining candidate entries. That callback is ordinary Protos code, but it must
+not make the candidate sequence of the same in-progress search depend on the
+implementation's table iterator.
+
+While a `Map` is executing a `queryKey == storedKey` comparison on behalf of a
+search of that same Map, any operation that would mutate that Map's entry set,
+entry values, recorded hashes, or insertion-order state signals an `Error`
+before performing the Map mutation.
+
+This restriction is scoped to the particular Map and only to the dynamic extent
+of its key-comparison callback. It does not block:
+
+- mutation of unrelated Maps;
+- mutation of the query or stored key objects themselves;
+- mutation of objects stored as Map values;
+- read-only operations on the same Map;
+- ordinary non-Map slot mutation that does not alter the Map's keyed-entry
+  state.
+
+If the attempted reentrant Map mutation signals an error that user code handles,
+the comparison may continue and return a Boolean in the ordinary way. If the
+error escapes the comparison, the outer Map operation fails. No Map-entry
+mutation attempted while the restriction was active has occurred.
+
+The query key's `hash` call happens before candidate comparison begins. Effects
+performed by `hash`, including mutations of the target Map, complete according
+to ordinary semantics before the search examines its candidate entries.
+Consequently the candidate search observes the Map state that exists after the
+query hash has returned. The Map's own requested mutation, if any, still occurs
+only after key search succeeds as specified elsewhere.
+
+Mutation of key objects during `hash` or `==` remains governed by the existing
+mutable-key rules: the query hash is computed once, stored entries retain their
+recorded hashes, and later equality comparisons use then-current key behavior.
+
+The implementation may enforce the comparison restriction with an operation
+stack, reentrancy flag, iterator discipline, or any other mechanism. No
+Actor-wide lock, global lock, snapshot copy of the Map, or permanent per-entry
+metadata is required by Core semantics.
 
 ## Future Cancellation
 

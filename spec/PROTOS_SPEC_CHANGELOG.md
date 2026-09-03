@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.131] - 2026-09-03
+
+### Fixed
+- Defined reentrant mutation of a Map's keyed-entry state during that Map's
+  user-defined key-equality callback to signal an Error before mutation.
+- Scoped the restriction to the particular Map and comparison dynamic extent,
+  preserving unrelated Map mutation and read-only same-Map operations.
+- Defined query-key `hash` effects to complete before candidate traversal, so
+  target-Map mutations performed by `hash` are observed deterministically by
+  the subsequent search.
+- Preserved mutable-key semantics while preventing live hash-table iterator,
+  rehashing, or bucket-layout behavior from leaking into language semantics.
+- Avoided requiring snapshots, global locks, Actor-wide locks, or permanent
+  per-entry reentrancy metadata.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 131.
+  No grammar, Actor/Future, or I/O semantics change.
+
 ## [0.1.130] - 2026-09-03
 
 ### Fixed

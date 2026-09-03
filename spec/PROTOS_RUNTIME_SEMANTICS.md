@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 130
+Document revision: 131
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3368,6 +3368,81 @@ use `findMapEntry`.
 `hash` values need only be valid within the current execution. The runtime may salt hashes per process. Persisted hash values must therefore not rely on the ordinary `hash` protocol.
 
 Map iteration preserves insertion order as an observable collection property.
+
+
+### Reentrant Map mutation during equality callbacks
+
+The deterministic Map search has a protected comparison phase for the Map whose
+entries are being searched.
+
+Conceptually:
+
+```text
+function compareMapCandidate(map, queryKey, storedKey):
+    enterMapComparison(map)
+
+    try:
+        result = send(queryKey, "==", [storedKey])
+
+        if result !== true and result !== false:
+            signal InvalidEqualityResult(result)
+
+        return result
+    finally:
+        leaveMapComparison(map)
+```
+
+`enterMapComparison(map)` is dynamically nestable. While its depth for `map` is
+greater than zero, every primitive operation that would mutate `map`'s keyed
+entry state must fail before mutation:
+
+```text
+function requireMapEntryMutationAllowed(map):
+    if mapComparisonDepth(map) > 0:
+        signal ReentrantMapMutation(map)
+```
+
+`ReentrantMapMutation` is pseudocode notation unless another normative
+specification explicitly defines that name as a standard error prototype; the
+normative requirement is that an `Error` is signaled before the attempted
+Map-entry mutation.
+
+The check applies to adding an entry, removing an entry, clearing entries,
+replacing an entry value, changing a recorded hash, or changing insertion-order
+state. Implementations must perform the check before any such mutation.
+
+The check is per Map, not Actor-global. It does not prohibit read-only searches
+of the same Map or any operation on another Map. Nested read-only searches may
+therefore create nested comparison scopes for the same Map.
+
+`findMapEntry` computes and validates the query hash before entering any
+candidate comparison:
+
+```text
+queryHash = requireHashResult(send(queryKey, "hash", []))
+```
+
+No comparison restriction is active merely because this hash call belongs to a
+Map operation. If that user-defined `hash` behavior mutates the target Map, those
+effects occur before the subsequent candidate traversal and are visible to it.
+
+The candidate traversal then uses `compareMapCandidate`:
+
+```text
+for entry in map.entriesInInsertionOrder:
+    if entry.recordedHash == queryHash:
+        if compareMapCandidate(map, queryKey, entry.key):
+            return entry
+```
+
+Because keyed-entry mutation of that Map cannot occur during each user equality
+callback, the implementation cannot expose live-table iterator invalidation,
+rehashing, bucket relocation, or implementation-specific concurrent-modification
+behavior through the outer search.
+
+Mutation of the key objects themselves is not intercepted by this mechanism.
+The already-defined recorded-hash and current-equality rules remain
+authoritative.
 
 ## Custom Operator Runtime Note
 
