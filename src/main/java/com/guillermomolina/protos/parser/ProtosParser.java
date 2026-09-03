@@ -33,6 +33,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceMember;
 import com.guillermomolina.protos.parser.ast.SurfaceNonLocalReturn;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
+import com.guillermomolina.protos.parser.ast.SurfaceSuperSend;
 import com.guillermomolina.protos.parser.ast.SurfaceUnary;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.source.SourceSpan;
@@ -268,9 +269,37 @@ public final class ProtosParser {
             case THIS -> intrinsic(SurfaceIntrinsic.Kind.THIS);
             case CONTEXT -> intrinsic(SurfaceIntrinsic.Kind.CONTEXT);
             case ARGS -> intrinsic(SurfaceIntrinsic.Kind.ARGS);
+            case SUPER -> parseSuperMessageSend();
             case LPAREN -> parseParenthesized();
             default -> throw ParseError.expected("a primary expression", token);
         };
+    }
+
+    private SurfaceExpression parseSuperMessageSend() {
+        TokenOccurrence superToken = cursor.consume(TokenType.SUPER, "'super'");
+        cursor.consume(TokenType.DOT, "'.'");
+        TokenOccurrence message = consumeMemberName();
+        cursor.consume(TokenType.LPAREN, "'('");
+        consumeNewlines();
+
+        List<SurfaceArgument> arguments = new ArrayList<>();
+        if (!cursor.at(TokenType.RPAREN)) {
+            arguments.add(parseArgument());
+            consumeNewlines();
+
+            while (cursor.at(TokenType.COMMA)) {
+                cursor.advance();
+                consumeNewlines();
+                arguments.add(parseArgument());
+                consumeNewlines();
+            }
+        }
+
+        TokenOccurrence close = cursor.consume(TokenType.RPAREN, "')'");
+        return new SurfaceSuperSend(
+                message.token().lexeme(),
+                arguments,
+                new SourceSpan(superToken.span().startOffset(), close.span().endOffset()));
     }
 
     private SurfaceExpression parseParenthesized() {
