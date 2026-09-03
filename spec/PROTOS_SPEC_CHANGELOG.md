@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.174] - 2026-09-03
+
+### Fixed
+- Defined a receiver-visible `shutdownWrite()` cutover for one logical output
+  direction rather than leaving concurrent write/shutdown outcomes to native
+  scheduling.
+- Preserved Protos-defined ordering: a write ordered before shutdown remains an
+  accepted preceding operation and shutdown waits behind it.
+- Required a write ordered after the write-shutdown cutover to fail with zero
+  byte contribution rather than racing a later backend/native write.
+- Defined genuinely concurrent cross-Actor write/shutdown requests as initially
+  unordered, with routing/admission choosing one stable relative order.
+- Required that stable choice to decide whether the competing write is accepted
+  before shutdown or rejected after the cutover.
+- Shared the cutover across Actor-local proxies for the same output direction
+  without imposing a global Actor scheduler order or one native syscall at a
+  time.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 174. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.173] - 2026-09-03
 
 ### Fixed

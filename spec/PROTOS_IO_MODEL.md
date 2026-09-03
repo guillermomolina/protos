@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 173
+Document revision: 174
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -1075,7 +1075,15 @@ Both operations return Futures. On successful completion, each operation resolve
 
 Invoking `shutdownWrite()` is itself the irreversible commitment boundary for the output-direction lifecycle. Before the returned Future is observable, the receiver has entered a permanent write-shutting-down state and accepts no new writes. That transition cannot be rolled back, so the shutdown Future cannot subsequently become `cancelled`. Cancellation of an activation waiting for it does not cancel or reopen the committed shutdown lifecycle.
 
-`shutdownWrite()` establishes an end-of-output frontier after writes invoked before it. Those writes retain the opportunity to complete, and shutdown waits behind them.
+`shutdownWrite()` has a receiver-visible output cutover point: the irreversible transition into `write-shutting-down`. Writes and write shutdown that target the same logical output direction are ordered relative to that cutover rather than by host/native completion timing.
+
+When a write and `shutdownWrite()` have a Protos-defined order, that order is preserved. In particular, a write issued earlier by one Actor on the same logical output flow is admitted before a later shutdown from that Actor even when the write Future is still pending. That accepted write retains the opportunity to complete, and shutdown waits behind it.
+
+A write ordered after the write-shutdown cutover is not accepted as output work: it fails under the receiver's write-shut-down lifecycle and contributes zero bytes. It does not race the shutdown by starting a later native write merely because backend scheduling happens to run it first.
+
+For a write and shutdown request that are genuinely concurrent because they originate from independently progressing Actors through Actor-safe proxies, Protos defines no predetermined cross-Actor arrival order. Routing/admission may choose either request first. If the write is admitted first, it becomes preceding accepted output and shutdown waits behind it; if shutdown establishes the cutover first, the competing write is rejected with zero contribution. Once that relative order is chosen, host scheduling cannot retroactively move the write across the cutover.
+
+The cutover is a logical output-direction property shared by proxies that denote that same direction. It does not require one native syscall at a time and does not make proxy object identity an ordering primitive.
 
 Successful completion means that every required preceding output operation reached the outcome required for a clean frontier and that the underlying resource accepted the end-of-output frontier after that preceding output. It does not mean the peer application consumed the data.
 
@@ -1534,6 +1542,7 @@ Object unreachability/GC never semantically invokes close; deterministic resourc
 
 flush != sync != close != shutdownWrite
 Invoking read/write shutdown commits permanent termination of that direction; cancellation cannot reopen it, and a failed shutdown does not create a fresh retry lifecycle.
+Write shutdown has a logical cutover shared by one output direction: writes ordered before it remain accepted and are awaited, while writes ordered after it fail with zero contribution; genuinely concurrent cross-Actor write/shutdown requests are stably ordered by routing/admission.
 Read shutdown has an explicit cutover: read results committed before it survive, while every accepted but uncommitted read becomes local EOF (`null`); host callback timing cannot decide the boundary.
 A failed sync may leave an unknown subset durable, but does not itself poison the receiver; a later successful sync covers its entire later frontier without replaying logical data changes.
 A failed flush never authorizes duplicate replay; an output wrapper with unknowable downstream progress becomes unusable unless a stronger protocol makes exact recovery possible.
