@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.183] - 2026-09-03
+
+### Fixed
+- Defined the aftermath of a failed `ByteReadable.read` when lower-level bytes
+  were obtained and preserved before the failure outcome was reported.
+- Required preserved bytes to remain ordinary unread input while treating the
+  already-reported error as the outcome of the failed read, not as a queued
+  stream element that must automatically fail a later read again.
+- Required later reads to fail only when their then-current receiver/backend
+  state independently requires failure, including persistent or distinct
+  backend errors.
+- Prevented implementations from diverging solely over whether one previously
+  reported host error is replayed after preserved bytes are drained.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 183. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.182] - 2026-09-03
 
 ### Fixed

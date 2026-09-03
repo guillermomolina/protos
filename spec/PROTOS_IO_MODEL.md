@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 182
+Document revision: 183
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -224,6 +224,14 @@ If cancellation wins before commitment, the operation consumes no bytes from the
 A failed ordinary `ByteReadable.read` also consumes zero bytes from the receiver's observable input sequence. Failure is therefore not a partial-read result hidden behind a failed Future.
 
 If an implementation has already obtained bytes from an operating-system, host, or downstream source before the Protos read is cancelled or fails, those bytes must be preserved or rebuffered whenever they belong to that read's logical input position. They remain the earliest unread bytes of the observable sequence and must be returned by later successful reads before newer source bytes that follow them.
+
+An error already reported by the failed read is not itself an unread stream element and is not automatically replayed after those preserved bytes are later returned. The failed Future is the portable observation of that read's error outcome. After preserved bytes have been consumed in logical order, a later read is evaluated against the receiver's then-current protocol/backend state and fails only if that later operation independently encounters or inherits an error required by the concrete receiver's contract.
+
+Therefore an implementation must not synthesize a second failure merely to reproduce the same lower-level error that already caused the earlier Protos read Future to fail. Conversely, preserving bytes does not suppress a distinct or persistent backend error: if the receiver's actual state still requires a later read to fail, that later failure is reported normally.
+
+This rule deliberately separates byte-sequence preservation from error-event replay. It prevents two implementations from disagreeing solely because one models a previously reported host error as a queued input event while another treats it as the already-consumed outcome of the failed Protos operation.
+
+A failed ByteReadable read reports its error once as that operation's outcome; preserved bytes are replayed as input, but the already-reported error is not automatically replayed after them unless the later receiver state independently requires another failure.
 
 `read(maxBytes)` also bounds implementation-controlled speculative retention associated with that logical input flow. A standard `ByteReadable` implementation must have an effective finite bound on unread bytes, native-read results, bookkeeping, or equivalent state retained solely because it chose to read ahead beyond the bytes currently needed to satisfy accepted Protos reads. The numeric bound is implementation-specific and is not portable Protos behavior.
 
