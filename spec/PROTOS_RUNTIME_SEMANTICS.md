@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 158
+Document revision: 159
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -1808,20 +1808,32 @@ function recordFutureCancellationRequest(future):
         cancelPendingAdoption(future)
         return
 
-    if future.task != none and future.task is suspended:
-        scheduler.makeRunnableLater(future.task)
+    if future.task != none:
+        scheduler.ensureCancellationRunnable(future.task)
 ```
 
 `recordFutureCancellationRequest` is conceptual runtime bookkeeping, not a new
 language-visible Future operation. Every Core path that requests cancellation of
 a Future uses this same semantic operation.
 
+`scheduler.ensureCancellationRunnable(task)` is likewise conceptual and
+idempotent. If the task has not yet begun ordinary Protos execution, including
+when it is waiting for a semantic prerequisite before its first turn, it makes
+the task eligible to reach `beforeFirstProtosExecution(task)` without satisfying
+that prerequisite. If the task is already suspended, it makes the task eligible
+to reach `beforeResumeIntoProtos(task)` without satisfying the original wait
+condition. If the task is already runnable, it does not enqueue a duplicate
+semantic execution. If the task is currently executing ordinary non-suspending
+Protos code, it does not preempt it or create a new cancellation boundary; the
+request remains pending for the next portable boundary.
+
 The transition from no request to a pending cancellation request is idempotent.
-For a task that is already suspended, recording that first request makes the task
-runnable so the existing before-resume cancellation boundary can honor it. For a
-Future that is currently adopting another Future, adoption is itself the
-cancellation-aware pending operation, so the request may complete the destination
-as cancelled through `cancelPendingAdoption` without executing Protos code.
+For a task that has not yet started or is already suspended, recording that first
+request therefore makes the task cancellation-runnable so the applicable
+portable boundary can honor it. For a Future that is currently adopting another
+Future, adoption is itself the cancellation-aware pending operation, so the
+request may complete the destination as cancelled through
+`cancelPendingAdoption` without executing Protos code.
 
 If neither case applies, the request remains recorded for the task or
 producer-specific cancellation boundary that already governs that Future. In

@@ -4,6 +4,30 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.159] - 2026-09-03
+
+### Fixed
+- Defined cancellation of a not-yet-started asynchronous task to make that task
+  cancellation-runnable even when an unmet semantic prerequisite was preventing
+  its first turn.
+- Closed the `Future.then()` liveness hole where cancelling a continuation could
+  otherwise remain pending forever while its source Future never completed.
+- Required a cancelled pre-start `then()` continuation to reach the existing
+  first-execution cancellation boundary without inspecting or modifying its
+  still-pending source Future.
+- Generalized cancellation readiness through an idempotent conceptual scheduler
+  operation that also covers already-suspended tasks without duplicate semantic
+  execution.
+- Preserved cooperative cancellation: currently executing non-suspending Protos
+  code is not preempted and acquires no hidden cancellation boundary.
+- Preserved downstream-only cancellation: making a task cancellation-runnable
+  does not satisfy or cancel its unrelated prerequisite or upstream Future.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 159.
+
 ## [0.1.158] - 2026-09-03
 
 ### Fixed

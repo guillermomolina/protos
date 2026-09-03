@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 158
+Document revision: 159
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -253,10 +253,20 @@ Future.
 
 The first execution of every newly created asynchronous task is a portable
 cancellation-observation boundary before any ordinary Protos code in that task
-executes. Therefore, if the destination of `then()` has a pending cancellation
-request before its continuation begins its first turn, that request is honored
+executes. A cancellation request for a not-yet-started task must make that task
+eligible to reach this boundary even when the task was waiting for a semantic
+prerequisite that has not become ready. Cancellation does not satisfy, complete,
+or otherwise modify that prerequisite.
+
+Therefore, if the destination of `then()` is cancelled while its continuation is
+waiting for a still-pending source Future, the continuation becomes
+cancellation-runnable without waiting for the source. The request is honored
 before inspecting the source outcome or invoking `transform`; the destination
-becomes cancelled and `transform` is not invoked. This rule prevents scheduler
+becomes cancelled and `transform` is not invoked. The source Future remains
+unchanged.
+
+The same rule applies when the source had already completed but the continuation
+had not yet begun its first turn. This prevents scheduler or source-completion
 timing from deciding whether a never-started continuation nevertheless performs
 ordinary Protos side effects.
 
@@ -940,6 +950,14 @@ task eligible to resume for cancellation without waiting for the condition that
 originally suspended it to complete. Otherwise structured cancellation could
 wait forever for a child suspended on a Future, timer, I/O operation, or other
 condition that never becomes ready.
+
+Likewise, cancellation of a task that has been created but has not yet begun its
+first ordinary Protos instruction must not wait indefinitely for an unmet
+pre-start scheduling prerequisite. The task becomes eligible to reach its
+mandatory first-execution cancellation boundary without that prerequisite being
+made true. Making the task cancellation-runnable is idempotent and does not
+authorize duplicate execution, preemption of currently executing ordinary code,
+or satisfaction/cancellation of an unrelated prerequisite or upstream Future.
 
 This cancellation wake-up resumes only the waiting task's control flow. It does
 not by itself cancel, fail, complete, or otherwise modify the Future or other
