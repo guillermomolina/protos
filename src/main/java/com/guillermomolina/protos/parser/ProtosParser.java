@@ -76,7 +76,37 @@ public final class ProtosParser {
     }
 
     private SurfaceExpression parseExpressionFoundation() {
-        return parseLogicalOrFoundation();
+        SurfaceExpression expression = parseLogicalOrFoundation();
+
+        if (!cursor.at(TokenType.CUSTOM_OPERATOR)) {
+            return expression;
+        }
+
+        /*
+         * A standard binary expression and a custom binary expression are separate
+         * grammar alternatives. If the standard ladder already consumed an
+         * unparenthesized binary operator, leaving CUSTOM_OPERATOR unconsumed makes
+         * the mixed form fail at its enclosing grammar boundary.
+         */
+        if (expression instanceof SurfaceBinary) {
+            return expression;
+        }
+
+        return parseCustomBinaryFoundation(expression);
+    }
+
+    private SurfaceExpression parseCustomBinaryFoundation(SurfaceExpression expression) {
+        while (cursor.at(TokenType.CUSTOM_OPERATOR)) {
+            TokenOccurrence operator = cursor.advance();
+            consumeContinuationNewlines();
+            SurfaceExpression right = parseUnaryFoundation();
+            expression = new SurfaceBinary(
+                    expression,
+                    operator.token().lexeme(),
+                    right,
+                    new SourceSpan(expression.span().startOffset(), right.span().endOffset()));
+        }
+        return expression;
     }
 
     private SurfaceExpression parseLogicalOrFoundation() {

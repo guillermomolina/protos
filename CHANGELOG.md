@@ -8,6 +8,7 @@ For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_
 
 ### Added
 
+- Added parser support for the separate custom binary-operator precedence domain and its required standard/custom mixing errors.
 - Added deterministic parsing for the standard unary and binary operator precedence ladder.
 - Added parser support for same-line semicolon expression separators with the grammar-defined error cases.
 - Extended the parser foundation with parenthesized expressions, member access, calls, indexing, argument spread, and leading-dot continuation.
