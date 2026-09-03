@@ -50,18 +50,27 @@ public final class ProtosParser {
         consumeNewlines();
 
         if (!cursor.at(TokenType.EOF)) {
-            expressions.add(parseExpressionFoundation());
+            parseExpressionLine(expressions);
 
             while (cursor.at(TokenType.NEWLINE)) {
                 consumeNewlines();
                 if (!cursor.at(TokenType.EOF)) {
-                    expressions.add(parseExpressionFoundation());
+                    parseExpressionLine(expressions);
                 }
             }
         }
 
         cursor.consume(TokenType.EOF, "end of source");
         return new SurfaceSequence(expressions, sequenceSpan(expressions));
+    }
+
+    private void parseExpressionLine(List<SurfaceExpression> expressions) {
+        expressions.add(parseExpressionFoundation());
+
+        while (cursor.at(TokenType.SEMICOLON)) {
+            cursor.advance();
+            expressions.add(parseExpressionFoundation());
+        }
     }
 
     private SurfaceExpression parseExpressionFoundation() {
