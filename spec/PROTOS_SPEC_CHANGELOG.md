@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.195] - 2026-09-03
+
+### Fixed
+- Defined the lifetime of the same-Map keyed-entry mutation restriction when a
+  user `==` callback explicitly suspends.
+- Required an in-progress Map comparison scope to remain active across Actor
+  turns until that comparison returns or unwinds.
+- Defined conflicting keyed-entry mutation by another Actor-local task to fail
+  before mutation rather than race with the suspended search or wait on a lock.
+- Preserved read-only same-Map work, unrelated Map mutation, ordinary Actor
+  scheduling, and exact scope release on return/error/non-local-return/cancellation
+  unwind.
+- Distinguished Map-scoped comparison protection from task-local dynamic error
+  handlers without introducing cross-Actor synchronization.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 195.
+  `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
+  `PROTOS_CONCURRENCY_MODEL.md` gain normative semantic content in this revision.
+
 ## [0.1.194] - 2026-09-03
 
 ### Fixed

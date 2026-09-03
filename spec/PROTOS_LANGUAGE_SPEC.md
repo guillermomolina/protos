@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 194
+Document revision: 195
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -4560,6 +4560,56 @@ hasSlot(name)
 
 slotNames()
     returns the names of the receiver's local slots.
+
+### Map comparison restriction across suspension
+
+A normal `Map` candidate equality comparison is ordinary Protos code and may
+reach an explicit suspension point. Suspension does not end, mask, or transfer
+the same-Map comparison restriction.
+
+If a `queryKey == storedKey` comparison suspends while executing on behalf of a
+search of a particular Map, that Map remains under the existing keyed-entry
+mutation restriction until the comparison invocation completes normally or
+leaves through ordinary unwind. Other runnable Actor-local work may execute
+while the comparison is suspended, but any such work that attempts to mutate
+that same Map's keyed-entry state signals the same reentrant-mutation `Error`
+before mutation.
+
+The restriction therefore follows the lifetime of the in-progress comparison,
+not merely the currently executing Actor turn or task segment. It remains
+Map-specific and does not prevent:
+
+- other Actor-local tasks from running;
+- read-only operations on that Map;
+- mutation of unrelated Maps;
+- mutation of key objects or objects stored as values;
+- ordinary non-Map slot mutation that does not alter that Map's keyed-entry
+  state.
+
+A read-only same-Map search started by another Actor-local task while the
+comparison is suspended executes under the already-active restriction. Its own
+query-key `hash` call therefore cannot mutate that Map merely because the new
+search has not yet entered one of its own candidate comparisons.
+
+The restriction is not a blocking lock. A conflicting keyed-entry mutation
+fails according to the existing reentrant-mutation rule; it does not wait for
+the suspended comparison to resume. No global Actor or execution-wide exclusion
+is introduced.
+
+When the suspended comparison later resumes, the same restriction is still
+active. Normal return, error unwind, non-local return, or cancellation unwind
+that leaves the comparison releases that comparison's contribution to the
+restriction exactly once. An implementation must not leave the Map permanently
+restricted after the comparison has ceased to exist.
+
+This rule deliberately avoids snapshotting the Map's keyed-entry state across a
+suspending equality callback and avoids letting unrelated Actor-local
+interleaving silently change the candidate associations of an already-active
+comparison. A key equality implementation that suspends for an unbounded time
+can consequently keep that particular Map mutation-restricted for the same
+unbounded time; this is an observable consequence of choosing to suspend inside
+a protocol whose dynamic extent protects that Map, not permission for the
+runtime to block unrelated Actor work.
 
 ### Deterministic `slotNames()` ordering
 

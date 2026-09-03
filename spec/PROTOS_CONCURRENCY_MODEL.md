@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 194
+Document revision: 195
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -212,6 +212,44 @@ This rule prevents handler installation from becoming hidden Actor-wide state,
 prevents unrelated task failures from being intercepted by another task's
 temporary scope, and avoids retaining a creator's dynamic stack for the lifetime
 of asynchronously spawned work.
+
+### Map comparison scopes and Actor-local suspension
+
+The language-level Map comparison restriction composes with Actor reentrancy at
+explicit suspension points.
+
+A task that suspends inside a standard normal-`Map` key equality comparison
+releases the Actor execution segment in the ordinary way, so other runnable
+Actor-local work may execute. It does **not** release the Map-specific
+keyed-entry mutation restriction associated with that in-progress comparison.
+
+Consequently, during the suspension:
+
+```text
+other task reads same Map
+    -> permitted
+
+other task mutates unrelated Map
+    -> permitted
+
+other task mutates same Map keyed-entry state
+    -> Error before mutation
+```
+
+This is intentionally narrower than Actor-wide exclusion and intentionally
+different from task-local dynamic error handlers. The comparison restriction
+protects one mutable Map's in-progress keyed search and is therefore visible to
+other tasks that attempt to mutate that same Map. Error-handler frames instead
+control which task catches an error and remain private to their task.
+
+No task waits for a comparison scope as part of this rule. The Actor remains
+free to schedule unrelated work, and conflicting Map mutation fails rather than
+introducing hidden blocking or lock acquisition.
+
+If the comparison's suspended task is later cancelled, ordinary cancellation
+resumption and unwind release the comparison scope. If it remains suspended
+indefinitely, the same Map may remain mutation-restricted indefinitely; this
+does not prevent unrelated Actor-local work or operations on unrelated Maps.
 
 ### Future `then()` continuations
 

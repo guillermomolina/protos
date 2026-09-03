@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 194
+Document revision: 195
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -4768,6 +4768,74 @@ hasSlot(name)
 
 slotNames()
     enumerate receiver.localSlots only
+
+### Map comparison-scope lifetime across suspension
+
+`mapComparisonDepth(map)` denotes active comparison invocations for the Map, not
+only comparison code that is currently consuming an Actor execution segment.
+
+Conceptually, entering a normal Map candidate comparison creates one
+Map-specific comparison-scope token:
+
+```text
+function compareMapCandidate(map, queryKey, storedKey):
+    scope = enterMapComparisonScope(map)
+
+    try:
+        return requireBooleanEqualityResult(
+            send(queryKey, "==", [storedKey])
+        )
+    finally:
+        leaveMapComparisonScope(scope)
+```
+
+`enterMapComparisonScope` increments the Map's active comparison restriction,
+and `leaveMapComparisonScope` removes exactly that contribution. The `finally`
+semantics above include normal return, error unwind, non-local return, and
+cancellation unwind.
+
+If `send(queryKey, "==", [storedKey])` explicitly suspends, the scope token
+remains live in the suspended continuation and the Map's active comparison
+count remains greater than zero. The Actor may execute another runnable task,
+but `requireMapEntryMutationAllowed(map)` in that task observes the still-active
+Map restriction and rejects a keyed-entry mutation before it occurs.
+
+The active count is therefore Map-scoped Actor state whose lifetime may span
+several Actor turns. It is not task-private in the sense used for dynamic error
+handlers. The scope token itself belongs to the comparison invocation so that
+unwind can release exactly the contribution it created.
+
+A different Actor cannot observe or contend on this state because mutable Map
+identity does not cross Actor boundaries. No cross-Actor lock or synchronization
+primitive is implied.
+
+A read-only search of the same Map remains permitted while another comparison
+scope is suspended. Because the Map's active comparison count is already
+positive, that nested or interleaved search's query-hash phase remains subject
+to `requireMapEntryMutationAllowed(map)` if its `hash` behavior attempts a
+same-Map keyed-entry mutation.
+
+Implementations may represent active comparison scopes with a depth counter,
+scope tokens, continuation metadata, or another mechanism. They must preserve
+the following observable invariants:
+
+```text
+active comparison exists for map
+    -> keyed-entry mutation of map fails before mutation
+
+comparison suspends
+    -> restriction remains active
+
+comparison resumes
+    -> same restriction continues
+
+comparison exits or unwinds
+    -> its contribution is released exactly once
+```
+
+This mechanism must not block the Actor scheduler or prevent unrelated tasks
+from executing. A conflicting mutation signals the existing Error rather than
+waiting on the comparison scope.
 
 ### `slotNames()` ordering
 
