@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 115
+Document revision: 116
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger

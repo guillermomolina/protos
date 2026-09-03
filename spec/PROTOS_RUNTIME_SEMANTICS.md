@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 115
+Document revision: 116
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3080,6 +3080,56 @@ Collisions remain permitted.
 The internal error names above are pseudocode notation unless another normative
 specification explicitly defines them as standard error prototypes; the
 normative requirement is that an invalid hash result signals an `Error`.
+
+### Primitive semantic identity hashing
+
+The runtime operation used by identity-sensitive machinery is:
+
+```text
+function identityHashOf(value):
+    return semanticIdentityHash(value)
+```
+
+`semanticIdentityHash` is a primitive semantic operation. It performs no Protos
+slot lookup, method binding, `send`, user closure invocation, or fallback to a
+slot named `identityHash`.
+
+Its result must satisfy the existing semantic-Integer result, stability,
+collision, and `===` coherence rules.
+
+If the standard prelude provides an ordinary method:
+
+```text
+Object.identityHash()
+```
+
+its standard behavior is conceptually:
+
+```text
+return identityHashOf(this)
+```
+
+An explicit source-level send such as `x.identityHash()` uses ordinary message
+dispatch and can therefore observe a user override. That override affects only
+that explicit message behavior.
+
+Identity-keyed collection machinery must instead behave conceptually as:
+
+```text
+queryIdentityHash = identityHashOf(queryKey)
+```
+
+and compare candidate keys with primitive `===`. It must not perform:
+
+```text
+send(queryKey, "identityHash", [])
+```
+
+nor any observationally equivalent overridable dispatch.
+
+Implementations may cache or lazily assign internal identity-hash data, provided
+that cache state is not Protos-visible and does not change the required semantic
+result.
 
 ### Deterministic `Map` key search
 

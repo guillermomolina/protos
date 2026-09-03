@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 115
+Document revision: 116
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3434,6 +3434,49 @@ boxing, allocation, interning, or representation. Neither `hash` nor
 Persistent, distributed, cryptographic, or interoperable hashing requires a
 separate explicit algorithm/protocol. Ordinary `hash` and `identityHash` do not
 define a persistent object identifier or externally stable fingerprint.
+
+### Identity-hash dispatch boundary
+
+Semantic identity hashing is non-overridable in the same sense as semantic
+identity itself.
+
+Core defines a primitive semantic operation, written conceptually as:
+
+```text
+identityHashOf(value)
+```
+
+`identityHashOf` is not a Protos message lookup and ordinary program code cannot
+replace, shadow, intercept, or override it. It returns the semantic `Integer`
+identity hash governed by the `identityHash` contract above.
+
+The standard prelude may expose ordinary convenience behavior such as:
+
+```js
+object.identityHash()
+```
+
+whose standard implementation returns `identityHashOf(this)`. Such an ordinary
+message remains subject to the normal Protos object model: a program may shadow
+or override the `identityHash` slot for explicit message sends.
+
+That customization does **not** redefine semantic identity hashing. In
+particular, `IdentityMap` uses `identityHashOf(key)` together with primitive
+`===`; it does not send the overridable `identityHash` message to a key.
+Overriding `key.identityHash()` therefore cannot change whether the key is found
+in an `IdentityMap`, create or remove identity-key collisions at the language
+level, or violate the invariant that semantically identical values have the same
+semantic identity hash.
+
+Likewise, implementation optimizations may compute or cache semantic identity
+hashes internally, but may not route `IdentityMap` behavior through user-defined
+message dispatch merely because the same spelling `identityHash` exists as a
+convenience protocol.
+
+This distinction does not create a second observable notion of identity:
+`identityHashOf` is the hash companion of the already non-overridable `===`
+relation. The ordinary `identityHash()` message is only a way to expose that
+primitive result when its standard implementation is used.
 
 Stable `hash`/`==` behavior remains the correctness contract for keys whose
 programmer intends ordinary associative-map behavior. Core nevertheless defines
