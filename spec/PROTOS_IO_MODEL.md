@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 190
+Document revision: 191
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -957,6 +957,18 @@ writeLine(text)
 Both operations return `Future` values resolving to the receiver on successful completion.
 
 Each `writeText(text)` invocation is one ordered logical text-write operation. `writeLine(text)` is likewise one logical text-write operation whose text payload is `text` followed by LF (`U+000A`). The LF is therefore part of the same operation for encoding validation and ordering; another operation on that TextWriter does not interleave between the text and its line terminator.
+
+All standard text-output operations accepted by one logical `TextWriter` share one encoder-state and output-ordering domain. `writeText()` and `writeLine()` do not race independent encoder states or independently ordered byte-output sequences merely because their Futures are simultaneously pending or because callers use distinct Actor-safe proxies for the same writer.
+
+When two text-write operations have a Protos-defined order, that order is preserved. In particular, text writes issued sequentially by one Actor are encoded and contribute output in that Actor's invocation order even when an earlier text-write Future remains pending. The later operation's encoding starts from the encoder state established by the earlier operation's specified terminal aftermath; it cannot bypass the earlier operation merely because validation or downstream byte I/O for the later request could run first.
+
+Text-write requests that are genuinely concurrent because they originate from independently progressing Actors through Actor-safe routing/proxies have no predetermined relative order. The writer/routing layer may admit either operation first. Once it chooses their relative order, that order is stable for complete-payload validation, encoder-state evolution, cancellation/failure aftermath, and target-visible byte contribution.
+
+This ordering is a logical TextWriter property, not a requirement to hold one host lock, allocate one complete encoded buffer, or perform one underlying byte write at a time. Implementations may validate, encode, stage, pipeline, or overlap downstream work when such machinery cannot change the chosen Protos text-operation order or make one operation observe an encoder state inconsistent with that order.
+
+If the TextWriter exposes `Flushable`, its flush frontier is ordered in this same logical text-output flow: encoded output belonging to text writes ordered before the frontier is covered according to the ordinary `Flushable` contract, while later text writes are not required to be propagated by that flush. If the TextWriter exposes `Closable`, the ordinary close cutover likewise applies to these text-write operations; object/proxy identity does not create an independent lifecycle domain.
+
+A TextWriter has one logical encoder/output ordering domain: per-Actor text-write invocation order is preserved, genuinely concurrent cross-Actor writes receive one stable routing/admission order, and any exposed flush/close lifecycle composes with that same ordered text flow.
 
 `writeLine(text)` uses LF as the canonical Protos line terminator and does not perform platform-native newline translation.
 

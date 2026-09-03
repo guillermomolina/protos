@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.191] - 2026-09-03
+
+### Fixed
+- Defined one logical encoder-state/output-ordering domain for all standard
+  `TextWriter.writeText()` and `writeLine()` operations on the same writer.
+- Preserved per-Actor text-write invocation order even while earlier Futures
+  remain pending.
+- Defined genuinely concurrent cross-Actor text writes as initially unordered,
+  with routing/admission choosing one stable order for encoding validation,
+  encoder-state evolution, cancellation/failure aftermath, and byte output.
+- Prevented host scheduling, speculative encoding, or downstream byte-I/O timing
+  from selecting a different observable encoder order.
+- Composed any `Flushable` frontier and `Closable` cutover exposed by a
+  TextWriter with that same logical text-output flow.
+- Kept implementation freedom for staging, pipelining, buffering, and
+  overlapping backend work without requiring a global lock or one native write
+  at a time.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 191. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.190] - 2026-09-03
 
 ### Fixed
