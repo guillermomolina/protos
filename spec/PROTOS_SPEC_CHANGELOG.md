@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.126] - 2026-09-03
+
+### Fixed
+- Defined standard `Truncatable.truncate` as failure-atomic with respect to the
+  sequence size and contents changed by that operation.
+- Prohibited a failed truncate from leaving a partially truncated observable
+  sequence state.
+- Defined truncation commitment only when the complete requested size-reduction
+  effect is established; after that point cancellation cannot undo it and the
+  truncate operation completes successfully.
+- Kept no-extension truncation requests as successful no-ops.
+- Required backends unable to provide or emulate failure-atomic truncation not to
+  expose standard `Truncatable` merely because the host offers a similarly named
+  primitive.
+- Kept independently authorized concurrent resource changes outside the
+  truncate operation's own failure-atomicity guarantee.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 126. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.125] - 2026-09-03
 
 ### Fixed

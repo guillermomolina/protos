@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 125
+Document revision: 126
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -473,7 +473,17 @@ Successful `truncate(size)` resolves to the receiver.
 
 Truncation does not change a `ByteSeekable` receiver's current position, even when that position becomes greater than the new EOF.
 
-Cancellation before commitment leaves sequence contents and size unchanged. A committed truncation cannot be undone by cancellation.
+Standard `Truncatable.truncate` is failure-atomic with respect to the sequence contents and size changed by that operation. If `truncate(size)` fails, the truncate operation itself contributes no change to the sequence size or contents. It does not expose a partially truncated intermediate size as the aftermath of a failed Future.
+
+For a size-reducing truncate, the operation commits only when the complete requested truncation effect has been established at its semantic boundary: the sequence size is `size` and content at positions greater than or equal to `size` has been discarded. Once that commitment occurs, cancellation cannot undo it and the truncate operation completes successfully rather than reporting a truncate failure after its complete semantic effect has committed.
+
+For a request whose `size` is greater than or equal to the sequence size at the operation's ordered evaluation point, the standard no-extension rule makes the operation a successful no-op; it does not acquire an irreversible content-change commitment merely by checking the size.
+
+Cancellation before commitment leaves sequence contents and size unchanged. Failure before commitment likewise leaves them unchanged. An implementation may perform tentative backend work before commitment only if it can keep that work from becoming a failed truncate's observable sequence effect.
+
+A backend that cannot provide or emulate this failure-atomic contract must not expose the standard `Truncatable` capability for that operation merely because it has a host primitive named truncate. A future stronger/different protocol may explicitly model partially effective resizing, but ordinary `Truncatable` does not.
+
+This failure-atomicity rule concerns effects attributable to the truncate operation itself. It does not freeze the resource against independently authorized concurrent writers or other operations; such independent changes retain their own ordering/authority semantics and may change the resource before or after the truncate's commitment point.
 
 Operations whose results depend on the same sequence contents, size, or position preserve the logical invocation ordering required by the concrete receiver.
 
@@ -1298,6 +1308,7 @@ I/O introduces no hidden Protos suspension point.
 ByteWritable.write captures its Bytes value snapshot at invocation.
 Later mutation of the caller's Bytes cannot change that write.
 A failed ByteWritable write contributes one contiguous prefix of its captured sequence; failure does not reveal that prefix length or make whole-write retry safe.
+Truncatable.truncate is failure-atomic: a failed truncate contributes no size/content change, and a backend unable to provide that contract does not expose standard Truncatable.
 Pending writes remain subject to finite end-to-end admission; write snapshots do not authorize unbounded retained output.
 Distinct proxies for one logical output flow share its ordering domain; concurrent successful writes are ordered as whole logical byte sequences, not byte-interleaved.
 
