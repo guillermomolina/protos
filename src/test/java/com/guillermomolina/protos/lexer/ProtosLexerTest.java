@@ -388,6 +388,65 @@ class ProtosLexerTest {
     }
 
     @Test
+    void decimalDigitSeparatorsApplyAcrossFractionAndExponentParts() {
+        assertEquals(
+            List.of(
+                token(TokenType.NUMBER, "1_2.3_4e5_6"),
+                token(TokenType.NUMBER, "7e8_9"),
+                token(TokenType.EOF, "")
+            ),
+            lex("1_2.3_4e5_6 7e8_9")
+        );
+        for (String source : List.of(
+            "1e_2", "1e2_", "1.2_e3", "0b1__0", "0o7_", "0xA__B"
+        )) {
+            assertThrows(ProtosLexer.LexicalError.class, () -> lex(source), source);
+        }
+    }
+
+    @Test
+    void rejectsEveryRepresentativeUnsupportedNumericSuffixAndRadixFloat() {
+        for (String source : List.of(
+            "1L", "1f", "1d", "1.0f", "2e3d", "0x1.8"
+        )) {
+            assertThrows(ProtosLexer.LexicalError.class, () -> lex(source), source);
+        }
+    }
+
+    @Test
+    void nanAndInfinityRemainOrdinaryIdentifiers() {
+        assertEquals(
+            List.of(
+                token(TokenType.IDENTIFIER, "NaN"),
+                token(TokenType.IDENTIFIER, "Infinity"),
+                token(TokenType.MINUS, "-"),
+                token(TokenType.IDENTIFIER, "Infinity"),
+                token(TokenType.EOF, "")
+            ),
+            lex("NaN Infinity -Infinity")
+        );
+    }
+
+    @Test
+    void punctuationDelimitersAndOperatorsRemainValidNumericTokenBoundaries() {
+        assertEquals(
+            List.of(
+                token(TokenType.NUMBER, "42"),
+                token(TokenType.COMMA, ","),
+                token(TokenType.NUMBER, "0xFF"),
+                token(TokenType.RBRACKET, "]"),
+                token(TokenType.NUMBER, "7"),
+                token(TokenType.PLUS, "+"),
+                token(TokenType.NUMBER, "8"),
+                token(TokenType.SEMICOLON, ";"),
+                token(TokenType.NUMBER, "9"),
+                token(TokenType.EOF, "")
+            ),
+            lex("42,0xFF] 7+8;9")
+        );
+    }
+
+    @Test
     void radixMemberAccessDotRemainsStructuralWhenNotFollowedByDecimalDigit() {
         assertEquals(
             List.of(
