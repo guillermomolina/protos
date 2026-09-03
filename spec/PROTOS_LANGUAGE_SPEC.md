@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 141
+Document revision: 142
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -212,6 +212,56 @@ this === 42
 Delegation guarantees lookup, not semantic membership in the parent's built-in value family. This revision introduces no coercion and no value inheritance: `answer + 1` is not specified to behave as numeric `43` merely because `answer` delegates to `42`. Whether inherited behavior can operate on a particular receiver follows the ordinary contract and behavior of the invoked message.
 
 `Object` is special only in the already-defined sense that it is the unique root and therefore has no parent itself. Being the root does not prevent `Object` from serving as the parent of another object; bare `{ ... }` already creates an object whose parent is `Object`.
+
+### Receiver domains of standard semantic-family behavior
+
+Ordinary delegation determines where a message is found and preserves the
+original receiver as `this`. It does not change the receiver's semantic value
+family.
+
+Unless a standard behavior explicitly defines itself as generic or declares a
+wider receiver domain, a behavior whose normative semantics are defined in
+terms of the receiver being a member of a semantic value family is applicable
+only when the original receiver is actually a semantic member of that family.
+For example, standard Number-family arithmetic, comparison, conversion, and
+numeric `hash` behavior require a semantic Number receiver; merely delegating to
+a Number value or Number-family prototype does not satisfy that receiver
+contract.
+
+If lookup finds such a standard family-specific behavior for an incompatible
+receiver, invocation signals an `Error` for the invalid receiver before any
+family-specific computation or family-specific state effect occurs. Argument
+evaluation and effects that occurred before invocation are not rolled back.
+
+Failure of the located behavior does not resume lookup at a more distant slot
+with the same name. In particular, the runtime must not skip an incompatible
+Number-family method and silently fall through to an `Object` method merely
+because the original receiver is not a Number. Lookup remains ordinary lookup;
+receiver-domain validation is part of the invoked behavior's contract.
+
+This rule does not impose family restrictions on user-defined behavior merely
+because that behavior is stored on, copied from, or inherited through an object
+associated with a built-in family. A program may shadow or override a standard
+family-specific message with ordinary behavior that intentionally accepts a
+different receiver domain. Likewise, standard behavior explicitly specified as
+generic remains governed by its own receiver contract.
+
+Consequently:
+
+```js
+answer: (42) {
+    description: "the answer"
+}
+
+answer === 42     // false
+answer.hash()     // ERROR if lookup selects the standard Number-family hash
+answer + 1        // ERROR if lookup selects standard Number-family arithmetic
+```
+
+The child may define its own `hash`, `==`, arithmetic, or other behavior when it
+wants semantics different from the inherited family-specific contract. No
+implicit coercion, value inheritance, fallback dispatch, or hidden family
+membership is introduced.
 
 ## 3. Slot Creation and Modification
 

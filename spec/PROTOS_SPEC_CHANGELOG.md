@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.142] - 2026-09-03
+
+### Fixed
+- Defined receiver-domain validation for standard behavior whose semantics
+  require membership in a built-in semantic value family.
+- Made delegation to a Number, String, or other family value/prototype
+  insufficient to grant that semantic-family membership.
+- Required incompatible receivers to signal an Error after ordinary lookup
+  selects the behavior, without ancestor fallback or implicit coercion.
+- Kept user-defined overrides ordinary and allowed standard behavior to be
+  generic only when its own normative contract explicitly says so.
+- Applied the rule explicitly to standard Number-family hashing and
+  family-specific arithmetic/comparison behavior while preserving
+  optimization freedom when receiver membership is already proven.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 142.
+  No grammar, Actor/Future, or I/O semantics change.
+
 ## [0.1.141] - 2026-09-03
 
 ### Fixed

@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 141
+Document revision: 142
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -216,6 +216,55 @@ A delegation parent cannot change after object creation.
 ```
 
 ---
+
+## 2.1 Standard semantic-family receiver validation
+
+Built-in semantic-family classification is independent of delegation. A runtime
+must therefore validate the original receiver when invoking standard behavior
+whose contract requires membership in a semantic value family.
+
+Conceptually:
+
+```text
+function requireSemanticFamilyReceiver(receiver, familyPredicate):
+    if not familyPredicate(receiver):
+        signal an Error for invalid standard-behavior receiver
+
+    return receiver
+```
+
+`familyPredicate` denotes the corresponding semantic classifier, such as
+`isSemanticNumberValue` or `isSemanticStringValue`; it is not message lookup and
+does not test whether the receiver delegates to a family value or prototype.
+
+A standard family-specific behavior conceptually performs this validation
+before its family-specific primitive work. For example, standard numeric
+hashing is equivalent to:
+
+```text
+function standardNumberHash(receiver):
+    number = requireSemanticFamilyReceiver(
+        receiver,
+        isSemanticNumberValue
+    )
+    return standardNumericHash(number)
+```
+
+The same rule applies to other standard Number-family behavior and to
+family-specific standard behavior for other semantic value families unless the
+behavior's normative contract explicitly defines a wider receiver domain.
+
+This validation happens after ordinary receiver/argument evaluation and after
+ordinary message lookup has selected the behavior. If validation fails, the
+error propagates normally; lookup is not resumed at an ancestor with another
+slot of the same name.
+
+The validation operation itself performs no user-message dispatch and grants no
+new semantic-family membership. User-defined overrides remain ordinary Protos
+behavior and are constrained only by their own contracts. Implementations may
+inline, specialize, or otherwise eliminate explicit checks when semantic-family
+membership is already proven, provided that incompatible receivers have the
+same observable failure behavior.
 
 # 3. Local Slot Lookup
 
