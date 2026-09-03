@@ -4,6 +4,31 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.167] - 2026-09-03
+
+### Fixed
+- Defined each available stdin/stdout/stderr binding as one Process-local
+  logical byte stream for the Process lifetime.
+- Required repeated standard-stream accessor calls to preserve that same logical
+  input sequence or output-ordering domain rather than opening independent
+  semantic streams.
+- Kept physical capability-object identity non-normative: implementations may
+  return the same object or distinct views/Actor-local proxies.
+- Required duplicated native descriptors, rematerialized proxies, or internal
+  backend replacement to preserve the binding's logical ordering, state, and
+  backpressure semantics.
+- Kept stdout and stderr as distinct Protos logical flows even if a host happens
+  to route them to the same backend destination.
+- Defined repeated standard-stream Encoding accessor results by equivalent
+  descriptor semantics rather than object identity.
+- Aligned the multi-Actor stdin rule with repeated accessor results so every
+  capability for the binding shares one ByteReadable consumption domain.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 167. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.166] - 2026-09-03
 
 ### Fixed

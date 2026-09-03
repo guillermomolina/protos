@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 166
+Document revision: 167
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -1365,6 +1365,16 @@ If an already acquired standard stream later encounters a broken pipe, host fail
 
 Availability of each standard stream is established at Process bootstrap and remains semantically stable for the Process lifetime. A host may internally redirect or replace implementation resources only when the observable capability contract remains the same.
 
+Each available standard-stream binding denotes one Process-local logical byte stream for the Process lifetime. Repeated calls to `process.stdin()`, `process.stdout()`, or `process.stderr()` do not create fresh independent input sequences or output-ordering domains.
+
+The runtime may return the same capability object on repeated access or distinct Actor-local/view/proxy objects. Physical object identity is not normative. Every capability obtained for one standard-input binding participates in that binding's single `ByteReadable` input-consumption ordering domain. Every capability obtained for one standard-output or standard-error binding participates in that binding's single logical `ByteWritable` output flow and its ordering/backpressure semantics.
+
+This remains true if an implementation internally duplicates native descriptors/handles, rematerializes a proxy, or replaces a host/backend object while preserving the standard-stream binding. Such implementation machinery cannot duplicate stdin bytes, create per-access stdout/stderr ordering domains, reset logical stream state, or otherwise make repeated accessor calls behave like opening independent resources.
+
+`stdout` and `stderr` remain distinct logical output bindings even if a particular host routes both to the same backend destination. Their lack of a Protos-defined relative order is not changed by accidental backend identity.
+
+Repeated calls to a corresponding `*Encoding()` accessor may likewise return the same `Encoding` object or semantically equivalent immutable descriptors; their physical identity is not normative. The encoding association belongs to the stable standard-stream binding, not to whichever capability object happened to be returned by one accessor call.
+
 Core v0.1 defines no required `hasStdin()`, `hasStdout()`, or `hasStderr()` query.
 
 ### 25.2 Standard-stream text encoding
@@ -1417,7 +1427,7 @@ Different Actors may therefore hold distinct Actor-local capability objects that
 
 The runtime may optimize same-Process access aggressively. No observable message hop through RootActor or another ordinary Actor is required merely because Process is the semantic custodian of the capability.
 
-Process-local standard input, when delegated to multiple Actors, denotes one underlying logical input sequence unless a stronger host capability says otherwise. Distinct Actor-local proxies for that stdin therefore share the `ByteReadable` input-consumption ordering domain rather than creating independent streams.
+Process-local standard input, including repeated accessor results and capabilities delegated to multiple Actors, denotes the one logical input sequence of that standard-input binding unless a stronger explicitly different host capability is provisioned separately. Distinct Actor-local proxies for that stdin therefore share the `ByteReadable` input-consumption ordering domain rather than creating independent streams.
 
 Each Actor's own read invocation order is preserved. Reads issued concurrently by independently progressing Actors have no predetermined cross-Actor order; routing/admission may choose either request first, but once chosen that relative order is stable and determines which request receives the next logical input. Bytes, EOF, and failures are not duplicated or reassigned merely because requests arrived through different proxies or native completions occurred in a different host order.
 
@@ -1529,6 +1539,7 @@ Process existence and unused facilities may remain lightweight/lazy.
 
 Environment.each prevalidates complete portable String representability before invoking user code; invalid native environment text therefore cannot produce an implementation-dependent callback prefix.
 Process standard streams are byte capabilities.
+Each available stdin/stdout/stderr binding is one Process-local logical stream for the Process lifetime; repeated accessor calls may return different capability objects but cannot create independent input sequences or output-ordering domains.
 Text views are explicit adapters over those byte capabilities and their associated Encoding objects.
 
 Actor creation does not implicitly inherit host capabilities.
