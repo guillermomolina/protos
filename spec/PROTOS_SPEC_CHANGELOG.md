@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.108] - 2026-09-03
+
+### Fixed
+- Removed implementation-defined behavior after a normal `Map` key's `hash` or
+  `==` behavior changes while the key is stored.
+- Made an entry's insertion-time recorded hash stable until removal and prohibited
+  automatic rehashing, relocation, representative-key replacement, or repair.
+- Required all later searches to keep using the deterministic query-hash,
+  recorded-hash, insertion-order equality algorithm even for unstable or
+  contract-violating keys.
+- Defined deterministic behavior for keys that become unreachable by themselves,
+  entries that later become equal, and equality/hash-contract violations.
+- Preserved mutable keys without hidden freezing or mutation tracking and kept
+  optional diagnostics outside ordinary Core semantics.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 108.
+  No grammar, Actor, Future, or I/O semantics change.
+
 ## [0.1.107] - 2026-09-03
 
 ### Fixed

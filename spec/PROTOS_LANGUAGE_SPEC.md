@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 107
+Document revision: 108
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3386,42 +3386,50 @@ The required contract is:
 a == b  =>  a.hash == b.hash
 ```
 
-While an object is stored as a key in a `Map`, the observable behavior relevant to its `hash` and `==` operations must remain stable.
+Stable `hash`/`==` behavior remains the correctness contract for keys whose
+programmer intends ordinary associative-map behavior. Core nevertheless defines
+the result of violating that contract; it does not make the `Map` implementation
+strategy observable.
 
-Core does not prohibit mutable objects from being keys. A mutable object is valid as a key when the state participating in its hash/equality remains stable for as long as it is stored.
+A `Map` entry retains the hash recorded when that entry was first inserted.
+Subsequent mutation of the stored key, mutation of state consulted by its
+`hash`/`==` behavior, or any other change does not recompute that recorded hash,
+move the entry, replace its representative key, or cause automatic reindexing.
 
-If this contract is violated, subsequent map operations involving that key are not guaranteed to behave as if the key had remained stable. Observable consequences may include failure to find an existing entry, apparently duplicate equal keys, or surprising contains/remove results. Such misuse must not imply host-language memory unsafety or runtime corruption.
+Every later key search continues to use the deterministic matching algorithm
+defined below: compute the query key's current hash once, consider only entries
+whose recorded hash equals that query hash, and compare those candidates in
+insertion order using the query key's current `==` behavior. Therefore a changed
+stored key may cease to be findable by itself, may later coexist with another
+key that currently compares equal, or may become findable by a different query.
+Those outcomes follow from the specified recorded hashes and current protocol
+results rather than from hash-table layout.
 
-Implementations may optionally diagnose some unstable-key cases in debugging modes, but such detection is not required by Core semantics.
+If several stored entries currently compare equal to a query and have the same
+recorded hash as that query, the earliest such entry in insertion order is the
+one found. Entries with different recorded hashes are not equality candidates
+for that search even if their current `==` behavior would report equality.
 
-For identity-based keyed storage, the standard model includes `IdentityMap`:
+The invariant
 
 ```text
-IdentityMap equality -> ===
-IdentityMap hash     -> identityHash
+a == b  =>  a.hash == b.hash
 ```
 
-Identity equality and identity hashing are stable for the lifetime of an object.
+therefore remains a programmer-facing contract required for conventional map
+semantics, not a license for implementations to choose arbitrary behavior when
+it is violated. The same is true of the recommendation that a stored key's
+relevant equality/hash behavior remain stable.
 
-Missing-key lookup does not silently return `null`, because `null` is a valid language value. A direct lookup such as:
+Core does not prohibit mutable objects from being keys, does not implicitly
+freeze keys, and does not require hidden mutation tracking. Implementations may
+diagnose unstable or inconsistent keys in optional debugging facilities only if
+doing so does not replace the normative Core behavior of ordinary execution.
 
-```js
-map[key]
-```
-
-signals an absence/key error when the key is not present.
-
-Alternative lookup behavior is explicit through ordinary messages, for example:
-
-```js
-map.containsKey(key)
-map.atIfAbsent(key, block)
-```
-
-The exact convenience protocol may grow in the standard library without changing the core lookup rule.
-
-`Map` preserves insertion order for iteration. Updating an existing key's value does not create a new insertion position unless a library protocol explicitly specifies otherwise.
-
+Protocol violations cannot cause host-language memory unsafety or corruption of
+the Protos runtime. They also do not authorize implementation-dependent
+exceptions, aborts, nontermination, silent reindexing, or other behavior that
+would differ from the deterministic `Map` search/update rules.
 
 ### Deterministic `Map` key matching
 

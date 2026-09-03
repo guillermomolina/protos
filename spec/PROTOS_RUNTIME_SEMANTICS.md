@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 107
+Document revision: 108
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2976,9 +2976,50 @@ The required invariant for correctly behaving keys is:
 a == b  =>  a.hash == b.hash
 ```
 
-The hash/equality behavior relevant to a key must remain stable while that key is present in a `Map`.
+Stable key behavior is a programmer-facing correctness contract, but violation of
+that contract does not make normal `Map` behavior implementation-defined.
 
-If user code violates this invariant or mutates a key so that its relevant hash/equality behavior changes, the runtime is not required to repair or reindex that entry automatically. Later operations may fail to locate it or may observe otherwise inconsistent key behavior at the language level. This does not permit memory unsafety or corruption of the runtime itself.
+Each entry's `recordedHash` is fixed when the entry is first inserted and remains
+associated with that entry until the entry is removed. Updating the entry's
+value does not replace or recompute it. Mutating the stored key or any state used
+by its `hash` or `==` behavior does not trigger implicit rehashing, relocation,
+repair, or key replacement.
+
+Consequently all searches, including searches performed with the stored key
+object itself, continue to execute the same `findMapEntry` semantics:
+
+```text
+current query hash
+        ↓
+entries whose recordedHash equals that hash
+        ↓
+insertion-order queryKey == entry.key comparisons
+        ↓
+first true comparison wins
+```
+
+A key whose current hash differs from its recorded insertion hash will not be a
+candidate in a search whose query hash no longer equals that recorded hash.
+Two entries that become equal after insertion may coexist. If both are
+candidates for a later query, insertion order determines which one is found. If
+their recorded hashes differ, only entries matching the query's current hash are
+candidates, irrespective of equality that would have been observed had the
+other entry been compared.
+
+Likewise, if user-defined equality and hashing violate
+`a == b => a.hash == b.hash`, no repair or alternate equality pass is performed.
+The deterministic search algorithm remains authoritative.
+
+Implementations are not required to detect mutation or protocol instability and
+must not add hidden key freezing or mutation hooks merely to maintain a hash
+table. Optional diagnostics may observe and report misuse in debugging modes,
+but ordinary execution must remain semantically equivalent to the rules above.
+
+These rules confine malformed key protocols without importing Rust-style
+unspecified logic-error behavior or Java-style unspecified mutable-key behavior:
+no host/runtime memory corruption is permitted, and the implementation may not
+substitute arbitrary failure, abort, nontermination, or implementation-specific
+lookup results for the specified abstract algorithm.
 
 ### Deterministic `Map` key search
 
