@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 95
+Document revision: 96
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -188,6 +188,30 @@ executing in such a computation does not execute as another simultaneous
 turn against the Actor's mutable object graph; it crosses a separate
 isolation boundary and may only interact with the Actor through the
 value/result semantics defined for parallel execution.
+
+### Dynamic error handlers and task suspension
+
+Dynamic error-handler frames are local to the task whose execution installed
+them. They are not Actor-global mutable state.
+
+If a task suspends at an explicit suspension point while a protected handler
+scope remains active, that handler scope is retained as part of the suspended
+task's continuation. When the same task resumes, the scope is active again until
+normal completion or unwind leaves it. Other runnable work executed by the Actor
+during the suspension does not see or inherit the suspended task's handlers.
+
+Creating a distinct asynchronous Future/task does not inherit or copy the
+creator's active dynamic handler frames. This includes a Future continuation
+created by `then()`: the continuation is a distinct task and handles only errors
+under handlers that are dynamically installed in that continuation's own
+execution. If an asynchronous task fails without handling its error, the error is
+recorded by its Future and is re-signaled only when a consumer observes that
+failure under the ordinary Future rules.
+
+This rule prevents handler installation from becoming hidden Actor-wide state,
+prevents unrelated task failures from being intercepted by another task's
+temporary scope, and avoids retaining a creator's dynamic stack for the lifetime
+of asynchronously spawned work.
 
 ### Future `then()` continuations
 

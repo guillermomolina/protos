@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.96] - 2026-09-03
+
+### Fixed
+- Defined the portable Core handler-installation API as the ordinary
+  `matchPrototype.handle(body, handler)` protocol inherited through `Error`.
+- Fixed dynamic extent, innermost-match ordering, unwinding, handler deactivation
+  before handler execution, and the value returned after normal handling.
+- Defined handler state as task-local: the same suspended task retains its active
+  scopes, while distinct asynchronous tasks and Future continuations do not
+  inherit them.
+- Aligned Future failure consumption with the rule that `value()` re-signals in
+  the consumer's current dynamic handler context.
+- Removed formatting artifacts left by the earlier error-taxonomy applier where
+  present.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 96.
+  No new syntax or reserved words are introduced.
+
 ## [0.1.95] - 2026-09-03
 
 ### Fixed
@@ -56,7 +75,9 @@ Specification version follows the document revision number: 0.1.X where X is the
 ### Changed
 - Synchronized the normative document revisions to 93. No syntax,
   Future scheduling, Actor-transfer, or I/O operation semantics change in this
-  revision.\n\n## [0.1.92] - 2026-09-03
+  revision.
+
+## [0.1.92] - 2026-09-03
 
 ### Fixed
 - Required finite end-to-end admission/backpressure for `ByteWritable` output so

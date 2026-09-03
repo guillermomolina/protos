@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 95
+Document revision: 96
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -1508,7 +1508,88 @@ function signal(error, activation):
     terminateAtExecutionBoundary(error)
 ```
 
-The exact syntax and standard handler API are intentionally not fixed by this document.
+### Standard Handler Installation
+
+The standard `Error` prototype provides the ordinary message:
+
+```text
+matchPrototype.handle(body, handler)
+```
+
+The receiver is the handler's match prototype. It must be `Error` or an object
+whose delegation chain contains `Error`. `body` and `handler` must be Closures.
+
+Receiver and argument expressions are evaluated by the ordinary call machinery
+before this method begins; the handler installed by the call cannot handle an
+error raised while those expressions are being evaluated.
+
+Conceptually, handler installation behaves as follows:
+
+```text
+function handleError(matchPrototype, body, handler, activation):
+    requireErrorPrototype(matchPrototype)
+    requireClosure(body)
+    requireClosure(handler)
+
+    frame = HandlerFrame(
+        matchPrototype = matchPrototype,
+        handler = handler,
+        dynamicParent = activation
+    )
+
+    return invokeProtectedBody(body, frame)
+```
+
+`invokeProtectedBody` invokes `body` with zero arguments while `frame` is the
+dynamically innermost handler frame for that task. If `body` returns normally,
+the frame is removed and that value is returned from `handle`.
+
+Signaling searches active handler frames from dynamically newest to oldest. A
+frame matches exactly by the existing prototype-chain rule. When a matching
+frame is selected, the runtime performs an unwind to that frame before invoking
+its handler Closure. The signaling continuation and the unexecuted remainder of
+the protected body are abandoned.
+
+Conceptually:
+
+```text
+function transferToHandler(frame, error):
+    unwindThroughProtectedExtent(frame)
+    deactivate(frame)
+    return invokeClosure(
+        frame.handler,
+        arguments = [error]
+    )
+```
+
+The handler Closure's normal return value becomes the normal return value of the
+corresponding `handle` invocation. The selected frame is already inactive while
+the handler Closure runs. Therefore a new error signaled by that handler searches
+only still-active outer frames and can never be caught recursively by the frame
+that selected it.
+
+A nonmatching frame is skipped without mutation. Nested installations require no
+separate handler-list ordering: dynamic nesting alone determines priority.
+
+Handler frames belong to the currently executing task's dynamic control state.
+Suspending that task while its protected extent is still active preserves the
+frame in that task's continuation. Running another Actor-local task does not make
+the suspended task's handlers active in that other task.
+
+Creating a distinct asynchronous task or Future does not copy active handler
+frames into the new task. Future failure remains recorded in the Future; a later
+`value()` re-signals the stored error in the consumer's current dynamic context.
+Dynamic handler frames never cross an Actor boundary.
+
+Unwinding across a handler frame interacts with `ensure` exactly like any other
+unwind: cleanup scopes crossed on the way to the selected handler execute under
+the existing cleanup rules. A non-local return or another control transfer that
+leaves the protected extent removes the frame. No resumable continuation is
+retained by Core v0.1.
+
+This protocol fixes the standard handler API and its observable dynamic extent.
+Implementations may represent handler frames, task continuations, and unwind
+machinery differently provided that these semantics are preserved.
 
 The runtime architecture should not prevent resumable conditions from being added later.
 

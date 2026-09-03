@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 95
+Document revision: 96
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -1679,6 +1679,75 @@ Handlers are dynamically installed in the execution environment of closures.
 
 No fundamental `try`, `catch`, `throw`, or `finally` keywords are required.
 
+
+### Standard Handler Installation Protocol
+
+Core v0.1 exposes handler installation through an ordinary message provided by
+the standard `Error` prototype:
+
+```js
+matchPrototype.handle(body, handler)
+```
+
+`matchPrototype` is the receiver. `Error` itself and ordinary error prototypes
+below `Error` therefore use the same protocol through normal delegation. The
+receiver must be `Error` or have `Error` in its delegation chain.
+
+`body` and `handler` are Closures. The call establishes exactly one dynamically
+scoped unwinding handler whose match prototype is `matchPrototype`, then invokes
+`body` with no arguments.
+
+Ordinary call evaluation happens before installation. The receiver expression,
+the `body` argument expression, and the `handler` argument expression are
+evaluated left-to-right before the handler becomes active. Errors signaled while
+evaluating those expressions are therefore not handled by the handler being
+installed.
+
+If `body` completes normally, its result is the result of `handle`, and the
+handler is removed without invoking `handler`.
+
+If an error is signaled while the protected dynamic extent is active and
+`matchPrototype` occurs in the signaled error object's delegation chain, that
+handler is selected before any older matching handler. Core handlers are
+unwinding: execution of the signaling continuation and the remaining protected
+computation is abandoned. The selected handler frame is removed before
+`handler` is invoked, and `handler` receives the signaled error as its single
+argument. If `handler` then completes normally, its result is the result of the
+`handle` call.
+
+Because the selected handler is inactive while its handler Closure executes, an
+error signaled by that Closure is searched only against still-active outer
+handlers. The same handler cannot recursively catch its own failure merely
+because the new error also matches `matchPrototype`.
+
+Nested `handle` calls define ordering structurally: the dynamically innermost
+matching handler is selected first. Core v0.1 therefore needs no separate
+same-scope handler-list ordering rule; multiple handlers are expressed by
+ordinary nesting.
+
+A nonmatching error passes through the installed frame and continues outward
+through the normal dynamic handler search. Non-local return, cleanup through
+`ensure`, and other existing unwind behavior remain ordinary control transfers:
+leaving the protected dynamic extent removes the installed handler.
+
+Dynamic handler state is task-local execution state, not Actor-global state and
+not a property captured by a Closure. If the protected task explicitly suspends
+while the `handle` call remains active, the handler remains part of that same
+task's suspended continuation and is active again when that task resumes. Other
+Actor-local tasks that run while it is suspended cannot observe or use that
+handler.
+
+Creating a distinct asynchronous Future/task inside the protected scope does not
+copy or inherit the handler into that task. An unhandled failure in such a task
+fails its Future according to the Future rules. If a consumer later observes
+that failed Future through `value()`, the recorded error is re-signaled in the
+consumer's then-current dynamic handler context. Actor boundaries likewise never
+carry dynamic handlers.
+
+This protocol adds no `try`, `catch`, `throw`, or `finally` syntax and no second
+handler type system. User and library error prototypes use ordinary delegation,
+and richer handling abstractions may be built from this single primitive
+dynamic-scope mechanism.
 An unhandled error propagates until an appropriate handler is found or the outermost execution boundary is reached.
 
 The architecture should allow resumable conditions to be added later without redesigning the execution model.\n\n### Core Error Taxonomy
@@ -3310,6 +3379,8 @@ when observing a failed Future through value()
 ```
 
 A Future does not retain the creator's dynamic handler stack as an indefinitely active error context.
+
+A handler that remains dynamically active in the same task across an explicit suspension is retained only as part of that task's suspended continuation; it is not visible to other Actor-local tasks and is not copied into newly created asynchronous work.
 
 ## Concurrency Memory Semantics
 
