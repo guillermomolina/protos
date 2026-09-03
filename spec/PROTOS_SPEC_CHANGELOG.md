@@ -4,6 +4,31 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.141] - 2026-09-03
+
+### Fixed
+- Defined detachment as removal from activation-structured ownership only, not
+  escape from the Actor execution/lifecycle domain.
+- Defined that detached Actor-local tasks may outlive their creating activation
+  but cannot outlive their Actor incarnation.
+- Required semantic Actor termination, while runtime cleanup remains executable,
+  to request cooperative cancellation of every pending Actor-local task,
+  including detached tasks.
+- Prevented detached tasks from being silently re-parented to RootActor, Process,
+  replacement Actors, or another execution domain after Actor termination.
+- Reused the existing cancellation/`ensure` rules for Actor-termination cleanup:
+  successful cleanup yields `cancelled`, while cleanup failure yields `failed`.
+- Clarified that Actor replacement inherits no task/Future from the terminated
+  incarnation.
+- Scoped the cleanup guarantee so catastrophic loss of the hosting execution
+  substrate cannot imply impossible cleanup, while still forbidding task
+  continuation in another domain.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 141.
+
 ## [0.1.140] - 2026-09-03
 
 ### Fixed

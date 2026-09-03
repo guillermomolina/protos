@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 140
+Document revision: 141
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -1004,6 +1004,35 @@ failure replaces the cancellation transfer and the task fails; if cleanup
 completes, cancellation continues and the Future becomes cancelled only after
 cleanup is complete. This rule does not create a general user-visible
 cancellation-mask facility.
+
+Detachment removes a task from the structured lifetime of its creating
+activation only. It does not move Actor-local work out of the Actor execution
+domain, promote it to Process-global work, or give it an independent Actor-like
+lifecycle. A detached Actor-local task may outlive the activation that created
+it, but it cannot outlive the Actor incarnation whose mutable state and serial
+execution domain it uses.
+
+When termination of an Actor incarnation begins while its hosting runtime remains
+able to execute Protos cleanup, every pending Actor-local task belonging to that
+incarnation receives a cooperative cancellation request, including detached
+tasks. The incarnation stops accepting or dispatching new ordinary message work;
+task execution that occurs thereafter is limited to reaching the existing
+portable cancellation boundaries and performing the cancellation unwind and
+applicable `ensure` cleanup required to terminate those tasks.
+
+A detached task is never silently re-parented to the RootActor, Process, a
+replacement Actor, or another runtime scope merely so it can continue running
+after its Actor terminates. Its Future follows the ordinary cancellation-unwind
+rule: successful cleanup permits the Future to become `cancelled`; a cleanup
+failure makes that Future `failed` with the cleanup error. Replacement creates a
+fresh Actor execution domain and inherits none of these tasks.
+
+Termination cleanup may itself suspend and therefore has no bounded-time liveness
+guarantee. Catastrophic loss of the Process, runtime, or underlying execution
+capacity may make further Protos cleanup impossible; this does not authorize the
+task to continue in another Actor or execution domain. The portable guarantee
+here governs semantic Actor termination while the runtime remains capable of
+executing the required cleanup.
 
 When an explicit isolated parallel operation creates work whose result
 is represented by a Future, that work participates in the same

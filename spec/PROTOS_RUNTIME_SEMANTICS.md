@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 140
+Document revision: 141
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2126,7 +2126,41 @@ function detachFuture(future):
     return future
 ```
 
-A detached task no longer participates in the former owner's completion or cancellation lifetime.
+A detached task no longer participates in the former activation owner's
+completion or cancellation lifetime. Detachment changes structured activation
+ownership only; an Actor-local task remains in the same Actor execution and
+lifecycle domain.
+
+Conceptually, Actor termination while its hosting runtime can still execute
+cleanup includes:
+
+```text
+function cancelActorLocalTasksForTermination(actor):
+    tasks = all pending Actor-local tasks in actor
+        // includes tasks detached from activation ownership
+
+    for each task in tasks:
+        requestCooperativeCancellation(task)
+
+    for each task in tasks:
+        awaitTerminalCompletion(task)
+        // ordinary cancellation unwind and applicable ensure cleanup complete
+```
+
+Once Actor termination has begun, those tasks are not ordinary surviving work.
+They may receive execution only as required to observe the already-requested
+cancellation at the existing portable boundaries and to run the corresponding
+unwind/`ensure` cleanup. No task is re-parented to another Actor, the RootActor,
+or the Process.
+
+If cleanup completes normally, the task Future reaches `cancelled`; if cleanup
+signals an error, the existing cleanup-supersedes-cancellation rule makes that
+Future `failed`. Actor replacement does not inherit the task or its Future.
+
+This cleanup rule assumes that the hosting runtime remains able to schedule the
+terminating Actor's cleanup work. Loss of the Process/runtime/execution substrate
+may prevent further cleanup, but never permits Actor-local task execution to
+resume in a different execution domain.
 
 The scheduler may implement waiting by suspension rather than by blocking an operating-system thread.
 
