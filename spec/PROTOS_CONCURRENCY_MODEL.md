@@ -1,10 +1,31 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 85
+Document revision: 86
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
+
+
+### Normative status of this mixed document
+
+This document intentionally combines normative concurrency semantics with
+unresolved design work.
+
+A section whose status is exactly `CLOSED` or `CLOSED --- REVISED` is normative
+for the Actor/Future/concurrency domain. A section whose status contains
+`OPEN`, `PENDING`, `DIRECTION`, `DETAILS OPEN`, `API OPEN`, or another
+design-only qualifier is non-normative unless and until that status is changed
+explicitly.
+
+Normative status is section-local. When a CLOSED section explicitly says that
+a named API, syntax, policy, mechanism, or implementation detail remains open,
+that stated open subtopic remains non-normative; the closed semantic rules in
+the section remain normative.
+
+No implementation may use unresolved material in this ledger to choose
+observable behavior not otherwise fixed by the normative Protos
+specifications.
 
 ## 1. General Principle
 

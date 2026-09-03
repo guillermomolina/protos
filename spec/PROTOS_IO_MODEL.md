@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 85
+Document revision: 86
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -13,7 +13,7 @@ It complements:
 - `PROTOS_RUNTIME_SEMANTICS.md`
 - `PROTOS_CONCURRENCY_MODEL.md`
 
-The language specification owns language constructs, the grammar owns syntax and mandatory lowering, the runtime-semantics document owns executable core evaluation rules, the concurrency model owns Actor/Future/concurrency semantics, and this document owns observable I/O-domain semantics.
+The language specification owns language constructs, the grammar owns syntax and mandatory lowering, the runtime-semantics document owns executable core evaluation rules, the CLOSED normative sections of the concurrency model own Actor/Future/concurrency-domain semantics, and this document owns observable I/O-domain semantics. Unresolved concurrency-ledger sections and explicitly open subtopics are non-normative.
 
 The I/O model deliberately avoids introducing special I/O syntax. I/O facilities are ordinary objects, capabilities, Traits, and messages unless another normative specification explicitly says otherwise.
 

@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 85
+Document revision: 86
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -12,6 +12,10 @@ It complements:
 - `PROTOS_GRAMMAR.md`
 - `PROTOS_IO_MODEL.md`
 
+- the normative CLOSED sections of `PROTOS_CONCURRENCY_MODEL.md`
+
+Unresolved sections and explicitly open subtopics in the mixed concurrency
+document are non-normative.
 The goal is not to mandate an implementation strategy, but to define observable behavior precisely enough that different interpreters or VMs can behave consistently.
 
 ---

@@ -4,6 +4,31 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.86] - 2026-09-03
+
+### Fixed
+- Closed the concurrency specification-authority ambiguity. `PROTOS_CONCURRENCY_MODEL.md`
+  remains a mixed design ledger, but sections whose status is exactly `CLOSED` or
+  `CLOSED --- REVISED` are now explicitly normative for Actor/Future/concurrency
+  semantics. Sections carrying OPEN, PENDING, DIRECTION, DETAILS OPEN, API OPEN,
+  or other design-only qualifiers remain non-normative.
+- Defined the boundary for partially closed sections: an API, syntax, policy,
+  mechanism, or implementation detail explicitly stated to remain open inside a
+  CLOSED section remains non-normative without weakening the closed semantic
+  rules around it.
+- Made `AGENTS.md`, `PROTOS_LANGUAGE_SPEC.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, and `PROTOS_IO_MODEL.md` agree on that
+  authority model, so an independent implementation no longer has to choose
+  between treating the concurrency ledger as merely advisory and treating it as
+  the owner of Actor/Future semantics.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 86. No Actor, Future,
+  scheduling, ordering, cancellation, I/O, or grammar behavior changes in this
+  revision.
+
 ## [0.1.85] - 2026-09-03
 
 ### Fixed

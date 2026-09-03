@@ -1,11 +1,14 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 85
+Document revision: 86
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
 
+Normative Actor/Future/concurrency-domain semantics are also defined by the
+CLOSED sections of `PROTOS_CONCURRENCY_MODEL.md`; unresolved sections and
+explicitly open subtopics in that mixed document are non-normative.
 ## Language Name
 
 The language defined by this specification is named **Protos**.

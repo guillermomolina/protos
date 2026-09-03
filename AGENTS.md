@@ -260,9 +260,11 @@ Normative domain models supplement those core documents for semantically substan
 
 - "spec/PROTOS_IO_MODEL.md" — observable I/O, text/binary adapter, filesystem-authority, and Process-I/O-bootstrap semantics.
 
+- "spec/PROTOS_CONCURRENCY_MODEL.md" — CLOSED or `CLOSED --- REVISED` sections are normative Actor/Future/concurrency-domain semantics; sections or explicitly named subtopics carrying OPEN, PENDING, DIRECTION, DETAILS OPEN, API OPEN, or design-only status remain non-normative.
+
 Treat the canonical core documents together with applicable normative domain models as the source of truth for observable language/standard semantics in their respective domains.
 
-`spec/PROTOS_CONCURRENCY_MODEL.md` is also part of the documentation, but with a less complete status: it is a concurrency design ledger, not a canonical language specification document. See "Concurrency design work" below.
+Normative concurrency-domain semantics supplement the core specifications through the explicitly CLOSED portions of `spec/PROTOS_CONCURRENCY_MODEL.md`. That file remains a mixed design ledger rather than a canonical core language specification document; its section-local status controls normativity. See "Concurrency design work" below.
 
 Before implementing or modifying syntax, parsing, object semantics, invocation, lookup, control flow, errors, concurrency, built-in protocols, or other observable language behavior, inspect the relevant specification sections first.
 
@@ -657,8 +659,10 @@ Do not change licensing terms or make licensing-policy decisions implicitly as p
 
 ### Concurrency design work
 
-- `spec/PROTOS_CONCURRENCY_MODEL.md` is part of the documentation, but with a less complete status than the canonical specification documents: it is a design ledger that mixes CLOSED decisions with OPEN, PENDING, and design-only material.
+- `spec/PROTOS_CONCURRENCY_MODEL.md` is a mixed document: a section whose status is exactly `CLOSED` or `CLOSED --- REVISED` is normative concurrency-domain semantics; a section whose status contains OPEN, PENDING, DIRECTION, DETAILS OPEN, API OPEN, or another design-only qualifier is non-normative unless and until its status is changed explicitly.
+- Normative status is section-local. A CLOSED section may explicitly state that a named API, syntax, policy, mechanism, or implementation detail remains open; that open subtopic is not made normative merely by appearing inside the CLOSED section.
 - All documentation documents share the `Document revision` number. This document carries that common revision and has no independent revision or versioning scheme.
 - Record every change to this file in `spec/PROTOS_SPEC_CHANGELOG.md`, like changes to the canonical specification documents.
 - When a CLOSED decision from this ledger is incorporated into canonical specification documents, update the affected specification files and record that canonical change in `spec/PROTOS_SPEC_CHANGELOG.md`.
-- Do not treat OPEN, PENDING, or design-only material in this ledger as normative language semantics.
+- When concurrency semantics overlap responsibilities of a canonical core document or another normative domain model, update every affected normative document in the same change so the normative set remains mutually consistent.
+- Never infer semantics from OPEN, PENDING, DIRECTION, DETAILS OPEN, API OPEN, or design-only material.
