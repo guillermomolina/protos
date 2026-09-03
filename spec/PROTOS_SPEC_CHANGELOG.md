@@ -4,6 +4,30 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.214] - 2026-09-03
+
+### Fixed
+- Reconciled strict/fatal decoding with the already-standardized explicit
+  U+FFFD replacement policy instead of treating malformed input as
+  unconditionally fatal in line reading and one-shot EOF handling.
+- Defined portable UTF8/UTF16LE/UTF16BE replacement segmentation by Unicode
+  17.0.0 maximal subparts, with exactly one U+FFFD per consumed maximal subpart.
+- Defined incomplete final input to fail under strict decoding and to use the
+  same malformed-input replacement rule under replacement decoding.
+- Made replacement output invariant under native read, buffering, decoder-call,
+  vectorization, and other implementation-selected chunk boundaries.
+- Required host-provided non-portable Encodings to make replacement segmentation
+  deterministic within their host-bound contract rather than leaking converter
+  call boundaries or library-version heuristics.
+- Defined malformed source octets consumed for U+FFFD replacement to participate
+  in `readLine(maxBytes)` source-byte accounting, while preserving strict-mode
+  decoding-error precedence.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 214. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.213] - 2026-09-03
 
 ### Closed

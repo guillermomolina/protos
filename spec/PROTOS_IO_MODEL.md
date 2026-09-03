@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 213
+Document revision: 214
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -791,7 +791,7 @@ encoding.decode(bytes)  -> String
 
 They are in-memory operations and do not return Futures.
 
-One-shot decoding treats an incomplete final encoded sequence as an error.
+One-shot decoding treats an incomplete final encoded sequence according to the selected decoding error policy. Under the default strict/fatal policy it is an error. Under an explicitly selected replacement policy, an incomplete final subsequence is malformed final input and is handled by the replacement rule below rather than being unconditionally fatal.
 
 ### 15.1 Error policy
 
@@ -799,7 +799,17 @@ Decoding is strict/fatal by default.
 
 A decoding configuration may explicitly request replacement of malformed input with U+FFFD. Core v0.1 defines no ignore-malformed-input policy.
 
+For the portable `UTF8`, `UTF16LE`, and `UTF16BE` encodings, replacement decoding is deterministic: each maximal subpart of an ill-formed subsequence, using the Unicode Standard 17.0.0 section 3.9.6 maximal-subpart definition, is consumed and replaced by exactly one U+FFFD. `Latin1` has no malformed octet sequence because every octet maps directly to one Unicode scalar in U+0000 through U+00FF.
+
+Streaming/chunk boundaries do not alter this replacement segmentation. A decoder buffers an incomplete prefix while more source input may still complete it. When later input proves the prefix ill-formed, or EOF makes an incomplete final prefix ill-formed, replacement consumes exactly the maximal subpart required by the rule above. An implementation must not emit a different number or placement of U+FFFD values merely because native reads, buffers, vectorized decoding, or converter calls split the same source octets differently.
+
+For a host-provided non-portable `Encoding`, the malformed-subsequence segmentation used by replacement decoding is part of that Encoding's host-bound semantic contract. It must be deterministic for the same encoded source sequence and independent of implementation chunking; an implementation must not leave the observable replacement grouping to an accidental converter-call boundary or library-version heuristic.
+
+Replacement consumes malformed source input; it is not an ignore policy. The source octets consumed for a replacement participate in byte-accounting rules such as `readLine(maxBytes)` exactly where those rules count consumed source octets.
+
 Encoding is strict by default. Core v0.1 defines no general replacement-encoding policy for characters not representable in the selected encoding.
+
+Strict decoding fails on malformed input, while replacement decoding consumes deterministic malformed subsequences and emits U+FFFD; portable UTF replacement uses Unicode 17.0.0 maximal subparts, is invariant under streaming chunk boundaries, and its consumed octets count toward bounded line input.
 
 ### 15.2 Latin1
 
@@ -911,7 +921,11 @@ Failure of the `TextReader` does not by itself close, fail, or transfer ownershi
 
 Line construction is determined in logical input order after decoding under the selected `Encoding`; buffering and read-ahead do not change which condition belongs to the current line operation.
 
-For `readLine(maxBytes)`, decoding validity is established in logical source order. A malformed sequence fails with the decoding error if that failure is established before the byte budget has already been exceeded by validly consumed pre-terminator source octets; an implementation must not pretend malformed octets were valid content merely to manufacture an earlier size failure.
+For `readLine(maxBytes)`, decoding is evaluated in logical source order under the TextReader's selected decoding error policy.
+
+Under strict/fatal decoding, a malformed sequence fails with the decoding error if that failure is established before the byte budget has already been exceeded by validly consumed pre-terminator source octets; an implementation must not pretend malformed octets were valid content merely to manufacture an earlier size failure.
+
+Under replacement decoding, malformed input does not establish a decoding failure. The decoder consumes the malformed subsequence according to the Encoding's deterministic replacement rule and produces U+FFFD. Every source octet consumed for that replacement counts toward the current line's byte budget when it lies in the pre-terminator interval. If consuming that replacement extent makes the count exceed `maxBytes`, the line-too-long condition is established in the ordinary way.
 
 Valid decoder input that changes state without producing a Unicode scalar still advances the current line's byte budget as soon as those octets have been validly consumed in the pre-terminator interval. Likewise, when a valid non-terminator character is decoded, every source octet in its consumed encoded extent has already contributed to that same budget.
 
