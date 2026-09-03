@@ -66,7 +66,7 @@ class ProtosParserStandardOperatorTest {
 
     @Test
     void unaryOperatorsAssociateRecursively() {
-        SurfaceUnary outer = assertInstanceOf(SurfaceUnary.class, only("!-value"));
+        SurfaceUnary outer = assertInstanceOf(SurfaceUnary.class, only("! -value"));
         assertEquals("!", outer.operator());
         SurfaceUnary inner = assertInstanceOf(SurfaceUnary.class, outer.operand());
         assertEquals("-", inner.operator());
