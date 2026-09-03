@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 168
+Document revision: 169
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2058,13 +2058,18 @@ function wakeWaiters(future):
         scheduler.makeRunnableLater(waiter)
 ```
 
-Every task suspended by `awaitFutureValue(future, ...)` is one waiter on that
-Future. Waiter registration and the Future's first terminal transition obey the
-atomic race rule defined by `suspendOnPendingFuture`: a completion cannot fall
-into a gap between observing `pending` and installing the waiter. When the Future
-makes its first terminal transition, every waiter that was still registered for
-that Future becomes eligible to resume; no waiter is skipped merely because
-another waiter was also registered.
+Every execution continuation suspended by `awaitFutureValue(future, ...)` is one
+waiter on that Future. A waiter may belong to a task-backed execution or to
+another execution context that is permitted to suspend; waiter identity is the
+continuation to resume, not an assertion that every Future observer is itself a
+`Task`.
+
+Waiter registration and the Future's first terminal transition obey the atomic
+race rule defined by `suspendOnPendingFuture`: a completion cannot fall into a
+gap between observing `pending` and installing the waiter. When the Future makes
+its first terminal transition, every waiter that was still registered for that
+Future becomes eligible to resume; no waiter is skipped merely because another
+waiter was also registered.
 
 Clearing the waiter registration before making waiters runnable is semantic
 bookkeeping: once the Future is terminal, no task remains a pending waiter on
@@ -2139,10 +2144,12 @@ Conceptually:
 
 ```text
 function suspendOnPendingFuture(future, activation):
-    task = currentTaskOf(activation)
+    task = taskContaining(activation)  // may be none
+    waiter = suspendedContinuationOf(activation)
 
-    // This is the ordinary explicit-suspension cancellation boundary.
-    if task.future.cancellationRequested:
+    // This is the ordinary explicit-suspension cancellation boundary when the
+    // current execution is task-backed and therefore has a cancellation target.
+    if task != none and task.future.cancellationRequested:
         honorCancellation(task)
         return
 
@@ -2152,10 +2159,13 @@ function suspendOnPendingFuture(future, activation):
 
         registerWaiter(
             future,
-            task
+            waiter
         )
 
-        mark task suspended waiting on future
+        mark waiter suspended waiting on future
+
+        if task != none:
+            associateSuspendedWaiter(task, waiter)
 ```
 
 The atomic region above specifies an observable race property, not a required
@@ -2179,11 +2189,24 @@ counter, register-then-recheck protocol, or another mechanism. Spurious internal
 wake-ups are permitted only when they remain semantically invisible; lost
 terminal notifications are not.
 
-The registration is for the current task continuation, not an arbitrary
-activation object. If cancellation was already pending at the explicit
-suspension boundary, cancellation is honored instead of installing a live
-Future waiter. A cancellation request that arrives after that boundary follows
-the existing cancellation-runnable rules and cannot strand a registered waiter.
+A Future waiter denotes the suspended execution continuation that must become
+eligible to resume, not necessarily a `Task` object. Ordinary Actor turns,
+bootstrap/root execution, or another execution context that can explicitly wait
+on a Future need not be manufactured into a task-backed Future merely to use
+`value()`.
+
+When the waiting execution is task-backed, the waiter remains associated with
+that task so the existing cooperative-cancellation machinery can make the
+suspended continuation cancellation-runnable. If cancellation was already
+pending at the explicit suspension boundary, cancellation is honored instead of
+installing a live waiter. A cancellation request that arrives after that boundary
+follows the existing cancellation-runnable rules and cannot strand the registered
+waiter.
+
+For a non-task-backed execution there is no task cancellation flag to consult;
+this does not create an uncancellable hidden task. It only means that the
+execution is waiting under its own enclosing lifecycle rather than under a
+Future/task cancellation target.
 
 Returning from `suspendOnPendingFuture` because the Future was already terminal
 does not itself execute user code or consume the result. `awaitFutureValue`

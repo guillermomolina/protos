@@ -4,6 +4,23 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.169] - 2026-09-03
+
+### Fixed
+- Corrected Future waiter bookkeeping so a waiter denotes the suspended execution
+  continuation rather than assuming every Future observer is a `Task`.
+- Preserved `Future.value()` suspension for ordinary Actor/root/bootstrap
+  execution contexts without manufacturing hidden task/Future identities.
+- Kept cooperative cancellation associated only with task-backed waiting
+  executions while retaining the existing cancellation-runnable semantics.
+- Preserved the atomic waiter-registration/terminal-transition race rule for both
+  task-backed and non-task-backed Future observers.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 169.
+
 ## [0.1.168] - 2026-09-03
 
 ### Fixed
