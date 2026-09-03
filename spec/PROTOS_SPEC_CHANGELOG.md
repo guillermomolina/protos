@@ -4,6 +4,30 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.104] - 2026-09-03
+
+### Fixed
+- Defined the receiver direction of normal `Map` equality as
+  `queryKey == storedKey`, eliminating implementation-dependent reversal or
+  symmetrization of user-defined equality.
+- Defined deterministic insertion-order comparison among same-hash candidate
+  entries, so hash-table layout and probing strategy cannot change observable
+  user `==` effects, errors, or the selected entry.
+- Defined one query-key hash operation per key search/insertion semantic
+  operation and conceptual per-entry recorded hashes while preserving
+  implementation freedom for observationally equivalent layouts.
+- Required equal-key updates to retain the original stored key object, recorded
+  hash, and insertion position while replacing only the value.
+- Required a mutating Map operation to leave the map unchanged when key hashing
+  or comparison signals, without rolling back effects performed by user protocol
+  code.
+- Kept `IdentityMap` separate and explicitly rejected an implicit `===` shortcut
+  in normal `Map` matching.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 104.
+  No grammar, Actor, Future, or I/O semantics change.
+
 ## [0.1.103] - 2026-09-03
 
 ### Fixed

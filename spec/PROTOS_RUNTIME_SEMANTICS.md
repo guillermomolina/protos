@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 103
+Document revision: 104
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2914,6 +2914,92 @@ a == b  =>  a.hash == b.hash
 The hash/equality behavior relevant to a key must remain stable while that key is present in a `Map`.
 
 If user code violates this invariant or mutates a key so that its relevant hash/equality behavior changes, the runtime is not required to repair or reindex that entry automatically. Later operations may fail to locate it or may observe otherwise inconsistent key behavior at the language level. This does not permit memory unsafety or corruption of the runtime itself.
+
+### Deterministic `Map` key search
+
+The abstract search operation used by normal `Map` is:
+
+```text
+function findMapEntry(map, queryKey):
+    queryHash = requireHashResult(
+        send(queryKey, "hash", [])
+    )
+
+    for entry in map.entriesInInsertionOrder:
+        if entry.recordedHash == queryHash:
+            equal = requireBooleanEqualityResult(
+                send(queryKey, "==", [entry.key])
+            )
+
+            if equal === true:
+                return entry
+
+    return NOT_FOUND
+```
+
+The entry hash is conceptually recorded when that entry is first inserted:
+
+```text
+function mapAtPut(map, queryKey, value):
+    queryHash = requireHashResult(
+        send(queryKey, "hash", [])
+    )
+
+    entry = findMapEntryUsingKnownQueryHash(
+        map,
+        queryKey,
+        queryHash
+    )
+
+    if entry != NOT_FOUND:
+        oldValue = entry.value
+        entry.value = value
+        return oldValue
+
+    appendEntry(
+        map,
+        key = queryKey,
+        value = value,
+        recordedHash = queryHash
+    )
+
+    return ABSENT
+```
+
+`findMapEntryUsingKnownQueryHash` performs exactly the insertion-order
+candidate comparison described by `findMapEntry` without sending `hash` to the
+query a second time.
+
+The pseudocode is an observable semantic model, not a required table layout.
+An implementation may use ordinary hash buckets, open addressing, trees,
+specialized representations, cached protocol dispatch, or another strategy only
+when user code observes the same `hash` and `==` calls, in the same required
+comparison order, with the same first matching entry and failure behavior.
+
+The query key is always the receiver of `==`; the stored key is the argument.
+The runtime must not reverse that send, invoke both directions, or substitute
+`===` as a shortcut. This matters for user-defined equality whose behavior or
+side effects differ by receiver.
+
+A mutating `Map` operation performs no map mutation until its key search
+completes successfully. If the query `hash` or a required equality comparison
+signals, that error propagates and the map remains unchanged by that operation.
+Effects performed by the user-defined protocol code itself are ordinary effects
+and are not rolled back.
+
+Updating an existing mapping replaces only `entry.value`. `entry.key`,
+`entry.recordedHash`, and the entry's insertion position remain unchanged.
+Consequently two distinct objects that compare equal do not cause the later key
+object to replace the representative key already stored in the map.
+
+The existing unstable-key rule remains in force. If a stored key changes the
+relevant equality/hash behavior while present, subsequent logical map behavior
+is outside the correctly-behaving-key guarantee; this section does not require
+automatic repair or reindexing and does not permit host/runtime memory
+corruption.
+
+`IdentityMap` continues to use semantic identity and `identityHash` and does not
+use `findMapEntry`.
 
 `IdentityMap` uses primitive semantic identity (`===`) together with a stable `identityHash`.
 

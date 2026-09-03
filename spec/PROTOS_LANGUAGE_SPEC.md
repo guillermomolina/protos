@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 103
+Document revision: 104
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3402,6 +3402,73 @@ The exact convenience protocol may grow in the standard library without changing
 
 `Map` preserves insertion order for iteration. Updating an existing key's value does not create a new insertion position unless a library protocol explicitly specifies otherwise.
 
+
+### Deterministic `Map` key matching
+
+Because `==` and `hash` are ordinary Protos protocol operations, the direction
+and observable order in which a `Map` uses them are part of `Map` semantics.
+Implementations must not let hash-table layout, bucket order, probing strategy,
+or another storage detail choose which user-defined equality operations occur.
+
+For every standard `Map` operation that searches for an argument key `queryKey`,
+the portable behavior is as if the map performs the following search:
+
+```text
+queryHash = queryKey.hash
+
+for each stored entry in insertion order:
+    if entry.recordedHash == queryHash:
+        if queryKey == entry.key:
+            match that entry and stop
+
+no entry matches
+```
+
+`queryKey` is therefore the receiver of `==`; the stored key is its argument.
+Core does not silently reverse the comparison, invoke both directions, or
+symmetrize a user-defined `==`. The existing Boolean-result contract applies to
+every comparison.
+
+When a new entry is created, the hash value obtained from that insertion key is
+recorded conceptually with the entry. An implementation may represent this
+metadata differently, but a correctly behaving key observes semantics
+equivalent to the search above. This does not weaken the existing requirement
+that the equality/hash behavior relevant to a key remain stable while it is
+stored.
+
+If evaluating the query's `hash` or one of the required `==` comparisons signals
+an error, the `Map` operation signals that error. A mutating key operation does
+not perform its own structural/value mutation before the key search completes
+successfully; side effects already performed by user `hash` or `==` behavior are
+not rolled back.
+
+For insertion/update through `map[key] = value`, if the search finds an existing
+entry, only that entry's value is replaced. The originally stored key object,
+its recorded hash, and its insertion position are retained. Supplying a
+different identity-bearing object that compares equal therefore does not replace
+the representative key visible during iteration.
+
+If no entry matches, a new entry containing the supplied key and value is added
+at the end of insertion order and stores the query hash obtained for that
+operation.
+
+The same matching rule applies to standard operations such as direct lookup,
+`containsKey`, removal by key, and any later standard `Map` protocol that is
+defined in terms of finding a key. A library operation that deliberately wants
+different matching semantics must expose a distinct protocol rather than rely
+on implementation-specific `Map` internals.
+
+`IdentityMap` is unchanged. Its matching operation is based on `===` and
+`identityHash`, not this `Map` `==` protocol.
+
+This rule intentionally does not turn general user-defined `==` into an
+equivalence relation. If user code defines asymmetric equality, `Map` remains
+deterministic: only `queryKey == storedKey` is relevant. Numeric equality keeps
+its separately specified symmetry guarantee.
+
+Likewise, `Map` does not add an identity shortcut before `==`. Values such as
+Float NaN therefore retain their ordinary `==` semantics when used as normal
+`Map` keys. Code that requires identity-keyed behavior uses `IdentityMap`.
 The ordinary `hash` operation is not required to be stable across separate process executions. Implementations may use per-process randomization or salting for security. Persistent or interoperable hashing must use a separate explicit protocol or algorithm.
 
 `IdentityMap` follows the same insertion-order rule unless a more specialized collection explicitly documents otherwise.
