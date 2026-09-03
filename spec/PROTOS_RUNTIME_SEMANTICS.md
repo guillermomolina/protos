@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 89
+Document revision: 90
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -1747,6 +1747,13 @@ function registerChildTask(parentActivation, task):
 
 A parent activation cannot reach terminal completion while it owns non-detached child tasks.
 
+Waiting for child termination during normal owner completion is not equivalent to
+calling `value()` on those child Futures. The wait establishes the structured
+lifetime boundary only; it neither consumes nor propagates a child result, failure,
+or cancellation. In particular, no implementation may make normal owner completion
+depend on whether a failed child Future was previously "observed", because Protos
+defines no hidden failure-consumption state on Future objects.
+
 Normal completion:
 
 ```text
@@ -1755,6 +1762,9 @@ function completeActivationNormally(activation, result):
         if not task.detached:
             awaitTerminalCompletion(task)
 
+    // Structured ownership bounds lifetime only. Reaching a failed or
+    // cancelled child terminal state here does not implicitly observe that
+    // child's Future and does not replace `result`.
     complete activation with result
 ```
 

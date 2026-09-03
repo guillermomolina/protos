@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 89
+Document revision: 90
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -1819,6 +1819,17 @@ Non-detached child tasks are structurally owned by that execution context.
 An activation cannot complete while it still owns non-detached child tasks.
 
 On normal completion, the activation waits for all non-detached child tasks to reach a terminal state before the activation itself completes.
+
+That structural wait is a lifetime guarantee, not an implicit result observation. A
+failed or cancelled child does not by itself change an otherwise normal result of
+the owning activation. Child failure remains stored in the child's Future and
+becomes an error in the owner only if owner code explicitly observes that Future
+through an operation such as `value()`. Likewise, cancellation of a child does not
+implicitly cancel an otherwise normally completing owner.
+
+This rule is independent of whether the child Future was otherwise referenced or
+ignored. Implementations must not add hidden "unobserved failure" tracking that
+changes the owner's result at structured-scope exit.
 
 On exit caused by error or cancellation, the activation requests cooperative cancellation of all non-detached child tasks, waits for those tasks to unwind and complete their cleanup, and only then continues its own unwind.
 

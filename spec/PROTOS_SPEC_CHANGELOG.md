@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.90] - 2026-09-03
+
+### Fixed
+- Closed the structured-child terminal-outcome ambiguity. Normal owner completion
+  now waits for every non-detached child to become terminal without implicitly
+  observing or propagating that child's result.
+- Defined that a failed non-detached child does not automatically fail an otherwise
+  normally completing owner, and a cancelled child does not automatically cancel
+  that owner. Future failure/cancellation remains observable through the ordinary
+  Future API such as `value()`.
+- Explicitly rejected hidden "unobserved failure" / "failure consumed" state whose
+  history could otherwise make scope-exit behavior implementation-dependent.
+- Kept the existing opposite-direction rule unchanged: owner error or cancellation
+  still requests cancellation of non-detached children and waits for cleanup.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 90.
+
 ## [0.1.89] - 2026-09-03
 
 ### Fixed

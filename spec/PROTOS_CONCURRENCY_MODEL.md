@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 89
+Document revision: 90
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -728,6 +728,19 @@ The existing structured-concurrency semantics for Futures remain.
 
 Asynchronous child work created inside an execution context is owned by
 that context by default unless explicitly detached.
+
+Structured ownership bounds child lifetime but does not implicitly observe child
+results. When an owner reaches otherwise normal completion, it waits for every
+non-detached child to become terminal. A child's failed or cancelled terminal
+state does not by itself fail or cancel that normally completing owner. Failure
+or cancellation becomes observable to owner code only through the ordinary
+Future observation operations, such as `value()`.
+
+This deliberately avoids hidden "unobserved failure" or "failure consumed" state:
+whether an owner completes normally cannot depend on whether some previous read of
+a child Future happened to observe its failure. The Future remains an ordinary
+eventual-result object whose terminal outcome is stable and may be observed more
+than once.
 
 When an explicit isolated parallel operation creates work whose result
 is represented by a Future, that work participates in the same
