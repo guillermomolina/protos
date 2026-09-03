@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 195
+Document revision: 196
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2458,6 +2458,45 @@ Conceptually, Actor termination while its hosting runtime can still execute
 cleanup includes:
 
 ```text
+### Actor lifecycle observation
+
+`ActorRef.termination()` is represented conceptually as a non-task-backed
+Future observation:
+
+```text
+function observeActorTermination(actorRef):
+    result = newPendingFuture(task = none)
+
+    atomically:
+        if terminationKnown(actorRef):
+            resolveFuture(result, actorRef)
+            return result
+
+        registerTerminationObserver(actorRef, result)
+
+    return result
+
+function onActorTerminationKnown(actorRef):
+    observers = takeLiveTerminationObservers(actorRef)
+
+    for each observer in observers:
+        resolveFuture(observer, actorRef)
+```
+
+Registration and the known-termination transition are one semantic atomicity
+boundary. Implementations may realize it with locks, CAS, epochs,
+register-then-recheck, distributed monitor protocols, or equivalent machinery.
+
+Cancellation of `result` uses ordinary Future cancellation. Honoring that
+cancellation removes or makes inert only `result`'s observation registration;
+it does not mutate `actorRef`'s Actor.
+
+`UNREACHABLE` and `UNKNOWN` do not call `onActorTerminationKnown`. Network or
+node failure detection may do so only when another normative contract has
+established that the concrete Actor incarnation is terminated rather than
+merely unreachable.
+
+
 ### Unhandled Actor-turn failure
 
 Conceptually, every ordinary Actor turn has an outer runtime boundary:

@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 195
+Document revision: 196
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -1530,6 +1530,68 @@ For distributed Actors:
 
 A network partition or routing failure cannot by itself prove that a
 remote Actor has terminated.
+
+## 29A. Actor Lifecycle Monitoring API
+
+**CLOSED**
+
+Core exposes Actor lifecycle observation through the existing `Future`
+abstraction rather than introducing a second event-stream, monitor-handle, or
+mailbox-message universe.
+
+`ActorRef.termination()` returns a new non-task-backed Future local to the
+calling execution domain. The returned Future represents only this observation
+of the concrete Actor incarnation identified by that ActorRef.
+
+If termination of that incarnation is already known when `termination()` is
+called, the returned Future is resolved with that same ActorRef. Otherwise it
+remains pending until termination becomes known, then resolves with that same
+ActorRef.
+
+Each call creates an independent observation Future. Cancelling one such Future
+only abandons that observation. It never requests termination of the target
+Actor, never cancels another observer, and never affects supervision, failure
+authority, Group policy, routing, or the Actor's lifecycle.
+
+The first terminal transition of the observation Future wins under ordinary
+Future semantics. If observer cancellation races with notification of known
+termination, whichever transition reaches that Future first determines its
+stable terminal state.
+
+Monitoring reports **known termination**, not mere loss of communication.
+`UNREACHABLE`, `UNKNOWN`, routing failure, timeout, connection loss, or network
+partition must not resolve or fail the observation Future as though Actor
+termination had been proved. A future Process/Node failure-detection mechanism
+may establish stronger knowledge, but only its own normative contract may turn
+such evidence into known Actor termination.
+
+The observation does not expose the target Actor's private unhandled `Error`,
+mutable state, mailbox contents, cleanup state, or failure-authority
+information. Callers that need failure-policy diagnostics require a separate
+capability/API. `termination()` answers only the lifecycle question: whether
+this concrete Actor incarnation is known to have ended.
+
+A monitor installed while the target is INITIALIZING, READY, or TERMINATING
+therefore remains tied to that same incarnation until known TERMINATED. Actor
+replacement does not retarget the observation. If a replacement is created, it
+has a different ActorRef and requires a different call to `termination()`.
+
+Observation registration and target termination form an atomic semantic race:
+either registration observes that termination was already known and returns an
+already-resolved Future, or registration becomes live before the termination
+notification and that notification resolves it. An implementation must not
+permit the classic lost-wakeup outcome in which termination occurs between a
+state check and registration and the Future remains pending forever.
+
+A pending observation must not retain arbitrary caller state. The runtime may
+represent registrations by compact internal continuations or tokens. Once an
+observation Future becomes terminal or its cancellation is honored, its live
+registration must be removed or made inert so terminated Actors and long-lived
+observers do not retain dead observation state without bound.
+
+The implementation may use direct local registration, distributed monitor
+protocols, routing metadata, tombstones, or another mechanism. Those choices
+are non-observable provided the rules above are preserved.
 
 ## 30. Runtime Health and Watchdog
 
@@ -3543,7 +3605,6 @@ mechanism, or implementation detail that still requires design.
 -   Draining policy and mechanics
 -   Infrastructure Controller integration APIs
 -   External infrastructure adapters such as Kubernetes or Nomad
--   Monitoring API
 -   Failure-authority API
 -   Process failure detection mechanism
 -   Node failure detection mechanism

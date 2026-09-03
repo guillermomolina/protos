@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.196] - 2026-09-03
+
+### Closed
+- Closed `Monitoring API`.
+- Standardized `ActorRef.termination()` as an independent non-task-backed
+  Future observation of one concrete Actor incarnation.
+- Defined monitoring as known-termination observation only; unreachable,
+  unknown, timeout, routing loss, and network partition do not fabricate death.
+- Defined independent cancellation for each observation without any lifecycle
+  authority over the target Actor.
+- Closed the registration-versus-termination lost-wakeup race.
+- Required terminal/cancelled observation registrations to be removed or made
+  inert to prevent unbounded retention.
+- Preserved ActorRef incarnation identity across replacement and kept failure
+  diagnostics separate from lifecycle observation.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 196.
+
 ## [0.1.195] - 2026-09-03
 
 ### Fixed
