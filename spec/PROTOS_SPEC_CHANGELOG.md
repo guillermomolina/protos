@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.201] - 2026-09-03
+
+### Fixed
+- Defined file-URL conversion to establish URL components and path-segment
+  hierarchy before percent-decoding segment data.
+- Prevented percent-decoded separators, prefixes, device syntax, or other
+  hierarchy-looking data from creating extra Path structure.
+- Prevented percent-encoded data that decodes to `"."` or `".."` from being
+  silently reclassified as portable current/parent traversal.
+- Required lossless percent/text conversion and failure instead of replacement,
+  truncation, normalization, delimiter reinterpretation, or other lossy native
+  filename conversion.
+- Confined file-URL authority interpretation to mappings already authorized by
+  the receiving Filesystem capability.
+- Prohibited ambient DNS, network acquisition, UNC authority expansion, or host
+  root access merely to interpret a file URL.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 201. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.200] - 2026-09-03
 
 ### Fixed

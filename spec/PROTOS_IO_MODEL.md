@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 200
+Document revision: 201
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -1353,6 +1353,20 @@ filesystem.pathFromURL(url)
 ```
 
 The exact public spelling remains open. A non-file URL is invalid for such a conversion.
+
+Standard file-URL conversion preserves URL structure before converting it to Path structure. Scheme, authority, URL path hierarchy, and URL path-segment boundaries are determined under URL semantics before percent-encoded data inside a segment is decoded for filesystem naming. An implementation must not percent-decode a raw URL/path string first and then reinterpret decoded characters as URL delimiters.
+
+Consequently, a percent-encoded slash or other decoded hierarchy-looking character that was data inside one URL path segment cannot create an additional Path component, change rootedness, introduce a Filesystem prefix/root/device selector, or otherwise acquire separator semantics during conversion. The decoded value belongs to that one candidate filesystem component. If the interpreting Filesystem cannot represent it as one logical child name, conversion or the later filesystem operation fails rather than splitting or reinterpreting it.
+
+URL dot-segment semantics are likewise resolved in the URL domain before portable Path components are constructed. A segment that was not a URL `.` or `..` hierarchy segment does not become current/parent traversal merely because percent-decoding its data yields the String `"."` or `".."`. Because those Strings are not valid normal portable Path component names, a standard conversion that would otherwise produce such a normal component fails rather than silently changing its structural meaning.
+
+Percent decoding and conversion to Protos `String` must be lossless for every produced normal component. Malformed percent encoding, a byte/text sequence that the Filesystem's file-URL mapping cannot represent as valid Protos text, or a conversion requiring replacement, truncation, normalization, delimiter reinterpretation, or another lossy transformation makes the conversion fail. The exact native filename encoding remains a Filesystem/host boundary; lossiness is not a portable fallback.
+
+A file URL authority is data to be interpreted only through the receiving Filesystem capability's explicitly supported namespace mapping. A non-empty or non-local-looking authority does not grant ambient network, DNS, UNC, host-root, or sibling-filesystem authority merely because the host platform has APIs that could interpret it that way. If the Filesystem cannot map that authority wholly inside its authorized namespace without obtaining additional authority, the conversion fails.
+
+`pathFromURL` does not itself perform ambient DNS/name resolution or network acquisition to decide whether a file authority is local or reachable. Such facilities are outside this I/O model. A managed Filesystem may have an already-provisioned mapping for authorities or UNC-like forms, but using that mapping must preserve the same confinement and one-component rules as every other Path conversion and resolution.
+
+File-URL conversion parses URL hierarchy before percent decoding, never lets decoded segment data become Path separators/parent traversal, performs only lossless component conversion, and cannot turn URL authority into ambient filesystem/network authority.
 
 Neither a Path nor a URL grants resource-access authority.
 
