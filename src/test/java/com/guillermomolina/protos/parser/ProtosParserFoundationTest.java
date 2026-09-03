@@ -45,7 +45,7 @@ class ProtosParserFoundationTest {
                 ((SurfaceIntrinsic) program.expressions().get(3)).kind());
         assertEquals(SurfaceLiteral.Kind.NULL,
                 ((SurfaceLiteral) program.expressions().get(8)).kind());
-        assertEquals(new SourceSpan(0, 49), program.span());
+        assertEquals(new SourceSpan(0, 45), program.span());
     }
 
     @Test
