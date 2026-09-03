@@ -4,7 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
-## [0.1.92] - 2026-09-03
+## [0.1.93] - 2026-09-03
+
+### Fixed
+- Closed the Core error-taxonomy ambiguity that previously allowed
+  implementations to expose different intermediate error prototypes while
+  still satisfying the same failure rule.
+- Defined `Error` as the mandatory standard root error prototype and made the
+  default standard taxonomy shallow: normatively named standard error
+  prototypes delegate directly to `Error` unless a normative specification
+  explicitly defines another parent relation.
+- Clarified that a failure specified only as "signals an error" guarantees only
+  the `Error` category for portable handler matching, and that pseudocode
+  constructor names do not automatically become standard-prelude bindings.
+- Preserved ordinary user/library extensibility: programs may build arbitrary
+  error-prototype hierarchies below `Error` using normal delegation.
+
+### Changed
+- Synchronized the normative document revisions to 93. No syntax,
+  Future scheduling, Actor-transfer, or I/O operation semantics change in this
+  revision.\n\n## [0.1.92] - 2026-09-03
 
 ### Fixed
 - Required finite end-to-end admission/backpressure for `ByteWritable` output so

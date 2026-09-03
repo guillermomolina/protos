@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 92
+Document revision: 93
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -1681,9 +1681,44 @@ No fundamental `try`, `catch`, `throw`, or `finally` keywords are required.
 
 An unhandled error propagates until an appropriate handler is found or the outermost execution boundary is reached.
 
-The architecture should allow resumable conditions to be added later without redesigning the execution model.
+The architecture should allow resumable conditions to be added later without redesigning the execution model.\n\n### Core Error Taxonomy
 
-## 26. Futures
+Core v0.1 defines one mandatory root error prototype: `Error`. `Error` is an
+ordinary standard-prelude object whose delegation parent is `Object`.
+
+Every object signaled as a Core language/runtime error must have `Error` in its
+delegation chain. Standard error prototypes named normatively by Core or a
+normative domain model are ordinary objects in that chain and must delegate
+directly to `Error` unless that same normative specification explicitly defines
+another parent relation.
+
+This rule makes the portable taxonomy deliberately shallow. A specification may
+introduce a deeper standard hierarchy only by stating that hierarchy
+normatively; an implementation must not invent extra Protos-visible intermediate
+error categories. Such an invented ancestor would change handler matching and
+reflection and is therefore observable language behavior, not an implementation
+detail.
+
+When a normative rule says only that an operation "signals an error" and does
+not name a standard error prototype, Core v0.1 guarantees only the `Error`
+category for portable handler matching. An implementation may attach
+implementation-private diagnostic metadata, but it must not expose a different
+Protos delegation ancestry for that failure as though the additional category
+were standardized.
+
+Conversely, user code and libraries may create ordinary error prototypes and
+arbitrary deeper delegation hierarchies beneath `Error`. Those program-defined
+hierarchies use the normal object/delegation model and handler matching rules;
+they do not extend the set of standard Core error categories.
+
+A prototype name appearing only as pseudocode notation is not thereby a
+standard-prelude binding. A name becomes a portable standard error prototype
+only when a normative specification explicitly defines it as such.
+
+This taxonomy rule does not introduce checked errors, declarations, hidden
+classes, or a parallel type system. It exists solely to make the already
+observable prototype-based handler matching deterministic across independent
+implementations.\n\n## 26. Futures
 
 `Future` is an ordinary object representing the eventual result of an execution.
 

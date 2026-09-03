@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 92
+Document revision: 93
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2187,9 +2187,41 @@ function handlerMatches(handler, error):
 
 Core v0.1 handlers are **unwinding handlers**. Invoking a matching handler abandons the signaling continuation. If the handler returns normally, execution continues according to the handler-installation construct; it does not return a value to the original `signal` operation and does not resume immediately after the signaling point.
 
-Core v0.1 does not expose resumable conditions, `resume`, `retry`, or equivalent operations. Implementations should keep signaling, handler search, and stack transfer conceptually separable so that a later explicit resumable-condition facility can be introduced without redefining error objects or prototype-based handler matching.
+Core v0.1 does not expose resumable conditions, `resume`, `retry`, or equivalent operations. Implementations should keep signaling, handler search, and stack transfer conceptually separable so that a later explicit resumable-condition facility can be introduced without redefining error objects or prototype-based handler matching.\n\n### Error Prototype Taxonomy
 
+Error taxonomy is semantic and intentionally shallow in Core v0.1.
 
+`Error` is the mandatory root prototype for signaled Core errors and delegates
+directly to `Object`. Unless a normative specification explicitly defines a
+different standard parent relation, every normatively named standard error
+prototype is a direct child of `Error`.
+
+Conceptually:
+
+```text
+Object
+  ^
+  |
+Error
+  ^
+  |
+named standard error prototype
+```
+
+An implementation must not insert additional Protos-visible ancestors between a
+standard error prototype and `Error`, because `handlerMatches` and ordinary
+reflection could observe that difference.
+
+For a Core failure whose normative rule merely says "signals an error" without
+defining a named standard prototype, portable code may rely on matching `Error`
+and on no finer implementation-chosen category. Runtime pseudocode constructor
+names used to explain an operation do not by themselves create standard
+prelude bindings or normative intermediate categories.
+
+Program- and library-defined error prototypes remain ordinary objects and may
+form arbitrarily deep delegation hierarchies below `Error`. The runtime uses the
+same `handlerMatches` algorithm for those objects; no separate error type system
+exists.\n
 ## Module Instances and the Actor-Local Module Cache
 
 Module identity, caching, initialization, cycle handling, and failure are Actor-local. Each Actor owns a module cache keyed by canonical internal module identity. An Actor is an isolated domain of mutable Protos state and execution, with no shared mutable Protos memory between Actors. The module cache and the module instances it holds are part of that Actor's isolated runtime state. The broader Actor concurrency model is developed in `PROTOS_CONCURRENCY_MODEL.md`; this section depends only on the isolation and ownership consequences stated here.
