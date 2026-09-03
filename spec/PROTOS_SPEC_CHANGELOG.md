@@ -4,6 +4,30 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.145] - 2026-09-03
+
+### Fixed
+- Put `readText`, `readLine`, and `readLine(maxBytes)` on one logical
+  TextReader decoded-input operation-ordering domain.
+- Required sequentially ordered text reads to consume/evaluate input in their
+  Protos invocation order even when multiple Futures are simultaneously pending.
+- Defined genuinely concurrent Actor-routed text reads as having no predetermined
+  relative order, while requiring the chosen order to become stable.
+- Prevented mixed readText/readLine operations from racing independent decoder,
+  buffering, or line-framing states.
+- Composed ordering with existing cancellation semantics: a cancelled earlier
+  operation consumes zero text and the next operation receives the same earliest
+  logical input.
+- Composed ordering with permanent TextReader failure: later outstanding reads
+  cannot bypass an earlier committed decoding/I/O/line-too-long failure.
+- Preserved implementation freedom for speculative read-ahead, buffering,
+  decoding, and pipelining when observable result assignment remains identical.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 145. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.144] - 2026-09-03
 
 ### Fixed

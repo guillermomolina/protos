@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 144
+Document revision: 145
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -742,6 +742,18 @@ empty input + EOF  -> null
 
 An I/O or decoding error while constructing a line fails the Future; a partial line is not returned as success.
 
+All standard text-reading operations accepted by one logical `TextReader` — `readText()`, `readLine()`, and `readLine(maxBytes)` — share one logical decoded-input sequence and one operation-ordering domain. They do not race independent decoder, buffering, or line-framing states merely because their Futures are simultaneously pending.
+
+When two such operations have a Protos-defined invocation order, they consume/evaluate the decoded input in that order. In particular, operations invoked sequentially by one Actor retain that invocation order even when the earlier Future remains pending.
+
+Requests that are genuinely concurrent because they originate from independently progressing Actors through Actor-safe routing/proxies have no predetermined relative order merely from host scheduling. The reader/routing layer may choose either request first, but once their relative order is chosen it is stable. Each operation then receives the next logical text according to that chosen order and its own operation semantics.
+
+`readText()` and the two line-reading forms participate in the same ordering domain. A pending `readText()` cannot consume text past an earlier ordered `readLine()`, and a pending line read cannot consume text past an earlier ordered `readText()`.
+
+If an earlier ordered text-read is successfully cancelled, its zero-consumption rule leaves the next ordered operation to observe the same earliest remaining logical text. If an earlier ordered operation commits a decoding, I/O, or line-too-long failure that permanently fails the TextReader, later outstanding text-read operations fail under that lifecycle rule without bypassing the failed operation and consuming later input.
+
+This ordering is a logical TextReader property, not a requirement to execute one native byte read at a time. Implementations may read ahead, buffer, decode speculatively, and pipeline internal work when the resulting observable assignment of text/results/errors to operations is exactly the one required by this ordering.
+
 ### 16.1 Line length limit
 
 Core v0.1 imposes no universal arbitrary fixed line limit.
@@ -1387,6 +1399,7 @@ readLine result, limit, decoding-error, and I/O-error precedence follows logical
 A TextReader line-too-long, decoding, or underlying I/O failure permanently fails its text-reading side; there is no implicit drain or recovery-to-next-line behavior.
 TextWriter encoding failure is pre-output failure-atomic: it emits zero bytes and preserves encoder state; writeLine text plus LF is one ordered logical text-write operation.
 Successful cancellation of readText/readLine consumes zero logical text and preserves decoder/framing state; internal read-ahead may be retained but cannot become text loss, duplication, or reordering.
+readText and both readLine forms on one logical TextReader share one ordered decoded-input domain; mixed/outstanding operations cannot race separate decoder or framing states.
 
 I/O that may wait returns Future.
 I/O introduces no hidden Protos suspension point.
