@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 100
+Document revision: 101
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -1675,6 +1675,52 @@ Exceptional conditions use signaling:
 error.signal()
 ```
 
+### Standard Signaling Protocol
+
+The standard `Error` prototype provides the ordinary zero-argument message
+`signal()`.
+
+An ordinary error object may therefore be signaled with:
+
+```js
+error.signal()
+```
+
+The standard behavior is inherited through ordinary delegation. Its receiver
+must be `Error` itself or an object whose delegation chain contains `Error`.
+Calling the standard signaling behavior with any other receiver is a protocol
+error; copying, composing, extracting, or otherwise reusing the implementation
+of `Error.signal` does not make a non-error object signalable.
+
+The receiver object itself is the object presented to handler matching and to
+the selected handler. Signaling does not implicitly clone, wrap, replace, or
+convert it, and does not add Protos-visible slots or mutate its ordinary
+language-visible state. Implementations may retain implementation-private
+diagnostic information such as stack metadata only when that information is not
+observable as additional Core object structure or taxonomy.
+
+`Error.signal()` never returns normally to the activation that invoked it. If a
+matching handler is found, Core's unwinding semantics transfer control to that
+handler and abandon the signaling continuation. If no matching handler is
+found, the error reaches the applicable outermost execution boundary according
+to the existing unhandled-error rule.
+
+The standard method takes no arguments. Constructing or enriching an error is
+separate ordinary object/protocol behavior and occurs before signaling. Core
+does not define string-to-error coercion, prototype-to-instance coercion, or any
+other implicit condition designator.
+
+The runtime's own language-defined failures use the same semantic signaling
+operation directly; they are not specified as an overridable message send to
+`signal()`. Overriding a user object's `signal` slot therefore affects ordinary
+message dispatch to that object but cannot redefine how slot lookup failures,
+invalid assignments, cancellation observation, or other normative runtime
+failures transfer control.
+
+This keeps error signaling inside the ordinary object/delegation model while
+preserving one closed semantic category of signalable Core errors rooted at
+`Error`.
+
 Handlers are dynamically installed in the execution environment of closures.
 
 No fundamental `try`, `catch`, `throw`, or `finally` keywords are required.
@@ -1750,7 +1796,9 @@ and richer handling abstractions may be built from this single primitive
 dynamic-scope mechanism.
 An unhandled error propagates until an appropriate handler is found or the outermost execution boundary is reached.
 
-The architecture should allow resumable conditions to be added later without redesigning the execution model.\n\n### Core Error Taxonomy
+The architecture should allow resumable conditions to be added later without redesigning the execution model.
+
+### Core Error Taxonomy
 
 Core v0.1 defines one mandatory root error prototype: `Error`. `Error` is an
 ordinary standard-prelude object whose delegation parent is `Object`.
@@ -1787,7 +1835,9 @@ only when a normative specification explicitly defines it as such.
 This taxonomy rule does not introduce checked errors, declarations, hidden
 classes, or a parallel type system. It exists solely to make the already
 observable prototype-based handler matching deterministic across independent
-implementations.\n\n## 26. Futures
+implementations.
+
+## 26. Futures
 
 `Future` is an ordinary object representing the eventual result of an execution.
 

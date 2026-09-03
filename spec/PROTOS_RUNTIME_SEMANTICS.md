@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 100
+Document revision: 101
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -1507,6 +1507,60 @@ function signal(error, activation):
 
     terminateAtExecutionBoundary(error)
 ```
+
+### User-visible `Error.signal()` protocol
+
+The standard `Error` prototype exposes the semantic signaling operation through
+the ordinary zero-argument message `signal()`.
+
+Conceptually:
+
+```text
+function standardErrorSignal(receiver, activation):
+    if not delegationChainContains(receiver, Error):
+        signalCoreProtocolError(
+            operation = "Error.signal",
+            receiver = receiver,
+            activation = activation
+        )
+
+    signalErrorObject(
+        error = receiver,
+        activation = activation
+    )
+
+    UNREACHABLE
+```
+
+`signalErrorObject` searches the task's currently active dynamic handler frames
+using the rules below. The exact receiver object is used for prototype matching
+and is passed unchanged to the selected handler. The operation performs no
+language-visible mutation of that object merely because it is being signaled.
+
+`signalErrorObject` has a semantic precondition that its argument is `Error` or
+has `Error` in its delegation chain. Every normative Core/runtime failure must
+construct or otherwise provide such an object before invoking this operation.
+The invalid-receiver branch above is therefore validation of the user-visible
+standard method, not a recursive attempt to signal an arbitrary non-error
+object.
+
+Once `signalErrorObject` begins, the caller's signaling continuation cannot
+complete normally. Selection of a handler performs the already-defined unwind
+to that handler; absence of a matching handler reaches the applicable execution
+boundary. A selected handler's eventual return is the result of the enclosing
+`handle` installation construct, never a return value from `signal()` to the
+original signaling point.
+
+The standard method accepts no arguments. Implementations must not add implicit
+conversion from String values, prototypes, host exceptions, or arbitrary
+objects into signalable errors. Error creation and population are separate from
+signaling.
+
+Runtime-detected Protos failures invoke the semantic signaling operation rather
+than performing ordinary overridable message dispatch to a possibly modified
+`signal` slot. Conversely, an explicit source-level `error.signal()` expression
+is an ordinary message send and therefore follows ordinary lookup/override
+rules before the standard behavior, if selected, reaches this primitive.
 
 ### Standard Handler Installation
 

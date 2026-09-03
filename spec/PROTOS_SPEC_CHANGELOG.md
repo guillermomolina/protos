@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.101] - 2026-09-03
+
+### Fixed
+- Defined `Error.signal()` as the portable zero-argument user signaling protocol.
+- Required the signaled receiver itself to belong to the `Error` delegation
+  hierarchy and to be the exact object matched and delivered to handlers.
+- Made signaling non-returning at the original signaling point under Core's
+  unwinding model, whether control transfers to a handler or reaches an outer
+  execution boundary.
+- Separated runtime semantic signaling from overridable source-level message
+  dispatch, so user overrides cannot redefine normative runtime failures.
+- Prohibited implicit String/prototype/arbitrary-object coercion into errors and
+  language-visible mutation merely for signaling.
+- Removed known literal-newline formatting artifacts left by the earlier
+  error-taxonomy applier where present.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 101.
+  No syntax, reserved words, Actor scheduling, or I/O semantics change.
+
 ## [0.1.100] - 2026-09-03
 
 ### Fixed
