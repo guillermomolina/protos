@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 94
+Document revision: 95
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -813,7 +813,9 @@ For an open that would only acquire an existing file with preserved content, acq
 
 If `create` or `createNew` actually creates a previously absent target, creation is an irreversible open commitment. If `truncate` changes an existing target to size zero, that content change is an irreversible open commitment. Once either effect can be observed through the Filesystem capability, cancellation cannot make the open Future `cancelled` as though the target had remained unchanged.
 
-A committed open may subsequently fail before producing a `File`. Such failure does not imply rollback: a target created by the open may remain present, and truncation already performed may remain effective. Protos does not require an implementation to delete a newly created target or restore truncated content in order to report failure, and an implementation must not perform such rollback when doing so could race with or destroy independent later activity.
+A committed open may subsequently fail before producing a `File`. Such failure does not perform compensating rollback of portable effects already committed by that open. In particular, the open operation itself does not delete a target that it already created and does not restore content that it already truncated.
+
+This rule constrains only compensating action performed by the failed open. It does not guarantee that a later observer will still find the created target present or the file still empty: independent Actors, external processes, or backend activity may subsequently rename, remove, replace, truncate, or write the target according to their own authority and ordering.
 
 If an open reaches `failed` or `cancelled` without returning a `File`, no undisclosed live `File` resource is transferred to the program. Any native or backend resource acquired internally remains under implementation custody and must be released before that terminal result. If cancellation cannot satisfy that cleanup obligation, cancellation does not win; the operation continues to a non-cancelled terminal outcome.
 
@@ -1198,6 +1200,7 @@ Path is a value, not filesystem authority.
 URL is a value, not resource-access authority.
 Filesystem carries filesystem authority.
 filesystem.open may report cancelled only before any portable create/truncate effect and before File-result commitment.
+A failed committed open does not compensate by deleting an already-created target or restoring already-truncated content.
 
 A Protos Process is an execution domain, not an OS process.
 Every Protos execution has one Process and one RootActor.

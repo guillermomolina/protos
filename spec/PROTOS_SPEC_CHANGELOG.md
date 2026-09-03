@@ -4,6 +4,22 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.95] - 2026-09-03
+
+### Fixed
+- Removed implementation-dependent rollback behavior after a committed
+  `filesystem.open` later fails before returning a `File`.
+- Required the failed open itself not to compensate by deleting a target it
+  already created or restoring content it already truncated.
+- Clarified that this does not freeze later filesystem state: independent
+  Actors, external processes, or backend activity may still change the target
+  under their own authority and ordering.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 95. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.94] - 2026-09-03
 
 ### Fixed
