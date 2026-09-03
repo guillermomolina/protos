@@ -4,6 +4,24 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.92] - 2026-09-03
+
+### Fixed
+- Required finite end-to-end admission/backpressure for `ByteWritable` output so
+  invocation-time snapshots cannot turn pending writes into an implementation-
+  managed unbounded memory queue.
+- Required pressure to propagate through Protos-managed adapters, Actor-safe
+  proxies, routing layers, and backend buffering while preserving bounded
+  pipelining and implementation freedom.
+- Clarified that programs may still retain arbitrarily many Futures or arguments
+  themselves; the bounded-retention guarantee applies to state retained by the
+  I/O delivery path.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 92. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.91] - 2026-09-03
 
 ### Fixed

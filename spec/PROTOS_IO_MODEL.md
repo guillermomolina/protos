@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 91
+Document revision: 92
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -229,7 +229,22 @@ Successful completion does **not** by itself imply:
 
 Backpressure may keep a write pending. Internally, an implementation may use partial native writes, but ordinary `ByteWritable.write` does not expose partial success as its normal successful result.
 
-### 6.1 ByteWritable cancellation and failure
+### 6.1 Write admission and end-to-end backpressure
+
+Invocation-time snapshotting does not make a `ByteWritable` an unbounded output queue.
+
+A logical output flow must have an effective finite bound on write work that has been accepted but has not progressed far enough for its retained state to be released. The bound may be fixed, adaptive, receiver-specific, or imposed by downstream capacity; its numeric value is not portable Protos behavior.
+
+When that bound is reached, later writes remain pending at admission/backpressure rather than forcing the implementation to retain an unbounded number or volume of write snapshots. Backpressure must be capable of propagating toward the code issuing writes through the pending Futures.
+
+This rule is end-to-end across adapters, Actor-safe proxies, routing layers, and native/backend buffering controlled by the Protos implementation. No intermediate Protos-managed queue may grow without bound merely because another layer has not yet applied pressure.
+
+The rule does not impose a one-write-at-a-time protocol. Implementations may admit and overlap multiple writes, batch them, coalesce representation, or use bounded pipelining while preserving invocation ordering, snapshot semantics, cancellation/commitment rules, and the receiver's observable output contract.
+
+A program that intentionally issues writes without waiting may therefore accumulate pending write Futures, but the runtime is not required to accept all corresponding payload state into an ever-growing output queue. Program-held Futures and arguments remain subject to ordinary reachability/lifetime rules; this backpressure guarantee concerns retention required by the I/O delivery path itself.
+
+
+### 6.2 ByteWritable cancellation and failure
 
 While a write is still pending and no irreversible output effect has occurred, it may be cancelled with the guarantee that zero bytes from that write contributed to the receiver's observable output sequence.
 
@@ -1156,6 +1171,7 @@ I/O introduces no hidden Protos suspension point.
 
 ByteWritable.write captures its Bytes value snapshot at invocation.
 Later mutation of the caller's Bytes cannot change that write.
+Pending writes remain subject to finite end-to-end admission; write snapshots do not authorize unbounded retained output.
 
 
 COMMITTED is an I/O-operation concept, not a Future state.
