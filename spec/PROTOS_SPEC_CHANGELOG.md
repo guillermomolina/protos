@@ -4,6 +4,23 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.152] - 2026-09-03
+
+### Fixed
+- Aligned executable `honorCancellation` pseudocode with the already normative
+  cancellation-safe `ensure` semantics.
+- Made a cleanup error during cancellation fail the task Future instead of being
+  overwritten by an unconditional `CANCELLED` completion.
+- Preserved `CANCELLED` as the terminal outcome only when the cancellation unwind
+  and every applicable cleanup scope complete without a superseding error.
+- Reused the existing `ErrorTransfer` and `failFuture` machinery rather than
+  introducing another cancellation-specific outcome path.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 152.
+
 ## [0.1.151] - 2026-09-03
 
 ### Fixed

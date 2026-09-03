@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 151
+Document revision: 152
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -1786,8 +1786,12 @@ function beforeResumeIntoProtos(task):
         resumeProtosExecution(task)
 
 function honorCancellation(task):
-    unwind current asynchronous activation
-    run all applicable ensure cleanup
+    outcome = unwind current asynchronous activation with Cancellation
+
+    if outcome is ErrorTransfer(error):
+        failFuture(task.future, error)
+        return
+
     complete task.future as CANCELLED
 ```
 
