@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.112] - 2026-09-03
+
+### Fixed
+- Defined a portable filesystem-independent `Path` value model as rootedness plus
+  an ordered component sequence.
+- Separated normal names from parent traversal and prohibited lexical collapsing
+  across parent components where backend indirection could change resolution.
+- Defined Path equality structurally, independent of host case folding, Unicode
+  normalization, native prefixes, symlinks, or resource identity.
+- Made Path immutable/non-authoritative and safe to transfer under ordinary
+  immutable-value Actor rules without transferring Filesystem authority.
+- Required Filesystem backends to treat each portable normal component as one
+  logical child name, rejecting unrepresentable names rather than reinterpreting
+  them as native separators, roots, drives, devices, or authority-changing syntax.
+- Kept public parsing/display/native conversion APIs outside v0.1 while forbidding
+  them from silently embedding host-native identity rules into portable Path.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 112. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.111] - 2026-09-03
 
 ### Fixed

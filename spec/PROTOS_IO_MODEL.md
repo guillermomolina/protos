@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 111
+Document revision: 112
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -968,6 +968,31 @@ This rule does not require host ancestry to define the namespace. A virtual, mou
 
 Path normalization, component/equality rules, and host-native path conversion remain separate questions; none of them may weaken this authority boundary.
 
+### 20.2 Portable Path value semantics
+
+The portable semantic content of a `Path` is filesystem-independent. A Path consists of:
+
+- a rooted/relative flag; and
+- an ordered sequence of path components.
+
+A normal path component contains one valid Protos `String` name. The empty String, `"."`, and `".."` are not normal component names in the portable component model. Parent traversal is represented as a distinct parent component rather than by pretending that `".."` is an ordinary child name. A current-directory component is semantically redundant and is not retained in the portable value.
+
+A relative Path with no components denotes the interpreting Filesystem's configured base. A rooted Path with no components denotes that Filesystem's namespace root.
+
+The component sequence is not lexically collapsed across parent components. In particular, a path conceptually containing `a / b / parent / c` is not the same Path value as `a / c`. Filesystem resolution may observe backend indirection at `b`, so eliminating the parent component before resolution could change the target and weaken authority reasoning.
+
+Path value equality is structural and filesystem-independent: two Paths are equal exactly when they have the same rooted/relative flag and the same ordered component kinds and normal-component String values. Equality does not access a Filesystem and does not use host case folding, Unicode normalization, drive-letter rules, inode/file identity, symlink resolution, or backend aliases.
+
+Therefore unequal Path values may resolve to the same resource in a particular Filesystem, and an equal Path value may resolve differently at different times if the authorized namespace itself changes. Resource identity and Path value equality are distinct concepts.
+
+A Path is immutable and carries no authority. It may cross Actor boundaries according to the ordinary rules for immutable values without transferring a Filesystem capability.
+
+The exact public constructors, parsing helpers, display syntax, and native-path conversion APIs remain outside Core v0.1. Any standardized constructor/parser that produces a portable Path must produce the semantic value described above rather than embedding the host platform's separator, drive, UNC, device-prefix, case-folding, or current-directory rules into Path identity.
+
+When a Filesystem maps a normal component to a concrete backend, that component is one logical child name. A backend that cannot represent that name may reject the operation, but it must not reinterpret one component as multiple components, a root/prefix change, a drive/device selector, or another authority-changing native syntax. Host-native path values that require such semantics belong behind an explicitly host-specific/native boundary.
+
+Whether a concrete Filesystem treats two distinct normal names as referring to the same backend entry is a property of that Filesystem's namespace semantics. That lookup behavior does not change portable Path equality.
+
 The minimum filesystem operation closed by this model is `open`. Existence queries, metadata/stat, remove, mkdir, rename, symlink operations, directory iteration, and richer namespace operations remain outside this I/O revision.
 
 ---
@@ -1266,6 +1291,7 @@ EOF != unavailable capability != I/O failure
 A failed ByteReadable read consumes zero observable bytes and leaves the logical sequence position unchanged; any bytes already obtained are preserved for later logical reading.
 
 Path is a value, not filesystem authority.
+Portable Path identity is structural: rootedness plus ordered components; Filesystem lookup identity, host syntax, and resource identity are separate.
 URL is a value, not resource-access authority.
 Filesystem carries filesystem authority.
 Path resolution through a Filesystem is confined to that capability's authorized namespace; path syntax or backend indirection cannot escape into ambient authority.
