@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 83  
+Document revision: 84  
 Status: Draft  
 Last updated: 2026-09-03
 
@@ -2621,7 +2621,7 @@ Special floating-point cases such as NaN and signed zero are specified separatel
 
 `NaN` is a special semantic value of the `Float` family, not a language-level singleton object analogous to `null`.
 
-Different IEEE-754 NaN bit patterns or payloads do not create distinct language-level semantic values unless an explicit representation-inspection protocol is used.
+Different IEEE 754 NaN bit patterns, payloads, and NaN sign bits do not create distinct Core language-level semantic values. Core v0.1 has one semantic NaN value in the `Float` family. An implementation may use any convenient NaN representation internally, and Core code cannot observe or depend on an internal NaN payload or sign bit.
 
 Consequently:
 
@@ -2790,7 +2790,41 @@ Integer quotient/remainder behavior is exposed explicitly through integer protoc
 
 Conversions between numeric families are explicit when representation or information may change. Operations such as `floor`, `truncate`, and `round` express the intended conversion behavior rather than relying on silent coercion.
 
-`Float` follows IEEE-754-style floating-point behavior, including NaN and infinities where supported by the chosen floating representation.
+`Float` has one fixed Core v0.1 semantic format. The Float semantic value set is
+exactly IEEE 754-2019 `binary64` (double precision), with the language-level NaN
+model described below. The choice is part of Protos semantics and is not
+implementation-defined.
+
+Consequently, every finite Float has the precision and exponent range of
+`binary64`; positive and negative zero, positive and negative infinity, and
+subnormal values are required. Implementations must support gradual underflow
+and must not flush subnormal operands or results to zero.
+
+The standard Float behaviors corresponding to IEEE basic binary arithmetic
+(`+`, `-`, `*`, and `/`) and unary negation operate as `binary64`. Each primitive
+operation produces the result required by IEEE 754-2019 for those operands using
+`roundTiesToEven` when rounding is required. The result of each such operation
+is a Float value before any later Protos operation observes or consumes it.
+
+An implementation may use wider registers, fused instructions, constant
+folding, vector instructions, JIT specialization, or another internal strategy
+only when the observable result is the same as the required sequence of
+`binary64` operations. Extra intermediate precision and contraction of separate
+operations into a fused operation must not change a Protos result.
+
+Core v0.1 exposes no mutable floating-point rounding mode and no ambient
+floating-point status flags. Host thread-local floating-point environment state
+must not change Protos results.
+
+For the IEEE basic arithmetic above, overflow, underflow, division by zero, and
+invalid floating-point arithmetic produce the corresponding `binary64` infinity,
+signed zero/subnormal, or NaN result rather than signaling a Protos error merely
+because the IEEE condition occurred.
+
+This rule fixes the semantics of Core floating-point arithmetic; it does not
+silently specify unrelated numerical algorithms. Transcendental functions and
+other higher-level numerical operations require their own contracts if exact
+cross-implementation results are intended.
 
 Endianness is not a property of a numeric value. It belongs to binary encoding and decoding. The same numeric value may be represented as bytes using objects/protocol values such as `BigEndian` and `LittleEndian`.
 

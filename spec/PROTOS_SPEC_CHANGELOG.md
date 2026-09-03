@@ -4,6 +4,36 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.84] - 2026-09-03
+
+### Fixed
+- Defined the Core v0.1 `Float` semantic value set exactly as IEEE 754-2019
+  `binary64` instead of the previous implementation-dependent
+  "IEEE-754-style" formulation.
+- Required strict `binary64` results for standard Float basic arithmetic,
+  `roundTiesToEven` rounding, gradual underflow, and observable equivalence
+  across implementations. Excess precision, flush-to-zero modes, host rounding
+  state, and fused-operation contraction may not change Protos results.
+- Made positive and negative infinity, signed zero, subnormal values, and NaN
+  mandatory parts of the Float model rather than depending on a chosen host
+  floating representation.
+- Defined decimal Float literal conversion as exact-decimal to IEEE 754-2019
+  `binary64` using `roundTiesToEven`, independently of host parsing behavior.
+- Closed the remaining NaN representation leak: Core Float has one semantic NaN
+  value, while payload/sign bits are non-semantic implementation representation
+  and are not required to survive operations or storage.
+
+### Changed
+- Clarified that IEEE floating-point conditions arising from the standard Float
+  basic arithmetic produce IEEE Float results rather than signaling Protos
+  errors merely because overflow, underflow, division by zero, or an invalid
+  floating-point operation occurred.
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 84. No syntax,
+  concurrency-model, or I/O-model semantics change in this revision.
+
+
 ## [0.1.83] - 2026-09-03
 
 ### Fixed

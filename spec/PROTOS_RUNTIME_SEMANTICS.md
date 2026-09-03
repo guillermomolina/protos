@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 83  
+Document revision: 84  
 Status: Draft  
 Last updated: 2026-09-03
 
@@ -1303,6 +1303,55 @@ Triple-double-quoted String evaluation produces a `String` value defined by the 
 `true`, `false`, and `null` are canonical singleton values.
 
 `===` is not overrideable. Hash codes are not identity: a hash collision must never cause two distinct identity-bearing objects to compare identical.
+
+---
+
+# 26.1 Strict Float Evaluation
+
+The semantic Float format in Core v0.1 is exactly IEEE 754-2019 `binary64`.
+Implementations may represent Float objects differently internally, but every
+observable Float value and every standard Float basic arithmetic result must be
+equivalent to that semantic format.
+
+Conceptually:
+
+```text
+function roundFloat(realResult):
+    return IEEE754_binary64_roundTiesToEven(realResult)
+```
+
+For standard Float `+`, `-`, `*`, and `/`, each primitive operation is evaluated
+as one `binary64` operation. An implementation must not retain excess precision
+across a semantic operation boundary when doing so would change a later
+observable result.
+
+Likewise, an implementation must not contract a sequence of distinct Protos
+operations into a fused operation such as fused multiply-add when the fused
+result differs from performing the specified `binary64` operations separately.
+
+Subnormal values are supported with gradual underflow. Flush-to-zero and
+denormals-are-zero host modes may not change Protos semantics.
+
+The host floating-point rounding mode and floating-point exception/status flags
+are not Protos execution state in Core v0.1. Implementations must produce the
+specified result even when host state differs.
+
+IEEE floating-point conditions from these basic operations are represented by
+Float results:
+
+```text
+overflow          -> appropriately signed infinity
+gradual underflow -> binary64 subnormal or appropriately signed zero
+division by zero  -> IEEE binary64 result, including signed infinity where applicable
+invalid operation -> NaN
+```
+
+They do not by themselves signal a Protos error.
+
+NaN payload bits and a NaN sign bit are not part of the Core semantic Float
+value. Implementations are not required to preserve them across operations,
+storage, Actor transfer, optimization, or serialization unless a future
+explicit binary-format protocol defines a separate representation contract.
 
 ---
 

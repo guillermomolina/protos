@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 83  
+Document revision: 84  
 Status: Draft  
 Last updated: 2026-09-03
 
@@ -2990,6 +2990,23 @@ A `.` immediately following a complete radix-prefixed Integer literal is a struc
 Numeric type suffixes such as `L`, `f`, or `d` are not supported.
 
 `NaN` and `Infinity` are not special numeric literal syntax.
+
+Decimal Float literal evaluation is defined independently of the host parser,
+host floating-point library, or compiler constant-folder. After removing `_`
+digit separators and interpreting the accepted decimal spelling as an exact
+mathematical decimal value, the literal denotes the nearest IEEE 754-2019
+`binary64` value using `roundTiesToEven`.
+
+If the exact magnitude is too large for finite `binary64`, the literal denotes
+positive infinity. If it is nonzero but too small for a normal value, conversion
+uses gradual underflow and may produce a subnormal value or positive zero. A
+leading negative sign is not part of the literal token; unary `-` is applied
+after literal evaluation, so negating positive zero produces negative zero
+according to Float semantics.
+
+Two implementations must therefore produce the same Float value for every valid
+decimal Float literal even when their host numeric parsers or intermediate
+floating-point formats differ.
 
 **Malformed Numeric Literals and Numeric Token Termination:**
 
