@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 179
+Document revision: 180
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -1051,6 +1051,18 @@ A read+append handle may seek for reading. Append writes nevertheless retain app
 The initial logical position is zero even for append mode.
 
 The standard Protos append contract does not promise stronger non-interleaving with unrelated external writers than the backend can provide.
+
+For append writes performed through standard Protos `File` capabilities that select the same underlying filesystem resource, each write operation has an atomic append-placement boundary. Concurrent append writes have no predetermined relative order, but once the filesystem accepts one append operation as the next append contributor, no byte from another append write may be placed between bytes contributed by that operation. A failed append therefore contributes its contiguous prefix, if any, before the next append operation can contribute bytes to a later file position.
+
+The placement boundary is distinct from the write's completion boundary. An append may contribute a prefix and subsequently fail, and the next append may then continue from the resulting file end. An implementation must not reserve the complete requested sequence in advance and thereby create a semantic hole when a committed append contributes fewer bytes than requested.
+
+This guarantee applies to standard Protos append operations selecting the same resource, even when they are reached through distinct `File` capabilities or aliases. Their relative order remains nondeterministic when genuinely concurrent; Protos does not expose which operation won. The guarantee is nevertheless strong enough to prevent two such append operations from overlapping or interleaving their contributed byte sequences.
+
+If a backend cannot provide or emulate this append-placement boundary for the resource, it must not expose standard append mode for that resource. It may expose a weaker host-specific facility separately.
+
+This rule does not establish a general ordering domain for independently opened Files. It is a specific invariant of append placement required to make the standard append contract meaningful across independently opened capabilities. Other operations on those capabilities remain governed by their ordinary cross-capability semantics.
+
+Append writes selecting the same underlying resource have an atomic placement boundary: concurrent operations may be ordered either way, but their contributed byte sequences do not overlap or interleave, and a partial failed append does not reserve an uncommitted suffix.
 
 Writes invoked on the same receiver still preserve their required invocation ordering.
 

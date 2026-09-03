@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.180] - 2026-09-03
+
+### Fixed
+- Defined an atomic append-placement boundary for standard append writes
+  selecting the same underlying filesystem resource.
+- Allowed nondeterministic ordering of genuinely concurrent append writes while
+  prohibiting overlap or byte-level interleaving of their contributed
+  sequences.
+- Defined partial failed append behavior so only the contributed prefix affects
+  file end; an implementation may not reserve an entire requested sequence and
+  thereby create an observable semantic hole.
+- Required backends to provide or emulate the standard append-placement
+  invariant, or reject standard append mode for resources where they cannot.
+- Kept the rule local to append placement without creating a general ordering
+  domain between independently opened File capabilities.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 180. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.179] - 2026-09-03
 
 ### Fixed
