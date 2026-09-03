@@ -73,6 +73,23 @@ public final class ProtosLexer {
 
     public List<Token> tokenize() {
         List<Token> tokens = new ArrayList<>();
+        for (TokenOccurrence occurrence : tokenizeOccurrences()) {
+            tokens.add(occurrence.token());
+        }
+        return tokens;
+    }
+
+    /**
+     * Tokenizes the source while retaining the raw half-open source span of each
+     * emitted token.
+     *
+     * <p>Whitespace and comments still produce no token occurrence. The EOF
+     * occurrence has an empty span at the end of the source.</p>
+     *
+     * @return token occurrences in source order, including EOF
+     */
+    public List<TokenOccurrence> tokenizeOccurrences() {
+        List<TokenOccurrence> tokens = new ArrayList<>();
 
         while (!atEnd()) {
             int codePoint = codePointAt(pos);
@@ -83,8 +100,10 @@ public final class ProtosLexer {
             }
 
             if (isLogicalNewlineStart(codePoint)) {
+                int start = pos;
                 consumeLogicalNewline();
-                tokens.add(new Token(TokenType.NEWLINE, "\n"));
+                tokens.add(occurrence(new Token(TokenType.NEWLINE, "
+"), start));
                 continue;
             }
 
@@ -98,42 +117,53 @@ public final class ProtosLexer {
                 continue;
             }
 
+            int start = pos;
+
             if (codePoint == '_' || UnicodeXid.isStart(codePoint)) {
-                tokens.add(readIdentifierOrReservedWord());
+                tokens.add(occurrence(readIdentifierOrReservedWord(), start));
                 continue;
             }
 
             if (isDecimalDigit(codePoint)) {
-                tokens.add(readNumber());
+                tokens.add(occurrence(readNumber(), start));
                 continue;
             }
 
             if (codePoint == '\'') {
-                tokens.add(readQuotedString('\''));
+                tokens.add(occurrence(readQuotedString('\''), start));
                 continue;
             }
 
             if (codePoint == '"') {
-                tokens.add(startsWith("\"\"\"") ? readTripleDoubleQuotedString() : readQuotedString('"'));
+                Token string = startsWith("\"\"\"") ? readTripleDoubleQuotedString() : readQuotedString('"');
+                tokens.add(occurrence(string, start));
                 continue;
             }
 
             Token structural = readStructuralToken();
             if (structural != null) {
-                tokens.add(structural);
+                tokens.add(occurrence(structural, start));
                 continue;
             }
 
             if (isOperatorCharacter(codePoint)) {
-                tokens.add(readSymbolicToken());
+                tokens.add(occurrence(readSymbolicToken(), start));
                 continue;
             }
 
             throw error("Unexpected source character " + printableCodePoint(codePoint), pos);
         }
 
-        tokens.add(new Token(TokenType.EOF, ""));
+        tokens.add(new TokenOccurrence(
+                new Token(TokenType.EOF, ""),
+                new com.guillermomolina.protos.source.SourceSpan(pos, pos)));
         return tokens;
+    }
+
+    private TokenOccurrence occurrence(Token token, int start) {
+        return new TokenOccurrence(
+                token,
+                new com.guillermomolina.protos.source.SourceSpan(start, pos));
     }
 
     private Token readIdentifierOrReservedWord() {
