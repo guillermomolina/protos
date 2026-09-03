@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 205
+Document revision: 206
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2488,6 +2488,38 @@ cancelled or becomes terminal before acceptance.
 Admission eligibility is not Actor-task runnability. Making a delivery
 operation admission-eligible therefore does not create an Actor turn and does
 not weaken the existing definition of scheduler weak fairness.
+
+
+### Process termination knowledge
+
+Core distinguishes direct lifecycle knowledge from distributed failure
+detection:
+
+```text
+function classifyRemoteProcessAfterCommunicationLoss(processRef):
+    // No Core heuristic may infer terminal lifecycle from silence.
+    if authoritativeTerminationAlreadyKnown(processRef):
+        return TERMINATED
+
+    if communicationCurrentlyUnavailable(processRef):
+        return UNREACHABLE
+
+    return UNKNOWN
+```
+
+`authoritativeTerminationAlreadyKnown` denotes knowledge established by an
+already-defined lifecycle authority, not a heartbeat timeout, retry limit,
+transport exception, or host-specific probe.
+
+Core v0.1 therefore has no runtime transition of the form:
+
+```text
+missedHeartbeats >= implementationThreshold
+    -> TERMINATED
+```
+
+A future distributed failure-detection facility may introduce additional state
+and transitions only through its own normative contract.
 
 
 ### Core Actor failure-authority policy

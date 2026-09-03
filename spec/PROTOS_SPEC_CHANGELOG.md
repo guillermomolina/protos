@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.206] - 2026-09-03
+
+### Closed
+- Closed `Process failure detection mechanism` for Core v0.1.
+- Defined that Core has no automatic distributed failure detector for remote
+  Processes and no implementation-specific timeout/heartbeat heuristic may
+  fabricate `TERMINATED`.
+- Distinguished direct runtime lifecycle knowledge from inferred remote
+  failure suspicion.
+- Required communication loss, timeout, reconnect failure, heartbeat silence,
+  and Node unreachability to remain `UNREACHABLE`/`UNKNOWN` absent independent
+  authoritative termination knowledge.
+- Composed this boundary with `ActorRef.termination()` so remote transport loss
+  cannot masquerade as Actor death.
+- Reserved leases, epochs, quorum membership, fencing, explicit downing, and
+  similar mechanisms for a future normative distributed-runtime facility.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 206.
+
 ## [0.1.205] - 2026-09-03
 
 ### Fixed

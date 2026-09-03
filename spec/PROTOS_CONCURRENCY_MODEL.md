@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 205
+Document revision: 206
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -1986,6 +1986,57 @@ Process.
 Failure of a remote Process or communication channel does not
 automatically terminate a local Process.
 
+## 37A. Process Failure Knowledge Boundary
+
+**CLOSED**
+
+Core v0.1 does not define or require an automatic distributed failure detector
+for remote Processes.
+
+A runtime may know that a Process has terminated when that fact is established
+by direct lifecycle authority already inside the runtime's custody, such as the
+runtime completing termination of a Process it hosts. That is lifecycle
+knowledge, not failure detection by inference.
+
+For a Process that is only remotely reachable, loss of communication is not
+proof of Process termination. In particular, none of the following by itself
+permits Core to conclude `TERMINATED`:
+
+- heartbeat silence;
+- connection closure or reset;
+- routing failure;
+- request or communication timeout;
+- failure to reconnect;
+- DNS, transport, or host reachability failure;
+- observation that the containing Node is currently unreachable; or
+- a local suspicion threshold derived from elapsed time or missed traffic.
+
+Such evidence may justify `UNREACHABLE` or `UNKNOWN` according to the existing
+distributed-state distinction, but it must not fabricate terminal lifecycle
+knowledge.
+
+Therefore Core v0.1 has no implementation-selectable timeout, heartbeat
+interval, phi threshold, retry count, host-probe rule, or operating-system
+heuristic whose expiry turns a remote Process into `TERMINATED`.
+
+This rule composes with Actor lifecycle monitoring. Loss of a remote Process or
+its transport does not resolve `ActorRef.termination()` for Actors hosted there
+merely because communication was lost. Without independently authoritative
+termination knowledge, those Actors remain non-`TERMINATED` from the observer's
+point of view.
+
+A future distributed-runtime facility may define Process failure detection,
+leases, epochs, quorum-backed membership, fencing, explicit downing, or another
+mechanism. Such a facility must distinguish suspicion/unreachability from any
+decision that makes termination authoritative, and must specify the scope and
+observable consequences of that decision.
+
+Until such a facility is defined, the absence of a Core Process failure
+detector is normative rather than an implementation gap. Implementations may
+collect health telemetry internally, but they must not let implementation-
+specific heuristics change Core lifecycle, ActorRef, monitoring, messaging, or
+replacement behavior.
+
 ## 38. Node
 
 **CLOSED --- REVISED**
@@ -3710,7 +3761,6 @@ mechanism, or implementation detail that still requires design.
 -   Draining policy and mechanics
 -   Infrastructure Controller integration APIs
 -   External infrastructure adapters such as Kubernetes or Nomad
--   Process failure detection mechanism
 -   Node failure detection mechanism
 -   Network-partition detection and reporting
 -   Split-brain mitigation mechanisms
