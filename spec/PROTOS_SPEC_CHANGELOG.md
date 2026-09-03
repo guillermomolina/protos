@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.107] - 2026-09-03
+
+### Fixed
+- Defined failed ordinary `ByteReadable.read` operations to consume zero bytes
+  from the observable input sequence rather than permitting hidden partial
+  consumption behind a failed Future.
+- Required bytes already obtained before cancellation or failure to be
+  preserved/rebuffered as the earliest unread bytes for later logical reads.
+- Required shared logical read position to remain unchanged across failed or
+  cancelled reads even when a native/backend cursor advanced internally.
+- Prevented later outstanding reads from bypassing bytes an earlier failed read
+  was required to preserve.
+- Clarified that read failure alone does not universally close or poison the
+  receiver; later operations follow the concrete receiver state.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 107. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.106] - 2026-09-03
 
 ### Fixed

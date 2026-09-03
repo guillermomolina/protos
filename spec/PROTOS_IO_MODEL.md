@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 106
+Document revision: 107
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -184,15 +184,23 @@ If data remains before EOF, that data is returned before EOF is reported. Once E
 
 Multiple outstanding reads against the same logical receiver consume the sequence in invocation order.
 
-### 5.1 ByteReadable cancellation
+### 5.1 ByteReadable cancellation and failure
 
 A pending read may be cancelled only while cancellation can preserve the observable input sequence.
 
 If cancellation wins before commitment, the operation consumes no bytes from the observable sequence.
 
-If an implementation has already obtained bytes from an operating-system or host source but the Protos operation is still cancellable, those bytes must be preserved or rebuffered so that successful cancellation does not remove them from the observable sequence.
+A failed ordinary `ByteReadable.read` also consumes zero bytes from the receiver's observable input sequence. Failure is therefore not a partial-read result hidden behind a failed Future.
 
-Pending reads are logically ordered by invocation. Cancelling a pending read removes that read from the logical queue without consuming input assigned to it.
+If an implementation has already obtained bytes from an operating-system, host, or downstream source before the Protos read is cancelled or fails, those bytes must be preserved or rebuffered whenever they belong to that read's logical input position. They remain the earliest unread bytes of the observable sequence and must be returned by later successful reads before newer source bytes that follow them.
+
+For a receiver whose reads share a logical sequence position, cancellation or failure leaves that logical position unchanged. An implementation whose backend position advanced while obtaining bytes that are subsequently preserved must virtualize, rebuffer, reposition, or otherwise reconcile the backend so later Protos operations observe the unchanged logical position.
+
+Pending reads are logically ordered by invocation. Cancelling or failing an earlier read does not allow a later outstanding read to consume bytes that the earlier outcome was required to preserve before those bytes are again available in logical order.
+
+A later seek or other operation that explicitly changes the receiver's sequence state may make preserved read-ahead irrelevant according to that operation's normal semantics; this is not permission to expose an intermediate host position or to duplicate preserved bytes.
+
+Read failure does not by itself semantically close or poison the receiver. Later operations are evaluated against the receiver's actual protocol and backend state and may succeed or fail accordingly. A concrete receiver may define stronger lifecycle behavior when that behavior is part of its observable contract.
 
 Once a read has committed its data, EOF, or error result, cancellation cannot roll that result back.
 
@@ -1246,6 +1254,7 @@ Invoking close commits permanent lifecycle termination; close itself cannot subs
 flush != sync != close != shutdownWrite
 A failed flush never authorizes duplicate replay; an output wrapper with unknowable downstream progress becomes unusable unless a stronger protocol makes exact recovery possible.
 EOF != unavailable capability != I/O failure
+A failed ByteReadable read consumes zero observable bytes and leaves the logical sequence position unchanged; any bytes already obtained are preserved for later logical reading.
 
 Path is a value, not filesystem authority.
 URL is a value, not resource-access authority.
