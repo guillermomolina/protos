@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.170] - 2026-09-03
+
+### Fixed
+- Defined the standardized `Environment` snapshot as a single-valued mapping
+  under the represented environment's native name-identity rules.
+- Required `process.environment()` to fail when the native bootstrap environment
+  contains duplicate-equivalent names rather than selecting an
+  implementation-dependent first/last winner.
+- Made duplicate detection use native name identity, preserving POSIX-like
+  case-sensitive distinctions and rejecting Windows-like case-insensitive
+  duplicates.
+- Rejected duplicates even when their values are equal, because callback count,
+  retained spelling, and native-boundary behavior would still be ambiguous.
+- Prevented host enumeration order, case-preserving spelling, or runtime
+  deduplication policy from becoming accidental portable Protos semantics.
+- Kept raw/ambiguous host environment representations available only through a
+  separately defined host-specific/native boundary.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 170. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.169] - 2026-09-03
 
 ### Fixed

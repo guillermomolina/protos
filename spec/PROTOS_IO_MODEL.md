@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 169
+Document revision: 170
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -1316,6 +1316,16 @@ No entry is silently omitted because it cannot be represented as String. Host-sp
 
 Environment variable name identity follows the semantics of the represented environment. In particular, a POSIX-like environment may distinguish case while a Windows-like environment may treat names case-insensitively.
 
+The standardized portable Environment is a single-valued mapping under those native name-identity rules. The Process bootstrap environment therefore must not expose two or more native entries that compare as the same environment-variable name under the represented environment's own identity semantics.
+
+If the supplied native bootstrap environment contains such duplicate-equivalent entries, `process.environment()` fails rather than constructing an Environment whose `get(name)`, `contains(name)`, or `each(block)` behavior would depend on host enumeration order, first/last-match convention, case-preserving spelling, or implementation-specific deduplication.
+
+This duplicate-name validation is performed against native environment-name identity, before any rule that would make ambiguity depend on conversion to Protos String. Two POSIX-like names that differ only by case remain distinct because that represented environment treats them as distinct; two Windows-like names that differ only by case conflict when that represented environment treats them as the same name.
+
+Duplicate-equivalent entries are rejected even when their values happen to be equal. Equality of values does not make duplicate callback count, preserved name spelling, or future native-boundary behavior semantically unambiguous.
+
+The standardized view does not silently choose the first entry, choose the last entry, merge entries, or invent a canonical spelling. A host-specific/native environment API may expose a raw environment representation separately when an embedding needs to preserve host states that do not form a valid standardized Environment mapping.
+
 The standardized portable Environment view is immutable for the Process lifetime. Core v0.1 provides no operation to mutate or reload the current Process environment.
 
 Protos does not place invalid Unicode, surrogate escapes, or lossy replacements into `String` merely to preserve arbitrary host environment bytes. Host-specific/native APIs may expose exact native representations separately.
@@ -1538,6 +1548,7 @@ Process-local facilities are provisioned by the Process host.
 Process existence and unused facilities may remain lightweight/lazy.
 
 Environment.each prevalidates complete portable String representability before invoking user code; invalid native environment text therefore cannot produce an implementation-dependent callback prefix.
+Environment is single-valued under its native name identity; duplicate-equivalent native entries make process.environment() fail rather than selecting an implementation-dependent winner.
 Process standard streams are byte capabilities.
 Each available stdin/stdout/stderr binding is one Process-local logical stream for the Process lifetime; repeated accessor calls may return different capability objects but cannot create independent input sequences or output-ordering domains.
 Text views are explicit adapters over those byte capabilities and their associated Encoding objects.
