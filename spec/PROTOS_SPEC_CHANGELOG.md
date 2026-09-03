@@ -4,6 +4,23 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.94] - 2026-09-03
+
+### Fixed
+- Defined ordering when distinct capability objects or Actor-local proxies denote
+  one logical output flow, so proxy identity cannot accidentally create separate
+  ordering domains.
+- Preserved each Actor's invocation order while leaving concurrent cross-Actor
+  write order nondeterministic until the shared flow admits/routes the writes.
+- Required successful writes on one logical flow to contribute whole logical byte
+  sequences without byte-level interleaving, while permitting partial native
+  writes and other implementation strategies underneath.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 94. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.93] - 2026-09-03
 
 ### Fixed

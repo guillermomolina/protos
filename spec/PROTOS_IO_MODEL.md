@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 93
+Document revision: 94
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -82,7 +82,13 @@ Binary I/O uses `Bytes`. `String` never carries an implicit binary encoding.
 
 I/O operations that may wait return `Future` values. They never introduce hidden Protos suspension. Suspension occurs only through the ordinary Future mechanisms, such as invoking `.value()` on a pending Future.
 
-Unless a stronger protocol says otherwise, ordering guarantees are per logical receiver/flow. Protos defines no global order among independent I/O receivers such as standard output and standard error.
+Unless a stronger protocol says otherwise, ordering guarantees are per logical receiver/flow. Distinct capability objects or Actor-local proxies may denote the same logical flow; object identity alone does not create an independent ordering domain. Conversely, two resources that happen to reach the same host destination are not one logical flow unless the capability semantics say so.
+
+For writes belonging to one logical output flow, each issuing Actor's invocation order is preserved. Writes that are concurrent because they originate from independently progressing Actors have no predetermined order; the flow may choose either order when admitting/routing them. Once the flow chooses their relative order, that order is stable and the writes contribute their logical byte sequences in that order rather than interleaving the bytes of two successful writes.
+
+This per-write non-interleaving guarantee is a Protos logical-flow property, not a promise that one native `write` syscall is atomic. Implementations may use partial native writes, buffering, routing, or multiple backend operations while preserving the same observable sequence. A stronger concrete receiver may define additional atomicity guarantees; unrelated logical flows receive no global order merely because a host backend later merges them.
+
+Protos defines no global order among independent I/O receivers such as standard output and standard error.
 
 ---
 
@@ -1119,7 +1125,9 @@ The runtime may optimize same-Process access aggressively. No observable message
 
 Process-local standard input, when delegated to multiple Actors, denotes one underlying input sequence unless a stronger host capability says otherwise. Competing consumers are serialized/routed consistently with the capability contract; bytes are not duplicated merely because multiple Actors can request input.
 
-For one standard output capability, writes from the same Actor preserve that Actor's ordinary invocation/program order. Independent Actors do not receive an arbitrary additional total order beyond the ordering established by the routed output capability and the concurrency model.
+Delegated capability objects that denote the same standard output denote one logical output flow even when different Actors hold distinct Actor-local proxies. Each Actor's write invocation order is preserved. Writes issued concurrently by independent Actors have no predetermined cross-Actor order, but the routed output flow chooses one stable order for them; successful writes are not byte-interleaved merely because they arrived through different proxies.
+
+This ordering does not impose a global scheduler order between Actors and does not make proxy object identity observable as an ordering primitive. It is only the serialization required by the shared output flow once competing writes reach that flow.
 
 ---
 
@@ -1172,6 +1180,7 @@ I/O introduces no hidden Protos suspension point.
 ByteWritable.write captures its Bytes value snapshot at invocation.
 Later mutation of the caller's Bytes cannot change that write.
 Pending writes remain subject to finite end-to-end admission; write snapshots do not authorize unbounded retained output.
+Distinct proxies for one logical output flow share its ordering domain; concurrent successful writes are ordered as whole logical byte sequences, not byte-interleaved.
 
 
 COMMITTED is an I/O-operation concept, not a Future state.
