@@ -320,6 +320,46 @@ class ProtosLexerTest {
     }
 
     @Test
+    void nonstandardOperatorAlphabetCharactersFormCustomOperators() {
+        assertEquals(
+            List.of(
+                token(TokenType.CUSTOM_OPERATOR, "$?@\\~&|"),
+                token(TokenType.EOF, "")
+            ),
+            lex("$?@\\~&|")
+        );
+    }
+
+    @Test
+    void maximalOperatorRunsAreClassifiedOnlyAfterTheCompleteSpellingIsKnown() {
+        assertEquals(
+            List.of(
+                token(TokenType.CUSTOM_OPERATOR, "=>="),
+                token(TokenType.CUSTOM_OPERATOR, "&&&"),
+                token(TokenType.CUSTOM_OPERATOR, "|||"),
+                token(TokenType.CUSTOM_OPERATOR, "+++"),
+                token(TokenType.CUSTOM_OPERATOR, "<=?"),
+                token(TokenType.EOF, "")
+            ),
+            lex("=>= &&& ||| +++ <=?")
+        );
+    }
+
+    @Test
+    void commentOpenersTakeLexicalPrecedenceOverOperatorSpellings() {
+        assertEquals(
+            List.of(
+                token(TokenType.IDENTIFIER, "a"),
+                token(TokenType.NEWLINE, "\n"),
+                token(TokenType.IDENTIFIER, "b"),
+                token(TokenType.IDENTIFIER, "c"),
+                token(TokenType.EOF, "")
+            ),
+            lex("a // not an operator\nb /* not an operator */ c")
+        );
+    }
+
+    @Test
     void lexesDecimalIntegerFractionAndExponentForms() {
         assertEquals(
             List.of(
