@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 189
+Document revision: 190
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3802,16 +3802,14 @@ Therefore overriding `==` or `!=` cannot change `===` or `!==`, and overriding
 ordinary equality cannot change identity-sensitive mechanisms such as
 `IdentityMap`.
 
-### Default equality and hashing of Core identity-bearing objects
+### Default equality and hashing when Core defines no specialization
 
-The standard prelude does not silently introduce structural equality or
-content-derived hashing for an identity-bearing Core object merely because that
-object belongs to a standard built-in family.
+The ordinary `Object` equality/hash behavior is the default for every Core
+object for which no normative rule explicitly defines more specific standard
+`==` or `hash` behavior. This default is not limited to identity-bearing object
+kinds.
 
-Unless another normative Core rule explicitly specifies a more specific
-standard `==` or `hash` behavior for a particular semantic family or standard
-object kind, an identity-bearing Core object uses the ordinary inherited
-`Object` defaults:
+Therefore, absent an explicit normative specialization:
 
 ```text
 receiver == other
@@ -3821,28 +3819,34 @@ receiver.hash()
     -> identityHashOf(receiver)
 ```
 
-This rule applies uniformly to identity-bearing standard objects such as Arrays,
-Bytes objects, Futures, errors, execution contexts, module instances, standard
-prototype objects, Maps, IdentityMaps, and other identity-bearing Core objects
-for which no explicit specialized equality/hash rule is specified.
+For identity-bearing objects, this means ordinary object identity and an
+identity-derived hash. For Core value-identity objects, the same inherited
+default operates on their semantic identity: semantically identical String
+values, the canonical Boolean values, and `null` therefore use `===` for the
+standard equality result and `identityHashOf` for the standard hash unless a
+more specific normative rule is explicitly defined.
 
-Consequently, merely being a standard container, executable object, runtime
-coordination object, context, module, prototype, or other built-in object does
-not imply recursive comparison, element-wise comparison, slot-wise comparison,
-content hashing, graph traversal, cycle detection, or mutation-sensitive
-hashing.
+A built-in family, standard prototype, container, buffer, executable object,
+runtime coordination object, context, module, singleton, or other Core object
+does not acquire structural, content-derived, case-folded, locale-sensitive,
+state-derived, or otherwise specialized equality/hashing merely because an
+implementation or host language commonly provides such behavior.
 
 A normative section may deliberately define specialized standard equality or
-hashing when the semantic family requires it. Number-family hashing is such an
-explicit specialization because numeric `==` equates some values whose semantic
-identity differs. The explicit Map/IdentityMap rule remains consistent with this
-general default and documents the important collection-specific consequence.
+hashing where semantics require it. Number is explicitly specialized: numeric
+`==` is numeric equality rather than semantic identity, and standard numeric
+`hash` is correspondingly required to preserve numeric-equality coherence.
+Other explicit specializations, if added normatively, likewise take precedence
+over this default.
 
-User-defined ordinary `==` and `hash` overrides remain unaffected. A library may
-also build structural, recursive, content-based, or domain-specific comparison
-and hashing explicitly. Such behavior exists only where defined; an
-implementation must not infer it from object shape, mutability, container
-contents, host-language conventions, or the identity of a built-in prototype.
+The existing standard Map/IdentityMap equality/hash rule is a documented
+collection-specific consequence of this general default, not a separate
+identity relation.
+
+User-defined ordinary `==` and `hash` overrides remain unaffected. Libraries may
+provide structural, recursive, content-based, locale-sensitive, or
+domain-specific equality and hashing explicitly; those policies are not inferred
+by Core.
 
 ### Standard Map equality and hashing
 

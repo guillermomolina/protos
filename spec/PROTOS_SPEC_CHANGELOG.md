@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.190] - 2026-09-03
+
+### Fixed
+- Generalized the ordinary `Object` equality/hash default from only
+  identity-bearing Core objects to every Core object lacking an explicit
+  normative specialization.
+- Closed the remaining implementation-choice gap for value-identity objects
+  such as String values, canonical Booleans, and `null`.
+- Required absent-specialization standard `==` to use `===` and standard
+  `hash` to use `identityHashOf`, preserving each value category's semantic
+  identity.
+- Preserved explicit Number equality/hash specialization, the documented
+  Map/IdentityMap consequence, and ordinary user-defined overrides.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 190.
+  Only `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain
+  normative semantic content in this revision.
+
 ## [0.1.189] - 2026-09-03
 
 ### Closed
