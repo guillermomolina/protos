@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.139] - 2026-09-03
+
+### Fixed
+- Defined append-mode logical-position aftermath for successful, failed, and
+  cancelled writes using the existing ByteWritable contributed-prefix model.
+- Required zero-contribution failed/cancelled appends to leave logical position
+  unchanged even if a backend cursor was tentatively moved to EOF.
+- Required any append that contributes bytes to leave logical position
+  immediately after that operation's last contributed byte, including when the
+  write Future later fails.
+- Defined successful zero-length append as position-preserving.
+- Prevented external-writer interleaving from being incorrectly modeled as
+  `oldPosition + k` or `initialEOF + k`; later external changes do not
+  retroactively alter an already established logical position.
+- Kept backend-dependent external-writer atomicity outside the portable promise
+  while making the Protos handle's own position deterministic.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 139. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.138] - 2026-09-03
 
 ### Fixed

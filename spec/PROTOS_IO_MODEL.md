@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 138
+Document revision: 139
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -905,7 +905,17 @@ Every append-mode write is placed at the current file end applicable to that wri
 
 Therefore `seekToEnd()` followed by an ordinary positioned write is not semantically equivalent to append in the presence of concurrent external writers.
 
-A successful append-mode write updates the handle's logical position to the position after the bytes written. A later append still uses the then-current EOF rather than assuming that stored position is still the end.
+Append placement and logical-position aftermath follow the ordinary `ByteWritable` prefix semantics. Merely determining or consulting the current EOF is not an irreversible output effect. A cancelled append whose cancellation wins before any byte contribution leaves the handle's logical position unchanged.
+
+For a captured append sequence of length `N`, let `k` be the contiguous prefix length contributed by that write according to the ordinary failed-write rule. If the write fails with `k = 0`, its logical position is unchanged. If it contributes at least one byte, whether the Future ultimately resolves successfully or fails, the handle's logical position becomes one greater than the file offset at which the last byte contributed by that append operation was placed.
+
+Consequently, after a failed append that contributed bytes, the logical position does not revert merely because the Future failed. Conversely, a failed append that contributed no bytes does not move the logical position merely because an implementation/native API temporarily positioned a backend cursor at EOF.
+
+A successful append of non-empty `Bytes` uses the same rule and therefore leaves the logical position immediately after that operation's last contributed byte. A successful append of `Bytes()` contributes no byte and leaves the logical position unchanged.
+
+The logical position established by an append is a numeric position, not a promise that it remains the current EOF. A later append still uses the then-current EOF rather than assuming that the stored logical position is still the end.
+
+Unrelated external writers or independently authorized operations may change the file between backend-level append actions when the backend does not provide stronger atomicity. Such changes do not retroactively alter the logical position already established by a contributed byte. They may also mean that the final position cannot be derived as the pre-write position plus `k`, or as one initial EOF plus `k`; the normative rule is the position immediately following this operation's last contributed byte.
 
 A read+append handle may seek for reading. Append writes nevertheless retain append placement semantics.
 
@@ -1362,6 +1372,7 @@ I/O introduces no hidden Protos suspension point.
 ByteWritable.write captures its Bytes value snapshot at invocation.
 Later mutation of the caller's Bytes cannot change that write.
 A failed ByteWritable write contributes one contiguous prefix of its captured sequence; failure does not reveal that prefix length or make whole-write retry safe.
+Append writes update logical position only through actual byte contribution: zero contribution leaves it unchanged; otherwise it becomes the position immediately after that append operation's last contributed byte.
 Truncatable.truncate is failure-atomic: a failed truncate contributes no size/content change, and a backend unable to provide that contract does not expose standard Truncatable.
 Pending writes remain subject to finite end-to-end admission; write snapshots do not authorize unbounded retained output.
 Distinct proxies for one logical output flow share its ordering domain; concurrent successful writes are ordered as whole logical byte sequences, not byte-interleaved.
