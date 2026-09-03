@@ -624,6 +624,39 @@ class ProtosLexerTest {
     }
 
     @Test
+    void tripleDoubleWithoutStructuralPrefixPreservesWhitespaceOnlyLines() {
+        String source = "\"\"\"\n  alpha\n \t \n    beta\"\"\"";
+        assertEquals(
+            List.of(token(TokenType.STRING, "  alpha\n \t \n    beta"), token(TokenType.EOF, "")),
+            lex(source)
+        );
+    }
+
+    @Test
+    void tripleDoubleEmptyStructuralPrefixPreservesContentIndentation() {
+        String source = "\"\"\"\n  alpha\n\tbeta\n\"\"\"";
+        assertEquals(
+            List.of(token(TokenType.STRING, "  alpha\n\tbeta"), token(TokenType.EOF, "")),
+            lex(source)
+        );
+    }
+
+    @Test
+    void tripleDoubleBlankLineNeedNotContainTheCompleteStructuralPrefix() {
+        String source = "\"\"\"\n  alpha\n \n  beta\n  \"\"\"";
+        assertEquals(
+            List.of(token(TokenType.STRING, "alpha\n\nbeta"), token(TokenType.EOF, "")),
+            lex(source)
+        );
+    }
+
+    @Test
+    void tripleDoubleStructuralPrefixDistinguishesSpaceFromTab() {
+        String source = "\"\"\"\n  alpha\n\t \"\"\"";
+        assertThrows(ProtosLexer.LexicalError.class, () -> lex(source));
+    }
+
+    @Test
     void tripleDoubleEscapedQuoteDoesNotCloseLiteral() {
         assertEquals(
             List.of(token(TokenType.STRING, "a\"\"b"), token(TokenType.EOF, "")),
