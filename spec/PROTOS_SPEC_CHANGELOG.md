@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.85] - 2026-09-03
+
+### Fixed
+- Defined `ByteWritable.write(bytes)` argument capture precisely: every invocation
+  takes a logical snapshot of the supplied mutable `Bytes` size and octet contents
+  at invocation time, so later caller mutation cannot change an already-issued
+  write.
+- Kept the snapshot semantic rather than representational: implementations may
+  use copy-on-write, immutable backing, retained storage, scatter/gather, or other
+  optimizations, but `write` creates no caller-visible borrow/freeze lifetime and
+  snapshot capture is not the I/O commitment boundary.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 85. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision; the
+  other revisioned documents receive the common revision/date synchronization
+  only.
+
+
 ## [0.1.84] - 2026-09-03
 
 ### Fixed

@@ -1,10 +1,9 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 84  
+Document revision: 85
 Status: Draft  
 Last updated: 2026-09-03
-
 This document is the normative domain model for Protos input/output semantics.
 
 It complements:
@@ -206,6 +205,13 @@ ByteWritable {
 `write(bytes)` returns a `Future`. On successful completion, that Future resolves to the receiver.
 
 The argument must be `Bytes`.
+
+`write(bytes)` captures a logical snapshot of the argument's size and octet contents at invocation time. The snapshot is fixed before the operation can remain pending because of backpressure, wait behind an earlier operation, or begin host/native I/O. Later mutation of the supplied `Bytes` does not change the byte sequence belonging to that write, and each write invocation captures its own logical snapshot.
+
+This is a semantic snapshot, not a requirement for eager physical copying. An implementation may use immutable backing storage, copy-on-write, reference retention, scatter/gather I/O, or another representation strategy provided that ordinary later mutation of the caller's `Bytes` remains valid and cannot change the captured write sequence. `write` does not impose a hidden caller-visible borrow, freeze, pin, or "do not mutate until completion" lifetime rule.
+
+Snapshot capture does not itself commit output. A write whose cancellation wins before the I/O commitment boundary still contributes zero bytes to the observable output sequence.
+
 
 Writing `Bytes()` is valid and may complete immediately.
 
@@ -1121,6 +1127,10 @@ String never implies an encoding.
 
 I/O that may wait returns Future.
 I/O introduces no hidden Protos suspension point.
+
+ByteWritable.write captures its Bytes value snapshot at invocation.
+Later mutation of the caller's Bytes cannot change that write.
+
 
 COMMITTED is an I/O-operation concept, not a Future state.
 Successful cancellation before commitment preserves zero observable effect.
