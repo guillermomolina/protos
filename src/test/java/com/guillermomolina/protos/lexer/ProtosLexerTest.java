@@ -600,6 +600,46 @@ class ProtosLexerTest {
     }
 
     @Test
+    void unicodeEscapeAcceptsOneThroughSixHexDigits() {
+        assertEquals(
+            List.of(
+                token(TokenType.STRING, "A"),
+                token(TokenType.STRING, "A"),
+                token(TokenType.STRING, "A"),
+                token(TokenType.STRING, "A"),
+                token(TokenType.STRING, "A"),
+                token(TokenType.STRING, "😀"),
+                token(TokenType.EOF, "")
+            ),
+            lex("\"\\u{41}\" \"\\u{041}\" \"\\u{0041}\" \"\\u{00041}\" \"\\u{000041}\" \"\\u{01F600}\"")
+        );
+    }
+
+    @Test
+    void unicodeEscapeHexDigitsAreCaseInsensitive() {
+        assertEquals(
+            List.of(
+                token(TokenType.STRING, "ú"),
+                token(TokenType.STRING, "ú"),
+                token(TokenType.EOF, "")
+            ),
+            lex("\"\\u{00fa}\" \"\\u{00FA}\"")
+        );
+    }
+
+    @Test
+    void rejectsNamedAndOtherNonCoreEscapeForms() {
+        for (String source : List.of(
+            "\"\\N{LATIN CAPITAL LETTER A}\"",
+            "\"\\a\"",
+            "\"\\v\"",
+            "\"\\e\""
+        )) {
+            assertThrows(ProtosLexer.LexicalError.class, () -> lex(source), source);
+        }
+    }
+
+    @Test
     void rawLogicalNewlineIsRejectedInSingleLineStrings() {
         assertThrows(ProtosLexer.LexicalError.class, () -> lex("'a\nb'"));
         assertThrows(ProtosLexer.LexicalError.class, () -> lex("\"a\r\nb\""));
