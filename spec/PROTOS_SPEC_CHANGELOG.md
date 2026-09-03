@@ -4,6 +4,23 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.153] - 2026-09-03
+
+### Fixed
+- Defined successful standard `Map.atPut(key, value)` and
+  `IdentityMap.atPut(key, value)` to return the exact supplied `value`
+  regardless of whether the operation inserts or replaces an entry.
+- Removed the normal-Map pseudocode's observable previous-value/`ABSENT`
+  return split, which relied on an undefined non-language absence sentinel
+  and differed from `IdentityMap`.
+- Kept bracket assignment independently defined to evaluate to the assigned
+  value and left user-defined `atPut` direct-return contracts unconstrained
+  unless another normative protocol specifies them.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 153.
+  No grammar, Actor/Future, or I/O semantics change.
+
 ## [0.1.152] - 2026-09-03
 
 ### Fixed

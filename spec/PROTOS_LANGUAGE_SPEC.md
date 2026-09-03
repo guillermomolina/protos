@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 152
+Document revision: 153
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3722,6 +3722,47 @@ It returns canonical `true` exactly when `a === b` is false, and canonical
 Therefore overriding `==` or `!=` cannot change `===` or `!==`, and overriding
 ordinary equality cannot change identity-sensitive mechanisms such as
 `IdentityMap`.
+
+### Standard `Map.atPut` result
+
+For the standard `Map` and `IdentityMap` indexed-update protocols,
+`atPut(key, value)` returns the exact `value` object supplied to that invocation
+after the update succeeds.
+
+This result is independent of whether the operation inserted a new entry or
+updated an existing entry. It does not return the previous mapped value and does
+not use `null`, a hidden sentinel, or another absence marker to distinguish
+insertion from replacement.
+
+Consequently an explicit ordinary message send:
+
+```js
+result: map.atPut(key, value)
+```
+
+has:
+
+```js
+result === value
+```
+
+after successful completion.
+
+Bracket assignment remains governed by the existing indexed-assignment rule and
+also evaluates to the assigned value:
+
+```js
+map[key] = value
+```
+
+The syntax-level result does not depend on the `atPut` return value, so
+user-defined indexing protocols remain free to define a different direct
+`atPut` result unless their own normative protocol says otherwise. This section
+fixes only the standard `Map` and `IdentityMap` protocol results.
+
+If key search, hashing, equality, receiver validation, or the mutation itself
+signals an error, `atPut` has no normal return. Existing rules for effects and
+Map mutation before failure remain unchanged.
 
 ### Deterministic `Map` key matching
 

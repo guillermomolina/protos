@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 152
+Document revision: 153
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3595,9 +3595,8 @@ function mapAtPut(map, queryKey, value):
     )
 
     if entry != NOT_FOUND:
-        oldValue = entry.value
         entry.value = value
-        return oldValue
+        return value
 
     appendEntry(
         map,
@@ -3606,7 +3605,7 @@ function mapAtPut(map, queryKey, value):
         recordedHash = queryHash
     )
 
-    return ABSENT
+    return value
 ```
 
 `findMapEntryUsingKnownQueryHash` performs exactly the insertion-order
