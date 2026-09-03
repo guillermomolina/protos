@@ -4,6 +4,22 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.120] - 2026-09-03
+
+### Fixed
+- Defined `Object.!=` as ordinary customizable behavior whose default dynamically
+  invokes the receiver's current `==` behavior and returns its strict Boolean
+  complement.
+- Defined error and invalid-result propagation for the default `!=` behavior.
+- Defined `!==` as the non-overridable primitive Boolean complement of semantic
+  identity `===`, with no user-message dispatch.
+- Preserved independent user override of ordinary `!=` without allowing it to
+  redefine semantic identity or `IdentityMap`.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 120.
+  No grammar, Actor/Future, or I/O semantics change.
+
 ## [0.1.119] - 2026-09-03
 
 ### Fixed

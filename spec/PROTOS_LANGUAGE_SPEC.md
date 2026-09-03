@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 119
+Document revision: 120
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3568,6 +3568,45 @@ The default does not make `==` globally symmetric, transitive, or reflexive for
 all user-defined behavior. Those properties follow only where the specific
 equality protocol in use guarantees them. The default inherited behavior itself
 has the corresponding properties because it delegates to semantic identity.
+
+
+### Inequality semantics
+
+`!=` is the ordinary customizable inequality message protocol. `Object`
+provides its default behavior in terms of the receiver's current `==` behavior:
+
+```text
+Object.!=(other):
+    result = this == other
+    return booleanNot(result)
+```
+
+`booleanNot` accepts only canonical `true` or `false`; an error from `==` or an
+invalid equality result propagates rather than being interpreted through
+truthiness. Consequently, an object that overrides `==` but inherits the
+default `!=` automatically obtains the logical complement of its customized
+equality.
+
+A program may override `!=` independently as ordinary object behavior. If it
+does, Core does not impose a global law that the custom `!=` must remain the
+complement of custom `==`; both operations retain their existing strict
+Boolean-result contracts. Code that requires complementary custom behavior must
+define it accordingly.
+
+`!==` is different: it is the non-overridable logical complement of semantic
+identity `===`.
+
+```text
+a !== b  =  not (a === b)
+```
+
+`!==` performs no `!=`, `==`, `not`, or other user-overridable message dispatch.
+It returns canonical `true` exactly when `a === b` is false, and canonical
+`false` exactly when `a === b` is true.
+
+Therefore overriding `==` or `!=` cannot change `===` or `!==`, and overriding
+ordinary equality cannot change identity-sensitive mechanisms such as
+`IdentityMap`.
 
 ### Deterministic `Map` key matching
 

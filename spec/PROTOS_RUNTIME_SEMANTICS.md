@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 119
+Document revision: 120
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3173,6 +3173,49 @@ and equal default-`==` receivers necessarily obtain equal default hashes.
 
 No enumeration of local slots, traversal of delegation parents, deep graph
 comparison, or structural hashing is part of these defaults.
+
+
+### Inequality evaluation
+
+The standard default inequality behavior inherited from `Object` is
+conceptually:
+
+```text
+Object.!=(other):
+    result = send(this, "==", [other])
+    result = requireBooleanEqualityResult(result)
+
+    if result === true:
+        return false
+
+    return true
+```
+
+The `==` send is ordinary dynamic message dispatch. Therefore a receiver that
+overrides `==` but inherits `Object.!=` gets the complement of that override.
+Any error signaled by the `==` send propagates. A non-Boolean normal return from
+`==` signals the existing invalid-equality-result error before `!=` returns.
+
+An object may override the `!=` message itself; an explicit source-level
+`a != b` uses that ordinary message behavior and validates its result under the
+same equality Boolean-result contract.
+
+Semantic identity inequality is primitive:
+
+```text
+function notIdentical(a, b):
+    if identical(a, b):
+        return false
+
+    return true
+```
+
+Evaluation of `a !== b` evaluates `a` before `b`, then invokes this primitive
+semantic operation. `notIdentical` performs no Protos message lookup or send and
+cannot be overridden. It is exactly the Boolean complement of `identical`,
+including all Core value-identity rules such as numeric-family identity, String
+value identity, canonical Booleans, `null`, Float NaN identity, and signed-zero
+identity.
 
 ### Deterministic `Map` key search
 
