@@ -4,6 +4,33 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.173] - 2026-09-03
+
+### Fixed
+- Defined Protos Process termination as an I/O resource-custody and authority
+  boundary independently of operating-system process exit.
+- Required termination to revoke/detach the terminating Process's I/O
+  capabilities and Actor-safe proxies even in a managed runtime that keeps the
+  hosting OS process alive.
+- Prevented termination from implying successful `close`, `flush`, `sync`, or
+  half-close operations, synthesized lifecycle Futures, arbitrary Protos cleanup
+  callbacks, or guaranteed buffered-output/durability completion.
+- Required residual resources held solely for the terminating Process to
+  transfer to implementation/host cleanup custody without relying on GC or
+  execution of code in the dead Process.
+- Preserved already committed I/O effects and prevented termination from
+  inventing rollback semantics for pending/committed operations.
+- Distinguished Process-local authority revocation from destruction of backend
+  resources that are independently shared with other Processes or principals.
+- Kept exact post-transfer physical cleanup timing/backend consequences
+  host-dependent while requiring identical Protos-level authority revocation in
+  standalone and managed runtimes.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 173. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.172] - 2026-09-03
 
 ### Fixed

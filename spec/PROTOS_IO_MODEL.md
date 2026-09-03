@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 172
+Document revision: 173
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -1476,6 +1476,18 @@ Protos Process
 
 Terminating a Protos Process means terminating that Protos execution domain. In a standalone launcher this may naturally cause the hosting operating-system process to exit; in a managed runtime it need not terminate the operating-system process that hosts other Protos execution domains or runtime services.
 
+Process termination is a resource-custody boundary, not an implicit successful `close()`, `flush()`, `sync()`, `shutdownRead()`, or `shutdownWrite()` over every I/O object formerly reachable from that Process. Termination does not synthesize user-visible lifecycle Futures, run arbitrary Protos cleanup callbacks, promise buffered output propagation, establish durability, or convert pending I/O into successful operation results.
+
+Once Process termination commits, no Process-local I/O capability or proxy from that execution domain remains usable by Protos code. Host/runtime machinery must revoke or detach the terminated Process's routes to Process-local authority even when the hosting operating-system process, runtime service, or backend remains alive.
+
+Any live backend resource whose remaining custody exists solely on behalf of the terminating Process transfers to implementation/host cleanup custody. That cleanup must no longer depend on reachability, garbage-collection timing, or execution of Protos code in the terminated Process. The implementation may release such resources synchronously or asynchronously and may use backend-specific safe cleanup mechanisms, but it must not return them to program custody or resurrect a usable Protos capability merely because cleanup is delayed, fails, or has uncertain backend state.
+
+Termination does not roll back I/O effects that committed before the termination boundary. Pending or internally executing operations need not be allowed to finish merely to make Process termination graceful; implementation/host cleanup may cancel, abandon, or finish backend work as required to safely retire the Process. No portable Protos program may infer from Process termination whether an unobserved pending operation produced additional host-visible effect beyond effects already constrained by that operation's own commitment semantics.
+
+A backend resource deliberately shared independently of the terminating Process is not necessarily destroyed merely because one Process loses access to it. Termination releases/revokes that Process's authority and custody contribution; it does not revoke separately provisioned authority held by another Process, host service, peer, or external principal.
+
+Exact physical-release timing and backend consequences after custody has transferred to the host/runtime are outside portable Protos semantics, just as failed-close residual cleanup state is. A standalone operating-system process may obtain stronger automatic reclamation from its host; a managed runtime must provide the same Protos-level authority revocation without relying on whole-OS-process exit.
+
 A future external-process facility may expose stdin/stdout/stderr pipes or other streams. Such streams use the I/O protocols defined here.
 
 A future host-signal facility must integrate with the Actor/concurrency model rather than asynchronously executing arbitrary Protos code inside an Actor turn. The exact signal API is outside this document.
@@ -1543,6 +1555,7 @@ filesystem.open captures its complete semantic option configuration at invocatio
 A failed committed open does not compensate by deleting an already-created target or restoring already-truncated content.
 
 A Protos Process is an execution domain, not an OS process.
+Process termination revokes the execution domain's I/O authority and transfers solely Process-owned residual resources to host/runtime cleanup custody; it is not an implicit successful close/flush/sync and does not roll back committed I/O.
 Every Protos execution has one Process and one RootActor.
 Process-local facilities are provisioned by the Process host.
 Process existence and unused facilities may remain lightweight/lazy.
