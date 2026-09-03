@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 143
+Document revision: 144
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2168,12 +2168,38 @@ Detachment:
 
 ```text
 function detachFuture(future):
+    if future.task == none:
+        return future
+
+    if future.state != pending:
+        return future
+
+    if future.task.detached:
+        return future
+
+    owner = future.task.owner
+
     future.task.detached = true
-    remove future.task from its owner
     future.task.owner = none
+
+    if owner != none:
+        remove future.task from owner
 
     return future
 ```
+
+`Future.detach()` is an idempotent ownership operation and always returns the
+same Future object. Its only semantic effect is to remove a still-pending
+task-backed Future from its current activation's structured lifetime.
+
+If the Future is not task-backed, there is no structured task ownership to
+detach, so `detach()` is a state-preserving no-op. This includes Futures produced
+directly by facilities such as I/O operations. Detachment does not cancel,
+re-parent, abandon, or otherwise alter such a producer.
+
+If the Future is already terminal, `detach()` is likewise a state-preserving
+no-op. Repeated calls after successful detachment are no-ops. None of these cases
+signals merely because there is no remaining structured ownership edge.
 
 A detached task no longer participates in the former activation owner's
 completion or cancellation lifetime. Detachment changes structured activation

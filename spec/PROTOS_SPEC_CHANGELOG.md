@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.144] - 2026-09-03
+
+### Fixed
+- Defined `Future.detach()` as an idempotent ownership operation that always
+  returns the same Future object.
+- Defined successful detachment to remove only the structured activation-owner
+  edge of a still-pending task-backed Future.
+- Defined repeated `detach()` calls as state-preserving no-ops.
+- Defined `detach()` on non-task-backed Futures, including direct I/O Futures, as
+  a no-op because no structured task ownership edge exists.
+- Defined `detach()` on already terminal Futures as a no-op.
+- Prevented detachment from implicitly cancelling, re-parenting, abandoning, or
+  otherwise altering a non-task producer or Future terminal outcome.
+- Preserved Actor-local lifetime: detachment still does not escape the Actor
+  execution/lifecycle domain.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 144.
+
 ## [0.1.143] - 2026-09-03
 
 ### Fixed

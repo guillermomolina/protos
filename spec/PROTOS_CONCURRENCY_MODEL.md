@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 143
+Document revision: 144
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -1006,11 +1006,23 @@ cleanup is complete. This rule does not create a general user-visible
 cancellation-mask facility.
 
 Detachment removes a task from the structured lifetime of its creating
-activation only. It does not move Actor-local work out of the Actor execution
-domain, promote it to Process-global work, or give it an independent Actor-like
-lifecycle. A detached Actor-local task may outlive the activation that created
-it, but it cannot outlive the Actor incarnation whose mutable state and serial
-execution domain it uses.
+activation only. `Future.detach()` always returns the same Future object and is
+idempotent. On a still-pending task-backed Future that is not already detached,
+it removes that task's activation-ownership edge. Repeated detachment is a
+state-preserving no-op.
+
+A non-task-backed Future, including one produced directly by an I/O facility,
+has no structured task ownership edge to remove; `detach()` on such a Future is
+therefore a state-preserving no-op. Calling `detach()` on an already terminal
+Future is also a no-op. These cases do not signal merely because no detachable
+ownership edge remains.
+
+Detachment never changes Future terminal outcome, requests cancellation, alters
+an I/O producer's lifecycle, or manufactures a new owner. It does not move
+Actor-local work out of the Actor execution domain, promote it to Process-global
+work, or give it an independent Actor-like lifecycle. A detached Actor-local task
+may outlive the activation that created it, but it cannot outlive the Actor
+incarnation whose mutable state and serial execution domain it uses.
 
 When termination of an Actor incarnation begins while its hosting runtime remains
 able to execute Protos cleanup, every pending Actor-local task belonging to that
