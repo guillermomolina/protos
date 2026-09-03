@@ -21,7 +21,7 @@ import com.guillermomolina.protos.lexer.ProtosLexer;
 import com.guillermomolina.protos.lexer.TokenOccurrence;
 import com.guillermomolina.protos.lexer.TokenType;
 import com.guillermomolina.protos.parser.ast.SurfaceArgument;
-import com.guillermomolina.protos.parser.ast.SurfaceCall;
+import com.guillermomolina.protos.parser.ast.SurfaceAssignment;\nimport com.guillermomolina.protos.parser.ast.SurfaceSlotCreation;\nimport com.guillermomolina.protos.parser.ast.SurfaceCall;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
 import com.guillermomolina.protos.parser.ast.SurfaceIndex;
@@ -89,7 +89,7 @@ public final class ProtosParser {
         SurfaceExpression expression = parseLogicalOrFoundation();
 
         if (!cursor.at(TokenType.CUSTOM_OPERATOR)) {
-            return expression;
+            return parseMutationSuffixFoundation(expression);
         }
 
         /*
@@ -102,7 +102,50 @@ public final class ProtosParser {
             return expression;
         }
 
-        return parseCustomBinaryFoundation(expression);
+        expression = parseCustomBinaryFoundation(expression);
+        return parseMutationSuffixFoundation(expression);
+    }
+
+    private SurfaceExpression parseMutationSuffixFoundation(SurfaceExpression expression) {
+        if (cursor.at(TokenType.COLON)) {
+            if (!isSlotCreationTarget(expression)) {
+                throw ParseError.expected("a slot-creation target before ':'", cursor.current());
+            }
+
+            cursor.advance();
+            consumeContinuationNewlines();
+            SurfaceExpression value = parseExpressionFoundation();
+            return new SurfaceSlotCreation(
+                    expression,
+                    value,
+                    new SourceSpan(expression.span().startOffset(), value.span().endOffset()));
+        }
+
+        if (cursor.at(TokenType.EQUALS)) {
+            if (!isAssignmentTarget(expression)) {
+                throw ParseError.expected("an assignment target before '='", cursor.current());
+            }
+
+            cursor.advance();
+            consumeContinuationNewlines();
+            SurfaceExpression value = parseExpressionFoundation();
+            return new SurfaceAssignment(
+                    expression,
+                    value,
+                    new SourceSpan(expression.span().startOffset(), value.span().endOffset()));
+        }
+
+        return expression;
+    }
+
+    private boolean isSlotCreationTarget(SurfaceExpression expression) {
+        return expression instanceof SurfaceName || expression instanceof SurfaceMember;
+    }
+
+    private boolean isAssignmentTarget(SurfaceExpression expression) {
+        return expression instanceof SurfaceName
+                || expression instanceof SurfaceMember
+                || expression instanceof SurfaceIndex;
     }
 
     private SurfaceExpression parseCustomBinaryFoundation(SurfaceExpression expression) {

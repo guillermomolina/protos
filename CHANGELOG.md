@@ -8,6 +8,7 @@ For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_
 
 ### Added
 
+- Added parsing for slot creation and assignment with grammar-defined target restrictions.
 - Added deterministic parsing for the grammar-defined non-local return expression.
 - Added parser support for the separate custom binary-operator precedence domain and its required standard/custom mixing errors.
 - Added deterministic parsing for the standard unary and binary operator precedence ladder.
