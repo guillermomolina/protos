@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 215
+Document revision: 216
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2488,6 +2488,37 @@ cancelled or becomes terminal before acceptance.
 Admission eligibility is not Actor-task runnability. Making a delivery
 operation admission-eligible therefore does not create an Actor turn and does
 not weaken the existing definition of scheduler weak fairness.
+
+
+### Core Cluster membership protocol boundary
+
+Core runtime semantics consume established membership knowledge but do not
+prescribe how that knowledge is distributed:
+
+```text
+function mayUseNodeAsClusterCapacity(clusterView, node):
+    return clusterView.establishesMembership(node)
+        and ordinaryEligibilityRulesHold(node)
+```
+
+The following implications are invalid in Core:
+
+```text
+transportConnected(node) -> member(node)
+reachable(node)          -> member(node)
+member(node)             -> hasAuthority(node)
+notMember(node)          -> terminated(node)
+```
+
+An implementation-specific membership subsystem may maintain local views,
+epochs, gossip state, consensus state, or external-service registrations.
+Those structures are runtime machinery unless a future normative Cluster
+facility standardizes them.
+
+Core code must not observe unspecified membership-protocol timing or ordering as
+a language guarantee. Membership-dependent runtime behavior may use only
+membership facts that the active runtime has established without weakening the
+closed identity, reachability, uncertainty, and Authority rules.
 
 
 ### Core split-brain safety

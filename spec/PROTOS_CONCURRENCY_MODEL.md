@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 215
+Document revision: 216
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -2290,6 +2290,77 @@ than magically reconstructing the old one.
 Cluster functionality must remain lazy and must not impose distributed
 runtime costs on ordinary standalone programs.
 
+## 39A. Core Cluster Membership Protocol Boundary
+
+**CLOSED**
+
+Core v0.1 defines the semantic meaning and consequences of Cluster membership,
+but it does not standardize a distributed membership protocol, wire format,
+gossip algorithm, consensus algorithm, discovery transport, join handshake, or
+failure-detector algorithm.
+
+A Node is a member of a Cluster only when the active runtime has established
+that membership through a mechanism provided by the runtime configuration or a
+future/extended distributed facility. Merely discovering an address, opening a
+transport connection, sharing infrastructure, or observing another Node does
+not itself create Cluster membership.
+
+Membership is distinct from Node identity, reachability, physical existence,
+and Authority. In particular:
+
+```text
+member && unreachable
+    -> still the same Node incarnation unless an authoritative membership
+       or lifecycle decision says otherwise
+
+not-member
+    -> not usable as capacity in that Cluster view
+    -> does not by itself prove that the Node or its Processes terminated
+
+reachable
+    -> does not by itself imply membership
+
+member
+    -> does not by itself grant Authority for an exclusive decision
+```
+
+Core does not define a portable application-level operation such as
+`cluster.join()`, `cluster.leave()`, `down(node)`, or an automatic bootstrap
+rule. Core also defines no portable ordering, latency, convergence, or
+simultaneous-view guarantee for implementation-specific membership dissemination.
+
+Consequently, two independent Core implementations are not required to
+interoperate at the Cluster-membership wire-protocol level. A runtime that
+provides distributed Cluster membership in v0.1 does so as an implementation or
+extension facility, but that facility must not alter any already-closed Core
+semantic rule for Actor/Process/Node identity, reachability, message uncertainty,
+monitoring, Authority, or split-brain safety.
+
+Portable Core behavior must therefore not depend on which unspecified
+membership algorithm a runtime happens to use. Where a Core semantic operation
+depends on Cluster membership, it operates against the membership knowledge that
+the active runtime has validly established; it must not infer stronger facts
+than that knowledge supports.
+
+Voluntary membership removal, administrative removal, failure-driven removal,
+and replacement capacity are also not conflated:
+
+- voluntary or administrative removal changes Cluster membership;
+- removal does not resurrect, retarget, or reuse Node identity;
+- removal alone does not prove physical Node/Process death;
+- equivalent capacity joining later is a new Node incarnation; and
+- any removal decision whose correctness requires exclusivity must satisfy the
+  scoped Authority rules before it is treated as authoritative.
+
+A future standardized Cluster facility may define interoperable membership,
+join/leave APIs, dissemination, epochs, quorum/consensus, convergence, and
+failure-driven removal. Such a facility must make those properties normative
+and must compose with the already-closed failure-knowledge, partition,
+split-brain, and Authority boundaries.
+
+The `Cluster membership protocol` topic is therefore outside Core v0.1 rather
+than an implementation-selectable hole in Core semantics.
+
 ## 40. ActorRef
 
 **CLOSED --- REVISED**
@@ -3930,7 +4001,6 @@ mechanism, or implementation detail that still requires design.
 -   Draining policy and mechanics
 -   Infrastructure Controller integration APIs
 -   External infrastructure adapters such as Kubernetes or Nomad
--   Cluster membership protocol
 -   Authority-scope API/model representation
 -   Authority acquisition and transfer
 -   Authority leases/election/consensus implementation

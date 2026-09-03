@@ -4,6 +4,30 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.216] - 2026-09-03
+
+### Closed
+- Closed `Cluster membership protocol` for Core v0.1 by classifying the
+  interoperable membership protocol/API as outside Core rather than leaving an
+  implementation-selectable semantic hole.
+- Defined the minimal Core membership contract: membership is distinct from
+  reachability, Node identity, physical existence, and Authority.
+- Prohibited transport connectivity/reachability from implicitly creating
+  membership and prohibited membership loss from proving Node/Process death.
+- Defined that implementation-specific membership algorithms may establish
+  Cluster membership knowledge but cannot weaken closed Core identity,
+  uncertainty, partition, split-brain, or Authority semantics.
+- Explicitly stated that Core v0.1 does not standardize join/leave/down APIs,
+  wire format, gossip/consensus algorithm, convergence timing, or
+  cross-implementation Cluster-membership interoperability.
+- Reserved interoperable membership, epochs, quorum/consensus, and
+  failure-driven removal for a future normative Cluster facility.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 216.
+
 ## [0.1.215] - 2026-09-03
 
 ### Fixed
