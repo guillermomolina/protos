@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 148
+Document revision: 149
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -1248,7 +1248,17 @@ environment.each(block)
 
 `contains(name)` returns whether the variable exists according to the represented environment's native name-identity rules. It does not need to decode the variable's value merely to determine existence; therefore an existing entry with a non-Unicode value still makes `contains(name)` return `true` when its name is representable and matches.
 
-`each(block)` invokes the block with `(name, value)` String pairs. Iteration order is unspecified. The operation must not silently omit an entry merely because an entry that should be exposed through the portable view cannot be represented as String; reaching such an entry produces an error rather than silent loss.
+`each(block)` invokes the block with `(name, value)` String pairs. Iteration order among valid entries is unspecified.
+
+Before the first block invocation of one `each(block)` call, the Environment validates that every entry belonging to the portable snapshot can be represented as a valid `(String, String)` pair. If any entry's name or value is not representable as a Protos String, `each(block)` signals the representation error and invokes `block` zero times for that call.
+
+This prevalidation makes portable-representation failure atomic with respect to user callbacks: an implementation cannot expose an implementation-dependent prefix/subset of valid entries and only then discover an invalid-Unicode entry according to host enumeration order.
+
+The rule does not require a particular physical representation or a second host-environment read. The Process Environment is already a stable snapshot; an implementation may validate eagerly when constructing that snapshot, cache validation state, retain native entries, or validate on first enumeration, provided each call has the observable behavior above.
+
+Once representability has been established, ordinary callback behavior applies. Because iteration order remains unspecified, the order of successful callback invocations is not portable. If `block` itself signals an error or otherwise performs an ordinary non-local control effect, callbacks that already occurred before that user-code outcome are not rolled back; the prevalidation guarantee concerns Environment-to-String representation failure, not transactional execution of arbitrary Protos code.
+
+No entry is silently omitted because it cannot be represented as String. Host-specific/native APIs may expose such entries losslessly through a separate native representation.
 
 Environment variable name identity follows the semantics of the represented environment. In particular, a POSIX-like environment may distinguish case while a Windows-like environment may treat names case-insensitively.
 
@@ -1454,6 +1464,7 @@ Every Protos execution has one Process and one RootActor.
 Process-local facilities are provisioned by the Process host.
 Process existence and unused facilities may remain lightweight/lazy.
 
+Environment.each prevalidates complete portable String representability before invoking user code; invalid native environment text therefore cannot produce an implementation-dependent callback prefix.
 Process standard streams are byte capabilities.
 Text views are explicit adapters over those byte capabilities and their associated Encoding objects.
 

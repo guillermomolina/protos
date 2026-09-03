@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.149] - 2026-09-03
+
+### Fixed
+- Made `Environment.each(block)` prevalidate complete portable `(String, String)`
+  representability before invoking user code.
+- Required an invalid native environment name/value to fail an enumeration with
+  zero callback invocations instead of exposing a host-order-dependent prefix of
+  otherwise valid entries.
+- Preserved unspecified iteration order for fully representable environments.
+- Scoped failure atomicity to Environment-to-String representation validation;
+  errors/non-local effects raised by the user block retain ordinary callback
+  semantics and do not roll back prior callbacks.
+- Kept the rule representation-neutral: eager snapshot validation, cached
+  validation, retained native entries, or first-enumeration validation remain
+  valid implementations.
+- Preserved the separate host/native boundary for lossless access to environment
+  entries that portable Protos String cannot represent.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 149. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.148] - 2026-09-03
 
 ### Fixed
