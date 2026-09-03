@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 90
+Document revision: 91
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -779,6 +779,28 @@ A read/write File exposes the union of the corresponding capabilities.
 
 A raw File is not required to expose `Flushable`.
 
+### 18.5 Open commitment, cancellation, and resource custody
+
+`filesystem.open(path, options)` follows the general I/O commitment rule, but its commitment boundary depends on which requested open effects are observable.
+
+An open may resolve to `cancelled` only while both of the following remain true:
+
+- no portable filesystem namespace/content effect required by that open has become observable; and
+- no successful `File` result has committed.
+
+For an open that would only acquire an existing file with preserved content, acquiring an implementation/native handle is not by itself a portable Protos filesystem effect. Cancellation may therefore still win before the `File` result commits, provided the implementation can dispose of every internally acquired resource without exposing a `File`.
+
+If `create` or `createNew` actually creates a previously absent target, creation is an irreversible open commitment. If `truncate` changes an existing target to size zero, that content change is an irreversible open commitment. Once either effect can be observed through the Filesystem capability, cancellation cannot make the open Future `cancelled` as though the target had remained unchanged.
+
+A committed open may subsequently fail before producing a `File`. Such failure does not imply rollback: a target created by the open may remain present, and truncation already performed may remain effective. Protos does not require an implementation to delete a newly created target or restore truncated content in order to report failure, and an implementation must not perform such rollback when doing so could race with or destroy independent later activity.
+
+If an open reaches `failed` or `cancelled` without returning a `File`, no undisclosed live `File` resource is transferred to the program. Any native or backend resource acquired internally remains under implementation custody and must be released before that terminal result. If cancellation cannot satisfy that cleanup obligation, cancellation does not win; the operation continues to a non-cancelled terminal outcome.
+
+When open resolves successfully, custody of the resulting resource is represented by the returned `File`, whose subsequent lifecycle is governed by `Closable`.
+
+Host effects not otherwise exposed by the Filesystem capability, such as platform-specific metadata side effects outside the portable model, do not create additional Protos commitment boundaries merely because a particular native `open` primitive happens to have them.
+
+
 ---
 
 ## 19. ReadShutdown and WriteShutdown
@@ -1150,6 +1172,7 @@ EOF != unavailable capability != I/O failure
 Path is a value, not filesystem authority.
 URL is a value, not resource-access authority.
 Filesystem carries filesystem authority.
+filesystem.open may report cancelled only before any portable create/truncate effect and before File-result commitment.
 
 A Protos Process is an execution domain, not an OS process.
 Every Protos execution has one Process and one RootActor.

@@ -4,6 +4,24 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.91] - 2026-09-03
+
+### Fixed
+- Defined `filesystem.open(path, options)` commitment and cancellation semantics.
+  Cancellation may win only before any portable create/truncate effect and before
+  the successful `File` result commits.
+- Made create/truncate failure aftermath explicit: once creation or truncation
+  becomes observable, a later open failure does not imply rollback and cannot be
+  reported as cancellation with zero effect.
+- Closed undisclosed-handle lifetime ambiguity: an open that terminates without
+  returning a `File` retains implementation custody of internal resources and
+  must release them before a cancelled/failed terminal result.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 91. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.90] - 2026-09-03
 
 ### Fixed
