@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 201
+Document revision: 202
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2488,6 +2488,32 @@ cancelled or becomes terminal before acceptance.
 Admission eligibility is not Actor-task runnability. Making a delivery
 operation admission-eligible therefore does not create an Actor turn and does
 not weaken the existing definition of scheduler weak fairness.
+
+
+### Core Actor failure-authority policy
+
+After `failActorIncarnation(actor, error)` has established fatal termination,
+Core policy is conceptually:
+
+```text
+function applyCoreFailureAuthorityPolicy(actor, error):
+    if actor is actor.process.rootActor:
+        terminateProcessBecauseRootActorFailed(actor.process, actor, error)
+        return
+
+    // Non-root Core Actor:
+    // termination itself is the complete failure-authority action.
+    // Do not replace, escalate, or affect unrelated Actors here.
+    return
+```
+
+This function does not prevent a distinct ActorGroup controller from later
+observing that desired Group state is unsatisfied and creating a fresh Actor
+incarnation. Such reconciliation is not a continuation or restart of the failed
+Actor.
+
+Core runtime implementations may fuse this policy into lifecycle machinery and
+need not materialize a separate failure-authority object.
 
 
 ### Actor lifecycle observation

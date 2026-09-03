@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.202] - 2026-09-03
+
+### Closed
+- Closed `Failure-authority API` for Core v0.1 by defining that Core exposes no
+  configurable public failure-authority API.
+- Fixed the non-root Actor default: an unhandled fatal failure terminates that
+  incarnation and failure authority performs no automatic replacement,
+  escalation, sibling restart, or subtree restart.
+- Preserved the existing RootActor rule: fatal RootActor failure terminates the
+  Process.
+- Kept ActorGroup desired-state reconciliation independent; a Group may create a
+  fresh incarnation without that becoming Actor restart or failure-authority
+  replacement.
+- Reclassified Replace/Stop/Escalate/Ignore as future policy vocabulary rather
+  than implementation-selectable Core behavior.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 202.
+
 ## [0.1.201] - 2026-09-03
 
 ### Fixed

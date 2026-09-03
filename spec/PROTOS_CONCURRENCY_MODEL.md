@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 201
+Document revision: 202
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -1488,6 +1488,66 @@ By default:
         -> Process terminates
 
 This preserves the pay-as-you-grow principle.
+
+## 26A. Core Failure-Authority Policy and API Boundary
+
+**CLOSED**
+
+Core v0.1 does not expose a public failure-authority configuration object,
+supervisor Actor, policy callback, or mutable supervision tree.
+
+The failure-authority relationship remains a semantic/runtime relationship used
+to ensure that every unhandled fatal Actor failure has one well-defined place
+responsible for applying the Core policy. It is not itself a new language object
+kind and does not grant ordinary Protos code implicit authority over another
+Actor.
+
+For an Actor that is not the Process RootActor, the Core v0.1 failure-authority
+policy after an unhandled fatal failure is:
+
+```text
+failed Actor incarnation
+    -> terminates under the existing failure/cleanup rules
+    -> no automatic replacement by failure authority
+    -> no automatic escalation to creator/parentActor
+    -> no automatic termination of siblings or descendants
+```
+
+This does not suppress independent higher-level reconciliation. In particular,
+if the failed Actor was a member selected to satisfy an ActorGroup's desired
+state, the Group Controller may independently create a fresh replacement
+incarnation under the existing Group rules. That creation is Group
+reconciliation, not failure-authority replacement, and the new Actor receives a
+new ActorRef.
+
+For the Process RootActor, the existing Core rule remains authoritative:
+
+```text
+RootActor unhandled fatal failure
+    -> Process terminates
+```
+
+Therefore two Core implementations must not differ by silently choosing
+`Replace`, `Escalate`, or sibling/subtree restart for an otherwise identical
+non-root Actor failure.
+
+The previously listed `Replace`, `Stop`, `Escalate`, and `Ignore` choices are
+design vocabulary for possible future policy-bearing abstractions, not four
+implementation-selectable Core behaviors. Within Core v0.1 the observable
+default is the fixed policy above.
+
+A future supervision or controller facility may expose configurable failure
+policy, restart-intensity limits, one-for-one/one-for-all relationships, or
+other recovery mechanisms. Such a facility must define its own authority,
+lifetime, isolation, transfer, ordering, resource, and failure semantics
+explicitly. It must not retroactively make Core v0.1 failure behavior
+implementation-defined.
+
+No dedicated failure-authority API is therefore part of Core v0.1. Runtime
+diagnostics may internally retain structured failure information, but ordinary
+application access to policy diagnostics or configurable supervision is a
+future higher-level API rather than an unresolved requirement for Core
+compatibility.
 
 ## 27. Actor Identity Is Incarnation Identity
 
@@ -3650,7 +3710,6 @@ mechanism, or implementation detail that still requires design.
 -   Draining policy and mechanics
 -   Infrastructure Controller integration APIs
 -   External infrastructure adapters such as Kubernetes or Nomad
--   Failure-authority API
 -   Process failure detection mechanism
 -   Node failure detection mechanism
 -   Network-partition detection and reporting
