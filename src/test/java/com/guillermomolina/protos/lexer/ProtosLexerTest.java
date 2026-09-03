@@ -549,6 +549,35 @@ class ProtosLexerTest {
     }
 
     @Test
+    void numericLiteralsRejectAdjacentIdentifierLikeContinuations() {
+        for (String source : List.of(
+            "123abc",
+            "123true",
+            "123_name",
+            "123π",
+            "0xFFname",
+            "0b10π",
+            "0o7_name"
+        )) {
+            assertThrows(ProtosLexer.LexicalError.class, () -> lex(source), source);
+        }
+    }
+
+    @Test
+    void numericLiteralsRemainSeparateWhenARealLexicalBoundaryExists() {
+        assertEquals(
+            List.of(
+                token(TokenType.NUMBER, "123"),
+                token(TokenType.IDENTIFIER, "name"),
+                token(TokenType.NUMBER, "0xFF"),
+                token(TokenType.TRUE, "true"),
+                token(TokenType.EOF, "")
+            ),
+            lex("123 name 0xFF true")
+        );
+    }
+
+    @Test
     void leadingSignsAreOperatorsNotPartOfNumbers() {
         assertEquals(
             List.of(
