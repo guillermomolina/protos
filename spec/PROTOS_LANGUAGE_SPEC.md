@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 191
+Document revision: 192
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3219,6 +3219,53 @@ or equivalent buffer-oriented protocols.
 
 This follows the general rule that semantic values are distinct from their external binary representation.
 
+
+### Exact String semantic value and identity
+
+A Core `String` semantic value is exactly a finite sequence of Unicode scalar
+values, in order. String semantic identity compares that sequence exactly.
+
+Therefore two String values are semantically identical exactly when they contain
+the same number of Unicode scalar values and the scalar value at every position
+is the same:
+
+```text
+stringIdentity(a, b)
+    = exactUnicodeScalarSequence(a) == exactUnicodeScalarSequence(b)
+```
+
+No Unicode normalization is implicit in String construction, semantic identity,
+ordinary default `==`, or ordinary default `hash`. Canonically equivalent but
+differently encoded scalar sequences are distinct String semantic values unless
+a program explicitly normalizes them.
+
+For example, a String containing U+00E9 LATIN SMALL LETTER E WITH ACUTE is not
+semantically identical to a String containing U+0065 LATIN SMALL LETTER E
+followed by U+0301 COMBINING ACUTE ACCENT:
+
+```text
+"é" !== "e\u{301}"
+```
+
+when the first source spelling denotes the single precomposed scalar U+00E9.
+Their standard `==` results are likewise false under the ordinary unspecialized
+String equality default, and their standard hashes are not required to be equal.
+
+Case folding, locale-sensitive comparison, canonical-equivalence comparison,
+compatibility-equivalence comparison, collation, grapheme-cluster processing,
+and Unicode normalization are higher-level text policies. They require explicit
+protocols or library operations and do not alter Core String identity.
+
+The rule is independent of internal representation. An implementation may store
+Strings as UTF-8, UTF-16, UTF-32, ropes, slices, interned objects, or another
+representation, but encoding units, surrogate pairs used internally, storage
+sharing, and normalization choices must not change the observable scalar
+sequence or semantic identity.
+
+This exact-sequence rule also preserves retained source newline distinctions:
+a retained `LF`, `CR`, and `CRLF` denote respectively U+000A, U+000D, and the
+two-scalar sequence U+000D U+000A, as already required by the String-literal
+rules.
 
 ## Text, Bytes, and Character Encodings
 

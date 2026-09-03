@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 191
+Document revision: 192
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -1410,6 +1410,44 @@ Triple-double-quoted String evaluation produces a `String` value defined by the 
 `true`, `false`, and `null` are canonical singleton values.
 
 `===` is not overrideable. Hash codes are not identity: a hash collision must never cause two distinct identity-bearing objects to compare identical.
+
+### Exact String semantic-value comparison
+
+`sameSemanticValue` for the `STRING_VALUE` identity category compares the exact
+ordered sequence of Unicode scalar values represented by each String.
+
+Conceptually:
+
+```text
+function sameStringSemanticValue(a, b):
+    aScalars = semanticUnicodeScalarSequence(a)
+    bScalars = semanticUnicodeScalarSequence(b)
+
+    if length(aScalars) != length(bScalars):
+        return false
+
+    for i from 0 to length(aScalars) - 1:
+        if aScalars[i] != bScalars[i]:
+            return false
+
+    return true
+```
+
+This pseudocode specifies observable semantics, not a required traversal or
+storage representation. Implementations may use length metadata, hashes,
+interning, vectorized comparison, ropes, or other optimizations provided the
+result is exactly the same.
+
+The runtime must not normalize either operand, apply canonical or compatibility
+equivalence, case-fold, consult a locale, compare grapheme clusters, or compare
+host encoding units as though those were the String semantic value.
+
+`identityHashOf` and the ordinary unspecialized String `hash` must be coherent
+with this exact semantic identity: Strings that have the same scalar sequence
+must receive equal identity hashes during one Protos execution. Distinct scalar
+sequences may collide, but an implementation must not make normalization,
+locale, host encoding, or storage representation an observable source of
+identity-hash disagreement for semantically identical Strings.
 
 ---
 

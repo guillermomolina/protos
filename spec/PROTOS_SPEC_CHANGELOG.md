@@ -4,6 +4,23 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.192] - 2026-09-03
+
+### Fixed
+- Defined a Core String semantic value as an exact ordered sequence of Unicode
+  scalar values.
+- Made String semantic identity, default equality, and identity hashing depend
+  on that exact sequence rather than implementation-selected Unicode
+  normalization, host encoding, locale, case folding, or grapheme processing.
+- Defined canonically equivalent but differently represented scalar sequences as
+  distinct Core String values unless a program explicitly normalizes them.
+- Preserved the existing exact `LF` / `CR` / `CRLF` String-content distinction.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 192.
+  Only `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain
+  normative semantic content in this revision.
+
 ## [0.1.191] - 2026-09-03
 
 ### Fixed
