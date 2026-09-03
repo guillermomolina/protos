@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.198] - 2026-09-03
+
+### Fixed
+- Defined `creation: existing` as one race-free select-and-open operation rather
+  than leaving a probe/acquisition TOCTOU gap to implementations.
+- Required the namespace state at one selection point to determine absence or
+  the concrete resource selected by the open.
+- Prevented a successful helper existence/metadata probe from reserving resource
+  identity or being combined observably with acquisition from a later namespace
+  state.
+- Allowed genuinely concurrent namespace operations to determine the state seen
+  before the selection point without imposing a global filesystem order.
+- Applied stable File-resource binding immediately after successful selection so
+  later namespace changes cannot retarget the returned File or this open's
+  truncate-on-open effect.
+- Required uncertain backends to fail rather than expose a standard File whose
+  confined resource selection cannot be established race-safely.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 198. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.197] - 2026-09-03
 
 ### Fixed

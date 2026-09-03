@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 197
+Document revision: 198
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -1056,9 +1056,17 @@ Invalid combinations fail open.
 
 ### 18.1 Creation
 
-`existing` requires the target to exist.
+`existing` is one race-free select-and-open operation at the Filesystem/backend semantic boundary. At that selection point the target must exist; if it is absent, open fails. If it exists, the operation selects that resource and acquires the File binding as one semantic operation.
 
-`create` is one race-free open-or-create selection at the Filesystem/backend semantic boundary. At that selection point, if the target exists, the operation selects and opens that existing resource; if the target is absent, the operation creates and selects the new resource. The standard operation must not expose an implementation gap between an existence probe and acquisition/creation in which a competing namespace change can turn an otherwise valid `create` into a spurious already-exists/not-found outcome or cause it to acquire a resource different from the one selected by its own open-or-create decision.
+The standard operation must not expose an implementation gap between a separate existence/metadata probe and acquisition in which a competing namespace change can produce behavior belonging to two different namespace states. In particular, a successful preliminary probe does not reserve the target, and an implementation must not claim that the probed resource was selected if the actual acquisition selected a replacement instead.
+
+This guarantee does not impose a predetermined winner among genuinely concurrent namespace operations. Another authorized operation may create, remove, rename, replace, or redirect the target before this open's selection point; the namespace state at the selection point determines whether `existing` fails or which authorized resource it selects. Once selection succeeds, the stable File-resource binding rules apply immediately, so later namespace changes do not retarget the returned File or any truncate-on-open effect belonging to this open.
+
+An implementation may realize `existing` with one backend primitive or with a race-safe/emulated resolution-and-acquisition mechanism. Any helper probes may be used only when their intermediate results are not promoted into Protos-visible selection state. If the backend cannot provide or emulate one confined select-and-open result under concurrent namespace change, it must fail rather than expose an uncertain standard `File` binding.
+
+`create` is one race-free open-or-create selection at the Filesystem/backend semantic boundary.
+
+Standard `existing` selects and opens one existing authorized resource as a single race-free semantic acquisition; helper existence probes do not reserve identity or split resource selection across namespace states. At that selection point, if the target exists, the operation selects and opens that existing resource; if the target is absent, the operation creates and selects the new resource. The standard operation must not expose an implementation gap between an existence probe and acquisition/creation in which a competing namespace change can turn an otherwise valid `create` into a spurious already-exists/not-found outcome or cause it to acquire a resource different from the one selected by its own open-or-create decision.
 
 This guarantee does not impose a predetermined winner among genuinely concurrent namespace operations. Another authorized operation may create, remove, rename, or replace the target before the `create` operation's selection point, and that namespace state may determine which resource this open selects. Once this open has selected its resource, the stable File-resource binding rules apply: later namespace changes do not retarget the resulting File or any truncate-on-open effect belonging to this open.
 
