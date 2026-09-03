@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 108
+Document revision: 109
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -512,6 +512,14 @@ Later changes are not required to be durable when an earlier sync frontier compl
 File synchronization does not by itself guarantee filesystem-namespace durability for creation, deletion, rename, or directory-entry changes.
 
 Cancellation may cancel sync before the durable operation commits. Once irreversible synchronization has begun, cancellation cannot undo persistence already reached. Sync may fail after partial persistence.
+
+A failed `sync()` does not roll back durability already reached and does not make that partial durable state invalid. Ordinary `sync()` does not expose which subset of its frontier became durable before failure.
+
+Sync failure does not by itself semantically close or poison the receiver. If the receiver remains otherwise usable, a later `sync()` establishes its own frontier in the ordinary invocation order and, on success, guarantees durability for all receiver changes ordered before that later frontier, including changes that were part of an earlier failed sync frontier and had not yet become durable.
+
+Retrying `sync()` therefore does not duplicate or replay the underlying logical data changes: it requests durability for the then-current frontier. The implementation may avoid re-synchronizing state it already knows to be durable, but that optimization is not observable.
+
+A concrete receiver may define stronger lifecycle behavior after a synchronization failure when that behavior is part of its observable contract. Host-specific conventions, error codes, or backend writeback details do not by themselves create such a Protos lifecycle rule.
 
 ---
 
@@ -1252,6 +1260,7 @@ Wrapping does not imply lifecycle ownership.
 Invoking close commits permanent lifecycle termination; close itself cannot subsequently become cancelled.
 
 flush != sync != close != shutdownWrite
+A failed sync may leave an unknown subset durable, but does not itself poison the receiver; a later successful sync covers its entire later frontier without replaying logical data changes.
 A failed flush never authorizes duplicate replay; an output wrapper with unknowable downstream progress becomes unusable unless a stronger protocol makes exact recovery possible.
 EOF != unavailable capability != I/O failure
 A failed ByteReadable read consumes zero observable bytes and leaves the logical sequence position unchanged; any bytes already obtained are preserved for later logical reading.

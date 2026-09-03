@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.109] - 2026-09-03
+
+### Fixed
+- Defined the aftermath of a failed `sync()`: durability already reached is not
+  rolled back, while the exact partially durable subset remains unexposed.
+- Clarified that synchronization failure alone does not universally poison or
+  close the receiver.
+- Required a later successful `sync()` to cover its complete later frontier,
+  including still-undurable changes that belonged to an earlier failed frontier.
+- Defined sync retry as another durability request rather than replay of logical
+  data changes, preserving optimization freedom for already-durable state.
+- Kept stronger post-failure lifecycle rules explicit to concrete receiver
+  contracts rather than inheriting host-specific error conventions.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 109. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.108] - 2026-09-03
 
 ### Fixed
