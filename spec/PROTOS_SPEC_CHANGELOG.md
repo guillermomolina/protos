@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.117] - 2026-09-03
+
+### Fixed
+- Defined Actor pass-by-value transferability over the complete transitive value
+  graph rather than only over top-level objects.
+- Made local-slot references and immutable delegation-parent edges part of the
+  transfer graph.
+- Required graph-copy semantics to preserve cycles and aliasing without merging
+  distinct source identities.
+- Defined capability/shared-immutable boundary values as governed by their own
+  cross-Actor semantics rather than by copying mutable referent state.
+- Added standard `NonTransferableValue` error semantics.
+- Made transfer validation atomic before concrete-Actor acceptance, preventing
+  partial message delivery or source mutation on validation failure.
+- Applied the same transferability rule to `request()` reply values.
+- Corrected the stale wording `An request()` to `A request()` when present.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 117.
+
 ## [0.1.116] - 2026-09-03
 
 ### Fixed

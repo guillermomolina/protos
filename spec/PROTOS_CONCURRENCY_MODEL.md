@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 116
+Document revision: 117
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -533,7 +533,7 @@ Conceptually:
 The underlying delivery operation need not be separately exposed to the
 caller of `request()`.
 
-An `request()` Future may remain pending before a concrete Actor has been
+A `request()` Future may remain pending before a concrete Actor has been
 selected or accepted the message. Its resolution represents the reply,
 not merely successful delivery.
 
@@ -613,7 +613,7 @@ operations.
 
 ## 16. Pass-by-Value Between Actors
 
-**CLOSED**
+**CLOSED --- REVISED**
 
 Messages between Actors have pass-by-value semantics.
 
@@ -643,6 +643,56 @@ capability rather than direct access to another Actor's mutable heap.
 
 Closures are not transferable because they capture actor-local lexical
 execution contexts by reference.
+
+### Transfer graph closure and failure
+
+Transferability is a property of the complete logical value graph, not only of
+the top-level argument object.
+
+For a copied ordinary object, the transfer graph includes:
+
+- every value stored in a local slot of that object; and
+- the object's immutable delegation-parent edge.
+
+Traversal is transitive. The same source object encountered more than once maps
+to the same logical destination object, so cycles and aliasing are preserved.
+Two distinct source objects never become one destination object merely because
+their contents happen to be equal.
+
+An edge to a value whose normative semantics permit cross-Actor sharing or
+capability transfer is handled by that value's own rule rather than by copying
+the referent's mutable implementation state. `ActorRef` is the Core example:
+the communication capability crosses, not the target Actor's heap. Likewise,
+semantically immutable standard-prelude objects may be physically shared when
+the existing prelude-sharing rule permits it; that optimization must remain
+unobservable.
+
+Every other reachable edge must itself be transferable. In particular, an
+ordinary object is not transferable merely because its own local slots are
+copyable if its delegation parent, or any value transitively reachable through
+its local slots, is non-transferable.
+
+This concurrency domain defines the standard error prototype
+`NonTransferableValue`, delegating directly to `Error`.
+
+Message snapshot formation is atomic at the language level. `send()` and
+`request()` must validate the complete logical transfer graph before the message
+can cross the concrete-Actor acceptance boundary. If any required reachable
+value is non-transferable:
+
+- the communication invocation signals `NonTransferableValue` in the caller;
+- no partial message snapshot becomes deliverable;
+- no destination Actor accepts any prefix or fragment of that message; and
+- no source object is detached, invalidated, or otherwise mutated merely because
+  transfer validation was attempted.
+
+The same rule applies to the reply value of `request()`: if the handler's normal
+result cannot form a transferable reply graph, the request Future fails with
+`NonTransferableValue`; no partial reply is exposed to the requester.
+
+Implementations may validate eagerly, serialize incrementally, use copy-on-write,
+or use another representation, but must behave as though the complete logical
+graph was validated atomically against these rules.
 
 The destination Actor executes code that it already owns rather than
 receiving arbitrary executable closures carrying another Actor's lexical
