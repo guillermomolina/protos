@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 157
+Document revision: 158
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -826,6 +826,18 @@ When cancellation succeeds, that operation consumes no text from the `TextReader
 
 Bytes already obtained from the wrapped `ByteReadable`, decoded characters already produced internally, incomplete encoded-character state, BOM/decoder state, and read-ahead beyond a prospective result may remain buffered inside the TextReader. The implementation need not physically roll its decoder or wrapped byte source backward, but it must retain, rebuffer, virtualize, or otherwise reconcile that internal progress so it cannot cause text loss, duplication, reordering, a changed line boundary, or a spurious decoding error after successful cancellation.
 
+Implementation-controlled speculative read-ahead must not create unbounded retained state independently of the semantic work requested by the program. Every standard buffering/decoding reader has an effective finite implementation bound on additional unread bytes, decoded text, checkpoints, or equivalent state retained solely because the implementation chose to read or decode ahead of the earliest outstanding operation's required progress. The numeric bound is implementation-specific and is not portable Protos behavior.
+
+This bound is distinct from storage intrinsically required by an operation whose semantic result itself is unbounded. For example, unbounded `readLine()` may necessarily accumulate an arbitrarily long unterminated line because its successful result is that line. The rule does not impose an arbitrary portable line-length limit.
+
+Conversely, an explicitly bounded operation such as `readLine(maxBytes)` does not authorize speculative retention that grows without bound with input beyond the point needed to establish that operation's result or failure. Once enough logical encoded input has been examined to establish the line-too-long condition, an implementation must not continue consuming or retaining an unbounded suffix merely as read-ahead for that already-determined operation. Limited read-ahead already obtained as part of a finite buffer remains permitted and follows the ordinary preservation/discard rules.
+
+Likewise, `readText()` chunk boundaries remain implementation-selectable, but that freedom is not permission to require an ever-growing implementation-chosen chunk before completing an otherwise progress-capable read. A standard TextReader must be able to choose finite chunks and apply backpressure through pending reads rather than turning an open-ended source into unbounded Protos-managed speculative retention.
+
+The same principle applies to standard `BufferedReader` and other standard read adapters: buffering capacity may be fixed, adaptive, or downstream-informed, and may change over time, but implementation-controlled unread read-ahead retained by one logical reader/flow must remain effectively finite unless additional retained data is semantically required by outstanding program operations.
+
+This requirement constrains Protos-managed retention, not the amount of data a host kernel, remote peer, filesystem cache, or independently authorized underlying source may buffer outside the Protos reader. It also does not require one native read at a time or prohibit prefetch, vectorized I/O, decoder batching, or bounded pipelining.
+
 This guarantee is about the TextReader's logical text sequence. As with ordinary read-ahead, it does not promise to restore the separately accessible wrapped byte source's native/logical cursor to the position it had before the wrapper performed internal reads; abandoning or closing the wrapper retains the wrapper-lifecycle rule that already-consumed source bytes are not restored.
 
 For `readLine()` and `readLine(maxBytes)`, a line result commits when the complete result has been determined by a terminator or by EOF with remaining content.
@@ -1445,6 +1457,7 @@ readLine result, limit, decoding-error, and I/O-error precedence follows logical
 A TextReader line-too-long, decoding, or underlying I/O failure permanently fails its text-reading side; there is no implicit drain or recovery-to-next-line behavior.
 TextWriter encoding failure is pre-output failure-atomic: it emits zero bytes and preserves encoder state; writeLine text plus LF is one ordered logical text-write operation.
 Successful cancellation of readText/readLine consumes zero logical text and preserves decoder/framing state; internal read-ahead may be retained but cannot become text loss, duplication, or reordering.
+Implementation-controlled read-ahead in standard readers has finite effective retained-state bounds; bounded read operations do not authorize unbounded speculative consumption/retention, while intrinsically unbounded results such as readLine() remain unbounded by semantics.
 readText and both readLine forms on one logical TextReader share one ordered decoded-input domain; mixed/outstanding operations cannot race separate decoder or framing states.
 
 I/O that may wait returns Future.

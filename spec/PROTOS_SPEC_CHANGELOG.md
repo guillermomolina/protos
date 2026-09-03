@@ -4,6 +4,32 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.158] - 2026-09-03
+
+### Fixed
+- Bounded implementation-controlled speculative read-ahead retention for
+  standard buffering/decoding readers.
+- Required unread bytes, decoded text, checkpoints, and equivalent state retained
+  solely because of speculative read-ahead to have an effective finite
+  implementation bound per logical reader/flow.
+- Distinguished speculative retention from intrinsically unbounded operation
+  results: ordinary `readLine()` may still require unbounded line accumulation.
+- Prevented `readLine(maxBytes)` from using its explicit safety bound while
+  continuing to consume/retain an unbounded suffix after the limit condition can
+  already be established.
+- Kept `readText()` chunk boundaries implementation-selectable while prohibiting
+  an ever-growing implementation-chosen chunk as a prerequisite for progress.
+- Applied the same principle to `BufferedReader` and other standard read
+  adapters without prescribing one fixed buffer size or one native read at a
+  time.
+- Scoped the resource rule to Protos-managed retention rather than kernel,
+  filesystem-cache, remote-peer, or independently managed backend buffering.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 158. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.157] - 2026-09-03
 
 ### Fixed
