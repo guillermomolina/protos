@@ -40,6 +40,55 @@ class ProtosLexerTest {
     }
 
     @Test
+    void reservedWordRecognitionIsExactAndCaseSensitive() {
+        assertTypes(
+            "This CONTEXT Args SUPER True FALSE Null",
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.EOF
+        );
+    }
+
+    @Test
+    void controlFlowAndErrorLookingNamesAreNotReservedWords() {
+        assertTypes(
+            "if else while for class function try catch throw async await",
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.EOF
+        );
+    }
+
+    @Test
+    void reservedWordPrefixesAndSuffixesRemainOrdinaryIdentifiers() {
+        assertTypes(
+            "thisValue context_ args2 superman trueValue falsehood nullish",
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.IDENTIFIER,
+            TokenType.EOF
+        );
+    }
+
+    @Test
     void standardAndRuntimeNamesRemainOrdinaryIdentifiers() {
         assertTypes(
             "Object Context Boolean Number Integer Float String Closure Future Array Map IdentityMap Bytes Process This",
