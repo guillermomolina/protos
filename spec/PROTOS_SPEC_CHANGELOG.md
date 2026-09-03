@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.187] - 2026-09-03
+
+### Closed
+- Closed fundamental graceful Actor termination semantics.
+- Defined one irreversible stop cutover that prevents new concrete-Actor
+  acceptance and new ordinary turns.
+- Defined accepted-but-not-started interactions as lost accepted work instead
+  of draining arbitrary mailbox backlog or pretending non-acceptance.
+- Preserved non-preemptive execution for an already-running turn until normal
+  completion or its next portable cancellation boundary.
+- Reused existing Actor-termination cancellation for Actor-local tasks and
+  non-task-backed producer Futures.
+- Distinguished graceful stop from fatal failure and preserved independent
+  Group desired-state reconciliation.
+- Removed `Actor graceful shutdown` and `Actor stop API and exact lifecycle
+  mechanics` from Open Design Topics; exact administrative/public API shape
+  remains explicitly open inside the CLOSED lifecycle section.
+
+### Changed
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 187.
+
 ## [0.1.186] - 2026-09-03
 
 ### Fixed

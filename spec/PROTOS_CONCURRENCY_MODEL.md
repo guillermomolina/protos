@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 186
+Document revision: 187
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -1154,6 +1154,79 @@ relationship.
 Structured concurrency therefore governs Future-producing child work,
 including isolated parallel computations, but not Actor lifetime in
 general.
+
+## 24A. Actor Termination Request and Graceful Stop
+
+**CLOSED**
+
+Core distinguishes a **known Actor termination request** from failure, unreachability,
+and ordinary message handling. This section closes the lifecycle semantics of a
+graceful stop without standardizing a particular public `stop` spelling, return type,
+timeout option, or administrative API.
+
+A graceful-stop request establishes one irreversible lifecycle cutover for the
+target Actor incarnation. Once that cutover is established:
+
+- the Actor is terminating and can never return to READY;
+- no new ordinary message delivery may cross that Actor's concrete-Actor acceptance
+  boundary;
+- no new ordinary Actor turn may begin;
+- no replacement Actor inherits this lifecycle or this ActorRef.
+
+Operations that had not crossed concrete-Actor acceptance before the cutover remain
+pre-acceptance operations. They follow the ordinary routing, cancellation, failure,
+and Group re-routing rules. In particular, Group-addressed work may select another
+member only while Group routing still owns the operation and no concrete Actor has
+accepted it.
+
+Operations already accepted by the Actor but whose handler turn has not begun are
+not drained as new ordinary work after the cutover. They are accepted-but-not-
+completed operations lost with that incarnation and follow the same sender-visible
+failure/uncertainty rules as accepted work lost by Actor failure. In particular, an
+accepted `request()` that cannot produce its normal reply fails with
+`RequestOutcomeUncertain`. Graceful stop therefore never fabricates proof of
+non-execution merely because a handler had not started.
+
+If an ordinary Actor turn is executing when the cutover is established, Protos does
+not asynchronously preempt arbitrary non-suspending code. That turn may continue
+until it either completes normally or reaches an existing portable cancellation
+boundary. If it completes normally before observing termination cancellation, its
+already-defined effects and, for an accepted `request()`, its normal transferable
+reply remain valid. If it reaches a cancellation boundary first, the existing
+Actor-termination cancellation and `ensure`-cleanup rules apply and no further
+ordinary code from that turn executes.
+
+Establishing graceful stop requests cancellation of all remaining Actor-local tasks,
+including detached tasks, and of all still-pending non-task-backed asynchronous
+operations initiated by that Actor, exactly as defined by Structured Concurrency.
+Producer-specific commitment and acceptance boundaries remain authoritative:
+graceful stop does not undo committed I/O, unsend accepted communication, close
+Process-owned resources, or strengthen an operation's cancellation contract.
+
+The Actor reaches TERMINATED only after every Actor-local task that the runtime is
+still semantically required to clean up has completed its cancellation unwind and
+applicable `ensure` cleanup. Graceful stop does not generally wait for
+non-task-backed producer Futures whose backend work must continue under an
+already-committed operation contract; such residual work remains under
+runtime/producer custody and cannot resume ordinary code in the terminated Actor.
+
+Cleanup has no bounded-time guarantee. A task that never reaches a cancellation
+boundary, or cleanup that suspends forever, may therefore delay graceful termination
+forever while the runtime remains otherwise operational. A timeout on an API that
+waits for graceful termination is only a wait policy unless that API separately
+defines a stronger escalation mechanism; timeout alone does not mutate the Actor
+into a different semantic kind of termination.
+
+Repeated graceful-stop requests for the same live incarnation are idempotent with
+respect to lifecycle: they observe the same termination cutover and cannot create a
+second shutdown sequence, reopen acceptance, or cause already-committed effects to
+be replayed. Exact request-operation object identity, administrative API shape, and
+whether callers can wait on a dedicated stop operation remain API design questions.
+
+A graceful stop is not Actor failure. It does not by itself invoke failure policy as
+though an unhandled fatal error occurred. Group desired-state reconciliation remains
+independent: if a Group still requires capacity, its controller may create a new
+member, which is a new Actor incarnation with a new ActorRef.
 
 ## 25. Parent Actor Versus Failure Authority
 
@@ -3316,8 +3389,6 @@ mechanism, or implementation detail that still requires design.
 -   Draining policy and mechanics
 -   Infrastructure Controller integration APIs
 -   External infrastructure adapters such as Kubernetes or Nomad
--   Actor graceful shutdown
--   Actor stop API and exact lifecycle mechanics
 -   Actor garbage collection
 -   Monitoring API
 -   Fatal versus non-fatal handler errors

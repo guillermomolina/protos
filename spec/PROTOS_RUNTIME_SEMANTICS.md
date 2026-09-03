@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 186
+Document revision: 187
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2420,6 +2420,45 @@ Conceptually, Actor termination while its hosting runtime can still execute
 cleanup includes:
 
 ```text
+### Actor graceful-stop lifecycle cutover
+
+The concurrency model's graceful-stop cutover is represented conceptually as:
+
+```text
+function beginGracefulActorTermination(actor):
+    if actor.lifecycle is TERMINATING or TERMINATED:
+        return
+
+    actor.lifecycle = TERMINATING
+
+    stopConcreteActorAcceptance(actor)
+    preventNewOrdinaryTurns(actor)
+
+    classifyAcceptedButNotStartedInteractionsAsLost(actor)
+
+    cancelActorLocalWorkForTermination(actor)
+
+    when required Actor-local task cleanup is complete:
+        actor.lifecycle = TERMINATED
+```
+
+`classifyAcceptedButNotStartedInteractionsAsLost` does not execute their handlers
+and does not rewrite acceptance history. Sender-visible outcomes use the ordinary
+accepted-work loss and request-uncertainty rules.
+
+If a turn was already executing when `beginGracefulActorTermination` established
+the cutover, the runtime does not inject an asynchronous exception into arbitrary
+ordinary code. The turn remains subject to the existing cancellation boundaries.
+Normal completion before the next such boundary remains normal completion; reaching
+a boundary with the termination cancellation pending begins the ordinary
+cancellation unwind.
+
+The conceptual `when` above is not permission to wait for every residual
+non-task-backed producer Future. `cancelActorLocalWorkForTermination` already
+separates required Actor-local task cleanup from producer custody. The Actor can
+become TERMINATED once required Actor-local task cleanup has finished, even if
+committed backend work continues under runtime/producer custody.
+
 function cancelActorLocalWorkForTermination(actor):
     tasks = all pending Actor-local tasks in actor
         // includes tasks detached from activation ownership
