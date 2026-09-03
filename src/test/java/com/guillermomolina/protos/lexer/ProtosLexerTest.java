@@ -646,6 +646,27 @@ class ProtosLexerTest {
     }
 
     @Test
+    void everyLogicalNewlineSpellingIsRejectedInSingleLineStrings() {
+        for (String newline : List.of("\n", "\r", "\r\n")) {
+            String single = "'a" + newline + "b'";
+            String doubleQuoted = "\"a" + newline + "b\"";
+            assertThrows(ProtosLexer.LexicalError.class, () -> lex(single), single);
+            assertThrows(ProtosLexer.LexicalError.class, () -> lex(doubleQuoted), doubleQuoted);
+        }
+    }
+
+    @Test
+    void tripleDoubleIndentationMatchesRawSourceBeforeEscapeProcessing() {
+        String source = "\"\"\"\n\\talpha\n\t\"\"\"";
+        assertThrows(ProtosLexer.LexicalError.class, () -> lex(source));
+    }
+
+    @Test
+    void interpolationLookingEscapeIsRejectedRatherThanIntroducedAsSyntax() {
+        assertThrows(ProtosLexer.LexicalError.class, () -> lex("\"\\${value}\""));
+    }
+
+    @Test
     void unterminatedSingleDoubleAndTripleStringsAreLexicalErrors() {
         for (String source : List.of(
             "'text",
