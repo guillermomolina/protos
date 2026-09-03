@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.146] - 2026-09-03
+
+### Fixed
+- Replaced host-process-scoped hash wording with a Protos-execution-scoped
+  observable hash domain.
+- Required standard built-in value hashes to remain coherent across Actors,
+  workers, operating-system processes, and machines participating in the same
+  Protos execution rather than leaking host placement into language semantics.
+- Renamed conceptual `processLocalHashInteger` to
+  `executionLocalHashInteger` to match the semantic scope.
+- Preserved per-execution salting while allowing additional per-Map, per-Actor,
+  per-worker, or per-process mixing for unobservable physical table layout.
+- Avoided requiring a global mutable hash registry or global lock; immutable
+  execution-scoped configuration or equivalent mechanisms remain sufficient.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 146.
+  No grammar, Actor/Future, or I/O semantics change.
+
 ## [0.1.145] - 2026-09-03
 
 ### Fixed

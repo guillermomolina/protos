@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 145
+Document revision: 146
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3091,7 +3091,7 @@ numeric equality key:
 ```text
 function standardNumericHash(number):
     key = numericHashKey(number)
-    return processLocalHashInteger(key)
+    return executionLocalHashInteger(key)
 ```
 
 `numericHashKey` is representation-independent and must satisfy:
@@ -3115,10 +3115,19 @@ All Core Float NaN semantic values use one distinguished numeric hash key.
 `numericEquals(NaN, NaN)` remains false; this special key exists only to prevent
 hidden IEEE NaN representation details from leaking through standard hashing.
 
-`processLocalHashInteger` returns a semantic Integer and may use per-execution
-salting or randomization. It need not be injective: collisions between unequal
-numeric keys are valid. It must nevertheless be stable for a given numeric key
-for the duration of the execution.
+`executionLocalHashInteger` returns a semantic Integer and may use
+per-execution salting or randomization. It need not be injective: collisions
+between unequal numeric keys are valid. It must nevertheless be stable for a
+given numeric key for the duration of the Protos execution.
+
+`executionLocalHashInteger` is named for the semantic scope of the observable
+mapping, not for an implementation process. If one Protos execution uses
+multiple operating-system processes, workers, threads, Actors, or machines,
+host placement must not cause the same standard numeric hash key to acquire a
+different observable Integer solely because it is evaluated in another host
+container. Implementations may propagate immutable execution-scoped hash
+configuration or use any equivalent mechanism; no shared mutable hash registry
+or runtime-global lock is required.
 
 This abstract operation does not require conversion of an exact Integer through
 binary64 and must not introduce rounding merely to hash it. Implementations may
@@ -3589,7 +3598,13 @@ use `findMapEntry`.
 
 `IdentityMap` uses primitive semantic identity (`===`) together with a stable `identityHashOf`.
 
-`hash` values need only be valid within the current execution. The runtime may salt hashes per process. Persisted hash values must therefore not rely on the ordinary `hash` protocol.
+`hash` values need only be valid within the current Protos execution. Standard
+built-in hash behavior may be salted per Protos execution, but must not expose
+operating-system process, worker, thread, Actor-placement, or machine boundaries
+as different hash domains inside that execution. Implementations remain free to
+apply additional local random mixing to physical Map indexing when it is
+unobservable and preserves the logical exact-Integer matching contract.
+Persisted hash values must therefore not rely on the ordinary `hash` protocol.
 
 Map iteration preserves insertion order as an observable collection property.
 

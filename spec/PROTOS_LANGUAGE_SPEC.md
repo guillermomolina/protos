@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 145
+Document revision: 146
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3773,7 +3773,26 @@ its separately specified symmetry guarantee.
 Likewise, `Map` does not add an identity shortcut before `==`. Values such as
 Float NaN therefore retain their ordinary `==` semantics when used as normal
 `Map` keys. Code that requires identity-keyed behavior uses `IdentityMap`.
-The ordinary `hash` operation is not required to be stable across separate process executions. Implementations may use per-process randomization or salting for security. Persistent or interoperable hashing must use a separate explicit protocol or algorithm.
+The ordinary `hash` operation is not required to be stable across separate
+Protos executions. Standard built-in hash behavior may use per-execution
+randomization or salting for security, but host placement is not a semantic hash
+boundary: moving otherwise equivalent execution across operating-system
+processes, threads, workers, or machines within the same Protos execution must
+not by itself change a standard built-in value's observable `hash` result.
+
+For standard immutable value families whose hash is defined from semantic value,
+the mapping from the specified semantic hash key to the observable Integer hash
+is therefore coherent for the duration of one Protos execution. Separate Protos
+executions need not choose the same mapping.
+
+This requirement does not impose a global mutable hash table or a global lock.
+An implementation may derive the mapping from immutable execution-scoped
+configuration and may additionally use per-Map, per-Actor, per-worker, or
+per-process mixing for physical table layout when that mixing is not observable
+through the language-level `hash` result or logical Map matching semantics.
+
+Persistent or interoperable hashing must use a separate explicit protocol or
+algorithm.
 
 `IdentityMap` follows the same insertion-order rule unless a more specialized collection explicitly documents otherwise.
 
