@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.115] - 2026-09-03
+
+### Changed
+- Renamed the Actor request/reply operation from `ask()` to `request()`.
+- Renamed the standard uncertainty error from `AskOutcomeUncertain` to
+  `RequestOutcomeUncertain`.
+- Preserved all existing delivery, snapshot, ordering, cancellation, timeout,
+  reply, Actor-failure, and uncertainty semantics; this is an API vocabulary
+  change, not a behavior change.
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 115.
+
+### Rationale
+- `ask` is established actor-framework jargon, especially in Akka, but is not
+  self-explanatory outside that ecosystem.
+- `call` commonly implies synchronous waiting in Erlang/Elixir and would obscure
+  Protos's explicit Future-returning semantics.
+- `request` states the semantic role directly, pairs naturally with one-way
+  `send`, and is already established for asynchronous request/reply actor APIs.
+
 ## [0.1.114] - 2026-09-03
 
 ### Fixed

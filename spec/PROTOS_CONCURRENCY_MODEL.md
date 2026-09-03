@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 114
+Document revision: 115
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -290,7 +290,7 @@ ordering.
 
 For ordinary Actor messaging, the sender is the **originating Actor
 incarnation**, not the individual Actor-local task, Future, activation, or turn
-that happens to invoke `send()` or `ask()`. All Actor-local work executing inside
+that happens to invoke `send()` or `request()`. All Actor-local work executing inside
 one Actor therefore shares that Actor's sender identity for this ordering rule.
 
 For two delivery attempts issued from one Actor incarnation to the same concrete
@@ -513,27 +513,27 @@ authorize transparent replay.
 
 The exact SendOperation API and status set remain open.
 
-## 14. ask()
+## 14. request()
 
 **CLOSED --- REVISED**
 
-`ask()` represents request/reply communication.
+`request()` represents request/reply communication.
 
 It returns a Future.
 
-The delivery portion of `ask()` has exactly the same semantics as
-`send()`. `ask()` additionally establishes an ephemeral reply capability
+The delivery portion of `request()` has exactly the same semantics as
+`send()`. `request()` additionally establishes an ephemeral reply capability
 and a Future that represents the eventual reply.
 
 Conceptually:
 
     send(message) = delivery
-    ask(message)  = same delivery + reply Future
+    request(message)  = same delivery + reply Future
 
 The underlying delivery operation need not be separately exposed to the
-caller of `ask()`.
+caller of `request()`.
 
-An `ask()` Future may remain pending before a concrete Actor has been
+An `request()` Future may remain pending before a concrete Actor has been
 selected or accepted the message. Its resolution represents the reply,
 not merely successful delivery.
 
@@ -542,19 +542,19 @@ required correlation, routing, and reply delivery.
 
 The normal final result of the Actor handler becomes the reply value.
 
-One `ask()` produces one logical response.
+One `request()` produces one logical response.
 
 Streaming or multi-response communication will use a separate
-abstraction rather than stretching `ask()` into a streaming protocol.
+abstraction rather than stretching `request()` into a streaming protocol.
 
-Because `ask()` exposes an ordinary four-state Future rather than the richer
+Because `request()` exposes an ordinary four-state Future rather than the richer
 `SendOperation`, communication uncertainty must map deterministically into that
 Future instead of creating a fifth Future state.
 
 This concurrency domain therefore defines the standard error prototype
-`AskOutcomeUncertain`, delegating directly to `Error`. It denotes that the ask
+`RequestOutcomeUncertain`, delegating directly to `Error`. It denotes that the request
 cannot produce its normal reply and Protos cannot guarantee that the remote
-request had no effect. The ask Future completes `failed(AskOutcomeUncertain)`
+request had no effect. The request Future completes `failed(RequestOutcomeUncertain)`
 when, for example:
 
 - acceptance may or may not have occurred and the runtime cannot determine which;
@@ -563,49 +563,49 @@ when, for example:
 - a reply becomes unavailable after remote handling may already have produced
   effects and the caller cannot determine the handler's normal result.
 
-`AskOutcomeUncertain` describes caller-visible uncertainty, not an assertion that
+`RequestOutcomeUncertain` describes caller-visible uncertainty, not an assertion that
 the request definitely executed and not permission for transparent retry.
 Libraries may build idempotency, deduplication, or application-level retry policy
 above it.
 
 A failure known to have prevented concrete-Actor acceptance is an ordinary failed
 Future according to the communication failure rules and is not
-`AskOutcomeUncertain`. Conversely, once acceptance is known to have occurred,
+`RequestOutcomeUncertain`. Conversely, once acceptance is known to have occurred,
 failure to obtain a normal reply must not be reported as though non-delivery were
 proved.
 
 Cancellation has a separate deterministic mapping. Before concrete-Actor
 acceptance, cancellation may win the delivery race; if the runtime establishes
-that acceptance did not occur, the ask Future may become `cancelled`. Once
+that acceptance did not occur, the request Future may become `cancelled`. Once
 acceptance is known, cancellation can abandon the caller's wait/reply capability
-and the ask Future may become `cancelled`, but it cannot unsend the request or
+and the request Future may become `cancelled`, but it cannot unsend the request or
 imply that remote effects did not occur. A later reply to an already-cancelled
-ask is discarded and cannot change the terminal Future state.
+request is discarded and cannot change the terminal Future state.
 
 If cancellation races with delivery and the runtime cannot determine whether
-acceptance occurred, the Future fails with `AskOutcomeUncertain` rather than
+acceptance occurred, the Future fails with `RequestOutcomeUncertain` rather than
 becoming `cancelled`, because `cancelled` must not erase delivery uncertainty.
 
 A reply and cancellation race is resolved by the first terminal transition of the
-ask Future. Once resolved, failed, or cancelled, later reply/cancellation events
+request Future. Once resolved, failed, or cancelled, later reply/cancellation events
 cannot rewrite that terminal state.
 
 A wait timeout affects only the wait under the general timeout rule. It does not
-itself complete, fail, or cancel the ask Future, and it does not imply that remote
+itself complete, fail, or cancel the request Future, and it does not imply that remote
 work did not execute.
 
-## 15. send() and ask() Share Delivery and Dispatch
+## 15. send() and request() Share Delivery and Dispatch
 
 **CLOSED --- REVISED**
 
-`send()` and `ask()` use the same message-delivery semantics and the same
+`send()` and `request()` use the same message-delivery semantics and the same
 Actor message dispatch mechanism.
 
 For `send()`, the handler result is ignored.
 
-For `ask()`, the handler result resolves the caller Future.
+For `request()`, the handler result resolves the caller Future.
 
-There are no separate send handlers and ask handlers.
+There are no separate send handlers and request handlers.
 
 The same snapshot, routing, acceptance, backpressure, cancellation,
 uncertainty, and failure rules apply to the delivery portion of both
@@ -653,7 +653,7 @@ environment.
 **CLOSED --- REVISED**
 
 A message captures its logical value snapshot when the caller invokes
-`send()` or `ask()`.
+`send()` or `request()`.
 
 The snapshot is fixed before routing, member selection, backpressure,
 capacity waiting, or acceptance.
@@ -821,9 +821,9 @@ unsend it.
 
 If the runtime cannot determine whether acceptance occurred,
 cancellation may end in an uncertain delivery state rather than assuming
-that the message was cancelled before delivery. For `ask()`, whose public result
+that the message was cancelled before delivery. For `request()`, whose public result
 is an ordinary Future and therefore has no uncertain terminal state, this outcome
-is represented by failure with the standard `AskOutcomeUncertain` error.
+is represented by failure with the standard `RequestOutcomeUncertain` error.
 
 Principle:
 
@@ -1852,7 +1852,7 @@ Conceptually:
     GroupRef -> one concrete ActorGroup identity; routing selects a member
 
 ActorRef and GroupRef are both communication targets and expose the same
-fundamental send/ask communication model while retaining different
+fundamental send/request communication model while retaining different
 destination semantics.
 
 Multiple GroupRefs may refer to the same Group. GroupRef identity is not
@@ -1870,7 +1870,7 @@ membership, controller replacement, and routing-path changes.
 Discovery names may rebind; a concrete GroupRef never rebinds to another
 Group identity.
 
-Normal `send` or `ask` directed to an ActorGroup selects exactly one
+Normal `send` or `request` directed to an ActorGroup selects exactly one
 eligible concrete Actor by default. Broadcast/multicast is a distinct
 explicit operation.
 
@@ -1914,7 +1914,7 @@ operation becomes uncertain. Uncertainty does not authorize transparent
 replay.
 
 The logical message snapshot remains the snapshot taken at the original
-`send()` or `ask()` invocation across all pre-acceptance waiting and
+`send()` or `request()` invocation across all pre-acceptance waiting and
 rerouting.
 
 ### Empty, Unreachable, and Terminated Groups
@@ -2215,14 +2215,14 @@ Actor death terminates direct outstanding interactions with that Actor.
 
 Replacement does not inherit them.
 
-For a direct `ask`, if Protos can determine that the destination Actor
+For a direct `request`, if Protos can determine that the destination Actor
 terminated before accepting the request, the returned Future fails according to
 the ordinary communication failure semantics.
 
 If acceptance occurred, or may have occurred and Protos cannot prove otherwise,
 termination before a normal reply makes the returned Future fail with
-`AskOutcomeUncertain`. This includes an Actor turn that ends in an unhandled fatal
-failure after accepting the ask: the caller is not automatically given the
+`RequestOutcomeUncertain`. This includes an Actor turn that ends in an unhandled fatal
+failure after accepting the request: the caller is not automatically given the
 destination's internal failure object as though it were a normal reply, and the
 runtime does not pretend that the accepted request had no effects.
 
