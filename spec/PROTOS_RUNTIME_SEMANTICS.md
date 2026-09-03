@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 170
+Document revision: 171
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -4037,6 +4037,70 @@ Persisted hash values must therefore not rely on the ordinary `hash` protocol.
 
 Map iteration preserves insertion order as an observable collection property.
 
+
+### Stable Map iteration snapshot
+
+Standard `Map.each(block)` and `IdentityMap.each(block)` iterate a shallow
+logical association snapshot established once at invocation start.
+
+Conceptually:
+
+```text
+function captureMapIterationSnapshot(map):
+    snapshot = []
+
+    for entry in map.entriesInInsertionOrder:
+        snapshot.append(
+            key = entry.key,
+            value = entry.value
+        )
+
+    return snapshot
+
+function mapEach(map, block):
+    snapshot = captureMapIterationSnapshot(map)
+
+    for item in snapshot:
+        invoke(block, [item.key, item.value])
+
+    return map
+```
+
+`identityMapEach` uses the same algorithm; capturing the snapshot does not call
+`hash`, `==`, `identityHashOf`, or any other key-search operation.
+
+The pseudocode's `snapshot` and `append` are semantic notation only. A runtime
+may avoid an eager O(n) copy when another implementation strategy preserves the
+same observable association snapshot.
+
+The snapshot fixes, for the lifetime of that `each` invocation:
+
+- which associations will be visited;
+- their visitation order;
+- the representative key object passed for each visit; and
+- the mapped value object passed for each visit.
+
+Subsequent insertion, removal, or mapped-value replacement on the source Map
+does not revise those four snapshot facts. The snapshot is shallow: mutations
+inside a referenced key or value object remain ordinary object mutations.
+
+No dynamic Map iteration lock or mutation guard is established. In particular,
+an `each` callback may reach an explicit suspension point; another runnable task
+in the same Actor may then mutate the Map according to the ordinary Map and
+Actor rules without being blocked merely because an iteration is suspended.
+When the iterating task resumes, it continues with its already-established
+snapshot.
+
+Each nested `each` invocation captures its own snapshot at its own invocation
+start. A callback failure or non-local transfer stops the current iteration;
+remaining snapshot elements are not invoked, and completed effects are not
+rolled back.
+
+Implementations may use persistent entry nodes, immutable snapshot descriptors,
+copy-on-write structures, versioned representations, or other mechanisms. They
+must not expose physical hash-table traversal, host iterator invalidation,
+best-effort concurrent-modification detection, or scheduler timing as a
+different iteration result.
 
 ### Deterministic `IdentityMap` key search and update
 

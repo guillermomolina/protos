@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.171] - 2026-09-03
+
+### Fixed
+- Defined `Map.each(block)` and `IdentityMap.each(block)` as standard
+  insertion-order iteration over a shallow logical association snapshot
+  captured at invocation start.
+- Required callbacks to receive the representative key and snapshot value
+  as two arguments and made successful `each` return the receiver Map.
+- Made later insertion, removal, and mapped-value replacement unable to
+  alter an already-established iteration, including across task suspension.
+- Avoided hidden Map-wide iteration locks and mutation prohibitions, so
+  other Actor-local tasks remain free to mutate the Map while an iterator
+  task is suspended under ordinary Actor semantics.
+- Kept the snapshot shallow and implementation-independent; persistent,
+  versioned, copy-on-write, or equivalent representations may avoid eager
+  physical copying while preserving the same observable iteration.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 171.
+  No grammar, Future, or I/O semantics change.
+
 ## [0.1.170] - 2026-09-03
 
 ### Fixed

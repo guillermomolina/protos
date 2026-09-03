@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 170
+Document revision: 171
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3955,6 +3955,73 @@ algorithm.
 `IdentityMap` follows the same insertion-order rule unless a more specialized collection explicitly documents otherwise.
 
 
+
+### Standard Map iteration
+
+The standard iteration selector for `Map` and `IdentityMap` is:
+
+```js
+map.each(block)
+```
+
+At the start of the standard `each` invocation, after ordinary receiver and
+argument evaluation, the operation establishes a shallow logical snapshot of
+the receiver's current associations in insertion order. Each snapshot element
+contains exactly the representative key object stored by the Map and the exact
+value object associated with that entry at the snapshot point.
+
+`each` then invokes `block` once for every snapshot element, in snapshot
+insertion order, with two ordinary arguments:
+
+```text
+block(key, value)
+```
+
+If every callback returns normally, `each` returns the receiver Map object.
+
+The snapshot is an iteration semantic boundary, not a physical representation
+requirement. While the callbacks execute, code may mutate the same Map whenever
+those mutations are otherwise permitted by the existing open/closed/frozen,
+hash/equality, and reentrancy rules. Such later Map mutations do not alter the
+current iteration snapshot:
+
+- entries inserted after the snapshot are not visited by that invocation;
+- entries removed after the snapshot are still visited if their snapshot
+  position has not yet been visited;
+- replacing a Map entry's value after the snapshot does not change the value
+  argument stored in the current snapshot;
+- removing and later reinserting a semantically equal key does not create a
+  second visit in the current snapshot;
+- nested `each` calls establish their own independent snapshots.
+
+The snapshot is shallow. It preserves the key and value object references that
+were stored at the snapshot point; it does not clone, freeze, or otherwise
+isolate those objects. Mutating a mutable key or value object through some
+ordinary reference remains mutation of that object and is observable normally.
+Only later changes to the Map's association set or replacement of an entry's
+mapped value are excluded from the already-established snapshot.
+
+This rule also applies when a callback reaches an explicit suspension point.
+Another Actor-local task may mutate the Map while the iterating task is
+suspended, subject to ordinary Actor/task semantics, without acquiring a hidden
+iteration lock and without changing the suspended iteration's established
+snapshot. Standard Map iteration therefore introduces no Map-wide lock,
+mutation prohibition, or scheduling dependency.
+
+If a callback signals an error or otherwise exits the `each` invocation by an
+ordinary non-local control transfer, no later snapshot element is visited.
+Effects already completed by earlier callbacks are not rolled back.
+
+`IdentityMap.each` has exactly the same snapshot and result semantics. Its
+snapshot contains the representative key objects and values stored by the
+IdentityMap; no identity re-search is performed merely to iterate.
+
+An implementation need not allocate an eager copied Array or pair objects.
+Persistent entry structures, versioned cursors, copy-on-write state, or any
+other representation are valid when they produce the same shallow-snapshot
+behavior. The cost of preserving this semantics is incurred only when iteration
+requires it; Core does not mandate snapshot copies for Maps that are never
+iterated.
 
 ### Deterministic `IdentityMap` key semantics
 
