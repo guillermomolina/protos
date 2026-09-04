@@ -85,88 +85,11 @@ These fields are conceptual. An implementation may represent them differently. T
 
 Execution contexts delegate through `Context` to `Object`. `Context` is their delegation prototype, never their lexical parent: `lexicalParentOf` and `delegationParent` are different relationships, and the delegation chain `activationContext → Context → Object` is not the lexical chain. `lookupName` and `assignName` traverse lexical contexts only through `lexicalParentOf` and never walk the delegation chain of a context while searching for a bare name.
 
-Identifiers are lexical constructs that must conform to Unicode `XID_Start` and `XID_Continue` properties and must be in Unicode NFC normalization form. The lexer must validate NFC compliance and reject non-NFC identifiers as syntax errors.
-
-Reserved-word matching is case-sensitive. After lexical identifier recognition, the lexer must check whether the identifier spelling exactly matches one of the seven reserved words: `this`, `context`, `args`, `super`, `true`, `false`, or `null`. If it matches, the lexer tokenizes it as a reserved word token. Otherwise, it is an ordinary identifier token.
-
-**String Literal Lexical Forms:**
-
-The valid lexical token shapes for the three Core v0.1 String forms — single-quoted (`'...'`), double-quoted (`"..."`), and triple-double-quoted (`"""..."""`) — including the `escape-sequence` grammar, are defined formally in `../PROTOS_GRAMMAR.md`; that grammar is the source spelling the lexer recognizes for String tokens.
-
-**String Escape Validation:**
-
-String escape validation is part of lexical analysis. An invalid, incomplete, or unsupported escape sequence in any Core v0.1 String literal is a lexical error. This includes:
-
-- Malformed `\u{HEX}` escapes (missing braces, incomplete hex digits, extra characters)
-- Unicode escape values that are not valid Unicode scalar values (e.g., surrogates, values > U+10FFFF)
-- Unsupported escape sequences such as octal or `\xNN` forms
-
-The lexer must validate escape sequences and reject invalid ones before the parser receives a String token. A String token passed to the parser must contain only valid escape sequences according to Core v0.1 rules.
-
-**Logical Source Newlines (Lexer Contract):**
-
-- A logical source newline is exactly one of `LF` (U+000A), `CR` (U+000D), or `CRLF` (U+000D U+000A).
-- `CRLF` is consumed atomically as one logical source newline; it never produces two `NEWLINE` tokens.
-- Each logical source newline produces exactly one `NEWLINE` token for the parser when it is not consumed by another lexical construct.
-- Source files may freely mix `LF`, `CR`, and `CRLF` logical newlines; mixed line-ending styles are not lexical errors.
-- Newline recognition does not depend on the host operating system, editor settings, Git line-ending conversion, or any host line-separator convention.
-- A `//` line comment terminates immediately before the next logical source newline or at end of file. The terminating logical source newline is not consumed as part of the comment; it remains available for ordinary newline tokenization.
-- Whether a `NEWLINE` token separates expressions or is consumed as continuation is decided entirely by the parser (see `../PROTOS_GRAMMAR.md`); the lexer emits `NEWLINE` tokens uniformly. A continuation newline produces no runtime node and has no runtime semantic effect.
-- Commas between elements of argument and parameter lists are likewise resolved entirely by the parser (see `../PROTOS_GRAMMAR.md`). A comma separates list elements and produces no runtime node and no runtime semantic effect; only the parsed list elements appear in the semantic representation.
-
-**Block Comments (Lexer Contract):**
-
-- A `/* ... */` block comment is one lexical construct: the lexer consumes all source characters from the opening `/*` through the first following `*/`. Core v0.1 block comments do not nest; an unterminated block comment is a lexical error.
-- Logical source newlines inside a block comment are consumed as part of the comment. Each embedded `LF`, `CR`, or `CRLF` is consumed; no `NEWLINE` token is emitted for an embedded logical newline, and an embedded `CRLF` never produces `NEWLINE` tokens.
-- An embedded logical newline still counts as one logical source newline for source-position and logical-line accounting: line and column tracking advance normally through the comment, including the complete `CR` and `LF` of an embedded `CRLF`.
-- The lexer emits no comment token and no other parser token for a block comment. A block comment has the token-separation effect of insignificant whitespace regardless of whether it contains logical newlines; embedded logical newlines do not become expression separators.
-- Line comments are unchanged: a `//` line comment terminates immediately before its terminating logical source newline, which remains available for ordinary `NEWLINE` tokenization.
-
-**Horizontal Whitespace (Lexer Contract):**
-
-- `SPACE` (U+0020) is ignored horizontal whitespace.
-- `CHARACTER TABULATION` (U+0009, TAB) is ignored horizontal whitespace.
-- These two code points are the only Core v0.1 horizontal whitespace. Horizontal whitespace emits no parser token.
-- The lexer must not use host-dependent or Unicode-generic whitespace predicates to expand this set; no other Unicode whitespace-like code point is implicitly ignored.
-- A source code point that is neither part of a valid lexical token, nor SPACE or TAB horizontal whitespace, nor a logical source newline, nor consumed inside a lexical construct such as a String or comment is a lexical error. Otherwise-unrecognized whitespace-like or format code points must not be silently discarded.
-- Logical `NEWLINE` handling is separate and unchanged.
-
-**String Literal Newline Handling:**
-
-The lexer must enforce the following rules for String literals:
-
-- Single-quoted (`'...'`) and double-quoted (`"..."`) String literals are single-line literals.
-- A logical source newline (`LF`, `CR`, or `CRLF`) encountered inside a single-quoted or double-quoted String literal before the matching closing quote is a lexical error.
-- Newline characters must be represented in single-quoted and double-quoted literals using the escape sequences `\n` (line feed) or `\r` (carriage return); these escapes denote String content and are distinct from raw source-newline recognition.
-- Triple-double-quoted (`"""..."""`) String literals permit logical source newlines as part of the literal content. Each logical source newline counts as one logical newline for structural processing — delimiter placement, content-line splitting, and indentation normalization — regardless of whether it is spelled `LF`, `CR`, or `CRLF`.
-- Retained source newlines in triple-double-quoted literals preserve their original source code points in the resulting String: `LF` remains U+000A, `CR` remains U+000D, and `CRLF` remains U+000D U+000A. There is no implicit newline normalization of String content.
-- The escape-sequence rules for triple-double-quoted literals are unchanged; escape processing does not treat an escape sequence as source indentation. Opening/trailing newline removal removes the complete logical newline sequence. Multiline indentation normalization for triple-double-quoted literals follows the Core v0.1 closing-delimiter indentation rule defined in `../PROTOS_GRAMMAR.md`; it does not change the valid triple-double token shapes.
-
-**String Literal Delimiter Recognition (Lexer Contract):**
-
-Triple-double quote-run recognition is lexer behavior, not runtime behavior:
-
-- Outside a String lexical construct, three consecutive unescaped double-quote characters (`"""`) at the current lexical position begin a triple-double-quoted String; this takes priority over recognizing an ordinary double-quoted String opener at that position. The opening delimiter is exactly three double quotes.
-- Inside a triple-double-quoted String, the first three consecutive unescaped double-quote characters form the closing delimiter, which consumes exactly those three quotes. One or two consecutive unescaped quotes that do not begin a closing delimiter are ordinary content.
-- Any source characters immediately following a closing delimiter, including additional double quotes, are outside the completed String and are lexed normally from that point; there is no greedy rule that consumes a longer quote run as one delimiter, and quote-run decisions are not backtracked.
-- An escaped double quote (`\"`) is String content and does not participate in a closing delimiter.
-
-**Unterminated String Literals (Lexer Contract):**
-
-- Reaching the end of source before the required closing delimiter of a single-quoted (`'...'`), double-quoted (`"..."`), or triple-double-quoted (`"""..."""`) String literal is a lexical error.
-- An unterminated String literal never produces a partial String token. The parser never receives a successfully formed String token for the malformed literal, and the lexer must not recover by treating the opening quote as another token, emitting accumulated content as a partial String, splitting the literal into otherwise valid tokens, inserting a closing delimiter, or interpreting the end of source as the closing delimiter.
-- The end-of-source rule applies only when the end of source is reached while String recognition is still active and no earlier lexical error has already terminated recognition. The existing single-line raw-newline rule is unchanged: a logical source newline before the matching closing quote is already a lexical error.
-- The existing incomplete-escape rule is unchanged. If the end of source is reached after a backslash or during an incomplete escape while String recognition is still active, the source is a lexical error and no String token is emitted; no normative priority between an "incomplete escape" and an "unterminated String" classification is required.
-
-**Tokenization Rules:**
-
-- `...` is a single lexical token representing three consecutive periods. It is recognized greedily and is not parsed as three separate `.` tokens.
-- Maximal-munch tokenization applies to symbolic operators: when multiple valid symbolic operator tokens can begin at the same source position, the lexer must consume the longest valid token.
-- Symbolic token classification is lexical and independent of parser position: maximal munch first forms the longest valid symbolic spelling, which is classified as a reserved/standard token when it exactly matches a reserved/standard spelling and as `CUSTOM_OPERATOR` otherwise. The exact one-character spellings `!` and `^` are reserved/standard tokens with their existing prefix and non-local-return roles and are not custom binary operators; longer spellings containing those characters, such as `!!` or `^^`, are `CUSTOM_OPERATOR` tokens.
-- Standard punctuation and structural tokens are tokenized separately from symbolic operators.
-- A `.` immediately following a complete radix-prefixed Integer literal is a structural `.` token unless it is immediately followed by a decimal digit; a `.` immediately followed by a decimal digit makes the sequence an attempted unsupported radix Float literal and a lexical error (`0b10.5`), not `INTEGER("0b10")` `.` `INTEGER("5")`.
-
-Comments are purely lexical: the lexer strips `//` line comments and `/* ... */` block comments, which have whitespace-like token-separation behavior but are not additional horizontal-whitespace code points. They do not produce runtime values, they do not participate in the language object model, and they do not have any special meaning inside String literals. `#` is not a comment delimiter, and no documentation-comment syntax is defined by Core v0.1.
+Lexical recognition, identifier validity, reserved-word classification, String
+literal forms and escape validation, whitespace/newline/comment tokenization,
+symbolic-token maximal munch, and all parser continuation/separator rules are
+owned exclusively by `../PROTOS_GRAMMAR.md`. They are front-end contracts, not
+runtime algorithms, and are intentionally not restated here.
 
 `Object` is the unique root prototype. It has no delegation parent. Every other language object has exactly one immutable delegation parent, so every delegation chain terminates at `Object`. The absence of a parent on `Object` is structural; it is not represented by `null` or by any other language object. Reflective structural operations such as `removeSlot(name)`, `close()`, and `freeze()` are ordinary messages provided through `Object`, with runtime primitives implementing their structural effects.
 
@@ -2209,7 +2132,11 @@ Evaluation is strictly left-to-right wherever operands are evaluated. `Create` a
 
 Most high-level language behavior should be expressed through ordinary objects and message sends rather than by adding evaluator cases.
 
-Expression separation is resolved entirely during parsing. The parser-level separators — an inline `;` between two expressions on the same logical source line, and a separating logical `NEWLINE` between expressions on different source lines — are source-level syntax: neither becomes a semantic AST node, and no runtime node, value, or object corresponds to either separator. A logical `NEWLINE` token consumed as continuation — while a syntactic construct is necessarily incomplete, or immediately before a leading structural `.` — likewise appears nowhere in the semantic representation. Repeated separating `NEWLINE` tokens (blank lines) and layout newlines inside open delimited constructs are formatting: they produce no semantic AST nodes and no runtime behavior, and they never create empty, omitted, or `null` expressions. Only the expressions themselves become distinct elements of a `Sequence`, so `a: 1; b: 2` and the newline-separated form contain the same ordered `Sequence` elements and are evaluated strictly left-to-right in `evaluateSequence`. Commas that separate elements of argument and parameter lists are resolved entirely during parsing as well: they delimit the list elements but produce no runtime node and introduce no runtime behavior. Argument evaluation, parameter binding, spread, rest, and default semantics are unchanged.
+Parsing and mandatory lowering are complete before this evaluator runs. Source
+separators, continuation newlines, comments, commas, and other purely syntactic
+structure have no independent runtime node unless the normative grammar defines
+a semantic construct for them. See `../PROTOS_GRAMMAR.md`.
+
 
 ---
 

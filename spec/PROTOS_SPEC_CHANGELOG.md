@@ -8,6 +8,18 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.338] - 2026-09-04
+
+### Abstract Runtime ownership cleanup
+- Removed duplicated lexer, tokenization, String-literal, newline/comment, and
+  parser-separator contracts from `spec/runtime/ABSTRACT_RUNTIME.md`.
+- Replaced those copies with references to the normative grammar owner while
+  retaining only runtime-relevant evaluator facts.
+
+### Compatibility
+- No observable Protos behavior is changed; this removes duplicate explanatory
+  authority created or exposed by specification modularization.
+
 ## [0.1.337] - 2026-09-04
 
 ### Post-modularization structural cleanup
