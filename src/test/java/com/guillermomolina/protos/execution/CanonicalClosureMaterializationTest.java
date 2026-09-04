@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosExecutionContext;
@@ -54,6 +55,7 @@ class CanonicalClosureMaterializationTest {
         assertSame(current, closure.capturedLexicalContexts().get(0));
         assertSame(outer, closure.capturedLexicalContexts().get(1));
         assertSame(receiver, closure.capturedReceiver());
+        assertTrue(closure.methodHome().isEmpty());
     }
 
     @Test

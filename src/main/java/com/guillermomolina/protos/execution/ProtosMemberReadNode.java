@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -52,12 +53,9 @@ public final class ProtosMemberReadNode extends ProtosExpressionNode {
                                 () -> new ProtosSignalException(
                                         ProtosCoreErrors.newError()));
 
-        /*
-         * No Closure runtime representation exists yet. Once it does,
-         * closure-valued results must be rebound with receiver + result.home().
-         * All currently executable values are non-Closure values, for which
-         * member read returns the exact stored value.
-         */
+        if (result.value() instanceof ProtosClosureValue closure) {
+            return closure.bindMethod(receiver, result.home());
+        }
         return result.value();
     }
 }

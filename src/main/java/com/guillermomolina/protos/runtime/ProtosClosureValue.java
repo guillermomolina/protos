@@ -25,11 +25,20 @@ public final class ProtosClosureValue {
     private final CanonicalClosure definition;
     private final List<ProtosObjectValue> capturedLexicalContexts;
     private final ProtosObjectValue capturedReceiver;
+    private final ProtosObjectValue methodHome;
 
     public ProtosClosureValue(
             CanonicalClosure definition,
             List<ProtosObjectValue> capturedLexicalContexts,
             ProtosObjectValue capturedReceiver) {
+        this(definition, capturedLexicalContexts, capturedReceiver, null);
+    }
+
+    private ProtosClosureValue(
+            CanonicalClosure definition,
+            List<ProtosObjectValue> capturedLexicalContexts,
+            ProtosObjectValue capturedReceiver,
+            ProtosObjectValue methodHome) {
         this.definition = Objects.requireNonNull(definition, "definition");
         this.capturedLexicalContexts =
                 List.copyOf(
@@ -38,6 +47,7 @@ public final class ProtosClosureValue {
                                 "capturedLexicalContexts"));
         this.capturedReceiver =
                 Objects.requireNonNull(capturedReceiver, "capturedReceiver");
+        this.methodHome = methodHome;
     }
 
     public CanonicalClosure definition() {
@@ -50,5 +60,19 @@ public final class ProtosClosureValue {
 
     public ProtosObjectValue capturedReceiver() {
         return capturedReceiver;
+    }
+
+    public java.util.Optional<ProtosObjectValue> methodHome() {
+        return java.util.Optional.ofNullable(methodHome);
+    }
+
+    public ProtosClosureValue bindMethod(
+            ProtosObjectValue receiver,
+            ProtosObjectValue home) {
+        return new ProtosClosureValue(
+                definition,
+                capturedLexicalContexts,
+                Objects.requireNonNull(receiver, "receiver"),
+                Objects.requireNonNull(home, "home"));
     }
 }
