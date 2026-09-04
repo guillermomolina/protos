@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 256
+Document revision: 257
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -246,7 +246,17 @@ This rule is about avoiding implementation-selected extra waiting after useful i
 
 Likewise, implementation-controlled buffering or read-ahead that already contains unread logical input makes that input available to the earliest ordered read; the implementation must not pretend the buffer is empty merely because it prefers a larger chunk. A stronger protocol may explicitly define an exact-fill or delimiter/framing operation, but ordinary `ByteReadable.read(maxBytes)` does not.
 
-EOF or an I/O failure that becomes established before any octet is returnable for this read retains its ordinary precedence. If one or more octets are already returnable under the receiver's concrete semantics, ordinary `read(maxBytes)` is permitted to return that non-empty prefix without waiting to discover a later EOF or later failure that belongs after those bytes in logical input order. Existing failure-preservation rules continue to govern backend errors encountered by an operation that ultimately fails rather than succeeds.
+EOF or an I/O failure that becomes established before any octet is returnable for the earliest ordered read retains its ordinary precedence.
+
+If one or more logical octets precede a later EOF or I/O failure and are already returnable for that read under the receiver's concrete semantics, those octets take precedence over the later terminal condition. Ordinary `read(maxBytes)` must return a non-empty prefix of that preceding logical input rather than exposing the later EOF or failure first merely because implementation buffering, native batching, prefetch, or read-ahead discovered the later condition before the Future was resolved.
+
+The implementation remains free to choose any permitted non-empty chunk boundary up to `maxBytes`. It need not return every byte preceding the later condition in one result. However, every logical octet that precedes that EOF/failure must remain ahead of that condition in the input order and must be made available to successive ordered reads before the later EOF/failure becomes the outcome of an applicable read.
+
+A later I/O failure discovered while reading ahead beyond already-returnable bytes is therefore preserved/deferred as logical receiver error state until all preceding logical bytes have been delivered. Merely discovering that later failure does not make the current read a failed read and does not invoke the failed-read zero-consumption/rebuffering rule for bytes that already precede the failure in logical input order.
+
+When the preserved later failure reaches the head of the logical input/error order — that is, no preceding logical octet remains to be delivered for the applicable ordered read — it becomes that read's failure outcome and is reported exactly once under the ordinary ByteReadable failure rules. After it has actually been reported, the existing rule that an already-reported error is not automatically replayed remains unchanged.
+
+The same ordering rule applies to EOF: data that logically precedes EOF is delivered before `null`, while EOF established before any octet is returnable retains precedence. Thus implementation-selected read-ahead depth may change successful chunk boundaries but cannot change the relative observable order of preceding bytes versus a later EOF or I/O failure.
 
 For a readable standard `File`, bytes between the current logical position and the file size applicable at the read's ordered evaluation point are immediately returnable file content: a read whose position is before that EOF must not remain pending merely to fill `maxBytes` or wait for later file growth. It returns a non-empty prefix up to `maxBytes` of the bytes then readable from that position, subject to an independently established I/O failure. At current EOF it follows the existing `null` rule rather than waiting for hypothetical growth.
 

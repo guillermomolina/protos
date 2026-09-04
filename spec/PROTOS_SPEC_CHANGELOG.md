@@ -4,6 +4,31 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.257] - 2026-09-04
+
+### Fixed
+- Made ordinary `ByteReadable.read(maxBytes)` preserve logical byte/error order
+  independently of implementation read-ahead depth.
+- Required already-returnable bytes that logically precede a later EOF or I/O
+  failure to be delivered before that terminal condition can become a read
+  outcome.
+- Kept successful read chunk boundaries implementation-selectable while requiring
+  all bytes preceding a later error to remain ahead of that error across
+  successive ordered reads.
+- Defined a later read-ahead failure as preserved/deferred receiver error state,
+  rather than allowing it to fail the current read and rebuffer earlier bytes.
+- Required the deferred failure to be reported exactly once when it reaches the
+  head of the logical input/error order, preserving the existing no-auto-replay
+  rule after actual reporting.
+- Prevented buffering, native batching, or prefetch from changing observable
+  `bytes -> error` into `error -> bytes` solely because the implementation
+  discovered the later error earlier internally.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 257. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.256] - 2026-09-04
 
 ### Added / Closed
