@@ -8,6 +8,26 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.341] - 2026-09-04
+
+### Fixed
+- Defined ordinary semantic `Sequence` normal-completion results in
+  `semantics/EXECUTION_AND_CONTROL.md`: the final expression value for a
+  non-empty Sequence and canonical `null` for a zero-expression Sequence.
+- Made zero-expression source module/program bodies and braced Closure bodies
+  deterministic without converting non-local return, Error unwind,
+  cancellation, or other control transfer into `null`.
+- Kept `object-body-sequence` outside this rule so empty object construction
+  retains its independent `OBJECT_MODEL.md` construction semantics.
+- Updated `semantics/CALLABLES.md` to derive normal Closure return from the
+  owned Sequence contract and marked implementation blocker B001 `READY`.
+- The informative Abstract Runtime already initializes Sequence evaluation to
+  `null`, so no runtime semantic rewrite is required.
+
+### Compatibility
+- This revision closes previously unspecified observable behavior: an empty
+  semantic `Sequence` that completes normally now produces canonical `null`.
+
 ## [0.1.340] - 2026-09-04
 
 ### Deterministic Closure parameter binding

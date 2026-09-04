@@ -226,6 +226,18 @@ getObject().x = makeValue()
 ```
 
 evaluates `getObject()` first, then `makeValue()`, then performs the assignment. Lazy operations such as `&&` and `||` are exceptions because their right-hand expression is evaluated only when required by their lazy semantics.
+## 8.2 Sequence Evaluation
+
+The semantic `Sequence(expressions)` produced from an `expression-sequence` evaluates its expressions strictly from left to right in the current execution context.
+
+If the Sequence contains one or more expressions and completes normally, its result is the exact value produced by its final expression. If the Sequence contains zero expressions and completes normally, its result is the canonical `null` value.
+
+The `null` result is only the result of **normal completion** of the empty Sequence. Sequence evaluation does not convert a non-local return, Error signaling/unwind, cooperative cancellation unwind, or any other control transfer into `null`; when such a transfer leaves the Sequence, that Sequence produces no normal result.
+
+This rule applies to the semantic Sequence corresponding to the grammar's `expression-sequence`, including a source module/program body and a braced Closure body. It does not redefine `object-body-sequence` or the result of object construction; object-body construction semantics remain owned independently by `OBJECT_MODEL.md`.
+
+Implementations need not allocate a runtime Sequence object and may erase, inline, constant-fold, or otherwise optimize an empty Sequence, provided the observable normal result remains canonical `null` and all surrounding control-flow, cleanup, task/Future, and construction semantics remain unchanged.
+
 ## 17. Iteration and Loops
 
 No primitive `for` construct is required.

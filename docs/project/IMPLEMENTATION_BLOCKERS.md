@@ -20,27 +20,27 @@ changed. Verify the stated unblock condition against the current normative text.
 
 ## B001 — Empty Sequence execution
 
-Status: BLOCKED
+Status: READY
 
 Implementation area:
 Truffle lowering / execution of a `CanonicalSequence` containing zero
 expressions.
 
 Normative dependency:
-The current normative specifications do not uniquely state the language value
-produced by evaluating a `Sequence` containing no expressions.
+The normative execution semantics now state that a semantic `Sequence` containing
+zero expressions completes normally with canonical `null`.
 
 Specification authority:
-- `spec/runtime/ABSTRACT_RUNTIME.md`
-- `spec/PROTOS_LANGUAGE_SPEC.md`
+- `spec/semantics/EXECUTION_AND_CONTROL.md`
 
 Unblock condition:
 The current normative specifications explicitly and uniquely determine the
 result of evaluating an empty `Sequence`.
 
 Current consequence:
-`ProtosSequenceNode` and Canonical-to-Truffle lowering deliberately reject empty
-sequences. Non-empty sequence execution is implemented.
+The normative dependency is resolved. `ProtosSequenceNode` and
+Canonical-to-Truffle lowering still deliberately reject empty sequences and may
+now be implemented against the canonical-`null` result contract.
 
 Independent work:
 Literal/value representation and all other execution work whose observable

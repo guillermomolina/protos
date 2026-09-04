@@ -115,7 +115,7 @@ dog: animal {
 The closure preserves both the original receiver and the `methodHome` required to continue delegation correctly.
 ## 13. Return Semantics
 
-The value of the final expression in a closure is its normal return value.
+A braced Closure body is evaluated as the ordinary semantic `Sequence` defined by `EXECUTION_AND_CONTROL.md`. When that body completes normally, the Closure's normal return value is the Sequence result. Therefore a braced Closure with zero body expressions, such as `() => {}`, returns canonical `null` by the Sequence rule; this is not a separate Closure-specific empty-body rule.
 
 ```js
 square: (x) => {
