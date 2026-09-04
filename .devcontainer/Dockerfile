@@ -10,6 +10,7 @@ RUN microdnf install -y \
         tar \
         unzip \
         xz \
+        python3 \
     && microdnf clean all
 
 ARG MAVEN_VERSION=3.9.9
