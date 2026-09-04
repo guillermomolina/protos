@@ -19,6 +19,21 @@ instead of silently inventing, weakening, or replacing semantics in source code.
 Implementation agents should challenge the implementation. Language-design
 questions belong to the specification-design process.
 
+Implementation agents must also use the repository-root
+`docs/IMPLEMENTATION_BLOCKERS.md` ledger. Before starting implementation work,
+review its relevant `BLOCKED` and `READY` entries against the current normative
+specification on the current `main` branch.
+
+When work under `src/` discovers a normative dependency that prevents faithful
+implementation, add or update the corresponding blocker instead of leaving the
+dependency only in chat, comments, TODOs, or agent memory. Record an objective
+unblock condition and continue independent implementation work when possible.
+
+When current normative text satisfies a recorded unblock condition, update the
+entry to `READY`, re-audit the affected semantics, and resume the implementation
+when appropriate. After completing or superseding that work, mark the blocker
+`CLOSED` with a brief reason.
+
 ## Preserve observable semantics
 
 Representation, caching, compilation strategy, specialization, storage,

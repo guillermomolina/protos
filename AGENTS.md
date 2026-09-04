@@ -248,6 +248,44 @@ Do not bypass this process merely because the original request was phrased as
 "implement X".
 
 
+## Implementation blockers
+
+`docs/IMPLEMENTATION_BLOCKERS.md` is the repository-wide ledger for
+implementation work that cannot proceed without unresolved normative semantics.
+It records implementation state only; it is not part of the Protos specification.
+
+When implementation work reaches a semantic dependency that is not normatively
+closed or otherwise precise enough to implement without guessing:
+
+- do not invent the missing semantics;
+- do not block unrelated implementation work;
+- add or update a blocker in `docs/IMPLEMENTATION_BLOCKERS.md`;
+- give the blocker a stable identifier;
+- identify the blocked implementation area;
+- state the exact normative dependency;
+- identify the specification documents or sections that own the decision;
+- state an objective, verifiable unblock condition;
+- record what implementation work may safely continue independently.
+
+A blocker must be based on a normative condition, not on a predicted revision,
+commit SHA, implementation strategy, agent-specific memory, or expected wording
+of a future specification change.
+
+Before beginning implementation work, inspect
+`docs/IMPLEMENTATION_BLOCKERS.md`. Re-check every relevant `BLOCKED` or `READY`
+entry against the current normative specification on the current `main` branch.
+Never rely on the specification state that existed when the blocker was
+recorded.
+
+If a `BLOCKED` entry's unblock condition is now satisfied, mark it `READY`,
+re-audit the affected semantics against the current specification, and resume
+the work when it is within the current task or when no higher-priority
+independent work takes precedence.
+
+When the blocked implementation is completed, superseded, or no longer
+applicable, mark the entry `CLOSED` and briefly record why. Do not delete closed
+entries merely to hide project history.
+
 Canonical language specification
 
 The canonical core language definition is maintained in:
