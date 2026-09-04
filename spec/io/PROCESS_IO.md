@@ -36,13 +36,33 @@ process.stderr()
 process.stderrEncoding()
 ```
 
-`Process` is a standardized runtime-backed object/capability, not a reserved word, not a language intrinsic, and not a required Core-prelude binding.
+`Process` is the standard prototype of runtime-backed Process capability objects.
+The prototype may be present in the frozen prelude because it carries no instance
+authority; possessing/importing it cannot recover a Process capability.
 
-The exact bootstrap API/syntax by which the initial RootActor receives access to its Process capability remains outside this document. The semantic requirement is that Process authority is provisioned by the host/runtime rather than introduced as an ambient global variable.
+### Root bootstrap acquisition
 
-The Process is the custodian of Process-local host authority. The RootActor is the initial Actor to which appropriate Process capabilities are made available.
+Before the initial RootActor's initial module body evaluates its first source
+expression, the host provisions exactly one local slot named `process` on that
+module's `moduleContext`. Its value is the RootActor's Process capability and
+delegates to `Process`. The slot is bootstrap-local state, not a prelude/global
+binding, import side effect, intrinsic, or service locator. The same rule applies
+to a standalone non-importable initial entry. Imported modules receive no such
+slot and can use Process only when ordinary code passes them a capability.
 
-Creating another Actor does not implicitly copy or inherit the creator's Process capability or host-capability objects.
+The Process is the custodian of Process-local host authority. Its capability grants
+only operations standardized here and authority explicitly returned by them; it
+does not imply filesystem, network, subprocess, Node, Cluster, or arbitrary native
+authority. There is one logical Process domain but multiple Actor-local capability
+proxies may denote authority into it.
+
+Creating another Actor does not implicitly inherit Process. Explicitly supplying
+a Process capability in an Actor message or `Actor.spawn` initialization vector
+uses a Process-specific delegation contract: the destination receives an Actor-
+local proxy to the same logical Process authority, with no authority amplification
+or mutable alias to the source wrapper. This does not make open files, sockets,
+native handles, or arbitrary resources transferable. Process has no Core P-transfer
+contract and cannot be supplied/captured into isolated parallel execution.
 
 ---
 ## 23. Process Arguments

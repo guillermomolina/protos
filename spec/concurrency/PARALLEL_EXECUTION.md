@@ -26,11 +26,11 @@ Future/task execution and persistent Actor isolation.
 It does not introduce arbitrary shared mutable Protos memory and does
 not weaken the Actor turn rule.
 
-The semantic rules in this section are normative. The exact public API,
-surface syntax, bootstrap representation, standard-library names, and
-implementation mechanisms remain open unless this section states otherwise.
-Those open surfaces must preserve the closed rules below and may not choose
-different observable semantics.
+The semantic rules in this section are normative. Core v0.1 has no public value,
+prototype, capability, namespace, prelude binding, reserved word, or syntax form
+named `P`. `P` is specification shorthand for the isolated parallel execution
+domain entered through the standard operations below; implementation mechanisms
+remain unobservable.
 
 Conceptually:
 
@@ -67,6 +67,22 @@ Actor-local Protos execution according to the normal Actor turn model.
 The runtime may use internal concepts such as parallel jobs, work items,
 worker pools, region capabilities, or work-stealing queues. Such concepts
 are implementation machinery unless separately standardized later.
+
+### 71.1 Public API closure
+
+The complete Core v0.1 entry surface is ordinary dispatch on existing values:
+
+```text
+Closure.parallel(arguments...)
+Bytes.parallelRange(start, length, block, arguments...)
+ByteRegion.parallelRange(start, length, block, arguments...)
+```
+
+No `P(...)`, `P.spawn`, region constructor, worker/join/executor handle, current-P
+accessor, or implicit parallel operator exists. Nested P is another explicit call
+to one of these operations. Process and open I/O/native/resource capabilities have
+no P-transfer contract and fail under `NonParallelValue`; P acquires no ambient
+Actor, Process, I/O, or scheduler authority.
 
 ### 71.1A Task is not a Core public identity
 

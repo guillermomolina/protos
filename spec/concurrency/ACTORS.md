@@ -229,7 +229,37 @@ code is resolved and executed inside the destination Actor while only permitted
 values cross the isolation boundary. It does not create a second transferable
 function kind.
 
-The exact public creation message/API name and surface syntax remain open.
+### Core public Actor surface
+
+Core v0.1 exposes the ordinary frozen-prelude object `Actor` with exactly these
+portable entry operations:
+
+```text
+Actor.spawn(moduleSpecifier, bindingName, arguments...) -> ActorRef
+Actor.current() -> ActorRef
+```
+
+`Actor` is not syntax, an Actor instance, a scheduler handle, or host authority.
+`moduleSpecifier` and `bindingName` must be semantic `String` values after ordinary
+left-to-right argument evaluation; no coercion or String-like delegation occurs.
+The specifier is resolved once in the creator's module-resolution environment
+using the `import(specifier)` host boundary. Failure signals `Error` and creates no
+Actor. Success fixes the canonical module identity used by the destination; the
+destination does not reinterpret the original spelling.
+
+The complete initialization argument graph is then transferred/delegated before
+`spawn` returns. `NonTransferableValue` is synchronous and creates no observable
+partial Actor. A capability with an explicit Actor-delegation contract, including
+Process, uses that contract; nothing is inherited merely because the creator has
+it. After these validations, one incarnation is created and its `ActorRef` is
+returned even if initialization is still pending. Later bootstrap failure is
+therefore Actor initialization failure, not retroactive failure of `spawn`.
+
+`Actor.current()` returns the `ActorRef` of the current incarnation. Repeated calls
+in that incarnation denote the same semantic identity under `===`; the operation
+does not expose behavior, mailbox, scheduler, Process, or mutable runtime state.
+Core defines no Closure-taking Actor constructor, public Actor ID, mailbox object,
+worker/thread selector, or second creation syntax.
 
 ## 9. Actor Initialization and Readiness
 
@@ -349,8 +379,7 @@ meaning; for `request()` it is the reply value, and for `send()` it is ignored.
 An ActorRef identifies the Actor incarnation, not the behavior object and not an
 application-defined mode represented inside that behavior.
 
-The exact bootstrap API or syntax by which initialization establishes the
-initial behavior remains a separate open topic.
+Actor creation/bootstrap acquisition is the `Actor.spawn(...)` surface of §8; no second behavior-installation API exists.
 
 ## 12. Actor Message Dispatch
 
@@ -381,7 +410,7 @@ according to normal Protos activation semantics.
 
 **CLOSED --- REVISED**
 
-`send()` represents one-way Actor communication.
+`ActorRef.send(selector, arguments...)` is the standard one-way Actor communication operation. `selector` must be a semantic `String`; no coercion is performed. Selector validation and complete message snapshot/transfer validation occur synchronously after ordinary argument evaluation. Invalid selector values signal `Error`; a non-transferable graph signals `NonTransferableValue`.
 
 It returns a local identity-bearing communication operation object,
 provisionally called `SendOperation`.
@@ -423,13 +452,28 @@ crossed, the operation enters an explicit uncertain state rather than
 assuming either delivery or non-delivery. Such uncertainty does not
 authorize transparent replay.
 
-The exact SendOperation API and status set remain open.
+The standard `SendOperation` protocol is deliberately minimal:
+
+```text
+operation.cancel() -> Boolean
+operation.retry() -> SendOperation
+```
+
+`cancel()` returns `true` exactly when that call establishes known pre-acceptance
+cancellation; otherwise it returns `false` and never claims to undo accepted work.
+`retry()` is valid only after terminal failure or delivery uncertainty and returns
+a fresh logical delivery operation for the same destination, selector, and original
+logical message snapshot, ordered at the retry invocation point; otherwise it
+signals `Error`. Retry never re-evaluates source argument expressions. Distinct
+successful send/retry invocations have distinct `SendOperation` identities. Core
+exposes no standard status enum, attempt counter, destination ID, mailbox capacity,
+progress, last-error, blocking wait, or transport detail.
 
 ## 14. request()
 
 **CLOSED --- REVISED**
 
-`request()` represents request/reply communication.
+`ActorRef.request(selector, arguments...)` is the standard request/reply operation. It uses the same semantic-String selector domain, ordinary argument evaluation, synchronous validation, snapshot formation, and `NonTransferableValue` rule as `ActorRef.send`.
 
 It returns a Future.
 
@@ -562,6 +606,7 @@ Transferability currently follows these rules:
     and aliasing conceptually
 -   ActorRef: transferable as a special communication capability
 -   GroupRef: transferable as a special communication capability
+-   Process capability: transferable only through the explicit Actor-delegation contract owned by `../io/PROCESS_IO.md`; the destination receives Actor-local capability authority, not a copied host resource
 -   Closure: not transferable
 -   Future: not transferable
 -   ExecutionContext: not transferable
@@ -687,10 +732,7 @@ Actors.
 
 **CLOSED**
 
-Core distinguishes a **known Actor termination request** from failure, unreachability,
-and ordinary message handling. This section closes the lifecycle semantics of a
-graceful stop without standardizing a particular public `stop` spelling, return type,
-timeout option, or administrative API.
+Core distinguishes a **known Actor termination request** from failure, unreachability, and ordinary message handling. The standard public operation is `ActorRef.stop()`. It establishes the graceful-stop cutover below and returns canonical `null`. Repeated calls on the same terminating/terminated incarnation are idempotent and also return `null`; Core exposes no stop Future, timeout parameter, force-kill operation, or administrative Actor-control API.
 
 A graceful-stop request establishes one irreversible lifecycle cutover for the
 target Actor incarnation. Once that cutover is established:

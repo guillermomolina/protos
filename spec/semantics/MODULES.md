@@ -439,6 +439,15 @@ The recursive import must not create `main#2`.
 
 If the Actor's initial module was registered in the cache because it has an importable canonical `ModuleKey`, and its initialization fails, the same failure rule applies as to any other failed module initialization: the cache entry is removed, no successful-looking cache entry is preserved, effects already performed are not rolled back, and the runtime does not invent an automatic retry as part of Actor startup. Whether failure of the Actor's initial module terminates that Actor or its Process remains governed by the existing Actor and root failure semantics, which this section does not redefine.
 
+### RootActor Process bootstrap slot
+
+`../io/PROCESS_IO.md` owns the capability/authority contract for the RootActor's
+local `process` slot. This module specification owns lifecycle placement only: the
+host creates that slot after the initial `moduleContext` exists (and, for an
+importable initial module, after cache-before-execute registration) but before the
+first source expression executes. It is ordinary local module state thereafter.
+Imported modules and non-root Actor initial modules do not receive it implicitly.
+
 ### Initial Modules Without an Importable Canonical Identity
 
 Core v0.1 does not require the host to assign a fabricated filesystem or package identity to every possible host entry point. If, when execution of an Actor's initial entry begins, that entry is not importable through the host's module resolver and therefore has no canonical `ModuleKey` reachable by `import()`, it executes as a standalone entry point and remains outside the normal import lookup namespace. The instance created for that standalone execution:

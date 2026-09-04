@@ -8,6 +8,17 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.350] - 2026-09-04
+
+### Public Actor, P, and Process bootstrap surface
+- Closed D010 with portable `Actor.spawn`, `Actor.current`, `ActorRef.send`, `ActorRef.request`, `ActorRef.stop`, and minimal `SendOperation.cancel` / `retry`.
+- Closed P without a `P` object/syntax: entry remains `Closure.parallel`, `Bytes.parallelRange`, and `ByteRegion.parallelRange`.
+- Closed Process acquisition with a host-provisioned RootActor initial-module local `process` capability slot; imports/prelude cannot recover its authority.
+- Defined explicit Actor delegation of Process without implicit inheritance, authority amplification, P transfer, or automatic filesystem/network/subprocess authority.
+
+### Compatibility
+- Removes implementation-selectable Actor/P/Process acquisition names while keeping scheduler, mailbox, transport, workers, and host machinery unobservable.
+
 ## [0.1.349] - 2026-09-04
 
 ### Normative ownership and authority
