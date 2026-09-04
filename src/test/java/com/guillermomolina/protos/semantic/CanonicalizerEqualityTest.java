@@ -19,13 +19,13 @@ package com.guillermomolina.protos.semantic;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
+import com.guillermomolina.protos.semantic.ast.CanonicalNotIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalSend;
 import org.junit.jupiter.api.Test;
 
@@ -46,16 +46,18 @@ class CanonicalizerEqualityTest {
     }
 
     @Test
-    void lowersSemanticInequalityToNotOfEqualitySend() {
-        CanonicalSend negation =
+    void lowersSemanticInequalityToOrdinaryInequalitySend() {
+        CanonicalSend inequality =
                 assertInstanceOf(CanonicalSend.class, canonicalizeOnly("a != b"));
 
-        assertEquals("not", negation.message());
-        assertTrue(negation.arguments().isEmpty());
-
-        CanonicalSend equality =
-                assertInstanceOf(CanonicalSend.class, negation.receiver());
-        assertEquals("==", equality.message());
+        assertEquals("!=", inequality.message());
+        assertEquals(
+                "a",
+                assertInstanceOf(CanonicalLookup.class, inequality.receiver()).name());
+        assertEquals(1, inequality.arguments().size());
+        assertEquals(
+                "b",
+                assertInstanceOf(CanonicalLookup.class, inequality.arguments().get(0)).name());
     }
 
     @Test
@@ -68,13 +70,16 @@ class CanonicalizerEqualityTest {
     }
 
     @Test
-    void lowersNonIdentityToNotOfIdentityOperation() {
-        CanonicalSend negation =
-                assertInstanceOf(CanonicalSend.class, canonicalizeOnly("a !== b"));
+    void lowersNonIdentityToDedicatedNonDispatchableCanonicalNode() {
+        CanonicalNotIdentity nonIdentity =
+                assertInstanceOf(CanonicalNotIdentity.class, canonicalizeOnly("a !== b"));
 
-        assertEquals("not", negation.message());
-        assertTrue(negation.arguments().isEmpty());
-        assertInstanceOf(CanonicalIdentity.class, negation.receiver());
+        assertEquals(
+                "a",
+                assertInstanceOf(CanonicalLookup.class, nonIdentity.left()).name());
+        assertEquals(
+                "b",
+                assertInstanceOf(CanonicalLookup.class, nonIdentity.right()).name());
     }
 
     private Object canonicalizeOnly(String source) {

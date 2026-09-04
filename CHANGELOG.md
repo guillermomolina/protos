@@ -4,6 +4,24 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.53-SNAPSHOT] - 2026-09-04
+
+### Fixed
+
+- Updated `CanonicalizerEqualityTest` to the normative P66 lowering:
+  source `!=` canonicalizes to an ordinary `!=` message send, and source `!==`
+  canonicalizes to the dedicated non-dispatchable `CanonicalNotIdentity` form.
+- Removed the obsolete test expectations that both operators lowered through
+  the unrelated `not` selector.
+- Project implementation version changed from `0.2.52-SNAPSHOT` to
+  `0.2.53-SNAPSHOT`.
+
+### Notes
+
+- No runtime semantics changed.
+- No normative specification change is introduced.
+
+
 ## [0.2.52-SNAPSHOT] - 2026-09-04
 
 ### Added
