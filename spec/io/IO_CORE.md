@@ -226,6 +226,31 @@ input solely as a scheduler/runtime artifact.
 
 The exact internal mechanism used to preserve this contract is implementation-defined.
 
+### Idempotent lifecycle Future identity
+
+For every standardized Future-returning lifecycle operation whose contract
+defines repeated invocation as logically idempotent, each successfully
+dispatched invocation produces a **fresh standard Future object**. Futures
+returned by distinct invocations are distinct under `===`, including calls made
+while the same lifecycle is still pending and calls made after that lifecycle
+has already reached a terminal outcome.
+
+Fresh Future identity does not begin a fresh lifecycle attempt. All invocations
+that observe one idempotent lifecycle observe that lifecycle's single logical
+outcome. While it is pending, each fresh Future follows that same eventual
+success or failure. After successful completion, a later invocation returns a
+fresh Future that resolves according to the operation's existing success
+contract without repeating the lifecycle effect. After failed completion, a
+later invocation returns a fresh Future that observes the already-established
+failed lifecycle rather than retrying it.
+
+Where the lifecycle contract requires preservation of an exact recorded Error
+object, every fresh Future that re-observes that failed lifecycle fails with
+that exact Error object within the same value/isolation domain. This rule
+changes only the identity of the returned Future objects; it does not weaken
+Error-identity guarantees, create a canonical lifecycle Future, introduce a
+Future subtype or wrapper, or add a hidden lifecycle token.
+
 ---
 ## 8. Closable
 
@@ -318,7 +343,7 @@ aftermath; later work is rejected.
 
 Successful close completion means that the receiver/resource is permanently released or unusable according to its lifecycle contract.
 
-Close is logically idempotent. A call made while closing observes the same close lifecycle rather than beginning an independent second close operation; a call made after successful close succeeds without beginning another release. Exact Future-object identity across repeated calls is not required, but calls observing one close lifecycle must not disagree about whether that lifecycle ultimately succeeded or failed.
+Close is logically idempotent. A call made while closing observes the same close lifecycle rather than beginning an independent second close operation; a call made after successful close succeeds without beginning another release. Each invocation returns a fresh standard Future under the idempotent-lifecycle Future-identity rule above, while all calls observing one close lifecycle remain bound to that lifecycle's single logical success or failure outcome.
 
 `close()` does not imply `flush()` or `sync()` unless a more specific receiver protocol explicitly requires such behavior.
 

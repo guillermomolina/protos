@@ -532,7 +532,7 @@ There is no universal implied flush. A wrapper that exposes `WriteShutdown` must
 
 If required preceding output remains failed or otherwise lacks the clean frontier required above, or if establishment of the end-of-output frontier itself fails, the shutdown Future fails rather than pretending that a clean end-of-output was established. A preceding failed flush whose required propagation frontier was subsequently covered by a later successful flush is no longer an unsatisfied propagation failure for this shutdown decision; a failed write remains failed as specified above. The output direction remains permanently unavailable to new writes; failure never reopens it.
 
-Write shutdown is logically idempotent. Calls made while shutdown is pending observe the same lifecycle rather than beginning independent shutdown attempts. After successful shutdown, later calls succeed without establishing another end-of-output frontier. After failed shutdown, later calls fail consistently with that failed lifecycle and do not retry the frontier or reopen output. Exact Future-object identity is not required.
+Write shutdown is logically idempotent. Calls made while shutdown is pending observe the same lifecycle rather than beginning independent shutdown attempts. After successful shutdown, later calls succeed without establishing another end-of-output frontier. After failed shutdown, later calls fail consistently with that failed lifecycle and do not retry the frontier or reopen output. Each invocation returns a fresh standard Future under the idempotent-lifecycle Future-identity rule in `IO_CORE.md`.
 
 Input capability and input lifecycle remain unaffected except where a stronger concrete protocol explicitly couples them.
 
@@ -564,7 +564,7 @@ After read shutdown begins, later ordinary reads return `null`, including while 
 
 If underlying/backend work required to establish or release the read-shutdown state fails, the shutdown Future may fail, but the input direction remains permanently unavailable for ordinary reading; failure never reopens it.
 
-Read shutdown is logically idempotent. Calls made while shutdown is pending observe the same lifecycle. After successful shutdown, later calls succeed without performing another shutdown. After failed shutdown, later calls fail consistently with that failed lifecycle and do not start a fresh shutdown attempt. Exact Future-object identity is not required.
+Read shutdown is logically idempotent. Calls made while shutdown is pending observe the same lifecycle. After successful shutdown, later calls succeed without performing another shutdown. After failed shutdown, later calls fail consistently with that failed lifecycle and do not start a fresh shutdown attempt. Each invocation returns a fresh standard Future under the idempotent-lifecycle Future-identity rule in `IO_CORE.md`.
 
 Remote EOF and local read shutdown are distinct events even though ordinary reads after either condition may return `null`.
 

@@ -9,6 +9,41 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.368] - 2026-09-04
+
+### Standard Integer result family (D029)
+- Defines one general result-only rule in the Values and Collections numeric
+  owner: when a Core-standard operation returns or resolves simply to
+  `Integer`, without naming a more specific numeric family, the result is an
+  ordinary unbounded Integer.
+- Keeps input-domain contracts independent from that result rule; accepted
+  argument families are not narrowed merely because a standard result is
+  specified as `Integer`.
+- Removes the previous `Array.size()` freedom to choose a fixed-width Integer
+  family and aligns informative runtime pseudocode with the normative rule.
+- Existing contracts that explicitly name another numeric family remain
+  unchanged.
+
+### Idempotent lifecycle Future identity (D031)
+- Defines one cross-cutting I/O lifecycle rule: every invocation of a
+  standardized Future-returning idempotent lifecycle operation produces a fresh
+  standard Future identity, even when calls observe the same pending or already
+  terminal lifecycle.
+- Keeps the lifecycle itself singular and idempotent: fresh Futures do not retry
+  close/shutdown effects and must observe the same logical lifecycle outcome.
+- Preserves exact recorded Error identity wherever the lifecycle owner already
+  requires it, including repeated observation of one failed close lifecycle.
+- Applies the general rule to `close()`, `shutdownWrite()`, and
+  `shutdownRead()` without introducing canonical Futures, Future subtypes,
+  wrappers, or hidden lifecycle tokens.
+
+### Compatibility
+- Closes implementation-selectable result-family behavior for standard
+  `Integer` results and implementation-selectable Future identity for repeated
+  idempotent I/O lifecycle calls. Implementations remain free to optimize
+  physical representation when `===`, numeric-family behavior, lifecycle
+  outcome, and required Error identity remain unchanged.
+
 ## [0.1.367] - 2026-09-04
 
 ### Receiver-bound Closure semantic identity (D024)

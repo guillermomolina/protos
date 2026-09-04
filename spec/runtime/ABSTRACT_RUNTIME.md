@@ -3620,8 +3620,9 @@ function standardBytesAt(receiver, index):
 ```
 
 `byteAt` yields the stored octet's mathematical value in `0 .. 255`.
-`semanticIntegerFromMathematicalValue` does not require a particular fixed-width
-Integer family and must not expose host byte signedness.
+`semanticIntegerFromMathematicalValue` produces the ordinary unbounded `Integer`
+family required by the normative standard-result rule and must not expose host
+byte signedness.
 
 The standard update is equivalent to:
 

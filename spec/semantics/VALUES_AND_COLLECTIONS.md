@@ -509,9 +509,10 @@ For an Array whose indexed positions are:
 0, 1, 2, ... length - 1
 ```
 
-the result is exactly the mathematical Integer `length`. Core does not require a
-particular fixed-width Integer family and does not permit host-size overflow,
-wrapping, saturation, or truncation to alter the result.
+the result is exactly the mathematical Integer `length`. Because this
+Core-standard result is specified simply as an `Integer`, the Numeric Model's
+general standard-result rule makes it an ordinary unbounded Integer. Host-size
+overflow, wrapping, saturation, or truncation must not alter the result.
 
 `size` is a read-only observation. It does not invoke element behavior, does not
 traverse or copy the elements merely to establish the semantic result, and does
@@ -967,11 +968,14 @@ revision explicitly standardizes them.
 In this specification, an **ordinary Integer** means a value of the unbounded
 `Integer` semantic family itself. An **exact-integer value** means either an
 ordinary Integer or a value of one of the eight fixed-width integer families.
-Within the standard numeric arithmetic and conversion contracts in this
-**Numeric Model**, a result specified simply as an `Integer` without a
-fixed-width qualifier is an ordinary unbounded Integer. This wording does not
-redefine independent result-family contracts owned by other standard APIs such
-as collection `size` operations.
+
+For any Core-standard operation contract, when the operation's normal result or
+Future resolution is specified simply as an `Integer` without naming a more
+specific numeric family, that result is an ordinary unbounded Integer. This is a
+result-family rule only. It does not redefine or narrow any operation's input
+domain: uses of `Integer`, exact-integer values, fixed-width families, or other
+numeric domains as accepted arguments retain the contract stated by their
+normative owner.
 
 The fixed-width mathematical ranges are exactly:
 
@@ -1866,7 +1870,7 @@ For standard Bytes whose valid indexed positions are:
 
 `bytes.size` returns exactly the mathematical Integer `byteLength`.
 
-Core does not require a particular fixed-width Integer family for this result.
+Because this Core-standard result is specified simply as an `Integer`, it is an ordinary unbounded Integer under the Numeric Model's general standard-result rule.
 An implementation must not expose host index width, native buffer-size limits,
 overflow, wrapping, saturation, or truncation through `Bytes.size`.
 
