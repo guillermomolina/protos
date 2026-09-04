@@ -26,6 +26,7 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.math.BigInteger;
+import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.guillermomolina.protos.source.SourceSpan;
@@ -90,6 +91,51 @@ class CanonicalToTruffleLowererTest {
     }
 
     @Test
+    void executesValueIdentityForCoreLiteralFamilies() {
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                execute(identity(
+                        literal(CanonicalLiteral.Kind.NUMBER, "42"),
+                        literal(CanonicalLiteral.Kind.NUMBER, "0x2A"))));
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                execute(identity(
+                        literal(CanonicalLiteral.Kind.STRING, "hello"),
+                        literal(CanonicalLiteral.Kind.STRING, "hello"))));
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                execute(identity(
+                        literal(CanonicalLiteral.Kind.TRUE, "true"),
+                        literal(CanonicalLiteral.Kind.TRUE, "true"))));
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                execute(identity(
+                        literal(CanonicalLiteral.Kind.NULL, "null"),
+                        literal(CanonicalLiteral.Kind.NULL, "null"))));
+    }
+
+    @Test
+    void numericFamilyAndFloatSpecialCasesParticipateInIdentity() {
+        assertSame(
+                ProtosBooleanValue.FALSE,
+                execute(identity(
+                        literal(CanonicalLiteral.Kind.NUMBER, "1"),
+                        literal(CanonicalLiteral.Kind.NUMBER, "1.0"))));
+
+        assertEquals(
+                false,
+                com.guillermomolina.protos.runtime.ProtosIdentity.identical(
+                        new ProtosFloatValue(0.0d),
+                        new ProtosFloatValue(-0.0d)));
+
+        assertEquals(
+                true,
+                com.guillermomolina.protos.runtime.ProtosIdentity.identical(
+                        new ProtosFloatValue(Double.longBitsToDouble(0x7ff8000000000001L)),
+                        new ProtosFloatValue(Double.longBitsToDouble(0x7ff8000000000002L))));
+    }
+
+    @Test
     void lowersNonEmptyCanonicalSequenceAndReturnsFinalValue() {
         CanonicalSequence sequence =
                 new CanonicalSequence(
@@ -104,6 +150,12 @@ class CanonicalToTruffleLowererTest {
 
     private Object execute(com.guillermomolina.protos.semantic.ast.CanonicalExpression expression) {
         return ProtosExecution.createCallTarget(lowerer.lower(expression)).call();
+    }
+
+    private CanonicalIdentity identity(
+            com.guillermomolina.protos.semantic.ast.CanonicalExpression left,
+            com.guillermomolina.protos.semantic.ast.CanonicalExpression right) {
+        return new CanonicalIdentity(left, right, new SourceSpan(0, 1));
     }
 
     private CanonicalLiteral literal(CanonicalLiteral.Kind kind, String spelling) {
