@@ -8,6 +8,34 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.318] - 2026-09-04
+
+### Changed
+- Canonicalized the broader Core Future cancellation and structured-ownership
+  family in one migration unit.
+- Made `PROTOS_CONCURRENCY_MODEL.md` §23 the explicit primary normative owner of
+  cooperative cancellation, `Future.cancel()`, portable cancellation boundaries,
+  cancellation-runnable pre-start/suspended work, and cancellation wake-up rules.
+- Made `PROTOS_CONCURRENCY_MODEL.md` §24 the explicit primary normative owner of
+  structured Future/task ownership, structured completion/unwind, cleanup, and
+  `Future.detach()` semantics.
+- Kept Actor-local cooperative non-preemption under the existing §24D ownership.
+- Replaced the duplicated cancellation and structured-concurrency contracts in
+  `PROTOS_LANGUAGE_SPEC.md` with compact language-surface/cross-domain references.
+- Removed the duplicate conceptual cancellation, structured ownership, and
+  detachment algorithms from `PROTOS_RUNTIME_SEMANTICS.md` while retaining
+  runtime-oriented Actor-lifecycle integration.
+- Left Future resolution/adoption and the mixed language/concurrency semantics of
+  `Future.value()` for separate ownership canonicalization.
+
+### Documentation
+- This revision changes specification ownership and removes duplicate authority;
+  it does not intentionally change observable Protos behavior.
+- Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
+  `PROTOS_CONCURRENCY_MODEL.md` to document revision 318.
+- `PROTOS_GRAMMAR.md` and `PROTOS_IO_MODEL.md` are unaffected and remain
+  byte-for-byte unchanged.
+
 ## [0.1.317] - 2026-09-04
 
 ### Changed

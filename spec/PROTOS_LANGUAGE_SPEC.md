@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 317
+Document revision: 318
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -2020,32 +2020,16 @@ Asynchrony belongs to **the execution of a closure**, not to its definition.
 
 ### Cancellation of asynchronous execution
 
-A Future-producing task may be asked to cancel through the ordinary Future
-cancellation operation. Cancellation is cooperative: requesting cancellation does
-not forcibly terminate arbitrary running Protos code.
+Cancellation of Future-producing asynchronous work is a concurrency-domain
+facility. The normative semantics of `Future.cancel()`, cooperative cancellation,
+portable observation boundaries, cancellation-runnable suspended/pre-start work,
+resume precedence, cleanup, and producer-specific commitment boundaries are owned
+by `PROTOS_CONCURRENCY_MODEL.md` §23 and the structured-unwind rules of §24.
 
-Cancellation observation is portable rather than implementation-selected. Every
-explicit suspension point is a mandatory cancellation observation boundary. If a
-cancellation request is pending when a task would suspend, or when suspended work
-would otherwise resume into ordinary Protos code, the task observes cancellation
-before executing further ordinary Protos code.
-
-An operation whose normative contract is cancellation-aware may also observe a
-pending cancellation request while its underlying work is pending, subject to that
-operation's own commitment and effect rules.
-
-Ordinary non-suspending Protos execution is not an implicit cancellation
-checkpoint. Method calls, allocations, loop back-edges, interpreter polls, JIT
-safepoints, garbage-collection points, host calls, or other implementation-defined
-runtime boundaries do not by themselves make cancellation observable. Consequently,
-CPU-bound code that reaches no explicit suspension point or cancellation-aware
-operation may complete normally despite an outstanding cancellation request.
-
-When cancellation becomes effective, the task exits through the ordinary unwind
-machinery, so applicable `ensure` cleanup runs before its Future reaches the
-cancelled terminal state. An implementation may poll cancellation more frequently
-internally only when doing so cannot change the Protos-observable cancellation
-boundary.
+The language-level fact that `closure.future()` requests asynchronous execution
+through an ordinary message is unchanged. No additional cancellation syntax,
+asynchronous exception mechanism, or hidden implementation-selected checkpoint is
+introduced by this language specification.
 
 ## 28. Future Resolution
 
@@ -2186,57 +2170,17 @@ incarnation.
 
 ## 31. Structured Concurrency
 
-Asynchronous executions belong by default to the execution context that creates them.
+Structured ownership of Future-producing child work is a concurrency-domain
+facility. Its normative ownership, normal-exit waiting, error/cancellation
+unwind, cleanup, detachment, Actor-local lifetime, and non-task-backed Future
+semantics are owned by `PROTOS_CONCURRENCY_MODEL.md` §24.
 
-### Actor-local asynchronous execution is cooperatively non-preemptive
+The cooperative non-preemption rule for ordinary Actor-local
+`closure.future()` work is owned by `PROTOS_CONCURRENCY_MODEL.md` §24D.
+`Future.detach()` remains an ordinary Future message and introduces no syntax or
+new execution kind.
 
-Ordinary `closure.future()` work created in an Actor remains cooperative work in
-that Actor's mutable execution domain. While such a task executes ordinary
-Protos code without an explicit suspension point, Core defines no hidden
-preemption boundary that permits another Actor-local Protos task or message turn
-to interleave with it.
-
-CPU-bound Actor-local work may therefore monopolize that Actor until it
-suspends, completes, or fails. Runtime time slicing or host-thread preemption is
-permitted only when it is observationally equivalent to uninterrupted execution
-of the same Protos segment.
-
-Programs that require isolated CPU-parallel progress use the explicit
-`closure.parallel(...)` facility rather than relying on hidden preemption of
-`closure.future()`.
-
-Non-detached child tasks are structurally owned by that execution context.
-
-An activation cannot complete while it still owns non-detached child tasks.
-
-On normal completion, the activation waits for all non-detached child tasks to reach a terminal state before the activation itself completes.
-
-That structural wait is a lifetime guarantee, not an implicit result observation. A
-failed or cancelled child does not by itself change an otherwise normal result of
-the owning activation. Child failure remains stored in the child's Future and
-becomes an error in the owner only if owner code explicitly observes that Future
-through an operation such as `value()`. Likewise, cancellation of a child does not
-implicitly cancel an otherwise normally completing owner.
-
-This rule is independent of whether the child Future was otherwise referenced or
-ignored. Implementations must not add hidden "unobserved failure" tracking that
-changes the owner's result at structured-scope exit.
-
-On exit caused by error or cancellation, the activation requests cooperative cancellation of all non-detached child tasks, waits for those tasks to unwind and complete their cleanup, and only then continues its own unwind.
-
-This means `ensure` cleanup in child tasks completes before the owning activation finishes unwinding.
-
-An explicit operation:
-
-```js
-future.detach()
-```
-
-removes that task from the owner's structured-concurrency lifetime. Detached work may continue independently and is not awaited or automatically cancelled merely because the former owner completes.
-
-Detachment is explicit; ordinary `future()` execution remains structured by default.
-
-The exact scheduler implementation is outside the language specification.
+The exact scheduler representation remains implementation machinery.
 
 ## 32. Primitives
 

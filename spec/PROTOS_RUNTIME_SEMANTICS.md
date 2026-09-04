@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 317
+Document revision: 318
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -1947,128 +1947,18 @@ boundary from completing normally. Physical interruption or early abandonment
 is allowed only when observationally equivalent to these rules.
 
 
-### Future cancellation
+### Future cancellation runtime integration
 
-Cancellation of Future-producing work is cooperative. The portable observation
-boundaries are conceptualized as follows:
+The normative semantics of Future cancellation are owned by
+`PROTOS_CONCURRENCY_MODEL.md` §23, with cancellation-unwind and structured
+ownership consequences owned by §24.
 
-```text
-function beforeFirstProtosExecution(task):
-    if task.future.cancellationRequested:
-        honorCancellation(task)
-    else:
-        beginProtosExecution(task)
-
-function beforeExplicitSuspension(task):
-    if task.future.cancellationRequested:
-        honorCancellation(task)
-    else:
-        suspend(task)
-
-function beforeResumeIntoProtos(task):
-    if task.future.cancellationRequested:
-        honorCancellation(task)
-    else:
-        resumeProtosExecution(task)
-
-function honorCancellation(task):
-    outcome = unwind current asynchronous activation with Cancellation
-
-    if outcome is ErrorTransfer(error):
-        failFuture(task.future, error)
-        return
-
-    complete task.future as CANCELLED
-
-
-function recordFutureCancellationRequest(future):
-    if future.state != pending:
-        return
-
-    if future.cancellationRequested:
-        return
-
-    future.cancellationRequested = true
-
-    if future.adoptedSource != none:
-        cancelPendingAdoption(future)
-        return
-
-    if future.task != none:
-        scheduler.ensureCancellationRunnable(future.task)
-```
-
-`recordFutureCancellationRequest` is conceptual runtime bookkeeping, not a new
-language-visible Future operation. Every Core path that requests cancellation of
-a Future uses this same semantic operation.
-
-`scheduler.ensureCancellationRunnable(task)` is likewise conceptual and
-idempotent. If the task has not yet begun ordinary Protos execution, including
-when it is waiting for a semantic prerequisite before its first turn, it makes
-the task eligible to reach `beforeFirstProtosExecution(task)` without satisfying
-that prerequisite. If the task is already suspended, it makes the task eligible
-to reach `beforeResumeIntoProtos(task)` without satisfying the original wait
-condition. If the task is already runnable, it does not enqueue a duplicate
-semantic execution. If the task is currently executing ordinary non-suspending
-Protos code, it does not preempt it or create a new cancellation boundary; the
-request remains pending for the next portable boundary.
-
-The transition from no request to a pending cancellation request is idempotent.
-For a task that has not yet started or is already suspended, recording that first
-request therefore makes the task cancellation-runnable so the applicable
-portable boundary can honor it. For a Future that is currently adopting another
-Future, adoption is itself the cancellation-aware pending operation, so the
-request may complete the destination as cancelled through
-`cancelPendingAdoption` without executing Protos code.
-
-If neither case applies, the request remains recorded for the task or
-producer-specific cancellation boundary that already governs that Future. In
-particular, a non-task I/O Future is not made cancelled merely by this helper; its
-producer still follows the applicable I/O commitment/cancellation contract.
-
-This bookkeeping does not introduce an additional ordinary-code cancellation
-safe point. Waking an already-suspended task and observing cancellation in a
-normatively cancellation-aware adoption are consequences of the portable rules
-already defined above.
-
-A task that is already suspended is also cancellation-runnable. Recording a
-cancellation request for that task must arrange for the task to become eligible
-for scheduling even when the condition named by the original suspension remains
-pending.
-
-Conceptually, a suspension therefore has two independent reasons to make its
-task runnable:
-
-```text
-original suspension condition becomes ready
-task cancellation is requested
-```
-
-The latter reason affects only the suspended task. It does not invoke
-`cancel()` on an awaited Future and does not alter the awaited producer.
-
-When the task is selected after either reason, `beforeResumeIntoProtos(task)` is
-applied before the suspended operation can deliver a successful result or
-execute further ordinary Protos code. Consequently, a cancellation request that
-is pending at that resume boundary wins for the consumer even if the original
-condition also became ready. A later completion of the awaited Future remains
-that Future's own completion and cannot re-enter or rewrite the cancelled
-consumer task.
-
-Implementations may remove the cancelled task's waiter registration eagerly or
-leave inert bookkeeping until source completion, provided this cannot retain
-unbounded dead waiters and cannot execute Protos code after the task has
-cancelled.
-
-An operation whose normative contract is cancellation-aware may invoke the
-equivalent of `honorCancellation` while its underlying work is pending, subject to
-that operation's commitment/effect rules.
-
-Ordinary non-suspending execution must not observe cancellation merely because the
-implementation reaches a call boundary, allocation poll, loop back-edge, VM/JIT
-safepoint, garbage-collection point, host call, or other runtime checkpoint.
-Carrier interruption and internal polling are implementation mechanisms only; they
-must not introduce an additional Protos-observable cancellation point.
+A runtime may represent cancellation-request flags, runnable-state transitions,
+waiter removal, task wake-up, first-execution checks, resume checks, producer
+notification, and internal polling using any mechanism that preserves those
+contracts. This document does not define a second conceptual cancellation
+algorithm or any additional observable cancellation point, wake-up rule,
+preemption point, propagation direction, cleanup outcome, or terminal-state rule.
 
 ---
 
@@ -2460,121 +2350,20 @@ ordering rule.
 
 # 35. Structured Concurrency
 
-Asynchronous work belongs by default to the execution context that created it.
+The normative semantics of structured Future/task ownership and
+`Future.detach()` are owned by `PROTOS_CONCURRENCY_MODEL.md` §24. Actor-local
+cooperative non-preemption is owned by §24D.
 
-Conceptually:
+A runtime may represent owner edges, child-task sets, task/Future links,
+detachment, structured waits, and cancellation-unwind bookkeeping using any
+mechanism that preserves those contracts. This document does not define a second
+conceptual ownership or detachment algorithm.
 
-```text
-function registerChildTask(parentActivation, task):
-    parentActivation.childTasks.add(task)
-    task.owner = parentActivation
-    task.detached = false
+The Actor-termination integration below remains runtime-oriented realization of
+the separately owned Actor lifecycle contracts.
 
-function requestCooperativeCancellation(task):
-    recordFutureCancellationRequest(task.future)
-```
-
-The task/Future link is conceptual runtime bookkeeping. It does not add a
-language-visible slot to `Future` or `Task`, and it does not require a particular
-scheduler representation. A task-backed Future and its producing task denote one
-cooperative cancellation target: requesting cancellation through either
-structured ownership or `future.cancel()` sets the same request observed by that
-task at portable cancellation boundaries.
-
-Before a newly created asynchronous task executes its first ordinary Protos
-instruction, `beforeFirstProtosExecution(task)` is mandatory. This is a semantic
-task-lifecycle boundary, not an implementation-selected VM/JIT safepoint. A
-cancellation request already pending at that boundary is honored before the task
-body can produce ordinary Protos effects. After first execution begins, ordinary
-non-suspending code acquires no extra cancellation checkpoints from this rule.
-
-A Future produced by a non-task facility such as an I/O operation may have no
-`task`; its producer observes `future.cancellationRequested` according to that
-facility's normative cancellation/commitment contract.
-
-A parent activation cannot reach terminal completion while it owns non-detached child tasks.
-
-Waiting for child termination during normal owner completion is not equivalent to
-calling `value()` on those child Futures. The wait establishes the structured
-lifetime boundary only; it neither consumes nor propagates a child result, failure,
-or cancellation. In particular, no implementation may make normal owner completion
-depend on whether a failed child Future was previously "observed", because Protos
-defines no hidden failure-consumption state on Future objects.
-
-Normal completion:
-
-```text
-function completeActivationNormally(activation, result):
-    for each task in activation.childTasks:
-        if not task.detached:
-            awaitTerminalCompletion(task)
-
-    // Structured ownership bounds lifetime only. Reaching a failed or
-    // cancelled child terminal state here does not implicitly observe that
-    // child's Future and does not replace `result`.
-    complete activation with result
-```
-
-Error or cancellation unwind:
-
-```text
-function unwindActivation(activation, controlTransfer):
-    children = all non-detached tasks owned by activation
-
-    for each task in children:
-        requestCooperativeCancellation(task)
-
-    for each task in children:
-        awaitTerminalCompletion(task)
-        // child ensure cleanup has completed here
-
-    continueUnwind(activation, controlTransfer)
-```
-
-Child cancellation uses the normal cooperative cancellation semantics: no unsafe forced termination is permitted, and child `ensure` cleanup runs before terminal completion.
-
-Detachment:
-
-```text
-function detachFuture(future):
-    if future.task == none:
-        return future
-
-    if future.state != pending:
-        return future
-
-    if future.task.detached:
-        return future
-
-    owner = future.task.owner
-
-    future.task.detached = true
-    future.task.owner = none
-
-    if owner != none:
-        remove future.task from owner
-
-    return future
-```
-
-`Future.detach()` is an idempotent ownership operation and always returns the
-same Future object. Its only semantic effect is to remove a still-pending
-task-backed Future from its current activation's structured lifetime.
-
-If the Future is not task-backed, there is no structured task ownership to
-detach, so `detach()` is a state-preserving no-op. This includes Futures produced
-directly by facilities such as I/O operations. Detachment does not cancel,
-re-parent, abandon, or otherwise alter such a producer.
-
-If the Future is already terminal, `detach()` is likewise a state-preserving
-no-op. Repeated calls after successful detachment are no-ops. None of these cases
-signals merely because there is no remaining structured ownership edge.
-
-A detached task no longer participates in the former activation owner's
-completion or cancellation lifetime. Detachment changes structured activation
-ownership only; an Actor-local task remains in the same Actor execution and
-lifecycle domain.
-
+Conceptually, Actor termination while its hosting runtime can still execute
+cleanup includes:
 Conceptually, Actor termination while its hosting runtime can still execute
 cleanup includes:
 

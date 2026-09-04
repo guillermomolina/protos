@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 317
+Document revision: 318
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -1381,6 +1381,11 @@ The exact APIs remain open.
 
 **CLOSED --- REVISED**
 
+This section is the primary normative owner of Core v0.1 cooperative
+cancellation semantics, including `Future.cancel()` and portable cancellation
+observation/wake-up boundaries unless a more specific domain contract explicitly
+specializes an operation's commitment/effect behavior.
+
 Cancellation is cooperative.
 
 Protos does not arbitrarily interrupt Actor code in the middle of an
@@ -1471,6 +1476,11 @@ Principle:
 ## 24. Structured Concurrency
 
 **CLOSED --- REVISED**
+
+This section is the primary normative owner of Core v0.1 structured ownership
+semantics for Future-producing child work, including structured lifetime,
+cancellation unwind, cleanup, task-backed versus non-task-backed detachment, and
+`Future.detach()`.
 
 The existing structured-concurrency semantics for Futures remain.
 
