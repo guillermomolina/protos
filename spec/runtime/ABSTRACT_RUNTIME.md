@@ -552,7 +552,7 @@ function send(receiver, message, arguments, lookupStart = receiver):
     )
 ```
 
-Closure-valued slots receive method semantics because `this` and `methodHome` must describe the receiver-aware send. Other invokable values use their own invocation protocol.
+Closure-valued slots receive method semantics because `this` and `methodHome` must describe the receiver-aware send. Parenthesized invocation of every receiver uses the ordinary `call`-slot protocol owned normatively by `../semantics/CALLABLES.md`; this runtime model introduces no second hidden invocation property.
 
 ---
 
@@ -641,7 +641,7 @@ function invoke(receiver, arguments):
     )
 ```
 
-`lookupInvocationBehavior` is the runtime view of the language's ordinary invocation/call protocol. Standard `Closure` behavior executes code; ordinary prototypes inherit default construction behavior from `Object`; user objects may specialize the protocol.
+`lookupInvocationBehavior(receiver)` is runtime shorthand for ordinary delegating lookup of `receiver.call` plus the Closure-valued protocol check defined by `../semantics/CALLABLES.md`. It is not an independent runtime property or registry. The selected behavior, original receiver, `methodHome`, Closure execution, default construction, and user specialization follow that normative ordinary-slot protocol exactly.
 
 The implementation may specialize these cases directly rather than literally allocating or sending an intermediate `call` message, provided observable semantics are unchanged.
 

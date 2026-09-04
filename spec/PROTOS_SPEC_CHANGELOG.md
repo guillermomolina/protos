@@ -8,6 +8,19 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.352] - 2026-09-04
+
+### Polymorphic invocation protocol
+- Closed D013 by defining parenthesized invocation through ordinary delegating lookup of the `call` slot; no hidden callable property, registry, wrapper, or callable hierarchy exists.
+- Defined selected-`call` Closure validation, original-receiver/`methodHome` binding, non-executing `obj.call` reads and extracted bindings, inheritance/shadowing/copy/composition/aliasing, error precedence, and non-recursive terminal Closure activation.
+- Defined callability inspection as read-only ordinary `call` lookup plus Closure-value validation, shared by collection/Boolean callbacks, Actor bootstrap, and isolated-P boundaries.
+- Defined inherited `Object.call` as standard Closure execution for Closure receivers and default object construction otherwise; standard Array/Map/IdentityMap/numeric factories specialize through nearer ordinary `call` slots.
+- Aligned the informative Abstract Runtime so `lookupInvocationBehavior` is explicitly only shorthand for the normative ordinary `call` lookup rather than a second hidden invocation property.
+
+### Compatibility
+- Closes previously implementation-selectable invocation behavior without adding a new value kind, prototype hierarchy, wrapper, or runtime registry. Existing factory/callback semantics now use one portable ordinary-slot protocol.
+- D014 (`size`/`hash` spelling) remains unchanged and outside this revision.
+
 ## [0.1.351] - 2026-09-04
 
 ### Public Filesystem and I/O surface
