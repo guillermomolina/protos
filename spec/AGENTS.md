@@ -276,6 +276,54 @@ Stop and reconsider when reasoning relies on statements such as:
 
 These are signals to investigate further, not proofs of incorrectness.
 
+
+## Normative ownership and cross-document discipline
+
+Every observable normative rule must have one primary owning specification
+document or domain document.
+
+Other normative documents may depend on that rule and may state a
+domain-specific specialization of it, but they should reference the owning rule
+rather than copy or paraphrase the complete normative contract. Repeating the
+same rule in several normative locations creates multiple authorities that can
+drift independently and is therefore a specification defect.
+
+When a cross-domain interaction genuinely adds semantics, place the general rule
+in its primary owner and only the additional interaction-specific rule in the
+dependent domain. A reference to another document must not silently weaken,
+strengthen, or reinterpret the referenced contract.
+
+Abstract runtime pseudocode is normative only to the extent explicitly stated by
+the document that owns the corresponding semantics. Pseudocode must not become a
+second independent source of programmer-visible behavior.
+
+During the ongoing specification modularization, existing duplicated normative
+material is technical debt to be canonicalized. New changes must not introduce
+additional duplicated normative authority merely to keep several documents
+self-contained.
+
+## Specification revision discipline
+
+`spec/PROTOS_SPEC_CHANGELOG.md` owns the global specification revision. The
+newest changelog entry `0.1.N` is the current global revision.
+
+Each revisioned normative document carries its own `Document revision: N`, where
+`N` is the newest global specification revision that actually changed that
+document. These document revisions are deliberately allowed to differ.
+
+A specification change must:
+
+- allocate one new global revision in the changelog;
+- update the `Document revision` only in normative documents whose content is
+  actually changed by that revision;
+- leave every unaffected normative document byte-for-byte unchanged; and
+- list the actually changed normative documents in the changelog entry.
+
+Never synchronize document revision numbers by editing otherwise-unaffected
+files. Cross-document consistency means updating every document whose owned
+semantics really changes, not touching every document in the specification set.
+
+
 ## Editing discipline
 
 Follow the root rules for document revision, changelog updates, minimal edits,

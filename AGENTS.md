@@ -699,8 +699,10 @@ Do not change licensing terms or make licensing-policy decisions implicitly as p
 
 - `spec/PROTOS_CONCURRENCY_MODEL.md` is a mixed document: a section whose status is exactly `CLOSED` or `CLOSED --- REVISED` is normative concurrency-domain semantics; a section whose status contains OPEN, PENDING, DIRECTION, DETAILS OPEN, API OPEN, or another design-only qualifier is non-normative unless and until its status is changed explicitly.
 - Normative status is section-local. A CLOSED section may explicitly state that a named API, syntax, policy, mechanism, or implementation detail remains open; that open subtopic is not made normative merely by appearing inside the CLOSED section.
-- All documentation documents share the `Document revision` number. This document carries that common revision and has no independent revision or versioning scheme.
-- Record every change to this file in `spec/PROTOS_SPEC_CHANGELOG.md`, like changes to the canonical specification documents.
+- The global specification revision is the revision of the newest entry in `spec/PROTOS_SPEC_CHANGELOG.md`.
+- A normative document's `Document revision` records the newest global specification revision that changed that document. Document revisions are intentionally not synchronized.
+- Never edit or stage an otherwise-unaffected specification document solely to advance its `Document revision`.
+- Record every normative or specification-structure change in `spec/PROTOS_SPEC_CHANGELOG.md`.
 - When a CLOSED decision from this ledger is incorporated into canonical specification documents, update the affected specification files and record that canonical change in `spec/PROTOS_SPEC_CHANGELOG.md`.
 - When concurrency semantics overlap responsibilities of a canonical core document or another normative domain model, update every affected normative document in the same change so the normative set remains mutually consistent.
 - Never infer semantics from OPEN, PENDING, DIRECTION, DETAILS OPEN, API OPEN, or design-only material.

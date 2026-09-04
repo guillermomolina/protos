@@ -2,7 +2,36 @@
 
 All notable changes to the Protos language specification and the concurrency design ledger will be documented in this file.
 
-Specification version follows the document revision number: 0.1.X where X is the revision.
+Specification revision is global: the newest changelog entry `0.1.X` is the
+current specification revision. Each revisioned normative document carries the
+most recent global revision that changed that document; document revisions are
+not synchronized, and an otherwise-unaffected document is not edited merely to
+advance its revision.
+
+## [0.1.314] - 2026-09-04
+
+### Changed
+- Decoupled per-document `Document revision` values from the global specification
+  revision to remove artificial cross-domain edit collisions.
+- Defined the newest changelog entry as the single global specification revision.
+- Required each normative document revision to advance only when that document's
+  content actually changes; unaffected normative documents now remain
+  byte-for-byte unchanged.
+- Established one-primary-owner discipline for observable normative rules and
+  prohibited duplicated cross-document normative authority.
+- Clarified that cross-domain documents should reference owned semantics and add
+  only genuine domain-specific specializations.
+- Clarified that abstract runtime pseudocode must not become an independent
+  second authority for programmer-visible behavior.
+- Recorded existing duplicated normative material as technical debt to be
+  canonicalized during the specification modularization.
+
+### Documentation
+- Updated repository and `spec/` agent instructions plus the specification
+  changelog policy. No Protos language, grammar, runtime, concurrency, or I/O
+  semantics changed in this revision.
+- No normative document `Document revision` was advanced solely for this
+  governance change.
 
 ## [0.1.313] - 2026-09-04
 
