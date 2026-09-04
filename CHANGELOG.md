@@ -4,6 +4,13 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## 0.2.65-SNAPSHOT
+
+### Fixed
+- Corrected the CLI002 multiline-paste regex Java string literal so the regex engine receives `\R` through a valid Java string literal.
+- This is a compile-fix only; REPL semantics and the previously added line-by-line paste handling are unchanged.
+- No normative specification revision is changed.
+
 ## 0.2.64-SNAPSHOT
 
 ### Fixed

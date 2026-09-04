@@ -76,7 +76,7 @@ public final class ProtosCli {
     }
 
     private boolean processReturnedInput(String input, Session s, PrintStream out, PrintStream err) {
-        String[] lines = input.split("\R", -1);
+        String[] lines = input.split("\\R", -1);
         for (String line : lines) {
             processLine(line, s, out, err);
             if (isExit(line)) return true;
