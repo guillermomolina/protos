@@ -105,6 +105,25 @@ class CanonicalBareSlotMutationExecutionTest {
     }
 
     @Test
+    void bareAssignmentToFrozenDestinationSignalsCoreErrorWithoutMutation() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue current = new ProtosObjectValue(root);
+        current.createLocalSlot("x", ProtosBooleanValue.TRUE);
+        current.freeze();
+
+        ProtosExecutionContext activation =
+                new ProtosExecutionContext(current, List.of(), new ProtosObjectValue(root));
+
+        ProtosSignalException signal =
+                assertThrows(
+                        ProtosSignalException.class,
+                        () -> execute(assign("x", "nope"), activation));
+
+        assertSame(ProtosCoreErrors.errorPrototype(), signal.error().parent().orElseThrow());
+        assertSame(ProtosBooleanValue.TRUE, current.readLocalSlot("x").orElseThrow());
+    }
+
+    @Test
     void bareAssignmentNeverWritesDelegationParent() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue prototype = new ProtosObjectValue(root);

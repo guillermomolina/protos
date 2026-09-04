@@ -67,6 +67,54 @@ class ProtosObjectValueTest {
     }
 
     @Test
+    void objectsStartOpenAndCloseAndFreezeAreIdempotent() {
+        ProtosObjectValue object = new ProtosObjectValue(ProtosObjectValue.rootObject());
+
+        assertTrue(object.isOpen());
+
+        object.close();
+        assertTrue(object.isClosed());
+        object.close();
+        assertTrue(object.isClosed());
+
+        object.freeze();
+        assertTrue(object.isFrozen());
+        object.freeze();
+        assertTrue(object.isFrozen());
+        object.close();
+        assertTrue(object.isFrozen());
+    }
+
+    @Test
+    void closedObjectsRejectStructuralCreationButAllowExistingSlotAssignment() {
+        ProtosObjectValue object = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        object.createLocalSlot("existing", ProtosBooleanValue.TRUE);
+        object.close();
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> object.createLocalSlot("newSlot", ProtosBooleanValue.TRUE));
+
+        object.assignLocalSlot("existing", ProtosBooleanValue.FALSE);
+        assertSame(ProtosBooleanValue.FALSE, object.readLocalSlot("existing").orElseThrow());
+    }
+
+    @Test
+    void frozenObjectsRejectCreationAndAssignment() {
+        ProtosObjectValue object = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        object.createLocalSlot("existing", ProtosBooleanValue.TRUE);
+        object.freeze();
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> object.createLocalSlot("newSlot", ProtosBooleanValue.TRUE));
+        assertThrows(
+                IllegalStateException.class,
+                () -> object.assignLocalSlot("existing", ProtosBooleanValue.FALSE));
+        assertSame(ProtosBooleanValue.TRUE, object.readLocalSlot("existing").orElseThrow());
+    }
+
+    @Test
     void readsDelegateToNearestSlot() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue parent = new ProtosObjectValue(root);

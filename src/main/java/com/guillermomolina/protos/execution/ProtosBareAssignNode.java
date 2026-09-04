@@ -51,7 +51,11 @@ public final class ProtosBareAssignNode extends ProtosExpressionNode {
                                         ProtosCoreErrors.newError()));
 
         Object value = valueNode.execute(frame);
-        destination.assignLocalSlot(name, value);
+        try {
+            destination.assignLocalSlot(name, value);
+        } catch (IllegalStateException invalidMutation) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError());
+        }
         return value;
     }
 }

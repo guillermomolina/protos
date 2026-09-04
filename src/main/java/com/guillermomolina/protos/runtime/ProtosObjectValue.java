@@ -23,10 +23,17 @@ import java.util.Objects;
 import java.util.Optional;
 
 public final class ProtosObjectValue {
+    public enum MutationState {
+        OPEN,
+        CLOSED,
+        FROZEN
+    }
+
     private static final ProtosObjectValue ROOT = new ProtosObjectValue();
 
     private final Object parent;
     private final Map<String, Object> localSlots = new LinkedHashMap<>();
+    private MutationState mutationState = MutationState.OPEN;
 
     private ProtosObjectValue() {
         this.parent = null;
@@ -46,6 +53,32 @@ public final class ProtosObjectValue {
 
     public Optional<Object> parent() {
         return Optional.ofNullable(parent);
+    }
+
+    public MutationState mutationState() {
+        return mutationState;
+    }
+
+    public boolean isOpen() {
+        return mutationState == MutationState.OPEN;
+    }
+
+    public boolean isClosed() {
+        return mutationState == MutationState.CLOSED;
+    }
+
+    public boolean isFrozen() {
+        return mutationState == MutationState.FROZEN;
+    }
+
+    public void close() {
+        if (mutationState == MutationState.OPEN) {
+            mutationState = MutationState.CLOSED;
+        }
+    }
+
+    public void freeze() {
+        mutationState = MutationState.FROZEN;
     }
 
     public boolean hasLocalSlot(String name) {
@@ -87,6 +120,12 @@ public final class ProtosObjectValue {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(value, "value");
 
+        if (mutationState == MutationState.FROZEN) {
+            throw new IllegalStateException("object is frozen");
+        }
+        if (mutationState == MutationState.CLOSED) {
+            throw new IllegalStateException("object is closed");
+        }
         if (localSlots.containsKey(name)) {
             throw new IllegalStateException("local slot already exists: " + name);
         }
@@ -98,6 +137,9 @@ public final class ProtosObjectValue {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(value, "value");
 
+        if (mutationState == MutationState.FROZEN) {
+            throw new IllegalStateException("object is frozen");
+        }
         if (!localSlots.containsKey(name)) {
             throw new IllegalStateException("local slot does not exist: " + name);
         }
