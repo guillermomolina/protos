@@ -4,6 +4,35 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.12-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added explicit `ProtosPrelude` runtime state whose `Context` prototype is
+  supplied rather than hardcoded.
+- Added `ProtosCoreBootstrap`, which executes distributable
+  `protos/lib/core/context.protos` through the ordinary source pipeline and
+  returns a prelude backed by the resulting ordinary `Context` object.
+- Added focused coverage for explicit prelude context creation and source-backed
+  Core bootstrap.
+
+### Changed
+
+- Project implementation version changed from `0.2.11-SNAPSHOT` to
+  `0.2.12-SNAPSHOT`.
+
+### Notes
+
+- Core bootstrap uses a short-lived internal root-backed context only to create
+  the first standard `Context`; that bootstrap context is not a Protos module
+  instance or a new standard prototype.
+- No process-global mutable prelude state is introduced. `ProtosPrelude` is an
+  explicit object so later Actor ownership can remain local.
+- The older static `ProtosCorePrelude` remains for one migration increment and
+  is not extended.
+- No normative specification change is introduced.
+
+
 ## [0.2.11-SNAPSHOT] - 2026-09-04
 
 ### Added
