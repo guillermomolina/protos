@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 260
+Document revision: 261
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3077,6 +3077,24 @@ observationally invisible.
 Reducer results cross between nodes using ordinary P result/value rules. Failure
 or cancellation publishes no intermediate reduction state. The final successful
 canonical value crosses to the caller and resolves the Future.
+
+
+## Standard Array Parallel Iteration Boundary
+
+Core v0.1 defines no standard `Array.parallelEach(...)` operation.
+
+Independent per-element parallel computation uses
+`Array.parallelMap(worker, arguments...)`. Core does not add a second standard
+protocol solely to discard those normal per-element results.
+
+This boundary does not grant P workers any additional effect authority.
+In particular, an `each`-shaped API would not make Actor-local mutable state,
+Actor messaging, ambient I/O, Process/Node/Cluster authority, native global
+state, or another non-P-transferable capability usable from isolated P work.
+
+Implementations may eliminate unused result materialization internally when that
+optimization preserves the observable semantics of the actual standard
+operation.
 
 ## Invocation Arguments, Defaults, Rest, and Spread
 

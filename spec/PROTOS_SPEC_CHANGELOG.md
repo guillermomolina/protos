@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.261] - 2026-09-04
+
+### Closed
+- Closed parallel iteration out of Core v0.1: no standard
+  `Array.parallelEach(...)` operation is defined.
+- Derived that boundary from the existing P effect model: isolated P work has no
+  implicit Actor-local mutation, messaging, ambient I/O, runtime authority, or
+  other external-effect channel merely because results are discarded.
+- Kept `Array.parallelMap(...)` as the composable standard per-element parallel
+  operation when callers need independent computation and may ignore its final
+  result if appropriate.
+- Prevented an `each`-shaped API from implicitly weakening P transfer/effect
+  restrictions or legitimizing hidden shared/global side effects.
+- Allowed implementations to eliminate unused result materialization only as an
+  observationally invisible optimization.
+- Removed parallel iteration from §71.6 examples and narrowed the remaining
+  parallel collection API topic to parallel sort only.
+
+### Changed
+- Updated `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  261.
+
 ## [0.1.260] - 2026-09-04
 
 ### Fixed

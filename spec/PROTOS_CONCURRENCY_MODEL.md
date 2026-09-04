@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 260
+Document revision: 261
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -4011,7 +4011,6 @@ Examples may include:
 -   Parallel reduce
 -   Parallel search
 -   Parallel sort
--   Parallel iteration
 -   Partitioned Buffer/Array processing
 -   Parallel pipelines
 
@@ -4432,6 +4431,58 @@ with an already established terminal reduction outcome.
 count, SIMD width, or actual simultaneous execution. Physical batching, fusion,
 vectorization, sequential execution, work stealing, and storage reuse are
 allowed only when observationally equivalent to the canonical logical tree.
+
+### 71.6E No standard `Array.parallelEach(...)` in Core
+
+Core v0.1 does not standardize `Array.parallelEach(...)` or another parallel
+iteration operation whose element-worker results are discarded.
+
+This is an API boundary derived from the existing P effect model rather than a
+restriction on physical execution.
+
+A Core P computation is an isolated CPU-computation domain. It does not inherit
+the caller Actor's mutable state, sender identity, mailbox, ambient I/O
+capabilities, Process/Node/Cluster authority, or another standard external-effect
+channel merely because work is eligible to run simultaneously.
+
+Consequently, a generic operation of the form:
+
+```text
+array.parallelEach(worker, arguments...)
+```
+
+would have no additional standard publication channel beyond the same per-index
+P result/failure boundary already provided by `Array.parallelMap(...)`. Discarding
+those normal results would remove information without adding a new semantic
+capability.
+
+Core therefore prefers the existing composable operation:
+
+```text
+array.parallelMap(worker, arguments...)
+    -> Future<Array>
+```
+
+when independent per-element parallel computation is required. A caller may
+ignore the successfully resolved result Array when its values are not needed,
+but Core does not add a second standard operation merely to suppress that result.
+
+This decision also prevents an iteration-shaped API from implying that P workers
+may rely on hidden shared mutation, Actor messaging, I/O, native global state, or
+other externally observable side effects. Those capabilities remain governed by
+their existing P-transfer/effect rules and are not made valid by choosing an
+`each`-like spelling.
+
+An implementation may internally avoid materializing result storage when it can
+prove that doing so is observationally equivalent to the actual standard
+operation being executed. Such dead-result elimination is an optimization, not
+a distinct Core protocol.
+
+A future P-safe effect capability or a future API with independently useful
+completion/failure/resource semantics may justify a parallel iteration facility.
+If introduced, that facility must define its effect authority, result/failure
+meaning, cancellation, ownership, ordering, and P transfer semantics explicitly
+rather than inheriting them from an otherwise result-discarding loop.
 
 ### 71.7 Scheduling and Oversubscription
 
@@ -5028,7 +5079,7 @@ mechanism, or implementation detail that still requires design.
 -   Streaming
 -   Async streams
 -   Generators and suspendable iteration
--   Parallel sort/iteration standard-library APIs
+-   Parallel sort standard-library API
 -   Parallel scheduling, work-stealing, and granularity heuristics
 -   Pub/sub
 -   Advanced routers and load-balancing policies
