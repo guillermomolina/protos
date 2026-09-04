@@ -28,6 +28,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalCompose;
 import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
+import com.guillermomolina.protos.semantic.ast.CanonicalIndexedAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
@@ -72,6 +73,13 @@ public final class CanonicalToTruffleLowerer {
                     identity.span(),
                     lower(identity.left()),
                     lower(identity.right()));
+        }
+        if (expression instanceof CanonicalIndexedAssign indexedAssign) {
+            return new ProtosIndexedAssignNode(
+                    indexedAssign.span(),
+                    lower(indexedAssign.receiver()),
+                    lower(indexedAssign.index()),
+                    lower(indexedAssign.value()));
         }
         if (expression instanceof CanonicalLookup lookup) {
             return new ProtosLookupNode(lookup.span(), lookup.name());
@@ -154,6 +162,13 @@ public final class CanonicalToTruffleLowerer {
         }
         if (expression instanceof CanonicalSend send) {
             return lowerSend(send, true);
+        }
+        if (expression instanceof CanonicalIndexedAssign indexedAssign) {
+            return new ProtosIndexedAssignNode(
+                    indexedAssign.span(),
+                    lowerCallable(indexedAssign.receiver()),
+                    lowerCallable(indexedAssign.index()),
+                    lowerCallable(indexedAssign.value()));
         }
         if (expression instanceof CanonicalSequence sequence) {
             ProtosExpressionNode[] expressions =

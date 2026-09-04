@@ -4,6 +4,34 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.37-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added standard ordinary `Array.at(index)` and `Array.atPut(index, value)`
+  Closure-valued protocol slots on the source-backed `Array` object.
+- Standard Array indexed reads now require a semantic Integer index in the dense
+  range `0 <= index < length` and return the exact stored element.
+- Standard Array indexed updates replace exactly one existing element, preserve
+  length, return the exact supplied value, allow replacement on closed Arrays,
+  and reject mutation of frozen Arrays before index validation.
+- Added executable lowering for `CanonicalIndexedAssign`, preserving the
+  syntax-level evaluation order receiver -> index -> RHS -> `atPut` and returning
+  the exact RHS after normal `atPut` completion.
+- Added coverage for custom `atPut` return values, closed/frozen Arrays,
+  non-Integer indices, and bounds failures.
+- Project implementation version changed from `0.2.36-SNAPSHOT` to `0.2.37-SNAPSHOT`.
+
+### Notes
+
+- Bracket syntax remains ordinary `at` / `atPut` protocol dispatch rather than a
+  privileged Array runtime operation.
+- No insertion, growth, holes, negative-from-end indexing, or Array literals are
+  introduced.
+- D027/B003 remains untouched.
+- No normative specification change is introduced.
+
+
 ## [0.2.36-SNAPSHOT] - 2026-09-04
 
 ### Added

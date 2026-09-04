@@ -46,6 +46,60 @@ public final class ProtosStandardArrayProtocol {
                             }
                             return new ProtosArrayValue(prototype, supplied);
                         }));
+
+        arrayPrototype.createLocalSlot(
+                "at",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            ProtosArrayValue array =
+                                    requireArrayReceiver(activation);
+                            if (supplied.size() != 1
+                                    || !(supplied.get(0)
+                                            instanceof com.guillermomolina.protos.runtime.ProtosIntegerValue index)) {
+                                throw new ProtosSignalException(
+                                        ProtosCoreErrors.newError(activation));
+                            }
+                            java.math.BigInteger value = index.value();
+                            if (value.signum() < 0
+                                    || value.compareTo(array.indexedSize()) >= 0) {
+                                throw new ProtosSignalException(
+                                        ProtosCoreErrors.newError(activation));
+                            }
+                            return array.indexedAt(value);
+                        }));
+
+        arrayPrototype.createLocalSlot(
+                "atPut",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            ProtosArrayValue array =
+                                    requireArrayReceiver(activation);
+                            if (array.isFrozen()) {
+                                throw new ProtosSignalException(
+                                        ProtosCoreErrors.newError(activation));
+                            }
+                            if (supplied.size() != 2
+                                    || !(supplied.get(0)
+                                            instanceof com.guillermomolina.protos.runtime.ProtosIntegerValue index)) {
+                                throw new ProtosSignalException(
+                                        ProtosCoreErrors.newError(activation));
+                            }
+                            java.math.BigInteger value = index.value();
+                            if (value.signum() < 0
+                                    || value.compareTo(array.indexedSize()) >= 0) {
+                                throw new ProtosSignalException(
+                                        ProtosCoreErrors.newError(activation));
+                            }
+                            return array.indexedPut(value, supplied.get(1));
+                        }));
+    }
+
+    private static ProtosArrayValue requireArrayReceiver(
+            com.guillermomolina.protos.runtime.ProtosActivation activation) {
+        if (!(activation.receiver() instanceof ProtosArrayValue array)) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+        }
+        return array;
     }
 
     private static boolean delegatesTo(
