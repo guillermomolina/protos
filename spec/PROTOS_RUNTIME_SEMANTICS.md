@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 320
+Document revision: 321
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2005,7 +2005,6 @@ cancellation, structured-ownership, Actor, and P behavior.
 ---
 
 # 34. Future Composition
-# 34. Future Composition
 
 The normative semantics of `Future.then(...)` are owned by
 `PROTOS_CONCURRENCY_MODEL.md` under `Future then() continuations`, together with
@@ -2020,484 +2019,41 @@ ordering rule.
 
 ---
 
-# 35. Structured Concurrency
-
-The normative semantics of structured Future/task ownership and
-`Future.detach()` are owned by `PROTOS_CONCURRENCY_MODEL.md` §24. Actor-local
-cooperative non-preemption is owned by §24D.
-
-A runtime may represent owner edges, child-task sets, task/Future links,
-detachment, structured waits, and cancellation-unwind bookkeeping using any
-mechanism that preserves those contracts. This document does not define a second
-conceptual ownership or detachment algorithm.
-
-The Actor-termination integration below remains runtime-oriented realization of
-the separately owned Actor lifecycle contracts.
-
-Conceptually, Actor termination while its hosting runtime can still execute
-cleanup includes:
-
-```text
-### Actor delivery admission fairness
-
-Actor delivery backpressure has a liveness obligation distinct from runnable
-task scheduling. Conceptually:
-
-```text
-function considerAdmission(scope):
-    candidates = liveDeliveryOperationsEligibleForAdmission(scope)
-
-    choose some candidate subject to:
-        no candidate that remains continuously admission-eligible
-        may be bypassed forever while compatible admission
-        opportunities repeatedly occur
-
-    if candidate exists:
-        advance candidate according to the ordinary routing and
-        concrete-Actor acceptance rules
-```
-
-The choice mechanism is intentionally unspecified. It may use FIFO queues,
-fair semaphores, rotating producer queues, tickets, aging, or another strategy.
-
-For the same sender incarnation and same concrete Actor, the chooser must also
-preserve the existing issuance FIFO among still-live operations. This
-admission-order constraint ends for an earlier operation when that operation is
-cancelled or becomes terminal before acceptance.
-
-Admission eligibility is not Actor-task runnability. Making a delivery
-operation admission-eligible therefore does not create an Actor turn and does
-not weaken the existing definition of scheduler weak fairness.
-
-
-### Core Cluster membership protocol boundary
-
-Core runtime semantics consume established membership knowledge but do not
-prescribe how that knowledge is distributed:
-
-```text
-function mayUseNodeAsClusterCapacity(clusterView, node):
-    return clusterView.establishesMembership(node)
-        and ordinaryEligibilityRulesHold(node)
-```
-
-The following implications are invalid in Core:
-
-```text
-transportConnected(node) -> member(node)
-reachable(node)          -> member(node)
-member(node)             -> hasAuthority(node)
-notMember(node)          -> terminated(node)
-```
-
-An implementation-specific membership subsystem may maintain local views,
-epochs, gossip state, consensus state, or external-service registrations.
-Those structures are runtime machinery unless a future normative Cluster
-facility standardizes them.
-
-Core code must not observe unspecified membership-protocol timing or ordering as
-a language guarantee. Membership-dependent runtime behavior may use only
-membership facts that the active runtime has established without weakening the
-closed identity, reachability, uncertainty, and Authority rules.
-
-
-### Core split-brain safety
-
-Core has no automatic partition winner or downing strategy. Runtime control
-therefore reduces split-brain safety to Authority checks:
-
-```text
-function authorizeDuringReachabilityLoss(operation):
-    if not operation.requiresAuthority:
-        return ordinarySemanticEligibility(operation)
-
-    if demonstrateCurrentAuthority(operation.authorityScope):
-        return ALLOW
-
-    return DENY
-```
-
-`DENY` means the authoritative operation does not occur. It does not by itself
-terminate the local Process/Node, terminate the remote side, acquire replacement
-Authority, or convert unreachability into termination.
-
-A Core runtime must not contain a semantic shortcut such as:
-
-```text
-if partitionSuspected:
-    winner = chooseMajorityOrOldestOrLocalSide()
-    down(otherSide)
-```
-
-unless a future normative facility explicitly defines that policy and the
-Authority/fencing guarantees that make its decision valid.
-
-After reachability returns, ordinary communication and control may resume only
-according to the identities, membership decisions, Authority state, and
-operation outcomes that actually survived; Core performs no implicit state
-merge or uncertain-message replay.
-
-
-### Network-partition reporting
-
-Core runtime classification must not infer a special semantic partition state
-from communication loss:
-
-```text
-function reportDistributedCommunicationLoss(remoteScope):
-    if authoritativeTerminationAlreadyKnown(remoteScope):
-        return TERMINATED
-
-    if communicationCurrentlyUnavailable(remoteScope):
-        return UNREACHABLE
-
-    return UNKNOWN
-```
-
-An internal detector may additionally record diagnostics such as
-`partitionSuspected`, transport errors, probe history, or topology evidence.
-Those diagnostics are non-semantic unless a future normative facility defines
-otherwise.
-
-In particular, Core has no transition of the form:
-
-```text
-unreachableFor >= implementationPartitionThreshold
-    -> NETWORK_PARTITION
-    -> acquireAuthorityOrTerminateRemoteSide
-```
-
-Restored communication may make the remote scope reachable again when no
-independent authoritative decision has ended or removed the relevant
-incarnation.
-
-
-### Node termination knowledge
-
-Core treats remote Node failure suspicion separately from authoritative
-termination:
-
-```text
-function classifyRemoteNodeAfterCommunicationLoss(nodeRef):
-    if authoritativeNodeTerminationAlreadyKnown(nodeRef):
-        return TERMINATED
-
-    if communicationCurrentlyUnavailable(nodeRef):
-        return UNREACHABLE
-
-    return UNKNOWN
-```
-
-`authoritativeNodeTerminationAlreadyKnown` is lifecycle or membership knowledge
-established by an already-defined normative authority. It is not satisfied
-merely by a heartbeat timeout, phi value, retry limit, transport exception,
-host probe, container status, or infrastructure event.
-
-Core v0.1 therefore has no transition of the form:
-
-```text
-failureDetectorSuspects(nodeRef)
-    -> TERMINATED
-```
-
-A future distributed facility may add a suspicion detector and a distinct
-downing/removal decision only through its own normative contract. Merely
-suspecting a Node must remain reversible and must not itself retarget ActorRefs,
-terminate hosted remote entities, or authorize replacement.
-
-
-### Process termination knowledge
-
-Core distinguishes direct lifecycle knowledge from distributed failure
-detection:
-
-```text
-function classifyRemoteProcessAfterCommunicationLoss(processRef):
-    // No Core heuristic may infer terminal lifecycle from silence.
-    if authoritativeTerminationAlreadyKnown(processRef):
-        return TERMINATED
-
-    if communicationCurrentlyUnavailable(processRef):
-        return UNREACHABLE
-
-    return UNKNOWN
-```
-
-`authoritativeTerminationAlreadyKnown` denotes knowledge established by an
-already-defined lifecycle authority, not a heartbeat timeout, retry limit,
-transport exception, or host-specific probe.
-
-Core v0.1 therefore has no runtime transition of the form:
-
-```text
-missedHeartbeats >= implementationThreshold
-    -> TERMINATED
-```
-
-A future distributed failure-detection facility may introduce additional state
-and transitions only through its own normative contract.
-
-
-### Core Actor failure-authority policy
-
-After `failActorIncarnation(actor, error)` has established fatal termination,
-Core policy is conceptually:
-
-```text
-function applyCoreFailureAuthorityPolicy(actor, error):
-    if actor is actor.process.rootActor:
-        terminateProcessBecauseRootActorFailed(actor.process, actor, error)
-        return
-
-    // Non-root Core Actor:
-    // termination itself is the complete failure-authority action.
-    // Do not replace, escalate, or affect unrelated Actors here.
-    return
-```
-
-### Actor-fatal Error remains inside the failed incarnation boundary
-
-`applyCoreFailureAuthorityPolicy(actor, error)` consumes the local fatal failure
-as lifecycle input. The `error` parameter is not a portable cross-Actor message
-or result.
-
-For a non-root Core Actor, termination is the complete Core failure-authority
-action. No conforming implementation may make the internal Error observable in
-another Actor by sharing the reference, copying it, serializing it, re-signaling
-it remotely, or introducing an implicit supervisor callback.
-
-For the RootActor, `terminateProcessBecauseRootActorFailed(...)` may retain the
-Error as implementation/runtime diagnostic cause for Process termination where
-otherwise permitted. That use grants no Protos-level cross-Actor Error identity
-or transfer semantics.
-
-Sender-visible request outcomes remain governed exclusively by the existing
-Actor request/failure rules and never become destination-Error propagation merely
-because the destination died from an unhandled Error.
-
-This function does not prevent a distinct ActorGroup controller from later
-observing that desired Group state is unsatisfied and creating a fresh Actor
-incarnation. Such reconciliation is not a continuation or restart of the failed
-Actor.
-
-Core runtime implementations may fuse this policy into lifecycle machinery and
-need not materialize a separate failure-authority object.
-
-
-### Actor lifecycle observation
-
-`ActorRef.termination()` is represented conceptually as a non-task-backed
-Future observation:
-
-```text
-function observeActorTermination(actorRef):
-    result = newPendingFuture(task = none)
-
-    atomically:
-        if terminationKnown(actorRef):
-            resolveFuture(result, actorRef)
-            return result
-
-        registerTerminationObserver(actorRef, result)
-
-    return result
-
-function onActorTerminationKnown(actorRef):
-    observers = takeLiveTerminationObservers(actorRef)
-
-    for each observer in observers:
-        resolveFuture(observer, actorRef)
-```
-
-Registration and the known-termination transition are one semantic atomicity
-boundary. Implementations may realize it with locks, CAS, epochs,
-register-then-recheck, distributed monitor protocols, or equivalent machinery.
-
-Cancellation of `result` uses ordinary Future cancellation. Honoring that
-cancellation removes or makes inert only `result`'s observation registration;
-it does not mutate `actorRef`'s Actor.
-
-`UNREACHABLE` and `UNKNOWN` do not call `onActorTerminationKnown`. Network or
-node failure detection may do so only when another normative contract has
-established that the concrete Actor incarnation is terminated rather than
-merely unreachable.
-
-
-### Unhandled Actor-turn failure
-
-## Actor bootstrap resolution
-
-Actor bootstrap is resolved inside the new Actor domain.
-
-Conceptually:
-
-```text
-initializeActor(actor, bootstrapModuleKey, bootstrapBindingName, transferredArgs):
-    module = ensureModuleInstance(actor, bootstrapModuleKey)
-    requireLocalSlot(module, bootstrapBindingName)
-    bootstrap = readLocalSlot(module, bootstrapBindingName)
-    requireOrdinaryInvokable(bootstrap)
-    behavior = invoke(bootstrap, transferredArgs)
-    requireValidActorBehavior(behavior)
-    actor.currentBehavior = behavior
-    transition INITIALIZING -> READY
-```
-
-`ensureModuleInstance` uses the destination Actor's own module cache and module
-context. Neither the creator's module instance nor the creator's lexical/runtime
-context participates in this invocation.
-
-The bootstrap argument graph is formed under ordinary Actor transfer semantics
-before the destination invocation. The bootstrap invokable itself is not an
-Actor-transferred Closure.
-
-If module loading, lookup, callability validation, invocation, or behavior
-establishment fails, initialization fails and the Actor does not enter `READY`.
-No queued external message is dispatched before that cutover.
-
-Conceptually, every ordinary Actor turn has an outer runtime boundary:
-
-```text
-function runActorTurn(actor, turn):
-    try:
-        execute(turn)
-    on Error error escaping outermost dynamic handler boundary:
-        failActorIncarnation(actor, error)
-```
-
-`failActorIncarnation` is lifecycle failure, not ordinary Future failure of the
-turn. It records structured failure information for the Actor's failure
-authority, prevents subsequent ordinary turns for that incarnation, and invokes
-the existing Actor-termination cancellation/cleanup machinery.
-
-A distinct asynchronous task retains the existing rule:
-
-```text
-function runAsyncTask(task):
-    try:
-        value = execute(task.body)
-        resolveFuture(task.future, value)
-    on Error error:
-        failFuture(task.future, error)
-```
-
-The task error does not additionally call `failActorIncarnation`. If some later
-Actor turn observes `task.future` and that observation re-signals the error,
-`runActorTurn` handles fatality only if the re-signaled error escapes that later
-turn unhandled.
-
-Cancellation follows `honorCancellation` and is not routed through the
-unhandled-`Error` fatality branch.
-
-
-### Actor storage reclamation after termination
-
-Actor lifecycle termination and implementation storage reclamation are distinct.
-
-Conceptually:
-
-```text
-function mayReclaimActorImplementationState(actor):
-    require actor.lifecycle == TERMINATED
-    require reclaiming state preserves all remaining observable
-            ActorRef, identity, monitoring, routing, and communication semantics
-    return true
-```
-
-There is no corresponding `mayCollectLiveActorBecauseUnreferenced` operation in
-Core v0.1. Ordinary object-graph reachability, absence of known ActorRefs,
-idle-time heuristics, and memory pressure are not Actor termination causes.
-
-An implementation may replace a terminated Actor's full runtime representation
-with compact terminal metadata when that substitution is observationally
-equivalent.
-
-
-### Actor graceful-stop lifecycle cutover
-
-The concurrency model's graceful-stop cutover is represented conceptually as:
-
-```text
-function beginGracefulActorTermination(actor):
-    if actor.lifecycle is TERMINATING or TERMINATED:
-        return
-
-    actor.lifecycle = TERMINATING
-
-    stopConcreteActorAcceptance(actor)
-    preventNewOrdinaryTurns(actor)
-
-    classifyAcceptedButNotStartedInteractionsAsLost(actor)
-
-    cancelActorLocalWorkForTermination(actor)
-
-    when required Actor-local task cleanup is complete:
-        actor.lifecycle = TERMINATED
-```
-
-`classifyAcceptedButNotStartedInteractionsAsLost` does not execute their handlers
-and does not rewrite acceptance history. Sender-visible outcomes use the ordinary
-accepted-work loss and request-uncertainty rules.
-
-If a turn was already executing when `beginGracefulActorTermination` established
-the cutover, the runtime does not inject an asynchronous exception into arbitrary
-ordinary code. The turn remains subject to the existing cancellation boundaries.
-Normal completion before the next such boundary remains normal completion; reaching
-a boundary with the termination cancellation pending begins the ordinary
-cancellation unwind.
-
-The conceptual `when` above is not permission to wait for every residual
-non-task-backed producer Future. `cancelActorLocalWorkForTermination` already
-separates required Actor-local task cleanup from producer custody. The Actor can
-become TERMINATED once required Actor-local task cleanup has finished, even if
-committed backend work continues under runtime/producer custody.
-
-function cancelActorLocalWorkForTermination(actor):
-    tasks = all pending Actor-local tasks in actor
-        // includes tasks detached from activation ownership
-
-    producerFutures = all pending non-task-backed Futures
-        representing asynchronous operations initiated by actor
-
-    for each task in tasks:
-        requestCooperativeCancellation(task)
-
-    for each future in producerFutures:
-        recordFutureCancellationRequest(future)
-
-    for each task in tasks:
-        awaitTerminalCompletion(task)
-        // ordinary cancellation unwind and applicable ensure cleanup complete
-
-    // Actor termination does not wait merely for producerFutures to become
-    // terminal. Their producers retain only the custody needed to obey their
-    // own cancellation/commitment contracts.
-```
-
-Once Actor termination has begun, those tasks are not ordinary surviving work.
-They may receive execution only as required to observe the already-requested
-cancellation at the existing portable boundaries and to run the corresponding
-unwind/`ensure` cleanup. No task is re-parented to another Actor, the RootActor,
-or the Process.
-
-The producer-Future cancellation pass is distinct from task cleanup. It does not
-execute arbitrary Protos code in the terminating Actor, does not close an I/O
-receiver, and does not revoke or destroy a Process-level capability. If a
-producer has already committed an external effect or crossed a communication
-acceptance boundary, the producer continues only under its own existing semantic
-contract. A later producer completion does not resurrect the Actor or schedule
-ordinary code in its dead execution domain.
-
-If cleanup completes normally, the task Future reaches `cancelled`; if cleanup
-signals an error, the existing cleanup-supersedes-cancellation rule makes that
-Future `failed`. Actor replacement does not inherit the task or its Future.
-
-This cleanup rule assumes that the hosting runtime remains able to schedule the
-terminating Actor's cleanup work. Loss of the Process/runtime/execution substrate
-may prevent further cleanup, but never permits Actor-local task execution to
-resume in a different execution domain.
-
-The scheduler may implement waiting by suspension rather than by blocking an operating-system thread.
+# 35. Concurrency and Actor Runtime Integration
+
+The normative semantics of structured Future/task ownership, cancellation unwind,
+and `Future.detach()` are owned by `PROTOS_CONCURRENCY_MODEL.md` §24.
+Actor-local cooperative non-preemption is owned there by the corresponding
+Actor-local execution contract.
+
+The concurrency model is also the primary normative owner of Core Actor and
+distributed-concurrency semantics, including:
+
+- Actor lifecycle, graceful termination, cleanup, and storage/reachability
+  boundaries;
+- Actor bootstrap resolution and initialization failure;
+- unhandled Actor-turn failure and failure-authority consequences;
+- Actor termination observation;
+- delivery admission fairness and concrete-Actor acceptance ordering;
+- Process/Node/Cluster reachability, membership, termination knowledge,
+  partition/split-brain boundaries, and Authority requirements.
+
+Runtime implementations may realize these contracts with task records, queues,
+mailboxes, admission structures, lifecycle records, compact terminal metadata,
+membership views, callbacks, probes, epochs, distributed protocols, or other
+internal machinery. None of those representations creates an additional
+programmer-visible lifecycle state, ordering rule, failure detector, partition
+policy, ownership edge, authority grant, bootstrap path, or Error-transfer
+mechanism.
+
+`PROTOS_IO_MODEL.md` remains the primary owner of I/O-specific producer
+commitment/cancellation consequences when Actor termination requests cancellation
+of outstanding I/O operations.
+
+This runtime-semantics document therefore does not define second conceptual
+algorithms for Actor termination, graceful stop, failure authority, Actor
+termination observation, bootstrap, distributed reachability classification,
+Cluster membership, split-brain policy, or delivery admission.
 
 ---
 

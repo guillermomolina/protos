@@ -8,6 +8,35 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.321] - 2026-09-04
+
+### Changed
+- Canonicalized the large Runtime concurrency/Actor lifecycle integration block.
+- Removed duplicate conceptual Runtime authority for Actor graceful termination,
+  Actor-local cancellation cleanup, failure authority, termination observation,
+  Actor bootstrap, delivery admission fairness, Process/Node reachability and
+  termination classification, Cluster membership, and split-brain/Authority
+  handling.
+- Replaced those algorithms with a compact integration section referring to
+  `PROTOS_CONCURRENCY_MODEL.md` as the primary normative owner and
+  `PROTOS_IO_MODEL.md` for I/O-specific commitment/cancellation specialization.
+- Preserved runtime freedom to use internal lifecycle records, queues, membership
+  views, callbacks, probes, epochs, compact terminal metadata, or distributed
+  protocols only when programmer-visible behavior remains that of the owning
+  specifications.
+- Fixed the duplicate `# 34. Future Composition` heading accidentally introduced
+  during revision 320.
+- Removed a malformed open pseudocode fence that had caused subsequent Runtime
+  Markdown subsections to be presented as if they were part of one code block.
+
+### Documentation
+- This revision changes specification ownership/presentation and removes duplicate
+  authority; it does not intentionally change observable Protos behavior.
+- Updated only `PROTOS_RUNTIME_SEMANTICS.md` to document revision 321.
+- `PROTOS_LANGUAGE_SPEC.md` remains at document revision 320.
+- `PROTOS_CONCURRENCY_MODEL.md` remains at document revision 319.
+- `PROTOS_GRAMMAR.md` and `PROTOS_IO_MODEL.md` are unaffected.
+
 ## [0.1.320] - 2026-09-04
 
 ### Added / Closed
