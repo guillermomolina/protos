@@ -4,6 +4,33 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.264] - 2026-09-04
+
+### Closed
+- Closed P scheduler policy, work stealing, and granularity as non-semantic Core
+  implementation policy rather than an unresolved language/API surface.
+- Defined no portable Core API or introspection for worker count, queue topology,
+  work-stealing algorithm, victim selection, grain size, adaptive thresholds,
+  inline/help-first/work-first policy, NUMA/locality preference, priority
+  heuristics, carrier affinity, or scheduler cost model.
+- Allowed runtimes to adapt those mechanisms dynamically to hardware/load while
+  preserving all existing P snapshot, isolation, determinism, fairness,
+  bounded-carrier nested-progress, cancellation, lifetime, locality, effect, and
+  ByteRegion publication contracts.
+- Clarified that scheduler-policy changes alone may not alter deterministic
+  results/failures, create starvation, or introduce carrier-exhaustion deadlock.
+- Clarified that Core promises neither equal CPU shares nor bounded latency,
+  fixed parallelism, dedicated workers, work stealing, or a particular speedup.
+- Kept implementation/admin scheduler diagnostics outside portable Core
+  semantics.
+- Removed the corresponding scheduling/work-stealing/granularity item from Open
+  Design Topics.
+
+### Changed
+- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  264.
+
 ## [0.1.263] - 2026-09-04
 
 ### Fixed

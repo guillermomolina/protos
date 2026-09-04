@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 263
+Document revision: 264
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -4684,6 +4684,73 @@ work-stealing algorithm, carrier count, locality policy, priority heuristics,
 chunk size, adaptive granularity, and similar mechanisms remain implementation
 choices subject to the fairness and scheduler-independence rules.
 
+### 71.7B Scheduling policy is not a Core semantic surface
+
+Core v0.1 does not standardize a portable P scheduler policy beyond the
+observable progress and determinism constraints already defined by this section.
+
+In particular, Core defines no portable semantic value, API, option, directive,
+annotation, environment setting, or introspection result for any of the
+following:
+
+- worker-pool size or carrier count;
+- queue topology or queue discipline;
+- work-first versus help-first execution;
+- local versus global queues;
+- work-stealing deque representation or victim-selection policy;
+- steal frequency, batch size, or steal threshold;
+- chunk size or partition grain;
+- adaptive granularity thresholds;
+- inline/sequential fallback thresholds;
+- task fusion, splitting, batching, or coalescing policy;
+- NUMA/locality preference;
+- CPU affinity or carrier pinning;
+- priority or aging heuristic;
+- load-sampling interval;
+- hardware-sensitive or workload-sensitive cost model.
+
+A runtime may choose or change any of these policies dynamically according to
+hardware, current load, profiling, historical measurements, nesting depth,
+allocation pressure, locality, or another implementation concern.
+
+Such choices are conforming only while preserving every already-defined Core
+observable constraint, including:
+
+- P input snapshot and isolation semantics;
+- per-operation deterministic result/order/failure contracts;
+- weak fairness for continuously runnable P work;
+- bounded-carrier nested progress;
+- structured ownership and lifetime;
+- cooperative cancellation semantics;
+- Actor turn isolation;
+- P process-locality;
+- effect/authority boundaries;
+- ByteRegion reservation/publication rules;
+- the requirement that physical scheduling not become an accidental semantic
+  selector.
+
+Changing scheduler policy alone must therefore never change the semantic result
+of a deterministic Core program, select a different observable failure, expose a
+different mutation/publication order where Core has fixed one, permit starvation
+for continuously runnable admitted P work, or introduce a deadlock that exists
+only because ancestors occupy all carriers while runnable descendants wait.
+
+Conversely, Core does not promise equal CPU shares, bounded scheduling latency,
+a specific amount of parallel speedup, a dedicated worker for any logical P
+operation, a fixed number of simultaneous workers, a particular cache/NUMA
+placement, or the use of work stealing at all.
+
+Implementations may expose administrative diagnostics about their current
+scheduler configuration or runtime behavior outside the portable Core language
+surface. Such diagnostics are implementation facts and must not become inputs to
+portable Core semantics.
+
+A future explicit resource-governance or performance-control facility may expose
+selected scheduling controls only if it defines their observable contract,
+scope, ownership, portability, interaction with fairness, and failure behavior.
+That future facility is not implied by the existence of the internal P
+scheduler.
+
 ### 71.8 Failure and Cancellation
 
 Failure of an isolated parallel computation fails its result Future
@@ -5197,7 +5264,6 @@ mechanism, or implementation detail that still requires design.
 -   Streaming
 -   Async streams
 -   Generators and suspendable iteration
--   Parallel scheduling, work-stealing, and granularity heuristics
 -   Pub/sub
 -   Advanced routers and load-balancing policies
 -   Actor capacity policy
