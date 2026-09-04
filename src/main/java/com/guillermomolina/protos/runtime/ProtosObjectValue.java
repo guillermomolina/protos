@@ -95,6 +95,10 @@ public final class ProtosObjectValue {
                 : Optional.empty();
     }
 
+    public Map<String, Object> localSlotsSnapshot() {
+        return java.util.Collections.unmodifiableMap(new LinkedHashMap<>(localSlots));
+    }
+
     public Optional<ProtosSlotLookupResult> lookupSlot(String name) {
         Objects.requireNonNull(name, "name");
 

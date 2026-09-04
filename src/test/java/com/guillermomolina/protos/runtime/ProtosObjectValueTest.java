@@ -196,4 +196,25 @@ class ProtosObjectValueTest {
         assertThrows(IllegalStateException.class, () -> frozen.removeLocalSlot("x"));
         assertTrue(frozen.hasLocalSlot("x"));
     }
+
+    @Test
+    void localSlotSnapshotIsDetachedReadOnlyAndPreservesExactBindings() {
+        ProtosObjectValue object = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        Object first = new Object();
+        Object second = new Object();
+
+        object.createLocalSlot("first", first);
+        object.createLocalSlot("second", second);
+
+        java.util.Map<String, Object> snapshot = object.localSlotsSnapshot();
+
+        assertEquals(List.of("first", "second"), new java.util.ArrayList<>(snapshot.keySet()));
+        assertSame(first, snapshot.get("first"));
+        assertSame(second, snapshot.get("second"));
+        assertThrows(UnsupportedOperationException.class, () -> snapshot.put("third", new Object()));
+
+        object.removeLocalSlot("first");
+        assertSame(first, snapshot.get("first"));
+        assertFalse(object.hasLocalSlot("first"));
+    }
 }
