@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.300] - 2026-09-04
+
+### Fixed
+- Defined explicit BOM emission for fresh one-shot `Encoding.encode(text)`
+  conversions independently of payload emptiness.
+- Required an explicitly BOM-emitting one-shot conversion to prepend exactly one
+  matching BOM before the encoded text.
+- Defined `encode("")` under explicit BOM emission to return exactly the BOM
+  bytes, while the default no-BOM configuration returns `Bytes()`.
+- Prohibited implementations from suppressing a requested BOM merely because the
+  one-shot payload is empty or emitting multiple BOMs for one conversion.
+- Kept streaming `TextWriter.writeText("")` semantics unchanged: an empty text
+  write remains zero-byte/zero-state-transition and does not itself trigger BOM
+  emission, finalization, flush, or reset.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 300. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.299] - 2026-09-04
 
 ### Closed

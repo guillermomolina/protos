@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 299
+Document revision: 300
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -1029,6 +1029,14 @@ For UTF8, UTF16LE, and UTF16BE, an initial matching BOM is consumed by default. 
 A BOM occurring later in the stream is ordinary U+FEFF text.
 
 Encoders emit no BOM by default. Exact configuration syntax for explicit BOM emission is outside v0.1.
+
+Whenever a standard `Encoding` configuration explicitly requests BOM emission, that request is part of the encoded byte result of each fresh one-shot `encoding.encode(text)` conversion. The emitted BOM is exactly one initial matching BOM for the selected Encoding, placed before all bytes encoding `text`.
+
+This applies even when `text` is the empty String. Therefore a fresh one-shot `encode("")` under an explicit BOM-emitting configuration returns exactly that Encoding's BOM bytes, whereas `encode("")` under the default no-BOM configuration returns `Bytes()`.
+
+One-shot BOM emission is determined by the Encoding configuration and the fresh conversion boundary, not by whether the text payload contains at least one Unicode scalar. An implementation must not suppress a requested BOM merely because the payload is empty, nor emit multiple BOMs for one one-shot conversion.
+
+This one-shot rule does not change streaming `TextWriter` state semantics. In particular, an ordinary `TextWriter.writeText("")` remains the already-defined zero-byte, zero-encoder-state-transition operation and does not by itself trigger BOM emission, stream initialization/finalization, flush, or reset. Any BOM behavior of a stateful streaming writer belongs to that writer's explicit encoder/lifecycle contract rather than being inferred from the one-shot `Encoding.encode` rule.
 
 ---
 
