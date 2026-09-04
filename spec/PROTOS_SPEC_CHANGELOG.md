@@ -8,6 +8,32 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.346] - 2026-09-04
+
+### Fixed
+- Closed D007: defined the exact `import(specifier)` argument domain as semantic
+  `String` values only, after ordinary argument evaluation and without implicit
+  conversion or String-like delegation.
+- Fixed the Core/host boundary: Core validates the semantic String value, while
+  the host resolver owns interpretation of its exact text, including empty,
+  path-like, URI-like, package-like, filesystem, network, sandbox, permission,
+  and canonical-resolution policy.
+- Required invalid non-String specifiers to signal a Core `Error` before resolver
+  entry, and otherwise-valid but unresolved/rejected specifiers to surface as a
+  language `Error` rather than host exceptions or sentinel values.
+- Clarified that module cache identity begins at the resolver-produced canonical
+  `ModuleKey`, not at the original String spelling, so distinct spellings may
+  resolve to one Actor-local module instance and repeated canonical imports do
+  not re-run initialization.
+- Clarified that specifier validation/resolution adds no implicit Core suspension
+  point and that failed resolution creates no cached module instance.
+
+### Compatibility
+- This closes previously implementation-selectable specifier-domain, coercion,
+  empty-String, resolver-entry, resolution-failure, and textual-spelling/cache
+  behavior without standardizing a filesystem, URL/URI scheme, package manager,
+  registry, or concrete resolver algorithm.
+
 ## [0.1.345] - 2026-09-04
 
 ### Error identity and portable taxonomy

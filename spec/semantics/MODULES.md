@@ -74,6 +74,70 @@ Each module executes inside a `moduleContext`, an ordinary execution-context obj
 
 There is no separate namespace object, wrapper, copy, or proxy. Module identity is ordinary object identity (`===`), and a module's observable surface is its current top-level slot state.
 
+### `import(specifier)` argument and host-resolution boundary
+
+`import` is supplied as a standard prelude facility and is invoked through the
+ordinary call rules. The `specifier` expression is therefore evaluated exactly
+once, in ordinary left-to-right argument-evaluation order, before `import`
+validates or resolves its value. Effects completed while evaluating the
+specifier are not rolled back if validation or later resolution fails.
+
+Core v0.1 accepts as a module specifier **exactly a semantic `String` value**.
+Semantic String-family membership is the value-family membership defined by the
+Core value model; delegation to a String value or to the standard `String`
+prototype does not make an ordinary child object a semantic String. No other
+object is accepted merely because it defines String-like messages.
+
+`import` performs no implicit conversion, coercion, formatting, `toString`
+dispatch, parsing, invocation, or other user behavior to obtain a specifier.
+Consequently `null`, either Boolean, every Number value, Arrays, ordinary
+objects, and ordinary objects that merely delegate to String-family objects are
+invalid specifiers. An invalid specifier signals an `Error` before the host
+module resolver is invoked. Unless another normative specification names a more
+specific standard Error prototype, the portable error category is exactly the
+Core `Error` guarantee defined by `ERRORS.md`.
+
+A semantic String is passed to the module-resolution boundary with its exact
+String value. Core assigns no intrinsic path, URL, URI, package-name, or
+filesystem meaning to that text. In particular, Core does not reject the empty
+String and does not normalize, canonicalize, case-fold, absolutize, append an
+extension to, or otherwise rewrite the String before resolution. Whether any
+particular String — including `""`, `"foo"`, `"./foo"`, a path-like spelling, or
+a URI-like spelling — can be resolved is host/module-resolver policy.
+
+The host/module resolver may interpret the exact String using the importing
+module and its host resolution environment. Host-dependent policy may include,
+without limitation, filesystem or package lookup, base locations, implicit
+extensions, path separators, case sensitivity, URI schemes, network access,
+registries, sandboxing, permissions, and the process by which a successful
+resolution is canonicalized. None of those policies becomes a Core language
+institution merely because a host chooses it.
+
+A successful resolution must produce the canonical `ModuleKey` required by
+Canonical Module Identity below. From that point onward, module identity,
+Actor-local caching, cache-before-execute, initialization, cycles, repeated
+imports, and failed-initialization retry behavior are Core semantics and are not
+host-selectable. The cache is keyed by the resolved canonical `ModuleKey`, not
+by the original String spelling. Therefore distinct String specifiers may
+resolve to the same `ModuleKey`; within one Actor they then yield the same
+module instance under `===` and do not independently execute the module body.
+
+If the resolver cannot resolve an otherwise valid String specifier, or rejects
+resolution because of host policy or authority, `import` signals an `Error` and
+does not create or cache a module instance for that failed resolution. Core does
+not require portable code to distinguish not-found, unsupported-scheme,
+permission, sandbox, network, package, or other host-resolution failures by
+standard Error prototype unless a normative host/domain specification
+independently defines such a taxonomy. Host exceptions, status codes, or
+sentinel values must not leak as an alternative to the language-level Error
+contract.
+
+Specifier validation and resolution introduce no implicit suspension point in
+Core v0.1. A host may perform whatever internal work its resolver requires, but
+it must not make an ordinary `import` call observably suspend/re-enter the Actor
+unless another normative facility explicitly supplies such a suspension
+operation.
+
 ### Actor-Local Module Instances
 
 A module instance belongs to one Actor. Each Actor owns an independent module cache.
