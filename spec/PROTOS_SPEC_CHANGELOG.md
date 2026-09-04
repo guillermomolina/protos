@@ -4,6 +4,23 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.311] - 2026-09-04
+
+### Fixed
+- Required Actor bootstrap entry-point selection to use the destination module
+  instance's own local top-level slot rather than ordinary delegated lookup.
+- Clarified that a same-named binding inherited from `Context`, `Object`, the
+  prelude, or another delegation ancestor cannot satisfy the bootstrap binding.
+- Updated the runtime model to validate/read the local module slot directly
+  before ordinary invokability validation.
+- Preserved ordinary invocation semantics after the bootstrap value itself has
+  been selected.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 311.
+  `PROTOS_RUNTIME_SEMANTICS.md` and `PROTOS_CONCURRENCY_MODEL.md` gain normative
+  clarification in this revision.
+
 ## [0.1.310] - 2026-09-04
 
 ### Fixed

@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 310
+Document revision: 311
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -575,9 +575,14 @@ loading/cache lifecycle. No creator module instance or module context is
 transferred or shared.
 
 The bootstrap binding name identifies one top-level binding on that destination
-module instance. After the module is ready, bootstrap performs ordinary slot
-lookup of that binding and requires the resulting value to be ordinarily
-invokable.
+module instance. A top-level module binding is a local slot of that module
+instance, so bootstrap requires that exact name to exist as a local slot there.
+It does not use delegated lookup for bootstrap entry-point selection.
+
+After the module is ready, bootstrap reads that local slot directly and requires
+the resulting value to be ordinarily invokable. A same-named slot inherited from
+`Context`, `Object`, the prelude, or any other delegation ancestor does not
+satisfy the bootstrap-binding requirement.
 
 The explicit initialization arguments cross the Actor boundary under the
 existing Actor pass-by-value rules before bootstrap invocation. Bootstrap then

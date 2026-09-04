@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 310
+Document revision: 311
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2942,7 +2942,8 @@ Conceptually:
 ```text
 initializeActor(actor, bootstrapModuleKey, bootstrapBindingName, transferredArgs):
     module = ensureModuleInstance(actor, bootstrapModuleKey)
-    bootstrap = ordinaryLookup(module, bootstrapBindingName)
+    requireLocalSlot(module, bootstrapBindingName)
+    bootstrap = readLocalSlot(module, bootstrapBindingName)
     requireOrdinaryInvokable(bootstrap)
     behavior = invoke(bootstrap, transferredArgs)
     requireValidActorBehavior(behavior)
