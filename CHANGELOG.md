@@ -4,6 +4,30 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.38-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added standard `Array.size()` as a read-only ordinary Closure-valued protocol
+  operation returning the semantic Integer indexed length.
+- Added standard `Array.each(block)` with ordinary polymorphic callback
+  validation, ascending shallow-snapshot traversal, one exact element argument
+  per callback, and original-receiver normal result.
+- Array iteration snapshots are isolated from later element replacement while
+  preserving ordinary element identity and callback effects.
+- Added coverage for open/closed/frozen size observation, iteration order,
+  snapshot replacement behavior, callback validation, and exact receiver result.
+- Project implementation version changed from `0.2.37-SNAPSHOT` to `0.2.38-SNAPSHOT`.
+
+### Notes
+
+- `each` invokes callbacks through the existing ordinary invocation protocol;
+  it does not require callbacks to be Closures.
+- No parallel Array operations are introduced.
+- D027/B003 remains untouched.
+- No normative specification change is introduced.
+
+
 ## [0.2.37-SNAPSHOT] - 2026-09-04
 
 ### Added
