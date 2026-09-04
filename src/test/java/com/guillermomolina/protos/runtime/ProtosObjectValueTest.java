@@ -160,4 +160,40 @@ class ProtosObjectValueTest {
                 () -> object.createLocalSlot("x", ProtosNullValue.INSTANCE));
         assertTrue(object.readSlot("missing").isEmpty());
     }
+
+    @Test
+    void openObjectRemovesOnlyLocalSlotAndReturnsExactValue() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue parent = new ProtosObjectValue(root);
+        ProtosObjectValue child = new ProtosObjectValue(parent);
+        Object inherited = new Object();
+        Object local = new Object();
+
+        parent.createLocalSlot("name", inherited);
+        child.createLocalSlot("name", local);
+
+        assertSame(local, child.removeLocalSlot("name"));
+        assertSame(inherited, child.readSlot("name").orElseThrow());
+        assertFalse(child.hasLocalSlot("name"));
+    }
+
+    @Test
+    void removeSlotRejectsMissingClosedAndFrozenObjects() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+
+        ProtosObjectValue missing = new ProtosObjectValue(root);
+        assertThrows(IllegalStateException.class, () -> missing.removeLocalSlot("x"));
+
+        ProtosObjectValue closed = new ProtosObjectValue(root);
+        closed.createLocalSlot("x", new Object());
+        closed.close();
+        assertThrows(IllegalStateException.class, () -> closed.removeLocalSlot("x"));
+        assertTrue(closed.hasLocalSlot("x"));
+
+        ProtosObjectValue frozen = new ProtosObjectValue(root);
+        frozen.createLocalSlot("x", new Object());
+        frozen.freeze();
+        assertThrows(IllegalStateException.class, () -> frozen.removeLocalSlot("x"));
+        assertTrue(frozen.hasLocalSlot("x"));
+    }
 }

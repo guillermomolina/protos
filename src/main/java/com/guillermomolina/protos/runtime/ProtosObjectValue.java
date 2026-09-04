@@ -151,4 +151,20 @@ public final class ProtosObjectValue {
 
         localSlots.put(name, value);
     }
+
+    public Object removeLocalSlot(String name) {
+        Objects.requireNonNull(name, "name");
+
+        if (mutationState == MutationState.FROZEN) {
+            throw new IllegalStateException("object is frozen");
+        }
+        if (mutationState == MutationState.CLOSED) {
+            throw new IllegalStateException("object is closed");
+        }
+        if (!localSlots.containsKey(name)) {
+            throw new IllegalStateException("local slot does not exist: " + name);
+        }
+
+        return localSlots.remove(name);
+    }
 }
