@@ -27,12 +27,13 @@ public final class ProtosClosureValue {
     private final Object capturedReceiver;
     private final ProtosObjectValue methodHome;
     private final ProtosReturnHome returnHome;
+    private final ProtosPrelude prelude;
 
     public ProtosClosureValue(
             CanonicalClosure definition,
             List<ProtosObjectValue> capturedLexicalContexts,
             Object capturedReceiver) {
-        this(definition, capturedLexicalContexts, capturedReceiver, null, null);
+        this(definition, capturedLexicalContexts, capturedReceiver, null, null, null);
     }
 
     public ProtosClosureValue(
@@ -45,7 +46,8 @@ public final class ProtosClosureValue {
                 capturedLexicalContexts,
                 capturedReceiver,
                 null,
-                returnHome);
+                returnHome,
+                null);
     }
 
     public ProtosClosureValue(
@@ -53,7 +55,8 @@ public final class ProtosClosureValue {
             List<ProtosObjectValue> capturedLexicalContexts,
             Object capturedReceiver,
             ProtosObjectValue methodHome,
-            ProtosReturnHome returnHome) {
+            ProtosReturnHome returnHome,
+            ProtosPrelude prelude) {
         this.definition = Objects.requireNonNull(definition, "definition");
         this.capturedLexicalContexts =
                 List.copyOf(
@@ -64,6 +67,7 @@ public final class ProtosClosureValue {
                 Objects.requireNonNull(capturedReceiver, "capturedReceiver");
         this.methodHome = methodHome;
         this.returnHome = returnHome;
+        this.prelude = prelude;
     }
 
     public CanonicalClosure definition() {
@@ -86,6 +90,10 @@ public final class ProtosClosureValue {
         return java.util.Optional.ofNullable(returnHome);
     }
 
+    public java.util.Optional<ProtosPrelude> prelude() {
+        return java.util.Optional.ofNullable(prelude);
+    }
+
     public ProtosClosureValue bindMethod(
             Object receiver,
             ProtosObjectValue home) {
@@ -94,6 +102,7 @@ public final class ProtosClosureValue {
                 capturedLexicalContexts,
                 Objects.requireNonNull(receiver, "receiver"),
                 Objects.requireNonNull(home, "home"),
-                returnHome);
+                returnHome,
+                prelude);
     }
 }

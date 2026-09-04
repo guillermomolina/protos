@@ -45,6 +45,7 @@ public final class ProtosClosureLiteralNode extends ProtosExpressionNode {
                 activation.lexicalContextsForClosureCapture(),
                 activation.receiver(),
                 activation.methodHome().orElse(null),
-                activation.returnHome().orElse(null));
+                activation.returnHome().orElse(null),
+                activation.prelude().orElse(null));
     }
 }

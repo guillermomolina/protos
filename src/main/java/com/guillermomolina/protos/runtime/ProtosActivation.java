@@ -29,13 +29,14 @@ public final class ProtosActivation {
     private final ProtosArrayValue arguments;
     private final ProtosReturnHome returnHome;
     private final ProtosObjectValue methodHome;
+    private final boolean ownsReturnHome;
     private final boolean construction;
 
     public ProtosActivation(
             ProtosObjectValue context,
             List<ProtosObjectValue> capturedLexicalContexts,
             Object receiver) {
-        this(context, capturedLexicalContexts, receiver, null, null, null, null, false);
+        this(context, capturedLexicalContexts, receiver, null, null, null, null, false, false);
     }
 
     static ProtosActivation withPrelude(
@@ -51,6 +52,7 @@ public final class ProtosActivation {
                 null,
                 null,
                 null,
+                false,
                 false);
     }
 
@@ -67,6 +69,7 @@ public final class ProtosActivation {
                 null,
                 Objects.requireNonNull(returnHome, "returnHome"),
                 null,
+                false,
                 false);
     }
 
@@ -83,6 +86,36 @@ public final class ProtosActivation {
                 null,
                 null,
                 Objects.requireNonNull(methodHome, "methodHome"),
+                false,
+                false);
+    }
+
+    public static ProtosActivation forClosureInvocation(
+            ProtosClosureValue closure,
+            java.util.List<?> supplied) {
+        Objects.requireNonNull(closure, "closure");
+        Objects.requireNonNull(supplied, "supplied");
+
+        ProtosPrelude prelude =
+                closure.prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Closure invocation requires an owning Core prelude"));
+        ProtosReturnHome capturedHome = closure.returnHome().orElse(null);
+        boolean ownsReturnHome = capturedHome == null;
+        ProtosReturnHome invocationHome =
+                ownsReturnHome ? new ProtosReturnHome() : capturedHome;
+
+        return new ProtosActivation(
+                prelude.newExecutionContext(),
+                closure.capturedLexicalContexts(),
+                closure.capturedReceiver(),
+                prelude,
+                prelude.newFrozenArray(supplied),
+                invocationHome,
+                closure.methodHome().orElse(null),
+                ownsReturnHome,
                 false);
     }
 
@@ -94,6 +127,7 @@ public final class ProtosActivation {
             ProtosArrayValue arguments,
             ProtosReturnHome returnHome,
             ProtosObjectValue methodHome,
+            boolean ownsReturnHome,
             boolean construction) {
         this.context = Objects.requireNonNull(context, "context");
         this.capturedLexicalContexts =
@@ -104,6 +138,7 @@ public final class ProtosActivation {
         this.arguments = arguments;
         this.returnHome = returnHome;
         this.methodHome = methodHome;
+        this.ownsReturnHome = ownsReturnHome;
         this.construction = construction;
     }
 
@@ -120,6 +155,7 @@ public final class ProtosActivation {
                 null,
                 enclosing.returnHome,
                 enclosing.methodHome,
+                false,
                 true);
     }
 
@@ -149,6 +185,10 @@ public final class ProtosActivation {
 
     public Optional<ProtosObjectValue> methodHome() {
         return Optional.ofNullable(methodHome);
+    }
+
+    public boolean ownsReturnHome() {
+        return ownsReturnHome;
     }
 
     public List<ProtosObjectValue> lexicalContextsForClosureCapture() {

@@ -4,6 +4,36 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.21-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Closures now preserve their implementation-private owning `ProtosPrelude`
+  together with lexical contexts and callable control metadata.
+- Added `ProtosActivation.forClosureInvocation(...)`, which atomically
+  establishes a fresh execution context, exact captured receiver and lexical
+  contexts, source-backed frozen `args`, `methodHome`, and return-home state.
+- Invocation activations record whether they own a newly established return home
+  or reuse a captured lexical home.
+
+### Changed
+
+- Closure literal materialization now captures the exact owning prelude.
+- Project implementation version changed from `0.2.20-SNAPSHOT` to `0.2.21-SNAPSHOT`.
+
+### Tests
+
+- Added coverage for complete top-level Closure activation establishment and for
+  nested Closure reuse of the exact captured return home.
+
+### Notes
+
+- This increment still does not execute `CanonicalCall`, bind parameters or
+  defaults/rest, execute Closure bodies, complete return homes, or execute `^`.
+- No partial observable call path is introduced.
+- No normative specification change is introduced.
+
+
 ## [0.2.20-SNAPSHOT] - 2026-09-04
 
 ### Added
