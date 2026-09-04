@@ -68,6 +68,77 @@ or mutable alias to the source wrapper. This does not make open files, sockets,
 native handles, or arbitrary resources transferable. Process has no Core P-transfer
 contract and cannot be supplied/captured into isolated parallel execution.
 
+### Bootstrap snapshot semantic identity
+
+`process.args()` and `process.environment()` expose stable bootstrap snapshots, not
+fresh logical collections acquired on every call. For each accessor whose
+bootstrap state can be established successfully, exactly one logical snapshot
+object belongs to that Protos Process for the Process lifetime. The argument
+snapshot and the Environment snapshot are distinct semantic objects, and
+snapshots belonging to distinct Protos Processes remain distinct even when their
+contents happen to be equal.
+
+Both snapshots are identity-bearing objects under the Core semantic-identity
+classification; this section does not add a value-identity category and their
+identity is not derived from their contents. Every successful acquisition of one
+of these snapshots through any Actor-local Process capability/proxy denoting the
+same logical Process denotes that snapshot's one canonical semantic identity.
+Consequently, after successful acquisitions:
+
+```text
+a: process.args()
+b: process.args()
+a === b    -> true
+a !== b    -> false
+
+e1: process.environment()
+e2: process.environment()
+e1 === e2  -> true
+e1 !== e2  -> false
+```
+
+The same rule applies when the argument snapshot is empty or the Environment has
+no entries. Where the general standard `Object` equality/hash defaults apply,
+repeated acquisitions therefore also satisfy `a == b` and `e1 == e2`; each pair
+has equal `identityHashOf` results and equal standard `hash` results; and an
+`IdentityMap` treats both members of the pair as the same key. These consequences
+come from the existing semantic-identity, identity-hash, and default equality/hash
+rules rather than from content comparison.
+
+Canonical semantic identity does not require a canonical physical wrapper,
+allocation, address, or backing store. An implementation may reuse one physical
+object; materialize distinct immutable wrappers or views; share immutable backing
+storage; use persistent structures; defer conversion or wrapper materialization;
+virtualize or scalar-replace the object; memoize results; evict and later
+rematerialize caches; or move/compact storage during garbage collection. Any such
+choice is permitted only when all semantic identity observations above, including
+`===`, `!==`, `identityHashOf`, ordinary default equality/hash, and `IdentityMap`
+behavior, remain unchanged. No global semantic-identity registry, permanent
+wrapper allocation, or stable physical address is required.
+
+Canonical acquisition is distinct from value transfer. This rule grants no new
+Actor or P transferability. If an already acquired snapshot crosses an isolation
+boundary under an independently applicable ordinary pass-by-value graph-copy
+rule, that boundary's identity rule remains authoritative: a copied
+identity-bearing destination object has the destination semantic identity and
+need not preserve the source object's `===` relation or `identityHashOf` value,
+even when immutable physical backing is shared invisibly. By contrast, an Actor
+that has an explicitly delegated Process capability and itself calls one of these
+accessors acquires the same canonical snapshot identity of that logical Process;
+it is not receiving a pass-by-value copy of another Actor's accessor result.
+Process itself has no Core P-transfer contract, and this section does not make it
+available inside P. If a snapshot value is otherwise admitted by an existing P
+input/result transfer rule, the ordinary P boundary identity semantics apply.
+
+If bootstrap data is invalid so that an accessor consistently fails, no
+successful snapshot object is produced by that acquisition and this canonical
+snapshot rule creates no special identity relation among separate failure Error
+objects. Error construction and identity remain governed by the standard Error
+semantics. Once Process termination commits, no Process capability/proxy from
+that execution domain remains usable to acquire these snapshots; any snapshot
+value already copied across an independently permitted isolation boundary follows
+that destination value's ordinary lifetime rules.
+
 ---
 ## 23. Process Arguments
 
@@ -107,19 +178,19 @@ Program/executable identity, invocation details, and host-native argv representa
 
 The complete portable argument snapshot is validated as one operation. If any application argument supplied by the host cannot be represented as a valid Protos String, `process.args()` fails rather than returning a partial snapshot, deferring failure to a later `at(index)`, introducing invalid Unicode, or using lossy conversion.
 
-The application-argument sequence is one stable Process-bootstrap snapshot established for the lifetime of that Protos Process. Repeated successful `process.args()` calls observe the same argument count, order, and String values. The implementation may return the same immutable object or equivalent immutable views; physical identity is not normative unless another specification explicitly makes it observable.
+The application-argument sequence is one stable Process-bootstrap snapshot established for the lifetime of that Protos Process. Repeated successful `process.args()` calls observe the same canonical semantic snapshot identity defined in §22, together with the same argument count, order, and String values.
 
 Representability is part of that same stable snapshot contract. If the supplied bootstrap argument sequence cannot form the complete portable String snapshot, repeated `process.args()` calls for that Process fail consistently with that bootstrap condition; an implementation must not make one call fail and a later call succeed merely by re-reading a changed host-native argument area, changing conversion strategy, or observing host mutation after Process bootstrap.
 
 Conversely, once the portable argument snapshot has been established successfully, later mutation or rewriting of host-native argv storage, launcher metadata, process-title storage, or another host representation does not alter the Protos snapshot and cannot make a later `process.args()` call fail or return different values.
 
-This stability does not require eager String allocation or copying at Process startup. An implementation may retain an immutable captured representation, validate eagerly or lazily, cache conversion results, or use another representation strategy, provided all calls are observationally equivalent to one bootstrap-time logical snapshot and the success/failure outcome is stable.
+This stability does not require eager String allocation or copying at Process startup. An implementation may retain an immutable captured representation, validate eagerly or lazily, cache conversion results, or use another representation strategy, provided all calls are observationally equivalent to one bootstrap-time logical snapshot, preserve its canonical semantic identity, and keep the success/failure outcome stable.
 
 `process.args()` does not re-query a live operating-system process-information facility on each invocation. A future host/native process-inspection API may expose mutable or best-effort native argument information separately, but that information is not the standardized Protos application-argument snapshot.
 
 Host-specific APIs may later expose a native representation separately.
 
-Arguments are immutable Process bootstrap data, not live Process authority. They may be supplied to another Actor according to the ordinary transfer rules for immutable values.
+Arguments are immutable Process bootstrap data, not live Process authority. They may be supplied to another Actor according to the ordinary transfer rules for immutable values; such transfer is distinct from acquiring the canonical snapshot through a delegated Process capability as defined in §22.
 
 ---
 ## 24. Environment
@@ -190,19 +261,19 @@ The standardized view does not silently choose the first entry, choose the last 
 
 The standardized portable Environment view is immutable for the Process lifetime. Core v0.1 provides no operation to mutate or reload the current Process environment.
 
-The represented native/bootstrap environment itself is one stable Process-bootstrap snapshot. Repeated successful `process.environment()` calls observe the same native-name domain, the same set of native entries, the same native name-identity relationships, and therefore the same standardized Environment lookup/enumeration semantics. The implementation may return the same Environment object or equivalent immutable views; physical identity is not normative unless another specification explicitly makes it observable.
+The represented native/bootstrap environment itself is one stable Process-bootstrap snapshot. Repeated successful `process.environment()` calls observe the same canonical semantic snapshot identity defined in §22, the same native-name domain, the same set of native entries, the same native name-identity relationships, and therefore the same standardized Environment lookup/enumeration semantics.
 
 Acquisition validity is part of that stable bootstrap contract. If the supplied bootstrap environment cannot form a valid standardized Environment — for example because it contains duplicate-equivalent native names under the represented environment's own identity rules — repeated `process.environment()` calls for that Process fail consistently with that same bootstrap condition. An implementation must not make one acquisition fail and a later one succeed by re-reading a changed host environment, observing native mutation, changing enumeration order, or switching first/last-winner policy.
 
 Conversely, once `process.environment()` has successfully established the standardized snapshot, later mutation of an operating-system environment block, embedding-host environment object, launcher state, or other native source does not add, remove, rename, or change bindings in that Protos Environment and cannot make a later `process.environment()` acquisition fail.
 
-This stability does not require eager copying, decoding, or complete String validation at Process startup. The implementation may capture a native snapshot representation, materialize the Environment lazily, cache duplicate-name or representation metadata, and validate individual String conversions according to the existing `get`, `contains`, and `each` rules. Those choices are permitted only when every acquisition is observationally equivalent to one bootstrap-time native Environment snapshot and the acquisition success/failure outcome is stable.
+This stability does not require eager copying, decoding, or complete String validation at Process startup. The implementation may capture a native snapshot representation, materialize the Environment lazily, cache duplicate-name or representation metadata, and validate individual String conversions according to the existing `get`, `contains`, and `each` rules. Those choices are permitted only when every acquisition is observationally equivalent to one bootstrap-time native Environment snapshot, preserves its canonical semantic identity, and keeps the acquisition success/failure outcome stable.
 
 `process.environment()` therefore does not re-query a live host environment on each invocation. A future host/native environment-inspection facility may expose mutable, refreshed, or raw native state separately, but such state is not the standardized Process Environment.
 
 Protos does not place invalid Unicode, surrogate escapes, or lossy replacements into `String` merely to preserve arbitrary host environment bytes. Host-specific/native APIs may expose exact native representations separately.
 
-The snapshot is Process bootstrap data. The implementation may return the same Environment object on repeated calls or equivalent immutable views; physical identity is not normative unless another specification explicitly makes it observable.
+The snapshot is Process bootstrap data, not live Process authority. Its semantic identity is governed by the canonical bootstrap-snapshot rule in §22; no separate physical-wrapper identity rule applies here.
 
 ---
 ## 25. Standard Input, Output, and Error
