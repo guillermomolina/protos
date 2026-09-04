@@ -18,18 +18,22 @@
 package com.guillermomolina.protos.semantic;
 
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
+import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
 import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
 import com.guillermomolina.protos.parser.ast.SurfaceMember;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
+import com.guillermomolina.protos.parser.ast.SurfaceParameter;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.parser.ast.SurfaceUnary;
+import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalMember;
+import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
 import com.guillermomolina.protos.semantic.ast.CanonicalSend;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import java.util.List;
@@ -45,6 +49,7 @@ public final class Canonicalizer {
                     new CanonicalMember(
                             canonicalize(member.receiver()), member.name(), member.span());
             case SurfaceBinary binary -> lowerBinary(binary);
+            case SurfaceClosure closure -> lowerClosure(closure);
             case SurfaceUnary unary -> lowerUnary(unary);
             case SurfaceSequence sequence ->
                     new CanonicalSequence(canonicalizeAll(sequence.expressions()), sequence.span());
@@ -53,6 +58,23 @@ public final class Canonicalizer {
                             "Surface expression is not supported by this canonicalizer slice: "
                                     + expression.getClass().getSimpleName());
         };
+    }
+
+    private CanonicalExpression lowerClosure(SurfaceClosure closure) {
+        return new CanonicalClosure(
+                closure.parameters().stream().map(this::canonicalizeParameter).toList(),
+                new CanonicalSequence(
+                        canonicalizeAll(closure.body().expressions()),
+                        closure.body().span()),
+                closure.span());
+    }
+
+    private CanonicalParameter canonicalizeParameter(SurfaceParameter parameter) {
+        return new CanonicalParameter(
+                parameter.name(),
+                parameter.defaultValue().map(this::canonicalize),
+                parameter.rest(),
+                parameter.span());
     }
 
     private CanonicalExpression lowerBinary(SurfaceBinary binary) {
