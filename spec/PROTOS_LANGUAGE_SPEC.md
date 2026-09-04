@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 247
+Document revision: 248
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -2926,6 +2926,47 @@ the snapshot. Persistent element storage, versioned views, copy-on-write state,
 or another representation is valid when the observable shallow-snapshot
 behavior is identical. Arrays that are never iterated pay no semantic cost for
 iteration snapshots.
+
+
+## Standard Array Parallel Mapping
+
+Standard Array provides:
+
+```text
+array.parallelMap(worker, arguments...)
+    -> Future
+```
+
+The receiver must be a standard Array. `worker` is validated through the same
+ordinary polymorphic invocation domain used by `Array.each`; it is not
+Closure-only.
+
+The operation snapshots the source element-reference sequence in ascending index
+order after ordinary evaluation, receiver validation, and worker-callability
+validation. For every source index, it invokes the worker in an isolated P
+computation with that snapshotted element followed by the explicit extra
+arguments.
+
+For non-empty input, every child P input must be transferable before the call
+successfully returns its Future; otherwise `NonParallelValue` is signaled
+synchronously and no child begins. The successful return fixes the complete
+logical input snapshot. Empty input performs no P transfer and returns a Future
+resolved with a fresh empty standard Array.
+
+Worker scheduling order is not observable through result ordering. On success,
+the Future resolves with a fresh standard Array of the same size whose index `i`
+contains the successfully transferred result of the worker invocation for source
+index `i`.
+
+No partial Array is published. If multiple indexed invocations fail, the
+lowest failing source index determines the operation failure independently of
+scheduler timing. Cancellation requests cooperative cancellation of unfinished
+child P work and publishes no partial result.
+
+`parallelMap` does not mutate the source Array or grant writable authority over
+its indexed state or reachable mutable element graphs. It uses the ordinary P
+snapshot/value model; the absence of generic writable Array partitioning is
+unchanged.
 
 ## Invocation Arguments, Defaults, Rest, and Spread
 

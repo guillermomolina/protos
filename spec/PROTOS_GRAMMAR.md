@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 247
+Document revision: 248
 Status: Draft  
 Last updated: 2026-09-04
 ## Prelude Binding Note

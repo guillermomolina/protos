@@ -4,6 +4,39 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.248] - 2026-09-04
+
+### Added / Closed
+- Standardized `Array.parallelMap(worker, arguments...) -> Future` as the first
+  Core high-level parallel collection operation.
+- Kept callback eligibility polymorphic like `Array.each`: the worker need only
+  be ordinarily invokable, not specifically a Closure, while all actually used
+  worker/element/argument graphs must satisfy P transfer/projection rules.
+- Defined one logical child P isolation domain per source index, with no shared
+  mutable Protos identity between worker invocations.
+- Required all non-empty child inputs to be validated/snapshotted before the
+  successful call returns and before any child becomes eligible; invalid P input
+  fails synchronously with `NonParallelValue`.
+- Defined empty input to create no P work and require no P-transferability for
+  otherwise-unused worker/extra arguments, while still validating ordinary
+  worker callability.
+- Preserved source-index order in the fresh result Array independently of
+  physical worker execution/completion order.
+- Defined deterministic multiple-failure selection by the lowest failing source
+  index and prohibited scheduler timing from selecting the reported failure.
+- Required cancellation/failure to publish no partial result Array.
+- Left worker count, chunking, batching, fusion, SIMD, work stealing, and actual
+  simultaneous execution as unobservable implementation choices.
+- Narrowed the remaining collection-API open item to
+  filter/reduce/search/sort/iteration.
+
+### Changed
+- Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
+  `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 248.
+
 ## [0.1.247] - 2026-09-04
 
 ### Fixed

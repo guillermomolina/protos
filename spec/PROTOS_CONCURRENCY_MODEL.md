@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 247
+Document revision: 248
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -4035,6 +4035,103 @@ workers. A library may expose intentionally nondeterministic behavior only when
 that nondeterminism is part of the library operation's specified contract rather
 than an accidental consequence of runtime scheduling.
 
+### 71.6A Standard `Array.parallelMap(...)`
+
+Core v0.1 standardizes:
+
+```text
+array.parallelMap(worker, arguments...)
+    -> Future
+```
+
+`parallelMap` is standard Array behavior reached through ordinary message lookup.
+It introduces no syntax, iterator object, stream/pipeline object, Task object, or
+new executable value kind.
+
+The original receiver must satisfy the standard Array receiver-domain contract.
+`worker` must be invokable through the ordinary polymorphic invocation protocol;
+it need not be a Closure. When a Closure occurs in a P input graph, the existing
+Closure-projection rules apply.
+
+The logical operation is indexed by the source Array's ascending indexes. At the
+operation boundary, after ordinary receiver/argument evaluation, Array receiver
+validation, and worker-callability validation, the operation captures the
+source Array's current element-reference sequence in ascending index order.
+
+For a non-empty source, before `parallelMap` successfully returns its Future, it
+must establish all logical P inputs needed by the per-index worker invocations.
+For source index `i`, the worker is invoked in an isolated child P domain as:
+
+```text
+worker(sourceSnapshot[i], arguments...)
+```
+
+Each index is a separate P isolation domain. Mutable worker state, mutable
+element state, and mutable explicit arguments therefore do not become shared
+mutable authority between worker invocations. If the same mutable source object
+appears at several Array indexes, each child receives an isolated logical value
+for its own invocation; no cross-child mutable alias is created.
+
+Within one child invocation graph, ordinary P graph rules preserve cycles and
+aliasing among that element, the worker, and explicit arguments. Across distinct
+child P domains there is no shared mutable Protos identity.
+
+All required non-empty child input graphs are validated before any child becomes
+eligible to execute and before the operation returns its Future. If an input
+needed by any child cannot cross P, the call synchronously signals
+`NonParallelValue`, creates no result Future, and makes no child eligible.
+Validation is conceptually in ascending source-index order when an observable
+choice is required.
+
+For an empty source Array, no worker invocation exists and no P boundary is
+crossed. The worker is still required to be ordinarily invokable, but
+P-transferability of the otherwise-unused worker/explicit arguments is not
+required. The operation returns a Future already resolved with a fresh empty
+standard Array.
+
+For a non-empty source, successful return of the result Future is the complete
+logical input snapshot point. Later caller-domain mutation of the original Array,
+its former elements, the original worker object, or explicit argument objects
+cannot change any child input.
+
+Worker invocations may execute simultaneously and may begin or complete in any
+physical order. The result, however, is deterministic by source index:
+
+```text
+result.size == sourceSnapshot.size
+result[i] == successful result of worker(sourceSnapshot[i], arguments...)
+```
+
+The resolved value is one fresh standard Array. No partial result Array is
+published before successful completion of every logical worker invocation and
+successful P-boundary transfer of every worker result.
+
+A worker's normal result crosses from its child P domain by the ordinary P result
+rules. An untransferable worker result is a failure for that source index with
+caller-domain `NonParallelValue`.
+
+If more than one source index fails, including worker-signaled Error,
+cancellation-originating failure where applicable, or untransferable-result
+failure, the operation's deterministic failure is the failure belonging to the
+lowest failing source index. Scheduler timing, carrier count, chunking, or worker
+completion order must not select a different failure.
+
+The result Future cannot resolve successfully while any logical source-index
+invocation remains incomplete. An implementation may stop/cancel work at indexes
+whose outcomes can no longer affect the specified final result, provided that
+doing so cannot change any Protos-observable behavior.
+
+Cancelling the result Future requests cooperative cancellation of unfinished
+child P work under the ordinary structured-concurrency rules. Cancellation
+publishes no partial result Array. Races between cancellation and an already
+available terminal operation outcome follow the ordinary first-terminal-
+transition Future rule.
+
+`parallelMap` does not promise a particular worker count, chunk size, task count,
+carrier count, SIMD width, or actual overlap. An implementation may batch,
+fuse, inline, vectorize, or sequentialize physical execution when the complete
+observable contract above is preserved.
+
 ### 71.7 Scheduling and Oversubscription
 
 Requesting many parallel computations does not imply creating the same
@@ -4629,7 +4726,7 @@ mechanism, or implementation detail that still requires design.
 -   Streaming
 -   Async streams
 -   Generators and suspendable iteration
--   Parallel map/filter/reduce/sort/iteration standard-library APIs
+-   Parallel filter/reduce/search/sort/iteration standard-library APIs
 -   Parallel scheduling, work-stealing, and granularity heuristics
 -   Pub/sub
 -   Advanced routers and load-balancing policies

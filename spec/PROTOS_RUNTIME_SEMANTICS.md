@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 247
+Document revision: 248
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3769,6 +3769,66 @@ The runtime may optimize argument vectors, rest Arrays, and `args` Arrays, but o
 
 No dispatch by argument type is implied. These mechanisms support dynamic arity, forwarding, and user-defined helper protocols without introducing method-overload resolution.
 
+
+
+### Standard Array parallelMap runtime semantics
+
+Conceptually:
+
+```text
+parallelMap(receiver, worker, extras, caller):
+    requireStandardArrayReceiver(receiver)
+    requireOrdinarilyInvokable(worker)
+
+    source = shallowAscendingElementSnapshot(receiver)
+
+    if source.size == 0:
+        return resolvedFuture(freshStandardArray())
+
+    prepared = freshFixedSequence(source.size)
+
+    for i in 0 .. source.size - 1:
+        prepared[i] =
+            preparePInvocationGraph(
+                worker,
+                [source[i]] + extras
+            )
+        // failure here is synchronous NonParallelValue
+        // no child is eligible before the whole loop succeeds
+
+    resultFuture = freshPendingFutureOwnedBy(caller.activation)
+
+    for i in 0 .. source.size - 1:
+        scheduleIsolatedPChild(
+            prepared[i],
+            completionIndex = i,
+            owner = resultFuture
+        )
+
+    return resultFuture
+```
+
+`preparePInvocationGraph` applies the ordinary P value/copy/projection rules.
+Distinct indexes denote distinct child P domains. The implementation may share
+immutable physical representation or otherwise optimize preparation only when
+the specified independent logical child inputs remain observationally intact.
+
+Child completion records either a successfully transferred result value or an
+indexed failure. The parent result Future resolves only after every required
+index has a successful transferred result. It resolves to a fresh standard Array
+whose indexed order is the source-index order, not completion order.
+
+If indexed failures exist, terminal failure selection is the smallest failing
+source index. Implementations may avoid or cancel later work only after doing so
+cannot change that selected logical failure or any other observable semantics.
+
+Cancellation of the parent result Future requests cancellation of unfinished
+children according to the normal structured Future/P rules. No partially filled
+result Array becomes visible.
+
+Physical chunking, batching, fusion, sequential execution, SIMD, work stealing,
+and worker count are runtime choices and do not alter the conceptual per-index P
+isolation or deterministic result/failure rules.
 
 ### Exact call-spread expansion
 
