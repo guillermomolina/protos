@@ -67,11 +67,21 @@ class CanonicalizerLazyBooleanTest {
     @Test
     void keepsRightHandSideInsideClosureInsteadOfEvaluatingItEagerly() {
         CanonicalSend send =
-                assertInstanceOf(CanonicalSend.class, canonicalizeOnly("a && b()"));
+                assertInstanceOf(CanonicalSend.class, canonicalizeOnly("a && b + c"));
 
         CanonicalClosure closure =
                 assertInstanceOf(CanonicalClosure.class, send.arguments().get(0));
         assertEquals(1, closure.body().expressions().size());
+
+        CanonicalSend addition =
+                assertInstanceOf(CanonicalSend.class, closure.body().expressions().get(0));
+        assertEquals("+", addition.message());
+        assertEquals(
+                "b",
+                assertInstanceOf(CanonicalLookup.class, addition.receiver()).name());
+        assertEquals(
+                "c",
+                assertInstanceOf(CanonicalLookup.class, addition.arguments().get(0)).name());
     }
 
     @Test
