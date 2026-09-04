@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosNumberLiteral;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
+import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
@@ -46,6 +47,13 @@ public final class CanonicalToTruffleLowerer {
         }
         if (expression instanceof CanonicalLookup lookup) {
             return new ProtosLookupNode(lookup.span(), lookup.name());
+        }
+        if (expression instanceof CanonicalIntrinsic intrinsic) {
+            if (intrinsic.kind() == CanonicalIntrinsic.Kind.ARGS) {
+                throw new UnsupportedOperationException(
+                        "args execution requires standard frozen Array materialization");
+            }
+            return new ProtosIntrinsicNode(intrinsic.span(), intrinsic.kind());
         }
 
         throw new UnsupportedOperationException(
