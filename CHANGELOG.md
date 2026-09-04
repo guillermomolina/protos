@@ -5,6 +5,34 @@ All notable changes to the Protos implementation project will be documented in t
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
 
+## [0.2.55-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Completed the I004 standard Array conformance audit against the current
+  normative collection, object-model, callable, and Error contracts.
+- Added exhaustive Array completion coverage for fresh/empty construction,
+  dense boundary indexing, exact indexed-mutation result, closed/frozen
+  mutation behavior, semantic Integer size, polymorphic non-Closure callback
+  invocation, shallow snapshot order, callback failure propagation, ordinary
+  identity/default equality, and receiver-domain rejection.
+- Added explicit coverage that an ordinary object delegating to `Array` does
+  not acquire standard Array indexed state, while an inherited Array factory
+  still creates a real standard Array whose parent is the invocation receiver.
+- Project implementation version changed from `0.2.54-SNAPSHOT` to `0.2.55-SNAPSHOT`.
+
+### Notes
+
+- The audit found the existing standard Array runtime behavior already aligned
+  with the current normative surface; this completion closes the remaining
+  conformance gaps without changing Array runtime semantics.
+- No Array literal, growth, slicing, insertion/removal, negative-from-end
+  indexing, or unrelated collection behavior is introduced.
+- I001 (`args`), I002 (represented-value lookup), I007 (Error infrastructure),
+  and the normative specification are intentionally untouched.
+
+
+
 ## [0.2.54-SNAPSHOT] - 2026-09-04
 
 ### Fixed
