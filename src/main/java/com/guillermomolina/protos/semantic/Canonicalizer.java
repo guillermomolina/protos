@@ -70,8 +70,7 @@ public final class Canonicalizer {
 
     private boolean isDeferredStandardBinaryOperator(String operator) {
         return switch (operator) {
-            case "||", "&&", "==", "!=", "===", "!==",
-                    "<", "<=", ">", ">=" -> true;
+            case "||", "&&", "==", "!=", "===", "!==" -> true;
             default -> false;
         };
     }
