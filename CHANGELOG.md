@@ -4,6 +4,24 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.25-SNAPSHOT] - 2026-09-04
+
+### Fixed
+
+- Corrected the P47 callable-lowering test to import `ProtosParser` from its
+  actual `com.guillermomolina.protos.parser` package.
+
+### Changed
+
+- Project implementation version changed from `0.2.24-SNAPSHOT` to `0.2.25-SNAPSHOT`.
+
+### Notes
+
+- No production implementation or Protos semantics changed in this corrective
+  commit.
+
+
+
 ## [0.2.24-SNAPSHOT] - 2026-09-04
 
 ### Added

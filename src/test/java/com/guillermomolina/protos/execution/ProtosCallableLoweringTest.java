@@ -27,7 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
-import com.guillermomolina.protos.syntax.ProtosParser;
+import com.guillermomolina.protos.parser.ProtosParser;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
