@@ -4,6 +4,36 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.26-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added `ProtosClosureInvoker` for executing an already selected Closure through
+  activation establishment, normative parameter binding, and body execution.
+- Closure execution plans now own reusable Truffle call targets for binding and
+  body execution.
+
+### Changed
+
+- An invocation-owned return home is completed when that invocation leaves its
+  dynamic binding/body extent, including failure exits.
+- Nested Closure invocations that reuse a captured return home never complete
+  that home themselves.
+- Project implementation version changed from `0.2.25-SNAPSHOT` to `0.2.26-SNAPSHOT`.
+
+### Tests
+
+- Added coverage for selected-Closure invocation, normal owned-home completion,
+  binding failure propagation, and preservation of a captured nested return home.
+
+### Notes
+
+- This increment still does not lower or dispatch `CanonicalCall`/message sends.
+- Non-local `^` transfer itself remains unopened; this slice establishes the
+  lifecycle boundary it will target.
+- No normative specification change is introduced.
+
+
 ## [0.2.25-SNAPSHOT] - 2026-09-04
 
 ### Fixed

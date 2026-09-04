@@ -17,25 +17,32 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.oracle.truffle.api.CallTarget;
 import java.util.Objects;
 
 public final class ProtosClosureExecutionPlan {
-    private final ProtosParameterBindingNode parameterBinding;
-    private final ProtosExpressionNode body;
+    private final CallTarget parameterBindingTarget;
+    private final CallTarget bodyTarget;
 
     public ProtosClosureExecutionPlan(
             ProtosParameterBindingNode parameterBinding,
             ProtosExpressionNode body) {
-        this.parameterBinding =
-                Objects.requireNonNull(parameterBinding, "parameterBinding");
-        this.body = Objects.requireNonNull(body, "body");
+        this.parameterBindingTarget =
+                ProtosExecution.createCallTarget(
+                        Objects.requireNonNull(parameterBinding, "parameterBinding"));
+        this.bodyTarget =
+                ProtosExecution.createCallTarget(
+                        Objects.requireNonNull(body, "body"));
     }
 
-    public ProtosParameterBindingNode parameterBinding() {
-        return parameterBinding;
+    public void bind(ProtosActivation activation) {
+        parameterBindingTarget.call(
+                Objects.requireNonNull(activation, "activation"));
     }
 
-    public ProtosExpressionNode body() {
-        return body;
+    public Object executeBody(ProtosActivation activation) {
+        return bodyTarget.call(
+                Objects.requireNonNull(activation, "activation"));
     }
 }

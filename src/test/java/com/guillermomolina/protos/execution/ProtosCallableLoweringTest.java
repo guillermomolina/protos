@@ -52,7 +52,7 @@ class ProtosCallableLoweringTest {
         ProtosClosureExecutionPlan plan =
                 closure.executionPlan().orElseThrow();
 
-        ProtosExecution.createCallTarget(plan.parameterBinding()).call(invocation);
+        plan.bind(invocation);
 
         ProtosArrayValue args = invocation.arguments().orElseThrow();
         assertSame(args, invocation.context().readLocalSlot("x").orElseThrow());
@@ -78,8 +78,7 @@ class ProtosCallableLoweringTest {
         ProtosClosureExecutionPlan plan =
                 closure.executionPlan().orElseThrow();
 
-        Object actual =
-                ProtosExecution.createCallTarget(plan.body()).call(invocation);
+        Object actual = plan.executeBody(invocation);
 
         assertSame(invocation.arguments().orElseThrow(), actual);
     }
