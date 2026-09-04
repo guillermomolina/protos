@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.267] - 2026-09-04
+
+### Fixed
+- Removed the implementation-selected choice in `close()` between waiting for a
+  previously accepted pending operation and forcing that operation to fail.
+- Defined the close cutover in terms of the existing I/O commitment boundary:
+  accepted-but-uncommitted operations fail with the closing-or-closed error,
+  while already-committed operations retain their ordinary terminal aftermath.
+- Required close to wait only for previously accepted operations whose semantic
+  effects had already committed before the cutover.
+- Kept closure-induced failure distinct from cancellation and preserved an
+  independent cancellation outcome when cancellation wins before the cutover.
+- Applied the same commitment-based classification to operations admitted before
+  close through genuinely concurrent cross-Actor routing.
+- Preserved rejection of operations ordered after the close cutover.
+- Prevented backend/native scheduling policy from deciding whether reversible
+  accepted work drains or is terminated by close.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 267. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.266] - 2026-09-04
 
 ### Closed

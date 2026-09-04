@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 266
+Document revision: 267
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -467,9 +467,24 @@ timing.
 
 When an operation and `close()` have a Protos-defined order, that order is
 preserved. In particular, an operation issued earlier on the same logical receiver
-is admitted before a later close even when its Future is still pending. That
-accepted operation retains the opportunity to reach its normal terminal outcome,
-and close waits for it or causes it to fail according to the ordinary close rules.
+is admitted before a later close even when its Future is still pending. Admission,
+however, is not an implicit drain guarantee: the close cutover deterministically
+classifies that preceding operation according to whether the operation has already
+crossed its own irreversible semantic commitment boundary.
+
+At the close cutover, every previously accepted operation that has not yet crossed
+its own irreversible semantic commitment boundary is closure-terminated. Its
+Future fails with the receiver/resource closing-or-closed error, and that operation
+contributes no effect beyond whatever its ordinary pre-commitment contract already
+permits — which for a correctly uncommitted operation is no irreversible
+operation effect. Close does not leave such an operation implementation-selectably
+running merely because a backend/native request had already been started.
+
+A previously accepted operation that had already crossed its own irreversible
+semantic commitment boundary before the close cutover is not closure-terminated.
+Its committed effect is not rolled back, and the operation continues to its normal
+success/failure aftermath under its own contract. Close waits for that terminal
+aftermath before it can complete successfully.
 
 An operation ordered after the close cutover is not accepted as resource work: it
 fails with the receiver/resource closing-or-closed error and has no operation
@@ -479,21 +494,42 @@ merely because host scheduling happens to run it first.
 For an operation and `close()` that are genuinely concurrent because they originate
 from independently progressing Actors through Actor-safe proxies, Protos defines no
 predetermined cross-Actor arrival order. Routing/admission may choose either
-request first. If the operation is admitted first, it becomes a preceding accepted
-operation and close waits for or terminates it under the ordinary close contract; if
-close establishes the cutover first, the competing operation is rejected. Once that
-relative order is chosen, host scheduling cannot retroactively move the operation
-across the cutover.
+request first. If close establishes the cutover before the competing operation is
+admitted, that operation is rejected. If the operation is admitted first, it is
+then classified at the cutover by the same commitment rule above: uncommitted
+means closure-terminated failure; already committed means its normal terminal
+aftermath is preserved. Once routing/admission and commitment have established
+those facts, host scheduling cannot retroactively move the operation across the
+cutover or rewrite its classification.
 
 The cutover is a logical receiver-lifecycle property shared by Actor-local proxies
 that denote the same receiver. It does not require one native operation at a time
 and does not make proxy object identity an ordering primitive.
 
-Closure-induced termination of an operation is distinct from cancellation of that operation. A previously pending uncommitted operation that is prevented from proceeding because close won fails with an error indicating that the receiver/resource is closing or closed; close does not report that operation as `cancelled`. If an independent cancellation request for that operation satisfies its own cancellation contract before closure wins, that operation may instead become `cancelled`.
+Closure-induced termination of an operation is distinct from cancellation of that
+operation. A previously accepted uncommitted operation terminated by close fails
+with the closing-or-closed error; close does not report it as `cancelled`. If an
+independent cancellation request satisfies that operation's own cancellation
+contract before the close cutover terminates it, the operation may instead become
+`cancelled`.
 
-Operations that had already committed when closing began are not rolled back and are never rewritten as cancelled merely because of close. They may complete successfully or fail according to their operation contract, including any already-permitted partial external effect.
+Operations that had already committed when closing began are not rolled back and
+are never rewritten as cancelled or closing-failed merely because of close. They
+may complete successfully or fail according to their operation contract, including
+any already-permitted partial external effect.
 
-Successful close completion requires every operation accepted before closing to have reached a terminal Future state and the receiver's required resource-release work to have completed successfully. Close need not wait for a pending operation to succeed: it may cause that operation to fail as specified above. This rule prevents a successful close from leaving accepted I/O operations indefinitely pending.
+Successful close completion requires every operation accepted before closing to
+have reached a terminal Future state and the receiver's required resource-release
+work to have completed successfully. Because every uncommitted accepted operation
+is closure-terminated at the cutover, successful close never depends on an
+implementation-selected choice to keep reversible accepted work running
+indefinitely. Only operations whose own semantic effects had already committed may
+remain in progress beyond the cutover, and close waits for their required terminal
+aftermath.
+
+`close()` therefore has one portable treatment of preceding accepted work:
+uncommitted work fails at the close cutover; committed work keeps its ordinary
+aftermath; later work is rejected.
 
 Successful close completion means that the receiver/resource is permanently released or unusable according to its lifecycle contract.
 
