@@ -409,38 +409,83 @@ incarnation and observable execution state are preserved.
 ActorRef is a communication capability. Possessing an ActorRef does not
 by itself demonstrate Authority for a Group, Cluster, exclusive role, or
 other authoritative scope.
-## 43. Spawn Backpressure
+## 43. Actor Creation Admission and Backpressure
 
 **CLOSED --- REVISED**
 
-If the scheduler cannot admit a new Actor within currently available
-capacity and placement policies, Actor creation applies backpressure
-rather than failing immediately or forcing unlimited oversubscription.
+The public Actor-creation contract is owned by `ACTORS.md` §8:
 
-Conceptually:
+```text
+Actor.spawn(...) -> ActorRef
+```
 
-    spawn(...)
-        -> SpawnOperation
-        -> PENDING
-        -> capacity becomes available
-        -> Actor initialization
-        -> READY
+After that section's synchronous validation, module-identity resolution, and
+initialization-value transfer have succeeded, the creation cutover has already
+established exactly one Actor incarnation, its identity, and its `ActorRef`.
+Placement and admission must not replace that result with a `SpawnOperation`,
+Future, wait handle, or other public coordination object, and
+`Actor.spawn(...)` does not remain pending merely because execution capacity is
+not currently available.
 
-A pending SpawnOperation may be waited on, cancelled, or subject to a
-timeout.
+Admission is instead a prerequisite for progress of the already-created
+incarnation through `INITIALIZING`. If no currently usable placement satisfies
+the active hard constraints and admission policy, that same incarnation remains
+`INITIALIZING` while the runtime waits for or re-evaluates schedulable capacity.
+It is not `READY`, and `ACTORS.md` §9 prohibits dispatch of external application
+messages before `READY`.
 
-Actor capacity does not imply one CPU or other fixed resource
-reservation per Actor. Many Actors may share the same Process.
+Before concrete Process hosting has been established, the runtime may reconsider
+candidate Processes or Nodes as feasibility, reachability, membership, or
+capacity changes. Such candidate changes do not create another Actor, change the
+`ActorRef`, or constitute Actor migration. Once the incarnation has been admitted
+to and is hosted by a Process, the ordinary Process/Actor lifecycle rules apply;
+in particular, known termination of that hosting Process terminates the Actor.
 
-The scheduler places Actors using capacity that already exists.
+Capacity shortage therefore applies backpressure to Actor initialization
+progress. It does not, by itself:
 
-Pending demand may contribute to Protos capacity-demand signals.
+- fail `Actor.spawn(...)`;
+- authorize unlimited oversubscription;
+- create another Actor incarnation when capacity later appears;
+- impose an implementation-selected spawn timeout or deadline; or
+- cancel or terminate the incarnation because admission has taken too long.
 
-An external or explicitly integrated Infrastructure Controller may react
-by provisioning additional capacity.
+Core v0.1 defines no creation-specific wait, cancellation, timeout, or deadline
+surface. `ActorRef.stop()` remains the ordinary public way to request termination
+of the returned incarnation, including while it is `INITIALIZING`. If compatible
+capacity never appears and no independent lifecycle/failure event terminates the
+Actor, the incarnation may remain `INITIALIZING` indefinitely.
 
-`spawn()` itself does not create Processes, Nodes, Clusters, Pods, VMs,
-or machines.
+A live incarnation waiting for Actor admission is **continuously
+admission-eligible** when, from some point onward, every semantic prerequisite
+other than the occurrence of a compatible admission opportunity remains
+satisfied, the incarnation remains live, and compatible admission opportunities
+in its applicable scheduling scope continue to occur. Such an incarnation must
+eventually either advance through admission or become terminal for an
+independently defined semantic reason. Later Actor-creation demand must not
+consume recurring compatible opportunities so as to postpone that continuously
+eligible incarnation forever.
+
+This is weak admission fairness, not a latency, ordering, reservation, or
+throughput guarantee. It provides no progress guarantee while no compatible
+admission opportunity occurs and does not require a particular queue, scheduler,
+placement algorithm, or resource-accounting representation.
+
+Actor capacity does not imply one CPU or other fixed resource reservation per
+Actor. Many Actors may share the same Process. The runtime uses capacity that has
+become available through the normal Process/Node/runtime lifecycle.
+
+Live `INITIALIZING` incarnations waiting for placement/admission may contribute
+to semantic capacity-demand signals. Implementations may represent that demand
+internally with queues, tickets, counters, scheduler records, or other machinery,
+but no such representation is a Protos-visible creation-operation identity.
+
+An external or explicitly integrated Infrastructure Controller may react to
+capacity demand by provisioning additional raw capacity. `Actor.spawn(...)`
+itself does not create Processes, Nodes, Clusters, Pods, VMs, or machines.
+New capacity becomes usable only through the normal bootstrap, discovery, and
+membership rules of this document.
+
 ## 44. Hierarchical Runtime Domains
 
 **CLOSED**
@@ -513,8 +558,10 @@ Soft resource pressure normally affects placement scoring and
 contributes to proactive capacity-demand signals.
 
 When pressure becomes sufficiently severe, the runtime may temporarily
-stop admitting additional Actors, causing SpawnOperations to remain
-pending and applying backpressure.
+stop advancing newly created Actor incarnations through admission. Those
+incarnations remain `INITIALIZING` under §43, so the backpressure delays their
+initialization progress rather than changing the public result or synchronously
+failing `Actor.spawn(...)`.
 
 Admission decisions are adaptive and multidimensional.
 
@@ -700,6 +747,23 @@ does not implicitly reduce Group desired cardinality. If desired state
 still requires capacity, the Group Controller may create a replacement
 Actor.
 
+A live Actor incarnation already created by Group reconciliation to satisfy a
+known membership deficit remains an in-flight candidate while it awaits
+admission or initialization. It is not an eligible routing member merely because
+it exists: normal readiness and Group-membership eligibility still apply.
+However, reconciliation must not treat that known in-flight candidate as
+nonexistent solely because it has not reached `READY`, then repeatedly create
+additional incarnations for the same observed deficit. If that candidate
+terminates, fails initialization, is deliberately withdrawn, or otherwise ceases
+to be a viable candidate, the unsatisfied desired state remains and ordinary
+reconciliation may create a fresh incarnation.
+
+This accounting rule does not turn desired cardinality into an instantaneous
+exact-count invariant. Concurrent controllers, delayed observations, partitions,
+or membership uncertainty may still produce the temporary under/over-cardinality
+already permitted above. An implementation may represent in-flight reconciliation
+intent however it chooses; Core exposes no `SpawnOperation` for that purpose.
+
 Failure policy and Group desired-state reconciliation are independent. A
 failure policy such as Stop determines what happens to the failed Actor
 incarnation; it does not suppress Group reconciliation. Where multiple
@@ -845,14 +909,19 @@ Group-control decisions, and exposes semantic capacity demand.
 
 Capacity demand may reflect conditions such as:
 
--   Pending SpawnOperations
+-   Live Actor incarnations waiting for placement/admission during `INITIALIZING`
 -   Group demand with insufficient eligible members
 -   Resource pressure
 -   Hard placement/resource constraints
 -   Unsatisfied availability objectives
 -   Missing independent failure-domain capacity
 
-Capacity demand is information, not an imperative provisioning order.
+Capacity demand is information, not an imperative provisioning order. It has no
+required one-object-per-demand representation and does not imply a public
+creation-operation handle. A runtime may aggregate, coalesce, split, or otherwise
+represent demand internally provided that doing so does not change Actor
+identity, lifecycle, admission fairness, Group reconciliation, or any other
+portable observable behavior.
 
 An external or explicitly integrated Infrastructure Controller decides
 whether and how to satisfy that demand according to the capabilities,
@@ -1793,11 +1862,6 @@ mechanism, or implementation detail that still requires design.
 -   Advanced Group routing policies
 -   Group broadcast and multicast semantics
 -   Group membership transition protocol
--   Exact `spawn` API and syntax
--   Actor bootstrap representation
--   Exact SpawnOperation API
--   Exact SpawnOperation states
--   SpawnOperation timeout and cancellation API
 -   Exact current-behavior installation/replacement API
 -   Exact SendOperation API
 -   Exact SendOperation states

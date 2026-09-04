@@ -8,6 +8,37 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.354] - 2026-09-04
+
+### Actor creation admission model
+- Closed D016 by preserving `Actor.spawn(...) -> ActorRef` as the sole Core
+  creation result and removing the residual public `SpawnOperation` model.
+- Fixed the creation cutover: after synchronous resolution/transfer validation,
+  exactly one Actor incarnation, identity, and `ActorRef` exist; capacity
+  admission may delay that incarnation in `INITIALIZING` but cannot suspend or
+  synchronously fail `spawn` merely because capacity is unavailable.
+- Defined pre-`READY` messaging through the existing bounded
+  routing/acceptance/failure rules, with no bootstrap mailbox or second delivery
+  protocol, and retained initialization failure/stop as lifecycle outcomes of the
+  already-created incarnation.
+- Recast spawn backpressure, adaptive admission, semantic capacity demand, and
+  infrastructure provisioning around live `INITIALIZING` incarnations rather
+  than creation-operation objects, including weak actor-admission fairness and
+  the absence of implicit spawn timeout/deadline/cancellation.
+- Required Group reconciliation to account for known in-flight Actor candidates
+  without making them routing-eligible before readiness, preventing repeated
+  creation for the same observed deficit while preserving the existing
+  convergent/temporarily-over-or-under-cardinality model.
+- Removed stale open-design entries for the already-closed spawn/bootstrap and
+  `SpawnOperation` APIs.
+
+### Compatibility
+- Removes contradictory residual `SpawnOperation` semantics from the normative
+  distributed runtime. Implementations must return the `ActorRef` at the Actor
+  creation cutover and keep placement/admission/provisioning bookkeeping
+  unobservable except through already-defined lifecycle, communication, and
+  capacity-demand semantics.
+
 ## [0.1.353] - 2026-09-04
 
 ### Non-resumable Error handling in Actors

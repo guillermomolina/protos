@@ -251,9 +251,21 @@ The complete initialization argument graph is then transferred/delegated before
 `spawn` returns. `NonTransferableValue` is synchronous and creates no observable
 partial Actor. A capability with an explicit Actor-delegation contract, including
 Process, uses that contract; nothing is inherited merely because the creator has
-it. After these validations, one incarnation is created and its `ActorRef` is
-returned even if initialization is still pending. Later bootstrap failure is
-therefore Actor initialization failure, not retroactive failure of `spawn`.
+it.
+
+After those validations, successful creation has one semantic cutover: exactly
+one new Actor incarnation comes into existence, its incarnation identity is
+fixed, and the `ActorRef` denoting that identity exists. `Actor.spawn(...)`
+returns that `ActorRef` without waiting for placement/admission, bootstrap
+execution, or the `READY` transition. Core creates no `SpawnOperation`, Future,
+wait handle, or other public coordination object for Actor creation. Lack of
+currently usable Actor capacity is not a synchronous `spawn` failure; runtime
+admission/backpressure after the creation cutover is owned by
+`DISTRIBUTED_RUNTIME.md` §43.
+
+Later bootstrap or initialization failure is therefore failure of that already
+existing Actor incarnation, not retroactive failure of `spawn`. The returned
+`ActorRef` remains bound to that same incarnation if it later terminates.
 
 `Actor.current()` returns the `ActorRef` of the current incarnation. Repeated calls
 in that incarnation denote the same semantic identity under `===`; the operation
@@ -281,8 +293,18 @@ The conceptual initial lifecycle is:
 An Actor processes no external messages until initialization completes
 successfully.
 
-Messages arriving while the Actor is INITIALIZING may be queued, but
-they are not dispatched until the Actor reaches READY.
+The returned `ActorRef` may be used while its Actor is `INITIALIZING`.
+`send()` and `request()` then use their ordinary bounded delivery,
+backpressure, acceptance, cancellation, failure, and uncertainty rules. A
+delivery may remain pre-acceptance while the Actor is not yet ready to accept
+more work, or it may cross the concrete-Actor acceptance boundary and be retained
+in that Actor's bounded ownership. No accepted external message is dispatched to
+application behavior until the Actor reaches `READY`.
+
+`INITIALIZING` therefore creates neither an unbounded bootstrap mailbox nor a
+second message-delivery protocol. Whether a particular delivery has crossed the
+existing acceptance boundary determines its later failure/stop outcome; readiness
+does not redefine that boundary.
 
 If initialization fails with an unhandled error, that is an unhandled fatal
 failure of that Actor incarnation. The Actor never reaches READY and instead
@@ -1031,8 +1053,9 @@ behavior object established for the READY cutover, and each external message tur
 dispatches against that same object.
 
 This section closes the former open ledger item `Behavior requirements before
-READY`. The exact bootstrap API or syntax by which initialization establishes
-that initial behavior remains a separate open topic.
+READY`. Actor creation/bootstrap acquisition and establishment of the initial
+behavior are defined by §8; this section introduces no second bootstrap or
+behavior-installation API.
 
 ## 19. Buffers
 
