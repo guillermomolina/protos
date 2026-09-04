@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 282
+Document revision: 283
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -6185,6 +6185,22 @@ If the Error graph itself is not P-transferable, the Future instead fails with a
 caller-domain `NonParallelValue`.
 
 ### P-local cooperative Future work
+
+### Actor transfer does not synthesize resource proxies
+
+Actor value-graph validation classifies the values actually supplied. For an
+existing non-transferable resource value:
+
+```text
+validateActorTransfer(resource):
+    if resource has no explicit Actor-transfer contract:
+        signal NonTransferableValue
+```
+
+The validation path must not invoke an implicit "make proxy", "reopen",
+"duplicate handle", or "route via service" conversion. Proxy provisioning is a
+separate semantic operation and may occur only through an explicitly defined
+facility.
 
 ### Foreign mutable state cannot become shared Protos memory
 

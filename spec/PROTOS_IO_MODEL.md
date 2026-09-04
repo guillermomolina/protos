@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 282
+Document revision: 283
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -1997,6 +1997,23 @@ The Process capability itself is not an ordinary cross-Actor value that should b
 For example, an Actor that needs output may receive an Actor-safe output capability without automatically receiving stdin, environment, filesystem authority, or every other capability held by the delegator.
 
 A live non-transferable host resource such as an open file or socket is not made transferable merely because another Actor needs equivalent access. The runtime may instead provision an Actor-local proxy/capability routed to an appropriate service while preserving the observable protocol and isolation semantics.
+
+### Non-transferable live resources are never auto-proxied
+
+Actor transfer of an existing live resource and provisioning a new proxy are
+different semantic operations.
+
+If a `send()`/`request()` payload or reply graph contains a live resource that is
+non-transferable under the concurrency model, transfer fails with the ordinary
+`NonTransferableValue` rule. The runtime must not make that transfer succeed by
+silently creating a proxy, reopening the resource, duplicating a native handle,
+or substituting another routed capability.
+
+An Actor-local proxy/capability may be provisioned only through a distinct
+facility whose contract defines its resource target, authority, identity,
+ordering, failure, cancellation, close/lifetime, and state-sharing semantics.
+Such a proxy is a new capability value; it is not the original resource becoming
+transferable.
 
 Different Actors may therefore hold distinct Actor-local capability objects that ultimately refer to the same Process-local service without sharing ordinary mutable Protos object identity.
 

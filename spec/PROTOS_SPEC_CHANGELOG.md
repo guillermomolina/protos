@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.283] - 2026-09-04
+
+### Closed
+- Closed `Non-transferable resource capabilities` and `Foreign-resource proxies`.
+- Distinguished transfer of an existing value from provisioning a new
+  proxy/routed capability.
+- Required ordinary Actor transfer of a non-transferable live resource to fail
+  with `NonTransferableValue`; no runtime may silently proxy, reopen, duplicate,
+  broker, or substitute the resource to make transfer succeed.
+- Defined proxy/capability provisioning as a separate semantic operation that
+  must specify identity, authority, ordering, failure, cancellation,
+  close/lifetime, and state-sharing behavior.
+- Clarified that equivalent access to an external resource is not equivalent to
+  transferring the original capability.
+- Applied the same no-auto-proxy rule to P.
+- Removed both corresponding items from Open Design Topics.
+
+### Changed
+- Updated `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  283.
+
 ## [0.1.282] - 2026-09-04
 
 ### Fixed

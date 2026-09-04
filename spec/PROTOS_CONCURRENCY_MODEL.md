@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 282
+Document revision: 283
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -1985,6 +1985,76 @@ explicit P-safe contract consistent with §71.
 
 This section closes the former open ledger items `Java interoperability
 isolation`, `Java static mutable state`, and `Native global state`.
+
+## 24L. Non-Transferable Resources Never Auto-Proxy
+
+**CLOSED**
+
+Core v0.1 distinguishes **transfer of an existing value** from **provisioning a
+new capability**.
+
+When an Actor message/reply value graph contains a non-transferable live resource
+or foreign-resource value, the ordinary Actor transfer rule applies exactly as
+defined in §16:
+
+```text
+attempt to transfer existing non-transferable resource
+    -> NonTransferableValue
+    -> no partial message/reply transfer
+```
+
+The runtime must not silently replace that value with a proxy, broker handle,
+remote stub, service reference, duplicate open handle, reopened resource, or
+other newly created capability in order to make transfer succeed.
+
+Such substitution would change observable semantics including identity,
+authority, lifetime, failure, ordering, cancellation, close behavior, resource
+position/state, and possibly external effects. It is therefore not an
+implementation optimization of value transfer.
+
+This rule applies to, among other non-transferable values:
+
+- open files;
+- sockets and other live stream/resource endpoints;
+- native resource handles;
+- foreign objects without an explicit Actor-transfer contract;
+- resource wrappers whose semantics depend on Actor-/Process-local ownership;
+- any capability that another normative rule declares non-transferable.
+
+A proxy or routed capability may still be a valid design, but it is a **distinct
+provisioning operation** with its own contract. Such a facility must define, at
+minimum:
+
+- how the new proxy/capability is obtained;
+- what resource/service it denotes;
+- whether it preserves or replaces identity;
+- its authority scope and whether authority is attenuated;
+- operation ordering and concurrency;
+- failure and unreachability behavior;
+- cancellation/commitment behavior;
+- close/lifetime/ownership semantics;
+- whether state such as file position is shared, copied, virtualized, or
+  independently maintained;
+- Actor/P transferability of the resulting proxy value itself.
+
+A separately provisioned Actor-local proxy may route operations to an owning
+Actor, Process service, resource broker, host service, or another explicit
+authority boundary. That does not make the original live resource transferable.
+
+Likewise, "equivalent access" is not "the same value transferred". Opening the
+same path again, reconnecting to the same network address, duplicating an OS
+handle, or routing through a service can all have semantics different from
+transferring the original capability and must never be substituted implicitly.
+
+Physical same-host placement, shared memory, OS handle-passing support, Java
+reference reachability, or native pointer reachability do not weaken this rule.
+
+The same principle applies to P: a non-P-transferable resource cannot be made
+valid P input/result by silently inserting a proxy. A future P-safe capability
+must have an explicit P crossing contract.
+
+This closes the former open ledger items `Non-transferable resource capabilities`
+and `Foreign-resource proxies`.
 
 ## 25. Parent Actor Versus Failure Authority
 
@@ -5864,8 +5934,6 @@ mechanism, or implementation detail that still requires design.
 -   Message serialization format
 -   Serialization versioning
 -   Schema evolution
--   Non-transferable resource capabilities
--   Foreign-resource proxies
 -   Timers
 -   Clock semantics
 -   Resource limits and quotas
