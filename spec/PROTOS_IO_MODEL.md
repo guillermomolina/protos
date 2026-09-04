@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 280
+Document revision: 281
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -1764,6 +1764,14 @@ size()
 at(index)
 each(block)
 ```
+
+For this Process-argument snapshot, `size()` returns the exact semantic non-negative Integer equal to the number of application-argument String values in the snapshot. It is a synchronous observation of already-established bootstrap data and introduces no hidden suspension or external acquisition.
+
+`at(index)` uses the same standard zero-based indexed domain as `Array.at`: `index` must be an exact semantic Integer and must satisfy `0 <= index < size()`. There is no negative-from-end indexing, numeric coercion, truncation, wrapping, saturation, or host-width interpretation. For a valid index, `at(index)` returns the exact String value at that logical position in the Process-argument snapshot. For a non-Integer, negative, or out-of-range index, it fails under the same standard indexed-access failure semantics as `Array.at`; it does not return `null` merely to represent invalid indexing.
+
+This index-domain reuse does not make the Process-argument snapshot a standard Array, require Array object identity, or confer Array mutability. It only gives its promised immutable sequential `size()`/`at(index)` protocol the same portable index meaning already used by Core's standard zero-based sequence.
+
+An empty Process-argument snapshot therefore has `size() == 0`, and every `at(index)` invocation fails under that indexed-access rule.
 
 For this Process-argument snapshot, `each(block)` uses the same ordinary polymorphic callback-invocation domain as the standard Core `each` operations; it is not Closure-only. After ordinary receiver/argument evaluation has established the snapshot receiver and supplied `block`, the operation validates that `block` is callable without invoking it. A non-callable callback fails before any argument callback runs.
 

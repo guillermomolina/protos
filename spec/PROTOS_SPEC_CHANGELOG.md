@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.281] - 2026-09-04
+
+### Fixed
+- Completed the `size()` / `at(index)` contract of the immutable sequence
+  returned by `process.args()`.
+- Defined `size()` as the exact non-negative Integer application-argument count
+  over already-established bootstrap data, with no hidden suspension.
+- Reused the standard `Array.at` zero-based index domain: exact semantic Integer
+  only, `0 <= index < size()`, with no negative indexing, coercion, wrapping,
+  truncation, saturation, or host-width interpretation.
+- Defined valid `at(index)` to return the exact String at that snapshot position.
+- Defined invalid type/negative/out-of-range indexing to use the same standard
+  indexed-access failure semantics as `Array.at`, never `null` as an invalid-index
+  sentinel.
+- Kept Process-argument snapshots free to use non-Array representation/object
+  identity and preserved their immutability.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 281. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.280] - 2026-09-04
 
 ### Closed
