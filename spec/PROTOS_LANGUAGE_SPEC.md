@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 271
+Document revision: 272
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -1787,6 +1787,32 @@ matching handler is found, Core's unwinding semantics transfer control to that
 handler and abandon the signaling continuation. If no matching handler is
 found, the error reaches the applicable outermost execution boundary according
 to the existing unhandled-error rule.
+
+### Core v0.1 non-resumable error model
+
+Core v0.1 has one standard language-level failure family rooted at `Error`.
+It does not define a separate standard `Exception` hierarchy or a second
+continuable-exception category.
+
+`Error.signal()` is non-resumable. Once signaling begins, the continuation at
+the signaling point is abandoned. A matching handler may determine the result
+of the enclosing `handle(...)` operation under the existing unwinding rules,
+but it cannot return, resume, retry, or supply a value back into the abandoned
+`Error.signal()` invocation.
+
+Core v0.1 therefore defines no standard `resume`, `retry`, `restart`,
+`useValue`, continuable-signal, or arbitrary continuation-reentry operation for
+error handling. A user/library object may of course define ordinary messages
+with such names, but those messages have no privileged relationship to Core
+error signaling.
+
+This boundary is deliberate rather than a claim that resumable recovery is
+intrinsically undesirable. A future standard may define explicit recovery
+continuations or restart-style mechanisms, but doing so requires a separate
+semantic contract for recovery availability, dynamic extent, effects already
+performed, suspension, Futures, Actor/P boundaries, and cancellation. Such a
+future mechanism must not retroactively make Core v0.1 `Error.signal()`
+resumable.
 
 The standard method takes no arguments. Constructing or enriching an error is
 separate ordinary object/protocol behavior and occurs before signaling. Core

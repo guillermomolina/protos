@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 271
+Document revision: 272
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -1684,6 +1684,39 @@ than performing ordinary overridable message dispatch to a possibly modified
 `signal` slot. Conversely, an explicit source-level `error.signal()` expression
 is an ordinary message send and therefore follows ordinary lookup/override
 rules before the standard behavior, if selected, reaches this primitive.
+
+
+
+### Non-resumability invariant
+
+Core error transfer is an unwind transfer, not a resumable call/return protocol.
+
+After `signalError(error)` selects a matching handler, the signaling
+continuation is dead for Core semantic purposes. Executing the handler does not
+retain an implicit continuation token for the `Error.signal()` call and handler
+return does not re-enter the signaling activation.
+
+Conceptually:
+
+```text
+signalError(error):
+    handler = selectInnermostMatchingActiveHandler(error)
+
+    if handler exists:
+        deactivate handler
+        unwind to handler boundary
+        return executeHandlerAtBoundary(handler, error)
+
+    terminate or fail at the applicable outer execution boundary
+```
+
+The conceptual `return` above is the result delivered at the handler boundary;
+it is not a return to the original `Error.signal()` caller.
+
+Implementations must not expose host-language resumable exceptions,
+continuations, stack reification, debugger facilities, fibers, or VM exception
+machinery as an implicit way to resume a Core signaling point. Any future
+restart/recovery facility requires an explicit Protos semantic contract.
 
 ### Standard Handler Installation
 

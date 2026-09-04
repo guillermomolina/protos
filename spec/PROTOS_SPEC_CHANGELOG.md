@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.272] - 2026-09-04
+
+### Closed
+- Closed Core v0.1 error signaling as strictly non-resumable: once
+  `Error.signal()` begins, its signaling continuation is abandoned and a
+  matching handler cannot return or inject a value back into that signal point.
+- Defined one standard failure family rooted at `Error`; Core v0.1 introduces no
+  separate standard `Exception` hierarchy or implicit continuable-exception
+  category.
+- Defined no privileged `resume`, `retry`, `restart`, `useValue`, or equivalent
+  recovery operation in Core v0.1.
+- Clarified that a handler's normal result is the result of the enclosing handler
+  boundary, not a result returned to the abandoned signaling call.
+- Reserved restart/recovery-style continuable handling for a future explicit
+  semantic design without retroactively changing Core v0.1 `Error.signal()`.
+- Prohibited host exception/continuation machinery from leaking implicit
+  resumability into portable Protos semantics.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 272.
+  `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain normative
+  clarification in this revision.
+
 ## [0.1.271] - 2026-09-04
 
 ### Closed
