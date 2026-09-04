@@ -47,14 +47,24 @@ defined in this section is Boolean-family behavior: when ordinary lookup selects
 that standard behavior, the original receiver must be exactly canonical `true`
 or canonical `false`. An incompatible original receiver signals an `Error`
 under the standard semantic-family receiver-domain rule in `OBJECT_MODEL.md`.
-The term Boolean family in this specification names this semantic family; Core
-v0.1 does not thereby require a third standard prelude object or prototype named
-`Boolean`. If such a name exists for some other independently specified reason,
-it does not define Boolean membership here. Delegating to canonical `true` or
-canonical `false`, or to an object that supplies standard Boolean protocol
-behavior, does not make the original receiver one of the two canonical Boolean
-values. Any standard protocol check that requires a Boolean accepts exactly
-canonical `true` or canonical `false`.
+The term Boolean family in this specification names this semantic family. Core
+v0.1 defines **no standard prelude binding, object, or prototype named
+`Boolean`**. `Boolean` remains an ordinary identifier name: a program or library
+may create or shadow a binding with that name through the ordinary slot and
+lookup rules, but any object obtained from such a binding does not thereby
+define Boolean membership.
+
+Consequently, when ordinary bare-name lookup finds no program- or
+library-provided binding named `Boolean`, evaluating `Boolean` signals the
+ordinary missing-lookup `Error`. Expressions such as `Boolean.parent()` and
+`Boolean.slotNames()` therefore have no standard Core v0.1 receiver to inspect;
+in that situation evaluation fails while resolving `Boolean`, before either
+member lookup or invocation occurs.
+
+Delegating to canonical `true` or canonical `false`, or to an object that
+supplies standard Boolean protocol behavior, does not make the original receiver
+one of the two canonical Boolean values. Any standard protocol check that
+requires a Boolean accepts exactly canonical `true` or canonical `false`.
 
 A custom object may nevertheless define or override any of these selectors with
 its own ordinary behavior; doing so does not introduce truthiness and does not

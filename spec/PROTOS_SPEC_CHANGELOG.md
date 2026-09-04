@@ -8,6 +8,31 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.364] - 2026-09-04
+
+### Boolean standard-object surface (D026)
+- Resolves the normative contradiction over a standard `Boolean` object:
+  Core v0.1 defines exactly the canonical Boolean values `true` and `false` and
+  installs no standard prelude binding, object, or prototype named `Boolean`.
+- Makes the observable consequence explicit: absent an ordinary program/library
+  binding named `Boolean`, bare lookup of `Boolean` signals the normal
+  missing-lookup `Error`; `Boolean.parent()` and `Boolean.slotNames()` therefore
+  fail while resolving their receiver rather than inspecting a hidden standard
+  Boolean object.
+- Keeps `Boolean` available as an ordinary, non-reserved identifier name.
+  User/library objects bound to that name do not acquire Boolean-family
+  membership; the standard Boolean family remains exactly canonical `true` and
+  canonical `false`.
+- Removes `Boolean` from the `OBJECT_MODEL.md` illustrative list of standard
+  built-in prototype objects and leaves Boolean-family surface ownership in
+  `VALUES_AND_COLLECTIONS.md`.
+
+### Compatibility
+- Eliminates a direct contradiction between normative owners. Implementations
+  that exposed a standard Core `Boolean` prelude object were relying on the
+  contradicted interpretation and must remove that Core binding; ordinary
+  user/library bindings named `Boolean` remain valid.
+
 ## [0.1.363] - 2026-09-04
 
 ### Slot-write expression normal result (D023)

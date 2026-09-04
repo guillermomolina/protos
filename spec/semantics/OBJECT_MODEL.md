@@ -70,7 +70,9 @@ The delegation parent is fixed at object creation and cannot subsequently be cha
 
 Every Protos object may serve as the delegation parent of another object. There is no distinct "prototype object" category and no parentability capability, flag, type, predicate, or hidden classification. "Prototype" describes a role that an object plays when another object delegates to it; it is not a separate kind of object.
 
-The rule applies without exception to ordinary objects, built-in objects, immutable value objects, singleton values, execution-context objects, and every other Protos object. Consequently values such as `this`, `context`, `args`, `true`, `false`, `null`, Number values such as `42`, and String values such as `"hello"` may serve as delegation parents, as may the standard built-in prototype objects such as `Object`, `Number`, `Integer`, `Float`, `String`, and `Boolean`.
+The rule applies without exception to ordinary objects, built-in objects, immutable value objects, singleton values, execution-context objects, and every other Protos object. Consequently values such as `this`, `context`, `args`, `true`, `false`, `null`, Number values such as `42`, and String values such as `"hello"` may serve as delegation parents, as may the standard built-in prototype objects such as `Object`, `Number`, `Integer`, `Float`, and `String`.
+
+The standard Boolean-family surface is owned by `VALUES_AND_COLLECTIONS.md`. This section does not introduce or require an additional family prototype; the canonical Boolean values `true` and `false` are already covered by the general parentability rule above.
 
 Subject to the `parent-expression` grammar (see PROTOS_GRAMMAR.md), all of the following are valid parent expressions:
 
