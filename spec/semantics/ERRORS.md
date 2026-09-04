@@ -4,7 +4,7 @@ Language version: 0.1
 Status: Draft
 Last updated: 2026-09-04
 
-This document is the primary normative owner of Core Error objects, signaling, handling, propagation, and error-control semantics.
+This document is the primary normative owner of Core Error objects, signaling, handling, propagation, identity, standard error-prototype taxonomy, and error-control semantics.
 
 The material below is migrated without intended semantic change from `../PROTOS_LANGUAGE_SPEC.md`. Legacy section titles and numbering are retained so existing references remain understandable.
 
@@ -49,6 +49,98 @@ matching handler is found, Core's unwinding semantics transfer control to that
 handler and abandon the signaling continuation. If no matching handler is
 found, the error reaches the applicable outermost execution boundary according
 to the existing unhandled-error rule.
+
+### Standard failure occurrence objects and identity
+
+Core distinguishes signaling an Error object that already exists from a
+standard language/runtime/domain failure rule that must manufacture an Error
+outcome.
+
+A **standard failure occurrence** is one execution of a normative failure rule
+for which the specification does not already identify a particular Error object
+to propagate. Every standard failure occurrence produces a fresh ordinary Error
+object with fresh identity:
+
+- if the rule says only that it "signals an Error", "signals an error", or
+  otherwise promises no narrower standard category, the fresh object's immediate
+  delegation parent is the standard `Error` prototype;
+- if the rule says that it signals/fails with a named standard error prototype
+  `X`, the fresh object's immediate delegation parent is `X`;
+- the generated object is never `Error`, `X`, or another standard category
+  prototype itself, and it is never an Error instance reused from a distinct
+  standard failure occurrence.
+
+Core v0.1 therefore has **no singleton standard failure instances**. Standard
+Error prototypes are shared category/protocol objects, not cached instances for
+runtime failures. Two independently occurring lookup failures, argument
+failures, cancellation observations, I/O failures, or other standard failures
+are distinct by `===` even when they have the same standard prototype ancestry.
+
+Freshness is an observable semantic requirement, not a physical-allocation
+requirement. An implementation may scalar-replace, virtualize, elide, or otherwise
+optimize a generated Error when doing so cannot affect any Core observation. It
+must nevertheless preserve distinct identity whenever identity can become
+observable through `===`, identity hashing, handler installation, storage,
+Future failure, reflection defined elsewhere, or ordinary object reachability.
+Pooling or caching that makes two distinct standard failure occurrences observe
+the same object is non-conforming.
+
+Conversely, when semantics already identifies an Error object `e`, signaling or
+re-signaling that failure uses **exactly `e`**. In particular:
+
+- `e.signal()` signals `e` itself;
+- a handler receives that exact `e`;
+- a same-domain failed Future records and later re-signals that exact `e` under
+  the Future rules;
+- re-signaling an Error never manufactures a new instance merely because a new
+  handler search begins.
+
+`Error` and every standard Error prototype are themselves ordinary Error objects
+and are legal explicit receivers of `signal()`. Thus source code may explicitly
+execute `Error.signal()` or `Cancelled.signal()`, in which case the receiver
+prototype itself is the exact signaled object. That explicit user-directed act
+does not authorize a standard failure rule to reuse the prototype as its failure
+instance.
+
+Unless a domain contract explicitly defines visible Error payload slots, a
+standard-generated failure instance is not required to have any own
+Protos-visible slot. Diagnostic messages, native error codes, stack data, paths,
+handles, authority-bearing backend objects, and similar implementation data must
+not become visible merely because an implementation finds them useful for
+logging. A separately standardized diagnostic/reflection facility may expose only
+what its own contract permits.
+
+Error identity and hashing follow the ordinary object identity rules. Once a
+particular Error object exists, its identity is stable for as long as the object
+is observably reachable. `identityHashOf(error)` therefore has the same stability
+and collision rules as for other objects; fresh Error identity does not imply a
+unique numeric hash value.
+
+### Boundary crossing and recorded failures
+
+Freshness is defined per failure occurrence in the value/isolation domain where
+that occurrence is created. It does not create a cross-boundary identity channel.
+
+When an Error is transferred as ordinary data or as a P failure through a
+boundary whose value-transfer contract reconstructs object graphs, the receiving
+domain gets the boundary-defined reconstructed Error object. The source-domain
+Error and reconstructed receiving-domain Error are not identical. Aliasing and
+cycles inside one transferred graph follow that boundary's ordinary graph-transfer
+rules; no special remote identity, proxy, or Error singleton is introduced.
+
+Actor fatal failure is different: the unhandled Error that terminates an Actor
+incarnation remains in that Actor domain. It is not implicitly transferred,
+wrapped, copied, or re-signaled to a caller. A caller observes only the
+communication/lifecycle outcome promised by the Actor contract, such as a fresh
+caller-domain `RequestOutcomeUncertain` occurrence when applicable.
+
+When a domain explicitly records one Error as one stable failure outcome, later
+same-domain observations of **that recorded outcome** preserve the exact recorded
+Error rather than creating fresh failures. This applies to `failed(error)`
+Futures and to any I/O lifecycle contract that explicitly records one terminal
+failure cause. A later operation that merely encounters the same *category* but
+is not observing the same recorded outcome is a new failure occurrence and gets
+a fresh Error object.
 
 ### Core v0.1 non-resumable error model
 
@@ -96,7 +188,6 @@ Handlers are dynamically installed in the execution environment of closures.
 
 No fundamental `try`, `catch`, `throw`, or `finally` keywords are required.
 
-
 ### Standard Handler Installation Protocol
 
 Core v0.1 exposes handler installation through an ordinary message provided by
@@ -123,14 +214,20 @@ installed.
 If `body` completes normally, its result is the result of `handle`, and the
 handler is removed without invoking `handler`.
 
-If an error is signaled while the protected dynamic extent is active and
-`matchPrototype` occurs in the signaled error object's delegation chain, that
-handler is selected before any older matching handler. Core handlers are
-unwinding: execution of the signaling continuation and the remaining protected
-computation is abandoned. The selected handler frame is removed before
-`handler` is invoked, and `handler` receives the signaled error as its single
-argument. If `handler` then completes normally, its result is the result of the
-`handle` call.
+For handler matching, an Error object's matching chain consists of the signaled
+object itself followed by its ordinary delegation parents. A handler matches
+when its `matchPrototype` is any object in that chain. Category matching is
+therefore ordinary delegation matching; exact identity is the degenerate case in
+which `matchPrototype === signaledError`. Core defines no second hidden
+class/tag/identity matching channel.
+
+If an error is signaled while the protected dynamic extent is active and a
+handler matches by that rule, the dynamically innermost matching handler is
+selected before any older matching handler. Core handlers are unwinding:
+execution of the signaling continuation and the remaining protected computation
+is abandoned. The selected handler frame is removed before `handler` is invoked,
+and `handler` receives the exact signaled Error object as its single argument. If
+`handler` then completes normally, its result is the result of the `handle` call.
 
 Because the selected handler is inactive while its handler Closure executes, an
 error signaled by that Closure is searched only against still-active outer
@@ -186,7 +283,9 @@ This protocol adds no `try`, `catch`, `throw`, or `finally` syntax and no second
 handler type system. User and library error prototypes use ordinary delegation,
 and richer handling abstractions may be built from this single primitive
 dynamic-scope mechanism.
-An unhandled error propagates until an appropriate handler is found or the outermost execution boundary is reached.
+
+An unhandled error propagates until an appropriate handler is found or the
+outermost execution boundary is reached.
 
 Core v0.1 retains no resumable-condition authority or continuation state for
 error signaling. A future standard may add an explicit recovery/restart facility
@@ -200,9 +299,48 @@ ordinary standard-prelude object whose delegation parent is `Object`.
 
 Every object signaled as a Core language/runtime error must have `Error` in its
 delegation chain. Standard error prototypes named normatively by Core or a
-normative domain model are ordinary objects in that chain and must delegate
-directly to `Error` unless that same normative specification explicitly defines
-another parent relation.
+normative domain model are ordinary objects in that chain. Their portable parent
+relations are fixed below; implementations must not insert additional
+Protos-visible ancestors between those prototypes.
+
+The standard prototypes required by Core v0.1 are:
+
+| Standard prototype | Immediate parent | Trigger/consequence owner |
+| --- | --- | --- |
+| `Error` | `Object` | this document |
+| `SlotNotFound` | `Error` | `EXECUTION_AND_CONTROL.md` / grammar lookup rules |
+| `InvalidReturn` | `Error` | `CALLABLES.md` |
+| `Cancelled` | `Error` | `../concurrency/FUTURES_AND_TASKS.md` |
+| `FutureResolutionCycle` | `Error` | `../concurrency/FUTURES_AND_TASKS.md` |
+| `RequestOutcomeUncertain` | `Error` | `../concurrency/ACTORS.md` |
+| `NonTransferableValue` | `Error` | `../concurrency/ACTORS.md` |
+| `NonParallelValue` | `Error` | `../concurrency/PARALLEL_EXECUTION.md` |
+| `InvalidPredicateResult` | `Error` | `../concurrency/PARALLEL_EXECUTION.md` |
+| `InvalidComparatorResult` | `Error` | `../concurrency/PARALLEL_EXECUTION.md` |
+| `InvalidComparatorOrder` | `Error` | `../concurrency/PARALLEL_EXECUTION.md` |
+| `ParallelRegionOverlap` | `Error` | `../concurrency/PARALLEL_EXECUTION.md` |
+| `ParallelRegionInUse` | `Error` | `../concurrency/PARALLEL_EXECUTION.md` |
+| `ParallelRegionOutsideP` | `Error` | `../concurrency/PARALLEL_EXECUTION.md` |
+| `IOError` | `Error` | `../io/IO_CORE.md` and the modular I/O documents |
+| `InvalidIOArgument` | `IOError` | `../io/IO_CORE.md` |
+| `IOLifecycleError` | `IOError` | `../io/IO_CORE.md` |
+| `IOCapacityExhausted` | `IOError` | `../io/IO_CORE.md` / `../io/BYTE_IO.md` |
+| `EncodingError` | `IOError` | `../io/TEXT_IO.md` / `../io/IO_CORE.md` |
+| `LineTooLong` | `IOError` | `../io/TEXT_IO.md` / `../io/IO_CORE.md` |
+
+This table owns the existence and parent relation of those standard Error
+prototype bindings. The referenced domain document owns when the corresponding
+category is used and any domain-specific effect, cancellation, commitment, or
+lifecycle consequence. A domain document need not and must not redefine the
+identity/construction rule for standard failure instances.
+
+The list is deliberately minimal. In particular, Core v0.1 does **not** promise
+separate standard prototypes merely for ordinary assignment/creation failure,
+arity/binding failure, frozen/closed object mutation, index/range failure, Map
+lookup/update failure, filesystem target absence/existence/permission, native
+path failure, or generic backend failure unless another normative rule names one
+of the tabled categories. Where those rules say only `Error`, portable code may
+match only `Error` (or a user-defined ancestor it deliberately introduced).
 
 This rule makes the portable taxonomy deliberately shallow. A specification may
 introduce a deeper standard hierarchy only by stating that hierarchy
@@ -213,10 +351,10 @@ detail.
 
 When a normative rule says only that an operation "signals an error" and does
 not name a standard error prototype, Core v0.1 guarantees only the `Error`
-category for portable handler matching. An implementation may attach
-implementation-private diagnostic metadata, but it must not expose a different
-Protos delegation ancestry for that failure as though the additional category
-were standardized.
+category for portable handler matching and the fresh-instance rule above. An
+implementation may attach implementation-private diagnostic metadata, but it
+must not expose a different Protos delegation ancestry for that failure as
+though the additional category were standardized.
 
 Conversely, user code and libraries may create ordinary error prototypes and
 arbitrary deeper delegation hierarchies beneath `Error`. Those program-defined
@@ -225,7 +363,9 @@ they do not extend the set of standard Core error categories.
 
 A prototype name appearing only as pseudocode notation is not thereby a
 standard-prelude binding. A name becomes a portable standard error prototype
-only when a normative specification explicitly defines it as such.
+only when a normative specification explicitly defines it as such and this
+taxonomy (or a later revision of its owning contract) records its parent
+relation.
 
 This taxonomy rule does not introduce checked errors, declarations, hidden
 classes, or a parallel type system. It exists solely to make the already

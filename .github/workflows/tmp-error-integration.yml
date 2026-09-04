@@ -1,0 +1,99 @@
+name: Temporary Error Semantics Integration
+
+on:
+  push:
+    branches:
+      - tmp-error-semantics-stage2
+
+permissions:
+  contents: write
+
+jobs:
+  stage:
+    if: ${{ !contains(github.event.head_commit.message, '[stage-error-changelog]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Verify base and prepare changelog
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          git merge-base --is-ancestor origin/main HEAD
+          git diff --check origin/main...HEAD
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path("spec/PROTOS_SPEC_CHANGELOG.md")
+          text = path.read_text()
+          match = re.search(r"^## \[0\.1\.(\d+)\]", text, re.MULTILINE)
+          if match is None:
+              raise SystemExit("cannot determine current global specification revision")
+          if int(match.group(1)) != 343:
+              raise SystemExit(f"expected global revision 0.1.343, found 0.1.{match.group(1)}")
+
+          entry = """
+## [0.1.344] - 2026-09-04
+
+### Error identity and portable taxonomy
+- Made `semantics/ERRORS.md` the single normative owner of standard Error-object
+  construction, identity, portable prototype taxonomy, handler matching, and
+  Core v0.1 non-resumable signaling semantics.
+- Required every independent standard failure occurrence to create a fresh Error
+  instance delegating to the promised prototype; standard Error prototypes are
+  category/protocol objects and are never implicitly reused as singleton
+  failures.
+- Preserved exact identity when an existing Error is signaled or re-signaled and
+  when one same-domain failure outcome records an Error, including repeated
+  observation of a failed Future.
+- Defined cancelled-Future observation as a fresh `Cancelled` Error instance per
+  `value()` call while `failed(error)` retains and re-signals the exact stored
+  Error within one isolation domain.
+- Standardized the minimal portable I/O Error family rooted at `IOError`, with
+  `InvalidIOArgument`, `IOLifecycleError`, `IOCapacityExhausted`, `EncodingError`,
+  and `LineTooLong`; other standard operational/backend/open/path/filesystem
+  failures remain `IOError` unless a narrower category is explicitly named.
+- Reaffirmed that fatal Actor Errors remain Actor-local, P/value-transfer
+  boundaries reconstruct Error values under their ordinary transfer rules, and
+  Core handlers cannot resume or retry an abandoned signaling point.
+- Kept retry safety dependent on I/O commitment/effect contracts rather than
+  Error category. The informative Abstract Runtime already conforms and required
+  no duplicate normative authority.
+
+### Compatibility
+- Closes previously implementation-selectable Error identity and I/O category
+  behavior. Implementations that reused standard Error prototypes/singletons for
+  runtime failures must create semantically fresh instances where required;
+  portable programs may distinguish recorded identity with `===` and categories
+  by ordinary delegation.
+
+"""
+          insert_at = match.start()
+          path.write_text(text[:insert_at] + entry + text[insert_at:])
+          PY
+          git add spec/PROTOS_SPEC_CHANGELOG.md
+          git diff --cached --check
+
+      - name: Run tests
+        run: mvn --batch-mode --no-transfer-progress test
+
+      - name: Commit staged changelog
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "OpenAI integration agent"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -m "[stage-error-changelog] Stage Error semantics changelog"
+          git push origin HEAD:tmp-error-semantics-stage2
