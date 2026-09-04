@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.227] - 2026-09-04
+
+### Fixed
+- Defined truncate-on-open as an indivisible Protos content effect: before its
+  commitment the open contributes no truncation; at commitment it establishes
+  complete logical size zero.
+- Prohibited failed or cancelled opens from exposing an intermediate nonzero
+  truncation attributable to implementation/backend stepwise resizing.
+- Required tentative truncate work to be restored, virtualized, deferred, or
+  otherwise hidden when the complete zero-size effect has not committed.
+- Preserved the existing rule that a later failure after committed truncation
+  does not restore discarded content.
+- Defined already-empty and newly-created-empty resources so `truncate` does not
+  invent a second destructive commitment when no content change is needed.
+- Kept independently authorized resource changes outside this operation-specific
+  failure-atomicity and avoided requiring the returned File to expose Truncatable.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 227. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.226] - 2026-09-04
 
 ### Fixed

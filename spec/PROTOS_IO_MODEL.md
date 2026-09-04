@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 226
+Document revision: 227
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -1156,6 +1156,20 @@ Standard `create` is an atomic/race-free open-or-create selection, not a portabl
 Writable open with `truncate` establishes initial file size zero as part of open.
 
 Read-only plus truncate is invalid.
+
+The truncate-on-open content effect is indivisible at the Protos semantic boundary. For an already-existing selected resource whose size/content would actually change, that open either has not yet committed any truncate-attributable content change, or it has established the complete requested truncation to logical size zero. A standard open must not expose a failed or cancelled truncate-on-open whose own aftermath is an intermediate nonzero truncation merely because a backend performed resizing in several steps.
+
+Before the complete zero-size effect has committed, cancellation or an open failure attributable to the truncate attempt leaves the selected resource's content and size unchanged by that truncate-on-open operation. An implementation may use tentative backend work only when it can restore, virtualize, defer publication, or otherwise prevent a partial resize from becoming the failed/cancelled open's observable effect.
+
+Once the selected existing resource has been completely truncated to size zero, that content effect is an irreversible open commitment under section 18.5. Cancellation can no longer win. The open may still fail later for another reason, but the open performs no compensating restoration of the discarded content.
+
+If the selected resource was already size zero, the truncate request is a successful content no-op and creates no additional irreversible content commitment merely by checking or confirming that state. If `create` or `createNew` creates a new empty resource, creation remains the relevant namespace commitment; requesting `truncate` does not invent a second destructive effect when the newly created resource already has size zero.
+
+This failure-atomicity concerns only content change attributable to the truncate-on-open operation. It does not freeze the selected resource against independently authorized writes, truncations, or other backend changes. Such independent activity may make a later observer see nonzero size even after this open's complete zero-size effect occurred, according to the existing cross-capability/backend ordering and visibility rules.
+
+Support for this open-time invariant does not require the returned File to expose `Truncatable`. A backend may have a race-safe/atomic open-with-truncate primitive or may emulate the invariant specifically during acquisition. If it cannot provide or emulate the all-or-zero truncate-on-open effect while preserving the other standard open guarantees, it must reject that standard open configuration rather than expose an implementation-dependent partial destructive failure.
+
+Standard truncate-on-open is therefore failure-atomic with respect to its own content effect: before commitment it contributes no truncation, at commitment it establishes complete logical size zero, and a later open failure does not roll that committed effect back.
 
 ### 18.2.1 Positioned File writes
 
