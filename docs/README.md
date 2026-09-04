@@ -29,6 +29,8 @@ Operational project state.
   can proceed without an unresolved semantic decision.
 - `IMPLEMENTATION_BLOCKERS.md` records implementation work blocked on unresolved
   normative semantics.
+- `CORE_BOOTSTRAP_ARCHITECTURE.md` defines the non-normative boundary between
+  irreducible host bootstrap machinery and Core behavior implemented in Protos.
 
 The repository intentionally has no parallel root `TODO.md`; project work should
 be classified in these ledgers instead of accumulating in an unstructured

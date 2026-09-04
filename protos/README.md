@@ -14,6 +14,10 @@ The contents of this tree are non-normative. The language specification under
   in Protos.
 - `benchmarks/` — Reproducible workloads for measuring Protos implementations.
 - `conformance/` — Specification-conformance programs, when introduced.
+- `lib/` — Source libraries distributed with the language implementation.
+  `lib/core/` contains ordinary Core behavior and standard objects that can be
+  bootstrapped faithfully from Protos source rather than hardcoded in the host
+  runtime.
 
 Examples and benchmarks may intentionally contain similar programs. Their goals
 are different: examples optimize for clarity, while benchmarks define stable

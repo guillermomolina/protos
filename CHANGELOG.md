@@ -4,6 +4,47 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.1-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added executable numeric literal materialization and semantic identity execution.
+- Added the runtime ordinary-object foundation with immutable delegation parents,
+  local/delegated lookup, slot mutation, structural open/closed/frozen state,
+  local-slot removal and snapshots, composition views, and atomic composition
+  contributions.
+- Added activation-context lookup ordering, Core error signaling, `this` and
+  `context` execution, bare/member slot mutation, member lookup-home preservation,
+  Closure materialization, and extracted-method binding foundations.
+- Added empty-Sequence execution returning canonical `null`.
+- Added canonical object composition-reservation discovery for direct local
+  declarations.
+- Added the initial standard `Context` bootstrap scaffold and fresh execution
+  contexts delegating through `Context` to `Object`.
+- Added the non-normative Core bootstrap architecture and reserved
+  `protos/lib/core/` for standard objects and behavior implemented in Protos.
+
+### Changed
+
+- Project implementation version changed from `0.2.0-SNAPSHOT` to
+  `0.2.1-SNAPSHOT`.
+- Established an explicit repository rule requiring every committed executable
+  implementation or distributable Core-library change to bump the Maven
+  implementation patch version and add its corresponding root changelog entry.
+- Limited Java-side standard-object construction to irreducible or explicitly
+  temporary bootstrap scaffolding; ordinary Core behavior should move to
+  `protos/lib/core/` as soon as it can be loaded faithfully.
+
+### Notes
+
+- This entry catches up implementation release metadata that was not maintained
+  during the preceding incremental runtime/execution work.
+- Protos Core language version remains 0.1.
+- No normative language semantics are changed by the bootstrap architecture
+  decision; observable Core behavior remains defined exclusively by `spec/`.
+- The current Java-side `Context` bootstrap is temporary scaffolding until the
+  Core source loader can construct it faithfully.
+
 ## [0.2.0-SNAPSHOT] - 2026-09-01
 
 ### Added

@@ -394,6 +394,23 @@ Implementation architecture
 
 Keep language semantics independent from the implementation framework.
 
+### Core bootstrap boundary
+
+Bootstrap only the irreducible host machinery required to execute Protos.
+Do not grow a parallel hardcoded standard library in Java when standard objects
+or behavior can be constructed or installed faithfully through ordinary Protos
+mechanisms.
+
+The detailed non-normative bootstrap architecture is documented in
+`docs/project/CORE_BOOTSTRAP_ARCHITECTURE.md`. Source for distributable Core
+behavior that can be expressed in Protos belongs under `protos/lib/core/`.
+Host-native primitives should be exposed through the ordinary object/protocol
+model wherever that model can represent them.
+
+Temporary Java-side bootstrap scaffolding must be identified as temporary and
+must not be extended into additional standard families merely for convenience.
+
+
 Prefer a pipeline with clear boundaries:
 
 source
@@ -631,6 +648,28 @@ This includes:
 The language used by the user when giving instructions does not affect the development language: all development artifacts must remain in English.
 
 User-facing Protos programs and future localization facilities are separate concerns and must not force implementation or developer-facing content into a particular natural language.
+
+Implementation versioning and changelog
+
+Every committed change that modifies executable implementation source under
+`src/` or distributable Protos library source under `protos/lib/` MUST:
+
+- increment the Maven project implementation version in `pom.xml` exactly once
+  in that commit; during active `0.x` development, use the next patch
+  `-SNAPSHOT` version unless the user explicitly approves a different
+  major/minor transition;
+- add a corresponding section to the root `CHANGELOG.md` for that exact
+  implementation version, describing the notable implementation changes in
+  English;
+- keep specification revisions separate: specification-only or
+  documentation-only commits do not increment the implementation version merely
+  because `spec/` or `docs/` changed, and normative specification changes remain
+  recorded in `spec/PROTOS_SPEC_CHANGELOG.md`.
+
+A commit that changes both implementation and documentation follows the
+implementation rule above. A version bump must not be omitted merely because the
+implementation change is incremental, internal, or part of a longer sequence of
+work.
 
 Task completion
 
