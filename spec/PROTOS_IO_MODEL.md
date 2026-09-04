@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 269
+Document revision: 270
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -1819,11 +1819,17 @@ This rule deliberately leaves the concrete native name repertoire at the host/en
 
 Environment lookup distinguishes an absent valid native name from a Protos String that cannot be losslessly represented as one native environment-variable name; the latter makes both get and contains fail rather than returning null/false.
 
-`each(block)` invokes the block with `(name, value)` String pairs. Iteration order among valid entries is unspecified.
+`each(block)` invokes the callback with `(name, value)` String pairs. Iteration order among valid entries is unspecified.
 
-Before the first block invocation of one `each(block)` call, the Environment validates that every entry belonging to the portable snapshot can be represented as a valid `(String, String)` pair. If any entry's name or value is not representable as a Protos String, `each(block)` signals the representation error and invokes `block` zero times for that call.
+`block` uses the same ordinary polymorphic callback-invocation domain as the standard Core `each` operations; `Environment.each` is not Closure-only. After ordinary receiver/argument evaluation has established the Environment and supplied `block`, the operation validates that `block` is callable without invoking it. A non-callable callback fails at that point, before Environment entry representability validation and before any user callback can run.
+
+After callback callability has been established, and before the first callback invocation of that `each(block)` call, the Environment validates that every entry belonging to the portable snapshot can be represented as a valid `(String, String)` pair. If any entry's name or value is not representable as a Protos String, `each(block)` signals the representation error and invokes `block` zero times for that call.
+
+This ordering gives deterministic validation precedence when more than one condition is invalid: callback callability is established first; complete Environment-to-String representability is established second; callback execution begins only after both validations succeed. Neither validation invokes arbitrary user callback code.
 
 This prevalidation makes portable-representation failure atomic with respect to user callbacks: an implementation cannot expose an implementation-dependent prefix/subset of valid entries and only then discover an invalid-Unicode entry according to host enumeration order.
+
+When all required validation succeeds and every callback invocation returns normally, `each(block)` returns the Environment receiver itself. Callback return values are ignored for the `each` result; the result is not `null`, the last callback result, a newly allocated collection, or an implementation-selected value. An empty valid Environment therefore invokes the callback zero times and still returns its receiver.
 
 The rule does not require a particular physical representation or a second host-environment read. The Process Environment is already a stable snapshot; an implementation may validate eagerly when constructing that snapshot, cache validation state, retain native entries, or validate on first enumeration, provided each call has the observable behavior above.
 

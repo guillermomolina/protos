@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.270] - 2026-09-04
+
+### Fixed
+- Completed the standard `Environment.each(block)` callback contract.
+- Reused the ordinary polymorphic callback-invocation domain of Core `each`
+  operations rather than making Environment iteration Closure-only.
+- Defined deterministic validation precedence: callback callability is validated
+  first without invocation, complete Environment `(String, String)`
+  representability second, and callbacks begin only after both succeed.
+- Preserved the existing zero-callback guarantee when portable Environment
+  representation validation fails.
+- Defined successful `Environment.each(block)` to return the Environment receiver
+  itself and to ignore callback return values for the operation result.
+- Defined an empty valid Environment to invoke the callback zero times and still
+  return its receiver.
+- Removed implementation freedom to return `null`, the last callback result, or
+  another implementation-selected value from successful Environment iteration.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 270. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.269] - 2026-09-04
 
 ### Added / Closed
