@@ -4,6 +4,34 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.3-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added Truffle execution for canonical object expressions without composition.
+- Bare object expressions now create fresh open ordinary objects delegating to
+  the unique `Object` root.
+- Explicit parent expressions are evaluated before object-body execution and
+  their exact result becomes the constructed object's immutable delegation
+  parent.
+- Object bodies execute through construction activations, so local slot creation
+  targets the new object while Closures skip the construction object as a lexical
+  capture scope.
+
+### Changed
+
+- Canonical-to-Truffle lowering now accepts `CanonicalObject` when all body
+  expressions are otherwise supported by the current execution slice.
+- Project implementation version changed from `0.2.2-SNAPSHOT` to
+  `0.2.3-SNAPSHOT`.
+
+### Notes
+
+- Canonical composition execution remains a separate following increment.
+- No normative specification change is introduced; this implements the current
+  object-model and execution-context contracts.
+
+
 ## [0.2.2-SNAPSHOT] - 2026-09-04
 
 ### Added
