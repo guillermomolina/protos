@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 230
+Document revision: 231
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -744,6 +744,20 @@ Possessing such a Socket transfers only the capabilities exposed by that endpoin
 A future networking domain model may define creation/listening/datagram/address/name-resolution facilities. Those facilities must make network authority and any host-dependent namespace behavior explicit and must compose with the I/O protocols defined here. Until such a model exists, implementations must not treat host APIs such as BSD/POSIX sockets, Java networking, WinSock, or ambient DNS as portable Protos semantics merely because an already-provisioned Socket object exists.
 
 A `BufferedReader(source)` requires a `ByteReadable` source and exposes `ByteReadable` over its own buffered state. It may read ahead.
+
+A standard `BufferedReader` preserves the source's EOF resumability rather than strengthening one observed source EOF into a permanent adapter EOF. If the BufferedReader has no unread buffered bytes and an ordered source read establishes EOF for the source's current sequence state, the corresponding BufferedReader read may return `null`. That observation does not by itself authorize the BufferedReader to cache a permanent EOF when the source contract permits later sequence-state changes to make data readable again.
+
+After such a non-permanent EOF observation, a later BufferedReader read with no earlier buffered data must re-evaluate the underlying source through the ordinary ordered `ByteReadable` semantics. If the source still reports EOF, the BufferedReader reports `null` again. If the source now provides bytes, those bytes become the next buffered/logical input and may satisfy that later BufferedReader read. Thus a BufferedReader over a readable standard File can observe later file growth in the same manner as the File itself, subject to the File's existing cross-capability/backend visibility rules.
+
+The adapter need not poll, subscribe, or keep an EOF read pending for hypothetical future data. A BufferedReader read that reaches a source EOF state completes according to that state; possible future resumability is considered only by a later BufferedReader read. This preserves ordinary pull semantics and does not turn buffering into implicit tail/follow behavior.
+
+If the source contract makes EOF permanent, repeated re-evaluation may be optimized away internally because every Protos-visible later read must still produce the same permanent EOF. Such memoization is representation freedom justified by the source's semantic permanence, not by an implementation guess based on one native `read` result.
+
+Buffered read-ahead does not weaken this rule. Bytes obtained before a source EOF are delivered in logical order before that EOF is exposed, and a later source state change cannot cause newly available bytes to bypass unread buffered bytes. Conversely, an implementation must not retain a stale EOF marker ahead of bytes that a later source re-evaluation makes readable.
+
+This rule is specific to byte-buffering transparency. It does not weaken a standard `TextReader`'s separately defined permanent text-EOF lifecycle: once TextReader commits its own text EOF, later growth of an underlying mutable File does not resurrect that TextReader.
+
+A standard BufferedReader therefore preserves whether EOF is permanent or resumable according to its ByteReadable source; buffering alone cannot make a resumable source EOF permanently sticky.
 
 A `BufferedWriter(target)` exposes `ByteWritable` and `Flushable`. Its successful `write()` may mean that bytes have been copied into the wrapper's own buffer; `flush()` propagates the relevant frontier to its target according to the wrapper contract.
 

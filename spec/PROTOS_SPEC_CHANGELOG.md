@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.231] - 2026-09-04
+
+### Fixed
+- Defined standard BufferedReader to preserve the underlying ByteReadable
+  source's EOF permanence/resumability instead of making one observed EOF
+  permanently sticky merely because buffering is present.
+- Required a later BufferedReader read, after a non-permanent source EOF and with
+  no earlier buffered bytes, to re-evaluate the source under ordinary ordered
+  ByteReadable semantics.
+- Preserved pull semantics: a read that reaches current EOF completes `null`
+  rather than waiting, polling, or subscribing for hypothetical future data.
+- Required unread buffered bytes to remain ahead of bytes made readable by a
+  later source-state change and prohibited stale EOF markers from bypassing them.
+- Allowed permanent-EOF memoization only when the source contract itself makes
+  EOF permanent.
+- Kept TextReader's explicitly stronger permanent text-EOF lifecycle unchanged.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 231. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.230] - 2026-09-04
 
 ### Fixed
