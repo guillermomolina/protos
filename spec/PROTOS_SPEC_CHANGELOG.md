@@ -8,6 +8,16 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.355] - 2026-09-04
+
+### String normative ownership and migration cleanup
+- Closed D012 by making `semantics/VALUES_AND_COLLECTIONS.md` the sole primary normative owner of Core String value/indexing semantics and reducing the legacy monolith String section to a navigation anchor.
+- Repaired the malformed/duplicated Encoding-conversion migration block and made `io/TEXT_IO.md` the referenced owner of the standard Encoding conversion contract.
+- Kept String literal syntax ownership in `PROTOS_GRAMMAR.md` and avoided standardizing the separate D020 `uppercase()` / `replace(...)` APIs.
+
+### Compatibility
+- This is an ownership/migration cleanup: existing String semantics are preserved while duplicate normative authority and Markdown corruption are removed.
+
 ## [0.1.354] - 2026-09-04
 
 ### Actor creation admission model

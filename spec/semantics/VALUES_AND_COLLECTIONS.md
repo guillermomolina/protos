@@ -1291,6 +1291,181 @@ or equivalent buffer-oriented protocols. This follows the general rule that
 semantic values are distinct from their external binary representation.
 
 
+## String Indexing, Mutability, and Encoded Representations
+
+`String` is an immutable Unicode text value.
+
+Core String indexing and size operate on Unicode grapheme clusters rather than bytes, encoding code units, or raw Unicode code points:
+
+```js
+text.size
+text[0]
+```
+
+conceptually correspond to grapheme-count and grapheme-at-index operations.
+
+This keeps ordinary text operations aligned with user-perceived characters.
+
+Core v0.1 does not standardize separate `String.graphemes()` or
+`String.codePoints()` convenience protocols. Libraries may provide ordinary
+messages with those names, and a later standard may define explicit lower-level
+text views, but portable Core code cannot rely on either protocol.
+
+Encoding conversion is separate from String indexing and is owned by `../io/TEXT_IO.md`.
+
+Because `String` is immutable, an operation that produces different text produces a new `String` value. Core v0.1 does not standardize `uppercase()` or `replace(...)` here; those require separate contracts.
+
+
+Here `otherString` denotes another semantic String value. The standard
+String-family `+` operation does not accept an arbitrary non-String object.
+
+Efficient incremental text construction may be provided by separate mutable library objects or buffer-oriented abstractions. Core v0.1 does not standardize a `StringBuilder` binding, prototype, constructor, or protocol.
+
+`Bytes` is a mutable raw byte sequence by default. Indexed access therefore naturally follows the existing protocol:
+
+```js
+bytes[i]          // bytes.at(i)
+bytes[i] = value  // bytes.atPut(i, value)
+```
+
+Encoded textual representations such as UTF-8 data, UTF-16 data, C strings, memory-backed strings, or similar objects may be first-class values with their own protocols.
+
+Their mutability is not globally fixed by Core. An encoded representation may expose `atPut` if mutation is meaningful and supported, or omit it if the representation is immutable or read-only.
+
+Therefore mutability is expressed behaviorally through supported messages rather than through a universal collection mutability flag.
+
+Examples of possible first-class representations include:
+
+```text
+UTF8EncodedString
+UTF16EncodedString
+CString
+MappedText
+```
+
+These names are illustrative; Core v0.1 does not require this exact library taxonomy.
+
+
+### Exact standard String indexing semantics
+
+Core v0.1 uses the **default extended grapheme-cluster** boundary rules of
+Unicode Standard Annex #29, Unicode Text Segmentation, as synchronized with
+**The Unicode Standard, Version 17.0.0** (UAX #29 revision 47), for standard
+`String.size` and `String.at`.
+
+These are the untailored default Unicode rules. A host locale, ICU version,
+operating-system text service, rendering engine, editor convention, language-
+specific tailoring, or later Unicode release must not change Core-visible
+String boundaries. Implementations may use such facilities only when they
+produce exactly the Unicode 17.0.0 default extended-grapheme-cluster result.
+
+For a String whose exact semantic value is the scalar sequence `S`, let:
+
+```text
+G = defaultExtendedGraphemeClusters17(S)
+```
+
+where concatenating the scalar sequences of the elements of `G`, in order,
+reconstructs `S` exactly. Segmentation does not normalize, case-fold, replace,
+or otherwise alter the String's scalar values.
+
+The standard `size` result is:
+
+```text
+String.size -> semantic Integer equal to length(G)
+```
+
+The result is an exact semantic `Integer`; Core does not require a fixed-width
+Integer family or host-sized representation.
+
+The standard indexed read:
+
+```js
+text.at(index)
+text[index]
+```
+
+requires `index` to be a semantic `Integer`. Any Integer family is accepted
+according to its mathematical Integer value. No Float-to-Integer conversion,
+String parsing, truncation, wrapping, modulo reduction, or host-sized coercion
+is performed.
+
+The index must satisfy:
+
+```text
+0 <= index < text.size
+```
+
+Otherwise the operation signals an `Error`.
+
+A successful read returns a `String` whose semantic scalar sequence is exactly
+the scalar subsequence forming `G[index]`. The returned String is not normalized
+or rewritten. Therefore indexing preserves the exact-scalar String model even
+when the selected grapheme contains several scalars.
+
+For example, if:
+
+```text
+S = U+0065 U+0301
+```
+
+and Unicode 17.0.0 default extended-grapheme segmentation treats that sequence
+as one cluster, then `text.size` is `1` and `text[0]` is the two-scalar String
+`U+0065 U+0301`, not an implicitly normalized U+00E9 String.
+
+Standard String indexing behavior applies only to an original receiver that is
+a semantic String value. Delegating to a String value or String prototype does
+not confer String semantic membership. An incompatible receiver that invokes
+the standard behavior signals an `Error` under the existing semantic-family
+receiver rule.
+
+`String` is immutable and Core defines no standard indexed mutation behavior
+that changes a String in place. Bracket assignment does not acquire a hidden
+String mutation primitive merely because bracket-read syntax is supported.
+User-defined objects remain free to define their own ordinary `atPut` protocol.
+
+This section defines the standard String indexing/size semantics. It does not standardize the illustrative `graphemes()`,
+`codePoints()`, normalization, locale-sensitive segmentation, collation, or
+text-editing protocols mentioned elsewhere.
+
+
+
+### Standard String concatenation with `+`
+
+The standard String-family behavior for binary `+` concatenates two semantic
+String values.
+
+```js
+"hel" + "lo"     // "hello"
+```
+
+The original receiver must be a semantic String value, and the right operand
+must also be a semantic String value. No Number, Boolean, `null`, arbitrary
+object, prototype, or other value is implicitly converted to String.
+
+The result is the String whose Unicode-scalar sequence is exactly the receiver's
+scalar sequence followed by the right operand's scalar sequence. Concatenation
+performs no Unicode normalization, grapheme resegmentation beyond that implied
+later by ordinary String `size` / `at`, locale transformation, encoding, or
+decoding.
+
+String values are immutable, so concatenation mutates neither operand. The
+result obeys ordinary String value identity and equality. Consequently, when
+the concatenated scalar sequence equals an existing String value's scalar
+sequence, `===` observes the same String value semantics:
+
+```js
+("hel" + "lo") === "hello"   // true
+```
+
+The standard operation performs no user callback, textual coercion, `hash`,
+`==`, Encoding operation, or hidden suspension.
+
+This is a standard String-family specialization of the ordinary `+` message.
+Ordinary lookup and overriding rules remain unchanged. Merely delegating to a
+String value or String-family prototype does not make an incompatible receiver
+a semantic String.
+
 ### Exact String semantic value and identity
 
 A Core `String` semantic value is exactly a finite sequence of Unicode scalar
@@ -1340,7 +1515,9 @@ rules.
 
 ## Text, Bytes, and Character Encodings
 
-This section owns semantic String/Bytes/Encoding value behavior and explicit value conversion. I/O operation semantics remain owned by the modules under `../io/`.
+This section owns semantic `String` and `Bytes` value behavior. The standard
+Encoding-object conversion contract is owned by `../io/TEXT_IO.md`; this section
+only states the value-domain separation needed by String/Bytes semantics.
 
 
 Core v0.1 separates abstract text from its external binary representation.
@@ -1358,55 +1535,14 @@ UTF16BE
 Latin1
 ```
 
-Conversion between text and bytes is explicit:
+Conversion between text and bytes is explicit. The normative one-shot dispatch,
+argument domains, encoding catalogue, strict/replacement behavior, BOM rules,
+and conversion failures are owned by `../io/TEXT_IO.md`. In particular, the
+standard receiver is the `Encoding` object (`encoding.encode(text)` and
+`encoding.decode(bytes)`); this document does not define a reciprocal
+`String.encode(encoding)` or `Bytes.decode(encoding)` Core protocol.
 
-```js
-### Canonical one-shot text/byte conversion dispatch
-
-The standard one-shot encoding/decoding receiver is the `Encoding` object:
-
-```js
-UTF8.encode(text)
-UTF8.decode(bytes)
-```
-
-In abstract form, the standardized operations are
-`encoding.encode(text)` and `encoding.decode(bytes)`.
-
-Core v0.1 does not additionally standardize `String.encode(encoding)` or
-`Bytes.decode(encoding)` convenience messages. Libraries may provide such
-ordinary messages, but portable Core code cannot rely on them.
-
-UTF8.decode(bytes)
-### Canonical one-shot encoding dispatch
-
-Core v0.1 has one canonical standard one-shot encoding/decoding dispatch
-direction: the `Encoding` object is the receiver.
-
-```js
-UTF8.encode(text)
-UTF8.decode(bytes)
-```
-
-The corresponding abstract form is `encoding.encode(text)` and
-`encoding.decode(bytes)`, as defined normatively by `../io/TEXT_IO.md`.
-
-Core v0.1 does **not** additionally standardize reciprocal convenience messages
-`String.encode(encoding)` or `Bytes.decode(encoding)`. A library may provide
-such ordinary conveniences, but portable Core code cannot rely on them unless a
-later standard explicitly adds them.
-
-This choice introduces no special syntax. `UTF8` and other standardized
-encodings are ordinary Encoding objects when available through the applicable
-standard-library/I/O environment, and ordinary polymorphic message dispatch
-applies.
-
-UTF8.encode(text)
-```
-
-Decoding interprets a byte sequence using the selected encoding and produces a `String`. Encoding converts a `String` into a `Bytes` value using the selected encoding.
-
-The standard encoding catalogue, strict/replacement decoding rules, BOM behavior, and text-I/O semantics are defined normatively in `io/IO_CORE.md`. Those encoding objects and I/O facilities remain outside the required Core prelude unless another specification explicitly says otherwise.
+The availability of standard Encoding objects and I/O facilities remains governed by the I/O specifications; this value-domain section does not make them required Core-prelude bindings.
 
 This follows the same general principle used for numeric endianness:
 
