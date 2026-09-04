@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 237
+Document revision: 238
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -3970,6 +3970,57 @@ carrier release, or another mechanism whose choice is not observable.
 This is a progress requirement, not a promise that every submitted parallel
 operation begins immediately or receives a dedicated core.
 
+### 71.7A P admission and weak fairness
+
+A successfully submitted isolated parallel computation is an admitted logical P
+work item. Admission does not imply a dedicated carrier, immediate execution, or
+simultaneous execution relative to its creator.
+
+For scheduling fairness, a P work item is **runnable** when it is live, not
+terminal, and all semantic prerequisites for its next P execution segment are
+satisfied. A successfully submitted `Closure.parallel(...)` computation is
+runnable for its initial segment unless cancellation makes only its portable
+cancellation-observation boundary runnable. A P task suspended on a pending
+Future or other explicit semantic prerequisite is not runnable until that
+prerequisite is satisfied.
+
+Weak fairness applies to runnable P work:
+
+> If a live P work item remains continuously runnable and the Process repeatedly
+> reaches scheduling points capable of running P work, that item must eventually
+> receive an execution segment or become non-runnable/terminal for an
+> independently defined semantic reason.
+
+Later submissions, work stealing, locality preference, granularity choices,
+different originating Actors, or nested submission depth must not postpone one
+continuously runnable P item forever.
+
+This is weak fairness only. It does not promise equal CPU shares, bounded
+latency, round-robin scheduling, a dedicated carrier, a particular worker-pool
+size, or actual simultaneous execution.
+
+Nested P must satisfy the same rule using bounded carriers. In particular:
+
+```text
+parent P waits on child P Future
+    -> parent is not runnable while the child is pending
+    -> runnable child/descendant work may use any P-capable carrier
+    -> progress must not require an additional unused carrier
+```
+
+If every occupied carrier reaches a state in which its P computation is waiting
+for runnable descendant P work, the runtime must make descendant progress
+possible using those bounded carrier resources. It may release a carrier,
+schedule a continuation, help/steal descendant work, execute a child inline, or
+use another observationally equivalent mechanism. Deadlock caused solely by
+"all carriers are occupied by ancestors waiting for descendants" violates this
+rule.
+
+This closes semantic admission/fairness, not scheduler policy. Queue topology,
+work-stealing algorithm, carrier count, locality policy, priority heuristics,
+chunk size, adaptive granularity, and similar mechanisms remain implementation
+choices subject to the fairness and scheduler-independence rules.
+
 ### 71.8 Failure and Cancellation
 
 Failure of an isolated parallel computation fails its result Future
@@ -4120,72 +4171,6 @@ This does not prohibit APIs whose contract explicitly includes nondeterministic
 selection. It requires such nondeterminism to be semantic and documented rather
 than an accidental leak of implementation scheduling.
 
-### 71.17 Physical sharing is not a public capability
-
-Core v0.1 standardizes the isolation result, not the physical sharing mechanism.
-
-There is no standard API that asks whether a value is physically shareable, pins
-a value into shared storage, requests zero-copy transfer, exposes copy-on-write
-state, reveals whether two isolation domains use one backing allocation, or
-requires a particular storage-transfer strategy.
-
-Failure to obtain a particular physical optimization is therefore not a semantic
-failure condition. If a logical P snapshot is otherwise valid, an implementation
-must realize it through some semantics-preserving representation available to
-that implementation.
-
-This leaves implementations free to exploit immutable representation aggressively
-without adding a second user-visible immutability/ownership system to Protos.
-
-### 71.18 Standard exclusive byte regions
-
-Inside P, standard `Bytes` provides `parallelRange(start, length, worker,
-arguments...) -> Future`. `ByteRegion` values created by this mechanism provide
-the same operation recursively.
-
-The operation is valid only in P. Outside P it signals
-`ParallelRegionOutsideP`. `start` and `length` are semantic Integers and define
-the half-open interval `[start, start + length)`, with non-negative bounds inside
-the receiver. `worker` must be a Closure and executes as a projected child-P
-Closure whose first argument is the fixed-size local `ByteRegion`.
-
-### 71.19 Reservation and overlap semantics
-
-A successful non-empty submission creates one exclusive reservation until its
-Future becomes terminal. Two non-empty intervals overlap exactly when each begins
-before the other ends. Overlap signals `ParallelRegionOverlap` synchronously and
-creates no Future/reservation. Zero-length intervals reserve nothing.
-
-While reserved, parent access inside the interval signals
-`ParallelRegionInUse`; access wholly outside active intervals remains ordinary;
-`size` remains readable; operations that can change length or shift indexed
-positions signal `ParallelRegionInUse` while any reservation exists. These rules
-fail rather than block or suspend.
-
-A `ByteRegion` exposes only local zero-based byte indexing, fixed `size`, and
-recursive `parallelRange`. It exposes no parent identity, absolute offset,
-physical backing, address, or sibling authority.
-
-### 71.20 Commit, failure, and recursive subdivision
-
-The child mutates isolated region state. Parent mutation occurs only at successful
-publication, after both normal child completion and successful P-boundary result
-transfer. Then exactly the region's fixed bytes atomically replace the reserved
-parent interval, the reservation is released, and the Future resolves. Failure,
-cancellation, or untransferable result releases the reservation without publishing
-region mutation.
-
-This atomicity is only the reserved-byte publication boundary, not a transaction
-over arbitrary P state. Disjoint commits have no added total order. Recursive
-`ByteRegion.parallelRange` subdivides authority with the same rules.
-
-`ByteRegion` is scoped P-local authority, not an ordinary transferable/serializable
-value. It moves only through the dedicated region operation that defines the
-authority transfer.
-
-Core deliberately leaves generic writable Array/object partitioning open because
-disjoint indexes do not prove disjoint mutable reachable graphs.
-
 ### 71.13 Standard `Closure.parallel(...)`
 
 The Core v0.1 public submission surface is:
@@ -4291,6 +4276,91 @@ lifetime. Detachment removes an applicable structured activation ownership edge
 but does not create persistent identity, mailbox semantics, Actor identity, or a
 right to survive termination of the enclosing P domain.
 
+### 71.17 Physical sharing is not a public capability
+
+Core v0.1 standardizes the isolation result, not the physical sharing mechanism.
+
+There is no standard API that asks whether a value is physically shareable, pins
+a value into shared storage, requests zero-copy transfer, exposes copy-on-write
+state, reveals whether two isolation domains use one backing allocation, or
+requires a particular storage-transfer strategy.
+
+Failure to obtain a particular physical optimization is therefore not a semantic
+failure condition. If a logical P snapshot is otherwise valid, an implementation
+must realize it through some semantics-preserving representation available to
+that implementation.
+
+This leaves implementations free to exploit immutable representation aggressively
+without adding a second user-visible immutability/ownership system to Protos.
+
+### 71.18 Standard exclusive byte regions
+
+Inside P, standard `Bytes` provides `parallelRange(start, length, worker,
+arguments...) -> Future`. `ByteRegion` values created by this mechanism provide
+the same operation recursively.
+
+The operation is valid only in P. Outside P it signals
+`ParallelRegionOutsideP`. `start` and `length` are semantic Integers and define
+the half-open interval `[start, start + length)`, with non-negative bounds inside
+the receiver. `worker` must be a Closure and executes as a projected child-P
+Closure whose first argument is the fixed-size local `ByteRegion`.
+
+
+After ordinary receiver/argument evaluation has completed left-to-right, the
+standard behavior performs synchronous validation in exactly this order:
+
+1. require that the current execution domain is P, otherwise signal
+   `ParallelRegionOutsideP`;
+2. validate `start` as a semantic Integer and require `start >= 0`;
+3. validate `length` as a semantic Integer and require `length >= 0`;
+4. require `start + length <= receiver.size`;
+5. require `worker` to be a Closure;
+6. reject overlap with an already-active non-empty reservation on the same
+   logical receiver using `ParallelRegionOverlap`;
+7. validate the projected worker and remaining explicit argument graph for the
+   child P boundary.
+
+The first failing check in this sequence determines the synchronous failure.
+No reservation or Future exists before all seven checks succeed. Effects already
+performed while evaluating the receiver or arguments are not rolled back.
+
+### 71.19 Reservation and overlap semantics
+
+A successful non-empty submission creates one exclusive reservation until its
+Future becomes terminal. Two non-empty intervals overlap exactly when each begins
+before the other ends. Overlap signals `ParallelRegionOverlap` synchronously and
+creates no Future/reservation. Zero-length intervals reserve nothing.
+
+While reserved, parent access inside the interval signals
+`ParallelRegionInUse`; access wholly outside active intervals remains ordinary;
+`size` remains readable; operations that can change length or shift indexed
+positions signal `ParallelRegionInUse` while any reservation exists. These rules
+fail rather than block or suspend.
+
+A `ByteRegion` exposes only local zero-based byte indexing, fixed `size`, and
+recursive `parallelRange`. It exposes no parent identity, absolute offset,
+physical backing, address, or sibling authority.
+
+### 71.20 Commit, failure, and recursive subdivision
+
+The child mutates isolated region state. Parent mutation occurs only at successful
+publication, after both normal child completion and successful P-boundary result
+transfer. Then exactly the region's fixed bytes atomically replace the reserved
+parent interval, the reservation is released, and the Future resolves. Failure,
+cancellation, or untransferable result releases the reservation without publishing
+region mutation.
+
+This atomicity is only the reserved-byte publication boundary, not a transaction
+over arbitrary P state. Disjoint commits have no added total order. Recursive
+`ByteRegion.parallelRange` subdivides authority with the same rules.
+
+`ByteRegion` is scoped P-local authority, not an ordinary transferable/serializable
+value. It moves only through the dedicated region operation that defines the
+authority transfer.
+
+Core deliberately leaves generic writable Array/object partitioning open because
+disjoint indexes do not prove disjoint mutable reachable graphs.
+
 ## 72. Standard Prelude Sharing
 
 **CLOSED**
@@ -4369,7 +4439,6 @@ mechanism, or implementation detail that still requires design.
     Core byte regions
 -   Parallel map/filter/reduce/sort/iteration standard-library APIs
 -   Parallel scheduling, work-stealing, and granularity heuristics
--   Nested-parallelism admission and fairness
 -   Interaction between isolated parallel work and SIMD/vectorization
 -   Whether remote isolated parallel execution is ever supported
 -   Pub/sub

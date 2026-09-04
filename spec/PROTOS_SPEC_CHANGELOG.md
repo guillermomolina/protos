@@ -4,6 +4,21 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.238] - 2026-09-04
+
+### Fixed / Closed
+- Restored monotonic source order for §71.13 through §71.20 without changing their already-closed semantics.
+- Defined deterministic synchronous failure precedence for standard `parallelRange` validation.
+- Closed weak fairness for runnable isolated P work so later submissions or scheduler policy cannot starve it indefinitely.
+- Required nested-P descendant progress without needing an additional unused OS thread/carrier.
+
+### Changed
+- Updated normative P semantics from the repository state observed by this
+  application attempt, without assuming a particular starting revision or SHA.
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 238.
+
 ## [0.1.237] - 2026-09-04
 
 ### Fixed

@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 237
+Document revision: 238
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -5765,6 +5765,22 @@ caller-domain `NonParallelValue`.
 `closure.future()` created while the current activation belongs to a P domain
 creates an ordinary cooperative task owned by that P activation/domain. It keeps
 ordinary live P-local Closure captures and does not use parallel projection.
+
+### P runnable-work fairness
+
+A P task is runnable only when the semantic prerequisites for its next execution
+segment are satisfied. A parent P task suspended waiting for a child Future is
+not runnable; a child whose prerequisites are satisfied is independently
+runnable.
+
+Continuously runnable P work is weakly fair: if Process scheduling repeatedly
+offers opportunities capable of P execution, the item must eventually execute a
+segment or become non-runnable/terminal for an independent semantic reason.
+
+Nested scheduling must not require a spare carrier. If bounded carriers are
+occupied by ancestors waiting on runnable descendants, the runtime must
+release/reuse/help/steal/inline or otherwise arrange descendant execution.
+Concrete scheduling machinery is not observable.
 
 ### Standard byte-region submission
 
