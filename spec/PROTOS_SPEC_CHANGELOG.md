@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.263] - 2026-09-04
+
+### Fixed
+- Defined standard `TextWriter.writeText("")` as an empty logical text payload
+  with zero encoded-byte contribution and zero encoder-state transition.
+- Prohibited ordinary empty text writes from acting as implicit encoder flush,
+  finalization, reset, BOM emission, or stateful shift/reset control.
+- Required host/native encoder calls whose empty-input behavior emits control
+  bytes or resets state to be adapted so those effects do not leak through
+  ordinary `writeText("")`.
+- Kept empty text writes inside the normal TextWriter ordering/lifecycle domain:
+  they cannot resolve successfully ahead of an earlier ordered operation that can
+  still permanently fail the writer.
+- Clarified that `writeLine("")` is not empty because its logical payload
+  contains LF and is encoded normally.
+- Kept encoder finalization attached to the explicit lifecycle operation that
+  requires it, such as TextWriter close.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 263. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.262] - 2026-09-04
 
 ### Added / Closed

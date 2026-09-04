@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 262
+Document revision: 263
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -1134,6 +1134,16 @@ writeLine(text)
 Both operations return `Future` values resolving to the receiver on successful completion.
 
 Each `writeText(text)` invocation is one ordered logical text-write operation. `writeLine(text)` is likewise one logical text-write operation whose text payload is `text` followed by LF (`U+000A`). The LF is therefore part of the same operation for encoding validation and ordering; another operation on that TextWriter does not interleave between the text and its line terminator.
+
+For standard `TextWriter`, `writeText("")` has an empty logical text payload and therefore contributes no encoded bytes and performs no encoder-state transition. It is not an implicit encoder flush, finalization, reset, BOM-emission trigger, shift-state reset, or other control operation merely because the configured Encoding may be stateful. Successful completion leaves the per-flow encoder state exactly as it was immediately before this operation's ordered evaluation.
+
+This empty-payload rule is semantic rather than representational. An implementation need not invoke its backend/native encoder at all for `writeText("")`; if it does invoke one, any implementation-selected control bytes or state changes that are not the encoding of a source character must remain unobservable. A host/native encoder API whose "empty input" call would flush/reset state must therefore not be mapped directly to ordinary `writeText("")` in a way that exposes that control effect.
+
+`writeText("")` remains an ordinary member of the TextWriter ordering and lifecycle domain. It may complete without target I/O once every earlier ordered text-write operation has reached an aftermath that leaves the writer usable, but it must not resolve successfully ahead of an earlier ordered operation that can still permanently fail the TextWriter. If such an earlier operation does permanently fail the writer, the later empty write fails under the same predecessor-failure rule as any other later text write and contributes no bytes/state change.
+
+`writeLine("")` is not an empty-payload operation: its logical text payload is LF (`U+000A`) and it is encoded and ordered normally.
+
+Encoder finalization remains the job of the explicit lifecycle operation that requires it, such as `TextWriter.close()`. Ordinary empty text writes cannot be used as a portable substitute for finalization.
 
 All standard text-output operations accepted by one logical `TextWriter` share one encoder-state and output-ordering domain. `writeText()` and `writeLine()` do not race independent encoder states or independently ordered byte-output sequences merely because their Futures are simultaneously pending or because callers use distinct Actor-safe proxies for the same writer.
 
