@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 290
+Document revision: 291
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -5997,6 +5997,66 @@ The existing rule that freeze is shallow is unchanged: no deep freeze is
 introduced. Actor isolation is not weakened, and implementations are not
 required to duplicate immutable data unnecessarily.
 
+## 72A. No Core Application or Service Identity
+
+**CLOSED**
+
+Core v0.1 defines no intrinsic application identity, service identity,
+`ApplicationRoot`, deployment identity, or mandatory execution-hierarchy level
+above Process/RootActor, Node, Cluster, Group, and the other already-defined
+runtime identities.
+
+This is a deliberate semantic boundary rather than a missing hidden runtime
+object.
+
+An implementation, deployment system, orchestrator, observability platform, or
+administrative tool may associate Protos runtime entities with an external
+application/service identifier for purposes such as deployment, configuration,
+observability, metrics, ownership, tenancy, rollout grouping, or operational
+inventory.
+
+Such an identifier is administrative metadata unless a future normative facility
+explicitly promotes it into the Protos semantic universe.
+
+In Core v0.1, administrative application/service identity therefore must not:
+
+- become an implicit Actor sender identity;
+- create a mailbox, mutable object graph, execution domain, or lifecycle domain;
+- become a parent of Process RootActors;
+- alter ActorRef or GroupRef identity;
+- imply shared mutable state between Processes or Actors;
+- change same-sender FIFO, routing, placement, failure, supervision, or
+  cancellation semantics;
+- grant Process, Node, Cluster, resource, or capability authority merely by
+  association;
+- keep Actors, Processes, Groups, Nodes, or Clusters alive;
+- cause two otherwise distinct runtime identities to compare as the same Protos
+  identity;
+- impose distributed-runtime startup or coordination cost on programs that do
+  not use a separately defined facility.
+
+The same external application/service label may be associated with multiple
+Processes, Nodes, Clusters, Groups, or deployments without creating a new Core
+continuity guarantee among them. Conversely, one Protos Process or Cluster may be
+classified differently by external tooling over time without changing its Core
+identity.
+
+Distributed service continuity remains expressed through the already-defined
+semantic mechanisms such as Group identity, discovery, Cluster/runtime control
+state, and explicit durable state. An administrative label is not a substitute
+for those mechanisms.
+
+A future standard facility may introduce a first-class application/service
+identity only if a workload demonstrates a semantic boundary that cannot be
+expressed cleanly by the existing universe. Such a facility would need to define
+identity, lifetime, authority, topology relationships, transferability,
+persistence, failure behavior, and observable operations explicitly.
+
+This closes the former open ledger item `Optional administrative
+application/service identity for deployment, configuration, observability, or
+ownership` for Core v0.1. External administrative metadata remains permitted but
+non-semantic.
+
 ## Open Design Topics
 
 The following topics remain intentionally open. Items whose fundamental
@@ -6095,5 +6155,3 @@ mechanism, or implementation detail that still requires design.
 -   Code identity for remote Actor bootstrap
 -   Code availability and versioning across Nodes
 -   Hot code update
--   Optional administrative application/service identity for deployment,
-    configuration, observability, or ownership

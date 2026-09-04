@@ -4,6 +4,31 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.291] - 2026-09-04
+
+### Closed
+- Closed the optional administrative application/service identity topic for Core
+  v0.1.
+- Defined no intrinsic `ApplicationRoot`, application identity, service identity,
+  deployment identity, or mandatory execution-hierarchy level above the
+  already-defined runtime identities.
+- Permitted deployment/orchestration/observability tooling to associate external
+  application/service metadata with Protos entities only as non-semantic
+  administrative metadata.
+- Prohibited such metadata from changing sender identity, routing, placement,
+  lifecycle, supervision, authority, continuity, identity comparison, or
+  pay-as-you-grow behavior.
+- Reaffirmed that distributed service continuity belongs to Group/discovery/
+  Cluster-control/durable-state mechanisms rather than an administrative label.
+- Left any future first-class application/service identity to earn and define its
+  own semantic boundary explicitly.
+- Removed the corresponding item from Open Design Topics.
+
+### Changed
+- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  291.
+
 ## [0.1.290] - 2026-09-04
 
 ### Fixed

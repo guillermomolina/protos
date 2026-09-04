@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 290
+Document revision: 291
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -6207,4 +6207,3 @@ Object.parent()
 signals an error rather than manufacturing a sentinel parent value such as `null`.
 
 Core reflection intentionally distinguishes the object's own slot structure from ordinary delegated behavior. Core v0.1 does not require reflective access to implementation-internal activation frames, stacks, `methodHome`, or runtime representation details.
-
