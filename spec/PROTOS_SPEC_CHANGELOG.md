@@ -4,6 +4,33 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.240] - 2026-09-04
+
+### Closed
+- Closed the interaction between isolated parallel work and SIMD/vectorization
+  without introducing a new public SIMD/vector value universe.
+- Defined SIMD/vectorization as a permitted physical optimization only when it
+  is observationally equivalent to the already-specified scalar/logical Protos
+  execution.
+- Required vectorized execution to preserve result values, identity/aliasing,
+  evaluation and mutation order, dispatch/invocation behavior, failure
+  precedence, explicit suspension/cancellation boundaries, P
+  isolation/publication, and fairness.
+- Prohibited SIMD-driven reassociation from changing the logical result of an
+  observably non-associative reduction unless the invoked API explicitly defines
+  different semantics.
+- Left vector width, target instructions, masking, alignment strategy, cost
+  model, and scalar fallback as implementation details.
+- Removed the now-closed SIMD/vectorization interaction item from Open Design
+  Topics.
+
+### Changed
+- Updated `PROTOS_CONCURRENCY_MODEL.md` and, where the current structure permits
+  a stable anchor, `PROTOS_RUNTIME_SEMANTICS.md`.
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 240.
+
 ## [0.1.239] - 2026-09-04
 
 ### Fixed

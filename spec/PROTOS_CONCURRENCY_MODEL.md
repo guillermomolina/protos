@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 239
+Document revision: 240
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -4171,6 +4171,60 @@ This does not prohibit APIs whose contract explicitly includes nondeterministic
 selection. It requires such nondeterminism to be semantic and documented rather
 than an accidental leak of implementation scheduling.
 
+### 71.12A SIMD/vectorization is semantically invisible
+
+Core v0.1 introduces no SIMD value kind, vector register object, lane-count
+property, vector-width query, alignment requirement, target-instruction-set
+capability, or programmer-visible distinction between scalar and vectorized
+execution.
+
+An implementation may use SIMD, SLP vectorization, loop vectorization, masked
+lanes, vector reductions, target-specific vector instructions, or equivalent
+data-parallel machinery only as an observationally invisible optimization of
+otherwise valid Protos execution.
+
+The legality rule is:
+
+> Replacing scalar/logical execution with vectorized physical execution is
+> permitted only when every Protos-observable result is the same as under the
+> specified scalar/logical semantics.
+
+This includes preserving every observable property that may matter to Protos,
+including:
+
+- result values and standard Number/Float semantics;
+- object identity and aliasing;
+- ordinary left-to-right evaluation requirements;
+- message lookup and dispatch selection;
+- the number and observable order of user-defined message/Closure invocations;
+- error selection and failure precedence;
+- slot/index mutations and their observable ordering;
+- explicit suspension/cancellation boundaries;
+- dynamic-handler behavior;
+- P isolation, publication, reservation, and fairness guarantees.
+
+A vectorizer may therefore batch or widen operations only when doing so cannot
+change those observations. If legality is uncertain, the implementation must use
+a semantics-preserving scalar or otherwise equivalent execution strategy.
+
+In particular, a reduction or reassociation whose operator is observably
+non-associative may not change the logical combination order merely because a
+SIMD instruction or wider reduction tree is available. A standard/library
+parallel operation that defines a canonical logical reduction structure remains
+bound to that structure. A future API may explicitly define relaxed,
+approximate, target-sensitive, or otherwise different numeric semantics, but
+ordinary Core execution does not acquire them implicitly from vectorization.
+
+SIMD width, instruction selection, masking strategy, scalar fallback, vector
+cost model, alignment handling, and whether vectorization occurs at all are
+implementation details. Programs must not be able to infer a portable semantic
+fact from the presence or absence of SIMD hardware.
+
+This rule applies equally inside ordinary Actor/cooperative execution and inside
+isolated P work. P grants permission for simultaneous isolated execution; SIMD
+is merely one possible physical implementation of computation within such work.
+Neither mechanism changes the semantics of the other.
+
 ### 71.13 Standard `Closure.parallel(...)`
 
 The Core v0.1 public submission surface is:
@@ -4439,7 +4493,6 @@ mechanism, or implementation detail that still requires design.
     Core byte regions
 -   Parallel map/filter/reduce/sort/iteration standard-library APIs
 -   Parallel scheduling, work-stealing, and granularity heuristics
--   Interaction between isolated parallel work and SIMD/vectorization
 -   Whether remote isolated parallel execution is ever supported
 -   Pub/sub
 -   Advanced routers and load-balancing policies

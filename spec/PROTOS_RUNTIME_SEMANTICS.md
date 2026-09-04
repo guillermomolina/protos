@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 239
+Document revision: 240
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -5781,6 +5781,22 @@ Nested scheduling must not require a spare carrier. If bounded carriers are
 occupied by ancestors waiting on runnable descendants, the runtime must
 release/reuse/help/steal/inline or otherwise arrange descendant execution.
 Concrete scheduling machinery is not observable.
+
+### SIMD/vectorization legality
+
+The runtime may vectorize physical execution only after proving observational
+equivalence to the already-defined scalar/logical operation. Vector width,
+instruction selection, masking, scalar fallback, and cost modelling are not
+runtime-visible Protos state.
+
+Vectorization must not alter result values, identity/aliasing, required
+evaluation or mutation order, dispatch/invocation behavior, failure precedence,
+explicit suspension/cancellation behavior, P isolation/publication, or fairness.
+A reduction must preserve its specified logical combination order unless the
+invoked operation's own contract explicitly permits another result semantics.
+
+When such equivalence cannot be established, scalar or another
+semantics-preserving implementation is required.
 
 ### Standard byte-region submission
 
