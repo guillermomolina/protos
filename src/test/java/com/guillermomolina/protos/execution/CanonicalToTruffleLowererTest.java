@@ -17,10 +17,12 @@
 
 package com.guillermomolina.protos.execution;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.guillermomolina.protos.source.SourceSpan;
@@ -35,6 +37,14 @@ class CanonicalToTruffleLowererTest {
         assertSame(ProtosBooleanValue.TRUE, execute(literal(CanonicalLiteral.Kind.TRUE, "true")));
         assertSame(ProtosBooleanValue.FALSE, execute(literal(CanonicalLiteral.Kind.FALSE, "false")));
         assertSame(ProtosNullValue.INSTANCE, execute(literal(CanonicalLiteral.Kind.NULL, "null")));
+    }
+
+    @Test
+    void lowersCanonicalStringValue() {
+        Object result = execute(literal(CanonicalLiteral.Kind.STRING, "hello"));
+
+        ProtosStringValue string = (ProtosStringValue) result;
+        assertEquals("hello", string.value());
     }
 
     @Test

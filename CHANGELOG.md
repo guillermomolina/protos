@@ -8,6 +8,8 @@ For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_
 
 ### Added
 
+- Added canonical String literal execution as ordinary immutable Protos String values.
+
 - Added initial Canonical-to-Truffle lowering for canonical `true`, `false`, and `null` singleton literals and non-empty sequences.
 
 - Added a Truffle CallTarget entry point for executing Protos expression trees through the root-node boundary.
