@@ -72,16 +72,16 @@ class ProtosObjectValueTest {
 
         assertTrue(object.isOpen());
 
-        object.close();
+        assertSame(object, object.close());
         assertTrue(object.isClosed());
-        object.close();
+        assertSame(object, object.close());
         assertTrue(object.isClosed());
 
-        object.freeze();
+        assertSame(object, object.freeze());
         assertTrue(object.isFrozen());
-        object.freeze();
+        assertSame(object, object.freeze());
         assertTrue(object.isFrozen());
-        object.close();
+        assertSame(object, object.close());
         assertTrue(object.isFrozen());
     }
 

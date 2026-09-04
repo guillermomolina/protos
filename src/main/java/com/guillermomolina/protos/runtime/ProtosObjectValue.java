@@ -71,14 +71,16 @@ public final class ProtosObjectValue {
         return mutationState == MutationState.FROZEN;
     }
 
-    public void close() {
+    public ProtosObjectValue close() {
         if (mutationState == MutationState.OPEN) {
             mutationState = MutationState.CLOSED;
         }
+        return this;
     }
 
-    public void freeze() {
+    public ProtosObjectValue freeze() {
         mutationState = MutationState.FROZEN;
+        return this;
     }
 
     public boolean hasLocalSlot(String name) {
