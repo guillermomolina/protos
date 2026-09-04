@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 313
+Document revision: 315
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3124,210 +3124,30 @@ behavior is identical. Arrays that are never iterated pay no semantic cost for
 iteration snapshots.
 
 
-## Standard Array Parallel Mapping
+## Standard Array Parallel Operations
 
-Standard Array provides:
-
-```text
-array.parallelMap(worker, arguments...)
-    -> Future
-```
-
-The receiver must be a standard Array. `worker` is validated through the same
-ordinary polymorphic invocation domain used by `Array.each`; it is not
-Closure-only.
-
-The operation snapshots the source element-reference sequence in ascending index
-order after ordinary evaluation, receiver validation, and worker-callability
-validation. For every source index, it invokes the worker in an isolated P
-computation with that snapshotted element followed by the explicit extra
-arguments.
-
-For non-empty input, every child P input must be transferable before the call
-successfully returns its Future; otherwise `NonParallelValue` is signaled
-synchronously and no child begins. The successful return fixes the complete
-logical input snapshot. Empty input performs no P transfer and returns a Future
-resolved with a fresh empty standard Array.
-
-Worker scheduling order is not observable through result ordering. On success,
-the Future resolves with a fresh standard Array of the same size whose index `i`
-contains the successfully transferred result of the worker invocation for source
-index `i`.
-
-No partial Array is published. If multiple indexed invocations fail, the
-lowest failing source index determines the operation failure independently of
-scheduler timing. Cancellation requests cooperative cancellation of unfinished
-child P work and publishes no partial result.
-
-`parallelMap` does not mutate the source Array or grant writable authority over
-its indexed state or reachable mutable element graphs. It uses the ordinary P
-snapshot/value model; the absence of generic writable Array partitioning is
-unchanged.
-
-
-## Standard Array Parallel Filtering
-
-Standard Array provides:
+The standard parallel Array operations are concurrency-domain facilities:
 
 ```text
-array.parallelFilter(predicate, arguments...)
-    -> Future
+array.parallelMap(worker, arguments...)          -> Future
+array.parallelFilter(predicate, arguments...)    -> Future
+array.parallelFindIndex(predicate, arguments...) -> Future
+array.parallelReduce(reducer, arguments...)      -> Future
+array.parallelSort(less, arguments...)            -> Future
 ```
 
-The receiver must be a standard Array. `predicate` uses the ordinary
-polymorphic invocation protocol and is not Closure-only.
+Their normative isolation, snapshot, transfer, ordering, failure-selection,
+cancellation, publication, and implementation-freedom semantics are owned by
+`PROTOS_CONCURRENCY_MODEL.md` §71.6A–§71.6E.
 
-The operation snapshots the source element-reference sequence in ascending index
-order after ordinary evaluation, receiver validation, and predicate-callability
-validation. Each source index is evaluated in an isolated child P domain with
-the snapshotted element followed by the explicit extra arguments.
+These operations remain ordinary standard Array behaviors reached through
+ordinary message lookup. They introduce no additional syntax or executable value
+kind. The general Array receiver-domain and polymorphic invocation rules defined
+by this language specification continue to apply where referenced by the
+concurrency-domain contract.
 
-For non-empty input, all child P inputs must be valid before the call
-successfully returns its Future; otherwise `NonParallelValue` is signaled
-synchronously and no child begins. Empty input performs no P transfer and
-returns a Future resolved with a fresh empty standard Array.
-
-Predicate results have a strict Boolean contract. Only canonical `true` selects
-the element and canonical `false` rejects it. Any other normal result fails that
-index with `InvalidPredicateResult`, which delegates directly to `Error`; there
-is no truthiness conversion.
-
-On success, the Future resolves with a fresh standard Array containing selected
-source elements in ascending original source-index order. Predicate execution
-order is not observable through result ordering. Multiple indexed failures are
-resolved deterministically by the lowest failing source index. Cancellation or
-failure publishes no partial result.
-
-`parallelFilter` does not mutate the source Array and does not grant writable
-partition authority over the Array or any reachable mutable element graph.
-
-
-## Standard Array Parallel Search
-
-Standard Array provides:
-
-```text
-array.parallelFindIndex(predicate, arguments...)
-    -> Future
-```
-
-The Future resolves with the first matching semantic Integer source index, or
-`null` if no source index matches. Returning an index keeps absence unambiguous
-even when `null` itself occurs as an Array element.
-
-Receiver, predicate callability, source snapshot, per-index P isolation,
-non-empty input validation, and empty-input behavior follow the standard
-`parallelFilter` rules. Predicate results must be exactly canonical `true` or
-`false`; any other normal result is `InvalidPredicateResult`.
-
-The logical search is ascending by source index. `false` continues the search.
-`true` is a successful decisive outcome. A predicate failure is a failing
-decisive outcome. The operation becomes terminal only when the lowest index whose
-outcome is `true` or failure is known and all lower indexes are known `false`.
-
-Thus a lower-index failure beats a higher-index match, while failures strictly
-after the first established matching index do not affect the result. If every
-predicate result is `false`, the Future resolves with `null`.
-
-Physical predicate execution order is not observable. Higher-index work may be
-pruned only after it cannot affect the specified result or failure. Cancellation
-uses the ordinary Future/P structured-concurrency rules.
-
-
-## Standard Array Parallel Reduction
-
-Standard Array provides:
-
-```text
-array.parallelReduce(reducer, arguments...)
-    -> Future
-```
-
-The receiver must be a standard Array and `reducer` must be ordinarily invokable.
-An empty Array resolves to `null` without a P boundary. A one-element Array
-invokes no reducer but snapshots/transfers that sole value through the P value
-rules before resolving.
-
-For two or more elements, the operation uses a canonical adjacent-pair reduction
-tree independent of worker count:
-
-```text
-[a, b, c, d, e]
-    -> [r(a,b), r(c,d), e]
-    -> [r(r(a,b), r(c,d)), e]
-    -> [r(r(r(a,b), r(c,d)), e)]
-```
-
-An odd final value is carried unchanged to the next round. Each reducer
-invocation is a separate isolated P computation receiving the left value, right
-value, then the explicit extra arguments.
-
-The canonical tree is normative even for non-associative reducers. Physical
-chunking or scheduling must not choose a different parenthesization.
-
-All combine nodes in one logical round must succeed before the next logical round
-exists. If several nodes in one round fail, the leftmost failing pair determines
-the operation failure. Implementations may pipeline/speculate only when that is
-observationally invisible.
-
-Reducer results cross between nodes using ordinary P result/value rules. Failure
-or cancellation publishes no intermediate reduction state. The final successful
-canonical value crosses to the caller and resolves the Future.
-
-
-## Standard Array Parallel Iteration Boundary
-
-Core v0.1 defines no standard `Array.parallelEach(...)` operation.
-
-Independent per-element parallel computation uses
-`Array.parallelMap(worker, arguments...)`. Core does not add a second standard
-protocol solely to discard those normal per-element results.
-
-This boundary does not grant P workers any additional effect authority.
-In particular, an `each`-shaped API would not make Actor-local mutable state,
-Actor messaging, ambient I/O, Process/Node/Cluster authority, native global
-state, or another non-P-transferable capability usable from isolated P work.
-
-Implementations may eliminate unused result materialization internally when that
-optimization preserves the observable semantics of the actual standard
-operation.
-
-
-## Standard Array Parallel Sorting
-
-Standard Array provides:
-
-```text
-array.parallelSort(less, arguments...)
-    -> Future
-```
-
-The operation returns a fresh sorted standard Array and does not mutate the
-source. `less` is ordinarily invokable and must return exactly canonical `true`
-or `false`; another normal result is `InvalidComparatorResult`.
-
-Sorting uses one canonical stable merge-sort semantics. Each logical sequence is
-split into contiguous halves using `floor(n / 2)` for the left half. Both halves
-are recursively sorted and then merged.
-
-For each merge pair `(a, b)`, both `less(a, b, ...)` and `less(b, a, ...)` are
-evaluated in isolated P comparisons. Exactly one `true` selects the corresponding
-smaller value; two `false` results mean equivalence and preserve the left/source
-value first; two `true` results fail with `InvalidComparatorOrder`.
-
-`InvalidComparatorResult` and `InvalidComparatorOrder` delegate directly to
-`Error`.
-
-The canonical tree, stable tie rule, and failure precedence are normative and
-independent of worker count or physical sort algorithm. Left recursive-sort
-failure precedes right recursive-sort failure; within one merge decision the
-forward comparison precedes the reverse comparison; earlier merge output
-positions precede later ones.
-
-Empty input returns a resolved Future containing a fresh empty Array. Singleton
-input invokes no comparator but still crosses the P value boundary before
-resolving with a fresh one-element Array. Failure or cancellation publishes no
-partial sorted Array.
+Core v0.1 defines no standard `Array.parallelEach(...)`; that concurrency-domain
+boundary is likewise owned by `PROTOS_CONCURRENCY_MODEL.md`.
 
 ## Invocation Arguments, Defaults, Rest, and Spread
 

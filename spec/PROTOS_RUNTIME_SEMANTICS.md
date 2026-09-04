@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 313
+Document revision: 315
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3994,240 +3994,18 @@ No dispatch by argument type is implied. These mechanisms support dynamic arity,
 
 
 
-### Standard Array parallelMap runtime semantics
+### Parallel Array runtime integration
 
-Conceptually:
+The normative semantics of the standard parallel Array operations
+`parallelMap`, `parallelFilter`, `parallelFindIndex`, `parallelReduce`, and
+`parallelSort` are owned by `PROTOS_CONCURRENCY_MODEL.md` §71.6A–§71.6E.
 
-```text
-parallelMap(receiver, worker, extras, caller):
-    requireStandardArrayReceiver(receiver)
-    requireOrdinarilyInvokable(worker)
-
-    source = shallowAscendingElementSnapshot(receiver)
-
-    if source.size == 0:
-        return resolvedFuture(freshStandardArray())
-
-    prepared = freshFixedSequence(source.size)
-
-    for i in 0 .. source.size - 1:
-        prepared[i] =
-            preparePInvocationGraph(
-                worker,
-                [source[i]] + extras
-            )
-        // failure here is synchronous NonParallelValue
-        // no child is eligible before the whole loop succeeds
-
-    resultFuture = freshPendingFutureOwnedBy(caller.activation)
-
-    for i in 0 .. source.size - 1:
-        scheduleIsolatedPChild(
-            prepared[i],
-            completionIndex = i,
-            owner = resultFuture
-        )
-
-    return resultFuture
-```
-
-`preparePInvocationGraph` applies the ordinary P value/copy/projection rules.
-Distinct indexes denote distinct child P domains. The implementation may share
-immutable physical representation or otherwise optimize preparation only when
-the specified independent logical child inputs remain observationally intact.
-
-Child completion records either a successfully transferred result value or an
-indexed failure. The parent result Future resolves only after every required
-index has a successful transferred result. It resolves to a fresh standard Array
-whose indexed order is the source-index order, not completion order.
-
-If indexed failures exist, terminal failure selection is the smallest failing
-source index. Implementations may avoid or cancel later work only after doing so
-cannot change that selected logical failure or any other observable semantics.
-
-Cancellation of the parent result Future requests cancellation of unfinished
-children according to the normal structured Future/P rules. No partially filled
-result Array becomes visible.
-
-Physical chunking, batching, fusion, sequential execution, SIMD, work stealing,
-and worker count are runtime choices and do not alter the conceptual per-index P
-isolation or deterministic result/failure rules.
-
-
-### Standard Array parallelFilter runtime semantics
-
-Conceptually:
-
-```text
-parallelFilter(receiver, predicate, extras, caller):
-    requireStandardArrayReceiver(receiver)
-    requireOrdinarilyInvokable(predicate)
-
-    source = shallowAscendingElementSnapshot(receiver)
-
-    if source.size == 0:
-        return resolvedFuture(freshStandardArray())
-
-    prepared = freshFixedSequence(source.size)
-
-    for i in 0 .. source.size - 1:
-        prepared[i] =
-            preparePInvocationGraph(
-                predicate,
-                [source[i]] + extras
-            )
-        // synchronous NonParallelValue on failure
-        // no child is eligible until every input succeeds
-
-    resultFuture = freshPendingFutureOwnedBy(caller.activation)
-
-    for i in 0 .. source.size - 1:
-        scheduleIsolatedPChild(
-            prepared[i],
-            completionIndex = i,
-            owner = resultFuture
-        )
-
-    return resultFuture
-```
-
-Each child normal result is classified only as canonical `true` or canonical
-`false`. Any other normal result records `InvalidPredicateResult` for that source
-index.
-
-After all logically relevant indexed outcomes are known, successful selected
-elements are assembled in ascending source-index order into a fresh standard
-Array. A selected value must cross to the caller domain under ordinary P result
-rules; an untransferable selected value records caller-domain
-`NonParallelValue` for that index. Rejected elements need not be transferred
-back.
-
-If any indexed failure exists, the smallest failing source index is the
-deterministic operation failure. No partially assembled result Array is exposed.
-Physical batching, fusion, vectorization, sequential execution, chunking, worker
-count, and work stealing are unobservable implementation choices.
-
-
-### Standard Array parallelFindIndex runtime semantics
-
-Conceptually, preparation is identical to `parallelFilter`: validate the standard
-Array receiver and ordinary predicate callability, capture the ascending shallow
-source snapshot, prepare every non-empty per-index P invocation graph before any
-child becomes eligible, and return an already-resolved `null` Future for empty
-input.
-
-Each indexed child records exactly one logical outcome:
-
-```text
-FALSE
-TRUE
-FAIL(error)
-```
-
-where a non-Boolean normal result is normalized to
-`FAIL(InvalidPredicateResult)`.
-
-Completion processing maintains the smallest source index not yet proven
-`false`. The parent Future may become terminal when that frontier index has a
-decisive outcome:
-
-```text
-TRUE
-    -> resolve with that semantic Integer index
-
-FAIL(error)
-    -> fail with that error
-
-FALSE
-    -> advance the frontier across any consecutively completed FALSE indexes
-       until another unresolved or decisive index is reached
-```
-
-If the frontier advances past the final source index, resolve with `null`.
-
-A higher-index TRUE or failure may be recorded early but cannot become observable
-while any lower index is unresolved. Once a decisive frontier outcome becomes
-terminal, unfinished higher-index work may be cooperatively cancelled or omitted
-when that cannot change other specified semantics.
-
-Scheduler timing, batching, chunking, vectorization, worker count, and physical
-completion order never alter the frontier rule.
-
-
-### Standard Array parallelReduce runtime semantics
-
-Conceptually, after receiver/callability validation, the runtime establishes the
-submission snapshot required by the reduction before returning a pending Future.
-
-For non-empty input, reduction state is a logical sequence of isolated values.
-Each round constructs nodes from adjacent positions:
-
-```text
-next = []
-for pairStart in 0, 2, 4, ...:
-    if pairStart + 1 exists:
-        next.add(
-            isolatedPInvoke(
-                reducerSnapshot,
-                current[pairStart],
-                current[pairStart + 1],
-                argumentSnapshot...
-            )
-        )
-    else:
-        next.add(current[pairStart])
-```
-
-The next logical round is admitted only after every combine node in the current
-round has a successful transferred result. On multiple failures in the same
-round, select the failing node with the smallest `pairStart`.
-
-A runtime may overlap physical implementation stages only when it preserves this
-logical round/failure relation exactly. The final sole value is transferred to
-the caller domain and resolves the Future.
-
-The empty case returns resolved `null`. The singleton case performs no reducer
-call but still realizes the required isolated value snapshot/transfer. No
-intermediate sequence is a public Protos value.
-
-
-### Standard Array parallelSort runtime semantics
-
-The normative model is a stable recursive merge sort over the logical source
-snapshot. Runtime data structures used to realize the tree are not Protos values.
-
-Conceptually:
-
-```text
-sort(values):
-    if values.size <= 1:
-        return values
-
-    split = floor(values.size / 2)
-
-    leftResult  = sort(values[0 .. split])
-    rightResult = sort(values[split .. size])
-
-    require both successful
-    return merge(leftResult, rightResult)
-```
-
-The two recursive sorts may run in parallel. If both fail, the left failure is
-selected.
-
-`merge` proceeds by output position. For current heads `a` and `b`, it performs
-the two isolated Boolean comparator invocations for `(a,b)` and `(b,a)` and
-applies the normative decision table. Comparator failures are ordered first by
-merge output position and then forward comparison before reverse comparison.
-
-When both comparisons are false, merge takes the left value and therefore
-preserves source-relative order for equivalent values. When both are true,
-`InvalidComparatorOrder` is recorded for that merge decision.
-
-A physical implementation need not allocate this exact recursive structure, but
-its result, comparator-visible behavior, failure selection, stability, P
-boundaries, and cancellation/publication semantics must be observationally
-equivalent.
+A runtime may realize those operations using any internal algorithm, task graph,
+chunking scheme, worker organization, vectorization strategy, or sequential
+fallback permitted by that owning contract. This runtime-semantics document does
+not define a second conceptual algorithm or an additional observable ordering,
+failure, snapshot, transfer, cancellation, or publication rule for those
+operations.
 
 ### Exact call-spread expansion
 

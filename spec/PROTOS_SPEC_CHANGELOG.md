@@ -8,6 +8,37 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.315] - 2026-09-04
+
+### Changed
+- Began canonicalization of existing duplicated normative authority under the
+  one-primary-owner discipline introduced by revision 0.1.314.
+- Made `PROTOS_CONCURRENCY_MODEL.md` §71.6A–§71.6E the primary normative owner
+  of the concurrency-domain semantics for the standard
+  `Array.parallelMap(...)`, `Array.parallelFilter(...)`,
+  `Array.parallelFindIndex(...)`, `Array.parallelReduce(...)`, and
+  `Array.parallelSort(...)` operations.
+- Replaced the duplicated full parallel-Array contracts in
+  `PROTOS_LANGUAGE_SPEC.md` with a compact cross-domain integration reference
+  preserving ordinary Array receiver-domain and invocation semantics.
+- Removed the duplicate conceptual parallel-Array algorithms from
+  `PROTOS_RUNTIME_SEMANTICS.md`; runtime implementations remain constrained by
+  the owning concurrency contract without acquiring a second pseudocode
+  authority.
+- Reconciled §71.6's stale statement that exact names/APIs were undecided with
+  the already-closed standard APIs in §71.6A–§71.6E.
+- Clarified that other high-level parallel patterns remain library/API design
+  space unless standardized explicitly.
+
+### Documentation
+- This revision changes specification ownership and removes contradictory or
+  duplicate authority; it does not intentionally change observable Protos
+  language or concurrency behavior.
+- Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
+  `PROTOS_CONCURRENCY_MODEL.md` to document revision 315.
+- `PROTOS_GRAMMAR.md` and `PROTOS_IO_MODEL.md` are unaffected and remain
+  byte-for-byte unchanged.
+
 ## [0.1.314] - 2026-09-04
 
 ### Changed

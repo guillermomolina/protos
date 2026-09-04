@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 313
+Document revision: 315
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -5010,24 +5010,28 @@ independently rather than being smuggled in as an Array optimization.
 
 ### 71.6 Library-Level Parallel Patterns
 
-High-level parallel algorithms should normally be library facilities
-built on the minimal runtime guarantees rather than separate language
-primitives or separate fundamental task kinds.
+High-level parallel algorithms should normally be library facilities built on
+the minimal runtime guarantees rather than separate language primitives or
+separate fundamental task kinds.
 
-Examples may include:
+This section is the primary normative owner of the concurrency-domain semantics
+for the Core v0.1 standard parallel Array operations defined in §71.6A–§71.6E:
 
--   Parallel map
--   Parallel filter
--   Parallel reduce
--   Parallel search
--   Partitioned Buffer/Array processing
--   Parallel pipelines
+-   `Array.parallelMap(...)`
+-   `Array.parallelFilter(...)`
+-   `Array.parallelFindIndex(...)`
+-   `Array.parallelReduce(...)`
+-   `Array.parallelSort(...)`
 
-The exact names and APIs are not decided by this ledger.
+Those standardized operations have the exact names and contracts defined below.
+Other high-level parallel patterns, including additional partitioned collection
+processing or parallel pipelines, remain library/API design space unless another
+normative section standardizes them explicitly.
 
 A standard or third-party library may choose chunking, reduction trees,
-partition strategy, batching, or algorithm-specific policy while the
-runtime enforces the underlying isolation and scheduling guarantees.
+partition strategy, batching, or algorithm-specific policy only where the
+operation's normative contract leaves that choice unobservable and the runtime
+continues to enforce the underlying isolation and scheduling guarantees.
 
 Physical scheduling policy must not accidentally become an observable semantic
 choice. If a standard parallel library operation promises a deterministic
