@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 318
+Document revision: 319
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -1962,191 +1962,24 @@ preemption point, propagation direction, cleanup outcome, or terminal-state rule
 
 ---
 
-# 31. Future Resolution
+# 31. Future State and Resolution Runtime Integration
 
-```text
-function resolveFuture(future, value):
-    if future.state != pending:
-        signal InvalidFutureState()
+The normative Future state, terminal-transition, failure-identity, and
+resolution/adoption semantics are owned by `PROTOS_LANGUAGE_SPEC.md` §28.
 
-    if isFuture(value):
-        adoptFuture(
-            destination = future,
-            source = value
-        )
-
-        return
-
-    future.state = resolved
-    future.value = value
-
-    wakeWaiters(future)
-
-
-function adoptFuture(destination, source):
-    if destination.state != pending:
-        signal InvalidFutureState()
-
-    if destination === source or adoptionChainReaches(source, destination):
-        failFuture(
-            destination,
-            FutureResolutionCycle
-        )
-        return
-
-    switch source.state:
-        case resolved:
-            destination.state = resolved
-            destination.value = source.value
-            wakeWaiters(destination)
-            return
-
-        case failed:
-            destination.state = failed
-            destination.error = source.error
-            wakeWaiters(destination)
-            return
-
-        case cancelled:
-            destination.state = cancelled
-            wakeWaiters(destination)
-            return
-
-        case pending:
-            destination.adoptedSource = source
-
-            onFutureCompletion(source, terminalResult => {
-                // Runtime bookkeeping only; no Protos code runs inline here.
-                if destination.state != pending:
-                    return
-
-                destination.adoptedSource = none
-
-                switch terminalResult.state:
-                    case resolved:
-                        destination.state = resolved
-                        destination.value = terminalResult.value
-
-                    case failed:
-                        destination.state = failed
-                        destination.error = terminalResult.error
-
-                    case cancelled:
-                        destination.state = cancelled
-
-                wakeWaiters(destination)
-            })
-
-            // A request may already have been recorded before adoption became
-            // the destination's pending producer. Do not require a later edge.
-            if destination.cancellationRequested:
-                cancelPendingAdoption(destination)
-
-            return
-
-
-function adoptionChainReaches(start, target):
-    current = start
-
-    while current != none and current.state == pending:
-        if current === target:
-            return true
-
-        current = current.adoptedSource
-
-    return false
-
-
-function cancelPendingAdoption(destination):
-    // Runtime bookkeeping only; no Protos code executes here.
-    if destination.state != pending:
-        return
-
-    if destination.adoptedSource == none:
-        return
-
-    if not destination.cancellationRequested:
-        return
-
-    destination.adoptedSource = none
-    destination.state = cancelled
-    wakeWaiters(destination)
-```
-
-Automatic Future flattening therefore means outcome adoption, not ownership,
-identity, or cancellation adoption.
-
-While `destination` adopts a pending `source`, `destination.state` remains
-`pending`; `adoptedSource` is conceptual runtime bookkeeping and is not a fifth
-Future state or a language-visible slot.
-
-The adopted source's terminal outcome is mirrored exactly: resolution uses the
-same resolved value, failure uses the same error object, and source cancellation
-cancels the destination. No Protos transformation or handler is invoked merely
-to propagate that terminal outcome.
-
-Adoption is one-way. Cancelling the destination while adoption is pending may
-cancel the destination but never requests cancellation of the source and never
-changes the source's ownership or detachment. Likewise, detaching a task-backed
-destination does not detach or re-parent the adopted source.
-
-Adoption is a normative cancellation-aware pending operation. Therefore a
-cancellation request on an adopting destination can be honored even though the
-task body that initiated adoption has already returned. If source completion and
-destination cancellation race, the first terminal transition of the destination
-wins; later bookkeeping observes the terminal state and has no effect.
-
-Future-adoption cycles are invalid. Direct self-adoption and any transitive
-pending adoption that would make the destination reachable from the source's
-adoption chain fail the destination with the standard `FutureResolutionCycle`
-error prototype, which delegates directly to `Error`. A cycle must not be left as
-an implementation-dependent permanently pending Future.
-
-No adoption callback executes ordinary Protos code inline. Implementations may
-represent the dependency with callbacks, waiter lists, graph nodes, or another
-mechanism, provided the observable outcome, cancellation direction, cycle
-handling, and terminal-state rules above are preserved.
+A runtime may represent terminal state, stored values/errors, adoption edges,
+cycle detection, dependency callbacks, and source-to-destination propagation
+using any mechanism that preserves that contract and the cancellation semantics
+owned by `PROTOS_CONCURRENCY_MODEL.md` §23. This document does not define a
+second conceptual resolution/adoption algorithm or additional observable Future
+state.
 
 ---
 
-# 32. Future Failure
+# 32. Future Waiter Runtime Bookkeeping
 
-```text
-function failFuture(future, error):
-    if future.state != pending:
-        signal InvalidFutureState()
-
-    future.state = failed
-    future.error = error
-
-### Domain-local Future failure stores the exact Error object
-
-For an ordinary Future and an Error already in that Future's value/isolation
-domain:
-
-```text
-failFuture(future, error):
-    future.state = failed
-    future.error = error
-```
-
-the assignment to `future.error` is semantic object-reference preservation, not
-pseudocode shorthand for copying or reconstruction. `future.error === error`
-therefore holds for identity-bearing Error objects in that domain.
-
-A later `value()` observation re-signals that exact recorded object while still
-remaining a new consumer-side signaling event. Object identity preservation does
-not preserve the producer continuation, dynamic handlers, activation frames, or
-other control state.
-
-Boundary-specific transformations happen before this rule applies. In
-particular, P first transfers/reconstructs the Error into the caller domain and
-then fails the caller Future with that transferred object. No Actor-fatal Error
-is implicitly inserted into another Actor's Future.
-
-    wakeWaiters(future)
-```
-
+`wakeWaiters(future)` is conceptual runtime bookkeeping with the following
+observable contract:
 `wakeWaiters(future)` is conceptual runtime bookkeeping with the following
 observable contract:
 

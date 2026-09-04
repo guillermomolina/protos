@@ -8,6 +8,44 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.319] - 2026-09-04
+
+### Changed
+- Canonicalized the Core Future state/resolution/adoption family.
+- Made `PROTOS_LANGUAGE_SPEC.md` §28 the primary normative owner of the four
+  Future states, first-terminal-transition stability, normal resolution,
+  domain-local failure/Error identity, Future outcome adoption/flattening,
+  adoption cancellation direction, and `FutureResolutionCycle`.
+- Removed the duplicate conceptual Future resolution/adoption and failure-storage
+  algorithms from `PROTOS_RUNTIME_SEMANTICS.md`; runtime representation of those
+  mechanisms is now explicitly implementation freedom subject to the owning
+  contracts.
+- Reduced the `Future.then()` concurrency section to its genuine
+  continuation-task/ownership/scheduling specialization and made generic
+  flattening reference Language §28.
+- Retained Future waiter bookkeeping in Runtime temporarily because the remaining
+  `Future.value()` ownership migration is blocked by an existing specification
+  gap described below.
+
+### Specification gap
+- `PROTOS_RUNTIME_SEMANTICS.md` currently uses pseudocode `Cancelled` when
+  `Future.value()` observes a cancelled Future, but no normative specification
+  defines `Cancelled` as a standard Error prototype or otherwise defines the
+  exact observable cancellation-observation Error category.
+- Under the Core Error-taxonomy rule, a pseudocode-only name does not become a
+  portable standard Error prototype merely by appearing in Runtime pseudocode.
+- This revision therefore does not invent or silently standardize `Cancelled`.
+  The remaining `Future.value()` canonicalization must close that semantic gap
+  explicitly before Runtime's waiter/observation contract can be fully demoted.
+
+### Documentation
+- This revision changes specification ownership and exposes an existing gap; it
+  does not intentionally change observable Protos behavior.
+- Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
+  `PROTOS_CONCURRENCY_MODEL.md` to document revision 319.
+- `PROTOS_GRAMMAR.md` and `PROTOS_IO_MODEL.md` are unaffected and remain
+  byte-for-byte unchanged.
+
 ## [0.1.318] - 2026-09-04
 
 ### Changed

@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 318
+Document revision: 319
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -2031,21 +2031,91 @@ through an ordinary message is unchanged. No additional cancellation syntax,
 asynchronous exception mechanism, or hidden implementation-selected checkpoint is
 introduced by this language specification.
 
-## 28. Future Resolution
+## 28. Future State, Resolution, Failure, and Adoption
 
-Normal completion:
+This section is the primary normative owner of the Core v0.1 Future
+state/resolution model.
 
-```text
-Future → resolved(result)
-```
-
-Unhandled error:
+A Future has exactly one of four states:
 
 ```text
-Future → failed(error)
+pending
+resolved(value)
+failed(error)
+cancelled
 ```
 
-The error uses the ordinary signaling system. There is no separate promise-rejection mechanism.
+`pending` is the only non-terminal state. `resolved`, `failed`, and `cancelled`
+are terminal. The first terminal transition is stable: later producer,
+completion, cancellation, or adoption bookkeeping cannot rewrite the Future's
+terminal outcome.
+
+Normal completion with an ordinary non-Future value resolves the Future with
+that value. Unhandled asynchronous failure fails the Future with the applicable
+`Error`; there is no separate promise-rejection mechanism.
+
+### Domain-local failure preserves Error identity
+
+When a Future becomes failed with an `Error` already belonging to the same
+Protos value/isolation domain as that Future, the Future records that exact Error
+object. Failure recording does not clone, wrap, snapshot, reconstruct, or
+otherwise substitute it.
+
+Consequently, later observations that re-signal the stored failure use that same
+domain-local Error object. This identity rule does not preserve producer control
+state, dynamic handlers, activation frames, continuations, return homes, or
+resumption authority.
+
+Boundary-specific transformation happens before failure is recorded in the
+receiving Future. In particular, P first transfers/reconstructs an Error into the
+caller domain and then fails the caller Future with that transferred object.
+Actor-fatal Errors do not implicitly cross Actor boundaries.
+
+### Future resolution adopts Future outcomes
+
+When Future resolution is given another Future instead of an ordinary value, the
+destination adopts the source Future's eventual terminal outcome rather than
+resolving to a nested Future.
+
+While the adopted source is pending, the destination remains `pending`.
+Adoption bookkeeping is not a fifth Future state and is not a language-visible
+slot or object category.
+
+Adoption mirrors the source terminal outcome exactly:
+
+```text
+source resolved(value) -> destination resolved(value)
+source failed(error)    -> destination failed(error)
+source cancelled        -> destination cancelled
+```
+
+Resolution uses the same resolved value object. Failure uses the same Error
+object when both Futures are already in the same value/isolation domain, subject
+to the boundary rule above. Propagating an adopted terminal outcome does not
+invoke ordinary Protos transformation or handler code merely to perform that
+propagation.
+
+Adoption transfers only eventual outcome. It does not transfer Future identity,
+task identity, structured ownership, or detachment. It creates no upstream
+cancellation: cancelling an adopting destination never requests cancellation of
+the adopted source and never changes that source's ownership or detachment.
+Detaching a task-backed destination likewise does not detach or re-parent the
+adopted source.
+
+Adoption is a cancellation-aware pending operation under the cancellation rules
+owned by `PROTOS_CONCURRENCY_MODEL.md` §23. If destination cancellation and
+adopted-source completion race, the first terminal transition of the destination
+wins; later bookkeeping has no effect.
+
+Future-adoption cycles are invalid. Direct self-adoption and any transitive
+pending adoption that would make the destination reachable from the source's
+adoption chain fail the destination with the standard `FutureResolutionCycle`
+error prototype. `FutureResolutionCycle` delegates directly to `Error`. A cycle
+must not remain implementation-dependently pending.
+
+Implementations may represent adoption with callbacks, dependency nodes, waiter
+lists, graph edges, or another mechanism. Such bookkeeping must not execute
+ordinary Protos code inline merely because the source Future becomes terminal.
 
 ## 29. Obtaining a Future's Value
 
@@ -2081,26 +2151,6 @@ Repeated observations of the same failed Future, where otherwise permitted by
 the Future contract, are repeated consumer-side signaling events. They never
 revive or re-enter the failed producer computation.
 
-### Failed Future preserves Error object identity within one value domain
-
-When a Future becomes failed with an `Error` that already belongs to the same
-Protos value/isolation domain as that Future, the Future records that exact Error
-object. Failure recording does not clone, wrap, snapshot, reconstruct, or
-otherwise substitute the Error.
-
-Consequently, repeated observations of one such failed Future re-signal the same
-Error object, and a handler may observe `===` identity with the object that
-originally caused that Future to fail.
-
-This rule applies only where no semantic value-transfer boundary intervenes.
-When failure crosses P, the P Error-transfer rules determine the caller-domain
-Error value before the caller-side Future is failed. Actor-fatal Errors do not
-implicitly cross Actor boundaries at all.
-
-Future combinators that normatively propagate "the same Error" likewise preserve
-the exact already-domain-local Error object unless an explicit boundary rule says
-otherwise.
-
 ## 30. Future Composition
 
 Core v0.1 standardizes the ordinary Future transformation operation:
@@ -2116,10 +2166,12 @@ domain, scheduling, source-outcome propagation, flattening, cancellation,
 detachment, and ordering semantics are owned by
 `PROTOS_CONCURRENCY_MODEL.md` under `Future then() continuations`.
 
-Automatic flattening continues to use the ordinary Future-resolution/adoption
-semantics owned by the concurrency model. General invocation and object-model
-rules from this language specification continue to apply to the transformation
-Closure where referenced by that contract.
+Automatic flattening uses the Future resolution/adoption semantics owned by
+this specification in §28. The concurrency model owns the continuation task's
+execution, ownership, cancellation, detachment, and scheduling consequences.
+General invocation and object-model rules from this language specification
+continue to apply to the transformation Closure where referenced by that
+contract.
 
 ### Waiting for multiple Futures
 

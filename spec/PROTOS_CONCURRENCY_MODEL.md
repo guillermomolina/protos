@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 318
+Document revision: 319
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -306,23 +306,14 @@ The continuation executes as ordinary task work in the Actor/execution domain of
 the activation that created it. A resolved source invokes the transformation with
 the source value; a failed source fails the destination with the same error without
 invoking the transformation; a cancelled source cancels the destination without
-invoking the transformation. A Future returned by the transformation is flattened
-through the ordinary Future-resolution rule.
+invoking the transformation. A Future returned by the transformation is flattened through the Future
+resolution/adoption semantics owned by `PROTOS_LANGUAGE_SPEC.md` §28.
 
-Flattening adopts only the returned Future's eventual terminal outcome. It does
-not transfer ownership, task identity, or detachment, and it does not create
-upstream cancellation: cancelling the destination while it is adopting the
-returned Future never cancels that returned Future. Source resolution, failure,
-or cancellation is mirrored by the destination. A direct or transitive adoption
-cycle fails the destination with the standard `FutureResolutionCycle` error
-rather than leaving the cycle permanently pending. `FutureResolutionCycle`
-delegates directly to `Error`.
+That generic adoption contract owns outcome mirroring, cycle failure,
+destination/source identity separation, first-terminal-transition stability, and
+the absence of upstream cancellation or ownership transfer during adoption.
 
-If cancellation of an adopting destination races with completion of the adopted
-Future, the first terminal transition of the destination wins and later
-completion/cancellation bookkeeping cannot rewrite it.
-
-Cancellation and detachment are downstream-only for this composition edge:
+Cancellation and detachment are downstream-only for this continuation edge:
 cancelling the destination requests cancellation of the continuation but does not
 cancel the source Future, and detaching the destination detaches only the
 continuation task. Neither operation changes ownership or lifetime of the source
