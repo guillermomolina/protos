@@ -4,6 +4,31 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.236] - 2026-09-04
+
+### Fixed
+- Defined standard `TextReader.readText()` as a progress-oriented chunk read:
+  once non-empty decoded text is returnable without additional source/backend
+  progress, the operation cannot remain pending solely to build a larger chunk.
+- Kept chunk boundaries implementation-selectable while preventing buffered
+  decoded text from being hidden behind an implementation-preferred chunk size.
+- Distinguished incomplete encoded characters and state-only decoder progress,
+  which may still require more input before any String is returnable.
+- Defined a later I/O/decoding error discovered by read-ahead not to leap ahead
+  of valid decoded text that logically precedes it.
+- Required all valid decoded text preceding such an error to be exposed, in any
+  permitted finite chunking, before the error becomes a text-read outcome.
+- Reconciled permanent TextReader failure so deferred read-ahead errors poison
+  the text-reading side only when they become the committed failure outcome of
+  the applicable ordered text-reading operation.
+- Kept `readLine()` complete-line framing and its existing error precedence
+  unchanged.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 236. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.235] - 2026-09-04
 
 ### Fixed

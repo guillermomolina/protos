@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 235
+Document revision: 236
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -803,6 +803,20 @@ The decoder never exposes an incomplete encoded character as malformed String co
 
 Text I/O chunk size is not normatively expressed in grapheme clusters or Unicode code points.
 
+For a standard `TextReader`, `readText()` is a progress-oriented chunk read, not an exact-fill, delimiter-seeking, or read-all operation. Once the earliest ordered `readText()` has a non-empty prefix of decoded logical text that can be returned without waiting for additional source/backend progress, that operation must not remain pending solely to accumulate a larger implementation-selected String chunk.
+
+A returnable decoded prefix contains only complete valid Protos String text. Bytes that form only an incomplete encoded character, or valid decoder-control/state transitions that have not yet produced text, do not by themselves require a successful `readText()` result; the reader may remain pending until text, EOF, or an error becomes established. Conversely, decoded text already retained in implementation-controlled buffering is available to the earliest ordered `readText()` and cannot be hidden merely because the implementation prefers a larger chunk.
+
+The exact non-empty chunk boundary remains implementation-selectable. A reader may return one Unicode scalar or a larger finite prefix, may split an extended grapheme cluster as already permitted, and may use bounded read-ahead or decoder batching. That freedom changes chunking only; it does not permit implementation-selected extra waiting after useful decoded text is already returnable.
+
+For a standard `TextReader`, an I/O or decoding error that belongs logically after one or more already-returnable decoded characters does not retroactively erase those preceding characters merely because buffering/read-ahead discovered the later error before the implementation happened to resolve the current Future. `readText()` returns a non-empty prefix of the valid decoded text that precedes that error, and the later error is preserved/deferred in the reader's logical input/error state for a subsequent ordered text-reading operation after all preceding decoded text has been delivered.
+
+Therefore implementations may choose different permitted chunk boundaries before the same later error, but they must expose the same concatenated valid decoded prefix before that error becomes the outcome of a text-reading operation. A decoding or I/O error established before any text is returnable for the earliest ordered `readText()` remains that operation's failure and follows the ordinary permanent TextReader failure lifecycle.
+
+This rule does not alter `readLine()` framing. A line operation still waits until its complete line result, EOF-final line, or defined failure is established, and an error before that line's terminator can fail the line even when some non-terminating text has already been decoded. `readText()` and `readLine()` continue to share one ordered decoder/input domain.
+
+Ordinary `readText()` therefore completes once useful decoded text is returnable, while preserving later errors in logical order instead of letting implementation chunk size or read-ahead move those errors ahead of already-decoded text.
+
 The text-writing capability is conceptually:
 
 ```text
@@ -965,7 +979,7 @@ If the counted pre-terminator interval exceeds `maxBytes`, the Future fails and 
 
 A line-too-long failure permanently fails the `TextReader`'s text-reading side. The reader does not implicitly scan/discard the remainder of the overlong line, search for a later terminator, or attempt to recover a next-line boundary.
 
-A decoding or underlying I/O failure encountered while a `TextReader` is constructing a `readText()` or `readLine()` result likewise permanently fails that reader's text-reading side. This deterministic wrapper failure rule is independent of whether the wrapped byte source itself remains usable.
+A decoding or underlying I/O failure that becomes the committed failure outcome of a `TextReader` `readText()` or `readLine()` operation permanently fails that reader's text-reading side. For `readLine()`, the line-framing/error-precedence rules determine whether such a failure belongs to the current line before a complete line result exists. For `readText()`, the progress rule in section 14 first delivers any valid decoded text that logically precedes a later read-ahead I/O/decoding error; merely discovering that later error while constructing or buffering beyond the returned chunk does not poison the reader before the preceding text has been delivered. Once the preserved error becomes the outcome of the next applicable ordered text-reading operation, the text-reading side then enters this permanent failed state. This deterministic wrapper failure rule is independent of whether the wrapped byte source itself remains usable.
 
 After the text-reading side has failed, subsequent `readText()` and `readLine()` operations fail without consuming additional input from the wrapped source. Core v0.1 defines no recovery/reset operation that resumes text decoding on the same `TextReader`.
 
