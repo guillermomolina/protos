@@ -79,10 +79,8 @@ public final class Canonicalizer {
 
     private CanonicalExpression lowerBinary(SurfaceBinary binary) {
         return switch (binary.operator()) {
-            case "||", "&&" ->
-                    throw new IllegalArgumentException(
-                            "Lazy Boolean operator is not supported by this canonicalizer slice: "
-                                    + binary.operator());
+            case "&&" -> lowerLazyBoolean(binary, "and");
+            case "||" -> lowerLazyBoolean(binary, "or");
             case "==" -> lowerEquality(binary);
             case "!=" ->
                     negate(lowerEquality(binary), binary.span());
@@ -97,6 +95,22 @@ public final class Canonicalizer {
                             List.of(canonicalize(binary.right())),
                             binary.span());
         };
+    }
+
+    private CanonicalExpression lowerLazyBoolean(
+            SurfaceBinary binary, String message) {
+        CanonicalExpression right = canonicalize(binary.right());
+        CanonicalClosure lazyRight =
+                new CanonicalClosure(
+                        List.of(),
+                        new CanonicalSequence(List.of(right), binary.right().span()),
+                        binary.right().span());
+
+        return new CanonicalSend(
+                canonicalize(binary.left()),
+                message,
+                List.of(lazyRight),
+                binary.span());
     }
 
     private CanonicalExpression lowerEquality(SurfaceBinary binary) {
