@@ -4,6 +4,22 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.8-SNAPSHOT] - 2026-09-04
+
+### Fixed
+
+- Fixed `ProtosArgumentVectorNodeTest` to use the actual `SourceSpan` constructor
+  instead of a nonexistent `SourceSpan.unknown()` helper.
+- Project implementation version changed from `0.2.7-SNAPSHOT` to
+  `0.2.8-SNAPSHOT`.
+
+### Notes
+
+- This is a test-compilation correction only; caller argument-vector semantics
+  and implementation behavior are unchanged.
+- No normative specification change is introduced.
+
+
 ## [0.2.7-SNAPSHOT] - 2026-09-04
 
 ### Added

@@ -47,7 +47,7 @@ class ProtosArgumentVectorNodeTest {
 
         ProtosArgumentVectorNode node =
                 new ProtosArgumentVectorNode(
-                        SourceSpan.unknown(),
+                        new SourceSpan(0, 0),
                         List.of(
                                 new ProtosArgumentItem(
                                         recording(order, "first", first), false),
@@ -79,15 +79,15 @@ class ProtosArgumentVectorNodeTest {
 
         ProtosArgumentVectorNode node =
                 new ProtosArgumentVectorNode(
-                        SourceSpan.unknown(),
+                        new SourceSpan(0, 0),
                         List.of(
                                 new ProtosArgumentItem(
                                         new ProtosConstantNode(
-                                                SourceSpan.unknown(), array),
+                                                new SourceSpan(0, 0), array),
                                         true),
                                 new ProtosArgumentItem(
                                         new ProtosExpressionNode(
-                                                SourceSpan.unknown()) {
+                                                new SourceSpan(0, 0)) {
                                             @Override
                                             public Object execute(
                                                     VirtualFrame frame) {
@@ -113,7 +113,7 @@ class ProtosArgumentVectorNodeTest {
         List<String> order = new ArrayList<>();
         ProtosArgumentVectorNode node =
                 new ProtosArgumentVectorNode(
-                        SourceSpan.unknown(),
+                        new SourceSpan(0, 0),
                         List.of(
                                 new ProtosArgumentItem(
                                         recording(
@@ -144,11 +144,11 @@ class ProtosArgumentVectorNodeTest {
         Object value = new Object();
         ProtosArgumentVectorNode node =
                 new ProtosArgumentVectorNode(
-                        SourceSpan.unknown(),
+                        new SourceSpan(0, 0),
                         List.of(
                                 new ProtosArgumentItem(
                                         new ProtosConstantNode(
-                                                SourceSpan.unknown(), value),
+                                                new SourceSpan(0, 0), value),
                                         false)));
 
         @SuppressWarnings("unchecked")
@@ -165,7 +165,7 @@ class ProtosArgumentVectorNodeTest {
             List<String> order,
             String label,
             Object result) {
-        return new ProtosExpressionNode(SourceSpan.unknown()) {
+        return new ProtosExpressionNode(new SourceSpan(0, 0)) {
             @Override
             public Object execute(VirtualFrame frame) {
                 order.add(label);
