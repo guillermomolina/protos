@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 265
+Document revision: 266
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -2046,6 +2046,23 @@ transition.
 ## 31. Structured Concurrency
 
 Asynchronous executions belong by default to the execution context that creates them.
+
+### Actor-local asynchronous execution is cooperatively non-preemptive
+
+Ordinary `closure.future()` work created in an Actor remains cooperative work in
+that Actor's mutable execution domain. While such a task executes ordinary
+Protos code without an explicit suspension point, Core defines no hidden
+preemption boundary that permits another Actor-local Protos task or message turn
+to interleave with it.
+
+CPU-bound Actor-local work may therefore monopolize that Actor until it
+suspends, completes, or fails. Runtime time slicing or host-thread preemption is
+permitted only when it is observationally equivalent to uninterrupted execution
+of the same Protos segment.
+
+Programs that require isolated CPU-parallel progress use the explicit
+`closure.parallel(...)` facility rather than relying on hidden preemption of
+`closure.future()`.
 
 Non-detached child tasks are structurally owned by that execution context.
 

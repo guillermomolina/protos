@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 265
+Document revision: 266
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -1426,6 +1426,62 @@ This choice preserves local reasoning: application code may recover from any
 ordinary Protos `Error` it intentionally handles, while an error that leaves a
 turn without a defined recovery path cannot silently preserve possibly
 inconsistent Actor-local mutable state.
+
+## 24D. Actor-Local CPU Work Is Cooperatively Non-Preemptive
+
+**CLOSED**
+
+Actor-local asynchronous work created by ordinary `closure.future()` remains in
+the same mutable Actor execution domain as the code that created it.
+
+Within that domain, Protos concurrency is cooperative. A running Actor-local task
+continues ordinary Protos execution until it reaches an already-defined explicit
+suspension/cancellation-aware boundary, completes, fails, or otherwise leaves its
+current execution segment according to existing semantics.
+
+Core does not introduce hidden semantic preemption points at loop back-edges,
+method-call boundaries, allocations, interpreter/JIT polls, garbage collection,
+timer ticks, carrier time slices, host-thread scheduling boundaries, or similar
+implementation events.
+
+Consequently, an Actor-local task that performs CPU-bound Protos computation
+without reaching an explicit suspension point may monopolize that Actor's Protos
+execution domain for an unbounded amount of time. While that task remains in the
+same non-suspending execution segment:
+
+- another Actor-local task cannot simultaneously execute Protos code against the
+  same Actor mutable state;
+- queued Actor message handlers do not acquire an implementation-selected
+  interleaving point inside that segment;
+- cancellation requests remain pending until an existing portable cancellation
+  boundary is reached;
+- runtime scheduling fairness between different runnable Actor-local tasks does
+  not imply arbitrary preemption of the currently executing segment.
+
+This is a semantic consequence of C's shared-state/serialized-execution model,
+not a recommendation that CPU-heavy work should normally run this way.
+
+When CPU-bound work should make progress independently of Actor-local cooperative
+suspension, the standard Core mechanism is the explicit P boundary:
+
+```text
+closure.parallel(arguments...)
+```
+
+That operation creates isolated parallel execution rather than silently changing
+the semantics of `closure.future()`.
+
+An implementation may physically interrupt, migrate, time-slice, compile, or
+resume an Actor-local task internally, but such machinery must be
+observationally equivalent to uninterrupted execution of the same Protos segment.
+In particular, it must not allow another Actor-local Protos task to observe or
+mutate the shared Actor domain at a point where the program did not explicitly
+suspend.
+
+A future explicit yield/scheduling facility may add a new portable cooperative
+boundary if independently justified. Until then, Core defines no implicit
+`yield`, quantum expiration, fairness poll, or automatic conversion of CPU-bound
+Actor-local work into P.
 
 ## 25. Parent Actor Versus Failure Authority
 
@@ -5319,7 +5375,6 @@ mechanism, or implementation detail that still requires design.
 -   Clock semantics
 -   Waiting on multiple Futures
 -   Select/race operations
--   Actor-local CPU-bound Future monopolization
 -   Resource limits and quotas
 -   Runtime resource-pressure model
 -   Actor resource-cost estimation and learning

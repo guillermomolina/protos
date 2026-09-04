@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 265
+Document revision: 266
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -6134,6 +6134,39 @@ caller-domain `NonParallelValue`.
 `closure.future()` created while the current activation belongs to a P domain
 creates an ordinary cooperative task owned by that P activation/domain. It keeps
 ordinary live P-local Closure captures and does not use parallel projection.
+
+### Actor-local cooperative execution segments
+
+For an ordinary Actor-local task, one running Protos execution segment is
+semantically non-preemptive with respect to other Protos work in the same Actor
+domain.
+
+Conceptually:
+
+```text
+runActorLocalSegment(task):
+    while task has not completed/failed
+          and task has not reached an explicit suspension boundary:
+        execute next Protos step
+        // no semantic scheduler handoff inside this segment
+```
+
+The runtime may physically interrupt or migrate the carrier executing the
+segment, but it must not dispatch another Actor-local Protos continuation against
+the same mutable Actor state until the current segment reaches a portable
+boundary.
+
+Loop polls, allocation safepoints, GC safepoints, JIT polls, host-thread quantum
+expiration, and similar implementation events are not semantic suspension
+points.
+
+Therefore a CPU-bound `closure.future()` segment can delay other Actor-local work
+indefinitely if it never reaches a suspension point. This does not violate
+Actor-local fairness because Core fairness does not create hidden preemption
+inside an executing cooperative segment.
+
+Isolated CPU-parallel progress is provided by `closure.parallel(...)`, whose P
+domain has separate mutable authority and its own scheduler/fairness rules.
 
 ### P runnable-work fairness
 

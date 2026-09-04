@@ -4,6 +4,32 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.266] - 2026-09-04
+
+### Closed
+- Closed Actor-local CPU-bound Future monopolization as an explicit consequence
+  of cooperative C semantics.
+- Defined ordinary Actor-local `closure.future()` execution segments as
+  semantically non-preemptive with respect to other Protos work in the same
+  Actor mutable domain.
+- Defined no hidden suspension/preemption points at loop back-edges, calls,
+  allocations, GC/JIT polls, timer ticks, host-thread quanta, or similar runtime
+  machinery.
+- Clarified that CPU-bound Actor-local work which never suspends may monopolize
+  the Actor indefinitely and may delay queued tasks/messages and cancellation
+  observation.
+- Permitted physical carrier interruption/time slicing only when observationally
+  equivalent to uninterrupted Protos-segment execution.
+- Identified explicit `closure.parallel(...)` as the standard Core mechanism
+  when CPU-bound work needs isolated parallel progress.
+- Removed `Actor-local CPU-bound Future monopolization` from Open Design Topics.
+
+### Changed
+- Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
+  `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  266.
+
 ## [0.1.265] - 2026-09-04
 
 ### Fixed
