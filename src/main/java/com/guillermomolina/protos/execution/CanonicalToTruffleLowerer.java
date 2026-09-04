@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosNumberLiteral;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.semantic.ast.CanonicalAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
+import com.guillermomolina.protos.semantic.ast.CanonicalCompose;
 import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
@@ -56,7 +57,7 @@ public final class CanonicalToTruffleLowerer {
                     object.span(),
                     parentNode,
                     ProtosExecution.createCallTarget(
-                            lowerSequence(object.body())));
+                            lowerObjectBody(object)));
         }
         if (expression instanceof CanonicalIdentity identity) {
             return new ProtosIdentityNode(
@@ -129,5 +130,23 @@ public final class CanonicalToTruffleLowerer {
         ProtosExpressionNode[] expressions =
                 sequence.expressions().stream().map(this::lower).toArray(ProtosExpressionNode[]::new);
         return new ProtosSequenceNode(sequence.span(), expressions);
+    }
+
+    private ProtosExpressionNode lowerObjectBody(CanonicalObject object) {
+        java.util.Set<String> reservedNames =
+                object.reservedLocalSlotNames();
+        ProtosExpressionNode[] expressions =
+                object.body().expressions().stream()
+                        .map(expression -> {
+                            if (expression instanceof CanonicalCompose compose) {
+                                return new ProtosComposeNode(
+                                        compose.span(),
+                                        lower(compose.object()),
+                                        reservedNames);
+                            }
+                            return lower(expression);
+                        })
+                        .toArray(ProtosExpressionNode[]::new);
+        return new ProtosSequenceNode(object.body().span(), expressions);
     }
 }

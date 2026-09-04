@@ -4,6 +4,36 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.4-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added execution of canonical composition items inside object bodies.
+- Composition evaluates its source first, copies effective local bindings into
+  the object under construction, and makes successful contributions immediately
+  visible to later body items.
+- Direct local declarations reserve their names structurally across the complete
+  receiving object body, excluding those names from every composition item.
+- Composition conflicts and invalid non-ordinary composition sources now signal
+  Core `Error` objects instead of leaking host exceptions.
+
+### Changed
+
+- Canonical object-body lowering now supplies the object's structural reservation
+  set to each composition item while preserving strict left-to-right body
+  execution.
+- Project implementation version changed from `0.2.3-SNAPSHOT` to
+  `0.2.4-SNAPSHOT`.
+
+### Notes
+
+- Composition reuses the existing atomic runtime contribution helper, so a
+  conflicting item installs none of its effective bindings.
+- `without` and `alias` remain blocked by B002 and are not exposed by this
+  increment.
+- No normative specification change is introduced.
+
+
 ## [0.2.3-SNAPSHOT] - 2026-09-04
 
 ### Added
