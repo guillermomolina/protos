@@ -17,31 +17,25 @@
 
 package com.guillermomolina.protos.execution;
 
+import static org.junit.jupiter.api.Assertions.assertSame;
+
 import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.guillermomolina.protos.source.SourceSpan;
-import com.oracle.truffle.api.frame.VirtualFrame;
-import java.util.Arrays;
-import java.util.Objects;
+import java.util.List;
+import org.junit.jupiter.api.Test;
 
-public final class ProtosSequenceNode extends ProtosExpressionNode {
-    @Children
-    private final ProtosExpressionNode[] expressions;
+class CanonicalEmptySequenceExecutionTest {
+    @Test
+    void emptySequenceCompletesWithCanonicalNull() {
+        CanonicalSequence sequence =
+                new CanonicalSequence(List.of(), new SourceSpan(0, 0));
 
-    public ProtosSequenceNode(SourceSpan span, ProtosExpressionNode[] expressions) {
-        super(span);
-        Objects.requireNonNull(expressions, "expressions");
-        this.expressions = expressions.clone();
-        if (Arrays.stream(this.expressions).anyMatch(Objects::isNull)) {
-            throw new NullPointerException("expressions contains null");
-        }
-    }
+        Object result =
+                ProtosExecution.createCallTarget(
+                                new CanonicalToTruffleLowerer().lower(sequence))
+                        .call();
 
-    @Override
-    public Object execute(VirtualFrame frame) {
-        Object result = ProtosNullValue.INSTANCE;
-        for (ProtosExpressionNode expression : expressions) {
-            result = expression.execute(frame);
-        }
-        return result;
+        assertSame(ProtosNullValue.INSTANCE, result);
     }
 }

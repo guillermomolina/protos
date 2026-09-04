@@ -116,11 +116,6 @@ public final class CanonicalToTruffleLowerer {
     }
 
     private ProtosExpressionNode lowerSequence(CanonicalSequence sequence) {
-        if (sequence.expressions().isEmpty()) {
-            throw new UnsupportedOperationException(
-                    "Empty canonical Sequence execution remains blocked by B001");
-        }
-
         ProtosExpressionNode[] expressions =
                 sequence.expressions().stream().map(this::lower).toArray(ProtosExpressionNode[]::new);
         return new ProtosSequenceNode(sequence.span(), expressions);

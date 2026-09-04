@@ -20,7 +20,7 @@ changed. Verify the stated unblock condition against the current normative text.
 
 ## B001 — Empty Sequence execution
 
-Status: READY
+Status: CLOSED
 
 Implementation area:
 Truffle lowering / execution of a `CanonicalSequence` containing zero
@@ -38,9 +38,8 @@ The current normative specifications explicitly and uniquely determine the
 result of evaluating an empty `Sequence`.
 
 Current consequence:
-The normative dependency is resolved. `ProtosSequenceNode` and
-Canonical-to-Truffle lowering still deliberately reject empty sequences and may
-now be implemented against the canonical-`null` result contract.
+Implemented. Empty `CanonicalSequence` lowering/execution completes normally
+with the canonical `null` value, matching the normative contract.
 
 Independent work:
 Literal/value representation and all other execution work whose observable
