@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.287] - 2026-09-04
+
+### Fixed
+- Defined general `ensure` cleanup Error precedence rather than leaving
+  competing unwind outcomes implementation-selected.
+- Required normal cleanup completion to preserve the pending scope-exit transfer.
+- Required an Error signaled by cleanup to supersede the pending transfer,
+  including an earlier Error unwind, non-local return, normal scope exit, or
+  cancellation unwind.
+- Clarified that handling the cleanup Error later does not resurrect the
+  superseded earlier transfer.
+- Defined no automatic composite/suppressed-error object or language-visible
+  causal link between the cleanup Error and the superseded Error.
+- Generalized the already-existing cleanup-supersedes-cancellation rule rather
+  than creating a separate cancellation-only exception.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 287.
+  `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain normative
+  clarification in this revision.
+
 ## [0.1.286] - 2026-09-04
 
 ### Closed

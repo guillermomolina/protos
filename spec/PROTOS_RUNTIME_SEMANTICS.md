@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 286
+Document revision: 287
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -4317,6 +4317,36 @@ The runtime may represent cleanup registrations as unwind records, dynamic frame
 
 No GC finalizer or reachability callback is part of the deterministic resource-lifetime semantics.
 
+
+### Cleanup Error supersedes the pending transfer
+
+An `ensure` cleanup executes while a prior scope-exit transfer may be pending.
+The runtime applies this precedence rule:
+
+```text
+pending = transfer that caused cleanup to run
+
+execute cleanup
+
+if cleanup completes normally:
+    continue pending
+
+if cleanup signals cleanupError:
+    discard pending as the active transfer
+    continue ErrorTransfer(cleanupError)
+```
+
+The superseded transfer is not resumed after the cleanup Error is handled
+elsewhere. In particular, an earlier `ErrorTransfer(originalError)` does not
+become active again merely because an outer handler handles `cleanupError`.
+
+Core v0.1 creates no implicit composite/suppressed-error object and no
+language-visible causal link between the two Errors. Implementations may retain
+non-semantic diagnostic metadata only where otherwise permitted by Core.
+
+The existing cancellation rule is a direct instance of this general rule:
+cleanup Error supersedes pending cancellation and therefore fails the task
+Future instead of allowing an unconditional cancelled terminal state.
 
 ## Exact Cross-Family Numeric Equality
 
