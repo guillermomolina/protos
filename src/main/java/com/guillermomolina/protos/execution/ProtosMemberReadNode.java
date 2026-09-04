@@ -56,7 +56,7 @@ public final class ProtosMemberReadNode extends ProtosExpressionNode {
                     ProtosValueLookup.lookup(receiverValue, name, prelude)
                             .orElseThrow(
                                     () -> new ProtosSignalException(
-                                            ProtosCoreErrors.newError(activation)));
+                                            ProtosCoreErrors.newSlotNotFound(activation)));
         } catch (UnsupportedOperationException unsupportedRepresentation) {
             throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
         }

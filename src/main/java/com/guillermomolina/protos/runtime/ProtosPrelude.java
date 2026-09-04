@@ -114,6 +114,25 @@ public final class ProtosPrelude {
         return new ProtosObjectValue(invalidReturnPrototype());
     }
 
+    ProtosObjectValue standardErrorPrototype(String name) {
+        Objects.requireNonNull(name, "name");
+        Object binding = bindings.readLocalSlot(name).orElseThrow();
+        if (!(binding instanceof ProtosObjectValue prototype)) {
+            throw new IllegalStateException(
+                    "standard " + name + " binding is not an ordinary object");
+        }
+        ProtosObjectValue current = prototype;
+        while (true) {
+            if (current == errorPrototype()) return prototype;
+            Object parent = current.parent().orElse(null);
+            if (!(parent instanceof ProtosObjectValue parentObject)) {
+                throw new IllegalStateException(
+                        "standard " + name + " is outside the Error hierarchy");
+            }
+            current = parentObject;
+        }
+    }
+
     public ProtosObjectValue arrayPrototype() {
         Object binding = bindings.readLocalSlot("Array").orElseThrow();
         if (!(binding instanceof ProtosObjectValue arrayPrototype)) {

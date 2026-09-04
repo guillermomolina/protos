@@ -64,7 +64,7 @@ public final class ProtosInvocation {
                             .orElseThrow(
                                     () ->
                                             new ProtosSignalException(
-                                                    ProtosCoreErrors.newError(caller)));
+                                                    ProtosCoreErrors.newSlotNotFound(caller)));
         } catch (UnsupportedOperationException unsupportedRepresentation) {
             throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
         }

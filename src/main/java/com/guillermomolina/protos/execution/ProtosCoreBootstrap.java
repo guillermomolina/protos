@@ -93,6 +93,9 @@ public final class ProtosCoreBootstrap {
                 .load(coreDirectory.resolve("invalid_return.protos"))
                 .call(bootstrapActivation);
         sourceLoader
+                .load(coreDirectory.resolve("error_taxonomy.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
                 .load(coreDirectory.resolve("array.protos"))
                 .call(bootstrapActivation);
 
@@ -157,6 +160,7 @@ public final class ProtosCoreBootstrap {
             throw new IllegalStateException(
                     "Core Error prototype must delegate directly to Object");
         }
+        ProtosStandardErrorProtocol.install(errorPrototype);
 
         Object invalidReturnBinding =
                 bootstrapContext
@@ -175,6 +179,7 @@ public final class ProtosCoreBootstrap {
             throw new IllegalStateException(
                     "Core InvalidReturn prototype must delegate directly to Error");
         }
+        ProtosCoreErrorTaxonomy.validate(bootstrapContext, errorPrototype);
 
         Object arrayBinding =
                 bootstrapContext
@@ -211,6 +216,7 @@ public final class ProtosCoreBootstrap {
         preludeBindings.createLocalSlot("Error", errorPrototype);
         preludeBindings.createLocalSlot(
                 "InvalidReturn", invalidReturnPrototype);
+        ProtosCoreErrorTaxonomy.exportBindings(bootstrapContext, preludeBindings);
         preludeBindings.createLocalSlot("Array", arrayPrototype);
         preludeBindings.freeze();
 

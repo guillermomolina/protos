@@ -48,7 +48,7 @@ public final class ProtosBareAssignNode extends ProtosExpressionNode {
                 executionContext.writableLexicalContext(name)
                         .orElseThrow(
                                 () -> new ProtosSignalException(
-                                        ProtosCoreErrors.newError(ProtosFrameArguments.activation(frame))));
+                                        ProtosCoreErrors.newSlotNotFound(ProtosFrameArguments.activation(frame))));
 
         Object value = valueNode.execute(frame);
         try {

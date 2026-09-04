@@ -4,6 +4,35 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.57-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- I007 — Core error infrastructure: installed the closed normative Core Error
+  prototype taxonomy and exact parent relations.
+- Added typed fresh-occurrence factories and exact-object signaling through
+  `ProtosCoreErrors`.
+- Installed `Error.signal()` with receiver/arity validation, no implicit
+  condition-designator coercion, and exact signaled-object preservation.
+- Added focused tests for freshness, hierarchy, `InvalidReturn`, signaling,
+  incompatible receivers, and host/program-error separation.
+
+### Fixed
+
+- Normative lookup absence now creates fresh `SlotNotFound` occurrences rather
+  than generic `Error` occurrences.
+
+### Notes
+
+- Future, Actor, parallel, I/O, and filesystem execution remain reserved to
+  their subsystem implementations; I007 only exposes the standard Core
+  prototypes/factory infrastructure they require.
+- `Error.handle(body, handler)` is not faked with a Java catch. The current
+  runtime does not yet contain the handler-frame/unwind machinery required to
+  implement the normative deactivation-before-cleanup rule correctly.
+- No normative specification change is introduced.
+- Project implementation version changed from `0.2.56-SNAPSHOT` to `0.2.57-SNAPSHOT`.
+
 ## [0.2.56-SNAPSHOT] - 2026-09-04
 
 ### Changed
