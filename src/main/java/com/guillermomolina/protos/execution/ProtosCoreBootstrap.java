@@ -148,6 +148,7 @@ public final class ProtosCoreBootstrap {
             throw new IllegalStateException(
                     "Core Array prototype must delegate directly to Object");
         }
+        ProtosStandardArrayProtocol.install(arrayPrototype);
 
         ProtosObjectValue preludeBindings =
                 new ProtosObjectValue(contextPrototype);

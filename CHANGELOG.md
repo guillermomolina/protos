@@ -4,6 +4,32 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.36-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added the standard source-backed `Array` object's ordinary local `call`
+  specialization as an Array factory.
+- `Array(...)` now creates a fresh open `ProtosArrayValue` containing the exact
+  supplied positional objects in order, with no cloning, freezing, or
+  Integer-length overload.
+- Inherited Array-factory invocation uses the original invocation receiver as
+  the new Array's delegation parent, so ordinary descendants such as `MyArray`
+  construct Arrays delegating to that descendant.
+- Added receiver-domain validation so copying the standard Array factory Closure
+  onto an unrelated object does not make that object a standard Array-family
+  factory.
+- Project implementation version changed from `0.2.35-SNAPSHOT` to `0.2.36-SNAPSHOT`.
+
+### Notes
+
+- The factory is installed as an ordinary Closure-valued `call` slot on the
+  source-loaded `Array` object; no hidden invocation special case is added.
+- Indexed Array protocol methods remain separate implementation work.
+- D027/B003 remains untouched.
+- No normative specification change is introduced.
+
+
 ## [0.2.35-SNAPSHOT] - 2026-09-04
 
 ### Fixed
