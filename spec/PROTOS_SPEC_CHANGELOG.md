@@ -9,6 +9,31 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.372] - 2026-09-04
+
+### Callback-domain and eager-validation closure (D030, D034)
+- Defines `Future.then(transform)` against the existing ordinary-invokable
+  protocol rather than a hidden or Closure-only callback category.
+- Requires eager read-only callability validation after ordinary argument
+  evaluation and before creation of any continuation task or destination Future,
+  independently of the source Future's current state.
+- Preserves ordinary polymorphic invocation at continuation execution time,
+  including a fresh `call` lookup so validation does not pin a Closure across
+  intervening mutation or shadowing.
+- Defines `Error.handle(body, handler)` as intentionally Closure-only, with
+  left-to-right expression evaluation followed by `body` Closure validation and
+  then `handler` Closure validation before any handler frame is installed.
+- Invalid `body` or `handler` therefore fails before handler installation and
+  before `body` invocation; handler validation is never deferred until an Error
+  is actually signaled.
+
+### Compatibility
+- Closes implementation-selectable callback domains and validation timing for
+  `Future.then` and `Error.handle`. Conforming implementations may optimize
+  inspection, scheduling, and handler representation only when the specified
+  failure timing, side-effect visibility, fresh invocation lookup, and absence
+  of partially created continuation/handler state remain unchanged.
+
 ## [0.1.371] - 2026-09-04
 
 ### Reflective local-slot name argument domain (D033)

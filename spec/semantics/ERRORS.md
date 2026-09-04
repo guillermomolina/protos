@@ -202,15 +202,28 @@ matchPrototype.handle(body, handler)
 below `Error` therefore use the same protocol through normal delegation. The
 receiver must be `Error` or have `Error` in its delegation chain.
 
-`body` and `handler` are Closures. The call establishes exactly one dynamically
-scoped unwinding handler whose match prototype is `matchPrototype`, then invokes
-`body` with no arguments.
+`body` and `handler` must be semantic Closure values. This protocol is
+deliberately Closure-only: an ordinary object that is merely ordinarily invokable
+through a `call` slot does not satisfy either parameter.
 
 Ordinary call evaluation happens before installation. The receiver expression,
 the `body` argument expression, and the `handler` argument expression are
-evaluated left-to-right before the handler becomes active. Errors signaled while
-evaluating those expressions are therefore not handled by the handler being
-installed.
+evaluated left-to-right. After all three expressions complete normally, the
+resulting `body` value is validated as a Closure, then the resulting `handler`
+value is validated as a Closure.
+
+Only after both validations succeed does the call establish exactly one
+dynamically scoped unwinding handler whose match prototype is `matchPrototype`,
+then invoke `body` with no arguments.
+
+If either validation fails, the call signals the ordinary invalid-argument Error
+at that validation point. No handler frame has been installed and `body` is not
+invoked. Validation of `handler` is therefore never deferred until or unless
+`body` signals an Error.
+
+Errors signaled while evaluating the receiver or argument expressions, or while
+performing these pre-installation validations, cannot be handled by the handler
+being installed.
 
 If `body` completes normally, its result is the result of `handle`, and the
 handler is removed without invoking `handler`.

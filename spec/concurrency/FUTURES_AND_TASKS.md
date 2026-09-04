@@ -313,9 +313,9 @@ detachment, and ordering semantics are owned by
 Automatic flattening uses the Future resolution/adoption semantics owned by
 this specification in §28. The concurrency model owns the continuation task's
 execution, ownership, cancellation, detachment, and scheduling consequences.
-General invocation and object-model rules from this language specification
-continue to apply to the transformation Closure where referenced by that
-contract.
+The `transform` value is not Closure-only. It must be ordinarily invokable under
+the callability-inspection protocol owned by `../semantics/CALLABLES.md`; no
+hidden callback protocol or Closure-identity shortcut is introduced.
 
 ### Waiting for multiple Futures
 
@@ -389,21 +389,39 @@ is now their primary normative location.
 This section is the primary normative owner of the Core v0.1
 `Future.then(transform) -> Future` concurrency-domain semantics.
 
-A call to `future.then(transform)` creates a distinct continuation task and a
-destination Future. The continuation is asynchronous work created by the
-activation that calls `then`, and therefore belongs to that activation under the
-ordinary structured-concurrency rule unless the destination Future is detached.
+After ordinary receiver and argument-expression evaluation completes,
+`future.then(transform)` validates the exact resulting `transform` value as
+ordinarily invokable using the read-only callability-inspection protocol owned by
+`../semantics/CALLABLES.md`. Validation does not invoke `transform`.
+
+If that validation fails, the call immediately signals the ordinary
+non-invokable-argument Error for this API. No continuation task or destination
+Future is created, registered, scheduled, or otherwise made observable. This
+validation is eager and independent of the source Future's state: a pending,
+resolved, failed, or cancelled source does not defer, suppress, or replace it.
+
+Only after successful validation does the call create a distinct continuation
+task and a destination Future. The continuation is asynchronous work created by
+the activation that calls `then`, and therefore belongs to that activation under
+the ordinary structured-concurrency rule unless the destination Future is
+detached.
 
 Completion of the source Future only makes the continuation runnable. It does not
-execute the transformation closure inline, reentrantly, or inside the task or Actor
-turn that completes the source Future. This remains true when the source Future was
-already terminal when `then()` was called.
+execute `transform` inline, reentrantly, or inside the task or Actor turn that
+completes the source Future. This remains true when the source Future was already
+terminal when `then()` was called.
 
 The continuation executes as ordinary task work in the Actor/execution domain of
-the activation that created it. A resolved source invokes the transformation with
-the source value; a failed source fails the destination with the same error without
-invoking the transformation; a cancelled source cancels the destination without
-invoking the transformation. A Future returned by the transformation is flattened through the Future
+the activation that created it. For a resolved source, it invokes `transform`
+through ordinary polymorphic parenthesized invocation with the source value as
+the sole argument. That later invocation performs a fresh ordinary `call` lookup
+under `CALLABLES.md`; eager validation does not pin or cache the Closure selected
+during inspection, so intervening ordinary mutation or shadowing remains
+observable under the general invocation rules.
+
+A failed source fails the destination with the same error without invoking
+`transform`; a cancelled source cancels the destination without invoking
+`transform`. A Future returned by `transform` is flattened through the Future
 resolution/adoption semantics owned by `FUTURES_AND_TASKS.md` §28.
 
 That generic adoption contract owns outcome mirroring, cycle failure,
