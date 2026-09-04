@@ -1,11 +1,11 @@
 # Protos Execution and Control v0.1
 
 Language version: 0.1
-Document revision: 327
+Document revision: 330
 Status: Draft
 Last updated: 2026-09-04
 
-This document is the primary normative owner of execution contexts, lookup/control foundations, intrinsic execution references, and related control semantics.
+This document is the primary normative owner of execution contexts, lookup/control foundations, intrinsic execution references, evaluation order, iteration/loop control, and related execution semantics.
 
 The material below is migrated without intended semantic change from `../PROTOS_LANGUAGE_SPEC.md`. Legacy section titles and numbering are retained so existing references remain understandable.
 
@@ -227,50 +227,30 @@ getObject().x = makeValue()
 ```
 
 evaluates `getObject()` first, then `makeValue()`, then performs the assignment. Lazy operations such as `&&` and `||` are exceptions because their right-hand expression is evaluated only when required by their lazy semantics.
-## 9. Closures
+## 17. Iteration and Loops
 
-A closure is written with parameters before `=>` and a body after it:
+No primitive `for` construct is required.
 
 ```js
-() => {
-    ...
-}
+users.each((user) => {
+    print(user.name)
+})
 
-(a, b) => {
-    ...
-}
+users.map((user) => {
+    user.name
+})
+
+1.to(10).each((i) => {
+    print(i)
+})
 ```
 
-Two purely syntactic conveniences extend these spellings without changing what a Closure is.
-
-- **Expression bodies.** The body may be exactly one ordinary expression instead of a braced sequence: `(x) => x * 2` is exactly equivalent to `(x) => { x * 2 }`. An expression body is exactly one `expression`, not an `expression-sequence`: `x => print(x); foo()` is a Closure whose body is `print(x)` followed by the separate expression `foo()`, and multiple expressions still require a braced body. The body ends where the ordinary expression grammar ends it — a separating logical `NEWLINE` after a complete body expression or an inline `;` ends the Closure; no ASI-like or Closure-specific continuation rule is introduced (see the grammar's Closures section).
-- **Single-parameter shorthand.** Parentheses may be omitted when the Closure has exactly one parameter that is neither a default nor a rest parameter: `x => x * 2` is exactly equivalent to `(x) => x * 2`. Parentheses remain required for zero parameters, two or more parameters, a default parameter, and a rest parameter: `() => value`, `(a, b) => a + b`, `(x = 10) => x`, `(...items) => items`, and `(first, ...rest) => rest`. Because the shorthand parameter is an ordinary `identifier`, reserved words remain invalid as parameter names.
-
-All of these spellings — `(x) => { ... }`, `x => { ... }`, `(x) => expression`, and `x => expression` — create the same kind of Closure and obey precisely the same invocation semantics. There is no JavaScript-style split between a `function` and an arrow callable: Protos has one Closure semantics. Expression-bodied and braced forms behave identically with respect to lexical capture by reference, `this`, `context`, `args`, `super`, method binding, return homes, non-local return `^`, evaluation order, Future/async behavior, and error propagation. Creating a Closure never invokes it: `double: x => x * 2` stores the Closure object in slot `double`, `f = x => x + 1` assigns it to `f`, and `applyLater(x => x * 2)` passes it as an argument; only an explicit call such as `(x => x * 2)(10)` invokes it. Nested shorthand Closures associate to the right: `x => y => x + y` is `x => (y => (x + y))`.
-
-The `{` immediately after `=>` always begins the Closure's braced body, so a Closure whose body is an object expression is written with parenthesized grouping, `x => ({ ... })`. Trailing-closure syntax is unchanged and remains parameterless, and no new keyword or new callable category is introduced.
-
-Closures capture their lexical contexts **by reference**, not by value.
+A `while` operation requires a reevaluated condition and therefore semantically operates on a closure:
 
 ```js
-makeCounter: () => {
-    n: 0
-
-    () => {
-        n = n + 1
-        n
-    }
+(() => i < 10).while() {
+    i = i + 1
 }
 ```
 
-Therefore:
-
-```js
-counter: makeCounter()
-
-counter()   // 1
-counter()   // 2
-counter()   // 3
-```
-
-works because the context containing `n` remains alive while a closure still references it.
+A future `while (...) { ... }` form may be syntactic sugar.

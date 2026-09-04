@@ -8,6 +8,22 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.330] - 2026-09-04
+
+### Ownership corrected
+- Corrected semantic-module placement exposed by the post-migration audit.
+- Moved §9 `Closures` from `EXECUTION_AND_CONTROL.md` to `CALLABLES.md`.
+- Moved §17 `Iteration and Loops` from `VALUES_AND_COLLECTIONS.md` to
+  `EXECUTION_AND_CONTROL.md`.
+- Moved §18 `Trailing Closures` and §21.1 `Custom Symbolic Binary Operators`
+  from `VALUES_AND_COLLECTIONS.md` to `CALLABLES.md`.
+- Corrected Language compatibility anchors, module ownership descriptions, and
+  active cross-references to those sections.
+
+### Compatibility
+- This revision changes normative ownership/location only. The migrated section
+  bodies are preserved without intended observable semantic change.
+
 ## [0.1.329] - 2026-09-04
 
 ### Cleaned

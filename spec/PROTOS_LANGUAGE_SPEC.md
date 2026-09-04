@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1
-Document revision: 328
+Document revision: 330
 Status: Draft
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `io/IO_CORE.md`.
@@ -104,7 +104,7 @@ The primary normative contract formerly contained here has moved to `semantics/E
 
 ## 9. Closures
 
-The primary normative contract formerly contained here has moved to `semantics/EXECUTION_AND_CONTROL.md`. This heading remains as a compatibility and navigation anchor; it is not a second normative owner.
+The primary normative contract formerly contained here has moved to `semantics/CALLABLES.md`. This heading remains as a compatibility and navigation anchor; it is not a second normative owner.
 
 ## 10. Closures and Methods
 
@@ -136,11 +136,11 @@ The primary normative contract formerly contained here has moved to `semantics/V
 
 ## 17. Iteration and Loops
 
-The primary normative contract formerly contained here has moved to `semantics/VALUES_AND_COLLECTIONS.md`. This heading remains as a compatibility and navigation anchor; it is not a second normative owner.
+The primary normative contract formerly contained here has moved to `semantics/EXECUTION_AND_CONTROL.md`. This heading remains as a compatibility and navigation anchor; it is not a second normative owner.
 
 ## 18. Trailing Closures
 
-The primary normative contract formerly contained here has moved to `semantics/VALUES_AND_COLLECTIONS.md`. This heading remains as a compatibility and navigation anchor; it is not a second normative owner.
+The primary normative contract formerly contained here has moved to `semantics/CALLABLES.md`. This heading remains as a compatibility and navigation anchor; it is not a second normative owner.
 
 ## 19. Separators, Line Breaks, and Comments
 
@@ -452,7 +452,7 @@ The primary normative contract formerly contained here has moved to `semantics/V
 
 ## 21.1 Custom Symbolic Binary Operators
 
-The primary normative contract formerly contained here has moved to `semantics/VALUES_AND_COLLECTIONS.md`. This heading remains as a compatibility and navigation anchor; it is not a second normative owner.
+The primary normative contract formerly contained here has moved to `semantics/CALLABLES.md`. This heading remains as a compatibility and navigation anchor; it is not a second normative owner.
 
 ## 22. Open Objects
 

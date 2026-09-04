@@ -299,11 +299,11 @@ part of the normative authority set.
 Normative domain models supplement those core documents for semantically substantial standard subsystems. The current normative domain model is:
 
 - `spec/semantics/OBJECT_MODEL.md` — primary normative owner of migrated object-model semantics.
-- `spec/semantics/EXECUTION_AND_CONTROL.md` — primary normative owner of migrated execution/control semantics.
-- `spec/semantics/CALLABLES.md` — primary normative owner of migrated callable/invocation semantics.
+- `spec/semantics/EXECUTION_AND_CONTROL.md` — primary normative owner of execution contexts, lookup/evaluation, and iteration/control semantics.
+- `spec/semantics/CALLABLES.md` — primary normative owner of Closure, callable/invocation, trailing-closure, and custom symbolic message-send semantics.
 - `spec/semantics/MODULES.md` — primary normative owner of migrated module semantics.
 - `spec/semantics/ERRORS.md` — primary normative owner of migrated Error semantics.
-- `spec/semantics/VALUES_AND_COLLECTIONS.md` — primary normative owner of migrated value/collection semantics.
+- `spec/semantics/VALUES_AND_COLLECTIONS.md` — primary normative owner of value-family, equality/identity, indexing, and collection semantics.
 
 - `spec/io/IO_CORE.md` — cross-cutting I/O capability, commitment, lifecycle, and wrapper semantics.
 - `spec/io/BYTE_IO.md` — byte-I/O protocol semantics.

@@ -1,11 +1,11 @@
 # Protos Values and Collections v0.1
 
 Language version: 0.1
-Document revision: 328
+Document revision: 330
 Status: Draft
 Last updated: 2026-09-04
 
-This document is the primary normative owner of Core immutable value families, equality/identity, indexed access, and standard collection/value protocols.
+This document is the primary normative owner of Core immutable value families, equality/identity, indexed access, and standard collection/value protocols; callable and general control-flow semantics are owned by their dedicated modules.
 
 The material below is migrated without intended semantic change from `../PROTOS_LANGUAGE_SPEC.md`. Legacy section titles and numbering are retained so existing references remain understandable.
 
@@ -49,155 +49,6 @@ condition.ifFalse() {
 Closures provide lazy evaluation.
 
 Possible `if`/`else` syntax may exist as sugar, but does not define the fundamental semantics.
-## 17. Iteration and Loops
-
-No primitive `for` construct is required.
-
-```js
-users.each((user) => {
-    print(user.name)
-})
-
-users.map((user) => {
-    user.name
-})
-
-1.to(10).each((i) => {
-    print(i)
-})
-```
-
-A `while` operation requires a reevaluated condition and therefore semantically operates on a closure:
-
-```js
-(() => i < 10).while() {
-    i = i + 1
-}
-```
-
-A future `while (...) { ... }` form may be syntactic sugar.
-## 18. Trailing Closures
-
-The parentheses of a call always contain call arguments. A call may be followed by one trailing closure, which is appended as the final argument of the invocation.
-
-A trailing closure is always parameterless:
-
-```js
-transaction(options) {
-    work()
-}
-```
-
-is exactly equivalent to:
-
-```js
-transaction(
-    options,
-    () => {
-        work()
-    }
-)
-```
-
-A trailing closure never has its own parameter list. Core v0.1 provides no parameterized trailing-closure syntax: the former form `foo(args...) (params...) { body }` is not part of Core v0.1, and `items.each() (item) { print(item) }` is not trailing-closure syntax. Such forms do not become two adjacent same-line expressions merely because parameterized trailing closures were removed: whitespace alone does not separate expressions, and no implicit adjacency-based expression separation exists.
-
-A closure that requires parameters is passed explicitly as an ordinary closure expression in ordinary call-argument position:
-
-```js
-items.each((item) => {
-    print(item)
-})
-```
-
-Likewise, instead of a parameterized trailing closure after `collection.reduce(initial)`, write an explicit closure argument according to ordinary call syntax:
-
-```js
-collection.reduce(initial, (acc, item) => {
-    ...
-})
-```
-
-The exact position of the closure among a particular API's arguments is defined by that API. The trailing-closure sugar only appends a parameterless closure as the final argument.
-
-The call parentheses are never reinterpreted as the parameter list of a trailing closure. Therefore:
-
-```js
-items.each(item) {
-    print(item)
-}
-```
-
-means:
-
-```js
-items.each(
-    item,
-    () => {
-        print(item)
-    }
-)
-```
-
-The `item` inside the call parentheses is an ordinary explicit call argument. It is not a parameter declaration for the trailing closure.
-
-A parameter list exists only where ordinary closure syntax requires it, before `=>`. `(x)` is always an ordinary parenthesized expression, and `(x) => { body }` is always an ordinary closure expression; there is no third interpretation of `(x)` as the parameter declaration of a trailing closure. This resolves issue B6 structurally: the parser needs no special lookahead to distinguish `(x)` from a trailing-closure parameter list, no parameter list is inferred from a parenthesized expression, and no semantic/type-based interpretation decides whether parentheses contain closure parameters. When a Closure has exactly one simple parameter, its parentheses may be omitted (see Closures); the result, such as `items.each(item => print(item))`, is an ordinary explicit Closure in ordinary call-argument position and never a trailing closure.
-
-A trailing closure introduces no new runtime value kind: it is syntactic sugar for an ordinary Closure appended as the final call argument. Trailing-closure syntax does not alter closure semantics.
-
-A trailing closure is attached only when no logical `NEWLINE` token intervenes between the completed call and the closure body. The call is complete when its `argument-list` ends; a `NEWLINE` token at that point acts as an expression separator under the complete-expression newline rule (see Separators, Line Breaks, and Comments). Therefore:
-
-```js
-foo() {
-    body
-}
-```
-
-is a call with a parameterless trailing closure, while:
-
-```js
-foo()
-{
-    body
-}
-```
-
-does not attach the braces to `foo()` as a trailing closure. `foo()` is syntactically complete, so the logical `NEWLINE` after it separates expressions. `{` is not a complete-before-newline continuation exception: the only such exception remains the leading structural member-access `.` rule, and it does not generalize to `{`. What the separated `{ ... }` may mean, if anything, is governed by the ordinary grammar independently; the normative claim here is only that it is not attached as a trailing closure to the preceding call. This closes issue B7.
-
-Blank lines and semicolons do not attach a trailing closure: repeated separating `NEWLINE` tokens have the same effect as one separating `NEWLINE`, and `;` is an expression separator, so `foo(); { body }` is not a trailing closure on `foo()`.
-
-Indentation plays no role in the decision: the rule concerns logical `NEWLINE` tokens, not physical source formatting. The two forms:
-
-```js
-foo()
-{
-    body
-}
-```
-
-and:
-
-```js
-foo()
-    {
-        body
-    }
-```
-
-are equivalent with respect to the newline rule; both contain a separating logical `NEWLINE` after the completed call, so neither attaches the braces as a trailing closure. Horizontal whitespace between the completed call and the closure body is permitted: `foo()    { body }` remains valid trailing-closure syntax.
-
-Comments follow the existing lexical rules. A block comment behaves as whitespace and consumes any logical newlines inside it without producing `NEWLINE` tokens, so `foo() /* comment */ { body }` and:
-
-```js
-foo() /*
-    comment
-*/ {
-    body
-}
-```
-
-both attach. A line comment does not consume its terminating logical newline: that newline is tokenized normally, so `foo() // comment` followed by `{ body }` on the next source line does not attach. No special comment-sensitive trailing-closure rule exists; the result follows entirely from tokenization.
-
-A trailing closure is therefore permitted only when the parser sees the closure body as part of the same continuing token sequence after the completed call suffix, with no intervening `NEWLINE` token. A valid trailing closure remains a parameterless closure appended as the final call argument; this revision does not restore parameterized trailing closures.
 ## 21. Equality and Identity
 
 `===` represents **semantic identity** and is not customizable. Its result must not depend on allocation, interning, boxing, tagged values, or any other implementation strategy.
@@ -283,87 +134,6 @@ The same Boolean-result contract applies to the standard comparison operators:
 They return canonical `true` or `false`, or signal an error. The language defines no truthiness conversion for interpreting arbitrary comparison results. For built-in immutable value objects, `==` and `===` may naturally produce the same result, but they remain different operations: `==` is behavioral and customizable, while `===` is a non-overridable identity primitive.
 
 Identity is never defined by comparing hash codes. A runtime may derive or cache hashes from identity where appropriate, but hash collisions cannot make distinct identity-bearing objects identical.
-## 21.1 Custom Symbolic Binary Operators
-
-### Custom Operator Lexical Alphabet
-
-Custom symbolic binary operators are formed from the following operator characters:
-
-```text
-! $ % & * + - / < = > ? @ \ ^ | ~
-```
-
-The following punctuation is structural and is not part of the custom-operator alphabet:
-
-```text
-. : ; , ( ) { } [ ]
-```
-
-In particular, `.` is reserved for member access, `:` for slot creation, and `;` for explicit expression separation.
-
-The lexer recognizes reserved and standard operator tokens before classifying a remaining valid symbolic sequence as a custom operator.
-
-Reserved or standard symbolic tokens include:
-
-```text
-=>  =  ==  ===  !=  !==  <=  >=  &&  ||
-+   -  *   /   %   <   >   !   ^
-```
-
-The exact one-character spellings `!` and `^` are reserved/standard tokens and are not custom binary selectors: `a ! b` and `a ^ b` are syntax errors. Their existing roles are unchanged wherever they appear: `!` lowers to `not()` as a prefix operator and `^` performs a non-local return. Symbolic token classification is purely lexical and independent of parser position: maximal munch first forms the longest valid spelling, which is classified as a reserved/standard token when it exactly matches a reserved/standard spelling and as `CUSTOM_OPERATOR` otherwise. The characters `!` and `^` remain members of the custom operator alphabet, so longer spellings containing them, such as `!!`, `^^`, `!^`, and `^!`, are `CUSTOM_OPERATOR` tokens and may be used as custom binary selectors, for example `a !! b` and `a ^^ b`.
-
-A symbolic sequence composed from the operator alphabet that is not otherwise reserved or standard may be used as a custom binary selector, for example:
-
-```js
-a @ b
-a |> b
-a <=> b
-a ~~ b
-a ** b
-```
-
-The lexical alphabet is fixed by the language grammar. Modules, imports, runtime objects, or operator declarations cannot extend it.
-
-The formal lexical definition of `custom-binary-operator` — its `operator-character` alphabet, `symbolic-operator-spelling` candidate form, maximal-munch formation, and reserved-spelling classification — is normative in the grammar's Custom Operator Lexing rules.
-
-
-User-defined symbolic binary operators are permitted as ordinary message selectors.
-
-A custom operator expression:
-
-```js
-a @ b
-```
-
-lowers to an ordinary receiver-based send of the symbolic selector to `a`, with `b` as its argument.
-
-All custom binary operators have the same precedence relative to one another and associate left-to-right:
-
-```js
-a @ b |> c
-```
-
-means:
-
-```js
-(a @ b) |> c
-```
-
-Core v0.1 deliberately defines no implicit precedence relationship between custom binary operators and the standard operator groups. Mixing them without explicit grouping is therefore invalid:
-
-```js
-a + b @ c      // invalid
-a @ b * c      // invalid
-```
-
-Parentheses make the intended grouping explicit:
-
-```js
-(a + b) @ c
-a @ (b * c)
-```
-
-Modules, imports, declarations, or runtime mutation cannot change parser precedence.
 ## Indexed Access Syntax
 
 Bracket indexing is syntactic sugar over ordinary message sends. Indexing is not a privileged runtime operation and is not restricted to arrays.
