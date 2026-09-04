@@ -288,11 +288,13 @@ entries merely to hide project history.
 
 Canonical language specification
 
-The canonical core language definition is maintained in:
+The normative core language definition is maintained in:
 
-- "spec/PROTOS_LANGUAGE_SPEC.md"
-- "spec/PROTOS_GRAMMAR.md"
-- "spec/runtime/ABSTRACT_RUNTIME.md"
+- `spec/PROTOS_LANGUAGE_SPEC.md`
+- `spec/PROTOS_GRAMMAR.md`
+
+`spec/runtime/ABSTRACT_RUNTIME.md` is an informative execution model and is not
+part of the normative authority set.
 
 Normative domain models supplement those core documents for semantically substantial standard subsystems. The current normative domain model is:
 
@@ -303,7 +305,11 @@ Normative domain models supplement those core documents for semantically substan
 - `spec/semantics/ERRORS.md` — primary normative owner of migrated Error semantics.
 - `spec/semantics/VALUES_AND_COLLECTIONS.md` — primary normative owner of migrated value/collection semantics.
 
-- "spec/io/IO_CORE.md" — observable I/O, text/binary adapter, filesystem-authority, and Process-I/O-bootstrap semantics.
+- `spec/io/IO_CORE.md` — cross-cutting I/O capability, commitment, lifecycle, and wrapper semantics.
+- `spec/io/BYTE_IO.md` — byte-I/O protocol semantics.
+- `spec/io/TEXT_IO.md` — encoding and text-I/O semantics.
+- `spec/io/FILESYSTEM.md` — filesystem authority, File, Path, and file-URL semantics.
+- `spec/io/PROCESS_IO.md` — Process I/O bootstrap, environment/arguments, standard streams, and Process-local I/O authority.
 
 - `spec/concurrency/FUTURES_AND_TASKS.md` — primary normative owner of migrated Core Future/task semantics.
 - `spec/concurrency/ACTORS.md` — primary normative owner of migrated Core Actor semantics.
@@ -313,7 +319,9 @@ Normative domain models supplement those core documents for semantically substan
 
 Treat the canonical core documents together with applicable normative domain models as the source of truth for observable language/standard semantics in their respective domains.
 
-During concurrency modularization, normative ownership is split deliberately between the migrated domain modules above and the still-unmigrated CLOSED portions of `spec/PROTOS_CONCURRENCY_MODEL.md`. A compatibility anchor in the ledger never creates a second authority. See "Concurrency design work" below.
+Concurrency modularization is complete for normative CLOSED material. The
+legacy `spec/PROTOS_CONCURRENCY_MODEL.md` is design/history only; compatibility
+anchors there never create normative authority.
 
 Before implementing or modifying syntax, parsing, object semantics, invocation, lookup, control flow, errors, concurrency, built-in protocols, or other observable language behavior, inspect the relevant specification sections first.
 

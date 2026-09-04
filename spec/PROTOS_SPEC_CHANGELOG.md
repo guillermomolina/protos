@@ -8,6 +8,26 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.329] - 2026-09-04
+
+### Cleaned
+- Completed post-migration authority cleanup after revision 328.
+- Removed stale root-AGENTS text that still described unmigrated normative
+  concurrency sections.
+- Removed `runtime/ABSTRACT_RUNTIME.md` from the normative core authority set and
+  documented it consistently as informative.
+- Expanded root authority guidance to list all five normative I/O modules.
+- Rewrote stale cross-document citations that still treated
+  `PROTOS_CONCURRENCY_MODEL.md` as a normative owner.
+- Updated `DISTRIBUTED_RUNTIME.md` to state that the legacy ledger is entirely
+  non-normative and contains only unresolved design/history material.
+- Updated specification-agent guidance from ongoing-migration language to the
+  completed modular ownership model.
+
+### Compatibility
+- This revision changes references, authority descriptions, and documentation
+  consistency only. It does not intentionally change observable Protos behavior.
+
 ## [0.1.328] - 2026-09-04
 
 ### Migrated

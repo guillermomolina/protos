@@ -293,14 +293,15 @@ in its primary owner and only the additional interaction-specific rule in the
 dependent domain. A reference to another document must not silently weaken,
 strengthen, or reinterpret the referenced contract.
 
-Abstract runtime pseudocode is normative only to the extent explicitly stated by
-the document that owns the corresponding semantics. Pseudocode must not become a
-second independent source of programmer-visible behavior.
+`runtime/ABSTRACT_RUNTIME.md` is informative pseudocode. It may illustrate or
+cross-reference normative semantics, but it never independently defines
+programmer-visible behavior and must be corrected whenever it conflicts with a
+normative owner.
 
-During the ongoing specification modularization, existing duplicated normative
-material is technical debt to be canonicalized. New changes must not introduce
-additional duplicated normative authority merely to keep several documents
-self-contained.
+Specification modularization has established the primary owners. Remaining
+historical duplication or stale cross-references are defects to remove; new
+changes must not introduce duplicated normative authority merely to keep several
+documents self-contained.
 
 ## Specification revision discipline
 

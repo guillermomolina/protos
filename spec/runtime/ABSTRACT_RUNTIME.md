@@ -1,7 +1,7 @@
 # Protos Abstract Runtime v0.1
 
 Language version: 0.1
-Document revision: 328
+Document revision: 329
 Status: Informative — non-normative
 Last updated: 2026-09-04
 This document is an informative abstract execution model and pseudocode aid.
@@ -1950,7 +1950,7 @@ is allowed only when observationally equivalent to these rules.
 ### Future cancellation runtime integration
 
 The normative semantics of Future cancellation are owned by
-`../PROTOS_CONCURRENCY_MODEL.md` §23, with cancellation-unwind and structured
+`../concurrency/FUTURES_AND_TASKS.md` §23, with cancellation-unwind and structured
 ownership consequences owned by §24.
 
 A runtime may represent cancellation-request flags, runnable-state transitions,
@@ -2023,7 +2023,7 @@ ordering rule.
 # 35. Concurrency and Actor Runtime Integration
 
 The normative semantics of structured Future/task ownership, cancellation unwind,
-and `Future.detach()` are owned by `../PROTOS_CONCURRENCY_MODEL.md` §24.
+and `Future.detach()` are owned by `../concurrency/FUTURES_AND_TASKS.md` §24.
 Actor-local cooperative non-preemption is owned there by the corresponding
 Actor-local execution contract.
 
@@ -5187,7 +5187,7 @@ representations do not create a Core-visible cross-Actor return path.
 ### Future.all runtime integration
 
 The normative semantics of `Future.all(futures...)` are owned by
-`../PROTOS_CONCURRENCY_MODEL.md` §24E.
+`../concurrency/FUTURES_AND_TASKS.md` §24E.
 
 A runtime may represent source observation, readiness bookkeeping, argument-index
 frontiers, waiter registration, cancellation abandonment, and aggregate

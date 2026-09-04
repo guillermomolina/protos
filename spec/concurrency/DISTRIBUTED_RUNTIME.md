@@ -1,7 +1,7 @@
 # Protos Distributed Runtime v0.1
 
 Language version: 0.1
-Document revision: 328
+Document revision: 329
 Status: Draft
 Last updated: 2026-09-04
 
@@ -11,10 +11,10 @@ reachability/knowledge, Groups, placement/routing infrastructure boundaries,
 membership, partition/split-brain safety, and distributed Authority where those
 contracts were normatively CLOSED in the former mixed concurrency ledger.
 
-Legacy section numbers are retained during modularization. Sections that remain
-OPEN, PENDING, `CLOSED AS DIRECTION`, `DIRECTION CLOSED, DETAILS OPEN`, or
-otherwise design-qualified remain in `../PROTOS_CONCURRENCY_MODEL.md` and are
-not made normative by this migration.
+Legacy section numbers are retained for citation continuity. Unresolved design
+topics remain in `../PROTOS_CONCURRENCY_MODEL.md`, which is entirely
+non-normative after revision 328. Nothing in that ledger supplements or overrides
+the contracts in this document.
 
 ## 37. Process Boundary
 

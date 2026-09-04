@@ -1,7 +1,7 @@
 # Protos Modules v0.1
 
 Language version: 0.1
-Document revision: 328
+Document revision: 329
 Status: Draft
 Last updated: 2026-09-04
 
@@ -83,7 +83,7 @@ An Actor is an isolated domain of mutable Protos state and execution. Core v0.1 
 
 > No shared mutable Protos memory exists between Actors.
 
-The broader Actor concurrency model is developed in `PROTOS_CONCURRENCY_MODEL.md`. This section depends only on the isolation and ownership consequences stated here and introduces no Actor syntax.
+The normative Actor concurrency model is defined in `../concurrency/ACTORS.md`. This section depends only on the isolation and ownership consequences stated here and introduces no Actor syntax.
 
 Importing a module does not provide access to mutable module state belonging to another Actor. Conceptually:
 
