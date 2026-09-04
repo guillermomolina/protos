@@ -5,14 +5,14 @@ blocked by an unresolved language-semantic decision.
 
 It is distinct from:
 
-- `docs/IMPLEMENTATION_BLOCKERS.md`, which records implementation work that
+- `docs/project/IMPLEMENTATION_BLOCKERS.md`, which records implementation work that
   cannot proceed until normative semantics are resolved;
-- `docs/IDEAS.md`, which records exploratory possibilities not yet committed as
+- `docs/design/IDEAS.md`, which records exploratory possibilities not yet committed as
   implementation work;
 - normative specification Open Design Topics, which track unresolved semantic
   or API design.
 
-An item should move here from `IDEAS.md` only when there is a concrete outcome
+An item should move here from `../design/IDEAS.md` only when there is a concrete outcome
 worth implementing or investigating. If work becomes blocked on normative
 semantics, record that dependency in `IMPLEMENTATION_BLOCKERS.md` instead.
 

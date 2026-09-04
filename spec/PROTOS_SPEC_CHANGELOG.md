@@ -8,6 +8,20 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.339] - 2026-09-04
+
+### Documentation taxonomy cleanup
+- Organized non-normative documentation into `docs/design/` and `docs/project/`
+  according to document purpose and added `docs/README.md` as the taxonomy owner.
+- Moved design philosophy and exploratory ideas under `docs/design/`, and project
+  task/blocker ledgers under `docs/project/`.
+- Removed the empty root `TODO.md`; `docs/project/OPEN_TASKS.md` is the canonical
+  concrete-work ledger.
+- Updated specification and agent references to the new documentation paths.
+
+### Compatibility
+- No observable Protos behavior is changed.
+
 ## [0.1.338] - 2026-09-04
 
 ### Abstract Runtime ownership cleanup

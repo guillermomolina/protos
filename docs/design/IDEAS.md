@@ -6,7 +6,7 @@ open normative design decision.
 
 Ideas should remain here while their value, scope, or shape is still exploratory.
 If an idea becomes concrete implementation work, move or reference it from
-`OPEN_TASKS.md`. If it requires a normative language decision, move the question
+`../project/OPEN_TASKS.md`. If it requires a normative language decision, move the question
 to the appropriate specification design process instead.
 
 ## I001 — Concurrency Model Advisor (C/P/A)

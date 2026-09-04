@@ -20,7 +20,7 @@ Implementation agents should challenge the implementation. Language-design
 questions belong to the specification-design process.
 
 Implementation agents must also use the repository-root
-`docs/IMPLEMENTATION_BLOCKERS.md` ledger. Before starting implementation work,
+`docs/project/IMPLEMENTATION_BLOCKERS.md` ledger. Before starting implementation work,
 review its relevant `BLOCKED` and `READY` entries against the current normative
 specification on the current `main` branch.
 

@@ -250,7 +250,7 @@ Do not bypass this process merely because the original request was phrased as
 
 ## Implementation blockers
 
-`docs/IMPLEMENTATION_BLOCKERS.md` is the repository-wide ledger for
+`docs/project/IMPLEMENTATION_BLOCKERS.md` is the repository-wide ledger for
 implementation work that cannot proceed without unresolved normative semantics.
 It records implementation state only; it is not part of the Protos specification.
 
@@ -259,7 +259,7 @@ closed or otherwise precise enough to implement without guessing:
 
 - do not invent the missing semantics;
 - do not block unrelated implementation work;
-- add or update a blocker in `docs/IMPLEMENTATION_BLOCKERS.md`;
+- add or update a blocker in `docs/project/IMPLEMENTATION_BLOCKERS.md`;
 - give the blocker a stable identifier;
 - identify the blocked implementation area;
 - state the exact normative dependency;
@@ -272,7 +272,7 @@ commit SHA, implementation strategy, agent-specific memory, or expected wording
 of a future specification change.
 
 Before beginning implementation work, inspect
-`docs/IMPLEMENTATION_BLOCKERS.md`. Re-check every relevant `BLOCKED` or `READY`
+`docs/project/IMPLEMENTATION_BLOCKERS.md`. Re-check every relevant `BLOCKED` or `READY`
 entry against the current normative specification on the current `main` branch.
 Never rely on the specification state that existed when the blocker was
 recorded.
