@@ -4,6 +4,32 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.7-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added the caller-supplied positional-vector evaluation stage for future
+  polymorphic invocation.
+- Ordinary argument items are evaluated exactly once from left to right.
+- Spread items require standard Array indexed state and append a shallow
+  ascending-index snapshot at their exact evaluation position.
+- Invalid spread sources signal Core `Error` immediately and prevent later
+  argument evaluation.
+
+### Changed
+
+- Project implementation version changed from `0.2.6-SNAPSHOT` to `0.2.7-SNAPSHOT`.
+
+### Notes
+
+- This increment deliberately stops before Closure activation and parameter
+  binding. It therefore does not need to manufacture the standard frozen
+  `args` Array before the Core `Array` prototype is available from
+  `protos/lib/core/`.
+- No standard Array prototype or protocol behavior is hardcoded in Java.
+- No normative specification change is introduced.
+
+
 ## [0.2.6-SNAPSHOT] - 2026-09-04
 
 ### Changed
