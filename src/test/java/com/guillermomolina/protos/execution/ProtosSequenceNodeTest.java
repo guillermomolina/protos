@@ -18,8 +18,9 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertSame;
 
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.source.SourceSpan;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import java.util.ArrayList;
@@ -44,13 +45,13 @@ class ProtosSequenceNodeTest {
     }
 
     @Test
-    void rejectsEmptyExecutionSequenceUntilEmptySequenceValueLoweringExists() {
-        assertThrows(
-                IllegalArgumentException.class,
-                () ->
-                        new ProtosSequenceNode(
-                                new SourceSpan(0, 0),
-                                new ProtosExpressionNode[0]));
+    void emptyExecutionSequenceReturnsCanonicalNull() {
+        ProtosSequenceNode sequence =
+                new ProtosSequenceNode(
+                        new SourceSpan(0, 0),
+                        new ProtosExpressionNode[0]);
+
+        assertSame(ProtosNullValue.INSTANCE, sequence.execute(null));
     }
 
     private static final class RecordingNode extends ProtosExpressionNode {
