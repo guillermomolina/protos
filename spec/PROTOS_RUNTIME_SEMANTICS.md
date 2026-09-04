@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 312
+Document revision: 313
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -6590,10 +6590,31 @@ operation that changes byte-sequence length or shifts indexes performs the same
 active-reservation rejection before structural mutation.
 
 On normal child completion, the runtime first validates/transfers the child
-result. Only then does it atomically substitute exactly the region's fixed number
-of final bytes into the reserved parent interval, release the reservation, and
-resolve the Future. Failure, cancellation, or result-transfer failure releases
-the reservation without committing region bytes.
+result. It then performs one semantic successful-publication commit against the
+same pending Future that cancellation may otherwise terminalize:
+
+```text
+atomic:
+    if resultFuture.state != pending:
+        // cancellation or another terminal outcome already won
+        release reservation without committing region bytes
+        do not publish region mutation
+        stop
+
+    replace exactly the reserved parent interval with final region bytes
+    release reservation
+    resolve resultFuture with transferredChildResult
+```
+
+The `atomic` region is semantic, not a required lock. It means there is no
+observable state in which committed parent-region bytes coexist with a Future
+that cancellation may still change to `cancelled`.
+
+Therefore cancellation that terminalizes the Future first publishes no region
+mutation; successful publication that commits first resolves the Future and a
+later `cancel()` is the ordinary terminal-Future no-op. Child failure or
+result-transfer failure likewise releases the reservation without committing
+region bytes.
 
 Disjoint reservations have no semantic ordering relative to each other. A
 `ByteRegion.parallelRange` recursively derives authority over a subrange and

@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 312
+Document revision: 313
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -6069,7 +6069,15 @@ allocation, global offset, storage ownership, or another region.
 The child mutates only its isolated `ByteRegion`. On normal child completion,
 after the child result has itself been validated for P-boundary transfer, the
 region's final byte sequence replaces the reserved parent interval atomically and
-the parent Future resolves with the transferred child result. On child failure,
+the parent Future resolves with the transferred child result.
+
+Successful byte-region publication and cancellation are one semantic commitment race.
+The runtime must not expose committed parent-region mutation together with a
+`cancelled` result Future. If cancellation terminalizes the Future before
+successful publication commits, the reservation is released with no parent-byte
+publication. If successful publication commits first, the parent replacement and
+successful Future resolution are one indivisible semantic outcome and later
+cancellation is a no-op. On child failure,
 cancellation, or an untransferable result, no region mutation is published to
 the parent.
 

@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.313] - 2026-09-04
+
+### Fixed
+- Closed the cancellation/publication race in `Bytes.parallelRange(...)` and
+  recursive `ByteRegion.parallelRange(...)`.
+- Defined successful reserved-byte publication and successful Future
+  terminalization as one indivisible semantic commitment with respect to
+  cancellation.
+- Required cancellation that terminalizes the Future first to release the
+  reservation without publishing parent-region mutation.
+- Required successful publication that commits first to replace exactly the
+  reserved bytes and resolve the Future successfully; later `cancel()` is the
+  ordinary terminal-Future no-op.
+- Prohibited the observable combination of committed parent-region bytes with a
+  `cancelled` result Future.
+- Kept the atomicity semantic rather than prescribing locks, CAS, scheduler
+  serialization, or any other physical implementation mechanism.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 313.
+  `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
+  `PROTOS_CONCURRENCY_MODEL.md` gain normative clarification in this revision.
+
 ## [0.1.312] - 2026-09-04
 
 ### Fixed

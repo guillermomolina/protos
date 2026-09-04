@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 312
+Document revision: 313
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -6237,10 +6237,22 @@ physical backing, address, or sibling authority.
 
 The child mutates isolated region state. Parent mutation occurs only at successful
 publication, after both normal child completion and successful P-boundary result
-transfer. Then exactly the region's fixed bytes atomically replace the reserved
-parent interval, the reservation is released, and the Future resolves. Failure,
-cancellation, or untransferable result releases the reservation without publishing
-region mutation.
+transfer.
+
+Successful publication is one indivisible semantic commitment with respect to
+cancellation and Future terminalization. At that commitment, while the Future is
+still pending, the operation atomically chooses the successful outcome: exactly
+the region's fixed bytes replace the reserved parent interval, the reservation is
+released, and the Future resolves with the already-transferred child result.
+Cancellation cannot win after the parent bytes have become visible, and parent
+bytes cannot become visible if cancellation has already won the Future's terminal
+race.
+
+If cancellation wins before that successful-publication commitment, or if the
+child fails or its result cannot cross the P boundary, the reservation is
+released without publishing region mutation. A cancellation request that arrives
+after successful publication has committed is a terminal-Future no-op under the
+ordinary `Future.cancel()` rule.
 
 This atomicity is only the reserved-byte publication boundary, not a transaction
 over arbitrary P state. Disjoint commits have no added total order. Recursive
