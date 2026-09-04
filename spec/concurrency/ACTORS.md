@@ -639,6 +639,12 @@ and the capability restrictions carried by that reference. Transfer does not
 amplify authority, expose the target's mutable heap/control state, or turn the
 reference into ownership of its target.
 
+For `GroupRef`, transfer preserves the semantic identity of the transferred
+identity-bearing capability object; the distributed-runtime owner defines the
+full `GroupRef` identity/reconstruction contract. This is capability transfer,
+not the ordinary logical-copy rule for mutable objects. Physical transport may
+materialize another wrapper or proxy without creating a new semantic `GroupRef`.
+
 Closures are not transferable because they capture actor-local lexical
 execution contexts by reference.
 

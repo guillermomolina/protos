@@ -8,6 +8,24 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.358] - 2026-09-04
+
+### GroupRef semantic identity (D021)
+- Distinguished Group identity, semantic `GroupRef` object identity, and physical
+  proxy/wrapper representation. Same-Group references are not automatically the
+  same `GroupRef`.
+- Defined `GroupRef` transfer as preservation of the same identity-bearing
+  capability object: repeated transfer and round-trip rematerialization preserve
+  `===`, primitive `identityHashOf`, and therefore `IdentityMap` key identity.
+- Kept proxy caching, rematerialization, addresses, tokens, and representation
+  implementation-private; no global interning or permanent wrapper registry is
+  required.
+
+### Compatibility
+- Group membership/routing evolution and Group lifetime remain independent of
+  `GroupRef` semantic identity. No new Group API, equality-by-target rule,
+  capability amplification, or Authority mechanism is introduced.
+
 ## [0.1.357] - 2026-09-04
 
 ### Actor API closure cleanup (D017)

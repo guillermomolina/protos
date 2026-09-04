@@ -146,6 +146,16 @@ a === b  // false
 a === c  // true
 ```
 
+Individual object identity is semantic, not physical representation identity. If an
+applicable normative domain rule preserves the same identity-bearing object across
+a transfer, reconstruction, migration, or rematerialization boundary, distinct
+physical wrappers, proxies, handles, addresses, or cache entries for that same
+semantic object must still compare `===`. Conversely, a domain rule that creates a
+new semantic object creates a distinct identity even if physical storage is shared.
+This does not add a value-identity family: the object remains identity-bearing, and
+the domain rule determines whether the same individual object or a new one crosses
+that boundary.
+
 Some Core values have **value identity**: their semantic value determines
 identity rather than a particular allocation. The Core v0.1 value-identity set
 is closed and consists exactly of:

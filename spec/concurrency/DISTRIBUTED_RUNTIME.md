@@ -790,26 +790,61 @@ ActorRef and GroupRef are both communication targets and expose the same
 fundamental send/request communication model while retaining different
 destination semantics.
 
-Multiple GroupRefs may refer to the same Group. GroupRef identity is not
-Group identity, and implementations need not globally intern GroupRef
-objects.
+Multiple GroupRefs may refer to the same Group. Group identity therefore does
+not determine GroupRef identity. Two independently acquired GroupRefs may denote
+the same Group, and may even carry equivalent effective communication
+permissions, while remaining distinct identity-bearing objects for `===`. They
+are not collapsed merely because their target Group is the same.
 
 A GroupRef may carry a restricted communication capability for its Group.
 Group identity is independent of the permissions carried by a particular
-GroupRef. Authority remains a separate capability.
+GroupRef. Authority remains a separate capability. Distinct effective capability
+or restriction state necessarily denotes distinct GroupRef semantic identity;
+Core does not infer capability sameness from target Group identity alone.
+
+### GroupRef semantic identity and transfer
+
+A particular GroupRef is an identity-bearing communication-capability object.
+Its **semantic GroupRef identity** is distinct both from the identity of its
+target Group and from any physical wrapper, proxy, handle, address, routing
+entry, cache entry, or serialized representation used to realize it.
 
 GroupRef is transferable through ordinary Actor/Process message value transfer.
-The transferred value denotes the same concrete Group identity and preserves the
-same effective communication capability and restrictions as the source GroupRef.
-Transfer cannot grant broader communication permission and cannot implicitly
-grant Group, Cluster, role, fencing, or other Authority.
+Unlike an ordinary mutable-object logical copy, transferring a GroupRef preserves
+the same semantic GroupRef identity. The transferred value therefore denotes the
+same concrete Group identity, carries the same effective communication
+capability and restrictions, and compares `===` with any other materialization
+of that same transferred semantic GroupRef when the values are observed in one
+execution context. Transfer cannot grant broader communication permission and
+cannot implicitly grant Group, Cluster, role, fencing, or other Authority.
+
+Consequently, if Actor A transfers GroupRef `g` to B and a value descended only
+through transfers of that same capability later returns to A as `k`, `g === k`
+is `true`. If A transfers the same `g` to B more than once, the resulting values
+`h1` and `h2` represent the same semantic GroupRef and `h1 === h2` is `true`.
+These results do not depend on proxy caching, transport path, or wrapper reuse.
+By contrast, two independently acquired GroupRefs `g1` and `g2` to the same
+Group remain distinct when their acquisition did not itself specify preservation
+of one existing GroupRef identity; in that case `g1 === g2` is `false`.
+
+The general identity-hash contract follows automatically. Every materialization
+of the same semantic GroupRef identity must produce the same
+`identityHashOf(...)` result for the applicable Protos execution, so an
+`IdentityMap` lookup made with a transferred, returned, or rematerialized form of
+the same GroupRef finds the same identity key. Distinct GroupRef identities may
+collide numerically and remain distinct because identity is never defined by hash
+comparison. An ordinary overridable `identityHash()` member, if observed, does
+not replace the primitive `identityHashOf`/`===` contract.
 
 Transfer of a GroupRef does not copy or expose mutable Group membership,
 controller, routing-cache, policy, or control-plane state. A receiving runtime
-may materialize a distinct local GroupRef representation; because GroupRef object
-identity is not Group identity and global interning is not required, such
-representation differences are unobservable except through the already-defined
-GroupRef communication semantics.
+may materialize a distinct local GroupRef physical representation, discard it,
+and later rematerialize another one. Such representation changes do not create a
+new semantic GroupRef identity. No global interning, globally unique live
+wrapper, stable address, permanent proxy cache, Group-to-GroupRef registry, or
+wrapper lifetime tied to Group lifetime is required. An implementation need only
+preserve the semantic identity observations required above, using any
+unobservable token or mechanism it chooses.
 
 Receiving or retaining a transferred GroupRef does not extend the Group's
 lifetime. The existing rule that remote GroupRefs do not keep a Group alive
