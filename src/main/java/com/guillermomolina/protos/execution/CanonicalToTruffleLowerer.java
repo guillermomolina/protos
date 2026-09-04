@@ -59,8 +59,11 @@ public final class CanonicalToTruffleLowerer {
         }
         if (expression instanceof CanonicalCreate create) {
             if (create.target().isPresent()) {
-                throw new UnsupportedOperationException(
-                        "Explicit member creation is not supported by this execution slice");
+                return new ProtosMemberCreateNode(
+                        create.span(),
+                        lower(create.target().orElseThrow()),
+                        create.name(),
+                        lower(create.value()));
             }
             return new ProtosBareCreateNode(
                     create.span(),
@@ -69,8 +72,11 @@ public final class CanonicalToTruffleLowerer {
         }
         if (expression instanceof CanonicalAssign assign) {
             if (assign.target().isPresent()) {
-                throw new UnsupportedOperationException(
-                        "Explicit member assignment is not supported by this execution slice");
+                return new ProtosMemberAssignNode(
+                        assign.span(),
+                        lower(assign.target().orElseThrow()),
+                        assign.name(),
+                        lower(assign.value()));
             }
             return new ProtosBareAssignNode(
                     assign.span(),
