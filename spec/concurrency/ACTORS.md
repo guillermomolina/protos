@@ -873,10 +873,24 @@ defined Actor-failure, cancellation, accepted-work-loss, request-uncertainty,
 cleanup, replacement, and ActorRef rules apply.
 
 An `Error` that is handled within the turn is not an Actor failure merely
-because it occurred. After the handler resumes, substitutes a value, retries,
-transforms the error, or otherwise completes according to the ordinary Protos
-error semantics, Actor execution continues normally unless the resulting code
-itself triggers another lifecycle cause.
+because it occurred. Actor code uses exactly the Core non-resumable Error
+semantics owned by `../semantics/ERRORS.md`: selecting a matching handler
+abandons the continuation at the `Error.signal()` point and unwinds to the
+selected `handle` boundary. The handler may complete normally, in which case its
+ordinary result is the result of that `handle` operation; this is not
+substitution of a value at the abandoned signal point. Execution may then
+continue only from code that normally receives or follows that `handle` result.
+Code remaining after the signal point in the abandoned protected computation is
+not executed.
+
+Handling an Error does not implicitly roll back Actor-local mutation, I/O,
+messages, or any other effects already performed before the Error, and Core
+performs no implicit retry. Any later retry or compensating action is a new
+ordinary program action under the applicable operation contract. If the handler
+itself signals an Error, that Error follows Core's ordinary outer-handler search
+because the selected handler frame has already been removed. Only an Error that
+ultimately escapes the Actor turn unhandled triggers the fatal-failure rule
+below.
 
 This rule does not make asynchronous child-task failure implicitly fatal to the
 Actor. A distinct asynchronous task records its unhandled error in its Future

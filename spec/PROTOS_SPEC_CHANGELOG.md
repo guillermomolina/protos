@@ -8,6 +8,17 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.353] - 2026-09-04
+
+### Non-resumable Error handling in Actors
+- Closed D015 by removing the residual resumable/retry/substitution model from Actor fatal-failure semantics.
+- Actor code now explicitly follows Core's non-resumable Error protocol: handler selection unwinds and abandons the signal continuation; a normal handler result is the enclosing `handle` result, never a value injected at the signal point.
+- Clarified that handled Errors do not imply Actor failure, rollback, replay, or retry; pre-Error effects remain subject to their ordinary contracts, and only an Error escaping the Actor turn unhandled is fatal.
+- Clarified that an Error signaled by the handler follows ordinary outer-handler search after the selected handler frame has been removed.
+
+### Compatibility
+- Removes contradictory recovery wording without changing Core Error identity, Future failure, I/O commitment, Actor request uncertainty, or Actor replacement semantics.
+
 ## [0.1.352] - 2026-09-04
 
 ### Polymorphic invocation protocol
