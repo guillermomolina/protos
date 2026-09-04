@@ -4,6 +4,38 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.22-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added `ProtosParameterBindingNode`, implementing the normative left-to-right
+  Closure parameter-binding algorithm over an already established invocation
+  activation.
+- Binding supports supplied arguments, real-activation default evaluation,
+  trailing rest capture as a distinct fresh frozen standard Array, and generic
+  argument-count Error signaling.
+
+### Changed
+
+- Project implementation version changed from `0.2.21-SNAPSHOT` to `0.2.22-SNAPSHOT`.
+
+### Tests
+
+- Added coverage for earlier-parameter visibility from defaults, exact `args`
+  preservation, distinct frozen rest Arrays, missing required parameters, and
+  deferred excess-argument detection.
+
+### Notes
+
+- Parameter names are created only after their supplied/default value is
+  obtained; there is no predeclaration or arity preflight.
+- Slot-creation conflicts during parameter establishment use ordinary generic
+  Error signaling.
+- This increment does not yet execute `CanonicalCall`, lower the `args`
+  intrinsic, execute Closure bodies, or complete return homes.
+- No normative specification change is introduced.
+
+
 ## [0.2.21-SNAPSHOT] - 2026-09-04
 
 ### Added
