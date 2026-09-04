@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 279
+Document revision: 280
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -1889,6 +1889,86 @@ ordinary synchronous call.
 
 This closes the former open ledger items `Blocking foreign calls` and
 `Blocking-operation offload`.
+
+## 24K. Foreign Mutable State Does Not Bypass Actor Isolation
+
+**CLOSED**
+
+Core v0.1 does not standardize a general Java/FFI/native interoperability API.
+However, any implementation or extension that exposes foreign objects, Java
+objects, native objects, static fields, process globals, library globals, or
+equivalent host state to Protos must preserve the closed Actor-isolation rules.
+
+A host/native reference is not permitted to become an accidental shared-memory
+escape hatch merely because the mutable storage it reaches is outside the Protos
+heap.
+
+In particular, ordinary Protos code in two different Actors must not acquire
+foreign wrappers/capabilities that allow both Actors to synchronously read or
+mutate the same underlying mutable host state as though that state were ordinary
+Actor-local object state.
+
+This includes, unless mediated by a separately defined safe boundary:
+
+- Java static mutable fields;
+- mutable Java singleton objects reachable from static state;
+- JNI/native process globals;
+- mutable C/C++ library globals;
+- host-language module/class globals;
+- mutable singleton registries or caches whose contents are directly exposed as
+  application state;
+- foreign object identity whose methods provide unrestricted shared mutation
+  across Actor domains.
+
+Such state may still exist inside an implementation. The restriction is on what
+portable Protos code may observe and mutate through ordinary Actor-local object
+semantics.
+
+A conforming interoperability facility must use one of the following semantic
+shapes, or another shape with equivalent isolation:
+
+```text
+copy/value boundary
+    -> each Actor receives an isolated logical value/snapshot
+
+immutable shared boundary
+    -> underlying state is semantically immutable for the sharing duration
+
+capability/service boundary
+    -> mutable external state is accessed through an explicit resource/service
+       capability with its own concurrency, ordering, failure, and lifetime rules
+
+Actor ownership boundary
+    -> mutable foreign state is exclusively owned by one Actor and other Actors
+       interact through ordinary Actor communication
+```
+
+An implementation may internally synchronize host globals with locks, atomics,
+thread confinement, JNI monitors, native queues, or equivalent mechanisms.
+Internal synchronization alone does not make unrestricted shared mutable access
+a valid Protos semantic surface.
+
+Likewise, making a foreign wrapper thread-safe does not make it Actor-isolated.
+Thread safety prevents low-level races; Actor isolation requires that one Actor's
+ordinary mutable state cannot be directly observed or mutated by another Actor
+without crossing an explicit semantic boundary.
+
+Foreign object identity also cannot silently become cross-Actor Protos identity.
+If two Actor-local wrappers happen to refer to the same host object internally,
+portable Protos observations must still match the declared copy, immutable,
+capability/service, or ownership contract. Host pointer/reference equality is not
+thereby a Core identity relation.
+
+A bridge must not choose at runtime between copying and shared mutable aliasing in
+a way that changes Protos-observable behavior. Any sharing policy that is
+observable must be part of the explicit interoperability contract.
+
+The same boundary applies to P. A host/global capability is not P-transferable
+merely because it is thread-safe or process-global. P crossing requires an
+explicit P-safe contract consistent with §71.
+
+This section closes the former open ledger items `Java interoperability
+isolation`, `Java static mutable state`, and `Native global state`.
 
 ## 25. Parent Actor Versus Failure Authority
 
@@ -5770,9 +5850,6 @@ mechanism, or implementation detail that still requires design.
 -   Schema evolution
 -   Non-transferable resource capabilities
 -   Foreign-resource proxies
--   Java interoperability isolation
--   Java static mutable state
--   Native global state
 -   Timers
 -   Clock semantics
 -   Resource limits and quotas

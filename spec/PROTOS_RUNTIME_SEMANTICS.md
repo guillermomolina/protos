@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 279
+Document revision: 280
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -6163,6 +6163,23 @@ If the Error graph itself is not P-transferable, the Future instead fails with a
 caller-domain `NonParallelValue`.
 
 ### P-local cooperative Future work
+
+### Foreign mutable state cannot become shared Protos memory
+
+Foreign/host references exposed by an implementation or extension must be
+represented so Actor isolation remains true at the Protos semantic level.
+
+A runtime must not implement an ordinary transferable Protos value by handing
+multiple Actors wrappers around the same mutable Java/native/global object when
+those wrappers permit direct shared mutation.
+
+Permitted implementation strategies include copying, immutable sharing,
+Actor-exclusive ownership, or an explicit capability/service proxy whose
+contract defines concurrent access. The physical representation is otherwise
+implementation-defined.
+
+Thread-safe host state is not automatically Actor-safe semantic state, and
+host-reference identity is not automatically Protos cross-Actor identity.
 
 ### Synchronous foreign-call offload preserves the Protos segment
 

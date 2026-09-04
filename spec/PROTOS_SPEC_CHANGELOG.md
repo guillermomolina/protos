@@ -4,6 +4,31 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.280] - 2026-09-04
+
+### Closed
+- Closed `Java interoperability isolation`, `Java static mutable state`, and
+  `Native global state`.
+- Defined foreign mutable host/global state as unable to bypass Actor isolation
+  merely because the storage lives outside the Protos heap.
+- Prohibited ordinary cross-Actor wrappers from exposing unrestricted shared
+  mutation of the same Java/native/global object.
+- Distinguished host thread safety from Protos Actor isolation.
+- Allowed safe interoperability through isolated copies/snapshots, semantically
+  immutable sharing, explicit capability/service boundaries, or single-Actor
+  ownership with ordinary Actor communication.
+- Clarified that host reference identity does not become cross-Actor Protos
+  identity and that observable copy-vs-share choices cannot be implementation
+  selected.
+- Applied the same rule to P: thread-safe/process-global does not imply
+  P-transferable.
+- Removed all three corresponding items from Open Design Topics.
+
+### Changed
+- Updated `PROTOS_RUNTIME_SEMANTICS.md` and `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  280.
+
 ## [0.1.279] - 2026-09-04
 
 ### Closed
