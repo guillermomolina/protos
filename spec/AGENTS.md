@@ -305,25 +305,20 @@ documents self-contained.
 
 ## Specification revision discipline
 
-`spec/PROTOS_SPEC_CHANGELOG.md` owns the global specification revision. The
-newest changelog entry `0.1.N` is the current global revision.
+`spec/PROTOS_SPEC_CHANGELOG.md` owns the single global specification revision.
+The newest changelog entry `0.1.N` is the current specification revision.
 
-Each revisioned normative document carries its own `Document revision: N`, where
-`N` is the newest global specification revision that actually changed that
-document. These document revisions are deliberately allowed to differ.
+Individual specification documents do not carry independent revision numbers.
+Each changelog entry must identify the documents or domains actually changed by
+that revision.
 
-A specification change must:
+Git history is the authoritative exact history of an individual specification
+file. Use `git log -- <path>` (and the corresponding commit diffs) when exact
+per-file history is required.
 
-- allocate one new global revision in the changelog;
-- update the `Document revision` only in normative documents whose content is
-  actually changed by that revision;
-- leave every unaffected normative document byte-for-byte unchanged; and
-- list the actually changed normative documents in the changelog entry.
-
-Never synchronize document revision numbers by editing otherwise-unaffected
-files. Cross-document consistency means updating every document whose owned
-semantics really changes, not touching every document in the specification set.
-
+Do not introduce independent per-module revision streams unless modules acquire
+genuinely independent release cycles. Do not edit otherwise-unaffected
+specification documents merely to synchronize metadata.
 
 ## Editing discipline
 

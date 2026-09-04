@@ -8,6 +8,20 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.336] - 2026-09-04
+
+### Specification revision governance simplified
+- Established one revision stream for the complete Protos specification: the
+  newest `0.1.N` entry in this changelog.
+- Removed per-document `Document revision` metadata from specification files.
+- Changelog entries identify the documents/domains affected by each revision;
+  Git history is the authoritative exact per-file history.
+- Updated root and specification agent guidance to prohibit independent or
+  artificially synchronized document revision numbers.
+
+### Compatibility
+- No observable Protos behavior is changed.
+
 ## [0.1.335] - 2026-09-04
 
 ### Design-governance cleanup

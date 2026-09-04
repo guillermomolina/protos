@@ -715,6 +715,9 @@ Do not change licensing terms or make licensing-policy decisions implicitly as p
 
 ### Concurrency design work
 
+The global specification revision is the newest entry in `spec/PROTOS_SPEC_CHANGELOG.md`.
+Individual specification documents do not carry independent revision numbers; changelog entries identify affected documents/domains and Git provides exact per-file history.
+
 `docs/design/CONCURRENCY_DESIGN.md` is entirely non-normative. It preserves
 unresolved, directional, and historical concurrency-design material after the
 legacy concurrency ledger was retired.

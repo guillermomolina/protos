@@ -1,7 +1,6 @@
 # Protos Execution and Control v0.1
 
 Language version: 0.1
-Document revision: 333
 Status: Draft
 Last updated: 2026-09-04
 
