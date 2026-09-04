@@ -21,6 +21,8 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosNumberLiteral;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
+import com.guillermomolina.protos.semantic.ast.CanonicalAssign;
+import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
@@ -54,6 +56,26 @@ public final class CanonicalToTruffleLowerer {
                         "args execution requires standard frozen Array materialization");
             }
             return new ProtosIntrinsicNode(intrinsic.span(), intrinsic.kind());
+        }
+        if (expression instanceof CanonicalCreate create) {
+            if (create.target().isPresent()) {
+                throw new UnsupportedOperationException(
+                        "Explicit member creation is not supported by this execution slice");
+            }
+            return new ProtosBareCreateNode(
+                    create.span(),
+                    create.name(),
+                    lower(create.value()));
+        }
+        if (expression instanceof CanonicalAssign assign) {
+            if (assign.target().isPresent()) {
+                throw new UnsupportedOperationException(
+                        "Explicit member assignment is not supported by this execution slice");
+            }
+            return new ProtosBareAssignNode(
+                    assign.span(),
+                    assign.name(),
+                    lower(assign.value()));
         }
 
         throw new UnsupportedOperationException(

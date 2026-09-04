@@ -27,7 +27,11 @@ public final class ProtosCoreErrors {
         return ERROR_PROTOTYPE;
     }
 
-    public static ProtosObjectValue newUnqualifiedLookupError() {
+    public static ProtosObjectValue newError() {
         return new ProtosObjectValue(ERROR_PROTOTYPE);
+    }
+
+    public static ProtosObjectValue newUnqualifiedLookupError() {
+        return newError();
     }
 }
