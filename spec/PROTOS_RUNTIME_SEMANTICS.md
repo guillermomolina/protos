@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 231
+Document revision: 232
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -4281,6 +4281,34 @@ not provide a user-defined applicable behavior, the operation fails through the
 normal protocol/lookup rules rather than mutating String storage.
 
 ### Standard Bytes indexed-state semantics
+
+### Standard Bytes size runtime semantics
+
+Standard Bytes size is conceptually:
+
+```text
+function standardBytesSize(receiver):
+    bytes = requireBytesReceiver(receiver)
+
+    return semanticIntegerFromMathematicalValue(
+        bytesOctetLength(bytes)
+    )
+```
+
+`bytesOctetLength` returns the exact mathematical number of octets in the
+receiver-owned standard Bytes state. It is the same length that determines the
+valid index range for `standardBytesAt` and `standardBytesAtPut`.
+
+The operation performs no octet decoding, user-message dispatch, callback,
+allocation visible to Protos, or mutation. Internal host-sized indexes or
+lengths are permitted only when they preserve the exact semantic Integer result
+for every standard Bytes value an implementation exposes.
+
+Backing-storage capacity, sparse or segmented representation, native buffer
+capacity, signed-byte representation, endianness, and host allocation strategy
+are not observable through `Bytes.size`.
+
+
 
 Standard Bytes primitives operate on receiver-owned finite dense octet state.
 

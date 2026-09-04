@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.232] - 2026-09-04
+
+### Fixed
+- Defined standard `Bytes.size` as the exact semantic Integer number of current
+  octets in receiver-owned Bytes state.
+- Made `Bytes.size` use the same logical octet length that defines valid
+  `Bytes.at` / `atPut` indexes.
+- Prohibited host buffer width, capacity, overflow, wrapping, saturation,
+  signed-byte representation, or storage layout from changing the result.
+- Defined `size` as read-only and available for open, closed, and frozen Bytes
+  without decoding contents or invoking user behavior.
+- Preserved the existing Bytes receiver-domain rule and the existing I/O rule
+  that `Bytes` need not be a mandatory Core-prelude binding.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 232.
+  Only `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain
+  normative semantic content in this revision.
+
 ## [0.1.231] - 2026-09-04
 
 ### Fixed

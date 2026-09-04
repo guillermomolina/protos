@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 231
+Document revision: 232
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3795,6 +3795,37 @@ The resulting String is conceptually:
 
 
 ### Standard Bytes indexed semantics
+
+### Standard Bytes size
+
+The standard `Bytes.size` operation returns a semantic `Integer` equal to the
+receiver's current number of octets.
+
+For standard Bytes whose valid indexed positions are:
+
+```text
+0, 1, 2, ... byteLength - 1
+```
+
+`bytes.size` returns exactly the mathematical Integer `byteLength`.
+
+Core does not require a particular fixed-width Integer family for this result.
+An implementation must not expose host index width, native buffer-size limits,
+overflow, wrapping, saturation, or truncation through `Bytes.size`.
+
+`size` is a read-only observation. It does not read or decode octet contents,
+does not invoke user behavior, and does not mutate the Bytes object. It is
+available for open, closed, and frozen Bytes.
+
+The existing standard Bytes receiver-domain rule applies. Merely delegating to
+a Bytes object, copying a `size` behavior, or otherwise obtaining that behavior
+does not confer receiver-owned byte-sequence state.
+
+`Bytes.size` counts octets only. It does not report Unicode scalar values,
+grapheme clusters, encoded characters, storage capacity, reserved capacity,
+host buffer length, or any other representation-dependent quantity.
+
+
 
 A standard `Bytes` object is an identity-bearing mutable object with
 receiver-owned byte-sequence state. Its byte contents are distinct from its
