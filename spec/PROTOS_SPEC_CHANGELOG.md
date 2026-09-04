@@ -4,6 +4,35 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.253] - 2026-09-04
+
+### Added / Closed
+- Standardized `Array.parallelFilter(predicate, arguments...) -> Future`.
+- Reused the `parallelMap` per-index P-isolation model: one logical isolated
+  predicate invocation per source index, with all non-empty child inputs
+  validated/snapshotted before any child becomes eligible.
+- Kept predicate callability polymorphic rather than Closure-only.
+- Required predicate results to be exactly canonical `true` or `false`, matching
+  Protos' absence of language-wide truthiness; other normal results fail the
+  corresponding index with standard `InvalidPredicateResult`.
+- Defined `InvalidPredicateResult` as delegating directly to `Error`.
+- Preserved stable ascending source-index order in the fresh filtered result
+  independently of physical execution/completion order.
+- Required selected values to cross back under ordinary P result rules while
+  allowing rejected values to avoid unnecessary result transfer.
+- Defined deterministic multiple-failure selection by lowest failing source
+  index and prohibited partial result publication on failure/cancellation.
+- Left batching, fusion, chunking, SIMD, work stealing, worker count, and actual
+  overlap as unobservable implementation choices.
+- Narrowed the remaining parallel collection API topic to
+  reduce/search/sort/iteration.
+
+### Changed
+- Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
+  `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  253.
+
 ## [0.1.252] - 2026-09-04
 
 ### Fixed

@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 252
+Document revision: 253
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -4132,6 +4132,91 @@ carrier count, SIMD width, or actual overlap. An implementation may batch,
 fuse, inline, vectorize, or sequentialize physical execution when the complete
 observable contract above is preserved.
 
+### 71.6B Standard `Array.parallelFilter(...)`
+
+Core v0.1 standardizes:
+
+```text
+array.parallelFilter(predicate, arguments...)
+    -> Future
+```
+
+`parallelFilter` is standard Array behavior reached through ordinary message
+lookup. It introduces no new syntax, iterator/stream identity, Task identity, or
+writable Array partition authority.
+
+The receiver must satisfy the standard Array receiver-domain contract.
+`predicate` must be invokable through the ordinary polymorphic invocation
+protocol and need not be a Closure. Closure values that cross P follow the
+existing projection rules.
+
+After ordinary receiver/argument evaluation, Array receiver validation, and
+predicate-callability validation, the operation captures the source Array's
+current element-reference sequence in ascending index order.
+
+For every source index `i`, the logical predicate invocation is:
+
+```text
+predicate(sourceSnapshot[i], arguments...)
+```
+
+executed in an isolated child P domain. Each source index is a separate P
+isolation domain exactly as for `Array.parallelMap`; no mutable Protos identity
+is shared between predicate invocations merely because the same source element,
+predicate object, or explicit argument object appeared more than once.
+
+For a non-empty source, all logical child P input graphs must be validated and
+snapshotted before any child becomes eligible and before the operation
+successfully returns its Future. If any required child input cannot cross P, the
+call synchronously signals `NonParallelValue`, creates no result Future, and
+makes no child eligible. When an observable validation choice is required,
+source indexes are considered in ascending order.
+
+For an empty source, no predicate invocation exists and no P boundary is
+crossed. Ordinary receiver and predicate-callability validation still occurs,
+but P-transferability of otherwise-unused predicate/argument values is not
+required. The operation returns a Future already resolved with a fresh empty
+standard Array.
+
+A predicate invocation must complete normally with exactly the canonical
+Boolean object `true` or `false`. Protos has no language-wide truthiness
+conversion. A normal predicate result that is neither canonical `true` nor
+canonical `false` is an indexed `InvalidPredicateResult` failure. The standard
+`InvalidPredicateResult` error delegates directly to `Error`.
+
+A `true` result selects the corresponding snapshotted source element. A `false`
+result rejects it. On successful completion of all predicate invocations, the
+result Future resolves with one fresh standard Array containing exactly the
+selected source elements in ascending original source-index order.
+
+Selection order is therefore stable and independent of predicate start order,
+completion order, carrier count, work stealing, or physical chunking. The
+operation does not return predicate results; it returns the selected source
+values after their ordinary P result/publication crossing needed to construct
+the caller-domain result.
+
+No partial result Array is published. If more than one source index fails —
+whether through a predicate-signaled Error, `InvalidPredicateResult`,
+untransferable selected result, or another indexed P failure — the operation
+fails with the failure belonging to the lowest failing source index. Scheduler
+timing never chooses the reported failure.
+
+A source element rejected by a `false` predicate need not be transferred back as
+a result value. A selected element must be publishable under the ordinary P
+result/value rules; if it is not, that source index fails with caller-domain
+`NonParallelValue`.
+
+Cancelling the result Future requests cooperative cancellation of unfinished
+predicate P work under the ordinary structured-concurrency rules and publishes
+no partial result Array. The normal first-terminal-transition Future rule governs
+races with an already available terminal operation outcome.
+
+`parallelFilter` does not promise a worker count, chunk size, task count,
+carrier count, SIMD width, or actual simultaneous execution. Implementations may
+batch, fuse, inline, vectorize, or sequentialize physical execution only when
+the complete per-index isolation, stable-selection, deterministic-failure, and
+publication contract remains observationally identical.
+
 ### 71.7 Scheduling and Oversubscription
 
 Requesting many parallel computations does not imply creating the same
@@ -4727,7 +4812,7 @@ mechanism, or implementation detail that still requires design.
 -   Streaming
 -   Async streams
 -   Generators and suspendable iteration
--   Parallel filter/reduce/search/sort/iteration standard-library APIs
+-   Parallel reduce/search/sort/iteration standard-library APIs
 -   Parallel scheduling, work-stealing, and granularity heuristics
 -   Pub/sub
 -   Advanced routers and load-balancing policies

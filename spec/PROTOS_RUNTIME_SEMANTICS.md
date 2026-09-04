@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 252
+Document revision: 253
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3829,6 +3829,60 @@ result Array becomes visible.
 Physical chunking, batching, fusion, sequential execution, SIMD, work stealing,
 and worker count are runtime choices and do not alter the conceptual per-index P
 isolation or deterministic result/failure rules.
+
+
+### Standard Array parallelFilter runtime semantics
+
+Conceptually:
+
+```text
+parallelFilter(receiver, predicate, extras, caller):
+    requireStandardArrayReceiver(receiver)
+    requireOrdinarilyInvokable(predicate)
+
+    source = shallowAscendingElementSnapshot(receiver)
+
+    if source.size == 0:
+        return resolvedFuture(freshStandardArray())
+
+    prepared = freshFixedSequence(source.size)
+
+    for i in 0 .. source.size - 1:
+        prepared[i] =
+            preparePInvocationGraph(
+                predicate,
+                [source[i]] + extras
+            )
+        // synchronous NonParallelValue on failure
+        // no child is eligible until every input succeeds
+
+    resultFuture = freshPendingFutureOwnedBy(caller.activation)
+
+    for i in 0 .. source.size - 1:
+        scheduleIsolatedPChild(
+            prepared[i],
+            completionIndex = i,
+            owner = resultFuture
+        )
+
+    return resultFuture
+```
+
+Each child normal result is classified only as canonical `true` or canonical
+`false`. Any other normal result records `InvalidPredicateResult` for that source
+index.
+
+After all logically relevant indexed outcomes are known, successful selected
+elements are assembled in ascending source-index order into a fresh standard
+Array. A selected value must cross to the caller domain under ordinary P result
+rules; an untransferable selected value records caller-domain
+`NonParallelValue` for that index. Rejected elements need not be transferred
+back.
+
+If any indexed failure exists, the smallest failing source index is the
+deterministic operation failure. No partially assembled result Array is exposed.
+Physical batching, fusion, vectorization, sequential execution, chunking, worker
+count, and work stealing are unobservable implementation choices.
 
 ### Exact call-spread expansion
 

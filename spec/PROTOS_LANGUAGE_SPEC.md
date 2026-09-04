@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 252
+Document revision: 253
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -2967,6 +2967,43 @@ child P work and publishes no partial result.
 its indexed state or reachable mutable element graphs. It uses the ordinary P
 snapshot/value model; the absence of generic writable Array partitioning is
 unchanged.
+
+
+## Standard Array Parallel Filtering
+
+Standard Array provides:
+
+```text
+array.parallelFilter(predicate, arguments...)
+    -> Future
+```
+
+The receiver must be a standard Array. `predicate` uses the ordinary
+polymorphic invocation protocol and is not Closure-only.
+
+The operation snapshots the source element-reference sequence in ascending index
+order after ordinary evaluation, receiver validation, and predicate-callability
+validation. Each source index is evaluated in an isolated child P domain with
+the snapshotted element followed by the explicit extra arguments.
+
+For non-empty input, all child P inputs must be valid before the call
+successfully returns its Future; otherwise `NonParallelValue` is signaled
+synchronously and no child begins. Empty input performs no P transfer and
+returns a Future resolved with a fresh empty standard Array.
+
+Predicate results have a strict Boolean contract. Only canonical `true` selects
+the element and canonical `false` rejects it. Any other normal result fails that
+index with `InvalidPredicateResult`, which delegates directly to `Error`; there
+is no truthiness conversion.
+
+On success, the Future resolves with a fresh standard Array containing selected
+source elements in ascending original source-index order. Predicate execution
+order is not observable through result ordering. Multiple indexed failures are
+resolved deterministically by the lowest failing source index. Cancellation or
+failure publishes no partial result.
+
+`parallelFilter` does not mutate the source Array and does not grant writable
+partition authority over the Array or any reachable mutable element graph.
 
 ## Invocation Arguments, Defaults, Rest, and Spread
 
