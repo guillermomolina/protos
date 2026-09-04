@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -74,21 +75,29 @@ class ProtosMessageSendExecutionTest {
     void sendArgumentsEvaluateLeftToRightAndSpreadInPlace() throws IOException {
         ProtosPrelude prelude = corePrelude();
 
+        ProtosActivation activation = prelude.newModuleActivation();
+        activation.context().createLocalSlot(
+                "spread",
+                prelude.newArray(
+                        java.util.List.of(
+                                new ProtosIntegerValue(BigInteger.valueOf(2)))));
+
         Object result =
-                execute(
-                        prelude,
-                        """
-                        Receiver: {
-                            first: null
-                            second: null
-                            capture: (a, b) => {
-                                first = a
-                                second = b
-                                b
-                            }
-                        }
-                        Receiver.capture(1, ...Array(2))
-                        """);
+                new ProtosSourceCompiler()
+                        .compile(
+                                """
+                                Receiver: {
+                                    first: null
+                                    second: null
+                                    capture: (a, b) => {
+                                        first = a
+                                        second = b
+                                        b
+                                    }
+                                }
+                                Receiver.capture(1, ...spread)
+                                """)
+                        .call(activation);
 
         assertEquals(BigInteger.valueOf(2), ((ProtosIntegerValue) result).value());
     }

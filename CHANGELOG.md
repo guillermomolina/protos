@@ -4,6 +4,23 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.35-SNAPSHOT] - 2026-09-04
+
+### Fixed
+
+- Corrected the P53 message-send spread test so it exercises spread flattening
+  with an already-materialized `ProtosArrayValue` instead of depending on the
+  still-pending standard `Array.call` factory specialization.
+- Project implementation version changed from `0.2.34-SNAPSHOT` to `0.2.35-SNAPSHOT`.
+
+### Notes
+
+- No message-send runtime semantics are changed.
+- No standard Array factory behavior is introduced by this correction.
+- D027/B003 remains untouched.
+- No normative specification change is introduced.
+
+
 ## [0.2.34-SNAPSHOT] - 2026-09-04
 
 ### Added
