@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.semantic;
 
+import com.guillermomolina.protos.parser.ast.SurfaceAssignment;
 import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
@@ -27,8 +28,11 @@ import com.guillermomolina.protos.parser.ast.SurfaceMember;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
 import com.guillermomolina.protos.parser.ast.SurfaceParameter;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
+import com.guillermomolina.protos.parser.ast.SurfaceSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceUnary;
+import com.guillermomolina.protos.semantic.ast.CanonicalAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
+import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
@@ -50,17 +54,59 @@ public final class Canonicalizer {
             case SurfaceMember member ->
                     new CanonicalMember(
                             canonicalize(member.receiver()), member.name(), member.span());
+            case SurfaceAssignment assignment -> lowerAssignment(assignment);
             case SurfaceBinary binary -> lowerBinary(binary);
             case SurfaceClosure closure -> lowerClosure(closure);
             case SurfaceUnary unary -> lowerUnary(unary);
             case SurfaceSequence sequence ->
                     new CanonicalSequence(canonicalizeAll(sequence.expressions()), sequence.span());
+            case SurfaceSlotCreation creation -> lowerSlotCreation(creation);
             default ->
                     throw new IllegalArgumentException(
                             "Surface expression is not supported by this canonicalizer slice: "
                                     + expression.getClass().getSimpleName());
         };
     }
+
+    private CanonicalExpression lowerAssignment(SurfaceAssignment assignment) {
+        if (assignment.target() instanceof SurfaceIndex) {
+            throw new IllegalArgumentException(
+                    "Indexed assignment is not supported by this canonicalizer slice");
+        }
+        SlotTarget target = slotTarget(assignment.target());
+        return new CanonicalAssign(
+                target.receiver(),
+                target.name(),
+                canonicalize(assignment.value()),
+                assignment.span());
+    }
+
+    private CanonicalExpression lowerSlotCreation(SurfaceSlotCreation creation) {
+        SlotTarget target = slotTarget(creation.target());
+        return new CanonicalCreate(
+                target.receiver(),
+                target.name(),
+                canonicalize(creation.value()),
+                creation.span());
+    }
+
+    private SlotTarget slotTarget(SurfaceExpression target) {
+        if (target instanceof SurfaceName name) {
+            return new SlotTarget(java.util.Optional.empty(), name.name());
+        }
+        if (target instanceof SurfaceMember member) {
+            return new SlotTarget(
+                    java.util.Optional.of(canonicalize(member.receiver())),
+                    member.name());
+        }
+        throw new IllegalArgumentException(
+                "Unsupported slot target in this canonicalizer slice: "
+                        + target.getClass().getSimpleName());
+    }
+
+    private record SlotTarget(
+            java.util.Optional<CanonicalExpression> receiver,
+            String name) {}
 
     private CanonicalExpression lowerIndex(SurfaceIndex index) {
         return new CanonicalSend(
