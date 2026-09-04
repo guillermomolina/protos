@@ -35,6 +35,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceObjectItem;
 import com.guillermomolina.protos.parser.ast.SurfaceParameter;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.parser.ast.SurfaceSlotCreation;
+import com.guillermomolina.protos.parser.ast.SurfaceSuperSend;
 import com.guillermomolina.protos.parser.ast.SurfaceUnary;
 import com.guillermomolina.protos.semantic.ast.CanonicalAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalCall;
@@ -52,6 +53,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
 import com.guillermomolina.protos.semantic.ast.CanonicalReturn;
 import com.guillermomolina.protos.semantic.ast.CanonicalSend;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
+import com.guillermomolina.protos.semantic.ast.CanonicalSuperSend;
 import java.util.List;
 
 public final class Canonicalizer {
@@ -78,11 +80,26 @@ public final class Canonicalizer {
             case SurfaceSequence sequence ->
                     new CanonicalSequence(canonicalizeAll(sequence.expressions()), sequence.span());
             case SurfaceSlotCreation creation -> lowerSlotCreation(creation);
+            case SurfaceSuperSend superSend -> lowerSuperSend(superSend);
             default ->
                     throw new IllegalArgumentException(
                             "Surface expression is not supported by this canonicalizer slice: "
                                     + expression.getClass().getSimpleName());
         };
+    }
+
+    private CanonicalExpression lowerSuperSend(SurfaceSuperSend superSend) {
+        if (superSend.arguments().stream().anyMatch(SurfaceArgument::spread)) {
+            throw new IllegalArgumentException(
+                    "Spread arguments in super sends are not supported by this canonicalizer slice");
+        }
+        return new CanonicalSuperSend(
+                superSend.message(),
+                superSend.arguments().stream()
+                        .map(SurfaceArgument::expression)
+                        .map(this::canonicalize)
+                        .toList(),
+                superSend.span());
     }
 
     private CanonicalExpression lowerIntrinsic(SurfaceIntrinsic intrinsic) {
