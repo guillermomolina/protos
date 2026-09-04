@@ -21,6 +21,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
+import com.guillermomolina.protos.parser.ast.SurfaceIndex;
 import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
 import com.guillermomolina.protos.parser.ast.SurfaceMember;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
@@ -45,6 +46,7 @@ public final class Canonicalizer {
                     new CanonicalLiteral(literal.kind(), literal.value(), literal.span());
             case SurfaceName name -> new CanonicalLookup(name.name(), name.span());
             case SurfaceGroup group -> canonicalize(group.expression());
+            case SurfaceIndex index -> lowerIndex(index);
             case SurfaceMember member ->
                     new CanonicalMember(
                             canonicalize(member.receiver()), member.name(), member.span());
@@ -58,6 +60,14 @@ public final class Canonicalizer {
                             "Surface expression is not supported by this canonicalizer slice: "
                                     + expression.getClass().getSimpleName());
         };
+    }
+
+    private CanonicalExpression lowerIndex(SurfaceIndex index) {
+        return new CanonicalSend(
+                canonicalize(index.receiver()),
+                "at",
+                List.of(canonicalize(index.index())),
+                index.span());
     }
 
     private CanonicalExpression lowerClosure(SurfaceClosure closure) {
