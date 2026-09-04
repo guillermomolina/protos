@@ -1159,7 +1159,7 @@ Conceptually:
 function without(receiver, name):
     requireLocalSlot(receiver, name)
 
-    result = newOrdinaryObject()
+    result = newOrdinaryObject(parent = Object, state = open)
     for each local slot in receiver:
         if slot.name != name:
             createLocalSlot(result, slot.name, slot.value)
@@ -1176,12 +1176,12 @@ function alias(receiver, sourceName, aliasName):
     if receiver.hasLocalSlot(aliasName):
         signal AliasConflict(aliasName)
 
-    result = copyLocalSlotBindingsIntoNewObject(receiver)
+    result = copyLocalSlotBindingsIntoNewObject(receiver, parent = Object, state = open)
     createLocalSlot(result, aliasName, receiver.localSlot(sourceName).value)
     return result
 ```
 
-`alias` preserves the original `sourceName`; it adds `aliasName`. Both names initially refer to the same stored object. Neither operation clones slot values.
+`alias` preserves the original `sourceName`; it adds `aliasName`. Both names initially refer to the same stored object. Neither operation clones slot values. Both operations require semantic String name arguments, inspect only local slots, accept closed/frozen receivers because they do not mutate them, and always construct a fresh open result whose immediate parent is `Object`. Closure-valued bindings remain the same Closure objects; later receiver binding and `methodHome` arise from ordinary lookup/invocation on the result rather than from transformation-time rebinding.
 
 Because the returned value is an ordinary object, the composition machinery itself remains unchanged: `...` simply evaluates its operand and composes that object's local slots. Missing source names and alias-name collisions are errors rather than silent no-ops or overwrites.
 

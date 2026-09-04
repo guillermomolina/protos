@@ -55,7 +55,7 @@ unresolved observable case: the result of an empty `Sequence`.
 
 ## B002 — Delegation parent of `without` / `alias` result objects
 
-Status: BLOCKED
+Status: READY
 
 Implementation area:
 Standard `Object.without(name)` and `Object.alias(sourceName, aliasName)` message
@@ -77,9 +77,10 @@ delegation parent of the ordinary object returned by both `without(name)` and
 `alias(sourceName, aliasName)`.
 
 Current consequence:
-The runtime copy helpers require the caller to provide the result parent
-explicitly, so no standard Protos-visible parent policy is encoded. The
-`without` and `alias` messages must not be exposed until this blocker is READY.
+The normative contract now fixes both result objects as fresh open ordinary
+objects whose immediate delegation parent is `Object`, so implementation may
+proceed without choosing observable parent/state semantics. The blocked runtime
+work itself has not yet been completed.
 
 Independent work:
 Composition conflict validation, local-slot snapshots, atomic contribution

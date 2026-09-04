@@ -8,6 +8,30 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.347] - 2026-09-04
+
+### Fixed
+- Closed D008 by making `semantics/OBJECT_MODEL.md` the single normative owner of
+  the complete `without` / `alias` local-slot-view contract.
+- Defined both operations as ordinary non-mutating `Object` messages over local
+  slot structure only, with semantic String name arguments and no delegated
+  lookup, coercion, inherited-slot materialization, or trait-specific mechanism.
+- Fixed successful results as fresh open ordinary objects with immediate parent
+  `Object`; receiver parent and open/closed/frozen state are not copied.
+- Required shallow binding identity preservation, including Closure identity, and
+  specified that aliased methods obtain `this` and `methodHome` only from the
+  ordinary later lookup/invocation on the result.
+- Closed missing-source, delegated-only source, alias collision, identical-name,
+  frozen-receiver, reflection/order, and composition-chaining behavior through
+  the existing general object, reflection, invocation, and error rules.
+- Updated the informative Abstract Runtime to reflect the normative parent/state
+  choice and marked implementation blocker B002 READY.
+
+### Compatibility
+- Closes previously implementation-selectable result-parent/state, name-domain,
+  inherited-slot, method rebinding, and frozen-receiver behavior. Implementations
+  must not preserve the source parent or materialize delegated slots in a view.
+
 ## [0.1.346] - 2026-09-04
 
 ### Fixed
