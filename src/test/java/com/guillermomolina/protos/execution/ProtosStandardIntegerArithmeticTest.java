@@ -53,6 +53,56 @@ class ProtosStandardIntegerArithmeticTest {
     }
 
     @Test
+    void quotientAndRemainderUseTruncationTowardZero() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+
+        assertInteger(prelude, "7.div(3)", BigInteger.valueOf(2));
+        assertInteger(prelude, "(-7).div(3)", BigInteger.valueOf(-2));
+        assertInteger(prelude, "7.div(-3)", BigInteger.valueOf(-2));
+        assertInteger(prelude, "(-7).div(-3)", BigInteger.valueOf(2));
+
+        assertInteger(prelude, "7.mod(3)", BigInteger.ONE);
+        assertInteger(prelude, "(-7).mod(3)", BigInteger.valueOf(-1));
+        assertInteger(prelude, "7.mod(-3)", BigInteger.ONE);
+        assertInteger(prelude, "(-7).mod(-3)", BigInteger.valueOf(-1));
+
+        assertInteger(prelude, "7 % 3", BigInteger.ONE);
+        assertInteger(prelude, "-7 % 3", BigInteger.valueOf(-1));
+    }
+
+    @Test
+    void quotientAndRemainderRemainArbitraryPrecision() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+
+        assertInteger(
+                prelude,
+                "999999999999999999999999.div(3)",
+                new BigInteger("333333333333333333333333"));
+        assertInteger(
+                prelude,
+                "999999999999999999999999.mod(10)",
+                BigInteger.valueOf(9));
+    }
+
+    @Test
+    void quotientAndRemainderRejectZeroDivisor() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+
+        assertThrows(ProtosSignalException.class, () -> execute(prelude, "1.div(0)"));
+        assertThrows(ProtosSignalException.class, () -> execute(prelude, "1.mod(0)"));
+        assertThrows(ProtosSignalException.class, () -> execute(prelude, "1 % 0"));
+    }
+
+    @Test
+    void quotientAndRemainderRejectDifferentNumericFamily() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+
+        assertThrows(ProtosSignalException.class, () -> execute(prelude, "1.div(1.0)"));
+        assertThrows(ProtosSignalException.class, () -> execute(prelude, "1.mod(1.0)"));
+        assertThrows(ProtosSignalException.class, () -> execute(prelude, "1 % 1.0"));
+    }
+
+    @Test
     void unaryMinusUsesStandardNegatedBehavior() throws IOException {
         ProtosPrelude prelude = corePrelude();
 

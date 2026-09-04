@@ -34,6 +34,7 @@ public final class ProtosStandardIntegerProtocol {
         installBinary(integerPrototype, "+", java.math.BigInteger::add);
         installBinary(integerPrototype, "-", java.math.BigInteger::subtract);
         installBinary(integerPrototype, "*", java.math.BigInteger::multiply);
+        installQuotientRemainder(integerPrototype);
 
         if (integerPrototype.hasLocalSlot("negated")) {
             throw new IllegalStateException("Core Integer already defines a local negated slot");
@@ -48,6 +49,45 @@ public final class ProtosStandardIntegerProtocol {
                                         ProtosCoreErrors.newError(activation));
                             }
                             return new ProtosIntegerValue(receiver.value().negate());
+                        }));
+    }
+
+    private static void installQuotientRemainder(ProtosObjectValue integerPrototype) {
+        installExactIntegerBinary(
+                integerPrototype,
+                "div",
+                (left, right) -> left.divide(right));
+        installExactIntegerBinary(
+                integerPrototype,
+                "mod",
+                (left, right) -> left.remainder(right));
+        installExactIntegerBinary(
+                integerPrototype,
+                "%",
+                (left, right) -> left.remainder(right));
+    }
+
+    private static void installExactIntegerBinary(
+            ProtosObjectValue integerPrototype,
+            String selector,
+            BiFunction<java.math.BigInteger, java.math.BigInteger, java.math.BigInteger> operation) {
+        if (integerPrototype.hasLocalSlot(selector)) {
+            throw new IllegalStateException(
+                    "Core Integer already defines a local " + selector + " slot");
+        }
+        integerPrototype.createLocalSlot(
+                selector,
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            ProtosIntegerValue receiver = requireIntegerReceiver(activation);
+                            if (supplied.size() != 1
+                                    || !(supplied.get(0) instanceof ProtosIntegerValue argument)
+                                    || argument.value().signum() == 0) {
+                                throw new ProtosSignalException(
+                                        ProtosCoreErrors.newError(activation));
+                            }
+                            return new ProtosIntegerValue(
+                                    operation.apply(receiver.value(), argument.value()));
                         }));
     }
 

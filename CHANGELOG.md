@@ -4,6 +4,37 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.42-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added standard ordinary `Integer.div(argument)` quotient behavior with
+  truncation toward zero.
+- Added standard ordinary `Integer.mod(argument)` and `%` remainder behavior
+  using `a - (a div b) * b`, preserving the dividend sign for nonzero
+  remainders.
+- Added zero-divisor and mixed-numeric-family rejection for standard Integer
+  quotient and remainder operations.
+- Added exact arbitrary-precision quotient/remainder coverage in Java and
+  executable `.protos` conformance programs.
+- Added conformance cases for positive and negative operands, zero divisors,
+  mixed Integer/Float rejection, and `%` equivalence with standard `mod`.
+- Project implementation version changed from `0.2.41-SNAPSHOT` to
+  `0.2.42-SNAPSHOT`.
+
+### Notes
+
+- Ordinary Integer `/` remains separate work because Core requires its Float
+  result to be the correctly rounded binary64 representation of the exact
+  rational quotient; it must not be implemented by separately rounding large
+  Integer operands to host doubles before division.
+- Float `div`, `mod`, and `%` are intentionally not introduced.
+- Fixed-width integer-family quotient/remainder behavior remains separate until
+  those semantic families are represented by the implementation.
+- D027/B003 remains untouched.
+- No normative specification change is introduced.
+
+
 ## [0.2.41-SNAPSHOT] - 2026-09-04
 
 ### Added
