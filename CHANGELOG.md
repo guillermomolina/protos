@@ -7,6 +7,8 @@ For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_
 ## [0.2.0-SNAPSHOT] - 2026-09-01
 
 ### Added
+
+- Added a Truffle CallTarget entry point for executing Protos expression trees through the root-node boundary.
 - Added the initial Truffle root execution boundary, delegating directly to the executable expression tree without introducing language-value semantics.
 
 - Added the first executable Truffle node: non-empty expression sequences execute strictly left-to-right and return the final child result.
