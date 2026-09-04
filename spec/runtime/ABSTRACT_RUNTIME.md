@@ -1,7 +1,7 @@
 # Protos Abstract Runtime v0.1
 
 Language version: 0.1  
-Document revision: 324
+Document revision: 326
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -10,7 +10,7 @@ It complements:
 
 - `../PROTOS_LANGUAGE_SPEC.md`
 - `../PROTOS_GRAMMAR.md`
-- `../PROTOS_IO_MODEL.md`
+- `../../io/IO_CORE.md`
 
 - the normative CLOSED sections of `../PROTOS_CONCURRENCY_MODEL.md`
 
@@ -73,7 +73,7 @@ Future
     adoptedSource          // pending Future whose outcome is being adopted, or none
 ```
 
-These fields are conceptual. An implementation may represent them differently. The I/O-operation commitment state described in `../PROTOS_IO_MODEL.md` is not an additional Future state: a Future remains exactly pending, resolved, failed, or cancelled.
+These fields are conceptual. An implementation may represent them differently. The I/O-operation commitment state described in `../../io/IO_CORE.md` is not an additional Future state: a Future remains exactly pending, resolved, failed, or cancelled.
 
 **The Lexical Parent of an Execution Context:**
 
@@ -2047,7 +2047,7 @@ programmer-visible lifecycle state, ordering rule, failure detector, partition
 policy, ownership edge, authority grant, bootstrap path, or Error-transfer
 mechanism.
 
-`../PROTOS_IO_MODEL.md` remains the primary owner of I/O-specific producer
+`../../io/IO_CORE.md` remains the primary owner of I/O-specific producer
 commitment/cancellation consequences when Actor termination requests cancellation
 of outstanding I/O operations.
 

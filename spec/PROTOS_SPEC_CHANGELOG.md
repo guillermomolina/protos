@@ -8,6 +8,26 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.326] - 2026-09-04
+
+### Migrated
+- Performed a macro migration of two specification families in one revision.
+- Promoted `concurrency/DISTRIBUTED_RUNTIME.md` to the primary normative owner
+  of every legacy concurrency-ledger section numbered 35-70 whose section-local
+  status was exactly `CLOSED` or `CLOSED --- REVISED`.
+- Design-qualified distributed sections remain non-normative in the transitional
+  concurrency ledger.
+- Split the complete former `PROTOS_IO_MODEL.md` into five normative modules:
+  `io/IO_CORE.md`, `io/BYTE_IO.md`, `io/TEXT_IO.md`, `io/FILESYSTEM.md`, and
+  `io/PROCESS_IO.md`.
+- Removed `PROTOS_IO_MODEL.md`; legacy section numbers remain in the modular
+  files for citation continuity.
+
+### Compatibility
+- This revision changes specification location and ownership only; it does not
+  intentionally change observable Protos behavior.
+- Historical changelog references retain historical filenames.
+
 ## [0.1.325] - 2026-09-04
 
 ### Migrated

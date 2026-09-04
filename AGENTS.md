@@ -296,13 +296,13 @@ The canonical core language definition is maintained in:
 
 Normative domain models supplement those core documents for semantically substantial standard subsystems. The current normative domain model is:
 
-- "spec/PROTOS_IO_MODEL.md" — observable I/O, text/binary adapter, filesystem-authority, and Process-I/O-bootstrap semantics.
+- "spec/io/IO_CORE.md" — observable I/O, text/binary adapter, filesystem-authority, and Process-I/O-bootstrap semantics.
 
 - `spec/concurrency/FUTURES_AND_TASKS.md` — primary normative owner of migrated Core Future/task semantics.
 - `spec/concurrency/ACTORS.md` — primary normative owner of migrated Core Actor semantics.
 - `spec/concurrency/PARALLEL_EXECUTION.md` — primary normative owner of migrated Core isolated-parallel (P) semantics.
 - `spec/PROTOS_CONCURRENCY_MODEL.md` — transitional mixed design ledger. CLOSED material that has not yet been migrated remains normative there; compatibility anchors for migrated sections are non-owning references. OPEN/PENDING/DIRECTION/API-OPEN/design-only material remains non-normative.
-- `spec/concurrency/DISTRIBUTED_RUNTIME.md` — currently a non-normative migration index until its ownership transfer is recorded by a specification revision.
+- `spec/concurrency/DISTRIBUTED_RUNTIME.md` — primary normative owner of migrated Process/Node/Cluster/Group/distributed-runtime semantics; unresolved design-qualified material remains in the transitional ledger.
 
 Treat the canonical core documents together with applicable normative domain models as the source of truth for observable language/standard semantics in their respective domains.
 
@@ -315,7 +315,7 @@ The documents have distinct responsibilities:
 - `PROTOS_LANGUAGE_SPEC.md` defines the language model and observable semantics.
 - `PROTOS_GRAMMAR.md` defines lexical structure, syntax, precedence, parsing rules, mandatory desugarings, and the canonical semantic AST.
 - `runtime/ABSTRACT_RUNTIME.md` defines executable semantic rules and runtime pseudocode.
-- `PROTOS_IO_MODEL.md` owns observable I/O-domain semantics and should be referenced rather than duplicated when another document only needs an I/O rule.
+- `spec/io/IO_CORE.md` owns observable I/O-domain semantics and should be referenced rather than duplicated when another document only needs an I/O rule.
 
 Do not treat runtime pseudocode as permission to change language semantics.
 

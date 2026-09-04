@@ -1,10 +1,10 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 324
+Document revision: 326
 Status: Draft  
 Last updated: 2026-09-04
-Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
+Normative I/O-domain semantics are defined in `io/IO_CORE.md`.
 
 Normative Actor/Future/concurrency-domain semantics are also defined by the
 CLOSED sections of `PROTOS_CONCURRENCY_MODEL.md`; unresolved sections and
@@ -1697,7 +1697,7 @@ frozen object is likewise idempotent and returns that same receiver.
 These return rules expose no new primitive category and do not change ordinary
 message lookup or overriding. In particular, this synchronous structural
 `Object.close()` contract is distinct from the I/O-domain `Closable.close()`
-protocol defined by `PROTOS_IO_MODEL.md`, whose standard operation returns a
+protocol defined by `io/IO_CORE.md`, whose standard operation returns a
 `Future`. When lookup selects an I/O `Closable.close()` behavior, the I/O
 contract applies; inheriting `Object.close()` alone does not grant resource
 lifecycle semantics.
@@ -3637,7 +3637,7 @@ UTF8.encode(text)
 
 Decoding interprets a byte sequence using the selected encoding and produces a `String`. Encoding converts a `String` into a `Bytes` value using the selected encoding.
 
-The standard encoding catalogue, strict/replacement decoding rules, BOM behavior, and text-I/O semantics are defined normatively in `PROTOS_IO_MODEL.md`. Those encoding objects and I/O facilities remain outside the required Core prelude unless another specification explicitly says otherwise.
+The standard encoding catalogue, strict/replacement decoding rules, BOM behavior, and text-I/O semantics are defined normatively in `io/IO_CORE.md`. Those encoding objects and I/O facilities remain outside the required Core prelude unless another specification explicitly says otherwise.
 
 This follows the same general principle used for numeric endianness:
 
