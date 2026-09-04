@@ -218,4 +218,45 @@ class ProtosObjectValueTest {
         assertSame(first, snapshot.get("first"));
         assertFalse(object.hasLocalSlot("first"));
     }
+
+    @Test
+    void compositionViewsCopyBindingsWithoutMutatingReceiver() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue source = new ProtosObjectValue(root);
+        Object move = new Object();
+        Object state = new Object();
+
+        source.createLocalSlot("move", move);
+        source.createLocalSlot("state", state);
+
+        ProtosObjectValue without = source.withoutLocalSlot("move");
+        assertFalse(without.hasLocalSlot("move"));
+        assertSame(state, without.readLocalSlot("state").orElseThrow());
+        assertTrue(source.hasLocalSlot("move"));
+
+        ProtosObjectValue aliased = source.aliasLocalSlot("move", "swimMove");
+        assertSame(move, aliased.readLocalSlot("move").orElseThrow());
+        assertSame(move, aliased.readLocalSlot("swimMove").orElseThrow());
+        assertSame(state, aliased.readLocalSlot("state").orElseThrow());
+        assertFalse(source.hasLocalSlot("swimMove"));
+    }
+
+    @Test
+    void compositionViewsRejectNonLocalSourcesAndAliasConflicts() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue parent = new ProtosObjectValue(root);
+        ProtosObjectValue source = new ProtosObjectValue(parent);
+
+        parent.createLocalSlot("inherited", new Object());
+        source.createLocalSlot("local", new Object());
+        source.createLocalSlot("taken", new Object());
+
+        assertThrows(IllegalStateException.class, () -> source.withoutLocalSlot("inherited"));
+        assertThrows(
+                IllegalStateException.class,
+                () -> source.aliasLocalSlot("inherited", "copy"));
+        assertThrows(
+                IllegalStateException.class,
+                () -> source.aliasLocalSlot("local", "taken"));
+    }
 }
