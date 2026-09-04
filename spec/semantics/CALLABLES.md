@@ -418,29 +418,154 @@ No overload resolution by argument type is introduced.
 
 ## Polymorphic Invocation and Object Construction
 
-This section owns invocation/call-protocol consequences. Object creation, delegation-parent, slot-construction, and object-state semantics remain owned by `OBJECT_MODEL.md`; syntax and mandatory parse/lowering rules remain owned by `../PROTOS_GRAMMAR.md`.
+This section is the primary normative owner of the ordinary polymorphic
+invocation protocol. Object creation, delegation-parent, slot construction, and
+object-state semantics remain owned by `OBJECT_MODEL.md`; member lookup remains
+owned by `EXECUTION_AND_CONTROL.md`; syntax and mandatory parse/lowering rules
+remain owned by `../PROTOS_GRAMMAR.md`.
 
+### `call` is the ordinary invocation protocol
 
-Parentheses are a polymorphic invocation syntax. Invoking an object uses that object's call protocol; callability is therefore behavior, not a special static category reserved exclusively for closures.
+Parenthesized invocation is defined entirely in terms of the ordinary slot named
+`call`. There is no hidden callable bit, internal invocation property, separate
+callable hierarchy, wrapper object, or runtime registry.
 
-Conceptually:
+For a completed caller-supplied positional vector `supplied`, invoking target
+`receiver` performs these steps:
+
+1. Perform ordinary member lookup for the name `call`, starting at `receiver`
+   itself and continuing through its ordinary immutable delegation chain exactly
+   as for the member read `receiver.call`.
+2. Preserve `receiver` as the original receiver and preserve the object that owns
+   the selected `call` slot as `methodHome`, exactly as for an ordinary message
+   lookup selecting a Closure-valued slot.
+3. The selected slot value must be a `Closure`. If lookup finds no `call`, the
+   ordinary missing-slot Error from that lookup is signaled. If lookup succeeds
+   but the selected value is not a `Closure`, invocation signals an `Error`
+   before any activation or parameter/default binding for that selected value.
+4. Directly activate that selected Closure in method role with `this === receiver`,
+   the preserved `methodHome`, and `supplied` as its caller-supplied argument
+   vector. Activation, arity/default/rest binding, `args`, returns, Errors, and
+   explicit suspension then follow the ordinary Closure rules in this document.
+
+Steps 1–4 occur only after target evaluation and all ordinary/spread/trailing
+argument evaluation described above have completed. Thus an Error or non-local
+control transfer during target or argument evaluation wins over `call` lookup;
+a lookup failure wins over any activation/binding/body behavior; and effects of
+already evaluated arguments are not rolled back.
+
+The direct Closure activation in step 4 is the terminal executable operation of
+the Core callable model. It is **not** another source-level parenthesized
+invocation of the selected `call` value. Consequently `receiver(args...)` is not
+specified as the source rewrite `receiver.call(args...)`, and no infinite
+regress through `call.call.call...` exists. The lookup and receiver semantics are
+those of ordinary message lookup; activation of the already selected Closure is
+the irreducible execution operation already required by the Core rule that
+Closure is the single executable value kind.
+
+A slot named `call` is otherwise completely ordinary. It may be created,
+assigned, shadowed, inherited, copied, composed, or aliased under the same rules
+as any other slot. No assignment to `call` executes its value.
+
+For example:
 
 ```js
-receiver(a, b)
+obj: {
+    call: (x) => x
+}
+
+obj(42)       // 42
+f: obj.call   // reads; does not execute
+f(42)         // 42, with the extracted binding metadata for obj.call
 ```
 
-performs the receiver's ordinary invocation protocol with the evaluated arguments.
+The read `obj.call` follows the existing extracted-method rule: because the
+selected slot value is a Closure, the resulting Closure preserves `obj` as its
+receiver and the lookup origin as `methodHome`. Merely storing a Closure in any
+slot, including `call`, never invokes it.
 
-`Closure` provides the standard executable implementation of that protocol. `Object` provides the standard object-construction implementation inherited by ordinary prototypes.
+If an object inherits `call`, lookup selects the inherited slot but binds `this`
+to the original invocation receiver, not to the ancestor that owns the slot. A
+nearer local `call` shadows an inherited one. A local non-Closure `call` therefore
+makes parenthesized invocation fail at step 3 even when an ancestor has a valid
+`call`; lookup does not skip an incompatible shadowing value.
 
-The default construction behavior is conceptually:
+Composition and copying use the ordinary shallow slot rules of
+`OBJECT_MODEL.md`. Copying a local `call` slot copies the same stored Closure
+reference; it does not preserve a receiver binding from the source object.
+Receiver/methodHome binding is established when the copied slot is later reached
+through lookup. By contrast, explicitly extracting `obj.call` first produces the
+ordinary receiver-bound Closure described in §11, and storing or aliasing that
+already extracted Closure preserves its existing binding metadata exactly as for
+any other extracted method.
+
+### Callability inspection
+
+Whenever this specification says an API validates that an object is
+`invokable`, `callable`, or "ordinarily invokable" without invoking it, the test
+is exactly this structural protocol check:
+
+```text
+ordinary lookup of candidate.call succeeds
+and the selected slot value is a Closure
+```
+
+The check performs ordinary read-only lookup only. It does not activate the
+selected Closure, evaluate defaults, perform arity preflight, invoke user code,
+introduce a suspension point, or pin/cache the selected Closure for a later
+invocation. Unless the owning API explicitly says otherwise, a later invocation
+performs a fresh ordinary `call` lookup, so ordinary intervening mutation or
+shadowing remains observable.
+
+If validation itself encounters the ordinary lookup failure or an incompatible
+selected value, the owning API signals the Error it specifies for a non-invokable
+argument. Receiver/argument evaluation required to obtain that candidate has
+already occurred according to that API's own ordering rules.
+
+This definition applies uniformly to collection callbacks such as `Array.each`
+and `Bytes.each`, Boolean callbacks, Actor bootstrap targets, and the isolated
+parallel (`P`) worker/comparator boundaries. Those APIs do not recognize Closure
+identity as a separate shortcut and do not execute the callback merely to test
+callability.
+
+### Standard `Object.call`: Closure execution and default construction
+
+The standard `Object` object owns an ordinary local `call` slot whose value is a
+standard Closure. This one inherited behavior supplies both standard Closure
+execution and default object construction without introducing a separate
+`Closure` prototype, hidden callable property, or second dispatch mechanism.
+Conceptually, after `Object.call` has been selected and directly activated with
+invocation receiver `this`:
 
 ```text
 Object.call(...args):
+    if this is a Closure value:
+        directly activate this Closure value with args
+        using its captured/bound receiver, methodHome, lexical context,
+        and return-home semantics
+        return that activation's result
+
     instance = createObject(parent = this)
     send(instance, "init", args)
     return instance
 ```
+
+The Closure branch is the terminal executable operation already defined above;
+it does not perform another `this(args...)` lookup. A Closure that inherits
+`Object.call` therefore executes its own body. A receiver-bound Closure produced
+by §11 retains its preserved receiver and `methodHome` when that body executes.
+A Closure may nevertheless define or acquire a nearer ordinary `call` slot; in
+that case ordinary lookup selects the nearer behavior instead, exactly as for any
+other object.
+
+For non-Closure receivers, inherited `Object.call` performs default construction.
+Because `call` uses ordinary delegation, every object that does not define a
+nearer `call` inherits this behavior through the unique delegation chain ending
+at `Object`. There is no privileged "prototype" flag controlling this
+inheritance: any object may be a delegation parent, and an ordinary non-Closure
+object with no nearer `call` is therefore constructible by inherited
+`Object.call`. An object can deliberately make itself non-invokable by shadowing
+`call` with a non-Closure value, subject to its ordinary mutability rules.
 
 Thus:
 
@@ -448,35 +573,39 @@ Thus:
 Point(10, 20)
 ```
 
-creates a fresh object whose immutable delegation parent is `Point`, sends `init(10, 20)` to the fresh object, and returns that fresh object.
+creates a fresh object whose immutable delegation parent is `Point`, sends
+`init(10, 20)` to that fresh object, and returns that fresh object. `init` is an
+ordinary overridable message. Its return value is ignored; an Error or other
+control transfer from initialization propagates normally and the construction
+expression has no successful instance result.
 
-`init` is an ordinary overridable message. Its return value is ignored by the default construction protocol; the construction expression returns the created instance.
+`Object` provides a default `init` behavior that accepts zero arguments and
+signals an argument-count Error when arguments are supplied. Therefore `Thing()`
+works for an object that does not override `init`, while `Thing(1, 2)` requires
+compatible initialization behavior.
 
-If initialization signals an error, construction fails and the construction expression produces no successful instance result.
+Alternative constructors such as `Point.fromPolar(radius, angle)` are ordinary
+named messages and may internally use the same parenthesized invocation
+protocol.
 
-`Object` provides a default `init` behavior that accepts zero arguments and signals an argument-count error when arguments are supplied. Therefore:
+### Standard factory specialization
 
-```js
-Thing()
-```
+Standard objects described elsewhere as specializing ordinary polymorphic
+invocation do so by the same mechanism: they own a nearer ordinary local `call`
+slot whose value is their standard factory/conversion Closure, thereby shadowing
+`Object.call`. This includes `Array`, `Map`, `IdentityMap`, and the standard
+numeric conversion prototypes. Delegation inherits those factory behaviors
+normally, with the actual invocation receiver remaining `this`; a nearer user or
+standard `call` shadows them normally. Standard receiver-domain and result rules
+for each factory remain owned by the corresponding domain specification.
 
-works for a prototype that does not define its own `init`, while:
+Arity, defaults, rest, spread, Errors, non-local return, and explicit suspension
+for user-defined or standard `call` Closures are not a second invocation system:
+they are exactly the Closure rules above. Lookup and callability checks create no
+hidden suspension; suspension is observable only if execution of the selected
+Closure explicitly reaches an operation that is already a suspension point.
 
-```js
-Thing(1, 2)
-```
-
-requires compatible initialization behavior.
-
-Alternative constructors are ordinary named messages rather than overloads:
-
-```js
-Point.fromPolar(radius, angle)
-Point.fromJson(data)
-Point.origin()
-```
-
-Such messages may internally invoke the normal construction protocol.
+### Object literals and trailing closures remain distinct
 
 Object-literal/prototype syntax remains distinct:
 
@@ -487,8 +616,11 @@ Point {
 }
 ```
 
-directly creates an object whose parent is `Point` and evaluates the object body as slot definitions. It does not implicitly send `init`.
+directly creates an object whose parent is `Point` and evaluates the object body
+as slot definitions. It does not implicitly send `init` or `call`.
 
-Core v0.1 does not define a combined object-construction form in which `Point(args) { ... }` means "construct and then evaluate this object body".
-
-When the token sequence `Point(args) { ... }` is otherwise valid under trailing-closure syntax, the braces denote a parameterless trailing closure appended to the invocation's arguments: the form desugars as `Point(args, () => { ... })`. The braces do not become an object-construction body.
+Core v0.1 does not define a combined object-construction form in which
+`Point(args) { ... }` means "construct and then evaluate this object body". When
+that token sequence is valid under trailing-closure syntax, the braces denote a
+parameterless trailing Closure appended to the invocation arguments: the form
+desugars as `Point(args, () => { ... })`.
