@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.271] - 2026-09-04
+
+### Closed
+- Closed generic Future `race`/`select` out of Core v0.1.
+- Rejected first-completion semantics based on implementation observation,
+  callback, carrier, scheduler, polling, kernel, or I/O-backend timing.
+- Declined to invent a global portable total order across independent Future
+  terminal transitions solely to support a generic race primitive.
+- Kept `Future.all(...)` as the deterministic standard multi-Future coordination
+  operation.
+- Required any future wait-any/select facility to define an independent semantic
+  priority/event-ordering contract, including tie handling, loser lifecycle,
+  cancellation, and resource-registration semantics.
+- Removed `Select/race operations` from Open Design Topics.
+
+### Changed
+- Updated `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  271.
+
 ## [0.1.270] - 2026-09-04
 
 ### Fixed

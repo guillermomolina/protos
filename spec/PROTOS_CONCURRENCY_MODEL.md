@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 270
+Document revision: 271
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -1583,6 +1583,62 @@ registrations, bitmaps, counters, continuation records, polling already-terminal
 state, or another mechanism. Such choices are non-observable provided the
 ordered result, terminal-outcome selection, cancellation isolation, and
 registration-lifetime rules above are preserved.
+
+## 24F. No Generic Future Race/Select in Core
+
+**CLOSED**
+
+Core v0.1 does not standardize a generic `Future.race(...)`,
+`Future.select(...)`, wait-any object, or another Future combinator whose result
+is chosen by whichever independent source Future happens to become terminal
+"first".
+
+This is a semantic boundary, not an implementation omission.
+
+Independent Future producers may become terminal because of Actor scheduling,
+P scheduling, I/O completion, communication, cancellation, host events, or other
+concurrent causes. Core deliberately does not define one global portable clock or
+total event order across such independent terminal transitions.
+
+Therefore a generic first-completion API would have to choose one of two
+undesirable semantics:
+
+- expose implementation observation order, callback order, carrier timing,
+  kernel completion order, or scheduler timing as a language-visible winner; or
+- impose an unrelated fixed priority such as argument index and call that
+  priority a "race", even when another source actually became terminal earlier.
+
+Core v0.1 does neither.
+
+In particular, implementations must not add a standard-looking race/select
+operation whose winner may differ solely because of thread scheduling, callback
+registration order, polling cadence, work stealing, I/O backend choice, or other
+non-semantic machinery.
+
+`Future.all(...)` remains the standardized deterministic multi-Future
+coordination primitive. It preserves argument order and deterministic
+failure/cancellation selection without exposing completion timing.
+
+Libraries and future standard facilities may define selection when they have an
+independent semantic ordering rule. Examples include an explicit caller-supplied
+priority, a protocol-defined message/order position, a timer/clock contract, or
+another domain-specific event ordering. Such a facility must specify:
+
+- what events are eligible;
+- the exact selection/priority rule;
+- behavior when several eligible outcomes are already available;
+- behavior for semantically unordered concurrent events;
+- result/failure/cancellation representation;
+- whether losing operations continue, are merely unobserved, or receive explicit
+  cancellation requests;
+- registration/removal lifetime and resource bounds.
+
+A future facility may use ordinary Futures internally, but Future terminalization
+alone does not manufacture a portable total order between independent producers.
+
+This closure preserves scheduler independence: concurrency may affect when an
+answer becomes available, but generic Core Future coordination does not expose
+implementation-selected timing as which answer is observed.
 
 ## 25. Parent Actor Versus Failure Authority
 
@@ -5474,7 +5530,6 @@ mechanism, or implementation detail that still requires design.
 -   Future ownership interaction with Actor lifecycle
 -   Timers
 -   Clock semantics
--   Select/race operations
 -   Resource limits and quotas
 -   Runtime resource-pressure model
 -   Actor resource-cost estimation and learning

@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 270
+Document revision: 271
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -2103,6 +2103,21 @@ the aggregate with the same Error; a decisive cancellation cancels it.
 Cancelling the aggregate abandons only this observation and does not cancel any
 source Future. This operation is deterministic wait-all, not first-completion
 `race`/`select`.
+
+### No generic Future race/select in Core
+
+Core v0.1 defines no standard `Future.race(...)`, `Future.select(...)`, or
+equivalent first-completion combinator.
+
+Independent Future terminalizations do not acquire a portable global total order
+merely so a race API can pick a winner. Core therefore does not expose scheduler,
+callback, carrier, I/O-backend, polling, or host completion timing as a semantic
+selection rule.
+
+`Future.all(...)` is the standard deterministic multi-Future coordination
+operation. A future wait-any/select facility must define an independent semantic
+priority or event-ordering contract rather than deriving meaning from
+implementation-selected completion timing.
 
 ## 31. Structured Concurrency
 
