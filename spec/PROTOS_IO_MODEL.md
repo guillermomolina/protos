@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 233
+Document revision: 234
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -220,6 +220,18 @@ A successful non-EOF result is a `Bytes` object containing from 1 through `maxBy
 For `read(maxBytes)` with `maxBytes > 0`, an empty `Bytes()` result is never used to mean either "no data yet" or EOF. If data is not yet available and EOF has not been established, the Future remains pending.
 
 A read may complete with fewer octets than requested.
+
+`maxBytes` is a maximum successful-result size, not a minimum fill requirement. Once an ordered read has reached a state in which at least one next logical octet can be returned without waiting for additional source/backend progress, that read must not remain pending solely to accumulate more octets toward `maxBytes`. It may resolve with any non-empty prefix of the then-returnable logical input whose length is at most `maxBytes`, subject to the receiver's stronger concrete contract.
+
+This rule is about avoiding implementation-selected extra waiting after useful input is already available to the Protos operation. It does not require polling, busy waiting, one native read per Protos read, or a portable host-level `available()` byte-count API. An implementation may issue a backend/native read whose own completion waits for source progress; once such work has made one or more octets available to satisfy the earliest ordered Protos read, the implementation cannot withhold that read's result merely to seek a fuller buffer.
+
+Likewise, implementation-controlled buffering or read-ahead that already contains unread logical input makes that input available to the earliest ordered read; the implementation must not pretend the buffer is empty merely because it prefers a larger chunk. A stronger protocol may explicitly define an exact-fill or delimiter/framing operation, but ordinary `ByteReadable.read(maxBytes)` does not.
+
+EOF or an I/O failure that becomes established before any octet is returnable for this read retains its ordinary precedence. If one or more octets are already returnable under the receiver's concrete semantics, ordinary `read(maxBytes)` is permitted to return that non-empty prefix without waiting to discover a later EOF or later failure that belongs after those bytes in logical input order. Existing failure-preservation rules continue to govern backend errors encountered by an operation that ultimately fails rather than succeeds.
+
+For a readable standard `File`, bytes between the current logical position and the file size applicable at the read's ordered evaluation point are immediately returnable file content: a read whose position is before that EOF must not remain pending merely to fill `maxBytes` or wait for later file growth. It returns a non-empty prefix up to `maxBytes` of the bytes then readable from that position, subject to an independently established I/O failure. At current EOF it follows the existing `null` rule rather than waiting for hypothetical growth.
+
+Ordinary ByteReadable progress therefore requires completion once useful input for that read is already returnable; `read(maxBytes)` may return short, and no implementation may reinterpret the requested maximum as an exact-fill threshold.
 
 I/O errors fail the Future and are distinct from EOF.
 

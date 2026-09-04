@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.234] - 2026-09-04
+
+### Fixed
+- Defined `ByteReadable.read(maxBytes)` `maxBytes` as a maximum result size, not
+  an exact-fill or minimum-fill requirement.
+- Required an ordered ordinary read to stop waiting once at least one next
+  logical octet is returnable without additional source/backend progress.
+- Prevented implementation buffering/read-ahead policy from withholding already
+  unread logical input merely to construct a larger preferred chunk.
+- Preserved backend/native waiting freedom until useful input, EOF, or failure is
+  established, without introducing polling or a portable `available()` API.
+- Specialized standard File reads so a position before current EOF returns a
+  non-empty prefix of currently readable file bytes rather than waiting to fill
+  `maxBytes` or for later file growth.
+- Kept exact-fill/delimiter behavior available only to stronger protocols that
+  explicitly define it.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 234. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.233] - 2026-09-04
 
 ### Fixed
