@@ -4,6 +4,41 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.45-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added standard one-argument ordinary invocation factories for the `Integer`
+  and `Float` prototype objects.
+- `Integer(value)` now accepts ordinary Integer values and finite mathematically
+  integral Float values, returning the exact unbounded Integer without rounding
+  or truncation.
+- Float-to-Integer conversion derives the exact mathematical integer represented
+  by binary64 bits rather than relying on decimal rendering or host narrowing.
+- `Float(value)` now preserves existing Float semantic values and converts exact
+  Integers with exact-to-binary64 `roundTiesToEven`, including precision loss and
+  overflow to infinity required by Core.
+- Added arity, non-Number, non-integral Float, NaN, infinity, and incompatible
+  invocation-receiver rejection.
+- Added receiver-domain protection so inheriting or copying a standard numeric
+  factory `call` does not turn an ordinary object into a numeric conversion
+  prototype.
+- Added Java and executable `.protos` conformance coverage, including the
+  adversarial exact value of `Integer(1e23)`.
+- Project implementation version changed from `0.2.44-SNAPSHOT` to
+  `0.2.45-SNAPSHOT`.
+
+### Notes
+
+- This slice implements the currently represented ordinary `Integer` and
+  `Float` semantic families. Fixed-width conversion factories remain separate
+  until those eight semantic families have runtime representations.
+- No implicit numeric promotion or coercion is introduced by these explicit
+  factories.
+- D027/B003 remains untouched.
+- No normative specification change is introduced.
+
+
 ## [0.2.44-SNAPSHOT] - 2026-09-04
 
 ### Added

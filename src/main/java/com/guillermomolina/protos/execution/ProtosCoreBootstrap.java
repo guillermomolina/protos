@@ -98,6 +98,8 @@ public final class ProtosCoreBootstrap {
                 requirePrototype(bootstrapContext, "Float", numberPrototype);
         ProtosStandardIntegerProtocol.install(integerPrototype);
         ProtosStandardFloatProtocol.install(floatPrototype);
+        ProtosStandardNumericConversionProtocol.install(
+                integerPrototype, floatPrototype);
 
         Object errorBinding =
                 bootstrapContext
