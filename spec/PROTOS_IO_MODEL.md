@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 221
+Document revision: 222
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.

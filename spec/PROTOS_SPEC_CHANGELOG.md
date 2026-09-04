@@ -4,6 +4,48 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.222] - 2026-09-04
+
+### Closed
+- Standardized `Closure.parallel(arguments...)` as the Core v0.1 public isolated
+  parallel-submission API returning an ordinary Future.
+- Closed the bootstrap representation through parallel Closure projection:
+  executable code and user-visible Closure value state may cross, while caller
+  lexical contexts, caller `this`, caller return home, caller `methodHome`, and
+  caller dynamic handlers do not.
+- Defined every P computation to use a fresh P root execution environment with
+  the frozen standard prelude, `this === null`, and a P-local return home.
+- Rejected implementation-selected capture-safety analysis: caller captures
+  never cross; attempted dependence on unavailable caller lexical names fails
+  through ordinary lookup inside P.
+- Defined explicit P arguments and the bootstrap Closure as one atomic combined
+  input graph with preserved cycles and aliasing.
+- Added standard `NonParallelValue` for synchronous input-boundary rejection and
+  for untransferable normal results or failure values.
+- Defined Closure values inside P input graphs as projectable ordinary Closures,
+  not capture-transferable Closures.
+- Defined P failure-value transfer and deterministic fallback when a P Error
+  graph itself cannot cross the boundary.
+- Defined non-local return from projected Closures to target only the fresh
+  P-local return home, never the caller.
+- Defined ordinary `closure.future()` created inside P as cooperative P-local
+  work serialized against the same P mutable state.
+- Defined nested `closure.parallel(...)` as a fresh isolation boundary and
+  clarified that detachment cannot make P-local work survive the P domain as a
+  persistent identity.
+- Extended standard-prelude sharing semantics from Actor-only wording to Actor/P
+  isolation domains while preserving semantic immutability of physically shared
+  Protos objects.
+- Removed the now-closed parallel API/bootstrap, capture-safety mechanism, and
+  snapshot-point items from the Open Design Topics list.
+
+### Changed
+- Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
+  `PROTOS_CONCURRENCY_MODEL.md` with the closed P bootstrap/API semantics.
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 222.
+
 ## [0.1.221] - 2026-09-04
 
 ### Fixed

@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 221
+Document revision: 222
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -5394,7 +5394,104 @@ This guarantee applies to SUCCESS, FAILED, and CANCELLED completion with respect
 
 Ordinary Future/task execution is Actor-local and cooperative: only one segment of Actor-local Protos code executes at a time, tasks interleave with other Actor-local work only at explicit suspension points, and between suspension points Actor-local state is serialized. The visibility guarantee above is what lets a suspended task correctly observe the effects of a completed task, including writes the completed task made to the Actor-local mutable state before completion.
 
-Different Actors never share mutable Protos references, so no cross-Actor mutable-state visibility rule exists beyond Actor communication semantics. Explicit isolated parallel computation may execute Protos code simultaneously on other CPU carriers, but it crosses an isolation boundary. Its successful submission fixes logical cross-boundary input state before returning to the caller; it receives no arbitrary live mutable aliases to the calling Actor's state; mutation is confined to P-owned isolated state; failure or cancellation publishes no partial mutable result; and successful results return by value. Parallel execution has no implicit Actor sender identity or ambient Actor/Process/Node/Cluster/I/O authority, so conflicting concurrent mutation of one Actor's mutable state and scheduler-dependent Actor-side effect ordering do not arise.
+Different Actors never share mutable Protos references, so no cross-Actor mutable-state visibility rule exists beyond Actor communication semantics. Standard `Closure.parallel(arguments...)` may execute Protos code simultaneously on other CPU carriers, but it crosses an isolation boundary through a fresh P-local Closure projection rather than carrying the source Closure's caller lexical environment. Its successful submission fixes logical cross-boundary input state before returning to the caller; mutation is confined to P-owned isolated state; failure or cancellation publishes no partial mutable result; and successful results return by value. Parallel execution has no implicit Actor sender identity or ambient Actor/Process/Node/Cluster/I/O authority. Cooperative `future()` tasks created inside one P domain remain serialized against that P-local mutable state; only a nested P boundary permits simultaneous Protos execution relative to it.
+
+### Parallel submission and projection
+
+```text
+function standardClosureParallel(sourceClosure, sourceArguments, creatorActivation):
+    validateArgumentCount(sourceClosure.parameterForm, length(sourceArguments))
+
+    root = createParallelRootDescriptor(
+        lexicalParent = StandardPrelude,
+        thisValue = null,
+        returnHome = freshReturnHome(),
+        methodHome = NONE,
+        dynamicHandlers = NONE
+    )
+
+    projected = formParallelSnapshot(
+        bootstrapClosure = sourceClosure,
+        arguments = sourceArguments,
+        root = root
+    )
+    # Complete graph validation is atomic.
+    # Invalid graph -> signal NonParallelValue synchronously.
+    # No Future/task is published before this succeeds.
+
+    future = new Future(PENDING)
+
+    task = scheduler.createIsolatedParallelTask(
+        owner = creatorActivation,
+        resultFuture = future,
+        parallelRoot = root,
+        entryClosure = projected.bootstrapClosure,
+        arguments = projected.arguments
+    )
+
+    registerStructuredChild(creatorActivation, task, future)
+    scheduler.makeParallelEligible(task)
+    return future
+```
+
+Successful return from `standardClosureParallel` is the P input snapshot point.
+
+Parallel projection of a Closure is conceptually:
+
+```text
+function projectClosureForP(sourceClosure, root, snapshotMemo):
+    if snapshotMemo contains sourceClosure:
+        return snapshotMemo[sourceClosure]
+
+    destination = fresh Closure
+    snapshotMemo[sourceClosure] = destination
+
+    destination.executableBody = sourceClosure.executableBody
+    destination.parameterForm = sourceClosure.parameterForm
+    destination.lexicalContext = root.context
+    destination.capturedThis = null
+    destination.returnHome = root.returnHome
+    destination.methodHome = NONE
+
+    for each user-visible local slot of sourceClosure:
+        destination.createLocalSlot(
+            slot.name,
+            snapshotPValue(slot.value, root, snapshotMemo)
+        )
+
+    return destination
+```
+
+The omitted capture metadata is caller execution state prohibited from crossing
+P; it is not traversed as part of the P value graph.
+
+When the P task begins, it first observes the ordinary portable initial
+cancellation boundary. If cancelled before ordinary P code starts, no projected
+Closure body executes.
+
+Normal completion and a non-local return to the P-local root home both produce a
+candidate result that must cross back through the P value rules before resolving
+the result Future. A non-transferable result fails that Future with
+`NonParallelValue`.
+
+A signaled Error is copied back as the Future failure value when transferable.
+If the Error graph itself is not P-transferable, the Future instead fails with a
+caller-domain `NonParallelValue`.
+
+### P-local cooperative Future work
+
+`closure.future()` created while the current activation belongs to a P domain
+creates an ordinary cooperative task owned by that P activation/domain. It keeps
+ordinary live P-local Closure captures and does not use parallel projection.
+
+At most one cooperative segment in the same P domain executes Protos code at a
+time. Explicit suspension may let another runnable P-local cooperative task run.
+A nested `closure.parallel(...)` creates a distinct isolated P domain and may
+execute simultaneously.
+
+Remaining P-local children are subject to structured cancellation/cleanup when
+the P domain finishes. Detachment does not re-parent them to the caller Actor,
+Process, RootActor, or another execution domain.
 
 Implementations may map these guarantees to the host VM memory model, scheduler barriers, or equivalent mechanisms as long as language-level visibility is preserved.
 

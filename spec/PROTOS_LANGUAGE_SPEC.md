@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 221
+Document revision: 222
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -4903,7 +4903,165 @@ Core v0.1 concurrency follows the Actor model: an Actor is a serialized domain o
 
 - **Actor-local Future/task concurrency.** Ordinary Future/task execution created within an Actor remains Actor-local and cooperative. Only one segment of Actor-local Protos code executes at a time. Tasks may interleave with other Actor-local work only at explicit suspension points; they never execute Protos code simultaneously against the same mutable Actor state, and between suspension points Actor-local state is serialized, so no locks or other explicit synchronization are required to protect it.
 - **Different Actors.** Actors do not share mutable Protos references. Another Actor's mutable state is never accessed by direct reference; it is reached only through Actor communication, which has pass-by-value semantics.
-- **Explicit isolated parallel computation.** Explicit isolated parallel computation (whose exact public API and bootstrap representation remain open) may execute Protos code simultaneously on other CPU carriers, but it crosses an explicit isolation boundary. Mutable inputs are fixed as logical boundary values before a successful submission returns, P does not semantically mutate the calling Actor's original mutable values, partial P-owned state is not published on failure or cancellation, and completed results cross back by value. P has no implicit Actor sender identity or ambient Actor/Process/Node/Cluster/I/O authority; any future P-safe effect capability requires its own normative contract.
+- **Explicit isolated parallel computation.** Standard `Closure.parallel(arguments...)` explicitly submits isolated parallel computation and returns a Future. It may execute Protos code simultaneously on other CPU carriers, but it crosses an explicit isolation boundary. The receiver Closure supplies executable code through the parallel-projection semantics below rather than carrying its caller lexical environment into P. Mutable inputs are fixed as logical boundary values before a successful submission returns, P does not semantically mutate the calling Actor's original mutable values, partial P-owned state is not published on failure or cancellation, and completed results cross back by value. P has no implicit Actor sender identity or ambient Actor/Process/Node/Cluster/I/O authority; any future P-safe effect capability requires its own normative contract.
+
+### Standard isolated parallel submission
+
+`parallel` is standard behavior of Closure values. It introduces no keyword, no
+new expression grammar, no second executable value kind, and no public
+identity-bearing parallel-task object.
+
+```js
+square: (x) => x * x
+future: square.parallel(12)
+result: future.value()
+```
+
+The message send itself is ordinary lookup and invocation. A user-defined
+`parallel` slot selected by ordinary lookup is ordinary user behavior; the rules
+in this section apply when lookup selects the standard Closure `parallel`
+behavior.
+
+The explicit arguments of `parallel(arguments...)` are evaluated left-to-right
+by the ordinary call rules before the standard behavior begins. The standard
+behavior then:
+
+1. validates that the supplied argument count is admissible for the receiver
+   Closure's parameter form under the ordinary Closure argument-binding rules;
+2. forms one atomic logical P-boundary snapshot over the receiver Closure's
+   projectable user-visible state and all explicit argument graphs;
+3. signals `NonParallelValue` synchronously if that complete boundary graph
+   contains a value that cannot cross into P;
+4. otherwise creates the parallel computation and its result Future, registers
+   it under the ordinary structured-ownership rules of the creating activation,
+   and returns that Future.
+
+No Future or partially submitted P computation is produced when synchronous
+argument/boundary validation fails. Because ordinary argument evaluation happens
+first, effects from evaluating the receiver and arguments are not rolled back.
+
+#### Parallel Closure projection
+
+A Closure used as the `parallel` receiver does **not** cross into P with its
+caller lexical environment. Instead, the boundary creates a fresh P-local
+ordinary Closure that is the **parallel projection** of the source Closure.
+
+Parallel projection preserves:
+
+- the executable body and parameter form;
+- ordinary user-visible local slots of the Closure object, transferred through
+  the P value graph;
+- repeated-reference and cycle identity within one boundary snapshot.
+
+Parallel projection does not transfer:
+
+- the source Closure's captured lexical execution contexts;
+- its captured caller `this`;
+- its caller return home;
+- its caller `methodHome`;
+- caller dynamic error-handler state;
+- any other hidden caller-domain execution state.
+
+The projected Closure is conceptually created in a fresh P root execution
+domain. That root has a fresh execution context whose lexical parent is the
+standard frozen prelude, `this` is `null`, and its return home is new and local
+to that P computation. The projected Closure therefore captures only this P root
+environment. It cannot reach the source module context, source activation, source
+Actor state, or another caller lexical context merely because the source Closure
+could.
+
+This is an explicit operation of `parallel`, not a change to ordinary Closure
+creation or invocation. Calling the source Closure with `()` continues to use
+its normal captured contexts by reference. Calling `future()` continues to run
+the ordinary Closure in its current execution domain. Only `parallel()` requests
+parallel projection.
+
+Consequently:
+
+```js
+factor: 10
+work: (x) => x * factor
+
+work(5)            // ordinary Closure semantics: may read captured factor
+work.parallel(5)   // P has no caller/module capture named factor
+```
+
+If evaluation in P reaches a bare lookup that cannot be resolved through P-local
+contexts, the P root, the standard prelude, or the ordinary receiver lookup rules
+available there, normal lookup failure occurs inside P and fails the result
+Future. Protos performs no hidden capture-by-value analysis and no
+implementation-selected static "safe capture" heuristic.
+
+To make caller data available, pass it explicitly:
+
+```js
+work: (x, factor) => x * factor
+future: work.parallel(5, factor)
+```
+
+Closures created **inside** P are ordinary Closures and capture P-local lexical
+contexts by reference exactly as usual.
+
+The P-local root return home remains active for the lifetime of the P
+computation. Non-local return `^` executed by a projected Closure targets that
+P-local home, never the caller's discarded home. A projected Closure has no
+caller `methodHome`; `super` therefore cannot use a method home from outside P.
+Ordinary method binding established entirely inside P may establish P-local
+receiver/method-home semantics in the normal way.
+
+#### Values crossing the P boundary
+
+This concurrency domain defines the standard error prototype
+`NonParallelValue`, delegating directly to `Error`.
+
+P-boundary value formation follows the logical value-copy, cycle-preservation,
+alias-preservation, and atomic whole-graph principles used by Actor
+pass-by-value transfer, but P has its own transferability set.
+
+Ordinary values that can be represented as isolated logical value copies may
+cross. Semantically immutable standard-prelude objects may be physically shared
+when the standard prelude-sharing rule permits it. The following do not become
+P-transferable merely because they are reachable from an otherwise copyable
+object:
+
+- ActorRef or GroupRef;
+- pending Future/task identity or an ExecutionContext;
+- open I/O/resource capabilities;
+- Process, Node, Cluster, placement, lifecycle, or administrative authority;
+- native/host objects whose semantics do not define P transfer.
+
+A Closure appearing in the bootstrap receiver or explicit P input graph crosses
+only by the same parallel-projection rule above: its executable code and
+user-visible value state may be projected, while its caller capture metadata
+does not cross.
+
+Input snapshot validation is atomic over the complete combined graph. A repeated
+source object maps to one destination object in that snapshot; two distinct
+source objects do not merge merely because they are equal.
+
+A normally completed P result crosses back under the same P-boundary value
+rules. If the result cannot cross, the result Future fails with
+`NonParallelValue` and exposes no partial result.
+
+An Error signaled inside P is likewise transferred as the Future's failure value
+when its logical graph can cross. If the Error graph itself cannot cross, the
+caller Future fails with caller-domain `NonParallelValue` instead. No reference
+to P-local mutable state is leaked merely to report failure.
+
+#### Cooperative work inside P
+
+P is an isolated mutable execution domain, not a permanently single-stack
+region. Ordinary `closure.future()` created while executing inside P creates a
+cooperative P-local task. Such tasks may interleave at explicit suspension
+points but never execute Protos code simultaneously against the same P-local
+mutable state.
+
+Nested `closure.parallel(...)` crosses a fresh isolation boundary and may execute
+simultaneously, exactly as P created from an Actor may.
+
+Detachment never promotes P-local cooperative work or nested P work into a
+persistent independent identity. The P domain's lifetime remains bounded by the
+parallel computation and its structured cleanup/cancellation rules.
 
 Future completion establishes a visibility boundary:
 
