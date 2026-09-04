@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -34,6 +35,7 @@ public final class ProtosStandardIntegerProtocol {
         installBinary(integerPrototype, "+", java.math.BigInteger::add);
         installBinary(integerPrototype, "-", java.math.BigInteger::subtract);
         installBinary(integerPrototype, "*", java.math.BigInteger::multiply);
+        installDivision(integerPrototype);
         installQuotientRemainder(integerPrototype);
 
         if (integerPrototype.hasLocalSlot("negated")) {
@@ -49,6 +51,27 @@ public final class ProtosStandardIntegerProtocol {
                                         ProtosCoreErrors.newError(activation));
                             }
                             return new ProtosIntegerValue(receiver.value().negate());
+                        }));
+    }
+
+    private static void installDivision(ProtosObjectValue integerPrototype) {
+        if (integerPrototype.hasLocalSlot("/")) {
+            throw new IllegalStateException("Core Integer already defines a local / slot");
+        }
+        integerPrototype.createLocalSlot(
+                "/",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> {
+                            ProtosIntegerValue receiver = requireIntegerReceiver(activation);
+                            if (supplied.size() != 1
+                                    || !(supplied.get(0) instanceof ProtosIntegerValue argument)
+                                    || argument.value().signum() == 0) {
+                                throw new ProtosSignalException(
+                                        ProtosCoreErrors.newError(activation));
+                            }
+                            return new ProtosFloatValue(
+                                    ProtosBinary64Rounding.divideExactIntegers(
+                                            receiver.value(), argument.value()));
                         }));
     }
 

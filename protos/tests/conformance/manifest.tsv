@@ -24,3 +24,16 @@ integer/remainder-zero-error.protos	error	-
 integer/div-float-error.protos	error	-
 integer/mod-float-error.protos	error	-
 integer/remainder-float-error.protos	error	-
+integer/division-half.protos	float-bits	3fe0000000000000
+integer/division-third.protos	float-bits	3fd5555555555555
+integer/division-negative.protos	float-bits	bfe0000000000000
+integer/division-huge-exact-one.protos	float-bits	3ff0000000000000
+integer/division-overflow.protos	float-bits	7ff0000000000000
+integer/division-tie-even-down.protos	float-bits	3ff0000000000000
+integer/division-tie-even-up.protos	float-bits	3ff0000000000002
+integer/division-half-min-subnormal.protos	float-bits	0000000000000000
+integer/division-negative-zero.protos	float-bits	8000000000000000
+integer/division-subnormal-tie-up.protos	float-bits	0000000000000002
+integer/division-exact-zero.protos	float-bits	0000000000000000
+integer/division-zero-error.protos	error	-
+integer/division-float-error.protos	error	-

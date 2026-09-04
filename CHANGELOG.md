@@ -4,6 +4,38 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.43-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added standard ordinary `Integer / Integer` behavior returning the correctly
+  rounded IEEE binary64 Float representation of the exact mathematical rational
+  quotient.
+- Added exact integer-arithmetic binary64 rounding with `roundTiesToEven`,
+  including normal values, subnormals, signed underflow zero, overflow to
+  infinity, and the normal/subnormal boundary.
+- Integer division now rounds the exact rational quotient once rather than first
+  converting each arbitrary-precision Integer operand to a host `double`.
+- Added Java coverage for huge operands, halfway ties, subnormal rounding,
+  signed zero, infinity, zero-divisor failure, and mixed-family rejection.
+- Extended the language conformance manifest with `float-bits` expectations so
+  Float results can be checked by exact raw binary64 representation.
+- Added executable `.protos` conformance programs for Integer division,
+  including adversarial cases where separate host-double operand conversion
+  would produce the wrong result.
+- Project implementation version changed from `0.2.42-SNAPSHOT` to
+  `0.2.43-SNAPSHOT`.
+
+### Notes
+
+- This slice implements only ordinary `Integer / Integer`. Standard Float
+  arithmetic and fixed-width integer-family division remain separate work.
+- Exact zero divided by a nonzero Integer produces positive `0.0`; a nonzero
+  exact quotient that rounds to zero preserves the quotient sign as required.
+- D027/B003 remains untouched.
+- No normative specification change is introduced.
+
+
 ## [0.2.42-SNAPSHOT] - 2026-09-04
 
 ### Added

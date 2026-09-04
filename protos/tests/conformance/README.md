@@ -17,6 +17,8 @@ Current expectation kinds:
 
 - `integer`: the program must complete normally with the exact mathematical
   Integer in field 3;
+- `float-bits`: the program must complete normally with a Float whose raw IEEE
+  binary64 bits equal the 16-hex-digit payload in field 3;
 - `error`: the program must signal a Protos Error; field 3 is `-` because the
   current harness checks the semantic fact of signaling an Error, not a narrower
   Error category.

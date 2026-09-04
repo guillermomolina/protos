@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import com.guillermomolina.protos.execution.ProtosSourceFileLoader;
+import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -70,6 +71,17 @@ final class ProtosLanguageConformanceTest {
                 ProtosIntegerValue integer =
                         assertInstanceOf(ProtosIntegerValue.class, result);
                 assertEquals(new BigInteger(testCase.expectedValue()), integer.value());
+            }
+            case "float-bits" -> {
+                Object result =
+                        loader.load(source).call(prelude.newModuleActivation());
+                ProtosFloatValue floating =
+                        assertInstanceOf(ProtosFloatValue.class, result);
+                long expectedBits =
+                        Long.parseUnsignedLong(testCase.expectedValue(), 16);
+                assertEquals(
+                        expectedBits,
+                        Double.doubleToRawLongBits(floating.value()));
             }
             case "error" ->
                     assertThrows(

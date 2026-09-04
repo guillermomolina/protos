@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -50,6 +51,59 @@ class ProtosStandardIntegerArithmeticTest {
                 prelude,
                 "999999999999999999999999 * 999999999999999999999999",
                 new BigInteger("999999999999999999999998000000000000000000000001"));
+    }
+
+    @Test
+    void integerDivisionReturnsCorrectlyRoundedBinary64() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+
+        assertFloatBits(prelude, "1 / 2", 0x3fe0000000000000L);
+        assertFloatBits(prelude, "1 / 3", 0x3fd5555555555555L);
+        assertFloatBits(prelude, "-1 / 2", 0xbfe0000000000000L);
+        assertFloatBits(prelude, "1 / (-2)", 0xbfe0000000000000L);
+    }
+
+    @Test
+    void integerDivisionRoundsExactRationalRatherThanRoundedOperands() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        String huge = BigInteger.ONE.shiftLeft(2000).toString();
+
+        assertFloatBits(prelude, huge + " / " + huge, 0x3ff0000000000000L);
+        assertFloatBits(prelude, huge + " / 1", 0x7ff0000000000000L);
+    }
+
+    @Test
+    void integerDivisionUsesRoundTiesToEven() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        BigInteger scale = BigInteger.ONE.shiftLeft(53);
+
+        assertFloatBits(
+                prelude,
+                scale.add(BigInteger.ONE) + " / " + scale,
+                0x3ff0000000000000L);
+        assertFloatBits(
+                prelude,
+                scale.add(BigInteger.valueOf(3)) + " / " + scale,
+                0x3ff0000000000002L);
+    }
+
+    @Test
+    void integerDivisionPreservesSpecifiedSubnormalAndZeroSigns() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        String denominator = BigInteger.ONE.shiftLeft(1075).toString();
+
+        assertFloatBits(prelude, "1 / " + denominator, 0x0000000000000000L);
+        assertFloatBits(prelude, "-1 / " + denominator, 0x8000000000000000L);
+        assertFloatBits(prelude, "3 / " + denominator, 0x0000000000000002L);
+        assertFloatBits(prelude, "0 / (-3)", 0x0000000000000000L);
+    }
+
+    @Test
+    void integerDivisionRejectsZeroAndDifferentNumericFamily() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+
+        assertThrows(ProtosSignalException.class, () -> execute(prelude, "1 / 0"));
+        assertThrows(ProtosSignalException.class, () -> execute(prelude, "1 / 1.0"));
     }
 
     @Test
@@ -132,6 +186,13 @@ class ProtosStandardIntegerArithmeticTest {
         assertThrows(
                 ProtosSignalException.class,
                 () -> new ProtosSourceCompiler().compile("o + 1").call(activation));
+    }
+
+    private static void assertFloatBits(ProtosPrelude prelude, String source, long expectedBits) {
+        Object result = execute(prelude, source);
+        assertEquals(
+                expectedBits,
+                Double.doubleToRawLongBits(((ProtosFloatValue) result).value()));
     }
 
     private static void assertInteger(ProtosPrelude prelude, String source, BigInteger expected) {
