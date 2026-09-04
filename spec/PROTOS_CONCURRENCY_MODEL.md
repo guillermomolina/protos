@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 283
+Document revision: 284
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -2481,6 +2481,63 @@ are defined in the canonical module-lifecycle sections of
 `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md`. This
 section states only the Actor isolation and ownership consequences that
 the concurrency model depends on.
+
+## 34A. Module Implementation Sharing Is Semantically Invisible
+
+**CLOSED**
+
+Core v0.1 fully separates **module semantic state** from **module implementation
+artifacts**.
+
+For a given canonical module identity, each Actor's active module instance,
+`moduleContext`, mutable slots, initialization state, and module-cache membership
+remain Actor-local exactly as defined by the language/runtime module lifecycle.
+No process-global mutable module instance exists.
+
+An implementation may physically share artifacts that do not constitute mutable
+Protos module state, including:
+
+- parsed syntax or immutable syntax trees;
+- bytecode or other executable intermediate representation;
+- machine code/JIT code;
+- immutable metadata;
+- immutable constant data whose sharing is already semantically permitted;
+- read-only loader/compiler/runtime bookkeeping whose identity is not exposed as
+  a Protos value.
+
+Such sharing is an implementation optimization only. Programs must not be able
+to distinguish, through portable Core observations, whether two Actors execute
+one physically shared code object or two physically duplicated ones.
+
+In particular, implementation-artifact sharing must not cause Actors importing
+the same canonical module to share:
+
+- mutable module slots;
+- lexical execution contexts;
+- closure captures;
+- mutable object identity created by module initialization;
+- initialization progress/failure state;
+- module-cache entries;
+- dynamic handlers, return homes, Futures/tasks, resources, or Actor-local
+  authority.
+
+Likewise, compiling, caching, deduplicating, interning, unloading, recompiling,
+or JIT-specializing implementation artifacts must not change the normative
+module-instance identity or lifecycle observed by Protos code.
+
+An implementation may choose per-Process, per-Node, or otherwise broader
+physical caches for immutable artifacts, or choose no sharing at all. Cache
+placement, eviction, code deduplication, compilation tiers, and artifact identity
+are not Core semantic surfaces.
+
+If a future facility exposes code identity, hot-update/version selection,
+reflection over compiled artifacts, or implementation-level module handles, that
+facility must define its own observable contract. It must not retroactively make
+ordinary module implementation sharing visible.
+
+This closes the former open ledger item `Module implementation sharing`; the
+remaining module semantics are already fixed by the canonical Language and
+Runtime module-lifecycle rules.
 
 ## 35. Scope Roots
 
@@ -5947,7 +6004,6 @@ mechanism, or implementation detail that still requires design.
 -   Durable Cluster bootstrap after zero active Nodes
 -   Relationship between logical Protos topology and physical
     infrastructure topology
--   Module implementation sharing
 -   Behavior requirements before READY
 -   Runtime metrics architecture
 -   Scheduler/advisor interaction

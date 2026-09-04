@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.284] - 2026-09-04
+
+### Closed
+- Closed `Module implementation sharing` as an implementation-only concern
+  already constrained by Actor-local module-state semantics.
+- Distinguished Actor-local module instances, contexts, caches, mutable slots,
+  initialization state, and captures from physically shareable immutable
+  implementation artifacts.
+- Allowed parsed syntax, bytecode, machine code, immutable metadata, and similar
+  artifacts to be shared or duplicated only when the choice is unobservable.
+- Prohibited artifact sharing from creating shared mutable module state,
+  execution contexts, initialization state, Futures/tasks, resources, or
+  Actor-local authority.
+- Left artifact cache placement, eviction, deduplication, compilation tiers, JIT
+  specialization, and physical artifact identity as implementation details.
+- Removed `Module implementation sharing` from Open Design Topics.
+
+### Changed
+- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  284.
+
 ## [0.1.283] - 2026-09-04
 
 ### Closed
