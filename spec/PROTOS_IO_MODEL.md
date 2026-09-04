@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 232
+Document revision: 233
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -1133,6 +1133,20 @@ Write access alone does not imply create or truncate.
 Append alone does not imply create.
 
 Invalid combinations fail open.
+
+Validation of the captured standard open-configuration tuple is a preflight semantic step. After ordinary argument evaluation has supplied the `Filesystem`, `Path`, and captured open configuration required by the invocation, the access/creation/initial-content/write-placement combination is validated before that open performs filesystem namespace resolution, resource selection/acquisition, creation, truncation, or other host/backend I/O for the target.
+
+If that captured combination is invalid under the standard rules above, the `filesystem.open` Future fails for invalid open configuration without exercising filesystem authority against the supplied Path and without producing any namespace, content, cursor, resource-acquisition, or other target effect. In particular, an implementation must not discover `append + truncate`, missing read/write access, read-only truncate, or another standard-invalid combination only after it has looked up, created, opened, or modified the target.
+
+Because this validity decision depends only on the already-captured semantic configuration, implementations may and normally will return an already-failed Future. The standard asynchronous API is preserved: this rule does not introduce a separate synchronous exception path for an otherwise well-formed `filesystem.open` invocation merely because its captured option combination is invalid.
+
+This preflight rule establishes deterministic precedence over target-dependent filesystem outcomes for a valid `Path` value. For example, an invalid captured configuration fails as invalid configuration rather than sometimes reporting target absence, target existence, permission/confinement failure, or another backend/path outcome according to whether an implementation happened to resolve the Path before validating its options.
+
+The rule does not require every valid configuration to be supportable by every backend. A configuration may be semantically valid yet later fail because the selected resource/backend cannot provide a required standard capability or invariant. Such support/resource failures occur under the ordinary open, confinement, acquisition, cancellation, and commitment rules; they are distinct from the configuration tuple being invalid in the first place.
+
+Likewise, this rule does not redefine ordinary language-level receiver/argument validation needed to establish that the invocation has usable `Filesystem`, `Path`, and option-expression values at all. It only fixes the first filesystem-domain step once the semantic open configuration has been captured: validate the tuple before touching the target namespace/resource.
+
+Standard-invalid open configurations therefore fail through the open Future before target namespace/resource work begins; invalid options can never create, truncate, acquire, or otherwise affect the supplied filesystem target.
 
 Multiple `filesystem.open` invocations do not form one ordered namespace-operation stream merely because they use the same `Filesystem` capability, equal `Path` values, or one Actor invokes them sequentially without awaiting an earlier Future. `Filesystem` carries namespace authority; it is not a mutable sequence cursor whose independent acquisitions are implicitly serialized in caller invocation order.
 

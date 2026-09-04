@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.233] - 2026-09-04
+
+### Fixed
+- Defined captured standard open-configuration validation as a preflight semantic
+  step before filesystem namespace resolution, acquisition, creation, truncation,
+  or other target/backend I/O.
+- Required a standard-invalid configuration to fail through the open Future with
+  zero target filesystem effect and without exercising filesystem authority
+  against the supplied Path.
+- Prevented invalid combinations such as append+truncate or read-only truncate
+  from being discovered only after a target has been looked up or modified.
+- Defined invalid-configuration precedence over target-dependent outcomes for an
+  otherwise valid Path value.
+- Preserved the asynchronous `filesystem.open` API by permitting an already-
+  failed Future rather than introducing a special synchronous exception path.
+- Distinguished globally invalid configuration tuples from semantically valid
+  configurations that a selected backend/resource may later be unable to support.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 233. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.232] - 2026-09-04
 
 ### Fixed
