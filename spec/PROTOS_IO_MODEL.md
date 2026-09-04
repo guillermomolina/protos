@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 307
+Document revision: 308
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -882,6 +882,18 @@ This rule is specific to byte-buffering transparency. It does not weaken a stand
 A standard BufferedReader therefore preserves whether EOF is permanent or resumable according to its ByteReadable source; buffering alone cannot make a resumable source EOF permanently sticky.
 
 A `BufferedWriter(target)` exposes `ByteWritable` and `Flushable`. Its successful `write()` may mean that bytes have been copied into the wrapper's own buffer; `flush()` propagates the relevant frontier to its target according to the wrapper contract.
+
+For every standard output wrapper that exposes `Flushable`, successful wrapper `flush()` must propagate its frontier through the complete chain of standard `Flushable` output wrappers/capabilities that are semantically on the path to that wrapper's defined underlying output boundary. Propagation does not stop merely because the wrapper's buffered bytes have been accepted by an immediate target that itself still retains them behind its own `Flushable` boundary.
+
+Concretely, when a wrapper flush has delivered all output belonging to its frontier into an immediate target that also exposes `Flushable`, the wrapper's flush must establish an ordered target `flush()` frontier after those delivered bytes and must not resolve successfully until that target flush has completed successfully. If that target is itself a standard output wrapper over another `Flushable` target, the same rule composes recursively. Thus one successful flush of the outer standard wrapper cannot leave bytes from its frontier stranded solely in a deeper standard Protos-managed flushable buffer.
+
+The target `flush()` may also propagate other target output that is ordered before the target's own flush frontier under the target's ordinary ordering rules. That extra propagation does not make such independently originated output part of the outer wrapper's earlier logical write sequence and does not create a new global ordering relation.
+
+If the immediate target does not expose `Flushable`, the wrapper's portable flush obligation ends at the target boundary that the target's `ByteWritable` contract actually exposes. The wrapper must not invent an unstated host flush, durability operation, device drain, remote acknowledgement, or other stronger effect merely to simulate a missing `Flushable` capability.
+
+Failure/cancellation aftermath composes with the existing `Flushable` rules at each layer. In particular, an outer wrapper flush cannot report success when a required deeper target flush fails, and a propagation failure does not authorize guessing hidden downstream progress or replaying bytes unsafely.
+
+This chaining rule does not make `Flushable` automatically inherited from a wrapped object. A wrapper exposes `Flushable` only when its own contract says so and it can implement this propagation semantics correctly.
 
 A wrapper does not automatically expose seek, size, truncate, sync, close, or shutdown merely because the wrapped object exposes them.
 

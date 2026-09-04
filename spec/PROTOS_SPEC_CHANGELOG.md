@@ -4,6 +4,31 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.308] - 2026-09-04
+
+### Fixed
+- Defined compositional `Flushable` semantics for nested standard output wrappers.
+- Required a successful wrapper `flush()` to establish an ordered deeper
+  `flush()` whenever its immediate target itself exposes `Flushable`, after the
+  wrapper has delivered its own frontier to that target.
+- Required the same rule to compose recursively through standard flushable
+  wrapper chains, preventing an outer successful flush from leaving its frontier
+  stranded in a deeper Protos-managed buffer.
+- Kept targets without `Flushable` at their actual `ByteWritable` boundary rather
+  than inventing host flush, durability, drain, or acknowledgement semantics.
+- Preserved target-local ordering: a deeper flush may also propagate independently
+  originated target output ordered before its own frontier without creating a
+  global or outer-wrapper ordering relation.
+- Composed deeper failure/cancellation with existing `Flushable` aftermath rules
+  and prohibited outer success when a required deeper flush fails.
+- Clarified that this rule does not make `Flushable` automatically inherited by
+  arbitrary wrappers.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 308. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.307] - 2026-09-04
 
 ### Closed
