@@ -4,6 +4,31 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.243] - 2026-09-04
+
+### Fixed
+- Reconciled the normative Bytes model across Language, Runtime, and I/O:
+  `Bytes()`, `each`, `add`, and `removeAt` are no longer required by I/O while
+  semantically undefined elsewhere.
+- Defined standardized `Bytes()` as a zero-argument factory for a fresh open
+  empty Bytes value wherever that standardized factory is exposed, without
+  making `Bytes` a mandatory Core-prelude binding.
+- Kept `atPut` replacement-only while defining `add` and `removeAt` as the only
+  standard Bytes operations in this set that change sequence length.
+- Defined exact octet validation, `add` return value, `removeAt` shifting and
+  removed-value result, and failure-before-mutation behavior.
+- Defined `Bytes.each` through ordinary polymorphic invocation over one
+  ascending-index snapshot of octet values.
+- Defined open/closed/frozen consequences: closed Bytes allow existing-index
+  replacement but reject resize; frozen Bytes reject all standard mutation.
+- Required I/O's Bytes section to defer detailed sequence semantics to the
+  Language/Runtime contracts rather than maintaining a competing partial model.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 243.
+  `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
+  `PROTOS_IO_MODEL.md` gain normative semantic content in this revision.
+
 ## [0.1.242] - 2026-09-04
 
 ### Fixed

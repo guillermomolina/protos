@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 242
+Document revision: 243
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3797,6 +3797,146 @@ The resulting String is conceptually:
 ### Standard Bytes indexed semantics
 
 ### Standard Bytes size
+
+### Complete standard Bytes sequence semantics
+
+Standard `Bytes` is dynamically resizable through the explicit standard
+operations `add(value)` and `removeAt(index)`. This does not change the existing
+`atPut(index, value)` contract: `atPut` replaces one existing octet and never
+changes sequence length.
+
+#### Standard empty Bytes construction
+
+Where the standardized `Bytes` factory object is available, its ordinary
+polymorphic invocation behavior accepts exactly zero positional arguments:
+
+```js
+Bytes()
+```
+
+and creates a fresh **open**, empty standard Bytes object with receiver-owned
+byte-sequence state.
+
+Core v0.1 does not require `Bytes` to be a binding of the Core prelude; that
+availability boundary remains owned by the I/O model and standard-library
+environment. This rule defines the semantics of the standardized factory when
+it is exposed; it does not introduce a new mandatory prelude binding.
+
+Each successful `Bytes()` invocation creates a fresh identity. A non-empty
+argument vector fails with the ordinary argument-count error after ordinary
+left-to-right argument evaluation and before the new Bytes object is created.
+The standard factory sends no `init` message.
+
+If a prototype inherits the standard Bytes-factory invocation behavior, the
+fresh Bytes object's delegation parent is the actual invocation receiver. The
+prototype itself does not acquire byte-sequence state merely by inheriting the
+factory.
+
+#### Standard `Bytes.add`
+
+```js
+bytes.add(value)
+```
+
+requires `value` to be an exact semantic `Integer` in the inclusive range
+`0..255`. No Float, numeric coercion, masking, wrapping, truncation, or
+implementation-native byte conversion is permitted.
+
+The original receiver must own standard Bytes state and must be **open**.
+A closed or frozen receiver signals an `Error` before mutation.
+
+On success, `add` appends the exact supplied semantic Integer value after the
+current last octet, increases `size` by exactly one, preserves all existing
+octets and their relative order, and returns the exact supplied `value` object.
+
+Validation completes before sequence mutation. A failing `add` changes neither
+length nor contents.
+
+#### Standard `Bytes.removeAt`
+
+```js
+bytes.removeAt(index)
+```
+
+requires an exact semantic `Integer` index in the current range
+`0 .. bytes.size - 1`. No coercion, truncation, wrapping, or negative indexing
+is defined.
+
+The original receiver must own standard Bytes state and must be **open**.
+A closed or frozen receiver signals an `Error` before indexed removal.
+
+On success, `removeAt` removes exactly the octet currently at `index`, shifts
+every later octet left by one position while preserving order, decreases `size`
+by exactly one, and returns the exact semantic Integer octet value that was
+removed.
+
+The index is validated against the sequence state applicable to this operation
+before mutation. A failing `removeAt` changes neither length nor contents.
+
+#### Standard `Bytes.each`
+
+```js
+bytes.each(block)
+```
+
+requires `block` to be invokable through the ordinary polymorphic invocation
+protocol. It need not be a Closure.
+
+After ordinary receiver and argument evaluation, standard `Bytes.each` first
+validates the original receiver as standard Bytes, then validates `block`
+callability, and only then captures a shallow logical snapshot of the current
+octets in ascending index order.
+
+Each snapshot octet is supplied to one ordinary invocation:
+
+```text
+block(octet)
+```
+
+The octet argument is the exact semantic Integer value stored at snapshot time.
+Because byte values are semantic Integer values, no host byte/signed-byte object
+is exposed.
+
+The iteration snapshot is fixed for the invocation. Later `atPut`, `add`, or
+`removeAt` operations performed by callbacks or by other Actor-local work at
+explicit suspension points do not change which snapshot octets this invocation
+will visit or their order. Such mutations remain governed by the receiver's
+ordinary open/closed/frozen rules.
+
+If every callback completes normally, `each` returns the receiver Bytes object.
+A callback error or non-local control effect stops further callbacks and
+propagates normally; callbacks already completed and independently permitted
+mutations are not rolled back.
+
+`Bytes.each` introduces no hidden Map-style mutation guard, lock, transaction,
+or suspension point. Snapshot representation is implementation-private provided
+the observable ascending-index snapshot semantics are preserved.
+
+#### State consequences
+
+Standard Bytes state therefore has these mutation permissions:
+
+```text
+open:
+    atPut     allowed for an existing index
+    add       allowed
+    removeAt  allowed
+
+closed:
+    atPut     allowed for an existing index
+    add       ERROR
+    removeAt  ERROR
+
+frozen:
+    atPut     ERROR
+    add       ERROR
+    removeAt  ERROR
+```
+
+`size`, `at`, and `each` remain read-only observations available for open,
+closed, and frozen Bytes.
+
+
 
 The standard `Bytes.size` operation returns a semantic `Integer` equal to the
 receiver's current number of octets.

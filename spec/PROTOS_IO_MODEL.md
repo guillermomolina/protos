@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 242
+Document revision: 243
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -138,9 +138,16 @@ add(value)
 removeAt(index)
 ```
 
-`Bytes` is mutable and dynamically resizable. `atPut(index, value)` modifies an existing position and does not resize the sequence. `add(value)` appends. `removeAt(index)` removes the existing element, shifts later elements left, and returns the removed element.
+The exact programmer-visible semantics of those standard Bytes operations,
+including zero-argument empty construction, exact octet validation,
+replacement-only `atPut`, dynamic resizing through `add` / `removeAt`,
+ascending-snapshot `each`, callback callability, return values, and
+open/closed/frozen behavior, are defined normatively by
+`PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md`.
 
-`atPut` and `add` accept only semantic `Integer` values from 0 through 255. A value such as `1.0` is rejected even when it is numerically equal to an allowed Integer.
+`Bytes` remains mutable and dynamically resizable through the explicit
+length-changing operations `add` and `removeAt`. No other operation acquires
+implicit resizing semantics merely because it is indexed.
 
 The concurrency model's P-local `ByteRegion` is an authority capability, not an
 I/O resource and not an ordinary transferable `Bytes` value. I/O APIs do not

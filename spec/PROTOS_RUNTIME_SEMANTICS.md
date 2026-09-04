@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 242
+Document revision: 243
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -4283,6 +4283,96 @@ normal protocol/lookup rules rather than mutating String storage.
 ### Standard Bytes indexed-state semantics
 
 ### Standard Bytes size runtime semantics
+
+### Complete standard Bytes sequence runtime semantics
+
+The resizable standard Bytes operations are conceptually:
+
+```text
+function standardBytesFactoryInvoke(invocationReceiver, arguments):
+    requireArgumentCount(arguments, 0)
+
+    return newStandardBytes(
+        parent = invocationReceiver,
+        state = open,
+        octets = empty
+    )
+
+function requireOpenBytesForResize(receiver):
+    bytes = requireBytesReceiver(receiver)
+
+    if objectState(bytes) != open:
+        signal Error
+
+    return bytes
+
+function requireOctetValue(value):
+    if not isSemanticInteger(value):
+        signal Error
+
+    if value < 0 or value > 255:
+        signal Error
+
+    return value
+
+function standardBytesAdd(receiver, value):
+    bytes = requireOpenBytesForResize(receiver)
+    octet = requireOctetValue(value)
+
+    appendOctet(bytes, octet)
+    return value
+
+function standardBytesRemoveAt(receiver, index):
+    bytes = requireOpenBytesForResize(receiver)
+    i = requireBytesIndex(bytes, index)
+
+    removed = octetAt(bytes, i)
+    removeOctetAndShiftLeft(bytes, i)
+    return removed
+```
+
+`appendOctet` increases the logical octet length by exactly one.
+`removeOctetAndShiftLeft` decreases it by exactly one and preserves the relative
+order of all surviving octets. Neither operation exposes backing capacity,
+native byte representation, or host array mechanics.
+
+The existing `standardBytesAtPut` remains replacement-only and never calls
+either resizing primitive.
+
+Standard Bytes iteration is conceptually:
+
+```text
+function standardBytesEach(receiver, block):
+    bytes = requireBytesReceiver(receiver)
+    requireInvokable(block)
+
+    snapshot = snapshotBytesOctets(bytes)
+
+    for octet in snapshot from lowest to highest original index:
+        invoke(block, [octet])
+
+    return receiver
+```
+
+`requireInvokable` is the same ordinary polymorphic-callability check used by
+standard Array and Map iteration. It runs before snapshot capture and invokes no
+callback.
+
+`snapshotBytesOctets` captures the logical octet values present at that point.
+Subsequent `atPut`, `add`, or `removeAt` does not rewrite the captured sequence.
+An implementation may avoid a physical copy when it preserves exactly that
+observable snapshot behavior.
+
+The standard factory and resizable operations are ordinary protocol
+specializations; they do not grant byte-sequence state to the invocation
+receiver itself. `newStandardBytes` creates fresh receiver-owned Bytes state and
+fresh identity.
+
+Closed Bytes permit existing-index replacement through the existing
+`standardBytesAtPut` contract but fail `add` and `removeAt`; frozen Bytes fail all
+standard mutation. Read-only `size`, `at`, and `each` remain permitted.
+
+
 
 Standard Bytes size is conceptually:
 
