@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 300
+Document revision: 301
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2805,6 +2805,26 @@ function applyCoreFailureAuthorityPolicy(actor, error):
     // Do not replace, escalate, or affect unrelated Actors here.
     return
 ```
+
+### Actor-fatal Error remains inside the failed incarnation boundary
+
+`applyCoreFailureAuthorityPolicy(actor, error)` consumes the local fatal failure
+as lifecycle input. The `error` parameter is not a portable cross-Actor message
+or result.
+
+For a non-root Core Actor, termination is the complete Core failure-authority
+action. No conforming implementation may make the internal Error observable in
+another Actor by sharing the reference, copying it, serializing it, re-signaling
+it remotely, or introducing an implicit supervisor callback.
+
+For the RootActor, `terminateProcessBecauseRootActorFailed(...)` may retain the
+Error as implementation/runtime diagnostic cause for Process termination where
+otherwise permitted. That use grants no Protos-level cross-Actor Error identity
+or transfer semantics.
+
+Sender-visible request outcomes remain governed exclusively by the existing
+Actor request/failure rules and never become destination-Error propagation merely
+because the destination died from an unhandled Error.
 
 This function does not prevent a distinct ActorGroup controller from later
 observing that desired Group state is unsatisfied and creating a fresh Actor

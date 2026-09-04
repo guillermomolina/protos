@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.301] - 2026-09-04
+
+### Fixed
+- Clarified that a fatal unhandled Actor Error remains local failure state of the
+  failed Actor incarnation rather than becoming an implicit remote Error channel.
+- Defined non-root Actor termination itself as the complete Core failure-authority
+  consequence, with no automatic Error transfer/copy/snapshot/proxy/re-signal to
+  another Actor.
+- Preserved accepted-request `RequestOutcomeUncertain` semantics instead of
+  exposing the destination Actor's internal fatal Error to the requester.
+- Clarified that RootActor failure may use the Error internally as Process
+  termination cause without granting cross-Actor Error identity or transfer.
+- Left any future supervision/failure-reporting facility to define an explicit
+  transferable report contract rather than synthesizing one in Core v0.1.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 301.
+  `PROTOS_RUNTIME_SEMANTICS.md` and `PROTOS_CONCURRENCY_MODEL.md` gain normative
+  clarification in this revision.
+
 ## [0.1.300] - 2026-09-04
 
 ### Fixed

@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 300
+Document revision: 301
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -588,6 +588,31 @@ If initialization fails with an unhandled error, that is an unhandled fatal
 failure of that Actor incarnation. The Actor never reaches READY and instead
 terminates. Its failure authority observes the failure and applies the ordinary
 Actor-failure policy.
+
+### Fatal Actor Error does not become an implicit remote Error channel
+
+An `Error` that escapes the outermost dynamic handler boundary of an ordinary
+Actor turn is local failure state of that Actor incarnation.
+
+For a non-root Core Actor, the failure-authority consequence is Actor
+termination itself. Core does not additionally transfer, copy, snapshot, proxy,
+re-signal, or otherwise expose that internal Error object to another Actor merely
+because the failure is fatal.
+
+Observers outside the failed Actor see only the outcomes already defined by the
+Actor lifecycle and communication contracts. In particular, an accepted
+`request()` that cannot produce its normal reply follows the existing
+`RequestOutcomeUncertain` rule rather than failing with the destination's
+internal Error.
+
+For the RootActor, the escaping Error may be used internally as the cause of the
+required Process termination. This does not make the Error an Actor-transferred
+value, does not establish cross-Actor `===` identity, and does not create a
+portable remote-error delivery API.
+
+A future supervision/failure-reporting facility may explicitly define a
+transferable failure report or Error snapshot, but Core v0.1 does not synthesize
+one implicitly.
 
 Initialization failure does not create a special message-delivery universe.
 Operations not yet accepted by the Actor remain governed by the ordinary
