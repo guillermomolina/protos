@@ -331,7 +331,9 @@ Possessing a `File` grants access only through the capabilities exposed by that 
 
 `Path` is a standardized path value rather than merely an alias for `String`. Core v0.1 defines no special path literal syntax. `Path` is a standard frozen-prelude factory/prototype binding because it carries no filesystem authority.
 
-The minimum portable construction protocol is `Path.relative()` for the empty relative Path, `Path.rooted()` for the empty rooted Path, `path.child(name)` to append one normal component, and `path.parent()` to append one parent component. `child(name)` requires a String other than `""`, `"."`, or `".."`; it appends exactly that String as one component. Slash, backslash, colon, drive/UNC syntax, normalization, and host separators inside `name` acquire no structural meaning. No implicit String-to-Path coercion exists. All these operations are synchronous, immutable value construction and access no Filesystem.
+The minimum portable construction protocol is `Path.relative()` for the empty relative Path, `Path.rooted()` for the empty rooted Path, `path.child(name)` to append one normal component, and `path.parentComponent()` to append one parent component. `child(name)` requires a String other than `""`, `"."`, or `".."`; it appends exactly that String as one component. Slash, backslash, colon, drive/UNC syntax, normalization, and host separators inside `name` acquire no structural meaning. No implicit String-to-Path coercion exists. All these operations are synchronous, immutable value construction and access no Filesystem.
+
+`parentComponent()` is deliberately distinct from the Core reflection selector `parent()` defined by `semantics/OBJECT_MODEL.md`. A Path does not specialize or overload `parent()` to mean filesystem traversal. Consequently `path.parent()` remains the ordinary structural reflection operation and reports the receiver's immutable delegation parent, while `path.parentComponent()` constructs the Path value whose component sequence has one additional parent-traversal component. Core v0.1 defines no standard compatibility alias in which `Path.parent()` appends a path component.
 
 
 Every Filesystem defines the namespace/root/base used to interpret paths supplied to it.
@@ -375,7 +377,7 @@ Therefore unequal Path values may resolve to the same resource in a particular F
 
 A Path is immutable and carries no authority. It may cross Actor boundaries according to the ordinary rules for immutable values without transferring a Filesystem capability.
 
-Beyond `Path.relative()`, `Path.rooted()`, `child(name)`, and `parent()`, display syntax, convenience parsers, and native-path conversion APIs remain outside Core v0.1. Any standardized constructor/parser that produces a portable Path must produce the semantic value described above rather than embedding the host platform's separator, drive, UNC, device-prefix, case-folding, or current-directory rules into Path identity.
+Beyond `Path.relative()`, `Path.rooted()`, `child(name)`, and `parentComponent()`, display syntax, convenience parsers, and native-path conversion APIs remain outside Core v0.1. Any standardized constructor/parser that produces a portable Path must produce the semantic value described above rather than embedding the host platform's separator, drive, UNC, device-prefix, case-folding, or current-directory rules into Path identity.
 
 When a Filesystem maps a normal component to a concrete backend, that component is one logical child name. A backend that cannot represent that name may reject the operation, but it must not reinterpret one component as multiple components, a root/prefix change, a drive/device selector, or another authority-changing native syntax. Host-native path values that require such semantics belong behind an explicitly host-specific/native boundary.
 

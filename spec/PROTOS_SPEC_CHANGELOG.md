@@ -9,6 +9,25 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.369] - 2026-09-04
+
+### Path parent-component selector disambiguation (D028)
+- Renames the standard Path operation that appends one parent-traversal component
+  from `parent()` to `parentComponent()`.
+- Preserves `parent()` as the Core structural-reflection selector owned by
+  `semantics/OBJECT_MODEL.md`; Path does not overload that selector with
+  filesystem/path-construction semantics.
+- Makes `path.parent()` and `path.parentComponent()` observably distinct:
+  the former reports the immutable delegation parent, while the latter returns
+  the immutable Path value with one additional parent component.
+- Defines no Core v0.1 compatibility alias from `Path.parent()` to traversal,
+  preventing standard Path behavior from shadowing structural reflection.
+
+### Compatibility
+- Portable code using the former ambiguous `path.parent()` spelling for Path
+  traversal must use `path.parentComponent()`. Structural reflection through
+  `parent()` remains unchanged.
+
 ## [0.1.368] - 2026-09-04
 
 ### Standard Integer result family (D029)
