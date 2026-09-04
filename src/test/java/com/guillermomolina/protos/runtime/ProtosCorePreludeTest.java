@@ -34,6 +34,32 @@ class ProtosCorePreludeTest {
     }
 
     @Test
+    void numericPrototypeHierarchyMatchesCoreModel() {
+        assertSame(
+                ProtosObjectValue.rootObject(),
+                ProtosCorePrelude.numberPrototype().parent().orElseThrow());
+        assertSame(
+                ProtosCorePrelude.numberPrototype(),
+                ProtosCorePrelude.integerPrototype().parent().orElseThrow());
+        assertSame(
+                ProtosCorePrelude.numberPrototype(),
+                ProtosCorePrelude.floatPrototype().parent().orElseThrow());
+    }
+
+    @Test
+    void numericValuesResolveToTheirSemanticFamilyPrototype() {
+        ProtosIntegerValue integer = new ProtosIntegerValue(java.math.BigInteger.valueOf(42));
+        ProtosFloatValue floating = new ProtosFloatValue(42.5);
+
+        assertSame(
+                ProtosCorePrelude.integerPrototype(),
+                ProtosCorePrelude.numericPrototypeFor(integer));
+        assertSame(
+                ProtosCorePrelude.floatPrototype(),
+                ProtosCorePrelude.numericPrototypeFor(floating));
+    }
+
+    @Test
     void freshExecutionContextsDelegateToContextPrototype() {
         ProtosObjectValue first = ProtosCorePrelude.newExecutionContext();
         ProtosObjectValue second = ProtosCorePrelude.newExecutionContext();

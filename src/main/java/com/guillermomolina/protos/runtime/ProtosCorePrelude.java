@@ -20,11 +20,40 @@ package com.guillermomolina.protos.runtime;
 public final class ProtosCorePrelude {
     private static final ProtosObjectValue CONTEXT =
             new ProtosObjectValue(ProtosObjectValue.rootObject());
+    private static final ProtosObjectValue NUMBER =
+            new ProtosObjectValue(ProtosObjectValue.rootObject());
+    private static final ProtosObjectValue INTEGER =
+            new ProtosObjectValue(NUMBER);
+    private static final ProtosObjectValue FLOAT =
+            new ProtosObjectValue(NUMBER);
 
     private ProtosCorePrelude() {}
 
     public static ProtosObjectValue contextPrototype() {
         return CONTEXT;
+    }
+
+    public static ProtosObjectValue numberPrototype() {
+        return NUMBER;
+    }
+
+    public static ProtosObjectValue integerPrototype() {
+        return INTEGER;
+    }
+
+    public static ProtosObjectValue floatPrototype() {
+        return FLOAT;
+    }
+
+    public static ProtosObjectValue numericPrototypeFor(Object value) {
+        if (value instanceof ProtosIntegerValue) {
+            return INTEGER;
+        }
+        if (value instanceof ProtosFloatValue) {
+            return FLOAT;
+        }
+        throw new IllegalArgumentException(
+                "value is not a Core numeric value: " + value.getClass().getSimpleName());
     }
 
     public static ProtosObjectValue newExecutionContext() {
