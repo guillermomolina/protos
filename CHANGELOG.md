@@ -4,6 +4,37 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.28-SNAPSHOT] - 2026-09-04
+
+### Changed
+
+- Closed implementation blocker B002 for the runtime semantics of
+  `Object.without(name)` and `Object.alias(sourceName, aliasName)` structural
+  views.
+- Structural-view results now always use the unique root `Object` as their
+  immediate delegation parent rather than accepting an implementation-selected
+  parent.
+- The result remains a fresh open ordinary object regardless of the source
+  object's parent or open/closed/frozen state.
+- Project implementation version changed from `0.2.27-SNAPSHOT` to `0.2.28-SNAPSHOT`.
+
+### Tests
+
+- Extended object-runtime coverage for fresh identity, root-`Object` parent,
+  open result state, frozen-source behavior, shallow exact-value copying,
+  mutation independence, and delegated alias-name non-collision.
+
+### Notes
+
+- This block implements the now-closed runtime object semantics without exposing
+  new Protos-visible messages yet; ordinary message dispatch remains pending the
+  invocation-protocol work.
+- `CanonicalCall` remains deliberately unopened while the current specification
+  does not yet define the portable inheritance/replacement mechanism of the
+  ordinary invocation protocol.
+- No normative specification change is introduced.
+
+
 ## [0.2.27-SNAPSHOT] - 2026-09-04
 
 ### Added

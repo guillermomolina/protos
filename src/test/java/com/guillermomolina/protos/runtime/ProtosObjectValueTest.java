@@ -230,7 +230,7 @@ class ProtosObjectValueTest {
         source.createLocalSlot("state", state);
 
         ProtosObjectValue without =
-                source.withoutLocalSlot("move", ProtosObjectValue.rootObject());
+                source.withoutLocalSlot("move");
         assertFalse(without.hasLocalSlot("move"));
         assertSame(state, without.readLocalSlot("state").orElseThrow());
         assertTrue(source.hasLocalSlot("move"));
@@ -238,12 +238,58 @@ class ProtosObjectValueTest {
         ProtosObjectValue aliased =
                 source.aliasLocalSlot(
                         "move",
-                        "swimMove",
-                        ProtosObjectValue.rootObject());
+                        "swimMove");
         assertSame(move, aliased.readLocalSlot("move").orElseThrow());
         assertSame(move, aliased.readLocalSlot("swimMove").orElseThrow());
         assertSame(state, aliased.readLocalSlot("state").orElseThrow());
         assertFalse(source.hasLocalSlot("swimMove"));
+    }
+
+    @Test
+    void compositionViewsAlwaysReturnFreshOpenChildrenOfObject() {
+        ProtosObjectValue parent = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue source = new ProtosObjectValue(parent);
+        Object value = new Object();
+        source.createLocalSlot("value", value);
+        source.createLocalSlot("other", new Object());
+        source.freeze();
+
+        ProtosObjectValue firstWithout = source.withoutLocalSlot("other");
+        ProtosObjectValue secondWithout = source.withoutLocalSlot("other");
+        ProtosObjectValue aliased = source.aliasLocalSlot("value", "copy");
+
+        assertSame(ProtosObjectValue.rootObject(), firstWithout.parent().orElseThrow());
+        assertSame(ProtosObjectValue.rootObject(), aliased.parent().orElseThrow());
+        assertTrue(firstWithout.isOpen());
+        assertTrue(aliased.isOpen());
+        org.junit.jupiter.api.Assertions.assertNotSame(firstWithout, secondWithout);
+        assertSame(value, firstWithout.readLocalSlot("value").orElseThrow());
+        assertSame(value, aliased.readLocalSlot("value").orElseThrow());
+        assertSame(value, aliased.readLocalSlot("copy").orElseThrow());
+        assertTrue(source.isFrozen());
+
+        firstWithout.assignLocalSlot("value", new Object());
+        aliased.createLocalSlot("fresh", new Object());
+        assertSame(value, source.readLocalSlot("value").orElseThrow());
+        assertFalse(source.hasLocalSlot("fresh"));
+    }
+
+    @Test
+    void aliasIgnoresDelegatedAliasNameCollision() {
+        ProtosObjectValue parent = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue source = new ProtosObjectValue(parent);
+        Object inherited = new Object();
+        Object local = new Object();
+
+        parent.createLocalSlot("aliasName", inherited);
+        source.createLocalSlot("sourceName", local);
+
+        ProtosObjectValue result =
+                source.aliasLocalSlot("sourceName", "aliasName");
+
+        assertSame(local, result.readLocalSlot("aliasName").orElseThrow());
+        assertSame(ProtosObjectValue.rootObject(), result.parent().orElseThrow());
+        assertSame(inherited, source.readSlot("aliasName").orElseThrow());
     }
 
     @Test
@@ -260,22 +306,19 @@ class ProtosObjectValueTest {
                 IllegalStateException.class,
                 () ->
                         source.withoutLocalSlot(
-                                "inherited",
-                                ProtosObjectValue.rootObject()));
+                                "inherited"));
         assertThrows(
                 IllegalStateException.class,
                 () ->
                         source.aliasLocalSlot(
                                 "inherited",
-                                "copy",
-                                ProtosObjectValue.rootObject()));
+                                "copy"));
         assertThrows(
                 IllegalStateException.class,
                 () ->
                         source.aliasLocalSlot(
                                 "local",
-                                "taken",
-                                ProtosObjectValue.rootObject()));
+                                "taken"));
     }
 
     @Test

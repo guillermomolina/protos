@@ -55,7 +55,7 @@ unresolved observable case: the result of an empty `Sequence`.
 
 ## B002 — Delegation parent of `without` / `alias` result objects
 
-Status: READY
+Status: CLOSED
 
 Implementation area:
 Standard `Object.without(name)` and `Object.alias(sourceName, aliasName)` message
@@ -77,10 +77,10 @@ delegation parent of the ordinary object returned by both `without(name)` and
 `alias(sourceName, aliasName)`.
 
 Current consequence:
-The normative contract now fixes both result objects as fresh open ordinary
-objects whose immediate delegation parent is `Object`, so implementation may
-proceed without choosing observable parent/state semantics. The blocked runtime
-work itself has not yet been completed.
+Implemented. Runtime structural-view helpers now construct both results as fresh
+open ordinary objects whose immediate delegation parent is the unique root
+`Object`, copy only local bindings shallowly, preserve exact stored values, and
+never inherit the receiver's structural state or parent.
 
 Independent work:
 Composition conflict validation, local-slot snapshots, atomic contribution
