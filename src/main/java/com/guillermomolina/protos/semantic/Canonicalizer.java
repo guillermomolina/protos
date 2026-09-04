@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.semantic;
 
+import com.guillermomolina.protos.parser.ast.SurfaceBinary;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
 import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
@@ -42,6 +43,7 @@ public final class Canonicalizer {
             case SurfaceMember member ->
                     new CanonicalMember(
                             canonicalize(member.receiver()), member.name(), member.span());
+            case SurfaceBinary binary -> lowerBinary(binary);
             case SurfaceUnary unary -> lowerUnary(unary);
             case SurfaceSequence sequence ->
                     new CanonicalSequence(canonicalizeAll(sequence.expressions()), sequence.span());
@@ -49,6 +51,28 @@ public final class Canonicalizer {
                     throw new IllegalArgumentException(
                             "Surface expression is not supported by this canonicalizer slice: "
                                     + expression.getClass().getSimpleName());
+        };
+    }
+
+    private CanonicalExpression lowerBinary(SurfaceBinary binary) {
+        if (isStandardBinaryOperator(binary.operator())) {
+            throw new IllegalArgumentException(
+                    "Standard binary operator is not supported by this canonicalizer slice: "
+                            + binary.operator());
+        }
+
+        return new CanonicalSend(
+                canonicalize(binary.left()),
+                binary.operator(),
+                List.of(canonicalize(binary.right())),
+                binary.span());
+    }
+
+    private boolean isStandardBinaryOperator(String operator) {
+        return switch (operator) {
+            case "||", "&&", "==", "!=", "===", "!==",
+                    "<", "<=", ">", ">=", "+", "-", "*", "/", "%" -> true;
+            default -> false;
         };
     }
 
