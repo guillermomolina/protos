@@ -903,32 +903,94 @@ second privileged argument-collection object model.
 
 ## Numeric Model
 
-Core v0.1 distinguishes numeric behavior through prototype delegation rather than static types or overload resolution.
+Core v0.1 defines one portable numeric model. Numeric family is semantic state, not an implementation representation, and no arithmetic result may depend on host integer width, boxing, tagging, or storage strategy.
 
-The conceptual hierarchy includes:
+### Standard numeric families and prototypes
+
+The Core v0.1 numeric semantic families are exactly:
 
 ```text
-Number
-├── Integer
-│   ├── fixed-width integer prototypes such as UInt8, Int16, UInt32, ...
-│   └── implementation-specific exact-integer representations
-└── Float
+Number                         common numeric prototype; not a concrete value family
+├── Integer                    ordinary unbounded exact-integer family
+│   ├── UInt8                  unsigned 8-bit exact-integer family
+│   ├── Int8                   signed 8-bit exact-integer family
+│   ├── UInt16                 unsigned 16-bit exact-integer family
+│   ├── Int16                  signed 16-bit exact-integer family
+│   ├── UInt32                 unsigned 32-bit exact-integer family
+│   ├── Int32                  signed 32-bit exact-integer family
+│   ├── UInt64                 unsigned 64-bit exact-integer family
+│   └── Int64                  signed 64-bit exact-integer family
+└── Float                      IEEE 754-2019 binary64 family
 ```
 
-`Integer` denotes mathematically exact integers. Integer semantics are arbitrary precision: ordinary integer arithmetic does not expose machine overflow. An implementation may optimize small values using machine integers or tagged values and transparently promote to an arbitrary-precision representation when necessary. Whether objects such as `SmallInteger` or `BigInteger` are exposed as standard prototypes remains an implementation/library design choice unless otherwise specified.
+`Number`, `Integer`, `Float`, `UInt8`, `Int8`, `UInt16`, `Int16`, `UInt32`,
+`Int32`, `UInt64`, and `Int64` are the standard prototype objects corresponding
+to that hierarchy. The eight fixed-width prototypes delegate through `Integer`;
+`Integer` and `Float` delegate through `Number`. Numeric-family membership is
+not conferred by delegation: an ordinary object that delegates to one of these
+prototype objects is still an ordinary object unless a separate normative
+factory or operation creates a numeric semantic value.
 
-Integer-only protocols may include bit manipulation operations such as shifts, masks, bitwise conjunction/disjunction/XOR, and bit access. `Float` need not implement those messages.
+Core v0.1 defines no additional standard numeric prototypes named `Int` or
+`UInt`. Such names, if present in a library or program, are ordinary bindings
+and do not denote a portable Core numeric family unless a later normative
+revision explicitly standardizes them.
 
-Fixed-width integer prototypes such as `UInt8`, `Int8`, `UInt16`, `Int16`, `UInt32`, `Int32`, `UInt64`, and `Int64` have width and signedness as part of their semantics. They delegate through `Integer` and may specialize arithmetic and bit-oriented behavior.
+In this specification, an **ordinary Integer** means a value of the unbounded
+`Integer` semantic family itself. An **exact-integer value** means either an
+ordinary Integer or a value of one of the eight fixed-width integer families.
+Within the standard numeric arithmetic and conversion contracts in this
+**Numeric Model**, a result specified simply as an `Integer` without a
+fixed-width qualifier is an ordinary unbounded Integer. This wording does not
+redefine independent result-family contracts owned by other standard APIs such
+as collection `size` operations.
 
-For fixed-width integers:
+The fixed-width mathematical ranges are exactly:
 
-- conversion of an out-of-range value signals an error;
-- ordinary arithmetic does not silently wrap;
-- arithmetic that cannot be represented in the fixed-width result signals an error;
-- explicit wrapping operations may be provided as separate messages.
+```text
+UIntN:  0 .. 2^N - 1
+IntN:  -2^(N-1) .. 2^(N-1) - 1
+```
 
-Numeric literal syntax is defined as follows:
+for `N` equal to `8`, `16`, `32`, or `64`.
+
+`Integer` denotes mathematical integers with unbounded precision. Ordinary
+Integer arithmetic therefore has no semantic integer overflow. A conforming
+implementation must grow representation as required; allocation failure or a
+runtime resource limit is not permission to wrap, saturate, truncate, or expose
+the host's integer width as a numeric result.
+
+### Internal exact-integer representation is not portable surface
+
+`SmallInteger`, `BigInteger`, tagged integers, boxed integers, machine-word
+integers, limb arrays, and similar categories are implementation representations
+only. Core v0.1 defines no standard numeric semantic family, prototype object, or
+prelude binding named `SmallInteger` or `BigInteger`.
+
+An implementation may change an ordinary Integer between small and large
+representations at any time, including across arithmetic, constant folding,
+Actor transfer, specialization, deoptimization, or garbage collection, provided
+the change is unobservable. In particular, internal representation must not
+change:
+
+- the value's semantic family or standard prototype/delegation behavior;
+- ordinary lookup or dispatch;
+- `==`, `!=`, `===`, `!==`, `hash`, or `identityHashOf`;
+- reflection or family/prototype observations provided elsewhere by Core;
+- standard transfer/copy behavior between Actors or `P` workers;
+- any standard external encoding/decoding semantics.
+
+Core v0.1 introduces no serialization format for an internal integer
+representation. Any standard transfer or encoding rule that preserves a numeric
+value operates on its semantic family and semantic value, never on a
+small/big/tagged storage category.
+
+Integer-only bit-manipulation or explicit wrapping protocols are not added by
+this section. Libraries may define such ordinary messages, but portable Core
+v0.1 code cannot infer an unstated wrapping, widening, or host-word behavior from
+the standard arithmetic rules below.
+
+### Numeric literals
 
 - A leading sign is never part of a numeric literal.
 - Decimal integer literals use digits `0` through `9`.
@@ -937,7 +999,7 @@ Numeric literal syntax is defined as follows:
 - Binary integer literals use `0b` or `0B`.
 - Octal integer literals use `0o` or `0O`.
 - `_` may be used as a visual separator between digits; it cannot appear at the beginning or end of a digit sequence and cannot appear consecutively.
-- Radix-prefixed literals produce `Integer` values.
+- Radix-prefixed literals produce ordinary `Integer` values.
 - Decimal literals containing a decimal point or exponent produce `Float` values.
 - A `.` belongs to a decimal numeric literal only when it is immediately followed by a decimal digit: `1.0` is a `Float` literal; `1.` and `.5` are not numeric literals as complete source sequences. The lexer tokenizes `1.` as `INTEGER("1")` followed by a `.` token and `.5` as a `.` token followed by `INTEGER("5")`, so for example `1.to(10)` tokenizes as `INTEGER("1")` `.` `IDENTIFIER("to")` `(` `INTEGER("10")` `)`. This does not make either complete sequence necessarily a lexical error; whether the resulting token sequence is syntactically valid is the parser's responsibility.
 - Decimal exponents use `e` or `E`, optionally followed by `+` or `-`, and require at least one exponent digit.
@@ -967,30 +1029,156 @@ For example:
 1.5e-3
 ```
 
-denote the same numeric values described by the rules above. Literal radix is syntactic only.
+denote the values above. Literal radix is syntactic only; every integer literal
+denotes an ordinary unbounded `Integer`, not a width-selected family.
 
-`/` denotes ordinary numeric division and may produce a `Float` from integer operands:
+### Explicit standard numeric conversion
+
+The standard prototype objects `Integer`, `Float`, `UInt8`, `Int8`, `UInt16`,
+`Int16`, `UInt32`, `Int32`, `UInt64`, and `Int64` specialize ordinary
+polymorphic invocation as one-argument numeric conversion factories. Argument
+evaluation and invocation otherwise follow `CALLABLES.md`. Each standard numeric
+conversion requires exactly one positional argument and requires that argument
+to be a semantic `Number`; wrong arity or a non-Number argument signals an
+`Error`.
+
+No standard numeric conversion sends a user conversion callback, performs
+String parsing, invokes equality/hash behavior, or introduces a hidden
+suspension point.
+
+`Integer(value)` returns the exact ordinary unbounded Integer denoting the same
+mathematical integer when `value` is any exact-integer value. When `value` is a
+Float, conversion succeeds only if the Float is finite and its exact binary64
+value is mathematically integral; the result is that exact ordinary Integer.
+NaN, either infinity, and a finite non-integral Float signal an `Error`.
+`Integer` conversion never rounds or truncates.
+
+For a fixed-width target `T`, `T(value)` succeeds exactly when `value` is either:
+
+- an exact-integer value whose mathematical value lies in `T`'s range; or
+- a finite, mathematically integral Float whose exact binary64 value lies in
+  `T`'s range.
+
+The result is a value of family `T` with that exact mathematical value.
+Out-of-range, NaN, infinity, or non-integral Float input signals an `Error`.
+There is no modulo reduction, saturation, truncation, sign reinterpretation, or
+intermediate host-width conversion.
+
+`Float(value)` returns the same semantic Float value when `value` is already a
+Float, preserving signed zero, infinity, and the Core NaN semantic value. For
+any exact-integer value, it returns the unique IEEE 754-2019 binary64 value
+obtained by converting that exact mathematical integer using
+`roundTiesToEven`. Loss of integer precision in this explicit conversion is
+therefore permitted and normative, not an `Error`. A result beyond the finite
+binary64 range is the correspondingly signed infinity. Exact integer zero
+converts to positive `0.0`.
+
+No other implicit numeric conversion follows from these factories. In
+particular, the availability of `Float(x)` does not make an `Integer` acceptable
+to a standard Float arithmetic operation.
+
+### Standard arithmetic compatibility matrix
+
+Standard numeric arithmetic uses the **original receiver and argument semantic
+families**. There is no implicit arithmetic promotion, widening, narrowing, or
+coercion between distinct numeric families.
+
+For binary `+`, `-`, and `*`, the complete Core v0.1 matrix is:
+
+| receiver family | argument family | result |
+| --- | --- | --- |
+| ordinary `Integer` | ordinary `Integer` | ordinary `Integer`, exact |
+| `Float` | `Float` | `Float`, binary64 rule below |
+| same fixed-width family `T` | same `T` | `T` if exact result is in range; otherwise `Error` |
+| any numeric family `A` | distinct numeric family `B` | `Error` |
+
+Thus the result family is independent of operand order whenever both operand
+orders select the standard behavior. Examples:
 
 ```js
-5 / 2    // 2.5
+1 + 2                 // ordinary Integer(3)
+1 + 2.0               // Error
+2.0 + 1               // Error
+UInt8(1) + UInt8(2)   // UInt8(3)
+UInt8(255) + UInt8(1) // Error
+UInt8(1) + Int16(2)   // Error
+Int16(-1) + UInt8(1)  // Error
+Integer(1) + UInt8(2) // Error
+Float(1.5) + UInt8(2) // Error
 ```
 
-Integer quotient/remainder behavior is exposed explicitly through integer protocol messages such as `div` and `mod`.
+The same-family rule also governs standard unary negation:
 
-Conversions between numeric families are explicit when representation or information may change. Operations such as `floor`, `truncate`, and `round` express the intended conversion behavior rather than relying on silent coercion.
+- ordinary Integer negation returns the exact ordinary Integer;
+- Float negation is the binary64 sign-negation operation described below;
+- signed fixed-width `T` negation returns `T` when representable and signals an
+  `Error` for the minimum value whose positive counterpart is out of range;
+- unsigned fixed-width negation returns the same unsigned family for zero and
+  signals an `Error` for every positive value.
+
+The grammar-owned prefix `-` lowering inherits exactly that standard behavior.
+
+### Division, integer quotient, and remainder
+
+Standard `/` also rejects distinct numeric families; it performs no mixed-family
+promotion.
+
+For same-family operands:
+
+- `Float / Float` returns the IEEE binary64 result described below.
+- ordinary `Integer / Integer` with nonzero divisor returns a `Float` equal to
+  the correctly rounded `roundTiesToEven` binary64 representation of the exact
+  mathematical rational quotient.
+- same fixed-width family `T / T` with nonzero divisor returns the same `Float`
+  result rule applied to the exact mathematical rational quotient. It does not
+  first perform a fixed-width quotient and does not retain family `T`.
+- division by exact-integer zero signals an `Error`.
+
+The integer-to-Float division rule rounds the exact quotient, not separately
+rounded operands. Consequently it remains deterministic even when either exact
+integer is far outside binary64 precision or range. Precision loss, overflow to
+infinity, subnormal rounding, and rounding to signed zero that arise in this
+specified Float result are part of the Float result and do not signal an Error.
+An exact zero quotient produced by a zero exact-integer dividend is positive
+`0.0`. If a nonzero exact rational quotient rounds to zero, the Float result is
+`+0.0` or `-0.0` according to the sign of that exact quotient.
+
+Core v0.1 standardizes integer quotient/remainder selectors `div` and `mod`, and
+the grammar operator `%` has the same standard numeric result as `mod` for
+exact-integer receivers.
+
+For `div`, `mod`, and `%`:
+
+- both operands must be exact-integer values of the same semantic family;
+- a zero divisor signals an `Error`;
+- the mathematical quotient for `div` is truncated toward zero;
+- `mod` and `%` return `a - (a div b) * b`, so a nonzero remainder has the sign
+  of the dividend and its magnitude is less than the divisor magnitude;
+- ordinary Integer operands return ordinary Integer results;
+- fixed-width family `T` operands return family `T`; if the mathematical result
+  of the particular operation is outside `T`'s range, that operation signals an
+  `Error`.
+
+The range check is per operation. For example, signed minimum divided by `-1`
+signals an Error for `div` because its quotient is out of range, while `mod`/`%`
+for those operands return zero of the same signed family because that remainder
+is representable. `Float` has no standard `div`, `mod`, or `%` numeric behavior
+in Core v0.1.
+
+### Float format, precision, and arithmetic
 
 `Float` has one fixed Core v0.1 semantic format. The Float semantic value set is
 exactly IEEE 754-2019 `binary64` (double precision), with the language-level NaN
-model described below. The choice is part of Protos semantics and is not
-implementation-defined.
+and signed-zero model specified in this document. The choice is part of Protos
+semantics and is not implementation-defined.
 
-Consequently, every finite Float has the precision and exponent range of
-`binary64`; positive and negative zero, positive and negative infinity, and
-subnormal values are required. Implementations must support gradual underflow
-and must not flush subnormal operands or results to zero.
+Every finite Float has the precision and exponent range of binary64; positive
+and negative zero, positive and negative infinity, and subnormal values are
+required. Implementations must support gradual underflow and must not flush
+subnormal operands or results to zero.
 
 The standard Float behaviors corresponding to IEEE basic binary arithmetic
-(`+`, `-`, `*`, and `/`) and unary negation operate as `binary64`. Each primitive
+(`+`, `-`, `*`, and `/`) and unary negation operate as binary64. Each primitive
 operation produces the result required by IEEE 754-2019 for those operands using
 `roundTiesToEven` when rounding is required. The result of each such operation
 is a Float value before any later Protos operation observes or consumes it.
@@ -998,24 +1186,99 @@ is a Float value before any later Protos operation observes or consumes it.
 An implementation may use wider registers, fused instructions, constant
 folding, vector instructions, JIT specialization, or another internal strategy
 only when the observable result is the same as the required sequence of
-`binary64` operations. Extra intermediate precision and contraction of separate
+binary64 operations. Extra intermediate precision and contraction of separate
 operations into a fused operation must not change a Protos result.
 
 Core v0.1 exposes no mutable floating-point rounding mode and no ambient
 floating-point status flags. Host thread-local floating-point environment state
 must not change Protos results.
 
-For the IEEE basic arithmetic above, overflow, underflow, division by zero, and
-invalid floating-point arithmetic produce the corresponding `binary64` infinity,
-signed zero/subnormal, or NaN result rather than signaling a Protos error merely
+For IEEE basic Float arithmetic, overflow, underflow, division by zero, and
+invalid floating-point arithmetic produce the corresponding binary64 infinity,
+signed zero/subnormal, or NaN result rather than signaling a Protos Error merely
 because the IEEE condition occurred.
 
-This rule fixes the semantics of Core floating-point arithmetic; it does not
-silently specify unrelated numerical algorithms. Transcendental functions and
-other higher-level numerical operations require their own contracts if exact
-cross-implementation results are intended.
+### Numeric equality, identity, ordering, and hashing
 
-Endianness is not a property of a numeric value. It belongs to binary encoding and decoding. The same numeric value may be represented as bytes using objects/protocol values such as `BigEndian` and `LittleEndian`.
+The earlier **Numeric Equality Across Families**, **Numeric hash coherence**,
+**Float Special Values and Identity**, and **Float Signed Zero Semantics**
+sections remain the authoritative equality/identity/hash rules. This subsection
+closes their ordering and arithmetic interaction without introducing conversion.
+
+For any two numeric values, standard `==` compares exact mathematical numeric
+value across families as already specified. The comparison never converts an
+Integer to Float or otherwise rounds an operand. A finite Float participates by
+its exact binary64 mathematical value. Therefore, for example:
+
+```js
+1 == 1.0                         // true
+1 === 1.0                        // false
+UInt8(1) == Int16(1)             // true
+UInt8(1) === Int16(1)            // false
+9007199254740993 == 9007199254740992.0 // false
+```
+
+`===` remains non-overridable semantic identity and includes numeric semantic
+family, with the previously specified Float signed-zero and NaN special cases.
+Internal small/big integer representation is never a semantic family and cannot
+change `===`.
+
+The standard numeric ordering operators `<`, `<=`, `>`, and `>=` accept any two
+semantic Number values, including distinct numeric families. They compare
+without promotion or coercion:
+
+- finite values are ordered by exact mathematical value, treating each finite
+  Float as its exact binary64 value;
+- negative infinity is below every finite value;
+- positive infinity is above every finite value;
+- `-0.0`, `+0.0`, and exact-integer zero are equal for ordering;
+- if either operand is Float NaN, every one of `<`, `<=`, `>`, and `>=` returns
+  canonical `false`.
+
+Consequently `1 < 1.5` is `true`, and fixed-width/ordinary Integer ordering is
+also cross-family by exact mathematical value. Ordering does not imply that the
+same pair is valid for arithmetic.
+
+The existing numeric hash coherence rule is unchanged and mandatory across all
+these families: whenever numeric `a == b` is true, standard `a.hash` and
+`b.hash` are the same mathematical Integer hash value for that execution.
+Width, signedness, Float-vs-Integer family, and internal Integer representation
+must not split equal numeric values into different normal-Map hash classes.
+`IdentityMap` continues to use `===` and `identityHashOf`, so distinct semantic
+numeric families remain distinct identity keys even when ordinary numeric `==`
+is true.
+
+Standard numeric ordering with a non-Number argument signals an `Error`.
+Standard numeric equality with a non-Number argument returns canonical `false`;
+this is the Number-family specialization of ordinary semantic equality and does
+not coerce the other object.
+
+### Errors, effects, transfer, and optimization boundary
+
+Every numeric failure explicitly specified above signals an `Error` according to
+`ERRORS.md`. Core v0.1 introduces no more-specific mandatory numeric Error
+prototype. Implementations must not expose a host arithmetic exception or
+implementation-specific visible Error subtype as a portability requirement.
+
+Receiver and argument expressions are evaluated before standard numeric
+behavior begins under the ordinary call rules. Numeric validation, arithmetic,
+comparison, hashing, and standard conversion execute no user callback and
+introduce no hidden suspension point. If validation or checked fixed-width
+arithmetic fails, earlier expression-evaluation effects remain completed and no
+numeric result is produced.
+
+Number values are immutable value objects. Actor transfer, `P` transfer, constant
+folding, JIT specialization, unboxing, arbitrary-precision specialization, and
+other optimizations may copy, share, inline, or change physical representation
+only when semantic family, exact Integer value, exact binary64 Float value and
+special-value distinctions, result/error behavior, equality, ordering, hashing,
+identity, dispatch, and observable evaluation order remain exactly as specified.
+
+Endianness is not a property of a numeric value. It belongs to binary encoding
+and decoding. The same semantic numeric value may be represented as bytes using
+ordinary encoding protocols such as `BigEndian` and `LittleEndian`; such
+protocols must not expose an implementation-private small/big/tagged Integer
+representation.
 
 For example:
 
@@ -1024,9 +1287,8 @@ value.toBytes(BigEndian)
 UInt32.fromBytes(bytes, LittleEndian)
 ```
 
-or equivalent buffer-oriented protocols.
-
-This follows the general rule that semantic values are distinct from their external binary representation.
+or equivalent buffer-oriented protocols. This follows the general rule that
+semantic values are distinct from their external binary representation.
 
 
 ### Exact String semantic value and identity
@@ -1045,8 +1307,8 @@ stringIdentity(a, b)
 
 No Unicode normalization is implicit in String construction, semantic identity,
 ordinary default `==`, or ordinary default `hash`. Canonically equivalent but
-differently encoded scalar sequences are distinct String semantic values unless
-a program explicitly normalizes them.
+differently encoded scalar sequences are distinct Core String values unless a
+program explicitly normalizes them.
 
 For example, a String containing U+00E9 LATIN SMALL LETTER E WITH ACUTE is not
 semantically identical to a String containing U+0065 LATIN SMALL LETTER E
@@ -1274,7 +1536,7 @@ When content flows into the closing delimiter on its source line, no structural 
 
 ```js
 """one
-
+       
 two"""
 ```
 
@@ -1906,7 +2168,7 @@ a == b  =>  a.hash == b.hash
 therefore remains a programmer-facing contract required for conventional map
 semantics, not a license for implementations to choose arbitrary behavior when
 it is violated. The same is true of the recommendation that a stored key's
-relevant equality/hash behavior remain stable.
+relevant equality/hash behavior remain stable while it is stored.
 
 Core does not prohibit mutable objects from being keys, does not implicitly
 freeze keys, and does not require hidden mutation tracking. Implementations may
@@ -2111,8 +2373,8 @@ For the standard `Map` and `IdentityMap` indexed-update protocols,
 after the update succeeds.
 
 This result is independent of whether the operation inserted a new entry or
-updated an existing entry. It does not return the previous mapped value and does
-not use `null`, a hidden sentinel, or another absence marker to distinguish
+updated an existing entry. It does not return the previous mapped value and
+does not use `null`, a hidden sentinel, or another absence marker to distinguish
 insertion from replacement.
 
 Consequently an explicit ordinary message send:
