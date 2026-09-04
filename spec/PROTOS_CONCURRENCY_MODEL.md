@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 249
+Document revision: 250
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -3945,9 +3945,9 @@ all relevant child authorities complete, the parent authority may be
 reconstituted according to the eventual partition API.
 
 For Core byte regions, representation, validation, recomposition, and public
-surface are closed by §§71.18-71.20 below. Generic writable partitioning for
-Array or arbitrary object graphs remains open and is not implied by the byte
-mechanism.
+surface are closed by §§71.18-71.20 below. Generic writable partitioning for Array or arbitrary object graphs is not
+part of Core v0.1, as closed explicitly by §71.5A; the byte mechanism does
+not imply such authority.
 
 ### 71.5A No generic writable graph partitioning in Core
 
@@ -4258,8 +4258,8 @@ placement, discovery, delivery, and failure semantics on fine-grained
 parallel computation.
 
 A future explicit remote-compute facility may reuse compatible value and
-isolation rules, but remote placement is not implied by the existence of
-parallel execution and remains open.
+isolation rules, but Core remote placement is excluded by §71.9A rather than
+left to implementation choice.
 
 ### 71.9A Core P is process-local
 
@@ -4650,8 +4650,9 @@ over arbitrary P state. Disjoint commits have no added total order. Recursive
 value. It moves only through the dedicated region operation that defines the
 authority transfer.
 
-Core deliberately leaves generic writable Array/object partitioning open because
-disjoint indexes do not prove disjoint mutable reachable graphs.
+Core v0.1 deliberately excludes generic writable Array/object partitioning,
+as closed by §71.5A, because disjoint indexes do not prove disjoint mutable
+reachable graphs.
 
 ## 72. Standard Prelude Sharing
 

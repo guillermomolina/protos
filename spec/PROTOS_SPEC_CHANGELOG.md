@@ -4,6 +4,22 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.250] - 2026-09-04
+
+### Fixed
+- Reconciled §71.5 with §71.5A so generic writable Array/object partitioning is described as excluded from Core v0.1 rather than open.
+- Reconciled §71.9 with §71.9A so remote execution of Core P is described as excluded rather than open or implementation-selectable.
+- Reconciled §71.20 with §71.5A so byte-region closure no longer says generic writable Array/object partitioning remains open.
+- Made no new concurrency design decision; this revision only removes stale
+  open-state wording that contradicted already-closed §71.5A and §71.9A
+  semantics.
+
+### Changed
+- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 250.
+
 ## [0.1.249] - 2026-09-04
 
 ### Fixed
