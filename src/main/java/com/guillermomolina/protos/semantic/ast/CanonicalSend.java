@@ -18,8 +18,19 @@
 package com.guillermomolina.protos.semantic.ast;
 
 import com.guillermomolina.protos.source.SourceSpan;
+import java.util.List;
+import java.util.Objects;
 
-public sealed interface CanonicalExpression
-        permits CanonicalLiteral, CanonicalLookup, CanonicalMember, CanonicalSend, CanonicalSequence {
-    SourceSpan span();
+public record CanonicalSend(
+        CanonicalExpression receiver,
+        String message,
+        List<CanonicalExpression> arguments,
+        SourceSpan span)
+        implements CanonicalExpression {
+    public CanonicalSend {
+        Objects.requireNonNull(receiver, "receiver");
+        Objects.requireNonNull(message, "message");
+        arguments = List.copyOf(Objects.requireNonNull(arguments, "arguments"));
+        Objects.requireNonNull(span, "span");
+    }
 }

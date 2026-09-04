@@ -23,10 +23,12 @@ import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
 import com.guillermomolina.protos.parser.ast.SurfaceMember;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
+import com.guillermomolina.protos.parser.ast.SurfaceUnary;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalMember;
+import com.guillermomolina.protos.semantic.ast.CanonicalSend;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import java.util.List;
 
@@ -40,6 +42,7 @@ public final class Canonicalizer {
             case SurfaceMember member ->
                     new CanonicalMember(
                             canonicalize(member.receiver()), member.name(), member.span());
+            case SurfaceUnary unary -> lowerUnary(unary);
             case SurfaceSequence sequence ->
                     new CanonicalSequence(canonicalizeAll(sequence.expressions()), sequence.span());
             default ->
@@ -47,6 +50,18 @@ public final class Canonicalizer {
                             "Surface expression is not supported by this canonicalizer slice: "
                                     + expression.getClass().getSimpleName());
         };
+    }
+
+    private CanonicalExpression lowerUnary(SurfaceUnary unary) {
+        String message = switch (unary.operator()) {
+            case "-" -> "negated";
+            case "!" -> "not";
+            default -> throw new IllegalArgumentException(
+                    "Unsupported unary operator: " + unary.operator());
+        };
+
+        return new CanonicalSend(
+                canonicalize(unary.operand()), message, List.of(), unary.span());
     }
 
     private List<CanonicalExpression> canonicalizeAll(List<SurfaceExpression> expressions) {
