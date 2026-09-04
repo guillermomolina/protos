@@ -4,6 +4,16 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## 0.2.60-SNAPSHOT
+
+### Added
+- Implemented I005 Standard Map: Map(), at, atPut, containsKey, remove, size, insertion-order each, semantic receiver-domain checks, recorded hashes and query-key equality.
+- Added Map-required standard hash behavior for ordinary objects, Numbers and Strings.
+- Set remains explicitly out of scope.
+
+### Notes
+- No normative specification revision is changed.
+
 ## [0.2.59-SNAPSHOT] - 2026-09-04
 
 ### Added

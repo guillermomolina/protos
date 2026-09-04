@@ -146,6 +146,9 @@ public final class ProtosPrelude {
         return arrayPrototype;
     }
 
+    public ProtosObjectValue mapPrototype() { return requiredOrdinaryBinding("Map"); }
+    public ProtosMapValue newMap() { return new ProtosMapValue(mapPrototype()); }
+
     public ProtosArrayValue newArray(java.util.List<?> elements) {
         return new ProtosArrayValue(arrayPrototype(), elements);
     }

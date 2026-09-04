@@ -101,6 +101,9 @@ public final class ProtosCoreBootstrap {
         sourceLoader
                 .load(coreDirectory.resolve("string.protos"))
                 .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("map.protos"))
+                .call(bootstrapActivation);
 
         Object contextBinding =
                 bootstrapContext
@@ -143,6 +146,8 @@ public final class ProtosCoreBootstrap {
         ProtosObjectValue int64Prototype =
                 requirePrototype(bootstrapContext, "Int64", integerPrototype);
         ProtosStandardNumberEqualityProtocol.install(numberPrototype);
+        ProtosStandardHashSupport.installObjectHash();
+        ProtosStandardHashSupport.installNumberHash(numberPrototype);
         ProtosStandardIntegerProtocol.install(integerPrototype);
         ProtosStandardFloatProtocol.install(floatPrototype);
         ProtosStandardNumericConversionProtocol.install(integerPrototype, floatPrototype, uInt8Prototype, int8Prototype, uInt16Prototype, int16Prototype, uInt32Prototype, int32Prototype, uInt64Prototype, int64Prototype);
@@ -206,6 +211,9 @@ public final class ProtosCoreBootstrap {
                 requirePrototype(
                         bootstrapContext, "String", ProtosObjectValue.rootObject());
         ProtosStandardStringProtocol.install(stringPrototype);
+        ProtosStandardHashSupport.installStringHash(stringPrototype);
+        ProtosObjectValue mapPrototype = requirePrototype(bootstrapContext, "Map", ProtosObjectValue.rootObject());
+        ProtosStandardMapProtocol.install(mapPrototype);
 
         ProtosObjectValue preludeBindings =
                 new ProtosObjectValue(contextPrototype);
@@ -227,6 +235,7 @@ public final class ProtosCoreBootstrap {
         ProtosCoreErrorTaxonomy.exportBindings(bootstrapContext, preludeBindings);
         preludeBindings.createLocalSlot("Array", arrayPrototype);
         preludeBindings.createLocalSlot("String", stringPrototype);
+        preludeBindings.createLocalSlot("Map", mapPrototype);
         preludeBindings.freeze();
 
         return new ProtosPrelude(preludeBindings, contextPrototype);
