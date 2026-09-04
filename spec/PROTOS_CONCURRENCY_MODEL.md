@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 292
+Document revision: 293
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -1055,6 +1055,72 @@ SendOperation.
 The underlying transport may be in-process, shared memory, IPC, TCP,
 QUIC, or another transport without changing the Actor communication
 semantics.
+
+## 20A. Same-Host and Shared-Memory Transport Are Semantically Invisible
+
+**CLOSED**
+
+Core v0.1 does not define a separate communication semantic universe for Actors
+that happen to reside in different Processes on the same physical host.
+
+Same-host placement may permit optimized transport, including shared memory,
+memory mapping, page remapping, zero-copy representations, shared immutable
+backing, local IPC, or equivalent mechanisms. These are physical transport
+choices only.
+
+The observable contract remains the ordinary Actor communication contract:
+
+```text
+sender value graph
+    -> logical snapshot at the normative snapshot point
+    -> ordinary transferability validation
+    -> routing/admission/acceptance
+    -> destination-local value graph/capability view
+```
+
+A same-host optimization must therefore preserve all existing semantics,
+including:
+
+- no shared mutable Protos identity between Actors;
+- the same logical message snapshot;
+- the same graph aliasing/cycle preservation rules;
+- the same transferability and `NonTransferableValue` behavior;
+- the same sender identity and FIFO guarantees;
+- the same backpressure and acceptance boundaries;
+- the same cancellation, uncertainty, failure, and Actor-death behavior;
+- the same ActorRef/GroupRef capability semantics;
+- the same message/reply publication rules.
+
+Physical shared-memory eligibility is not a portable property of a value. Core
+defines no `isSharedMemoryTransferable`, pinning API, locality predicate, backing
+allocation identity, page identity, zero-copy flag, or same-host transport
+requirement.
+
+The runtime may choose shared-memory transport only when it can preserve the
+ordinary logical transfer semantics. If it cannot do so for a particular value,
+resource, topology, runtime state, or security boundary, it must use another
+representation or transport rather than weakening the semantics.
+
+The lifecycle of physical shared-memory artifacts is likewise not a Core
+semantic surface. Segment creation, mapping, reference counting, reclamation,
+unmapping, handle duplication, file-descriptor passing, page lifetime, cache
+coherence, and equivalent implementation machinery must not be observable as
+additional Protos identities, capabilities, or lifetime guarantees.
+
+In particular, destination lifetime must not depend on keeping the sender's
+mutable object alive, and sender mutation after the snapshot must not become
+observable merely because both sides still reference one physical backing
+allocation internally.
+
+Transport switching is also permitted. A runtime may move between in-process,
+shared-memory, IPC, or network transport during the lifetime of runtime entities
+when every observable Actor semantic remains unchanged. A switch must not reset
+sender FIFO, duplicate accepted operations, erase uncertainty, change identity,
+or alter snapshot semantics.
+
+This section closes the former open ledger items `Cross-process same-host
+optimization` and `Shared-memory transport eligibility and lifecycle`. Exact
+transport implementation and selection policy remain implementation concerns.
 
 ## 21. Mailbox Bounds
 
@@ -6130,8 +6196,6 @@ mechanism, or implementation detail that still requires design.
 -   GroupRef persistence/serialization and capability semantics, if any
 -   Service discovery implementation
 -   Physical-locality discovery
--   Cross-process same-host optimization
--   Shared-memory transport eligibility and lifecycle
 -   Transport selection and switching
 -   Message serialization format
 -   Serialization versioning

@@ -4,6 +4,31 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.293] - 2026-09-04
+
+### Closed
+- Closed `Cross-process same-host optimization` and `Shared-memory transport
+  eligibility and lifecycle`.
+- Defined same-host/shared-memory transport as an implementation optimization
+  that must preserve ordinary Actor pass-by-value/snapshot semantics.
+- Required identical transferability, aliasing/cycle, sender-ordering,
+  backpressure, acceptance, cancellation, uncertainty, failure, and capability
+  behavior regardless of physical transport.
+- Prohibited shared-memory eligibility, pinning, backing-allocation identity,
+  zero-copy state, or same-host placement from becoming portable Core
+  observations.
+- Defined shared-memory segment/mapping/reclamation/handle/page lifecycle as
+  non-semantic implementation machinery.
+- Permitted transport switching only when it preserves the same Actor-observable
+  semantics without resetting ordering, duplicating accepted work, changing
+  identity, or erasing uncertainty.
+- Removed both corresponding items from Open Design Topics.
+
+### Changed
+- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  293.
+
 ## [0.1.292] - 2026-09-04
 
 ### Fixed
