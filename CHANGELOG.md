@@ -4,6 +4,38 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.41-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added the first end-to-end Protos language conformance harness.
+- Added executable `.protos` conformance programs under
+  `protos/tests/conformance/`, keeping the language test corpus independent from
+  the Java/Maven resource layout.
+- Added an external tab-separated expectation manifest so conformance assertions
+  remain outside the Protos language itself.
+- Added P57 Integer conformance programs covering small arithmetic, negative
+  results, arbitrary-precision overflow boundaries, unary negation, and
+  mixed-family Error cases.
+- Conformance programs execute through `ProtosSourceFileLoader`, the normal
+  source compiler/lowering/runtime path, and a freshly bootstrapped Core prelude.
+- Project implementation version changed from `0.2.40-SNAPSHOT` to
+  `0.2.41-SNAPSHOT`.
+
+### Notes
+
+- The JUnit runner remains under `src/test/java`, but the Protos conformance
+  corpus is intentionally implementation-layout-independent under `protos/tests`.
+- Existing Java unit/integration tests remain valuable for implementation
+  invariants; Protos conformance tests complement rather than replace them.
+- No test-only Protos syntax, assertion primitive, privileged test object, or
+  standard-library testing API is introduced.
+- Future observable language slices should add `.protos` conformance programs
+  when their behavior can be expressed through the executable language surface.
+- D027/B003 remains untouched.
+- No normative specification change is introduced.
+
+
 ## [0.2.40-SNAPSHOT] - 2026-09-04
 
 ### Added

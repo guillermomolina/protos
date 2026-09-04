@@ -1,0 +1,11 @@
+# path	expectation	expected
+integer/add-small.protos	integer	2
+integer/subtract-negative.protos	integer	-2
+integer/multiply.protos	integer	440
+integer/add-beyond-int64.protos	integer	9223372036854775808
+integer/multiply-big.protos	integer	999999999999999999999998000000000000000000000001
+integer/negated.protos	integer	-123
+integer/double-negated.protos	integer	123
+integer/mixed-add-error.protos	error	-
+integer/mixed-subtract-error.protos	error	-
+integer/mixed-multiply-error.protos	error	-
