@@ -55,7 +55,7 @@ unresolved observable case: the result of an empty `Sequence`.
 
 ## B003 — Delegation parent / lookup chain of canonical Boolean values
 
-Status: BLOCKED
+Status: CLOSED
 
 Implementation area:
 Standard prototype/delegation bridge for the canonical `true` and `false` runtime
@@ -63,11 +63,9 @@ representations, including ordinary member lookup and polymorphic invocation
 through their delegation chains.
 
 Normative dependency:
-Core fixes `true` and `false` as the only semantic Boolean values and defines
-their standard Boolean-family protocol, but the implementation must not choose
-their immediate delegation parent or introduce a `Boolean` prototype merely as
-an implementation convenience. D027 owns the normative closure of that object
-model relationship.
+D027 closed the portable Core topology. Canonical `true` and canonical `false`
+delegate directly to the unique root `Object`; Core v0.1 defines no standard
+prelude binding, object, or prototype named `Boolean`.
 
 Specification authority:
 - `spec/semantics/OBJECT_MODEL.md`
@@ -79,13 +77,21 @@ delegation parent / ordinary lookup chain of canonical `true` and `false`,
 including whether any standard Boolean prototype object exists.
 
 Current consequence:
-The standard value-prototype bridge deliberately excludes `true` and `false`.
-No fallback to `Object`, synthetic `Boolean` prototype, or hidden host dispatch
-is permitted while this blocker remains open.
+Implemented. The runtime value-lookup bridge maps both canonical Boolean host
+singletons directly to `Object` for ordinary lookup. Inherited Object behavior
+therefore preserves the original canonical Boolean receiver during dispatch,
+and polymorphic invocation follows the same ordinary lookup path. No synthetic
+or Protos-visible `Boolean` prototype is introduced.
 
 Independent work:
 Numeric and other value families whose standard prototype/delegation hierarchy
 is already normatively closed may continue independently.
+
+History:
+B003 was originally `BLOCKED` while D027 still owned the unresolved parent
+topology. Once D027 closed that topology, the blocker became logically `READY`.
+This implementation completes the previously excluded Boolean bridge, so the
+final transition is `BLOCKED -> READY -> CLOSED`.
 
 ## B002 — Delegation parent of `without` / `alias` result objects
 

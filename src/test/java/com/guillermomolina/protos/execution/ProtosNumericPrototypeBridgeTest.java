@@ -17,14 +17,19 @@
 
 package com.guillermomolina.protos.execution;
 
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Path;
@@ -142,4 +147,51 @@ class ProtosNumericPrototypeBridgeTest {
         return new ProtosCoreBootstrap()
                 .bootstrap(Path.of("protos", "lib", "core"));
     }
+
+    @Test
+    void canonicalBooleansLookupDirectlyThroughObjectWithoutBooleanPrototype() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        Object inheritedCall =
+                ProtosObjectValue.rootObject().readLocalSlot("call").orElseThrow();
+
+        assertSame(
+                inheritedCall,
+                ProtosValueLookup.lookup(ProtosBooleanValue.TRUE, "call", prelude)
+                        .orElseThrow()
+                        .value());
+        assertSame(
+                ProtosObjectValue.rootObject(),
+                ProtosValueLookup.lookup(ProtosBooleanValue.TRUE, "call", prelude)
+                        .orElseThrow()
+                        .home());
+        assertSame(
+                inheritedCall,
+                ProtosValueLookup.lookup(ProtosBooleanValue.FALSE, "call", prelude)
+                        .orElseThrow()
+                        .value());
+        assertSame(
+                ProtosObjectValue.rootObject(),
+                ProtosValueLookup.lookup(ProtosBooleanValue.FALSE, "call", prelude)
+                        .orElseThrow()
+                        .home());
+
+        assertFalse(prelude.bindings().hasLocalSlot("Boolean"));
+    }
+
+    @Test
+    void canonicalBooleanPolymorphicInvocationUsesInheritedObjectCall() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        ProtosActivation activation = prelude.newModuleActivation();
+
+        assertThrows(
+                ProtosSignalException.class,
+                () -> ProtosInvocation.invoke(
+                        ProtosBooleanValue.TRUE, java.util.List.of(), activation));
+        assertThrows(
+                ProtosSignalException.class,
+                () -> ProtosInvocation.invoke(
+                        ProtosBooleanValue.FALSE, java.util.List.of(), activation));
+    }
+
+
 }

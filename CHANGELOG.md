@@ -4,6 +4,28 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.47-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Implemented the canonical Boolean delegation bridge: represented `true` and
+  `false` now continue ordinary lookup directly through `Object`.
+- Added regression coverage for inherited Object lookup, original-receiver
+  dispatch through polymorphic invocation, and absence of a standard `Boolean`
+  prelude prototype.
+- Closed implementation blocker B003 after D027 normatively fixed the Boolean
+  parent topology.
+- Project implementation version changed from `0.2.46-SNAPSHOT` to
+  `0.2.47-SNAPSHOT`.
+
+### Notes
+
+- Canonical Booleans remain the existing host singleton representations
+  `ProtosBooleanValue.TRUE` and `ProtosBooleanValue.FALSE`.
+- No standard `Boolean`, `Value`, or other synthetic Protos-visible ancestor is
+  introduced.
+- No normative specification document or specification revision changed.
+
 ## [0.2.46-SNAPSHOT] - 2026-09-04
 
 ### Fixed

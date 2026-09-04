@@ -49,6 +49,11 @@ public final class ProtosValueLookup {
                 continue;
             }
 
+            if (current instanceof ProtosBooleanValue) {
+                current = ProtosObjectValue.rootObject();
+                continue;
+            }
+
             if (current instanceof ProtosIntegerValue) {
                 if (prelude == null) {
                     throw new UnsupportedOperationException(
