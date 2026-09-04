@@ -55,7 +55,7 @@ public final class Canonicalizer {
     }
 
     private CanonicalExpression lowerBinary(SurfaceBinary binary) {
-        if (isStandardBinaryOperator(binary.operator())) {
+        if (isDeferredStandardBinaryOperator(binary.operator())) {
             throw new IllegalArgumentException(
                     "Standard binary operator is not supported by this canonicalizer slice: "
                             + binary.operator());
@@ -68,10 +68,10 @@ public final class Canonicalizer {
                 binary.span());
     }
 
-    private boolean isStandardBinaryOperator(String operator) {
+    private boolean isDeferredStandardBinaryOperator(String operator) {
         return switch (operator) {
             case "||", "&&", "==", "!=", "===", "!==",
-                    "<", "<=", ">", ">=", "+", "-", "*", "/", "%" -> true;
+                    "<", "<=", ">", ">=" -> true;
             default -> false;
         };
     }
