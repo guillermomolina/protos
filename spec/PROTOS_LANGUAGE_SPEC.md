@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 264
+Document revision: 265
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -4341,10 +4341,13 @@ Because `String` is immutable, operations that conceptually modify text produce 
 ```js
 text.uppercase()
 text.replace("a", "b")
-text + other
+text + otherString
 ```
 
-Efficient incremental text construction belongs to separate mutable objects such as `StringBuilder` or equivalent buffer-oriented abstractions.
+Here `otherString` denotes another semantic String value. The standard
+String-family `+` operation does not accept an arbitrary non-String object.
+
+Efficient incremental text construction may be provided by separate mutable library objects or buffer-oriented abstractions. Core v0.1 does not standardize a `StringBuilder` binding, prototype, constructor, or protocol.
 
 `Bytes` is a mutable raw byte sequence by default. Indexed access therefore naturally follows the existing protocol:
 

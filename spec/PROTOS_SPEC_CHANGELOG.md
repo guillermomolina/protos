@@ -4,6 +4,22 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.265] - 2026-09-04
+
+### Fixed
+- Reconciled the remaining generic `text + other` String example with the
+  strict standard String concatenation rule by making the right operand
+  explicitly another semantic String.
+- Clarified that standard String `+` does not accept an arbitrary non-String
+  object merely because an earlier illustrative variable name was generic.
+- Removed the accidental implication that `StringBuilder` is a standardized
+  Core v0.1 binding/prototype/protocol; efficient mutable text builders remain
+  ordinary library abstractions unless explicitly standardized later.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 265.
+  Only `PROTOS_LANGUAGE_SPEC.md` gains normative clarification in this revision.
+
 ## [0.1.264] - 2026-09-04
 
 ### Closed
