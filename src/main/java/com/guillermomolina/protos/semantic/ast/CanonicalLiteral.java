@@ -17,12 +17,19 @@
 
 package com.guillermomolina.protos.semantic.ast;
 
-import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
 import com.guillermomolina.protos.source.SourceSpan;
 import java.util.Objects;
 
-public record CanonicalLiteral(SurfaceLiteral.Kind kind, String value, SourceSpan span)
+public record CanonicalLiteral(Kind kind, String value, SourceSpan span)
         implements CanonicalExpression {
+    public enum Kind {
+        NUMBER,
+        STRING,
+        TRUE,
+        FALSE,
+        NULL
+    }
+
     public CanonicalLiteral {
         Objects.requireNonNull(kind, "kind");
         Objects.requireNonNull(value, "value");

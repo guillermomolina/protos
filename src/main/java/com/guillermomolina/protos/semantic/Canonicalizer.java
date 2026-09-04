@@ -61,8 +61,7 @@ import java.util.List;
 public final class Canonicalizer {
     public CanonicalExpression canonicalize(SurfaceExpression expression) {
         return switch (expression) {
-            case SurfaceLiteral literal ->
-                    new CanonicalLiteral(literal.kind(), literal.value(), literal.span());
+            case SurfaceLiteral literal -> lowerLiteral(literal);
             case SurfaceName name -> new CanonicalLookup(name.name(), name.span());
             case SurfaceGroup group -> canonicalize(group.expression());
             case SurfaceIndex index -> lowerIndex(index);
@@ -88,6 +87,17 @@ public final class Canonicalizer {
                             "Surface expression is not supported by this canonicalizer slice: "
                                     + expression.getClass().getSimpleName());
         };
+    }
+
+    private CanonicalExpression lowerLiteral(SurfaceLiteral literal) {
+        CanonicalLiteral.Kind kind = switch (literal.kind()) {
+            case NUMBER -> CanonicalLiteral.Kind.NUMBER;
+            case STRING -> CanonicalLiteral.Kind.STRING;
+            case TRUE -> CanonicalLiteral.Kind.TRUE;
+            case FALSE -> CanonicalLiteral.Kind.FALSE;
+            case NULL -> CanonicalLiteral.Kind.NULL;
+        };
+        return new CanonicalLiteral(kind, literal.value(), literal.span());
     }
 
     private CanonicalExpression lowerSuperSend(SurfaceSuperSend superSend) {

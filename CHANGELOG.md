@@ -58,6 +58,7 @@ For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_
 
 ### Changed
 
+- Decoupled canonical literal kinds from parser surface literal kinds with an explicit Surface-to-Canonical mapping.
 - Corrected malformed parser imports introduced by slot-creation and assignment support.
 - Restored the canonical NEWLINE token value after adding source-aware token occurrences.
 - Fixed source-aware newline token occurrence emission so canonical NEWLINE lexemes remain valid Java Strings.
