@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 315
+Document revision: 316
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2445,83 +2445,16 @@ Suspending an activation does not imply blocking an OS thread.
 
 # 34. Future Composition
 
-For:
+The normative semantics of `Future.then(...)` are owned by
+`PROTOS_CONCURRENCY_MODEL.md` under `Future then() continuations`, together with
+the Future-resolution/adoption rules referenced by that contract.
 
-```js
-future.then(value => {
-    transform(value)
-})
-```
-
-conceptually:
-
-```text
-function futureThen(source, transformClosure, callerActivation):
-    destination = new Future(
-        state = pending
-    )
-
-    continuationTask = scheduler.createTask(
-        owner = callerActivation,
-        body = () => {
-            switch source.state:
-                case failed:
-                    failFuture(
-                        destination,
-                        source.error
-                    )
-                    return
-
-                case cancelled:
-                    if destination.state == pending:
-                        destination.state = cancelled
-                        wakeWaiters(destination)
-                    return
-
-                case resolved:
-                    try:
-                        transformed = invoke(
-                            transformClosure,
-                            [source.value]
-                        )
-
-                        resolveFuture(
-                            destination,
-                            transformed
-                        )
-
-                    catch error:
-                        failFuture(
-                            destination,
-                            error
-                        )
-
-                case pending:
-                    signal InvalidFutureContinuationState()
-        }
-    )
-
-    destination.task = continuationTask
-    continuationTask.future = destination
-
-    registerChildTask(
-        callerActivation,
-        continuationTask
-    )
-
-    onFutureCompletion(source, terminalResult => {
-        // Runtime bookkeeping only. This callback must not invoke Protos code.
-        scheduler.makeRunnableLater(
-            continuationTask
-        )
-    })
-
-    // Even if source was already terminal, makeRunnableLater must not run the
-    // continuation inline in this call.
-    return destination
-```
-
-If `transformed` is itself a Future, `resolveFuture` adopts it and flattens the result.
+A runtime may represent continuation eligibility, dependency observation,
+runnable queues, task records, callbacks, or equivalent machinery in any way
+that preserves the owning contract. This runtime-semantics document does not
+define a second conceptual `futureThen` algorithm or an additional observable
+ownership, scheduling, propagation, flattening, cancellation, detachment, or
+ordering rule.
 
 ---
 

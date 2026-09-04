@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 315
+Document revision: 316
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -2119,52 +2119,23 @@ otherwise.
 
 ## 30. Future Composition
 
-A Future supports transformation:
+Core v0.1 standardizes the ordinary Future transformation operation:
 
-```js
-future.then(value => {
-    transform(value)
-})
+```text
+future.then(transform)
+    -> Future
 ```
 
-`then` returns another Future.
+`then` is an ordinary message on a Future value and introduces no new syntax or
+executable value kind. Its normative continuation-task ownership, execution
+domain, scheduling, source-outcome propagation, flattening, cancellation,
+detachment, and ordering semantics are owned by
+`PROTOS_CONCURRENCY_MODEL.md` under `Future then() continuations`.
 
-Calling `then` creates a distinct continuation task and its destination Future. That
-continuation is asynchronous work created by the activation that calls `then`, so
-the ordinary structured-concurrency ownership rule applies to it: unless detached,
-the continuation task belongs to that calling activation.
-
-`then` itself does not invoke the transformation closure. Source completion only
-makes the continuation eligible to run. The transformation closure executes later
-as ordinary task work in the Actor/execution domain of the activation that called
-`then`; it never executes as an inline or reentrant consequence of completing the
-source Future, including when the source Future was already terminal when `then`
-was called.
-
-When the continuation runs:
-
-- if the source Future is resolved, the transformation closure is invoked with the
-  resolved value;
-- if the source Future is failed, the transformation closure is not invoked and
-  the destination Future fails with the same error;
-- if the source Future is cancelled, the transformation closure is not invoked
-  and the destination Future becomes cancelled.
-
-If the closure returns an ordinary value, the resulting Future resolves with it.
-
-If the closure returns another Future, the result is automatically flattened rather
-than producing a nested Future.
-
-Cancellation and detachment apply to the continuation independently of the source
-Future. Cancelling the destination Future requests cancellation of the continuation
-task but does not cancel or otherwise alter the source Future. Detaching the
-destination Future detaches only the continuation task from its structured owner;
-it does not detach or otherwise alter the source Future.
-
-These rules do not impose a global ordering among independent continuations.
-They require only that a `then` transformation never run before its source Future
-is terminal and never run inline as part of the `then` call or source-completion
-transition.
+Automatic flattening continues to use the ordinary Future-resolution/adoption
+semantics owned by the concurrency model. General invocation and object-model
+rules from this language specification continue to apply to the transformation
+Closure where referenced by that contract.
 
 ### Waiting for multiple Futures
 

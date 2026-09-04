@@ -8,6 +8,32 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.316] - 2026-09-04
+
+### Changed
+- Continued canonicalization of duplicated normative authority under the
+  one-primary-owner discipline.
+- Made the `Future then() continuations` section of
+  `PROTOS_CONCURRENCY_MODEL.md` the explicit primary normative owner of
+  `Future.then(transform) -> Future` concurrency-domain semantics.
+- Replaced the duplicated full `Future.then(...)` contract in
+  `PROTOS_LANGUAGE_SPEC.md` with a compact language-surface and cross-domain
+  integration reference.
+- Removed the duplicate conceptual `futureThen` algorithm from
+  `PROTOS_RUNTIME_SEMANTICS.md`; runtime continuation machinery remains free
+  subject to the owning concurrency contract.
+- Kept `Future.all(...)`, Future observation, cancellation, detachment,
+  structured ownership, and general Future resolution/adoption outside this
+  migration unit so their ownership can be canonicalized independently.
+
+### Documentation
+- This revision changes specification ownership and removes duplicate authority;
+  it does not intentionally change observable Protos behavior.
+- Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
+  `PROTOS_CONCURRENCY_MODEL.md` to document revision 316.
+- `PROTOS_GRAMMAR.md` and `PROTOS_IO_MODEL.md` are unaffected and remain
+  byte-for-byte unchanged.
+
 ## [0.1.315] - 2026-09-04
 
 ### Changed

@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 315
+Document revision: 316
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -288,6 +288,9 @@ indefinitely, the same Map may remain mutation-restricted indefinitely; this
 does not prevent unrelated Actor-local work or operations on unrelated Maps.
 
 ### Future `then()` continuations
+
+This section is the primary normative owner of the Core v0.1
+`Future.then(transform) -> Future` concurrency-domain semantics.
 
 A call to `future.then(transform)` creates a distinct continuation task and a
 destination Future. The continuation is asynchronous work created by the
