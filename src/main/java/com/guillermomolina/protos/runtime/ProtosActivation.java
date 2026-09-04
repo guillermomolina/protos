@@ -27,13 +27,14 @@ public final class ProtosActivation {
     private final Object receiver;
     private final ProtosPrelude prelude;
     private final ProtosArrayValue arguments;
+    private final ProtosReturnHome returnHome;
     private final boolean construction;
 
     public ProtosActivation(
             ProtosObjectValue context,
             List<ProtosObjectValue> capturedLexicalContexts,
             Object receiver) {
-        this(context, capturedLexicalContexts, receiver, null, null, false);
+        this(context, capturedLexicalContexts, receiver, null, null, null, false);
     }
 
     static ProtosActivation withPrelude(
@@ -47,6 +48,22 @@ public final class ProtosActivation {
                 receiver,
                 Objects.requireNonNull(prelude, "prelude"),
                 null,
+                null,
+                false);
+    }
+
+    public static ProtosActivation withReturnHome(
+            ProtosObjectValue context,
+            List<ProtosObjectValue> capturedLexicalContexts,
+            Object receiver,
+            ProtosReturnHome returnHome) {
+        return new ProtosActivation(
+                context,
+                capturedLexicalContexts,
+                receiver,
+                null,
+                null,
+                Objects.requireNonNull(returnHome, "returnHome"),
                 false);
     }
 
@@ -56,6 +73,7 @@ public final class ProtosActivation {
             Object receiver,
             ProtosPrelude prelude,
             ProtosArrayValue arguments,
+            ProtosReturnHome returnHome,
             boolean construction) {
         this.context = Objects.requireNonNull(context, "context");
         this.capturedLexicalContexts =
@@ -64,6 +82,7 @@ public final class ProtosActivation {
         this.receiver = Objects.requireNonNull(receiver, "receiver");
         this.prelude = prelude;
         this.arguments = arguments;
+        this.returnHome = returnHome;
         this.construction = construction;
     }
 
@@ -78,6 +97,7 @@ public final class ProtosActivation {
                 object,
                 enclosing.prelude,
                 null,
+                enclosing.returnHome,
                 true);
     }
 
@@ -99,6 +119,10 @@ public final class ProtosActivation {
 
     public Optional<ProtosArrayValue> arguments() {
         return Optional.ofNullable(arguments);
+    }
+
+    public Optional<ProtosReturnHome> returnHome() {
+        return Optional.ofNullable(returnHome);
     }
 
     public List<ProtosObjectValue> lexicalContextsForClosureCapture() {

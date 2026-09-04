@@ -4,6 +4,39 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.19-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added `ProtosReturnHome`, an implementation-private identity object with
+  explicit active/completed lifecycle state for callable non-local return
+  ownership.
+- `ProtosActivation` can now carry an optional lexical return home, and object
+  construction preserves the enclosing home.
+- `ProtosClosureValue` now captures and preserves the exact lexical return home,
+  including across extracted-method binding.
+
+### Changed
+
+- Closure literal materialization now records the current activation's return
+  home when one exists.
+- Project implementation version changed from `0.2.18-SNAPSHOT` to
+  `0.2.19-SNAPSHOT`.
+
+### Tests
+
+- Added focused return-home lifecycle and object-construction propagation
+  coverage.
+
+### Notes
+
+- This increment does not yet execute `^`, create callable activations, or
+  establish fresh invocation return homes.
+- It does not add activation-level `methodHome`; `super` activation state remains
+  a separate subsequent slice.
+- No normative specification change is introduced.
+
+
 ## [0.2.18-SNAPSHOT] - 2026-09-04
 
 ### Added

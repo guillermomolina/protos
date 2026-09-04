@@ -26,19 +26,34 @@ public final class ProtosClosureValue {
     private final List<ProtosObjectValue> capturedLexicalContexts;
     private final Object capturedReceiver;
     private final ProtosObjectValue methodHome;
+    private final ProtosReturnHome returnHome;
 
     public ProtosClosureValue(
             CanonicalClosure definition,
             List<ProtosObjectValue> capturedLexicalContexts,
             Object capturedReceiver) {
-        this(definition, capturedLexicalContexts, capturedReceiver, null);
+        this(definition, capturedLexicalContexts, capturedReceiver, null, null);
+    }
+
+    public ProtosClosureValue(
+            CanonicalClosure definition,
+            List<ProtosObjectValue> capturedLexicalContexts,
+            Object capturedReceiver,
+            ProtosReturnHome returnHome) {
+        this(
+                definition,
+                capturedLexicalContexts,
+                capturedReceiver,
+                null,
+                returnHome);
     }
 
     private ProtosClosureValue(
             CanonicalClosure definition,
             List<ProtosObjectValue> capturedLexicalContexts,
             Object capturedReceiver,
-            ProtosObjectValue methodHome) {
+            ProtosObjectValue methodHome,
+            ProtosReturnHome returnHome) {
         this.definition = Objects.requireNonNull(definition, "definition");
         this.capturedLexicalContexts =
                 List.copyOf(
@@ -48,6 +63,7 @@ public final class ProtosClosureValue {
         this.capturedReceiver =
                 Objects.requireNonNull(capturedReceiver, "capturedReceiver");
         this.methodHome = methodHome;
+        this.returnHome = returnHome;
     }
 
     public CanonicalClosure definition() {
@@ -66,6 +82,10 @@ public final class ProtosClosureValue {
         return java.util.Optional.ofNullable(methodHome);
     }
 
+    public java.util.Optional<ProtosReturnHome> returnHome() {
+        return java.util.Optional.ofNullable(returnHome);
+    }
+
     public ProtosClosureValue bindMethod(
             Object receiver,
             ProtosObjectValue home) {
@@ -73,6 +93,7 @@ public final class ProtosClosureValue {
                 definition,
                 capturedLexicalContexts,
                 Objects.requireNonNull(receiver, "receiver"),
-                Objects.requireNonNull(home, "home"));
+                Objects.requireNonNull(home, "home"),
+                returnHome);
     }
 }
