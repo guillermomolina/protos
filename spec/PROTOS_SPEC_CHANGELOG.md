@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.310] - 2026-09-04
+
+### Fixed
+- Removed the contradictory statement in isolated-parallel §71.8 that left P
+  cancellation safe points to implementation/API choice.
+- Required P to use the same portable cancellation-observation boundaries as
+  other task-backed asynchronous work, independent of internal Task
+  representation.
+- Made the pre-first-instruction P boundary mandatory when cancellation is
+  already pending.
+- Reaffirmed that method calls, allocations, loop back-edges, JIT/GC safepoints,
+  carrier/worker-pool checks, work-stealing boundaries, SIMD/vectorization
+  boundaries, and host-thread interruption do not create hidden P cancellation
+  observation points.
+- Clarified that CPU-bound P code with no later portable boundary may complete
+  normally after cancellation is requested.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 310.
+  `PROTOS_CONCURRENCY_MODEL.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain normative
+  clarification in this revision.
+
 ## [0.1.309] - 2026-09-04
 
 ### Closed

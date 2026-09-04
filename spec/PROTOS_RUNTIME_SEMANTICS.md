@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 309
+Document revision: 310
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -1914,6 +1914,38 @@ function executeAsFuture(closure, parentActivation):
 ```
 
 The scheduler implementation is not observable semantics.
+
+### Isolated P cancellation uses portable task boundaries
+
+Isolated P execution uses the same semantic cancellation-observation boundaries
+as other task-backed asynchronous work even when an implementation does not
+materialize a distinct internal `Task` object for the P work item.
+
+Conceptually:
+
+```text
+beforeFirstProtosExecution(pWork)
+    -> mandatory cancellation observation
+
+ordinary non-suspending P execution
+    -> no implementation-selected cancellation observation
+
+explicit P-local suspension/resume
+    -> ordinary mandatory cancellation observation
+
+normatively cancellation-aware operation
+    -> may observe according to that operation's contract
+```
+
+Worker-pool polling, carrier interruption, work-stealing boundaries, loop
+back-edges, JIT/GC safepoints, SIMD/vectorization boundaries, and equivalent
+runtime events are not semantic P cancellation points.
+
+Therefore a cancellation request that arrives after P ordinary execution has
+started does not by itself prevent CPU-bound P code with no later portable
+boundary from completing normally. Physical interruption or early abandonment
+is allowed only when observationally equivalent to these rules.
+
 
 ### Future cancellation
 

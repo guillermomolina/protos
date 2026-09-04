@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 309
+Document revision: 310
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -5798,9 +5798,27 @@ according to normal Future error semantics. It does not by itself invoke
 Actor supervision or Actor replacement semantics because the parallel
 work is not an Actor.
 
-Cancellation is cooperative and follows Future structured-concurrency
-rules. The exact safe points and runtime cancellation mechanics remain
-implementation/API details.
+Cancellation is cooperative and follows the same portable Future and
+structured-concurrency observation boundaries as other task-backed asynchronous
+work. P does not introduce implementation-selected cancellation safe points.
+
+Before the first ordinary Protos instruction of newly started P work, a pending
+cancellation request is observed at the mandatory first-execution cancellation
+boundary. After ordinary P execution has begun, cancellation becomes observable
+only at already-defined explicit suspension/resume boundaries or at operations
+whose normative contract is cancellation-aware.
+
+Method calls, allocations, loop back-edges, interpreter/JIT polls, garbage
+collection, carrier time slices, worker-pool checks, work-stealing boundaries,
+SIMD/vectorization boundaries, host-thread interruption, or similar physical
+runtime events do not by themselves create P cancellation observation points.
+
+Consequently, CPU-bound P code that has already begun and reaches no explicit
+suspension or cancellation-aware operation may complete normally despite an
+outstanding cancellation request. A runtime may poll, interrupt, migrate, or
+discard physical work internally only when doing so cannot change which
+Protos-visible cancellation boundary wins or otherwise change the Future's
+specified observable outcome.
 
 If the owning structured context or Actor terminates, outstanding
 parallel child work follows the corresponding Future ownership and
