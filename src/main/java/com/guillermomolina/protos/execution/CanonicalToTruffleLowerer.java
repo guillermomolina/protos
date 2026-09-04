@@ -35,6 +35,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalMember;
 import com.guillermomolina.protos.semantic.ast.CanonicalObject;
 import com.guillermomolina.protos.semantic.ast.CanonicalReturn;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
+import com.guillermomolina.protos.semantic.ast.CanonicalSend;
 import com.guillermomolina.protos.semantic.ast.CanonicalSpread;
 import java.util.Objects;
 
@@ -50,6 +51,9 @@ public final class CanonicalToTruffleLowerer {
         }
         if (expression instanceof CanonicalCall call) {
             return lowerCall(call, false);
+        }
+        if (expression instanceof CanonicalSend send) {
+            return lowerSend(send, false);
         }
         if (expression instanceof CanonicalSequence sequence) {
             return lowerSequence(sequence);
@@ -148,6 +152,9 @@ public final class CanonicalToTruffleLowerer {
         if (expression instanceof CanonicalCall call) {
             return lowerCall(call, true);
         }
+        if (expression instanceof CanonicalSend send) {
+            return lowerSend(send, true);
+        }
         if (expression instanceof CanonicalSequence sequence) {
             ProtosExpressionNode[] expressions =
                     sequence.expressions().stream()
@@ -175,6 +182,40 @@ public final class CanonicalToTruffleLowerer {
         }
         ProtosExpressionNode receiver = callableContext ? lowerCallable(call.receiver()) : lower(call.receiver());
         return new ProtosCallNode(call.span(), receiver, new ProtosArgumentVectorNode(call.span(), items));
+    }
+
+    private ProtosExpressionNode lowerSend(
+            CanonicalSend send,
+            boolean callableContext) {
+        java.util.List<ProtosArgumentItem> items =
+                new java.util.ArrayList<>(send.arguments().size());
+        for (CanonicalExpression argument : send.arguments()) {
+            if (argument instanceof CanonicalSpread spread) {
+                items.add(
+                        new ProtosArgumentItem(
+                                callableContext
+                                        ? lowerCallable(spread.expression())
+                                        : lower(spread.expression()),
+                                true));
+            } else {
+                items.add(
+                        new ProtosArgumentItem(
+                                callableContext
+                                        ? lowerCallable(argument)
+                                        : lower(argument),
+                                false));
+            }
+        }
+
+        ProtosExpressionNode receiver =
+                callableContext
+                        ? lowerCallable(send.receiver())
+                        : lower(send.receiver());
+        return new ProtosSendNode(
+                send.span(),
+                receiver,
+                send.message(),
+                new ProtosArgumentVectorNode(send.span(), items));
     }
 
     private ProtosExpressionNode lowerLiteral(CanonicalLiteral literal) {

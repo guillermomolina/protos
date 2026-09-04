@@ -4,6 +4,33 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.34-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added executable lowering for `CanonicalSend` through a dedicated
+  `ProtosSendNode`.
+- Added direct ordinary message invocation for arbitrary Protos receivers using
+  the existing semantic value lookup bridge, preserving original receiver and
+  physical `methodHome`.
+- Added coverage for local and inherited method sends, argument/spread handling,
+  and missing-message Core Error behavior.
+- Project implementation version changed from `0.2.33-SNAPSHOT` to `0.2.34-SNAPSHOT`.
+
+### Changed
+
+- Callable lowering now recursively supports nested `CanonicalSend` expressions
+  in closure bodies and defaults.
+
+### Notes
+
+- Message send remains ordinary slot lookup plus Closure activation; no parallel
+  host dispatch mechanism is introduced.
+- D027/B003 remains untouched: this change does not choose a parent for
+  canonical `true` or `false` and does not introduce a `Boolean` prototype.
+- No normative specification change is introduced.
+
+
 ## [0.2.33-SNAPSHOT] - 2026-09-04
 
 ### Fixed

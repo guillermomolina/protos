@@ -1,0 +1,117 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+package com.guillermomolina.protos.execution;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
+import java.io.IOException;
+import java.math.BigInteger;
+import java.nio.file.Path;
+import org.junit.jupiter.api.Test;
+
+class ProtosMessageSendExecutionTest {
+    @Test
+    void sourceMemberCallInvokesClosureWithOriginalReceiver() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+
+        Object result =
+                execute(
+                        prelude,
+                        """
+                        Point: {
+                            value: 41
+                            next: () => value
+                        }
+                        Point.next()
+                        """);
+
+        assertEquals(BigInteger.valueOf(41), ((ProtosIntegerValue) result).value());
+    }
+
+    @Test
+    void inheritedMethodUsesDynamicReceiverAndPhysicalMethodHome() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+
+        Object result =
+                execute(
+                        prelude,
+                        """
+                        Parent: {
+                            value: 1
+                            get: () => value
+                        }
+                        Child: Parent {
+                            value: 2
+                        }
+                        Child.get()
+                        """);
+
+        assertEquals(BigInteger.valueOf(2), ((ProtosIntegerValue) result).value());
+    }
+
+    @Test
+    void sendArgumentsEvaluateLeftToRightAndSpreadInPlace() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+
+        Object result =
+                execute(
+                        prelude,
+                        """
+                        Receiver: {
+                            first: null
+                            second: null
+                            capture: (a, b) => {
+                                first = a
+                                second = b
+                                b
+                            }
+                        }
+                        Receiver.capture(1, ...Array(2))
+                        """);
+
+        assertEquals(BigInteger.valueOf(2), ((ProtosIntegerValue) result).value());
+    }
+
+    @Test
+    void missingMessageSignalsCoreError() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        ProtosSignalException signal =
+                assertThrows(
+                        ProtosSignalException.class,
+                        () -> execute(prelude, "({}).missing()"));
+
+        assertSame(prelude.errorPrototype(), signal.error().parent().orElseThrow());
+    }
+
+    private static Object execute(ProtosPrelude prelude, String source) {
+        return new ProtosSourceCompiler()
+                .compile(source)
+                .call(prelude.newModuleActivation());
+    }
+
+    private static ProtosPrelude corePrelude() throws IOException {
+        return new ProtosCoreBootstrap()
+                .bootstrap(Path.of("protos", "lib", "core"));
+    }
+}

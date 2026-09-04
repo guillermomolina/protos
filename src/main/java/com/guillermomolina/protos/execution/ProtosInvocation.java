@@ -49,17 +49,26 @@ public final class ProtosInvocation {
     }
 
     public static Object invokeMessage(
-            ProtosObjectValue receiver, String selector, List<?> supplied, ProtosActivation caller) {
+            Object receiver, String selector, List<?> supplied, ProtosActivation caller) {
         Objects.requireNonNull(receiver, "receiver");
         Objects.requireNonNull(selector, "selector");
         Objects.requireNonNull(supplied, "supplied");
         Objects.requireNonNull(caller, "caller");
-        return invokeSelected(
-                receiver,
-                receiver.lookupSlot(selector).orElseThrow(
-                        () -> new ProtosSignalException(ProtosCoreErrors.newError(caller))),
-                supplied,
-                caller);
+
+        com.guillermomolina.protos.runtime.ProtosPrelude prelude =
+                caller.prelude().orElse(null);
+        ProtosSlotLookupResult selected;
+        try {
+            selected =
+                    ProtosValueLookup.lookup(receiver, selector, prelude)
+                            .orElseThrow(
+                                    () ->
+                                            new ProtosSignalException(
+                                                    ProtosCoreErrors.newError(caller)));
+        } catch (UnsupportedOperationException unsupportedRepresentation) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
+        }
+        return invokeSelected(receiver, selected, supplied, caller);
     }
 
     private static Object invokeSelected(
