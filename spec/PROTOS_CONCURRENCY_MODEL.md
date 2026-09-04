@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 297
+Document revision: 298
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -6247,6 +6247,59 @@ application/service identity for deployment, configuration, observability, or
 ownership` for Core v0.1. External administrative metadata remains permitted but
 non-semantic.
 
+## 72B. Service Discovery Implementation Is Not Core Semantics
+
+**CLOSED**
+
+Core v0.1 defines the observable meaning of discovery identities and rebinding
+where those semantics are already specified, but it does not standardize one
+service-discovery implementation.
+
+A conforming runtime or distributed facility may implement discovery through
+mechanisms such as:
+
+- in-process or per-Process registries;
+- Cluster control state;
+- external registries or naming services;
+- DNS-like systems;
+- orchestrator/service-platform APIs;
+- replicated metadata stores;
+- static configuration;
+- another mechanism that preserves the normative discovery semantics.
+
+The choice of implementation must not change the identity represented by a
+resolved `ActorRef` or `GroupRef`, make an existing concrete reference retarget
+after name rebinding, manufacture lifetime or durability, or grant authority not
+already carried by the resolved capability.
+
+Discovery implementation also must preserve the pay-as-you-grow rule. A program
+that does not use a discovery/distributed facility must not require a network
+listener, external registry, Cluster membership, background discovery protocol,
+or equivalent distributed runtime merely because an implementation supports
+such machinery.
+
+Core v0.1 therefore does not standardize:
+
+- registry protocol or wire format;
+- storage engine or replication algorithm;
+- cache topology or cache invalidation strategy;
+- polling versus push/watch implementation;
+- backend selection or fallback order;
+- registry server placement;
+- health-probe implementation;
+- implementation-specific TTL bookkeeping;
+- implementation-specific retry/backoff policy.
+
+Those mechanisms may affect performance and availability of the implementation,
+but they must not retroactively choose otherwise-unfixed portable semantics.
+
+This closure does not define a new public discovery API, namespace model,
+consistency level, TTL contract, watch/notification semantics, federation model,
+persistence guarantee, security model, or schema/versioning rule. Any such
+portable facility remains subject to its own normative design.
+
+This closes the former open ledger item `Service discovery implementation`.
+
 ## Open Design Topics
 
 The following topics remain intentionally open. Items whose fundamental
@@ -6318,7 +6371,6 @@ mechanism, or implementation detail that still requires design.
 -   ActorRef routing implementation
 -   ActorRef persistence/serialization semantics, if any
 -   GroupRef persistence/serialization and capability semantics, if any
--   Service discovery implementation
 -   Message serialization format
 -   Serialization versioning
 -   Schema evolution

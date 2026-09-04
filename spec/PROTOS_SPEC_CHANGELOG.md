@@ -4,6 +4,32 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.298] - 2026-09-04
+
+### Closed
+- Closed `Service discovery implementation` as runtime/infrastructure machinery
+  rather than portable Core semantics.
+- Allowed discovery to use local registries, Cluster control state, external
+  naming services, orchestrator APIs, replicated stores, static configuration,
+  or other conforming mechanisms.
+- Required implementation choice to preserve resolved ActorRef/GroupRef identity,
+  discovery-name rebinding semantics, capability authority, lifetime, and
+  durability boundaries.
+- Preserved pay-as-you-grow: unused discovery must not require distributed
+  runtime infrastructure.
+- Left registry protocols, storage/replication, caching, watches/polling,
+  backend selection, health probing, TTL bookkeeping, and retry/backoff as
+  implementation concerns.
+- Explicitly left public discovery API, namespace, consistency, TTL, watches,
+  federation, persistence, security, and schema/versioning semantics outside
+  this closure.
+- Removed `Service discovery implementation` from Open Design Topics.
+
+### Changed
+- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  298.
+
 ## [0.1.297] - 2026-09-04
 
 ### Fixed
