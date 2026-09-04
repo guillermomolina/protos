@@ -54,6 +54,9 @@ public final class ProtosCoreBootstrap {
         sourceLoader
                 .load(coreDirectory.resolve("error.protos"))
                 .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("array.protos"))
+                .call(bootstrapActivation);
 
         Object contextBinding =
                 bootstrapContext
@@ -89,10 +92,28 @@ public final class ProtosCoreBootstrap {
                     "Core Error prototype must delegate directly to Object");
         }
 
+        Object arrayBinding =
+                bootstrapContext
+                        .readLocalSlot("Array")
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Core bootstrap did not define Array"));
+        if (!(arrayBinding instanceof ProtosObjectValue arrayPrototype)) {
+            throw new IllegalStateException(
+                    "Core Array binding is not an ordinary object");
+        }
+        if (arrayPrototype.parent().orElse(null)
+                != ProtosObjectValue.rootObject()) {
+            throw new IllegalStateException(
+                    "Core Array prototype must delegate directly to Object");
+        }
+
         ProtosObjectValue preludeBindings =
                 new ProtosObjectValue(contextPrototype);
         preludeBindings.createLocalSlot("Context", contextPrototype);
         preludeBindings.createLocalSlot("Error", errorPrototype);
+        preludeBindings.createLocalSlot("Array", arrayPrototype);
         preludeBindings.freeze();
 
         return new ProtosPrelude(preludeBindings, contextPrototype);

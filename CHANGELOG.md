@@ -4,6 +4,38 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.17-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added distributable `protos/lib/core/array.protos`, defining the standard
+  `Array` prototype as an ordinary child of `Object`.
+- Added `ProtosPrelude.arrayPrototype()` and `newArray(...)` so runtime
+  machinery can materialize standard Arrays with the exact source-backed
+  Array prototype as delegation parent.
+
+### Changed
+
+- Core bootstrap now loads and validates the `Array` binding before freezing
+  the standard prelude and installs that exact source-created object alongside
+  `Context` and `Error`.
+- Project implementation version changed from `0.2.16-SNAPSHOT` to
+  `0.2.17-SNAPSHOT`.
+
+### Tests
+
+- Extended Core bootstrap coverage to verify the exact source-backed Array
+  binding, its delegation parent, and the parent of a materialized standard
+  Array value.
+
+### Notes
+
+- This increment does not implement Array invocation, `at`, `atPut`, `size`,
+  `each`, `args`, rest binding, or any other Array protocol.
+- No hardcoded Java Array prototype singleton is introduced.
+- No normative specification change is introduced.
+
+
 ## [0.2.16-SNAPSHOT] - 2026-09-04
 
 ### Added

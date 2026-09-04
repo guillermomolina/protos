@@ -69,6 +69,19 @@ public final class ProtosPrelude {
         return new ProtosObjectValue(errorPrototype());
     }
 
+    public ProtosObjectValue arrayPrototype() {
+        Object binding = bindings.readLocalSlot("Array").orElseThrow();
+        if (!(binding instanceof ProtosObjectValue arrayPrototype)) {
+            throw new IllegalStateException(
+                    "standard Array binding is not an ordinary object");
+        }
+        return arrayPrototype;
+    }
+
+    public ProtosArrayValue newArray(java.util.List<?> elements) {
+        return new ProtosArrayValue(arrayPrototype(), elements);
+    }
+
     public ProtosObjectValue newExecutionContext() {
         return new ProtosObjectValue(contextPrototype);
     }
