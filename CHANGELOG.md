@@ -4,6 +4,31 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.9-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added `ProtosSourceCompiler`, a single source-to-execution entry point that
+  composes the existing parser, canonicalizer, Truffle lowerer, and call-target
+  construction pipeline.
+- Added focused coverage proving compiled source preserves ordinary sequence,
+  literal, object-construction, and parser-failure behavior.
+
+### Changed
+
+- Project implementation version changed from `0.2.8-SNAPSHOT` to
+  `0.2.9-SNAPSHOT`.
+
+### Notes
+
+- This is implementation plumbing only. It introduces no new syntax, lookup,
+  invocation, object, or bootstrap semantics.
+- The new entry point is intended to be reused by the upcoming
+  `protos/lib/core/` loader so Core source and user source travel through the
+  same ordinary compiler pipeline.
+- No normative specification change is introduced.
+
+
 ## [0.2.8-SNAPSHOT] - 2026-09-04
 
 ### Fixed
