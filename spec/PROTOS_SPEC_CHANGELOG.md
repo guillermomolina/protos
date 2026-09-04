@@ -4,6 +4,33 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.245] - 2026-09-04
+
+### Closed
+- Closed generic writable Array/object partitioning out of Core v0.1.
+- Defined non-overlapping container indexes, slots, physical ranges, or storage
+  regions as insufficient proof of disjoint mutable authority over reachable
+  Protos object graphs.
+- Kept `Bytes`/`ByteRegion` as the sole standardized Core writable-partition
+  facility because its authority is explicitly bounded to byte-indexed state.
+- Defined no Core `Array.parallelRange(...)`, generic object/graph partition
+  capability, implementation-dependent alias-proof API, or borrow/ownership
+  annotation system.
+- Preserved ordinary parallel algorithms over Arrays/objects through P
+  snapshot/value semantics, fresh-result construction, read-only inputs, and
+  semantics-preserving internal optimizations.
+- Required any future broader writable partition facility to provide a portable
+  language/runtime proof of disjoint mutable authority rather than depending on
+  implementation-selected heap/alias analysis.
+- Removed the now-closed generic writable Array/object partitioning item from
+  Open Design Topics.
+
+### Changed
+- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 245.
+
 ## [0.1.244] - 2026-09-04
 
 ### Closed

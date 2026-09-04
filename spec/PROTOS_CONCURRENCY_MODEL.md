@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 244
+Document revision: 245
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -3949,6 +3949,55 @@ surface are closed by §§71.18-71.20 below. Generic writable partitioning for
 Array or arbitrary object graphs remains open and is not implied by the byte
 mechanism.
 
+### 71.5A No generic writable graph partitioning in Core
+
+Core v0.1 does not standardize a general writable-partition facility for
+`Array`, arbitrary objects, or arbitrary reachable mutable object graphs.
+
+This is a semantic boundary, not an implementation omission.
+
+Non-overlapping container indexes, slot names, byte addresses, storage pages, or
+implementation-level memory ranges do not by themselves prove that the mutable
+state reachable through those positions is logically disjoint. In particular:
+
+```text
+array[0] -> sharedMutableObject
+array[1] -> sharedMutableObject
+```
+
+means that disjoint Array indexes still reach the same mutable authority.
+Granting independent writable partition authority to those indexes would expose
+simultaneous shared mutable Protos state and would violate the P isolation model.
+
+Core therefore provides no standard:
+
+- `Array.parallelRange(...)` writable-region analogue;
+- generic `Object.partition(...)` or graph-region capability;
+- runtime alias-analysis API that grants writable P authority;
+- borrow/ownership annotation system;
+- user-visible uniqueness, move-only, affine, or linear reference mode;
+- dynamic "prove disjoint" operation whose success depends on
+  implementation-selected heap analysis.
+
+`Bytes`/`ByteRegion` remains the standardized Core writable-partition facility
+because its mutable authority is defined exactly over byte-indexed state and can
+be bounded by explicit non-overlapping intervals without granting authority over
+arbitrary reachable mutable objects.
+
+This does not prohibit parallel algorithms over Arrays or objects. Such
+algorithms may use ordinary P snapshot/value semantics, produce fresh results,
+use immutable/read-only inputs, or internally exploit semantics-preserving
+representation optimizations. What Core does not provide is simultaneous
+writable authority over arbitrary logical object graphs merely because a
+container representation can be physically partitioned.
+
+A future facility may add broader writable partitioning only if it introduces a
+portable semantic proof of disjoint mutable authority. That proof must be
+language/runtime-defined rather than dependent on one implementation's escape,
+alias, GC, pointer, or storage analysis. If broader ownership/capability
+semantics are ever introduced, they must justify their global language cost
+independently rather than being smuggled in as an Array optimization.
+
 ### 71.6 Library-Level Parallel Patterns
 
 High-level parallel algorithms should normally be library facilities
@@ -4580,8 +4629,6 @@ mechanism, or implementation detail that still requires design.
 -   Streaming
 -   Async streams
 -   Generators and suspendable iteration
--   Whether generic writable Array/object partitioning is standardized beyond
-    Core byte regions
 -   Parallel map/filter/reduce/sort/iteration standard-library APIs
 -   Parallel scheduling, work-stealing, and granularity heuristics
 -   Pub/sub
