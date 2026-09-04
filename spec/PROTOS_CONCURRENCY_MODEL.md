@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 272
+Document revision: 273
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -1639,6 +1639,68 @@ alone does not manufacture a portable total order between independent producers.
 This closure preserves scheduler independence: concurrency may affect when an
 answer becomes available, but generic Core Future coordination does not expose
 implementation-selected timing as which answer is observed.
+
+## 24G. Future Ownership and Actor Lifecycle Matrix
+
+**CLOSED**
+
+The interaction between Future ownership and Actor lifecycle is fully determined
+in Core v0.1 by the existing structured-concurrency and Actor-termination rules.
+It is not an implementation-selectable policy.
+
+The normative cases are:
+
+```text
+Actor-local task-backed Future
+    -> producing task belongs to that Actor execution domain
+    -> Actor termination requests cooperative cancellation
+    -> Actor waits for required task cancellation unwind/ensure cleanup
+    -> task cannot continue as ordinary Protos work after Actor termination
+
+detached Actor-local task-backed Future
+    -> activation ownership edge is removed
+    -> Actor-domain ownership is not removed
+    -> Actor termination still requests cooperative cancellation
+    -> task is not re-parented to Process, RootActor, replacement Actor, or runtime
+
+Actor-originated non-task-backed Future
+    -> no structured task ownership edge exists
+    -> Actor termination records a cancellation request on the pending operation
+    -> producer-specific commitment/cancellation semantics remain authoritative
+    -> Actor generally does not wait for backend work that must safely continue
+    -> no later continuation may resume ordinary code in the terminated Actor
+
+P-result Future created from Actor-local code
+    -> structured ownership follows the creating activation
+    -> P execution remains isolated from Actor mutable state
+    -> Actor termination requests cancellation through the existing structured
+       ownership/lifecycle rules
+    -> P work does not gain an independent Actor-like lifetime
+
+pure observation Future with no Actor-originated producer ownership
+    -> follows the explicit contract of that observation facility
+    -> `detach()` remains a no-op when no task ownership edge exists
+    -> merely holding the Future does not extend Actor lifetime
+```
+
+A Future object surviving as an ordinary value after its originating Actor has
+terminated does not keep that Actor incarnation alive, resurrect it, or authorize
+continuation execution inside its former mutable domain. The Future may still
+carry a stable terminal outcome or, for producer/backend work whose contract
+allows it, may later become terminal under runtime/producer custody.
+
+Likewise, Actor replacement does not inherit pending tasks, continuation state,
+Future producer ownership, or Actor-local mutable execution from the terminated
+incarnation. A replacement is a fresh Actor domain.
+
+Core defines no hidden "orphan Future" policy that may choose among continuing,
+cancelling, re-parenting, abandoning, or migrating Actor-local work according to
+runtime convenience. Each case above follows its already-defined ownership and
+producer contract.
+
+This section is a consolidation of existing normative rules, not a new lifetime
+mechanism. It closes the former open ledger item `Future ownership interaction
+with Actor lifecycle`.
 
 ## 25. Parent Actor Versus Failure Authority
 
@@ -5527,7 +5589,6 @@ mechanism, or implementation detail that still requires design.
 -   Blocking-operation offload
 -   Non-local return across Actor boundaries
 -   Dynamic error handlers across Actor boundaries
--   Future ownership interaction with Actor lifecycle
 -   Timers
 -   Clock semantics
 -   Resource limits and quotas

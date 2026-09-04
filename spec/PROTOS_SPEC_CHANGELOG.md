@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.273] - 2026-09-04
+
+### Closed
+- Closed `Future ownership interaction with Actor lifecycle` as already fully
+  determined by existing structured-concurrency and Actor-termination semantics.
+- Added one normative ownership/lifecycle matrix covering Actor-local task-backed
+  Futures, detached Actor-local tasks, Actor-originated non-task-backed Futures,
+  Actor-originated P result Futures, and pure observation Futures.
+- Clarified that detachment removes only activation ownership, never Actor-domain
+  lifetime ownership.
+- Clarified that surviving Future values do not keep terminated Actors alive or
+  authorize continuation execution in their former mutable domains.
+- Clarified that Actor replacement inherits no pending task/Future producer
+  ownership from the terminated incarnation.
+- Prohibited implementation-selected orphan-Future policies such as silent
+  re-parenting, migration, abandonment, or continuation after Actor termination.
+- Removed the corresponding item from Open Design Topics.
+
+### Changed
+- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  273.
+
 ## [0.1.272] - 2026-09-04
 
 ### Closed
