@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 224
+Document revision: 225
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -5522,6 +5522,17 @@ function projectClosureForP(sourceClosure, root, snapshotMemo):
 
 The omitted capture metadata is caller execution state prohibited from crossing
 P; it is not traversed as part of the P value graph.
+
+`formParallelSnapshot` and `snapshotPValue` describe logical snapshots, not
+mandatory allocation or copying algorithms. An implementation may physically
+share immutable representation, use copy-on-write, remap storage, reuse backing,
+or apply another optimization only when every Protos observation remains
+equivalent to the required isolated logical values.
+
+No runtime-visible sharing predicate or representation choice is created by this
+freedom. If safe physical sharing is unavailable, the implementation must use
+another semantics-preserving representation; it must not signal
+`NonParallelValue` solely because a sharing optimization cannot be used.
 
 When the P task begins, it first observes the ordinary portable initial
 cancellation boundary. If cancelled before ordinary P code starts, no projected

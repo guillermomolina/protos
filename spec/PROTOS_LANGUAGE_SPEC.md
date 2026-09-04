@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 224
+Document revision: 225
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -5079,10 +5079,20 @@ alias-preservation, and atomic whole-graph principles used by Actor
 pass-by-value transfer, but P has its own transferability set.
 
 Ordinary values that can be represented as isolated logical value copies may
-cross. Semantically immutable standard-prelude objects may be physically shared
-when the standard prelude-sharing rule permits it. The following do not become
-P-transferable merely because they are reachable from an otherwise copyable
-object:
+cross. P transferability is a logical semantic property and does not expose
+whether an implementation copied, shared, remapped, or copy-on-wrote physical
+storage. Semantically immutable standard-prelude objects may be physically shared
+when the standard prelude-sharing rule permits it.
+
+Core v0.1 exposes no `isShareable` predicate, immutable-sharing marker, deep-freeze
+operation, ownership-transfer flag, or other public control over this physical
+choice. Existing shallow `freeze()` is neither a promise that an entire reachable
+graph will be physically shared nor a requirement for an implementation to use
+safe immutable backing internally. Inability to perform a sharing optimization
+must not by itself make an otherwise P-transferable logical value fail.
+
+The following do not become P-transferable merely because they are reachable
+from an otherwise copyable object:
 
 - ActorRef or GroupRef;
 - pending Future/task identity or an ExecutionContext;

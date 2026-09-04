@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 224
+Document revision: 225
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -3817,6 +3817,28 @@ The implementation may therefore let multiple parallel computations
 read the same immutable physical storage without producing semantic
 shared mutable identity.
 
+Physical sharing eligibility is defined only by observational equivalence to the
+required isolated logical values. It is not a new Protos capability.
+
+An implementation may physically share an object representation, backing store,
+page, code artifact, immutable node, or other storage across P domains when no
+permitted Protos operation in either domain can use that sharing to observe
+shared mutable semantic state, identity collapse, different lookup/delegation,
+different equality/identity, different failure behavior, or any other result
+that would differ from the specified isolated values.
+
+Conversely, semantic mutability of a logical value does not force eager copying.
+A runtime may still share immutable backing, use copy-on-write, remap pages,
+reuse storage after proving exclusivity, or use another representation that
+preserves the same observable logical state.
+
+The existing shallow `freeze()` operation does not introduce transitive
+shareability. Freezing one object does not freeze mutable objects reachable
+through its slots or delegation graph, and Core does not reinterpret `freeze()`
+as a parallel ownership/transfer primitive. A frozen source object may be copied;
+an unfrozen logical value may use physically shared immutable backing. Programs
+cannot portably distinguish these implementation choices.
+
 ### 71.5 Exclusive Mutable Partitioning
 
 Parallel algorithms may require several CPU cores to modify disjoint
@@ -4091,6 +4113,23 @@ This does not prohibit APIs whose contract explicitly includes nondeterministic
 selection. It requires such nondeterminism to be semantic and documented rather
 than an accidental leak of implementation scheduling.
 
+### 71.17 Physical sharing is not a public capability
+
+Core v0.1 standardizes the isolation result, not the physical sharing mechanism.
+
+There is no standard API that asks whether a value is physically shareable, pins
+a value into shared storage, requests zero-copy transfer, exposes copy-on-write
+state, reveals whether two isolation domains use one backing allocation, or
+requires a particular storage-transfer strategy.
+
+Failure to obtain a particular physical optimization is therefore not a semantic
+failure condition. If a logical P snapshot is otherwise valid, an implementation
+must realize it through some semantics-preserving representation available to
+that implementation.
+
+This leaves implementations free to exploit immutable representation aggressively
+without adding a second user-visible immutability/ownership system to Protos.
+
 ### 71.13 Standard `Closure.parallel(...)`
 
 The Core v0.1 public submission surface is:
@@ -4217,10 +4256,11 @@ Consequences:
 
 -   The prelude itself may be physically shared, and its slots may refer
     to immutable Protos objects.
--   A prelude slot must not let two Actors share mutable Protos state.
--   Mutable standard-library or runtime state — such as an Actor's
-    module cache and module instances — belongs to the Actor that uses
-    it.
+-   A prelude slot must not let two Actor/P isolation domains share mutable
+    Protos state.
+-   Mutable standard-library or runtime state — such as an Actor's module cache
+    and module instances, or P-local mutable library state — belongs to the
+    isolation domain that uses it.
 -   The implementation may physically share immutable implementation
     artifacts such as parsed syntax, bytecode, machine code, immutable
     metadata, and immutable constant data where the sharing is
@@ -4269,7 +4309,6 @@ mechanism, or implementation detail that still requires design.
 -   Async streams
 -   Generators and suspendable iteration
 -   Whether Task should become observable
--   Immutable-sharing eligibility and representation for parallel work
 -   Exclusive mutable partition/region API and representation
 -   Partition overlap/alias validation mechanism
 -   Parallel map/filter/reduce/sort/iteration standard-library APIs

@@ -4,6 +4,36 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.225] - 2026-09-04
+
+### Closed
+- Closed immutable physical-sharing eligibility/representation for P as an
+  implementation optimization rather than a new public Protos capability.
+- Defined physical sharing as permitted only when every Protos observation is
+  equivalent to the required isolated logical values.
+- Clarified that logically mutable values may still use immutable backing,
+  copy-on-write, remapping, exclusivity-proven reuse, or equivalent invisible
+  optimizations.
+- Clarified that shallow `freeze()` neither grants transitive P shareability nor
+  is required for safe implementation-level immutable sharing.
+- Prohibited public/runtime-observable shareability predicates, pinning,
+  zero-copy state, copy-on-write state, or backing-allocation identity in Core
+  v0.1.
+- Required an implementation to fall back to another semantics-preserving
+  representation when a sharing optimization is unavailable rather than fail an
+  otherwise P-transferable value.
+- Removed the now-closed immutable-sharing eligibility/representation item from
+  Open Design Topics.
+- Repaired remaining Actor-only wording in standard-prelude sharing consequences
+  so the already-closed Actor/P isolation rule is stated consistently.
+
+### Changed
+- Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
+  `PROTOS_CONCURRENCY_MODEL.md` with the closed physical-sharing boundary.
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 225.
+
 ## [0.1.224] - 2026-09-04
 
 ### Fixed
