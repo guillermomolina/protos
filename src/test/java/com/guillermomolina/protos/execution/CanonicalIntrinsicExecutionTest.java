@@ -17,8 +17,8 @@
 
 package com.guillermomolina.protos.execution;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -53,10 +53,10 @@ class CanonicalIntrinsicExecutionTest {
     }
 
     @Test
-    void argsRemainsExplicitlyUnimplementedUntilStandardArrayMaterializationExists() {
-        assertThrows(
-                UnsupportedOperationException.class,
-                () -> lowerer.lower(intrinsic(CanonicalIntrinsic.Kind.ARGS)));
+    void argsLowersToInvocationArgsNodeInsteadOfHostUnsupportedPath() {
+        assertInstanceOf(
+                ProtosArgsNode.class,
+                lowerer.lower(intrinsic(CanonicalIntrinsic.Kind.ARGS)));
     }
 
     private Object execute(

@@ -4,6 +4,32 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+
+## [0.2.54-SNAPSHOT] - 2026-09-04
+
+### Fixed
+
+- I001: `args` now lowers uniformly to `ProtosArgsNode` instead of retaining a
+  generic-lowering `UnsupportedOperationException` path for nested canonical
+  expression shapes.
+- Object-construction activations preserve the enclosing invocation's already
+  materialized `args` Array while retaining existing construction `context`,
+  receiver, lexical-capture, method-home, and return-home semantics.
+- Added end-to-end coverage for zero/one/multiple arguments, ordering, mixed
+  value families, element identity, fresh Array identity, nested Closure and
+  method calls, polymorphic invocation, non-local return, and object bodies.
+- Replaced the obsolete regression that explicitly expected `args` lowering to
+  remain unimplemented.
+- Project implementation version changed from `0.2.53-SNAPSHOT` to
+  `0.2.54-SNAPSHOT`.
+
+### Notes
+
+- `args` remains the fresh frozen standard Array established from the flattened
+  caller-supplied positional vector; receiver/default values are not inserted.
+- No normative specification change is introduced.
+
+
 ## [0.2.53-SNAPSHOT] - 2026-09-04
 
 ### Fixed

@@ -99,8 +99,7 @@ public final class CanonicalToTruffleLowerer {
         }
         if (expression instanceof CanonicalIntrinsic intrinsic) {
             if (intrinsic.kind() == CanonicalIntrinsic.Kind.ARGS) {
-                throw new UnsupportedOperationException(
-                        "args is only lowerable inside a Closure invocation plan");
+                return new ProtosArgsNode(intrinsic.span());
             }
             return new ProtosIntrinsicNode(intrinsic.span(), intrinsic.kind());
         }

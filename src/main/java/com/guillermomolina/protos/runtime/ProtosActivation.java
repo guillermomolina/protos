@@ -157,7 +157,7 @@ public final class ProtosActivation {
                 enclosing.lexicalContextsForClosureCapture(),
                 object,
                 enclosing.prelude,
-                null,
+                enclosing.arguments,
                 enclosing.returnHome,
                 enclosing.methodHome,
                 false,
