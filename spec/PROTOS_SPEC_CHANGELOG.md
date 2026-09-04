@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.228] - 2026-09-04
+
+### Fixed
+- Defined every resource newly created by standard `create` or `createNew` to
+  begin as an empty logical byte sequence with size zero.
+- Made the empty initial content part of the creation semantic result rather than
+  an implementation/backend-selected default.
+- Defined `preserve` and `truncate` consistently for newly created resources:
+  there is no prior content to preserve and truncate introduces no second
+  destructive effect when creation already established size zero.
+- Allowed sparse, lazy, remote, virtual, copy-on-write, and other physical
+  representations when their Protos-visible initial byte sequence is empty.
+- Clarified that later independently authorized writes may change the resource
+  after creation commitment without changing what the creation itself established.
+- Required backends with non-empty/template/residual creation defaults to emulate
+  empty creation or reject standard create/createNew semantics.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 228. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.227] - 2026-09-04
 
 ### Fixed

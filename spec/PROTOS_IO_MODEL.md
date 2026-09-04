@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 227
+Document revision: 228
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -1148,6 +1148,20 @@ This guarantee does not impose a predetermined winner among genuinely concurrent
 An implementation may realize `create` with one backend primitive or by emulation, but any emulation must preserve the same race-free semantic result. In particular, a probe-then-exclusive-create sequence must recover from a concurrent creator by selecting the then-existing target when that is the result a single standard open-or-create operation requires, rather than leaking the helper primitive's race as a Protos-visible failure. If a backend cannot provide or emulate this invariant while also preserving Filesystem confinement, it must not expose standard `create` semantics for that resource.
 
 `createNew` creates a new target and fails if the target already exists. The existence check and creation are one race-free/atomic creation operation at the backend's semantic boundary.
+
+Whenever standard `create` selects the absent-target branch, and whenever standard `createNew` succeeds, the newly created file resource begins with logical byte size zero and contains no octets at the creation commitment point. This empty-content state is part of the standard file-creation semantic result, not a host-selected default.
+
+The rule is independent of `initial content: preserve` versus `truncate`. `preserve` has no pre-creation content to preserve on a newly created resource, so the created resource is empty. `truncate` likewise finds the newly created resource already at logical size zero and introduces no additional destructive content effect or commitment merely to re-establish zero size.
+
+Creation emptiness is a logical content guarantee rather than a physical allocation rule. A backend may create a sparse object, lazy object, copy-on-write object, virtual file, remote resource, or other representation without eagerly materializing an empty byte buffer, provided that the resource's Protos-visible initial byte sequence is exactly empty.
+
+The empty state is established at this open's creation commitment point. It is not a promise that the resource remains empty until the open Future resolves or until some later observer examines it: independently authorized writes or other backend changes may occur afterward according to the existing cross-capability, namespace, and resource-visibility semantics. Such later changes do not retroactively alter the content state that this creation operation itself established.
+
+If creation commits and the open later fails before returning a `File`, the ordinary no-compensating-rollback rule still applies: the operation does not delete the created target merely because later acquisition work failed. The created resource was established empty by this operation, although independent authorized activity may subsequently change it.
+
+A backend whose primitive for creating the standard file resource necessarily exposes non-empty implementation-selected initial content, inherited template bytes, residual storage contents, or another non-empty default must clear/emulate that state before creation can commit as a standard Protos creation. If it cannot do so while preserving the required race-free creation, confinement, and commitment semantics, it must not expose that operation as standard `create`/`createNew`.
+
+A standard newly created File resource therefore starts as an empty logical byte sequence of size zero; host/backend creation defaults cannot supply portable initial content.
 
 Standard `create` is an atomic/race-free open-or-create selection, not a portable existence-check-then-create recipe; concurrent namespace changes may determine the selected state before the selection point, but implementation helper races must not become observable results.
 
