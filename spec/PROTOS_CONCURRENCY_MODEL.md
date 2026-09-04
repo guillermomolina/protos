@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 316
+Document revision: 317
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -1829,6 +1829,9 @@ Actor-local work into P.
 ## 24E. Waiting for Multiple Futures with `Future.all(...)`
 
 **CLOSED**
+
+This section is the primary normative owner of the Core v0.1
+`Future.all(futures...) -> Future` concurrency-domain semantics.
 
 Core v0.1 standardizes the ordinary Future-protocol operation:
 

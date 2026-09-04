@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 316
+Document revision: 317
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -2139,31 +2139,22 @@ Closure where referenced by that contract.
 
 ### Waiting for multiple Futures
 
-Core v0.1 standardizes:
+Core v0.1 standardizes the ordinary Future coordination operation:
 
 ```text
-Future.all(future0, future1, ...)
+Future.all(futures...)
     -> Future
 ```
 
-All arguments are evaluated normally and then synchronously validated as Future
-values from left to right. The returned object is a fresh non-task-backed Future;
-it observes the sources but does not own or cancel them.
+`Future.all` is an ordinary message on the standard Future prototype and
+introduces no new syntax, Task kind, or wait-set object. Its normative argument
+validation, aggregate identity/kind, deterministic terminal selection, result
+ordering, source ownership, cancellation, failure propagation, and empty-input
+semantics are owned by `PROTOS_CONCURRENCY_MODEL.md` §24E.
 
-If all sources resolve, the aggregate resolves with a fresh standard Array of
-their values in argument order. Source completion order does not affect result
-order.
-
-If a source fails or is cancelled, aggregate terminal selection follows argument
-order rather than completion timing: the lowest non-resolved source index becomes
-decisive only after every lower index is known resolved. A decisive failure fails
-the aggregate with the same Error; a decisive cancellation cancels it.
-
-`Future.all()` resolves immediately with a fresh empty Array.
-
-Cancelling the aggregate abandons only this observation and does not cancel any
-source Future. This operation is deterministic wait-all, not first-completion
-`race`/`select`.
+General argument-evaluation, Array, Error-object identity, and ordinary message
+rules from this language specification continue to apply where referenced by
+that owning contract.
 
 ### No generic Future race/select in Core
 

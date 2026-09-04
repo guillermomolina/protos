@@ -8,6 +8,30 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.317] - 2026-09-04
+
+### Changed
+- Continued canonicalization of duplicated normative authority under the
+  one-primary-owner discipline.
+- Made `PROTOS_CONCURRENCY_MODEL.md` §24E the explicit primary normative owner
+  of `Future.all(futures...) -> Future` concurrency-domain semantics.
+- Replaced the duplicated full `Future.all(...)` contract in
+  `PROTOS_LANGUAGE_SPEC.md` with a compact language-surface and cross-domain
+  integration reference.
+- Removed the duplicate conceptual aggregate-observation algorithm from
+  `PROTOS_RUNTIME_SEMANTICS.md`; runtime observation/frontier machinery remains
+  free subject to the owning concurrency contract.
+- Kept the separate Core boundary excluding generic first-completion
+  `Future.race(...)` / `Future.select(...)` intact.
+
+### Documentation
+- This revision changes specification ownership and removes duplicate authority;
+  it does not intentionally change observable Protos behavior.
+- Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
+  `PROTOS_CONCURRENCY_MODEL.md` to document revision 317.
+- `PROTOS_GRAMMAR.md` and `PROTOS_IO_MODEL.md` are unaffected and remain
+  byte-for-byte unchanged.
+
 ## [0.1.316] - 2026-09-04
 
 ### Changed
