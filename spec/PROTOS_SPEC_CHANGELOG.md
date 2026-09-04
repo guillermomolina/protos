@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.223] - 2026-09-04
+
+### Fixed
+- Defined Core call spread to accept standard Array indexed state only rather
+  than leaving the spreadable-object domain implementation-selected.
+- Defined each spread argument to evaluate once at its ordinary left-to-right
+  position and contribute a shallow ascending-index snapshot of current Array
+  element references.
+- Defined later argument effects and later source-Array mutation not to rewrite
+  elements already contributed by an earlier spread.
+- Prohibited hidden `each`, `at`, `size`, iterator, conversion, callback, or
+  suspension behavior during standard call-spread extraction.
+- Preserved empty-Array expansion, shallow element identity, open/closed/frozen
+  read-only behavior, and implementation freedom to avoid physical snapshots.
+- Reserved any future generic iterable/spreadable protocol for an explicit
+  normative design rather than implicitly inventing one through call syntax.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 223.
+  Only `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain
+  normative semantic content in this revision.
+
 ## [0.1.222] - 2026-09-04
 
 ### Closed

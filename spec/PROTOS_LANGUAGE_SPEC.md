@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 222
+Document revision: 223
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3251,6 +3251,66 @@ The general rule is:
 ```
 
 This rule is semantic and must not depend on boxing, allocation, host references, or implementation-specific representation.
+
+### Exact call-spread semantics
+
+Core v0.1 call spread:
+
+```js
+f(...values)
+```
+
+accepts only an original receiver that owns standard `Array` indexed state.
+Delegation, copying, composition, or user-defined `at` / `size` / `each`
+behavior does not make an otherwise incompatible object spreadable.
+
+The spread operand expression is evaluated exactly once at its ordinary
+left-to-right argument position. After successful standard Array receiver
+validation, the spread operation captures a shallow logical snapshot of the
+Array's current indexed element references in ascending index order:
+
+```text
+0, 1, 2, ... size - 1
+```
+
+Those captured element objects are appended, in that order, to the outgoing
+positional argument vector.
+
+The snapshot is established at the point where the spread argument itself is
+evaluated. Later argument expressions may mutate the source Array when ordinary
+state rules permit it, but those later mutations do not alter the argument
+objects already contributed by that spread.
+
+For example, in:
+
+```js
+f(...values, mutate(values))
+```
+
+the spread captures `values` before `mutate(values)` is evaluated, because
+argument evaluation remains strictly left-to-right.
+
+Spread capture is shallow. It does not clone, freeze, or otherwise transform
+the element objects. If an element is a mutable object, the outgoing argument
+vector contains that same object reference.
+
+Call spread performs no user-message iteration. In particular, it does not
+invoke `each`, `at`, `size`, an iterator method, conversion behavior, or any
+other user-defined protocol while extracting standard Array elements. A
+non-Array operand signals an `Error` after the operand expression has been
+evaluated but before any later argument expression is evaluated.
+
+An empty standard Array contributes zero positional arguments.
+
+The source Array may be open, closed, or frozen; spread is read-only. No Array
+mutation, lock, suspension point, iterator object, or hidden callback is
+introduced merely by expansion.
+
+This Core rule intentionally does not standardize a general iterable/spreadable
+protocol. A future generic iteration protocol may generalize call spread only
+through an explicit normative revision defining traversal order, failure,
+effects, suspension, mutation visibility, and interaction with existing
+collection protocols.
 
 ### Invocation argument collections are frozen Arrays
 

@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 222
+Document revision: 223
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3700,6 +3700,64 @@ The runtime may optimize argument vectors, rest Arrays, and `args` Arrays, but o
 
 No dispatch by argument type is implied. These mechanisms support dynamic arity, forwarding, and user-defined helper protocols without introducing method-overload resolution.
 
+
+### Exact call-spread expansion
+
+Call-argument evaluation expands a spread operand using standard Array indexed
+state directly.
+
+Conceptually:
+
+```text
+function expandCallSpread(value):
+    array = requireArrayReceiver(value)
+    snapshot = snapshotArrayElements(array)
+    return snapshot
+```
+
+`snapshotArrayElements` has the same shallow element-reference meaning used by
+standard Array iteration, but spread expansion invokes no callback. It captures
+the current indexed element references in ascending index order.
+
+For an argument list, evaluation remains left-to-right. Conceptually:
+
+```text
+function evaluateCallArguments(argumentItems, activation):
+    outgoing = []
+
+    for item in argumentItems from left to right:
+        if item is ordinary argument:
+            outgoing.append(
+                evaluate(item.expression, activation)
+            )
+            continue
+
+        if item is spread argument:
+            value = evaluate(item.expression, activation)
+            elements = expandCallSpread(value)
+            outgoing.appendAll(elements)
+            continue
+
+    return outgoing
+```
+
+If evaluation of a spread expression has ordinary effects, those effects remain
+completed. If `requireArrayReceiver` then fails, no later argument item is
+evaluated and no invocation occurs.
+
+Spread expansion itself performs no user-message dispatch and has no explicit
+suspension point. It therefore cannot execute user-defined `each`, `at`, `size`,
+conversion, iterator, equality, hashing, or callback behavior merely to obtain
+the expanded elements.
+
+The captured outgoing references are independent of later structural or element
+replacement changes to the source Array. They are not deep copies: mutation of
+an element object through another reference remains visible through the same
+argument object.
+
+Implementations may avoid materializing an intermediate snapshot object or even
+an intermediate outgoing vector when observable evaluation order, error timing,
+element identity, and expansion order remain exactly equivalent to this model.
 
 ## Invocation argument Array representation
 
