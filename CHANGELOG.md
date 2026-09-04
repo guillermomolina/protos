@@ -4,6 +4,28 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.32-SNAPSHOT] - 2026-09-04
+
+### Fixed
+
+- Routed member lookup through the semantic value walker even when the initial
+  receiver is an ordinary object, so an ordinary delegation chain can continue
+  through a represented numeric value and then into its source-backed
+  `Integer`/`Float`/`Number` prototype chain.
+- Prevented the legacy `ProtosObjectValue.lookupSlot` host exception from
+  escaping that mixed ordinary/represented delegation path.
+- Preserved the existing language-level Core Error behavior for represented
+  value families whose prototype bridge is not implemented in this slice.
+- Project implementation version changed from `0.2.31-SNAPSHOT` to `0.2.32-SNAPSHOT`.
+
+### Notes
+
+- No delegation parent is selected for canonical `true` or `false`; D027/B003
+  remains untouched.
+- No `Boolean` prototype or Boolean fallback is introduced.
+- No normative specification change is introduced.
+
+
 ## [0.2.31-SNAPSHOT] - 2026-09-04
 
 ### Fixed

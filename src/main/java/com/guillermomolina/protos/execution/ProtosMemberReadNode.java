@@ -47,23 +47,23 @@ public final class ProtosMemberReadNode extends ProtosExpressionNode {
         com.guillermomolina.protos.runtime.ProtosActivation activation =
                 ProtosFrameArguments.activation(frame);
 
-        java.util.Optional<ProtosSlotLookupResult> lookup;
-        if (receiverValue instanceof ProtosObjectValue ordinaryReceiver) {
-            lookup = ordinaryReceiver.lookupSlot(name);
-        } else {
-            com.guillermomolina.protos.runtime.ProtosPrelude prelude =
-                    activation.prelude()
-                            .orElseThrow(
-                                    () ->
-                                            new IllegalStateException(
-                                                    "represented-value member lookup requires an owning Core prelude"));
-            lookup = ProtosValueLookup.lookup(receiverValue, name, prelude);
-        }
+        com.guillermomolina.protos.runtime.ProtosPrelude prelude =
+                activation.prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "semantic member lookup requires an owning Core prelude"));
 
-        ProtosSlotLookupResult result =
-                lookup.orElseThrow(
-                        () -> new ProtosSignalException(
-                                ProtosCoreErrors.newError(activation)));
+        ProtosSlotLookupResult result;
+        try {
+            result =
+                    ProtosValueLookup.lookup(receiverValue, name, prelude)
+                            .orElseThrow(
+                                    () -> new ProtosSignalException(
+                                            ProtosCoreErrors.newError(activation)));
+        } catch (UnsupportedOperationException unsupportedRepresentation) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+        }
 
         if (result.value() instanceof ProtosClosureValue closure) {
             return closure.bindMethod(receiverValue, result.home());
