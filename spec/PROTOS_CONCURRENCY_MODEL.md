@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 298
+Document revision: 299
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -6300,6 +6300,65 @@ portable facility remains subject to its own normative design.
 
 This closes the former open ledger item `Service discovery implementation`.
 
+## 72C. ActorRef Routing Implementation Is Runtime Machinery
+
+**CLOSED**
+
+Core v0.1 defines the semantic identity and communication behavior of an
+`ActorRef`, but it does not standardize one internal mechanism for locating the
+concrete Actor incarnation denoted by that reference.
+
+A runtime may route an `ActorRef` through mechanisms such as:
+
+- direct in-Process tables;
+- Process- or Node-local routing tables;
+- Cluster directories;
+- distributed location metadata;
+- cached routes;
+- indirection through runtime-owned routing services;
+- transport-specific endpoint metadata;
+- another mechanism that preserves the normative ActorRef semantics.
+
+The routing mechanism is not part of ActorRef identity. Updating, invalidating,
+or replacing an internal route to the same live incarnation must not create a
+new ActorRef identity or make two distinct Actor incarnations compare as one.
+
+Routing machinery must preserve the existing rules that:
+
+- an `ActorRef` denotes exactly one concrete Actor incarnation;
+- the reference never retargets to a replacement Actor;
+- destination death does not authorize transparent replay to another Actor;
+- unreachability, unknown state, and known termination remain distinct;
+- same-sender FIFO, snapshot, acceptance, backpressure, cancellation, failure,
+  and delivery-uncertainty semantics do not depend on route-cache layout;
+- Group routing remains a separate semantic layer and cannot be simulated by
+  silently retargeting a concrete ActorRef.
+
+A stale or missing internal route may lead only to outcomes already permitted by
+the communication and reachability semantics. It must not cause a runtime to
+invent a replacement destination, duplicate an accepted operation, erase
+delivery uncertainty, or reinterpret one ActorRef as another.
+
+Core v0.1 therefore does not standardize:
+
+- ActorRef directory protocol;
+- route-cache shape or eviction policy;
+- route-refresh algorithm;
+- routing-table replication;
+- endpoint-address format;
+- route lookup batching;
+- implementation-specific forwarding hops;
+- location-cache consistency mechanism.
+
+These choices may affect performance and availability, but not portable ActorRef
+semantics.
+
+This closure does not define ActorRef persistence, serialization, external
+capability encoding, or durable resolution across runtime restarts. Those remain
+separate open design topics.
+
+This closes the former open ledger item `ActorRef routing implementation`.
+
 ## Open Design Topics
 
 The following topics remain intentionally open. Items whose fundamental
@@ -6368,7 +6427,6 @@ mechanism, or implementation detail that still requires design.
 -   Durable-state recovery API/mechanism
 -   State replication
 -   Replicated Actor/service semantics
--   ActorRef routing implementation
 -   ActorRef persistence/serialization semantics, if any
 -   GroupRef persistence/serialization and capability semantics, if any
 -   Message serialization format

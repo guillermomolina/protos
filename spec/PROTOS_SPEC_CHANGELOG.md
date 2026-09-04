@@ -4,6 +4,30 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.299] - 2026-09-04
+
+### Closed
+- Closed `ActorRef routing implementation` as runtime machinery rather than a
+  portable Core semantic facility.
+- Allowed direct tables, local/Cluster directories, cached routes, distributed
+  location metadata, routing services, transport endpoint metadata, or equivalent
+  mechanisms to locate one concrete Actor incarnation.
+- Required route updates/refreshes to preserve ActorRef identity, no-retargeting,
+  same-sender FIFO, snapshot, acceptance, backpressure, cancellation, failure,
+  reachability, and uncertainty semantics.
+- Prohibited stale/missing routes from authorizing replacement retargeting,
+  replay of accepted operations, duplication, or erasure of delivery uncertainty.
+- Left route-cache, directory, replication, endpoint, refresh, forwarding, and
+  lookup mechanisms as implementation concerns.
+- Kept ActorRef persistence/serialization/capability encoding as separate open
+  topics.
+- Removed `ActorRef routing implementation` from Open Design Topics.
+
+### Changed
+- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  299.
+
 ## [0.1.298] - 2026-09-04
 
 ### Closed
