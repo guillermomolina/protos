@@ -4,6 +4,33 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.244] - 2026-09-04
+
+### Closed
+- Closed `Task` as non-observable Core v0.1 execution machinery rather than a
+  second public concurrency identity.
+- Kept `Future` as the public eventual-result/coordination abstraction regardless
+  of whether its producer is task-backed, I/O-backed, communication-backed,
+  continuation-backed, or isolated P work.
+- Defined no Core `Task` prototype, constructor, current-task intrinsic, task
+  identity, public parent/child task graph, scheduler handle, priority/affinity
+  API, task enumeration, or Future-to-task conversion.
+- Clarified that structured ownership, detachment, cancellation, waiting,
+  failure propagation, and Actor/P lifetime semantics do not require exposing
+  runtime task records.
+- Required task/fiber/continuation splitting, fusion, inlining, migration, and
+  carrier assignment to remain unobservable when Future/domain semantics are
+  preserved.
+- Removed the now-closed `Whether Task should become observable` item from Open
+  Design Topics.
+
+### Changed
+- Updated `PROTOS_CONCURRENCY_MODEL.md` and, when its current stable semantic
+  anchor is present, `PROTOS_RUNTIME_SEMANTICS.md`.
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 244.
+
 ## [0.1.243] - 2026-09-04
 
 ### Fixed

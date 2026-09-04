@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 243
+Document revision: 244
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -3722,6 +3722,53 @@ The runtime may use internal concepts such as parallel jobs, work items,
 worker pools, region capabilities, or work-stealing queues. Such concepts
 are implementation machinery unless separately standardized later.
 
+### 71.1A Task is not a Core public identity
+
+Core v0.1 does not expose `Task` as a separate ordinary Protos value, handle,
+identity, lifecycle object, scheduling capability, or introspection surface.
+
+The public result/coordination abstraction for asynchronous and isolated work is
+`Future`. A Future may be backed by task execution, by an I/O producer, by
+communication, by a continuation, by isolated P work, or by another producer
+whose implementation does not require an observable task object.
+
+Consequently, Core v0.1 defines no standard:
+
+- `Task` prototype or constructor;
+- current-task intrinsic/reference;
+- task identity or identity comparison;
+- task-parent/child object graph exposed to application code;
+- task-local mailbox, slots, or mutable state object;
+- task handle distinct from the Future that represents eventual outcome;
+- task enumeration, lookup, join handle, scheduler handle, carrier affinity, or
+  priority API;
+- conversion from a Future to an underlying task identity.
+
+Runtime concepts such as task records, fibers, continuations, stacklets, worker
+jobs, scheduler nodes, coroutine frames, or carrier assignments remain
+implementation machinery. Two conforming runtimes may organize the same Future
+semantics using different internal execution objects without creating a
+Protos-visible difference.
+
+Structured concurrency does not require a public Task object. Ownership,
+detachment, cancellation, waiting, failure propagation, and Actor/P lifetime
+rules are defined semantically through activations, Futures, and execution
+domains. An implementation may track richer internal parent/child task state as
+needed to realize those rules.
+
+This boundary also prevents accidental identity from leaking out of
+implementation structure. Code must not be able to distinguish two executions
+merely because one runtime used one internal task record and another runtime
+used several continuations or inlined work.
+
+A future facility may introduce an explicit task-like abstraction only if it
+provides independently justified semantics that Future/activation/domain
+mechanisms cannot express, such as a deliberately exposed scheduling,
+cancellation-scope, task-group, diagnostic, or resource-governance capability.
+Such a future facility must define its own identity, lifetime, ownership,
+transferability, cancellation, failure, and isolation rules rather than exposing
+Core scheduler objects retroactively.
+
 ### 71.2 Explicit Isolation Boundary
 
 Parallel execution crosses an explicit semantic isolation boundary.
@@ -4533,7 +4580,6 @@ mechanism, or implementation detail that still requires design.
 -   Streaming
 -   Async streams
 -   Generators and suspendable iteration
--   Whether Task should become observable
 -   Whether generic writable Array/object partitioning is standardized beyond
     Core byte regions
 -   Parallel map/filter/reduce/sort/iteration standard-library APIs

@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 243
+Document revision: 244
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2101,6 +2101,21 @@ waiter on that Future. A waiter may belong to a task-backed execution or to
 another execution context that is permitted to suspend; waiter identity is the
 continuation to resume, not an assertion that every Future observer is itself a
 `Task`.
+
+### Internal task records are not Protos values
+
+Any runtime task/fiber/continuation record used to realize asynchronous work is
+internal execution machinery, not a Core Protos value or identity. Core exposes
+the Future outcome and the already-defined activation/execution-domain
+semantics, not a handle to the scheduler object that happens to produce that
+outcome.
+
+No runtime transformation may become observable by changing the number,
+identity, parentage, inlining, splitting, fusion, migration, or carrier
+assignment of internal task records while preserving the specified Future,
+cancellation, structured-ownership, Actor, and P behavior.
+
+
 
 Waiter registration and the Future's first terminal transition obey the atomic
 race rule defined by `suspendOnPendingFuture`: a completion cannot fall into a
