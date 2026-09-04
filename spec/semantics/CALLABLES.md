@@ -579,10 +579,15 @@ ordinary overridable message. Its return value is ignored; an Error or other
 control transfer from initialization propagates normally and the construction
 expression has no successful instance result.
 
-`Object` provides a default `init` behavior that accepts zero arguments and
-signals an argument-count Error when arguments are supplied. Therefore `Thing()`
-works for an object that does not override `init`, while `Thing(1, 2)` requires
-compatible initialization behavior.
+`Object` provides a default `init` behavior that accepts zero arguments and,
+on normal completion, returns its receiver (`this`). A non-empty argument vector
+handled by this inherited standard initialization signals an argument-count
+Error. This return rule belongs only to the standard `Object.init`; an overriding
+`init` has ordinary Closure return semantics and is not required to return
+`this`. Therefore `Thing()` works for an object that does not override `init`,
+while `Thing(1, 2)` requires compatible initialization behavior. As specified
+above, `Object.call` ignores the normal result of `init` during default
+construction and returns the fresh instance.
 
 Alternative constructors such as `Point.fromPolar(radius, angle)` are ordinary
 named messages and may internally use the same parenthesized invocation

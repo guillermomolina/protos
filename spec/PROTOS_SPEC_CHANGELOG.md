@@ -8,6 +8,22 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.362] - 2026-09-04
+
+### Standard Object.init normal result (D022)
+- Defines the inherited standard `Object.init()` normal result as its receiver
+  (`this`), making direct invocation portable.
+- Keeps overriding `init` methods under ordinary Closure return semantics; they
+  are not required to return `this`.
+- Preserves default construction semantics: `Object.call` ignores the normal
+  result of `init` and returns the fresh instance; initialization Errors and
+  other control transfers continue to propagate normally.
+
+### Compatibility
+- Closes previously unspecified observable behavior for direct calls to the
+  standard inherited `Object.init`; it does not change custom initialization or
+  construction result semantics.
+
 ## [0.1.361] - 2026-09-04
 
 ### Canonical Process bootstrap snapshot identity (D018)

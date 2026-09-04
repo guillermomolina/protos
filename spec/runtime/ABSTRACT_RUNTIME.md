@@ -3037,7 +3037,7 @@ The result of `init` is deliberately ignored. Successful construction returns th
 
 If `init` signals, normal error-unwinding semantics apply and the construction call does not successfully return the instance.
 
-The standard `Object.init` accepts no arguments. A non-empty argument vector handled by the inherited default initialization signals an argument-count error.
+The standard `Object.init` accepts no arguments and, on normal completion, returns its receiver (`this`). A non-empty argument vector handled by the inherited default initialization signals an argument-count error. This result rule applies only to the standard inherited behavior; an overriding `init` has ordinary Closure return semantics. `objectCall` ignores the normal result of the selected `init` and returns the fresh instance.
 
 `init` is found through ordinary message lookup beginning at the fresh instance, so a prototype may specialize initialization simply by providing an `init` slot.
 
