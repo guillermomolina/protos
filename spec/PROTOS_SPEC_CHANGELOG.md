@@ -8,6 +8,24 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.357] - 2026-09-04
+
+### Actor API closure cleanup (D017)
+- Removed residual wording that presented already-closed Core Actor API decisions
+  as open or implementation-selectable.
+- Aligned the introductory `SendOperation` description with its closed minimal
+  Core `cancel()` / `retry()` protocol and kept extra diagnostics explicitly
+  outside portable Core.
+- Aligned graceful stop with the closed `ActorRef.stop() -> null` contract and
+  its absence of a dedicated stop Future/operation, while preserving
+  `ActorRef.termination()` as the independent lifecycle-observation mechanism.
+- Removed the stale open failure-policy API statement and made §26 defer to the
+  fixed Core policy/API boundary already owned by §26A.
+
+### Compatibility
+- No new Actor API or lifecycle state is introduced. D015 non-resumable Error
+  handling and D016 `Actor.spawn(...) -> ActorRef` semantics are unchanged.
+
 ## [0.1.356] - 2026-09-04
 
 ### Ordinary computed-operation invocation spelling

@@ -437,19 +437,12 @@ according to normal Protos activation semantics.
 It returns a local identity-bearing communication operation object,
 provisionally called `SendOperation`.
 
-A SendOperation represents the logical delivery operation and may expose
-information or operations concerning:
-
--   Status
--   Progress
--   Waiting
--   Cancellation
--   Retry
--   Attempts
--   Logical message identity
--   Destination
--   Last error
--   Delivery uncertainty
+A SendOperation represents one logical delivery operation. Its portable Core
+protocol is the minimal `cancel()` / `retry()` surface defined below. Core does
+not expose status, progress, waiting, attempt-count, destination-ID, last-error,
+or transport-introspection members on SendOperation; implementation extensions
+may expose additional non-portable diagnostics only when they do not change the
+Core operation semantics.
 
 A SendOperation is communication-specific and is therefore distinct from
 a generic Future.
@@ -812,8 +805,10 @@ into a different semantic kind of termination.
 Repeated graceful-stop requests for the same live incarnation are idempotent with
 respect to lifecycle: they observe the same termination cutover and cannot create a
 second shutdown sequence, reopen acceptance, or cause already-committed effects to
-be replayed. Exact request-operation object identity, administrative API shape, and
-whether callers can wait on a dedicated stop operation remain API design questions.
+be replayed. `ActorRef.stop()` itself always returns canonical `null` and creates no
+dedicated stop operation or Future. Callers that need to observe known termination
+use the independent `ActorRef.termination()` Future defined by §29A; that observation
+does not alter the stop request or Actor lifecycle.
 
 A graceful stop is not Actor failure. It does not by itself invoke failure policy as
 though an unhandled fatal error occurred. Group desired-state reconciliation remains
@@ -1678,22 +1673,14 @@ When an Actor suffers an unhandled fatal failure, its failure authority
 receives or observes structured failure information and applies the
 relevant policy.
 
-Possible policies may include:
+`restart` is not a distinct Actor-lifecycle semantic operation. Actors are
+replaced, never restarted. Replacement creates a new Actor and does not inherit
+the failed Actor's identity, ActorRef, private mutable heap, pending interactions,
+or mailbox.
 
--   Replace
--   Stop
--   Escalate
--   Ignore
-
-`restart` is not a distinct Actor-lifecycle semantic operation.
-
-Actors are replaced, never restarted.
-
-Replacement creates a new Actor. The replacement does not inherit the
-failed Actor's identity, ActorRef, private mutable heap, pending
-interactions, or mailbox.
-
-The exact policy API remains open.
+Core v0.1 does not expose a public failure-authority or supervisor policy API.
+The mandatory Core policy and the boundary for possible future higher-level
+policy facilities are defined by §26A.
 
 For a trivial Process containing only its RootActor, no dedicated
 supervisor machinery is required.
