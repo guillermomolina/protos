@@ -19,34 +19,22 @@ package com.guillermomolina.protos.runtime;
 
 public final class ProtosIdentity {
     private ProtosIdentity() {}
-
-    public static boolean identical(Object left, Object right) {
-        if (left == right) {
-            return true;
-        }
-
-        if (left instanceof ProtosIntegerValue leftInteger
-                && right instanceof ProtosIntegerValue rightInteger) {
-            return leftInteger.value().equals(rightInteger.value());
-        }
-
-        if (left instanceof ProtosFloatValue leftFloat
-                && right instanceof ProtosFloatValue rightFloat) {
-            double a = leftFloat.value();
-            double b = rightFloat.value();
-
-            if (Double.isNaN(a) && Double.isNaN(b)) {
-                return true;
-            }
-
-            return Double.doubleToRawLongBits(a) == Double.doubleToRawLongBits(b);
-        }
-
-        if (left instanceof ProtosStringValue leftString
-                && right instanceof ProtosStringValue rightString) {
-            return leftString.value().equals(rightString.value());
-        }
-
+    public static boolean identical(Object left,Object right) {
+        if(left==right)return true;
+        if(left instanceof ProtosIntegerValue a && right instanceof ProtosIntegerValue b)return a.value().equals(b.value());
+        if(left instanceof ProtosFixedIntegerValue a && right instanceof ProtosFixedIntegerValue b)return a.family()==b.family()&&a.value().equals(b.value());
+        if(left instanceof ProtosFloatValue a && right instanceof ProtosFloatValue b){double av=a.value(),bv=b.value();if(Double.isNaN(av)&&Double.isNaN(bv))return true;return Double.doubleToRawLongBits(av)==Double.doubleToRawLongBits(bv);}
+        if(left instanceof ProtosStringValue a && right instanceof ProtosStringValue b)return a.value().equals(b.value());
         return false;
     }
+    public static java.math.BigInteger identityHash(Object value){
+        java.util.Objects.requireNonNull(value,"value");
+        if(value instanceof ProtosIntegerValue i)return tagged(1,i.value().hashCode());
+        if(value instanceof ProtosFixedIntegerValue i)return tagged(10+i.family().ordinal(),i.value().hashCode());
+        if(value instanceof ProtosFloatValue f){double d=f.value();long bits=Double.isNaN(d)?0x7ff8000000000000L:Double.doubleToRawLongBits(d);return tagged(30,Long.hashCode(bits));}
+        if(value instanceof ProtosStringValue st)return tagged(31,st.value().hashCode());
+        if(value==ProtosBooleanValue.TRUE)return tagged(32,1); if(value==ProtosBooleanValue.FALSE)return tagged(32,0); if(value==ProtosNullValue.INSTANCE)return tagged(33,0);
+        return java.math.BigInteger.valueOf(Integer.toUnsignedLong(System.identityHashCode(value)));
+    }
+    private static java.math.BigInteger tagged(int family,int hash){long x=(((long)family)<<32)^Integer.toUnsignedLong(hash);return java.math.BigInteger.valueOf(x);}
 }

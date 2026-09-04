@@ -104,6 +104,9 @@ public final class ProtosCoreBootstrap {
         sourceLoader
                 .load(coreDirectory.resolve("map.protos"))
                 .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("identity_map.protos"))
+                .call(bootstrapActivation);
 
         Object contextBinding =
                 bootstrapContext
@@ -214,6 +217,8 @@ public final class ProtosCoreBootstrap {
         ProtosStandardHashSupport.installStringHash(stringPrototype);
         ProtosObjectValue mapPrototype = requirePrototype(bootstrapContext, "Map", ProtosObjectValue.rootObject());
         ProtosStandardMapProtocol.install(mapPrototype);
+        ProtosObjectValue identityMapPrototype = requirePrototype(bootstrapContext, "IdentityMap", ProtosObjectValue.rootObject());
+        ProtosStandardIdentityMapProtocol.install(identityMapPrototype);
 
         ProtosObjectValue preludeBindings =
                 new ProtosObjectValue(contextPrototype);
@@ -236,6 +241,7 @@ public final class ProtosCoreBootstrap {
         preludeBindings.createLocalSlot("Array", arrayPrototype);
         preludeBindings.createLocalSlot("String", stringPrototype);
         preludeBindings.createLocalSlot("Map", mapPrototype);
+        preludeBindings.createLocalSlot("IdentityMap", identityMapPrototype);
         preludeBindings.freeze();
 
         return new ProtosPrelude(preludeBindings, contextPrototype);

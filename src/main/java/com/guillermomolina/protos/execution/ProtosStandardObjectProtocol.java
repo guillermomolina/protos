@@ -71,6 +71,12 @@ public final class ProtosStandardObjectProtocol {
                                         : com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE;
                             }));
         }
+        if (!object.hasLocalSlot("identityHash")) {
+            object.createLocalSlot("identityHash", ProtosClosureValue.nativeClosure((activation, supplied) -> {
+                if (!supplied.isEmpty()) throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+                return new com.guillermomolina.protos.runtime.ProtosIntegerValue(com.guillermomolina.protos.runtime.ProtosIdentity.identityHash(activation.receiver()));
+            }));
+        }
         if (!object.hasLocalSlot("!=")) {
             object.createLocalSlot(
                     "!=",

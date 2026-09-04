@@ -4,6 +4,17 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## 0.2.61-SNAPSHOT
+
+### Added
+- Implemented I006 IdentityMap with semantic identity hashing plus primitive `===`.
+- Completed fixed-width Integer identity and identity-hash coherence.
+- Added IdentityMap conformance coverage.
+
+### Notes
+- Standard Map remains on `hash` plus `==`; Set and IdentitySet remain out of scope.
+- No normative specification revision is changed.
+
 ## 0.2.60-SNAPSHOT
 
 ### Added

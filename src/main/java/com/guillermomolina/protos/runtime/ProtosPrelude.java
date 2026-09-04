@@ -137,6 +137,10 @@ public final class ProtosPrelude {
         return requiredOrdinaryBinding("String");
     }
 
+    public ProtosObjectValue identityMapPrototype() {
+        return requiredOrdinaryBinding("IdentityMap");
+    }
+
     public ProtosObjectValue arrayPrototype() {
         Object binding = bindings.readLocalSlot("Array").orElseThrow();
         if (!(binding instanceof ProtosObjectValue arrayPrototype)) {
