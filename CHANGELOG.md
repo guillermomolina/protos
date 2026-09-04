@@ -8,6 +8,7 @@ For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_
 
 ### Added
 
+- Added the first executable Truffle node: non-empty expression sequences execute strictly left-to-right and return the final child result.
 - Added the initial Truffle execution-node boundary with source-span preservation and the Truffle API dependency.
 - Added canonical call-spread lowering with a contextual `CanonicalSpread(expression)` marker for ordinary, member, and super invocation arguments.
 - Added dedicated canonical indexed-assignment lowering that preserves receiver/index/value evaluation structure and the distinct `atPut` assignment-result semantics.
