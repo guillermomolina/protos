@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 217
+Document revision: 218
 Status: Draft  
 Last updated: 2026-09-03
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -5374,7 +5374,7 @@ This guarantee applies to SUCCESS, FAILED, and CANCELLED completion with respect
 
 Ordinary Future/task execution is Actor-local and cooperative: only one segment of Actor-local Protos code executes at a time, tasks interleave with other Actor-local work only at explicit suspension points, and between suspension points Actor-local state is serialized. The visibility guarantee above is what lets a suspended task correctly observe the effects of a completed task, including writes the completed task made to the Actor-local mutable state before completion.
 
-Different Actors never share mutable Protos references, so no cross-Actor mutable-state visibility rule exists beyond Actor communication semantics. Explicit isolated parallel computation, where provided, may execute Protos code simultaneously on other CPU carriers, but it crosses an isolation boundary, receives no arbitrary live mutable aliases to the calling Actor's state, and returns its result by value, so conflicting concurrent mutation of one Actor's mutable state does not arise.
+Different Actors never share mutable Protos references, so no cross-Actor mutable-state visibility rule exists beyond Actor communication semantics. Explicit isolated parallel computation may execute Protos code simultaneously on other CPU carriers, but it crosses an isolation boundary. Its successful submission fixes logical cross-boundary input state before returning to the caller; it receives no arbitrary live mutable aliases to the calling Actor's state; mutation is confined to P-owned isolated state; failure or cancellation publishes no partial mutable result; and successful results return by value. Parallel execution has no implicit Actor sender identity or ambient Actor/Process/Node/Cluster/I/O authority, so conflicting concurrent mutation of one Actor's mutable state and scheduler-dependent Actor-side effect ordering do not arise.
 
 Implementations may map these guarantees to the host VM memory model, scheduler barriers, or equivalent mechanisms as long as language-level visibility is preserved.
 

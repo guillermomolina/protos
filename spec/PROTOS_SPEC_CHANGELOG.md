@@ -4,6 +4,45 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.218] - 2026-09-04
+
+### Closed
+- Closed the semantic core of isolated parallel execution while keeping its
+  exact public API, syntax, bootstrap representation, partition representation,
+  and implementation mechanisms open.
+- Defined successful parallel submission to establish deterministic input
+  snapshot state before control returns to the caller, independent of delayed
+  scheduling.
+- Defined that P never semantically mutates the calling Actor's original mutable
+  input and publishes mutable result state only through successful completion.
+- Defined failure and cancellation to publish no partially mutated P-owned state.
+- Defined exclusive writable partitioning over logically disjoint mutable state,
+  not merely non-overlapping physical ranges or top-level Array indexes.
+- Defined nested partition authority as derived disjoint authority and required
+  nested parallel work to remain capable of progress over bounded CPU carriers.
+- Required deterministic parallel operations to keep observable result,
+  combination ordering, and failure selection independent of worker scheduling,
+  carrier count, chunk timing, and work-stealing choices.
+- Defined isolated parallel execution as a CPU-computation domain rather than a
+  second Actor-like effects domain.
+- Prohibited P from implicitly inheriting Actor sender identity, Actor-local
+  continuations, I/O authority, Process/Node/Cluster authority, or other ambient
+  caller authority.
+- Clarified that ActorRef/GroupRef transferability across Actor messaging does
+  not imply transferability into P; any future P-safe effect capability requires
+  its own normative contract.
+- Preserved ordinary Closure capture-by-reference semantics: a future P API must
+  validate/avoid unsafe captures or introduce an explicit bootstrap mechanism,
+  never silently reinterpret captures as by-value.
+
+### Changed
+- Updated the canonical language and runtime concurrency summaries and the
+  normative I/O capability model to reflect the closed P isolation,
+  publication, and authority boundaries.
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 218.
+
 ## [0.1.217] - 2026-09-03
 
 ### Fixed

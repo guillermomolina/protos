@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 217
+Document revision: 218
 Status: Draft  
 Last updated: 2026-09-03
 This document is the normative domain model for Protos input/output semantics.
@@ -63,6 +63,19 @@ Protos separates resource identity, I/O capability, text encoding, buffering, te
 There is no universal `Stream` prototype required by v0.1. A file, socket, pipe endpoint, buffered wrapper, or memory byte stream may share protocols without sharing a common semantic ancestor other than the normal Protos delegation hierarchy.
 
 Traits express observable capabilities of the receiver. A capability possessed by a wrapped object does not automatically become a capability of the wrapper.
+
+Standard I/O capabilities are not implicitly transferable into isolated parallel
+execution. Creating P work does not inherit the caller Actor's open files,
+sockets, process handles, terminal capabilities, filesystem authority, standard
+streams, or other ambient I/O authority. The fact that an I/O capability may be
+delegated safely across an Actor boundary does not by itself make that capability
+valid across the P boundary.
+
+A future facility may define a specifically P-safe I/O/effect capability, but it
+must define its crossing, ordering, cancellation, lifetime, and authority
+semantics explicitly. Until then, ordinary isolated parallel computation performs
+CPU-local isolated computation and returns values; Actor/cooperative execution
+performs standard I/O effects.
 
 > A wrapper exposes a Trait only when it correctly implements that protocol over its own observable state.
 

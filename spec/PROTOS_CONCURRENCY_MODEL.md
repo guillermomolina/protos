@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 217
+Document revision: 218
 Status: Draft
 Last updated: 2026-09-03
 # Protos Multithreading Design Ledger
@@ -3668,7 +3668,7 @@ environments.
 
 ## 71. Isolated Parallel Execution
 
-**DIRECTION CLOSED, API AND MECHANISMS OPEN**
+**CLOSED --- REVISED**
 
 Protos provides a runtime capability for explicit CPU-parallel
 computation that does not require the programmer to create persistent
@@ -3679,6 +3679,12 @@ Future/task execution and persistent Actor isolation.
 
 It does not introduce arbitrary shared mutable Protos memory and does
 not weaken the Actor turn rule.
+
+The semantic rules in this section are normative. The exact public API,
+surface syntax, bootstrap representation, standard-library names, and
+implementation mechanisms remain open unless this section states otherwise.
+Those open surfaces must preserve the closed rules below and may not choose
+different observable semantics.
 
 Conceptually:
 
@@ -3736,6 +3742,19 @@ runtime validation of capture safety, or another mechanism that does
 not transform ordinary by-reference lexical captures into hidden
 cross-boundary mutable access.
 
+A public parallel API must therefore establish the executable part of a
+parallel computation without granting that computation direct access to a
+captured Actor-local lexical context. Passing an ordinary Closure to a future
+parallel API does not, by itself, authorize the runtime to reinterpret its
+captures as copied values, to detach its captured contexts, or to make those
+contexts concurrently readable.
+
+If an eventual API accepts an ordinary Closure directly, that API must either
+prove that executing the Closure cannot observe prohibited captured state or
+reject the operation before parallel Protos execution begins. A future API may
+instead use an explicitly different bootstrap representation. The exact choice
+remains open; silently changing ordinary Closure capture semantics does not.
+
 ### 71.3 Value and Snapshot Semantics
 
 Values supplied across the isolated parallel boundary have logical
@@ -3752,6 +3771,27 @@ Actor-local mutations.
 Results cross back by value. Completion, failure, or cooperative
 cancellation resolves the corresponding Future according to the normal
 Future model.
+
+For every successful parallel submission, the logical input state of every
+cross-boundary value is fixed before control returns from that successful
+submission to the caller. Worker admission, queueing, CPU availability, work
+stealing, or delayed execution must not move that logical snapshot point.
+
+Mutable input supplied by an Actor is not semantically mutated by the parallel
+computation. The parallel computation operates on isolated logical state. The
+caller's original mutable value retains the state established at the parallel
+boundary and remains governed by ordinary Actor-local rules.
+
+This rule does not prohibit an implementation from reusing physical storage when
+it can do so without changing any observable source-object identity, contents,
+aliasing, or later behavior. Copy-on-write, storage stealing followed by
+unobservable reconstruction, page remapping, uniqueness analysis, and equivalent
+optimizations remain implementation choices.
+
+Publication back to the caller occurs only through a completed cross-boundary
+result. Partial mutable state produced inside parallel execution is not visible
+to the caller merely because some physical work has completed. Failure or
+cancellation does not publish partially computed mutable state.
 
 ### 71.4 Safe Physical Sharing
 
@@ -3800,8 +3840,33 @@ The programmer is not required to introduce mutexes, atomics, volatile
 state, memory ordering, or general-purpose borrow checking merely to use
 this model.
 
-The exact region/partition representation, eligibility rules, alias
-validation, merge semantics, and surface API remain open.
+Disjoint physical ranges, Array indexes, or storage addresses are not by
+themselves sufficient to establish disjoint mutable authority. Partitioning is
+valid only when the abstract mutable state governed by each writable partition
+is logically disjoint from the mutable state governed by every simultaneously
+writable sibling partition.
+
+In particular, two Array regions that contain references to the same mutable
+object do not acquire independent authority over that referenced object merely
+because the Array indexes themselves do not overlap. A partition may provide
+exclusive mutation of its own indexed state without thereby granting mutation
+authority over arbitrary mutable objects reachable through its elements.
+
+Exclusive writable partitioning applies to isolated state owned by the parallel
+computation, not to live mutable state that remains semantically owned by the
+calling Actor. The runtime may physically reuse source storage only when the
+caller continues to observe the original source value exactly as required by the
+Value and Snapshot Semantics rules.
+
+An exclusive mutable authority may be subdivided into child authorities only
+when those child authorities are mutually disjoint. While a child authority is
+live, its parent authority must not be used concurrently to read or mutate the
+same logical mutable state in a way forbidden by that child's exclusivity. When
+all relevant child authorities complete, the parent authority may be
+reconstituted according to the eventual partition API.
+
+The exact region/partition representation, eligibility rules, validation
+mechanism, recomposition operation, merge API, and surface syntax remain open.
 
 ### 71.6 Library-Level Parallel Patterns
 
@@ -3826,6 +3891,20 @@ A standard or third-party library may choose chunking, reduction trees,
 partition strategy, batching, or algorithm-specific policy while the
 runtime enforces the underlying isolation and scheduling guarantees.
 
+Physical scheduling policy must not accidentally become an observable semantic
+choice. If a standard parallel library operation promises a deterministic
+result, every ordering, combination, conflict, or failure-selection decision
+capable of changing that result must be defined by a logical rule independent of
+worker count, carrier count, chunk timing, queue order, or work-stealing order.
+
+For example, a deterministic parallel reduction whose operator is observably
+non-associative must define a canonical logical combination structure or other
+equivalent deterministic rule; an implementation may not choose a different
+observable parenthesization merely because it used a different number of
+workers. A library may expose intentionally nondeterministic behavior only when
+that nondeterminism is part of the library operation's specified contract rather
+than an accidental consequence of runtime scheduling.
+
 ### 71.7 Scheduling and Oversubscription
 
 Requesting many parallel computations does not imply creating the same
@@ -3847,6 +3926,16 @@ This preserves the pay-for-what-you-use principle and prevents nested or
 multi-Actor parallelism from requiring unbounded operating-system-thread
 creation.
 
+Nested isolated parallelism must remain capable of progress with bounded CPU
+carriers. A parent parallel computation waiting for child parallel work must not
+semantically require an additional unused operating-system thread or carrier to
+exist before that child can run. An implementation may satisfy this requirement
+through continuation scheduling, helping, work stealing, inline execution,
+carrier release, or another mechanism whose choice is not observable.
+
+This is a progress requirement, not a promise that every submitted parallel
+operation begins immediately or receives a dedicated core.
+
 ### 71.8 Failure and Cancellation
 
 Failure of an isolated parallel computation fails its result Future
@@ -3863,6 +3952,21 @@ parallel child work follows the corresponding Future ownership and
 cancellation rules. A completed parallel result does not acquire an
 independent lifetime merely because it was computed on another CPU
 carrier.
+
+Failure and cancellation preserve the publication boundary defined above:
+partially mutated isolated parallel state does not become a mutation of the
+caller's original value and is not published as a successful result.
+
+When one logical parallel library operation contains several child computations,
+runtime race timing must not silently select one of several concurrently
+available observable failures. A deterministic operation must define a
+deterministic logical failure-selection rule or an explicit aggregate failure
+contract. An operation may expose nondeterministic failure selection only when
+that nondeterminism is part of its specified semantics.
+
+This rule does not impose one universal failure-selection policy on all future
+parallel APIs. It prohibits an otherwise deterministic API from making
+worker-completion timing, carrier scheduling, or queue order the hidden selector.
 
 ### 71.9 Locality and Distribution
 
@@ -3906,6 +4010,81 @@ Principle:
 > wherever the runtime can preserve simple logical isolation, while
 > exposing programmer-visible synchronization machinery only if a future
 > workload proves that the simpler model is fundamentally insufficient.
+
+### 71.11 Effect and Authority Boundary
+
+Isolated parallel computation is a CPU-computation domain, not a second
+Actor-like effects domain.
+
+A parallel computation does not inherit the originating Actor's sender identity,
+mailbox identity, lifecycle authority, Process authority, Node or Cluster
+authority, ambient I/O resources, active dynamic handlers, or other
+Actor-/runtime-local authority merely because the computation was created by
+that Actor.
+
+In particular, parallel execution does not silently perform Actor `send()` or
+`request()` operations as though they had been issued by the originating Actor.
+Doing so would make simultaneous parallel scheduling observable through
+same-sender FIFO and would violate the originating Actor's serialized issuance
+model.
+
+Core parallel execution therefore permits ordinary isolated computation,
+allocation, mutation of its own isolated state, and nested parallel computation
+subject to this section. Objects whose meaning is an authority to affect or
+observe state outside that isolated computation are not automatically valid
+parallel-boundary values.
+
+Until a later normative facility defines otherwise, the following must not be
+made usable inside isolated parallel execution merely by copying or forwarding a
+caller-held reference:
+
+-   `ActorRef` and `GroupRef` communication capabilities
+-   pending Future/task identity or Actor-local continuations
+-   Process, Node, Cluster, placement, lifecycle, or administrative authority
+-   open filesystem, network, process, terminal, or other I/O capabilities
+-   any capability whose operation would use the caller Actor's identity or
+    mutate/observe caller-local mutable runtime state
+
+A future facility may define a specifically P-safe capability and its crossing,
+ordering, failure, and authority semantics. Such a facility is not implied by
+ordinary Actor transferability. In particular, the fact that `ActorRef` or
+`GroupRef` may cross an Actor message boundary does not make it valid across the
+parallel-computation boundary.
+
+The normal architectural pattern is:
+
+```text
+Actor / cooperative code
+    -> establish isolated parallel inputs
+    -> P computes
+    -> completed value or failure returns
+    -> Actor / cooperative continuation performs messaging or I/O
+```
+
+This preserves Actor sender ordering, keeps I/O and external effects in domains
+whose authority and lifetime are already defined, and prevents P from acquiring
+persistent identity merely to explain effects.
+
+### 71.12 Scheduler Independence
+
+Parallel eligibility grants permission for simultaneous execution; it does not
+grant the scheduler authority to choose otherwise unspecified observable
+behavior.
+
+For a deterministic parallel operation, changing any of the following alone must
+not change its semantic result:
+
+-   number of CPU cores;
+-   number of runtime carriers;
+-   worker-pool size;
+-   work-stealing decisions;
+-   queue order;
+-   chunk timing;
+-   whether eligible work runs inline or on another carrier.
+
+This does not prohibit APIs whose contract explicitly includes nondeterministic
+selection. It requires such nondeterminism to be semantic and documented rather
+than an accidental leak of implementation scheduling.
 
 ## 72. Standard Prelude Sharing
 

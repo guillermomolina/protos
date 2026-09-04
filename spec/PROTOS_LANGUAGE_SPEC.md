@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 217
+Document revision: 218
 Status: Draft  
 Last updated: 2026-09-03
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -4905,7 +4905,7 @@ Core v0.1 concurrency follows the Actor model: an Actor is a serialized domain o
 
 - **Actor-local Future/task concurrency.** Ordinary Future/task execution created within an Actor remains Actor-local and cooperative. Only one segment of Actor-local Protos code executes at a time. Tasks may interleave with other Actor-local work only at explicit suspension points; they never execute Protos code simultaneously against the same mutable Actor state, and between suspension points Actor-local state is serialized, so no locks or other explicit synchronization are required to protect it.
 - **Different Actors.** Actors do not share mutable Protos references. Another Actor's mutable state is never accessed by direct reference; it is reached only through Actor communication, which has pass-by-value semantics.
-- **Explicit isolated parallel computation.** The design-ledger facility for explicit isolated parallel computation (whose API remains open) may execute Protos code simultaneously on other CPU carriers, but it crosses an explicit isolation boundary: it does not receive arbitrary live mutable aliases to the calling Actor's object graph, and results cross back by value.
+- **Explicit isolated parallel computation.** Explicit isolated parallel computation (whose exact public API and bootstrap representation remain open) may execute Protos code simultaneously on other CPU carriers, but it crosses an explicit isolation boundary. Mutable inputs are fixed as logical boundary values before a successful submission returns, P does not semantically mutate the calling Actor's original mutable values, partial P-owned state is not published on failure or cancellation, and completed results cross back by value. P has no implicit Actor sender identity or ambient Actor/Process/Node/Cluster/I/O authority; any future P-safe effect capability requires its own normative contract.
 
 Future completion establishes a visibility boundary:
 
