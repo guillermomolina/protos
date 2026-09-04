@@ -4,6 +4,31 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.11-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added the first executable distributable Core source,
+  `protos/lib/core/context.protos`.
+- The Core source constructs the standard `Context` prototype as an ordinary
+  Protos object with `Object` as its delegation parent.
+- Added coverage that loads and executes that Core source through the ordinary
+  source-file/compiler pipeline and observes the resulting `Context` binding.
+
+### Changed
+
+- Project implementation version changed from `0.2.10-SNAPSHOT` to `0.2.11-SNAPSHOT`.
+
+### Notes
+
+- The existing Java-side `Context` in `ProtosCorePrelude` remains temporary
+  bootstrap scaffolding for now. This increment establishes the source-side
+  replacement before changing activation construction to consume it.
+- No special Core parser, AST, object constructor, or Java-side standard
+  prototype was added.
+- No normative specification change is introduced.
+
+
 ## [0.2.10-SNAPSHOT] - 2026-09-04
 
 ### Added
