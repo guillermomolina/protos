@@ -22,6 +22,7 @@ import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosNumberLiteral;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.semantic.ast.CanonicalAssign;
+import com.guillermomolina.protos.semantic.ast.CanonicalCall;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalCompose;
 import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
@@ -34,6 +35,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalMember;
 import com.guillermomolina.protos.semantic.ast.CanonicalObject;
 import com.guillermomolina.protos.semantic.ast.CanonicalReturn;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
+import com.guillermomolina.protos.semantic.ast.CanonicalSpread;
 import java.util.Objects;
 
 public final class CanonicalToTruffleLowerer {
@@ -44,10 +46,10 @@ public final class CanonicalToTruffleLowerer {
             return lowerLiteral(literal);
         }
         if (expression instanceof CanonicalClosure closure) {
-            return new ProtosClosureLiteralNode(
-                    closure.span(),
-                    closure,
-                    lowerCallablePlan(closure));
+            return new ProtosClosureLiteralNode(closure.span(), closure, lowerCallablePlan(closure));
+        }
+        if (expression instanceof CanonicalCall call) {
+            return lowerCall(call, false);
         }
         if (expression instanceof CanonicalSequence sequence) {
             return lowerSequence(sequence);
@@ -143,6 +145,9 @@ public final class CanonicalToTruffleLowerer {
                     returnExpression.span(),
                     lowerCallable(returnExpression.value()));
         }
+        if (expression instanceof CanonicalCall call) {
+            return lowerCall(call, true);
+        }
         if (expression instanceof CanonicalSequence sequence) {
             ProtosExpressionNode[] expressions =
                     sequence.expressions().stream()
@@ -157,6 +162,19 @@ public final class CanonicalToTruffleLowerer {
                     lowerCallablePlan(closure));
         }
         return lower(expression);
+    }
+
+    private ProtosExpressionNode lowerCall(CanonicalCall call, boolean callableContext) {
+        java.util.List<ProtosArgumentItem> items = new java.util.ArrayList<>(call.arguments().size());
+        for (CanonicalExpression argument : call.arguments()) {
+            if (argument instanceof CanonicalSpread spread) {
+                items.add(new ProtosArgumentItem(callableContext ? lowerCallable(spread.expression()) : lower(spread.expression()), true));
+            } else {
+                items.add(new ProtosArgumentItem(callableContext ? lowerCallable(argument) : lower(argument), false));
+            }
+        }
+        ProtosExpressionNode receiver = callableContext ? lowerCallable(call.receiver()) : lower(call.receiver());
+        return new ProtosCallNode(call.span(), receiver, new ProtosArgumentVectorNode(call.span(), items));
     }
 
     private ProtosExpressionNode lowerLiteral(CanonicalLiteral literal) {

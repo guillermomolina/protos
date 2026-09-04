@@ -22,7 +22,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import java.util.List;
 import java.util.Objects;
 
-public final class ProtosClosureValue {
+public final class ProtosClosureValue extends ProtosObjectValue {
     private final CanonicalClosure definition;
     private final List<ProtosObjectValue> capturedLexicalContexts;
     private final Object capturedReceiver;
@@ -30,12 +30,13 @@ public final class ProtosClosureValue {
     private final ProtosReturnHome returnHome;
     private final ProtosPrelude prelude;
     private final ProtosClosureExecutionPlan executionPlan;
+    private final ProtosNativeClosureBody nativeBody;
 
     public ProtosClosureValue(
             CanonicalClosure definition,
             List<ProtosObjectValue> capturedLexicalContexts,
             Object capturedReceiver) {
-        this(definition, capturedLexicalContexts, capturedReceiver, null, null, null, null);
+        this(definition, capturedLexicalContexts, capturedReceiver, null, null, null, null, null);
     }
 
     public ProtosClosureValue(
@@ -49,6 +50,7 @@ public final class ProtosClosureValue {
                 capturedReceiver,
                 null,
                 returnHome,
+                null,
                 null,
                 null);
     }
@@ -67,6 +69,7 @@ public final class ProtosClosureValue {
                 methodHome,
                 returnHome,
                 prelude,
+                null,
                 null);
     }
 
@@ -78,7 +81,20 @@ public final class ProtosClosureValue {
             ProtosReturnHome returnHome,
             ProtosPrelude prelude,
             ProtosClosureExecutionPlan executionPlan) {
-        this.definition = Objects.requireNonNull(definition, "definition");
+        this(definition, capturedLexicalContexts, capturedReceiver, methodHome, returnHome, prelude, executionPlan, null);
+    }
+
+    private ProtosClosureValue(
+            CanonicalClosure definition,
+            List<ProtosObjectValue> capturedLexicalContexts,
+            Object capturedReceiver,
+            ProtosObjectValue methodHome,
+            ProtosReturnHome returnHome,
+            ProtosPrelude prelude,
+            ProtosClosureExecutionPlan executionPlan,
+            ProtosNativeClosureBody nativeBody) {
+        super(ProtosObjectValue.rootObject());
+        this.definition = definition;
         this.capturedLexicalContexts =
                 List.copyOf(
                         Objects.requireNonNull(
@@ -90,6 +106,11 @@ public final class ProtosClosureValue {
         this.returnHome = returnHome;
         this.prelude = prelude;
         this.executionPlan = executionPlan;
+        this.nativeBody = nativeBody;
+    }
+
+    public static ProtosClosureValue nativeClosure(ProtosNativeClosureBody body) {
+        return new ProtosClosureValue(null, List.of(), ProtosObjectValue.rootObject(), null, null, null, null, Objects.requireNonNull(body, "body"));
     }
 
     public CanonicalClosure definition() {
@@ -120,16 +141,24 @@ public final class ProtosClosureValue {
         return java.util.Optional.ofNullable(executionPlan);
     }
 
+    public java.util.Optional<ProtosNativeClosureBody> nativeBody() {
+        return java.util.Optional.ofNullable(nativeBody);
+    }
+
     public ProtosClosureValue bindMethod(
             Object receiver,
             ProtosObjectValue home) {
-        return new ProtosClosureValue(
-                definition,
-                capturedLexicalContexts,
-                Objects.requireNonNull(receiver, "receiver"),
-                Objects.requireNonNull(home, "home"),
-                returnHome,
-                prelude,
-                executionPlan);
+        ProtosClosureValue bound = new ProtosClosureValue(
+                definition, capturedLexicalContexts, Objects.requireNonNull(receiver, "receiver"),
+                Objects.requireNonNull(home, "home"), returnHome, prelude, executionPlan, nativeBody);
+        for (java.util.Map.Entry<String, Object> entry : localSlotsSnapshot().entrySet()) {
+            bound.createLocalSlot(entry.getKey(), entry.getValue());
+        }
+        if (isFrozen()) {
+            bound.freeze();
+        } else if (isClosed()) {
+            bound.close();
+        }
+        return bound;
     }
 }

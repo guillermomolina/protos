@@ -4,6 +4,30 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.29-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added ordinary parenthesized invocation through the normative `call` slot protocol.
+- Added `CanonicalCall` lowering, target-before-argument evaluation, spread flattening, ordinary `call` lookup, Closure validation, receiver/method-home binding, and terminal direct Closure activation.
+- Installed standard `Object.call` and `Object.init` as ordinary Closure-valued slots on `Object`, with default construction and D022's `Object.init() -> this` result.
+
+### Changed
+
+- `ProtosClosureValue` now participates in the ordinary object/delegation model as a direct child of `Object`; standard Closure invocation therefore inherits `Object.call` rather than using a hidden callable flag.
+- Extracted/bound Closure wrappers preserve ordinary local slots and structural state while replacing only receiver/method-home binding metadata.
+- Project implementation version changed from `0.2.28-SNAPSHOT` to `0.2.29-SNAPSHOT`.
+
+### Tests
+
+- Added end-to-end coverage for plain Closure calls, local and inherited `call`, incompatible shadowing, default construction, overridden and standard `init`, spread, nested calls, and non-local return across ordinary calls.
+
+### Notes
+
+- Host-represented primitive value prototype bridging and standard Array/Map/numeric `call` specializations remain later implementation layers.
+- No normative specification change is introduced.
+
+
 ## [0.2.28-SNAPSHOT] - 2026-09-04
 
 ### Changed

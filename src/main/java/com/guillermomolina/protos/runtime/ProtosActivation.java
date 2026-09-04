@@ -93,15 +93,20 @@ public final class ProtosActivation {
     public static ProtosActivation forClosureInvocation(
             ProtosClosureValue closure,
             java.util.List<?> supplied) {
+        return forClosureInvocation(closure, supplied, null);
+    }
+
+    public static ProtosActivation forClosureInvocation(
+            ProtosClosureValue closure,
+            java.util.List<?> supplied,
+            ProtosPrelude fallbackPrelude) {
         Objects.requireNonNull(closure, "closure");
         Objects.requireNonNull(supplied, "supplied");
 
-        ProtosPrelude prelude =
-                closure.prelude()
-                        .orElseThrow(
-                                () ->
-                                        new IllegalStateException(
-                                                "Closure invocation requires an owning Core prelude"));
+        ProtosPrelude prelude = closure.prelude().orElse(fallbackPrelude);
+        if (prelude == null) {
+            throw new IllegalStateException("Closure invocation requires an owning Core prelude");
+        }
         ProtosReturnHome capturedHome = closure.returnHome().orElse(null);
         boolean ownsReturnHome = capturedHome == null;
         ProtosReturnHome invocationHome =

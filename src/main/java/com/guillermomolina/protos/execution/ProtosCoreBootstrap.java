@@ -40,6 +40,8 @@ public final class ProtosCoreBootstrap {
     public ProtosPrelude bootstrap(Path coreDirectory) throws IOException {
         Objects.requireNonNull(coreDirectory, "coreDirectory");
 
+        ProtosStandardObjectProtocol.install();
+
         ProtosObjectValue bootstrapContext =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosActivation bootstrapActivation =

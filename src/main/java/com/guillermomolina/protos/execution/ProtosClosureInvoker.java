@@ -30,17 +30,18 @@ public final class ProtosClosureInvoker {
     public static Object invoke(
             ProtosClosureValue closure,
             List<?> supplied) {
+        return invoke(closure, supplied, null);
+    }
+
+    public static Object invoke(
+            ProtosClosureValue closure,
+            List<?> supplied,
+            ProtosActivation caller) {
         Objects.requireNonNull(closure, "closure");
         Objects.requireNonNull(supplied, "supplied");
-
-        ProtosClosureExecutionPlan plan =
-                closure.executionPlan()
-                        .orElseThrow(
-                                () ->
-                                        new IllegalStateException(
-                                                "Closure invocation requires a prepared execution plan"));
-        ProtosActivation activation =
-                ProtosActivation.forClosureInvocation(closure, supplied);
+        com.guillermomolina.protos.runtime.ProtosPrelude fallbackPrelude =
+                caller == null ? null : caller.prelude().orElse(null);
+        ProtosActivation activation = ProtosActivation.forClosureInvocation(closure, supplied, fallbackPrelude);
         ProtosReturnHome returnHome =
                 activation.returnHome()
                         .orElseThrow(
@@ -49,6 +50,11 @@ public final class ProtosClosureInvoker {
                                                 "Closure invocation requires a return home"));
 
         try {
+            if (closure.nativeBody().isPresent()) {
+                return closure.nativeBody().orElseThrow().execute(activation, supplied);
+            }
+            ProtosClosureExecutionPlan plan = closure.executionPlan().orElseThrow(
+                    () -> new IllegalStateException("Closure invocation requires a prepared execution plan"));
             plan.bind(activation);
             return plan.executeBody(activation);
         } catch (ProtosNonLocalReturnException transfer) {
