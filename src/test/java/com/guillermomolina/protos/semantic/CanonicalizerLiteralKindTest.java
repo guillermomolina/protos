@@ -32,7 +32,7 @@ class CanonicalizerLiteralKindTest {
     @Test
     void mapsEverySurfaceLiteralKindToCanonicalLiteralKind() {
         assertKind("42", CanonicalLiteral.Kind.NUMBER);
-        assertKind(""hello"", CanonicalLiteral.Kind.STRING);
+        assertKind("\"hello\"", CanonicalLiteral.Kind.STRING);
         assertKind("true", CanonicalLiteral.Kind.TRUE);
         assertKind("false", CanonicalLiteral.Kind.FALSE);
         assertKind("null", CanonicalLiteral.Kind.NULL);
