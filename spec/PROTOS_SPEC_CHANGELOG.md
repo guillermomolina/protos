@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.282] - 2026-09-04
+
+### Fixed
+- Defined failed-Future observation through `value()` as a new non-resumable
+  Error signaling event in the consumer's then-current dynamic handler context.
+- Prohibited Future failure records from preserving or restoring the producer's
+  abandoned signaling continuation, activation frames, dynamic handlers, return
+  homes, or other resumption authority.
+- Clarified that a consumer handler result belongs only to the consumer-side
+  handler boundary and cannot resume, retry, or inject a value into the failed
+  producer computation.
+- Defined repeated failed-Future observations as repeated consumer-side signals,
+  never revival or re-entry of the failed producer.
+- Applied the rule across same-Actor tasks, Actor boundaries, and P isolation so
+  Future failure transport cannot become an implicit continuation-transfer
+  mechanism.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 282.
+  `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
+  `PROTOS_CONCURRENCY_MODEL.md` gain normative clarification in this revision.
+
 ## [0.1.281] - 2026-09-04
 
 ### Fixed

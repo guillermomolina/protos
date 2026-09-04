@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 281
+Document revision: 282
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -1790,6 +1790,28 @@ Creating a distinct asynchronous task or Future does not copy active handler
 frames into the new task. Future failure remains recorded in the Future; a later
 `value()` re-signals the stored error in the consumer's current dynamic context.
 Dynamic handler frames never cross an Actor boundary.
+
+### Future failure records do not preserve producer continuations
+
+A failed Future records the Error outcome required by Future semantics. It does
+not record a resumable continuation of the producer's `Error.signal()` call.
+
+Conceptually:
+
+```text
+consumeFailedFuture(future, consumerTask):
+    error = future.error
+    signalErrorInCurrentTask(error, consumerTask)
+```
+
+`signalErrorInCurrentTask` performs ordinary Core handler lookup and unwind in
+the consumer task's current dynamic context. It does not restore producer
+handler frames, producer activation frames, return homes, or the abandoned
+producer signaling continuation.
+
+An implementation may retain diagnostic stack metadata only where otherwise
+permitted by Core. Such metadata is observational information and never grants
+resumption authority.
 
 Unwinding across a handler frame interacts with `ensure` exactly like any other
 unwind: cleanup scopes crossed on the way to the selected handler execute under

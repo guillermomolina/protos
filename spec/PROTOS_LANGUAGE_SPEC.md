@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 281
+Document revision: 282
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -2052,6 +2052,26 @@ If pending, the current activation is suspended. This does not require blocking 
 The implementation may use threads, fibers, coroutines, an event loop, or another scheduling mechanism without changing language semantics.
 
 If the Future completed with an error, `value()` signals that error in the waiting activation.
+
+### Failed-Future observation is a new non-resumable signal
+
+When `Future.value()` observes a failed Future, the recorded `Error` is signaled
+again in the consumer's then-current dynamic handler context. This is a new Core
+error-signaling event at the consumer observation point.
+
+It is not a continuation of the producer's original signaling operation. The
+producer-side signaling continuation was already abandoned under the Core
+non-resumable error model. Storing an Error in a Future does not preserve a
+producer stack frame, handler frame, continuation token, return home, or other
+resumption authority.
+
+If a consumer handler handles that re-signaled Error, the handler result belongs
+only to the consumer-side `handle(...)` boundary. It cannot resume, retry, or
+inject a value into the producer computation that originally failed.
+
+Repeated observations of the same failed Future, where otherwise permitted by
+the Future contract, are repeated consumer-side signaling events. They never
+revive or re-enter the failed producer computation.
 
 ## 30. Future Composition
 

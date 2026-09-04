@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 281
+Document revision: 282
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -212,6 +212,22 @@ This rule prevents handler installation from becoming hidden Actor-wide state,
 prevents unrelated task failures from being intercepted by another task's
 temporary scope, and avoids retaining a creator's dynamic stack for the lifetime
 of asynchronously spawned work.
+
+### Failed Future observation does not transfer producer control state
+
+Future failure transport carries an Error outcome, not the producer's dynamic
+control stack.
+
+The producer task or isolated computation has already reached its failure
+outcome. A later `value()` observation creates only a consumer-side Error
+signaling event. Handling that event cannot resume the producer task, restart a
+producer Actor turn, re-enter a terminated P child computation, or reconstruct
+producer dynamic handlers or return homes.
+
+This rule applies regardless of whether producer and consumer execute in the
+same Actor, different tasks of one Actor, different Actors, or across a P
+boundary. Future failure transport is never an implicit continuation-transfer
+mechanism.
 
 ### Map comparison scopes and Actor-local suspension
 
