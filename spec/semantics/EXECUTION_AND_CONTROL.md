@@ -1,7 +1,7 @@
 # Protos Execution and Control v0.1
 
 Language version: 0.1
-Document revision: 330
+Document revision: 332
 Status: Draft
 Last updated: 2026-09-04
 
@@ -254,3 +254,83 @@ A `while` operation requires a reevaluated condition and therefore semantically 
 ```
 
 A future `while (...) { ... }` form may be syntactic sugar.
+
+## Resource Cleanup and `ensure`
+
+This section owns deterministic control-flow cleanup/unwind behavior. Error signaling/handler selection during cleanup composes with `ERRORS.md`; `ensure` syntax/lowering is owned by `../PROTOS_GRAMMAR.md`.
+
+
+Core v0.1 defines no deterministic object destructor.
+
+Resource release is explicit protocol behavior, for example:
+
+```js
+file.close()
+socket.close()
+```
+
+The runtime provides unwind-safe cleanup semantics through an `ensure`-style protocol. Conceptually:
+
+```js
+body.ensure(cleanup)
+```
+
+executes `cleanup` whenever execution leaves the protected scope, whether by:
+
+- normal completion,
+- non-local return with `^`,
+- error signaling and unwind,
+- cooperative cancellation unwind.
+
+Cleanup is part of the unwind that triggered it, not fresh ordinary execution
+subject to re-delivery of that same control transfer. In particular, once a
+pending cancellation request has been honored and cancellation unwind has begun,
+that already-honored request is not observed again at suspension boundaries
+reached while running `ensure` cleanup for that unwind. Cleanup may therefore
+perform ordinary asynchronous operations and suspend while releasing resources.
+
+This shielding is only from the cancellation request already being delivered by
+the current unwind. It is not a general cancellation-masking facility and does
+not turn failures or independently observed Future outcomes into successful
+cleanup. An implementation may represent this with masking, a cancellation phase,
+or other machinery, but the distinction must be unobservable.
+
+If `cleanup` completes normally, the original completion or control transfer
+continues unchanged. For cancellation unwind, cancellation resumes after cleanup
+and the task's Future reaches the cancelled state only after all applicable
+cleanup has completed.
+
+If `cleanup` signals an error, that new error becomes the active control transfer.
+Any previously active return, error unwind, or cancellation unwind is abandoned
+in favor of the newly signaled error. Thus a cleanup failure during cancellation
+makes the task fail with that cleanup error rather than complete as cancelled.
+
+A future resumable-condition mechanism is compatible with this rule: a condition that is handled and resumed without leaving the protected scope does not trigger cleanup merely because it was signaled.
+
+Higher-level resource protocols such as `use`, `withOpen`, or similar APIs may be implemented on top of this guarantee using ordinary messages and closures.
+
+Garbage-collector finalization is not a resource-management guarantee and must not be relied upon for deterministic release of external resources.
+
+
+### Error precedence during `ensure` cleanup
+
+If execution enters `cleanup` because a control transfer is leaving the
+protected scope, normal completion of `cleanup` preserves that pending transfer.
+
+If `cleanup` instead signals an `Error`, the cleanup Error becomes the active
+error transfer and supersedes the transfer that caused cleanup to run. This
+applies when the prior transfer was normal scope exit, non-local return, Error
+unwind, or cancellation unwind.
+
+Therefore, when an Error `original` is already unwinding through an `ensure`
+scope and the cleanup signals `cleanupError`, outward handler search observes
+`cleanupError`, not `original`.
+
+Core v0.1 does not automatically wrap `cleanupError`, attach `original` as a
+language-visible cause, construct a suppressed-error list, or otherwise preserve
+both failures as a new composite Error. Libraries may build such reporting
+conventions explicitly with ordinary objects and handlers.
+
+This rule does not undo effects already performed before either Error was
+signaled. It fixes only which control transfer continues after the cleanup
+attempt.

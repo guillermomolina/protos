@@ -1,7 +1,7 @@
 # Protos Object Model v0.1
 
 Language version: 0.1
-Document revision: 327
+Document revision: 332
 Status: Draft
 Last updated: 2026-09-04
 
@@ -549,3 +549,133 @@ config.freeze()
 does not automatically freeze `config.database`.
 
 The delegation parent is immutable independently of `close()` or `freeze()`.
+
+## Core Reflection
+
+Core v0.1 provides a deliberately small reflective protocol through ordinary messages.
+
+```js
+object.hasSlot("name")
+object.slotNames()
+object.slotValue("name")
+object.parent()
+```
+
+The slot-oriented reflective operations inspect only slots local to the receiver:
+
+```text
+hasSlot(name)
+    true if the receiver has a local slot with that name;
+    false otherwise.
+
+slotNames()
+    returns the names of the receiver's local slots.
+
+### Map comparison restriction across suspension
+
+A normal `Map` candidate equality comparison is ordinary Protos code and may
+reach an explicit suspension point. Suspension does not end, mask, or transfer
+the same-Map comparison restriction.
+
+If a `queryKey == storedKey` comparison suspends while executing on behalf of a
+search of a particular Map, that Map remains under the existing keyed-entry
+mutation restriction until the comparison invocation completes normally or
+leaves through ordinary unwind. Other runnable Actor-local work may execute
+while the comparison is suspended, but any such work that attempts to mutate
+that same Map's keyed-entry state signals the same reentrant-mutation `Error`
+before mutation.
+
+The restriction therefore follows the lifetime of the in-progress comparison,
+not merely the currently executing Actor turn or task segment. It remains
+Map-specific and does not prevent:
+
+- other Actor-local tasks from running;
+- read-only operations on that Map;
+- mutation of unrelated Maps;
+- mutation of key objects or objects stored as values;
+- ordinary non-Map slot mutation that does not alter that Map's keyed-entry
+  state.
+
+A read-only same-Map search started by another Actor-local task while the
+comparison is suspended executes under the already-active restriction. Its own
+query-key `hash` call therefore cannot mutate that Map merely because the new
+search has not yet entered one of its own candidate comparisons.
+
+The restriction is not a blocking lock. A conflicting keyed-entry mutation
+fails according to the existing reentrant-mutation rule; it does not wait for
+the suspended comparison to resume. No global Actor or execution-wide exclusion
+is introduced.
+
+When the suspended comparison later resumes, the same restriction is still
+active. Normal return, error unwind, non-local return, or cancellation unwind
+that leaves the comparison releases that comparison's contribution to the
+restriction exactly once. An implementation must not leave the Map permanently
+restricted after the comparison has ceased to exist.
+
+This rule deliberately avoids snapshotting the Map's keyed-entry state across a
+suspending equality callback and avoids letting unrelated Actor-local
+interleaving silently change the candidate associations of an already-active
+comparison. A key equality implementation that suspends for an unbounded time
+can consequently keep that particular Map mutation-restricted for the same
+unbounded time; this is an observable consequence of choosing to suspend inside
+a protocol whose dynamic extent protects that Map, not permission for the
+runtime to block unrelated Actor work.
+
+### Deterministic `slotNames()` ordering
+
+`slotNames()` returns an `Array` containing every local slot name exactly once
+in ascending lexicographic order of the slot-name String's Unicode scalar-value
+sequence.
+
+The comparison is performed directly on the semantic String contents:
+the first differing Unicode scalar value determines the order; if one sequence
+is an exact prefix of the other, the shorter sequence comes first. No locale,
+collation table, host string comparator, source declaration order, object shape,
+hash-table order, insertion history, or implementation-specific slot layout
+participates.
+
+For example, if an object has the local slot names `"z"`, `"a"`, and `"aa"`,
+`slotNames()` returns them in the order:
+
+```text
+["a", "aa", "z"]
+```
+
+The rule applies uniformly to slots created by ordinary `:`, composition,
+runtime-provided standard behavior, or any other normative slot-creation
+mechanism. Removing and later recreating a slot does not create a distinct
+reflection position because creation history is not part of this ordering.
+
+The returned `Array` is a snapshot of the receiver's local slot-name set at the
+time `slotNames()` performs its reflective observation. Subsequent slot
+creation, removal, or renaming-like library behavior does not retroactively
+change that already-returned Array.
+
+This ordering rule intentionally does not prescribe the receiver's internal slot
+storage order. Implementations may use shapes, hash tables, compact arrays,
+sorted tables, or any other representation; sorting may be performed lazily
+only when reflection requires it. Ordinary non-reflective object access pays no
+semantic ordering cost.
+
+slotValue(name)
+    returns the value stored in the receiver's local slot;
+    signals an error if that local slot does not exist.
+```
+
+These operations do not perform delegated lookup. Normal member access remains the operation for lookup through the delegation chain:
+
+```js
+object.name
+```
+
+`parent()` returns the receiver's immutable delegation parent.
+
+`Object` is the unique structural root and has no parent. Calling:
+
+```js
+Object.parent()
+```
+
+signals an error rather than manufacturing a sentinel parent value such as `null`.
+
+Core reflection intentionally distinguishes the object's own slot structure from ordinary delegated behavior. Core v0.1 does not require reflective access to implementation-internal activation frames, stacks, `methodHome`, or runtime representation details.

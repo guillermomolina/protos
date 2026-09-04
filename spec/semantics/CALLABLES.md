@@ -1,7 +1,7 @@
 # Protos Callables v0.1
 
 Language version: 0.1
-Document revision: 331
+Document revision: 332
 Status: Draft
 Last updated: 2026-09-04
 
@@ -204,3 +204,164 @@ operator invocation mechanism: ordinary message lookup, receiver binding,
 argument evaluation already fixed by the applicable semantic owners, and
 ordinary Closure invocation apply. A symbolic selector does not create a second
 callable kind or a privileged dispatch path.
+
+## Invocation Arguments, Defaults, Rest, and Spread
+
+Every invocation exposes the arguments supplied by the caller through the reserved intrinsic `args`.
+
+`args` is not an ordinary writable identifier and cannot be shadowed by a parameter or local slot.
+
+`args` contains exactly the explicit argument expressions from the call site, after evaluation and in source order. It does not contain the receiver and does not contain the caller activation.
+
+For example:
+
+```js
+dog.move(10, 20)
+```
+
+inside `move`:
+
+```js
+this       // dog
+args[0]    // 10
+args[1]    // 20
+args.size  // 2
+```
+
+The receiver remains available through `this`. Caller introspection, if exposed in the future, belongs to execution-context reflection rather than the argument collection.
+
+Default parameters are supported. Defaults apply only when the corresponding argument was not supplied by the caller.
+
+```js
+foo: (a, b = 10) => {
+    ...
+}
+```
+
+For:
+
+```js
+foo(1)
+```
+
+`b` is bound to `10`, while `args` still contains only the caller-supplied value:
+
+```text
+args.size == 1
+```
+
+A closure may declare one trailing rest parameter:
+
+```js
+foo: (first, ...rest) => {
+    ...
+}
+```
+
+The rest parameter is bound to the standard invocation-argument collection defined below, containing the remaining caller-supplied arguments.
+
+Argument spread is supported at call sites:
+
+```js
+pack: (...items) => items
+values: pack(10, 20, 30)
+f(...values)
+```
+
+which invokes `f` with the elements of `values` as individual positional arguments, preserving their order. Here `pack` is a rest-capturing closure: its rest parameter binds the ordinary collection containing `10`, `20`, and `30`, and the spread expands that collection's elements into `f`'s arguments.
+
+These facilities are intended to make invocation forwarding and dynamic arity ordinary language operations:
+
+```js
+forward: (...args) => {
+    target(...args)
+}
+```
+
+Protocols analogous to Smalltalk block invocation helpers may therefore be implemented using ordinary callable objects and spread, for example conceptually:
+
+```js
+f.value(10, 20)
+f.values(pack(10, 20))
+```
+
+where such protocol methods delegate to normal invocation. No overload resolution by argument type is introduced by these facilities.
+
+Argument lists and parameter lists are comma-separated lists: `,` is the only separator between elements, a comma is a separator rather than a terminator, and trailing commas are syntax errors. Newlines inside the delimiters are continuation/layout under the newline-continuation rules in Separators, Line Breaks, and Comments; they never substitute for a required comma.
+
+## Polymorphic Invocation and Object Construction
+
+This section owns invocation/call-protocol consequences. Object creation, delegation-parent, slot-construction, and object-state semantics remain owned by `OBJECT_MODEL.md`; syntax and mandatory parse/lowering rules remain owned by `../PROTOS_GRAMMAR.md`.
+
+
+Parentheses are a polymorphic invocation syntax. Invoking an object uses that object's call protocol; callability is therefore behavior, not a special static category reserved exclusively for closures.
+
+Conceptually:
+
+```js
+receiver(a, b)
+```
+
+performs the receiver's ordinary invocation protocol with the evaluated arguments.
+
+`Closure` provides the standard executable implementation of that protocol. `Object` provides the standard object-construction implementation inherited by ordinary prototypes.
+
+The default construction behavior is conceptually:
+
+```text
+Object.call(...args):
+    instance = createObject(parent = this)
+    send(instance, "init", args)
+    return instance
+```
+
+Thus:
+
+```js
+Point(10, 20)
+```
+
+creates a fresh object whose immutable delegation parent is `Point`, sends `init(10, 20)` to the fresh object, and returns that fresh object.
+
+`init` is an ordinary overridable message. Its return value is ignored by the default construction protocol; the construction expression returns the created instance.
+
+If initialization signals an error, construction fails and the construction expression produces no successful instance result.
+
+`Object` provides a default `init` behavior that accepts zero arguments and signals an argument-count error when arguments are supplied. Therefore:
+
+```js
+Thing()
+```
+
+works for a prototype that does not define its own `init`, while:
+
+```js
+Thing(1, 2)
+```
+
+requires compatible initialization behavior.
+
+Alternative constructors are ordinary named messages rather than overloads:
+
+```js
+Point.fromPolar(radius, angle)
+Point.fromJson(data)
+Point.origin()
+```
+
+Such messages may internally invoke the normal construction protocol.
+
+Object-literal/prototype syntax remains distinct:
+
+```js
+Point {
+    x: 10
+    y: 20
+}
+```
+
+directly creates an object whose parent is `Point` and evaluates the object body as slot definitions. It does not implicitly send `init`.
+
+Core v0.1 does not define a combined object-construction form in which `Point(args) { ... }` means "construct and then evaluate this object body".
+
+When the token sequence `Point(args) { ... }` is otherwise valid under trailing-closure syntax, the braces denote a parameterless trailing closure appended to the invocation's arguments: the form desugars as `Point(args, () => { ... })`. The braces do not become an object-construction body.

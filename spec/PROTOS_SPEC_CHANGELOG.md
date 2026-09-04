@@ -8,6 +8,28 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.332] - 2026-09-04
+
+### Migration completed
+- Completed the residual modularization of `PROTOS_LANGUAGE_SPEC.md` left by the
+  original section-number-based migration.
+- Replaced duplicated identifier/separator/operator/error/Future/concurrency
+  contracts in Language with direct ownership anchors.
+- Moved remaining callable/invocation contracts to `semantics/CALLABLES.md`.
+- Moved remaining cleanup/control contracts to `semantics/EXECUTION_AND_CONTROL.md`.
+- Moved remaining numeric, String/Bytes/Encoding, Boolean conditional, and Map
+  contracts to `semantics/VALUES_AND_COLLECTIONS.md`.
+- Moved Core reflection to `semantics/OBJECT_MODEL.md` and parameter-name
+  uniqueness to `PROTOS_GRAMMAR.md`.
+- Corrected the Standard Array parallel-operations anchor to
+  `concurrency/PARALLEL_EXECUTION.md`.
+- Left Language as the global core/principles document plus compatibility and
+  cross-domain navigation anchors rather than a second domain specification.
+
+### Compatibility
+- This revision completes normative ownership relocation without intentionally
+  changing observable Protos behavior.
+
 ## [0.1.331] - 2026-09-04
 
 ### Ownership clarified
