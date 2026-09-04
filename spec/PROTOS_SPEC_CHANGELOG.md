@@ -4,6 +4,23 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.220] - 2026-09-03
+
+### Fixed
+- Removed the accidental Closure-only restriction from standard `Array.each`.
+- Defined iteration callbacks using the same polymorphic invocation domain as
+  ordinary parenthesized calls, including user-defined invokable objects.
+- Required callability validation after ordinary receiver/argument evaluation
+  and Array receiver validation but before snapshot establishment or callback
+  execution.
+- Kept non-invokable callback failure explicit without introducing a second
+  callback/type hierarchy.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 220.
+  Only `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain
+  normative semantic content in this revision.
+
 ## [0.1.219] - 2026-09-04
 
 ### Fixed

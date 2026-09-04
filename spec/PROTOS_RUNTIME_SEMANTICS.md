@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 219
+Document revision: 220
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3587,9 +3587,29 @@ references in ascending index order before invoking user code.
 Conceptually:
 
 ```text
+`requireInvokable(value)` uses the same callability domain as ordinary
+parenthesized invocation. Conceptually:
+
+```text
+function requireInvokable(value):
+    if isBoundClosure(value) or isClosure(value):
+        return value
+
+    if lookupInvocationBehavior(value) == NOT_FOUND:
+        signal NotCallable(value)
+
+    return value
+```
+
+The check does not invoke the callback. It performs only the ordinary
+callability lookup needed to determine whether a subsequent `invoke(value, ...)`
+has an invocation behavior. Consequently `Array.each` does not create a
+Closure-only callback category, and user-defined invokable objects participate
+without adaptation.
+
 function standardArrayEach(receiver, block):
     array = requireArrayReceiver(receiver)
-    requireClosure(block)
+    requireInvokable(block)
 
     snapshot = snapshotArrayElements(array)
 

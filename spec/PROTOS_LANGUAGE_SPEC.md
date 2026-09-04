@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 219
+Document revision: 220
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -2803,9 +2803,7 @@ The standard iteration selector for `Array` is:
 array.each(block)
 ```
 
-`block` must be a Closure accepting the ordinary invocation shape used by the
-program. The standard operation invokes it once with one argument for each
-Array element.
+`block` must be invokable through the ordinary polymorphic invocation protocol. It need not be a Closure: any value that an ordinary parenthesized call can invoke is accepted. Standard `Array.each` validates this callability after ordinary receiver and argument evaluation and standard Array receiver validation, but before establishing the iteration snapshot or invoking callback behavior. The standard operation then invokes `block` through ordinary polymorphic invocation once with one argument for each Array element.
 
 At the start of `each`, after ordinary receiver and argument evaluation and
 after standard Array receiver validation, the operation establishes a shallow
