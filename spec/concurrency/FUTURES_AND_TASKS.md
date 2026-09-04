@@ -1,7 +1,7 @@
 # Protos Futures and Tasks v0.1
 
 Language version: 0.1
-Document revision: 322
+Document revision: 323
 Status: Draft
 Last updated: 2026-09-04
 
@@ -339,7 +339,7 @@ unwind, cleanup, detachment, Actor-local lifetime, and non-task-backed Future
 semantics are owned by `FUTURES_AND_TASKS.md` §24.
 
 The cooperative non-preemption rule for ordinary Actor-local
-`closure.future()` work is owned by `PROTOS_CONCURRENCY_MODEL.md` §24D.
+`closure.future()` work is owned by `ACTORS.md` §24D.
 `Future.detach()` remains an ordinary Future message and introduces no syntax or
 new execution kind.
 
@@ -726,4 +726,3 @@ registrations, bitmaps, counters, continuation records, polling already-terminal
 state, or another mechanism. Such choices are non-observable provided the
 ordered result, terminal-outcome selection, cancellation isolation, and
 registration-lifetime rules above are preserved.
-

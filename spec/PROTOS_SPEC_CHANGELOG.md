@@ -8,6 +8,32 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.323] - 2026-09-04
+
+### Migrated
+- Promoted `concurrency/ACTORS.md` from a non-normative migration index to the
+  primary normative Actor-domain specification.
+- Moved the contiguous Actor communication family from legacy ledger sections
+  7-18 into `ACTORS.md`: ordering/fairness, Actor bootstrap and initialization,
+  behavior/readiness, message dispatch, `send()`, `request()`, shared delivery,
+  pass-by-value transfer, message snapshot timing, and transfer optimizations.
+- Moved Actor lifecycle sections 24A-24D into `ACTORS.md`: graceful termination,
+  reachability versus lifetime, fatal unhandled Actor errors, and Actor-local
+  cooperative non-preemption.
+- Replaced the corresponding mixed-ledger bodies with compact compatibility
+  anchors that explicitly define no duplicate normative contract.
+
+### Changed
+- Updated `concurrency/FUTURES_AND_TASKS.md` to reference `ACTORS.md` for
+  Actor-local cooperative non-preemption.
+- This revision changes specification location/ownership only and does not
+  intentionally change observable Protos behavior.
+
+### Documentation
+- Updated `PROTOS_CONCURRENCY_MODEL.md`, `concurrency/ACTORS.md`, and
+  `concurrency/FUTURES_AND_TASKS.md` to document revision 323.
+- Other normative documents are unaffected.
+
 ## [0.1.322] - 2026-09-04
 
 ### Added / Migrated
