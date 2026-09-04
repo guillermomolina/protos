@@ -8,6 +8,23 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.343] - 2026-09-04
+
+### Clarified
+- Clarified that Core v0.1 requires exactly the two canonical semantic Boolean
+  values `true` and `false`; the Boolean-family terminology does not itself
+  require a third standard prelude object or prototype named `Boolean`.
+- Delegation to `true`, `false`, or an object supplying standard Boolean protocol
+  behavior does not confer canonical Boolean membership. Standard checks that
+  require a Boolean accept exactly canonical `true` or canonical `false`.
+- Preserved ordinary dispatch and custom `ifTrue` / `ifFalse` / `and` / `or`
+  implementations without introducing truthiness or changing the Boolean protocol
+  contract established by the preceding revision.
+
+### Compatibility
+- This is a terminology/domain clarification only; it closes a possible inference
+  of an otherwise-unspecified mandatory `Boolean` prototype and changes no
+  `ifTrue`, `ifFalse`, `and`, `or`, `&&`, or `||` behavior.
 ## [0.1.342] - 2026-09-04
 
 ### Fixed

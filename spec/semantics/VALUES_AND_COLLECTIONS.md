@@ -47,7 +47,15 @@ defined in this section is Boolean-family behavior: when ordinary lookup selects
 that standard behavior, the original receiver must be exactly canonical `true`
 or canonical `false`. An incompatible original receiver signals an `Error`
 under the standard semantic-family receiver-domain rule in `OBJECT_MODEL.md`.
-Delegating to `Boolean`, `true`, or `false` does not confer Boolean membership.
+The term Boolean family in this specification names this semantic family; Core
+v0.1 does not thereby require a third standard prelude object or prototype named
+`Boolean`. If such a name exists for some other independently specified reason,
+it does not define Boolean membership here. Delegating to canonical `true` or
+canonical `false`, or to an object that supplies standard Boolean protocol
+behavior, does not make the original receiver one of the two canonical Boolean
+values. Any standard protocol check that requires a Boolean accepts exactly
+canonical `true` or canonical `false`.
+
 A custom object may nevertheless define or override any of these selectors with
 its own ordinary behavior; doing so does not introduce truthiness and does not
 make that object a semantic Boolean.
