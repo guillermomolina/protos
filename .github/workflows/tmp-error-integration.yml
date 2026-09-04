@@ -1,4 +1,4 @@
-name: Temporary Error Semantics Integration
+name: Temporary Error Semantics Validation
 
 on:
   push:
@@ -6,11 +6,10 @@ on:
       - tmp-error-semantics-stage2
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  stage:
-    if: ${{ !contains(github.event.head_commit.message, '[stage-error-changelog]') }}
+  validate:
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -35,7 +34,6 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import re
-
           path = Path("spec/PROTOS_SPEC_CHANGELOG.md")
           text = path.read_text()
           match = re.search(r"^## \[0\.1\.(\d+)\]", text, re.MULTILINE)
@@ -43,7 +41,6 @@ jobs:
               raise SystemExit("cannot determine current global specification revision")
           if int(match.group(1)) != 343:
               raise SystemExit(f"expected global revision 0.1.343, found 0.1.{match.group(1)}")
-
           entry = """
 ## [0.1.344] - 2026-09-04
 
@@ -80,20 +77,16 @@ jobs:
   by ordinary delegation.
 
 """
-          insert_at = match.start()
-          path.write_text(text[:insert_at] + entry + text[insert_at:])
+          path.write_text(text[:match.start()] + entry + text[match.start():])
           PY
-          git add spec/PROTOS_SPEC_CHANGELOG.md
-          git diff --cached --check
+          git diff --check
 
       - name: Run tests
         run: mvn --batch-mode --no-transfer-progress test
 
-      - name: Commit staged changelog
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "OpenAI integration agent"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git commit -m "[stage-error-changelog] Stage Error semantics changelog"
-          git push origin HEAD:tmp-error-semantics-stage2
+      - name: Upload validated changelog
+        uses: actions/upload-artifact@v4
+        with:
+          name: validated-error-changelog
+          path: spec/PROTOS_SPEC_CHANGELOG.md
+          if-no-files-found: error
