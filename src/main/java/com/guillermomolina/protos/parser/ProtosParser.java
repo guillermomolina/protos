@@ -495,14 +495,14 @@ public final class ProtosParser {
         List<SurfaceArgument> arguments = new ArrayList<>();
         if (!cursor.at(TokenType.RPAREN)) {
             arguments.add(parseArgument());
-            consumeNewlines();
 
             while (cursor.at(TokenType.COMMA)) {
                 cursor.advance();
                 consumeNewlines();
                 arguments.add(parseArgument());
-                consumeNewlines();
             }
+
+            consumeNewlines();
         }
 
         TokenOccurrence close = cursor.consume(TokenType.RPAREN, "')'");
@@ -548,14 +548,14 @@ public final class ProtosParser {
 
         if (!cursor.at(TokenType.RPAREN)) {
             arguments.add(parseArgument());
-            consumeNewlines();
 
             while (cursor.at(TokenType.COMMA)) {
                 cursor.advance();
                 consumeNewlines();
                 arguments.add(parseArgument());
-                consumeNewlines();
             }
+
+            consumeNewlines();
         }
 
         TokenOccurrence close = cursor.consume(TokenType.RPAREN, "')'");
