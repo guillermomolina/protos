@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 236
+Document revision: 237
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -4680,6 +4680,42 @@ the keyed-entry state required by the selected standard behavior.
 Conceptually:
 
 ### Standard Map factory invocation
+
+### Standard Map size runtime semantics
+
+Standard Map size is conceptually:
+
+```text
+function standardNormalMapSize(receiver):
+    map = requireNormalMapReceiver(receiver)
+
+    return semanticIntegerFromMathematicalValue(
+        storedAssociationCount(map)
+    )
+
+function standardIdentityMapSize(receiver):
+    map = requireIdentityMapReceiver(receiver)
+
+    return semanticIntegerFromMathematicalValue(
+        storedAssociationCount(map)
+    )
+```
+
+`storedAssociationCount` returns the exact mathematical number of associations
+present in the receiver-owned keyed-entry state. It counts entries, not hash
+buckets, currently distinct equality classes, backing-array cells, tombstones,
+or implementation capacity.
+
+The operation performs no key search. In particular it invokes no `hash`, `==`,
+primitive identity hashing, `===`, callback, or iteration machinery. Mutable key
+state therefore cannot trigger reclassification, rehashing, deduplication, or
+repair merely because `size` is observed.
+
+Implementations may maintain the count incrementally or derive it from internal
+state, provided the exact semantic result matches the current stored
+association count at the operation's evaluation point.
+
+
 
 `Map` and `IdentityMap` provide ordinary invocation-protocol specializations
 that create fresh empty keyed state rather than using `Object`'s default

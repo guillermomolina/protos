@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 236
+Document revision: 237
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -4080,6 +4080,41 @@ key hash      -> hash
 ```
 
 ### Standard Map construction through ordinary invocation
+
+### Standard Map size
+
+Standard `Map.size` and `IdentityMap.size` return the exact semantic `Integer`
+number of associations currently stored in the receiver's keyed-entry state.
+
+An empty newly constructed Map therefore has size `0`. Inserting a previously
+absent key increases size by exactly one. Replacing the mapped value of an
+already-matching key leaves size unchanged. Successfully removing one stored
+association decreases size by exactly one.
+
+For normal `Map`, size counts stored associations, not distinct current
+`==`-equivalence classes. Therefore if mutable-key behavior has caused two
+stored representative keys to become currently equal while both entries remain
+stored, both associations count toward `size`.
+
+For `IdentityMap`, size likewise counts stored associations. Identity-hash
+collisions do not merge entries and do not affect the count.
+
+The result is a mathematical semantic `Integer`. Core does not require a
+particular fixed-width Integer family, and an implementation must not expose
+host container width, bucket count, load factor, capacity, tombstones, sparse
+representation, or overflow/truncation through the result.
+
+`size` is a read-only observation. It performs no key `hash`, key `==`,
+`identityHashOf`, `===` comparison, callback, iteration snapshot, insertion,
+removal, or mapped-value access. It is available for open, closed, and frozen
+Maps.
+
+The existing standard keyed receiver-domain rule applies. Merely delegating to
+`Map` or `IdentityMap`, or copying/inheriting a `size` behavior onto an object
+without the corresponding receiver-owned keyed state, does not make that object
+a valid standard Map-size receiver.
+
+
 
 The standard prelude objects `Map` and `IdentityMap` specialize the ordinary
 polymorphic invocation protocol as empty-map factories.

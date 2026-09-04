@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.237] - 2026-09-04
+
+### Fixed
+- Defined standard `Map.size` and `IdentityMap.size` as the exact semantic
+  Integer number of currently stored associations.
+- Defined insertion of a new association to increase size by one, value
+  replacement to preserve size, and successful removal to decrease size by one.
+- Made size count stored entries rather than current equality classes, so
+  mutable keys that later become equal still count as separate stored
+  associations.
+- Prohibited hash-table capacity, buckets, tombstones, load factor, host width,
+  overflow, or representation details from affecting the result.
+- Defined size observation to perform no key hashing/equality, identity hashing,
+  iteration snapshot, callback, search, or mutation.
+- Preserved the existing keyed receiver-domain rule and open/closed/frozen
+  read-only availability.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 237.
+  Only `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain
+  normative semantic content in this revision.
+
 ## [0.1.236] - 2026-09-04
 
 ### Fixed
