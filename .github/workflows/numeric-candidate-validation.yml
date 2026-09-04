@@ -16,6 +16,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
       - name: Rebuild candidate from current main and validate
         shell: bash
         run: |
