@@ -1761,31 +1761,32 @@ means:
 
 ## 23. Boolean Operator Laziness
 
-`&&` and `||` preserve lazy evaluation.
-
-Conceptually:
-
-```js
-a && b
-```
-
-lowers to:
+`&&` and `||` have one mandatory source lowering. For arbitrary operand
+expressions `a` and `b`:
 
 ```text
-a.and(() => b)
+a && b  ->  a.and(() => b)
+a || b  ->  a.or(() => b)
 ```
 
-and:
+This lowering defines the operator semantics; it is not an optional
+implementation sketch and `&&` / `||` have no independent truthiness or
+primitive short-circuit semantics. The resulting `and` or `or` operation is an
+ordinary message send using ordinary lookup and preserving the original receiver.
 
-```js
-a || b
-```
+Ordinary evaluation evaluates `a` before the message invocation and creates the
+generated zero-argument Closure as the right argument. Creating that Closure does
+not evaluate `b`. The expression `b` is evaluated only if the selected ordinary
+`and` / `or` behavior invokes the generated Closure. Consequently a custom
+receiver may define or override `and` / `or` and observe the generated Closure;
+the operator syntax itself does not require that receiver to be a Boolean.
 
-lowers to:
-
-```text
-a.or(() => b)
-```
+The standard behavior of canonical `true` and `false` for these selectors,
+including exact results, callback validation, strict Boolean result checking,
+Error/control propagation, and suspension behavior, is owned exclusively by
+`semantics/VALUES_AND_COLLECTIONS.md` §16. Implementations may optimize this
+lowering only when all observable ordinary-dispatch and Closure semantics are
+preserved.
 
 ## 24. Composition Syntax
 

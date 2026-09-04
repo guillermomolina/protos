@@ -29,25 +29,100 @@ A failed lookup signals an error. It does not evaluate to `null`.
 `null` is a singleton object and may respond to messages like any other object.
 ## 16. Booleans
 
-`true` and `false` are singleton objects.
+Core v0.1 has exactly two semantic Boolean values: the canonical singleton
+objects `true` and `false`. No other object becomes a Boolean by delegation,
+copying, composition, freezing, or implementation representation.
 
-Conditional control flow is semantically implemented through messages sent to these objects.
+The standard Boolean protocol consists of the ordinary one-argument messages:
 
-Conceptually:
-
-```js
-condition.ifTrue() {
-    ...
-}
-
-condition.ifFalse() {
-    ...
-}
+```text
+ifTrue(block)
+ifFalse(block)
+and(block)
+or(block)
 ```
 
-Closures provide lazy evaluation.
+These selectors use ordinary message lookup and dispatch. The standard behavior
+defined in this section is Boolean-family behavior: when ordinary lookup selects
+that standard behavior, the original receiver must be exactly canonical `true`
+or canonical `false`. An incompatible original receiver signals an `Error`
+under the standard semantic-family receiver-domain rule in `OBJECT_MODEL.md`.
+Delegating to `Boolean`, `true`, or `false` does not confer Boolean membership.
+A custom object may nevertheless define or override any of these selectors with
+its own ordinary behavior; doing so does not introduce truthiness and does not
+make that object a semantic Boolean.
 
-Possible `if`/`else` syntax may exist as sugar, but does not define the fundamental semantics.
+`block` denotes the already-evaluated argument object. Receiver and argument
+expressions are evaluated before the message invocation according to the
+ordinary left-to-right call rules in `CALLABLES.md`. In particular, evaluating
+a Closure literal creates the Closure object but does not execute its body.
+Standard Boolean behavior requires the selected callback to be invokable through
+the ordinary polymorphic invocation protocol; it need not be a Closure. The
+selected callback is invoked exactly once with zero positional arguments.
+Callability validation does not pre-validate callback arity: any arity or other
+invocation failure from that actual zero-argument call propagates normally.
+
+Callability is validated **only on a path that will invoke the callback**. A
+path that does not select the callback neither validates nor invokes it. This
+rule concerns the already-evaluated callback object; it does not suppress the
+ordinary evaluation of the argument expression that produced that object.
+
+The exact standard results are:
+
+```text
+true.ifTrue(block)   -> invoke block(); return its exact normal result
+false.ifTrue(block)  -> null
+
+true.ifFalse(block)  -> null
+false.ifFalse(block) -> invoke block(); return its exact normal result
+
+true.and(block)      -> invoke block(); require Boolean result; return it
+false.and(block)     -> false
+
+true.or(block)       -> true
+false.or(block)      -> invoke block(); require Boolean result; return it
+```
+
+The `null`, `true`, and `false` results above are the canonical language values.
+For `ifTrue` and `ifFalse`, a selected callback's normal result is returned
+unchanged. It may therefore be `null`, either Boolean, an arbitrary ordinary
+object, or a `Future`; the Boolean method performs no conversion, awaiting,
+Future adoption, or result validation on that value.
+
+For standard `and` and `or`, the result of an invoked callback must be exactly
+canonical `true` or canonical `false`. Any other normal result, including
+`null`, an arbitrary ordinary object, or a `Future`, signals an `Error` after
+the callback has completed. No truthiness conversion, coercion, implicit
+invocation, implicit awaiting, or Future adoption is performed. When no more
+specific standard Error prototype is mandated by `ERRORS.md`, portability
+requires only that the failure be an `Error`; implementations must not rely on
+an implementation-specific visible subtype.
+
+If a selected callback signals an Error, performs a non-local return, is
+cancelled, or otherwise leaves by a non-normal control transfer, that transfer
+propagates exactly as it would from an ordinary callback invocation. Standard
+Boolean behavior does not catch it, wrap it, convert it to a Boolean or `null`,
+or invoke the callback again. Effects completed before such a transfer or before
+an invalid `and`/`or` result is detected are not rolled back.
+
+The Boolean protocol itself introduces no hidden suspension point, task, lock,
+or scheduling boundary. A selected callback may of course reach an explicit
+suspension point according to its own ordinary semantics; an unselected callback
+cannot suspend because it is not invoked.
+
+The mandatory source lowering and precedence of `&&` and `||` are owned by
+`../PROTOS_GRAMMAR.md`. That lowering supplies a zero-argument Closure around
+the right operand and then performs ordinary `and` / `or` dispatch. Therefore
+standard canonical-Boolean receivers obtain the short-circuit behavior defined
+above, while a custom receiver may observe the generated Closure through its own
+ordinary `and` or `or` implementation. Implementations may specialize the
+canonical Boolean cases only when the observable receiver lookup, argument
+creation/evaluation, callback-selection, validation, result, Error/control
+transfer, and suspension behavior remains identical to the ordinary protocol.
+
+Possible future `if`/`else` syntax may be defined as sugar, but it does not
+create a second Boolean or truthiness semantics.
+
 ## 21. Equality and Identity
 
 `===` represents **semantic identity** and is not customizable. Its result must not depend on allocation, interning, boxing, tagged values, or any other implementation strategy.
@@ -537,38 +612,22 @@ does not prevent unrelated Actor-local work or operations on unrelated Maps.
 
 ## Conditional Protocol and Truthiness
 
-The language defines **no language-wide truthiness conversion**.
+The complete standard Boolean protocol, including canonical receiver-domain,
+callback-selection/validation timing, exact results, strict `and`/`or` Boolean
+result validation, Error/control propagation, Future behavior, suspension
+behavior, and the absence of language-wide truthiness, is owned by §16
+**Booleans** above.
 
-Conditional behavior is expressed through ordinary messages. The standard Boolean objects `true` and `false` provide the standard conditional protocol, including behavior corresponding to:
+This section records only the general dispatch consequence: the selectors
+`ifTrue`, `ifFalse`, `and`, and `or` are ordinary messages. Any object may define
+or override them with its own behavior. Such customization does not make the
+object a semantic Boolean and does not establish a language-wide truthiness
+conversion. Values such as `0`, `""`, `null`, arrays, and arbitrary objects are
+therefore neither inherently truthy nor inherently falsy; absent a matching
+custom or inherited message, ordinary lookup fails in the usual way.
 
-```js
-condition.ifTrue(block)
-condition.ifFalse(block)
-```
-
-A receiver is not required by the language to be a Boolean in order to receive these messages. Any object may implement messages such as `ifTrue`, `ifFalse`, `and`, or `or` and define behavior appropriate to that object.
-
-Consequently, values such as `0`, `""`, `null`, arrays, and arbitrary objects are neither inherently truthy nor inherently falsy. If they do not implement the requested conditional message, ordinary message lookup fails in the usual way.
-
-Equality and comparison protocols have a Boolean-result contract. Implementations of `==`, `!=`, `<`, `<=`, `>`, and `>=` must return the canonical Boolean objects `true` or `false`, or signal an error. User-defined implementations remain ordinary message behavior, but returning any other object violates the protocol contract.
-
-Logical operator syntax, where provided, lowers to ordinary message sends with explicit laziness. For example:
-
-```js
-a && b
-a || b
-```
-
-lower conceptually to:
-
-```js
-a.and(() => b)
-a.or(() => b)
-```
-
-so the right-hand side is evaluated only if the receiver's implementation chooses to invoke the supplied closure.
-
-Implementations may specialize common Boolean receivers and standard operations in the interpreter or JIT, provided that such specialization preserves the observable semantics of ordinary message sends.
+The syntax and mandatory lazy lowering of `&&` and `||` are owned exclusively by
+`../PROTOS_GRAMMAR.md`.
 
 ## Numeric Equality Across Families
 

@@ -8,6 +8,29 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.342] - 2026-09-04
+
+### Fixed
+- Made `semantics/VALUES_AND_COLLECTIONS.md` §16 the single normative owner of
+  the complete standard Boolean protocol for canonical `true` and `false`.
+- Defined exact `ifTrue`, `ifFalse`, `and`, and `or` results, selected-only
+  callback callability validation/invocation, and strict canonical-Boolean result
+  validation for `and` / `or` without introducing truthiness.
+- Distinguished ordinary argument evaluation and Closure creation from lazy
+  callback-body execution, including unselected non-invokable callbacks.
+- Defined propagation of Error, non-local control, callback effects, Future
+  results, and explicit suspension, with no hidden Boolean suspension point.
+- Strengthened Grammar-owned `&&` / `||` lowering from conceptual wording to one
+  mandatory ordinary-message lowering through generated zero-argument Closures.
+- Preserved ordinary selector dispatch and custom overriding while applying the
+  standard semantic-family receiver-domain rule only to the standard Boolean
+  behavior. The informative Abstract Runtime was already compatible and required
+  no semantic rewrite.
+
+### Compatibility
+- Closes previously underspecified observable Boolean behavior and operator
+  short-circuit details; no syntax, language-wide truthiness, or new executable
+  value category is introduced.
 ## [0.1.341] - 2026-09-04
 
 ### Fixed
