@@ -21,8 +21,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
+import com.guillermomolina.protos.runtime.ProtosFloatValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
+import java.math.BigInteger;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.guillermomolina.protos.source.SourceSpan;
@@ -45,6 +48,45 @@ class CanonicalToTruffleLowererTest {
 
         ProtosStringValue string = (ProtosStringValue) result;
         assertEquals("hello", string.value());
+    }
+
+    @Test
+    void lowersExactIntegerLiteralsAcrossSupportedRadices() {
+        assertEquals(
+                new BigInteger("10000000000000000000000000000000000000000"),
+                ((ProtosIntegerValue) execute(literal(
+                                CanonicalLiteral.Kind.NUMBER,
+                                "10_000_000_000_000_000_000_000_000_000_000_000_000_000")))
+                        .value());
+        assertEquals(
+                BigInteger.valueOf(255),
+                ((ProtosIntegerValue) execute(literal(CanonicalLiteral.Kind.NUMBER, "0xFF"))).value());
+        assertEquals(
+                BigInteger.valueOf(255),
+                ((ProtosIntegerValue) execute(literal(CanonicalLiteral.Kind.NUMBER, "0b1111_1111")))
+                        .value());
+        assertEquals(
+                BigInteger.valueOf(255),
+                ((ProtosIntegerValue) execute(literal(CanonicalLiteral.Kind.NUMBER, "0o377"))).value());
+    }
+
+    @Test
+    void lowersDecimalFloatLiteralsAsBinary64() {
+        assertEquals(
+                Double.doubleToRawLongBits(1.5d),
+                Double.doubleToRawLongBits(
+                        ((ProtosFloatValue) execute(literal(CanonicalLiteral.Kind.NUMBER, "1.5")))
+                                .value()));
+        assertEquals(
+                Double.doubleToRawLongBits(2000.0d),
+                Double.doubleToRawLongBits(
+                        ((ProtosFloatValue) execute(literal(CanonicalLiteral.Kind.NUMBER, "2e3")))
+                                .value()));
+        assertEquals(
+                Double.doubleToRawLongBits(0.0015d),
+                Double.doubleToRawLongBits(
+                        ((ProtosFloatValue) execute(literal(CanonicalLiteral.Kind.NUMBER, "1.5e-3")))
+                                .value()));
     }
 
     @Test

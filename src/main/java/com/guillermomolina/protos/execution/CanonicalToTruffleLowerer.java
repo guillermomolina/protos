@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.runtime.ProtosNumberLiteral;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
@@ -48,10 +49,7 @@ public final class CanonicalToTruffleLowerer {
                     case FALSE -> ProtosBooleanValue.FALSE;
                     case NULL -> ProtosNullValue.INSTANCE;
                     case STRING -> new ProtosStringValue(literal.value());
-                    case NUMBER ->
-                            throw new UnsupportedOperationException(
-                                    "Canonical literal kind is not supported by this Truffle lowering slice: "
-                                            + literal.kind());
+                    case NUMBER -> ProtosNumberLiteral.materialize(literal.value());
                 };
 
         return new ProtosConstantNode(literal.span(), value);
