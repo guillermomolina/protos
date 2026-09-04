@@ -4,6 +4,36 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.50-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Implemented standard Number-family `==` as an ordinary `Number`-owned
+  Closure-valued slot inherited by Integer, Float, and all fixed-width integer
+  prototypes.
+- Numeric equality compares mathematical numeric value across semantic numeric
+  families without performing arithmetic coercion or narrowing.
+- Added exact Float-vs-exact-integer comparison using the actual represented
+  binary64 value, avoiding rounded host-integer comparison.
+- Implemented IEEE-style NaN equality (`NaN == x` is always false), signed-zero
+  numeric equality, infinity equality, and cross-family exact-integer equality.
+- Standard Number equality with a non-Number argument returns canonical `false`.
+- Added receiver-domain protection so ordinary objects that merely inherit
+  Number-family `==` are not treated as semantic Numbers.
+- Added Java and executable `.protos` conformance coverage for cross-family,
+  exact-rounding, NaN, signed-zero, infinity, and non-Number cases.
+- Project implementation version changed from `0.2.49-SNAPSHOT` to
+  `0.2.50-SNAPSHOT`.
+
+### Notes
+
+- `!=` is intentionally not implemented in this slice. The current canonicalizer
+  lowers it through a `not` send, but Core's normative Boolean section does not
+  currently define a standard `not` selector. That normative gap is left
+  untouched rather than inventing behavior.
+- No normative specification change is introduced.
+
+
 ## [0.2.49-SNAPSHOT] - 2026-09-04
 
 ### Added

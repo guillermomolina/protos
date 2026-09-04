@@ -104,3 +104,15 @@ boolean/and-invalid-result.protos	error	-
 boolean/or-invalid-result.protos	error	-
 boolean/iftrue-noninvokable.protos	error	-
 boolean/iffalse-noninvokable.protos	error	-
+numeric-equality/integer-float-equal.protos	boolean	true
+numeric-equality/fixed-integer-equal.protos	boolean	true
+numeric-equality/fixed-cross-family-equal.protos	boolean	true
+numeric-equality/exact-float-rounding-not-equal.protos	boolean	false
+numeric-equality/exact-large-float-equal.protos	boolean	true
+numeric-equality/fraction-not-equal.protos	boolean	false
+numeric-equality/nan-self-not-equal.protos	boolean	false
+numeric-equality/signed-zero-equal.protos	boolean	true
+numeric-equality/integer-negative-zero-equal.protos	boolean	true
+numeric-equality/positive-infinity-equal.protos	boolean	true
+numeric-equality/opposite-infinity-not-equal.protos	boolean	false
+numeric-equality/non-number-false.protos	boolean	false

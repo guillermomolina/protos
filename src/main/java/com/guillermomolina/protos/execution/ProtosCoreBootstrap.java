@@ -136,6 +136,7 @@ public final class ProtosCoreBootstrap {
                 requirePrototype(bootstrapContext, "UInt64", integerPrototype);
         ProtosObjectValue int64Prototype =
                 requirePrototype(bootstrapContext, "Int64", integerPrototype);
+        ProtosStandardNumberEqualityProtocol.install(numberPrototype);
         ProtosStandardIntegerProtocol.install(integerPrototype);
         ProtosStandardFloatProtocol.install(floatPrototype);
         ProtosStandardNumericConversionProtocol.install(integerPrototype, floatPrototype, uInt8Prototype, int8Prototype, uInt16Prototype, int16Prototype, uInt32Prototype, int32Prototype, uInt64Prototype, int64Prototype);
