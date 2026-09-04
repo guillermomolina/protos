@@ -212,15 +212,17 @@ class ProtosArrayConformanceCompletionTest {
     void arraysUseOrdinaryIdentityAndDefaultEquality() throws IOException {
         ProtosPrelude prelude = corePrelude();
         ProtosActivation activation = prelude.newModuleActivation();
+        ProtosArrayValue a =
+                prelude.newArray(List.of(new ProtosIntegerValue(BigInteger.ONE)));
+        ProtosArrayValue b =
+                prelude.newArray(List.of(new ProtosIntegerValue(BigInteger.ONE)));
+        activation.context().createLocalSlot("a", a);
+        activation.context().createLocalSlot("b", b);
 
-        assertSame(ProtosBooleanValue.TRUE, execute(activation, "a: Array(1)\na == a"));
-        assertSame(ProtosBooleanValue.TRUE, execute(activation, "a: Array(1)\na === a"));
-        assertSame(
-                ProtosBooleanValue.FALSE,
-                execute(activation, "a: Array(1)\nb: Array(1)\na == b"));
-        assertSame(
-                ProtosBooleanValue.FALSE,
-                execute(activation, "a: Array(1)\nb: Array(1)\na === b"));
+        assertSame(ProtosBooleanValue.TRUE, execute(activation, "a == a"));
+        assertSame(ProtosBooleanValue.TRUE, execute(activation, "a === a"));
+        assertSame(ProtosBooleanValue.FALSE, execute(activation, "a == b"));
+        assertSame(ProtosBooleanValue.FALSE, execute(activation, "a === b"));
     }
 
     @Test
