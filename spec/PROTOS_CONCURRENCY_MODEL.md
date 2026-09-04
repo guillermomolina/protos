@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 296
+Document revision: 297
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -217,6 +217,26 @@ of asynchronously spawned work.
 
 Future failure transport carries an Error outcome, not the producer's dynamic
 control stack.
+
+### P failure outcomes use ordinary value transfer
+
+A P computation's unhandled Error is not a privileged cross-domain exception
+channel. It is the failure value of the P computation and crosses toward the
+caller only through the ordinary P value-transfer boundary.
+
+A transferable Error graph is reconstructed/projected as the caller-side Error
+value according to the same isolation-preserving rules as any other transferable
+P result. P-local identity-bearing objects therefore do not retain `===`
+identity across the boundary.
+
+If the Error graph cannot cross, P exposes `NonParallelValue` as the
+caller-visible failure under the existing result-transfer rule. Implementations
+must not fall back to sharing the P-local Error object, serializing hidden
+continuation state, or creating an implicit remote-error proxy.
+
+Handler frames and all other dynamic control state remain local to the P
+execution domain. A caller-side Future observation signals only the transferred
+Error value under the caller's then-current handler context.
 
 The producer task or isolated computation has already reached its failure
 outcome. A later `value()` observation creates only a consumer-side Error

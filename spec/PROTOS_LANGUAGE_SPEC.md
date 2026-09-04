@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 296
+Document revision: 297
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -5934,6 +5934,33 @@ receiver/method-home semantics in the normal way.
 
 This concurrency domain defines the standard error prototype
 `NonParallelValue`, delegating directly to `Error`.
+
+#### Error outcomes crossing the P boundary
+
+An unhandled `Error` produced by isolated P execution is a failure value that
+must cross the P boundary under the same P value-transfer rules that govern a
+normal result.
+
+If the Error object graph is transferable, the caller-side P result Future fails
+with the transferred destination Error value. For identity-bearing Error objects,
+that destination object is not `===` to the P-local source object merely because
+it represents the same failure. P-local object identity never crosses the
+isolation boundary.
+
+If the Error object graph is not transferable, the caller-side operation fails
+with standard `NonParallelValue` according to the existing P result-transfer
+failure rule. Core does not leak a live P-local Error reference, silently proxy
+the Error, or preserve otherwise non-transferable state merely because the value
+represents a failure.
+
+Only the Error value graph participates in transfer. P-local dynamic handlers,
+activation frames, return homes, stacks, continuations, scheduler state, and
+other execution-control metadata are not part of the Error value graph and
+never cross with the failure.
+
+When the caller later observes the failed Future through `value()`, ordinary
+failed-Future semantics signal the caller-side transferred Error as a new
+non-resumable consumer-side signaling event.
 
 P-boundary value formation follows the logical value-copy, cycle-preservation,
 alias-preservation, and atomic whole-graph principles used by Actor

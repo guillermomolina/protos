@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.297] - 2026-09-04
+
+### Fixed
+- Made P Error propagation explicitly use the ordinary P value-transfer boundary
+  rather than an implicit privileged exception channel.
+- Required transferable P Error graphs to become caller-domain transferred Error
+  values, without preserving P-local identity for identity-bearing objects.
+- Required an untransferable P Error graph to produce standard
+  `NonParallelValue` under the existing P result-transfer failure rule.
+- Prohibited leaking/sharing a live P-local Error object, implicit remote-error
+  proxies, or hidden P execution-control state merely because the transferred
+  value represents failure.
+- Clarified that dynamic handlers, stacks, return homes, activations,
+  continuations, and scheduler state never form part of P Error transfer.
+- Connected the transferred caller-domain Error to the existing failed-Future
+  rule: later `value()` observation performs a new consumer-side non-resumable
+  signal.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 297.
+  `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
+  `PROTOS_CONCURRENCY_MODEL.md` gain normative clarification in this revision.
+
 ## [0.1.296] - 2026-09-04
 
 ### Closed
