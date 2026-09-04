@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.252] - 2026-09-04
+
+### Fixed
+- Defined `process.args()` as one stable Process-bootstrap argument snapshot for
+  the entire Protos Process lifetime.
+- Required repeated successful calls to observe the same argument count, order,
+  and String values while leaving returned-object physical identity non-normative.
+- Made portable argument representability a stable bootstrap outcome: an invalid
+  native argument set cannot fail one call and later succeed because host argv
+  storage or conversion behavior changed.
+- Prevented later host-native argv/process-title mutation from changing an
+  already-established successful Protos argument snapshot.
+- Allowed eager or lazy validation/materialization only when every call remains
+  observationally equivalent to one bootstrap-time logical snapshot.
+- Distinguished standardized application arguments from future live/best-effort
+  host process-inspection facilities.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 252. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.251] - 2026-09-04
 
 ### Fixed

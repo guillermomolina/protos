@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 251
+Document revision: 252
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -1708,6 +1708,16 @@ The host-launcher/executable argument corresponding to facilities such as POSIX 
 Program/executable identity, invocation details, and host-native argv representation are outside this I/O model.
 
 The complete portable argument snapshot is validated as one operation. If any application argument supplied by the host cannot be represented as a valid Protos String, `process.args()` fails rather than returning a partial snapshot, deferring failure to a later `at(index)`, introducing invalid Unicode, or using lossy conversion.
+
+The application-argument sequence is one stable Process-bootstrap snapshot established for the lifetime of that Protos Process. Repeated successful `process.args()` calls observe the same argument count, order, and String values. The implementation may return the same immutable object or equivalent immutable views; physical identity is not normative unless another specification explicitly makes it observable.
+
+Representability is part of that same stable snapshot contract. If the supplied bootstrap argument sequence cannot form the complete portable String snapshot, repeated `process.args()` calls for that Process fail consistently with that bootstrap condition; an implementation must not make one call fail and a later call succeed merely by re-reading a changed host-native argument area, changing conversion strategy, or observing host mutation after Process bootstrap.
+
+Conversely, once the portable argument snapshot has been established successfully, later mutation or rewriting of host-native argv storage, launcher metadata, process-title storage, or another host representation does not alter the Protos snapshot and cannot make a later `process.args()` call fail or return different values.
+
+This stability does not require eager String allocation or copying at Process startup. An implementation may retain an immutable captured representation, validate eagerly or lazily, cache conversion results, or use another representation strategy, provided all calls are observationally equivalent to one bootstrap-time logical snapshot and the success/failure outcome is stable.
+
+`process.args()` does not re-query a live operating-system process-information facility on each invocation. A future host/native process-inspection API may expose mutable or best-effort native argument information separately, but that information is not the standardized Protos application-argument snapshot.
 
 Host-specific APIs may later expose a native representation separately.
 
