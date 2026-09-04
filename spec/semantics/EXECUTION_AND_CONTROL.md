@@ -251,6 +251,47 @@ getObject().x = makeValue()
 ```
 
 evaluates `getObject()` first, then `makeValue()`, then performs the assignment. Lazy operations such as `&&` and `||` are exceptions because their right-hand expression is evaluated only when required by their lazy semantics.
+
+### Normal result of slot creation and assignment expressions
+
+The following four slot-write forms are expressions:
+
+```js
+x: value
+object.x: value
+x = value
+object.x = value
+```
+
+Their target-selection, local-slot, delegation, open/closed/frozen, conflict, and
+write-validity rules remain those defined by §7 for bare forms and by
+`OBJECT_MODEL.md` for explicit member forms.
+
+After all subexpressions required by the applicable evaluation-order rule have
+been evaluated, the slot creation or assignment is attempted using the exact
+object produced by the right-hand-side evaluation. If and only if that slot
+operation completes normally, the result of the whole slot-write expression is
+that **same exact object**.
+
+The result is therefore not `null`, not the target/receiver, and not a value
+obtained by reading the slot again after the write. No implicit conversion,
+copying, canonicalization, wrapping, or second lookup is performed merely to
+produce the expression result. In particular, when the right-hand side produces
+an identity-bearing object, successful slot creation or assignment preserves
+that object identity both in the written binding and as the expression result.
+
+If evaluation of a required target or right-hand-side subexpression performs a
+control transfer, the write is not completed and the slot-write expression has
+no normal result. If the right-hand side completes normally but the subsequent
+slot creation or assignment signals an `Error` or otherwise transfers control,
+the expression likewise has no normal result; effects already produced by
+earlier evaluation are not rolled back by this rule.
+
+This rule applies only to slot creation and slot assignment. It does **not**
+apply to indexed assignment such as `object[index] = value`, which is the
+ordinary indexing-protocol operation defined by its own normative owner and is
+not a `:`/`=` slot write.
+
 ## 8.2 Sequence Evaluation
 
 The semantic `Sequence(expressions)` produced from an `expression-sequence` evaluates its expressions strictly from left to right in the current execution context.

@@ -8,6 +8,28 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.363] - 2026-09-04
+
+### Slot-write expression normal result (D023)
+- Defines the normal result of `x: value`, `object.x: value`, `x = value`, and
+  `object.x = value` as the exact object produced by right-hand-side evaluation.
+- Requires successful writes to return that same RHS object without re-reading
+  the slot, converting, copying, canonicalizing, wrapping, or substituting
+  `null` or the target/receiver.
+- Defines failed writes and target/RHS control transfers as having no normal
+  expression result while preserving already-completed evaluation effects.
+- Keeps destination selection, delegation, and object-state validity in their
+  existing owners and explicitly excludes indexed `object[index] = value`,
+  which remains an indexing-protocol operation.
+- Confirms the informative Abstract Runtime's existing RHS-returning pseudocode
+  is aligned with the now-normative contract and requires no runtime-document
+  change.
+
+### Compatibility
+- Closes previously unspecified observable expression-result behavior without
+  changing where slots are created or assigned, evaluation order, write failure
+  conditions, object state, delegation, or indexed assignment semantics.
+
 ## [0.1.362] - 2026-09-04
 
 ### Standard Object.init normal result (D022)
