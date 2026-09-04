@@ -4,6 +4,18 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## 0.2.64-SNAPSHOT
+
+### Fixed
+- Fixed CLI002 bracketed-paste handling so a JLine `readLine` result containing multiple complete lines is split and evaluated sequentially in the same persistent REPL session.
+- Added a focused regression test for the actual JLine-style multiline paste payload, rather than only testing newline-separated stream input.
+- Added `--enable-native-access=ALL-UNNAMED` to the launcher to suppress the JDK restricted-native-access warning emitted when JLine initializes its native terminal support.
+
+### Notes
+- This does not add structured syntactic multiline parsing; each pasted complete line remains an independent evaluation.
+- The pre-existing Truffle `sun.misc.Unsafe` warning is unchanged and remains outside CLI002.
+- No normative specification revision is changed.
+
 ## 0.2.63-SNAPSHOT
 
 ### Added

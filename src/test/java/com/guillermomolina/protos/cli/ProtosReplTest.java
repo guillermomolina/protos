@@ -19,6 +19,21 @@ final class ProtosReplTest {
         R r=repl("x: 10\nx\nx + 5\n:exit\n");
         assertEquals(0,r.c); assertTrue(r.o.contains("protos> 10\nprotos> 10\nprotos> 15\n")); assertTrue(r.e.isBlank(),r.e);
     }
+    @Test void bracketedPastePayloadIsSplitIntoIndependentLines() throws Exception {
+        var out=new ByteArrayOutputStream(); var err=new ByteArrayOutputStream();
+        var cli=new ProtosCli();
+        var sessionMethod=ProtosCli.class.getDeclaredMethod("session");
+        sessionMethod.setAccessible(true);
+        Object session=sessionMethod.invoke(cli);
+        var method=ProtosCli.class.getDeclaredMethod(
+                "processReturnedInput",String.class,session.getClass(),PrintStream.class,PrintStream.class);
+        method.setAccessible(true);
+        boolean exit=(boolean)method.invoke(cli,"x: 10\nx\nx + 5",session,new PrintStream(out),new PrintStream(err));
+        assertFalse(exit);
+        assertEquals("10\n10\n15\n",out.toString(StandardCharsets.UTF_8));
+        assertTrue(err.toString(StandardCharsets.UTF_8).isBlank());
+    }
+
     @Test void streamFallbackDoesNotRequireATerminal() {
         R r=repl("1 + 1\n"); assertEquals(0,r.c); assertTrue(r.o.contains("2\n")); assertTrue(r.e.isBlank(),r.e);
     }

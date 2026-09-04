@@ -53,9 +53,8 @@ public final class ProtosCli {
                     .option(LineReader.Option.BRACKETED_PASTE, true).build();
             for (;;) {
                 try {
-                    String line = reader.readLine("protos> ");
-                    processLine(line, s, out, err);
-                    if (isExit(line)) return 0;
+                    String input = reader.readLine("protos> ");
+                    if (processReturnedInput(input, s, out, err)) return 0;
                 } catch (UserInterruptException e) {
                     // Ctrl-C cancels the current line and returns to a clean prompt.
                 } catch (EndOfFileException e) {
@@ -74,6 +73,15 @@ public final class ProtosCli {
             processLine(line, s, out, err);
             if (isExit(line)) return 0;
         }
+    }
+
+    private boolean processReturnedInput(String input, Session s, PrintStream out, PrintStream err) {
+        String[] lines = input.split("\R", -1);
+        for (String line : lines) {
+            processLine(line, s, out, err);
+            if (isExit(line)) return true;
+        }
+        return false;
     }
 
     private void processLine(String line, Session s, PrintStream out, PrintStream err) {
