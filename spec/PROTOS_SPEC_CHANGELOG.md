@@ -4,6 +4,31 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.219] - 2026-09-04
+
+### Fixed
+- Defined standard positioned File writes as overwrite-at-current-logical-position
+  operations rather than leaving overwrite versus insertion behavior implicit.
+- Defined a contributed prefix of length `k` to occupy the contiguous offsets
+  starting at the write's ordered starting position and to advance the File's
+  logical position by exactly `k`.
+- Defined positioned writes to grow the file when contributed bytes extend past
+  EOF.
+- Required logical gap octets created when a write begins beyond EOF to read as
+  zero, independent of sparse-file, extent, explicit-fill, or other backend
+  representation.
+- Required zero-contribution cancellation/failure to leave file size/content
+  unchanged even when the logical position was beyond EOF, preventing tentative
+  backend extension from leaking through a failed Future.
+- Kept independently opened Files and external/backend changes under their
+  existing cross-capability semantics without introducing a new global file
+  ordering or atomicity domain.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 219. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.218] - 2026-09-04
 
 ### Closed

@@ -1,9 +1,9 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 218
+Document revision: 219
 Status: Draft  
-Last updated: 2026-09-03
+Last updated: 2026-09-04
 ## Prelude Binding Note
 
 Prelude bindings introduce no additional grammar. The shared standard prelude is frozen by runtime semantics. Therefore `name = value` cannot modify a binding found only in the prelude; `name: value` creates a local slot and may explicitly shadow that name.

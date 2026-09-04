@@ -1,9 +1,9 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 218
+Document revision: 219
 Status: Draft  
-Last updated: 2026-09-03
+Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
 
 It complements:
@@ -1144,6 +1144,24 @@ Standard `create` is an atomic/race-free open-or-create selection, not a portabl
 Writable open with `truncate` establishes initial file size zero as part of open.
 
 Read-only plus truncate is invalid.
+
+### 18.2.1 Positioned File writes
+
+For a writable standard `File` opened with `write placement: positioned`, each `ByteWritable.write(bytes)` starts at that File's logical sequence position applicable when the operation reaches its ordered evaluation point. Let that starting position be `p` and let the captured write sequence have length `N`.
+
+The write replaces existing file octets beginning at `p`; it does not insert bytes and shift later file content. If the operation contributes a prefix of length `k` under the ordinary `ByteWritable` success/failure rules, its own byte contribution occupies exactly offsets `p` through `p + k - 1`, in source order. For `k > 0`, the File's logical position after that operation is `p + k`, whether the Future ultimately succeeds or fails. For `k = 0`, the logical position is unchanged.
+
+If contributed bytes extend beyond the file size applicable to the write, the file grows as necessary to include the last contributed byte. If `p` is greater than that file size when the first byte of this operation is contributed, every newly created logical octet between the former EOF and `p` reads as zero. Those zero-valued gap octets are part of the file-growth effect required to place this operation's first contributed byte; they are not bytes from the captured write sequence and do not increase `k`.
+
+A positioned write that contributes zero bytes does not grow the file or create a gap merely because its logical position is beyond EOF. In particular, cancellation or failure with `k = 0` preserves both the logical position and the file size/content effects attributable to that write. An implementation that tentatively extends, allocates, seeks, or materializes backend storage before the first contributed byte must reconcile that work so a zero-contribution outcome does not expose such tentative growth.
+
+The zero-gap rule is logical file content, not a requirement to physically allocate or write every intervening octet. Sparse allocation, holes, extents, virtual zero ranges, explicit zero filling, or another backend representation are all permitted when reads and size observations produce the specified result. A backend that cannot provide or emulate deterministic zero-valued gap content must not expose that resource as a standard positioned File whose writes may extend beyond EOF.
+
+Independent operations through separately opened File capabilities, external actors/processes, or backend agents remain governed by the existing cross-capability/backend semantics. This rule does not create a new cross-File ordering or atomicity domain. In particular, such independently authorized changes may alter file size or content before or after this write's own placement/effects according to the backend contract; they do not change which offsets are attributable to this write's contiguous contributed prefix once its starting logical position has been established.
+
+For operations ordered on the same logical File, the ordinary sequence-state domain applies: a later position-sensitive operation starts from the post-write logical position and sequence aftermath defined above, including the permitted prefix and any required zero-valued gap created by that prefix.
+
+A standard positioned File write overwrites from the File's current logical position, advances that position by exactly its contributed prefix, grows the file when necessary, and exposes deterministic zero-valued logical gap octets when placement begins beyond EOF.
 
 ### 18.3 Append
 
