@@ -4,6 +4,23 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.268] - 2026-09-04
+
+### Fixed
+- Reconciled the programmer-visible Language contract for the standard
+  structural `Object` messages with the return values already fixed by Runtime.
+- Defined successful `removeSlot(name)` to return the exact removed local-slot
+  value, without copy, coercion, or delegated lookup.
+- Defined successful structural `close()` and `freeze()` to return the original
+  receiver, including their existing idempotent repeated-transition cases.
+- Distinguished synchronous structural `Object.close()` from the I/O-domain
+  `Closable.close()` operation, which follows its separate Future-returning
+  resource-lifecycle contract when that behavior is selected by ordinary lookup.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 268.
+  Only `PROTOS_LANGUAGE_SPEC.md` gains normative clarification in this revision.
+
 ## [0.1.267] - 2026-09-04
 
 ### Fixed

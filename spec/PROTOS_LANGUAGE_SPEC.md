@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 267
+Document revision: 268
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -1668,6 +1668,39 @@ Objects are initially open and mutable.
 An open object permits local slot creation, modification, and removal subject to the normal rules. Slot removal never delegates.
 
 `Object` is the standard root prototype for ordinary objects and provides the ordinary reflective messages `removeSlot(name)`, `close()`, and `freeze()`. These are normal message sends backed by runtime primitives; they are not special grammar forms.
+
+### Return contracts of standard structural Object messages
+
+The standard structural messages inherited from `Object` have the following
+normal-result contracts:
+
+```text
+receiver.removeSlot(name)  -> exact value removed from the local slot
+receiver.close()           -> receiver
+receiver.freeze()          -> receiver
+```
+
+A successful `removeSlot(name)` returns the exact object that occupied the
+removed local slot immediately before removal. It performs no copy, coercion, or
+delegated lookup to determine that result. If removal fails under the existing
+state/name/local-slot rules, no normal result is produced.
+
+A successful structural `close()` returns the original receiver after applying
+the existing object-state transition rules. Calling structural `close()` on an
+already closed or frozen object retains the existing idempotent state semantics
+and returns that same receiver.
+
+A successful structural `freeze()` returns the original receiver after applying
+the existing freeze transition. Calling structural `freeze()` on an already
+frozen object is likewise idempotent and returns that same receiver.
+
+These return rules expose no new primitive category and do not change ordinary
+message lookup or overriding. In particular, this synchronous structural
+`Object.close()` contract is distinct from the I/O-domain `Closable.close()`
+protocol defined by `PROTOS_IO_MODEL.md`, whose standard operation returns a
+`Future`. When lookup selects an I/O `Closable.close()` behavior, the I/O
+contract applies; inheriting `Object.close()` alone does not grant resource
+lifecycle semantics.
 
 ```js
 dog.removeSlot("age")
