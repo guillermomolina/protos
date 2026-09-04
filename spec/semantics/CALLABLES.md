@@ -96,6 +96,61 @@ f()
 retains `this === dog`.
 
 The language therefore does not reproduce JavaScript's lost-`this` behavior when a method is extracted.
+
+### Standard Closure-specific behavior ownership
+
+Core v0.1 installs the standard Closure-specific selectors `future` and
+`parallel` as ordinary **local Closure-valued slots of `Object`**. They are not
+hidden runtime methods, per-Closure materialized slots, entries in a separate
+method table, or slots on a standard `Closure` prototype. Core defines no
+standard `Closure` prototype.
+
+This location is ordinary and observable. Under the portable topology in
+`OBJECT_MODEL.md`, every Closure delegates directly to `Object`, so ordinary
+lookup of `closure.future` or `closure.parallel` reaches the corresponding local
+slot on `Object` unless a nearer ordinary slot shadows it. Consequently
+`Object.hasSlot("future")` and `Object.hasSlot("parallel")` are true, and
+`Object.slotNames()` includes both names under the ordinary reflection rules.
+Any other receiver whose delegation chain reaches `Object` can likewise find
+these selectors by ordinary lookup.
+
+The **standard** behaviors stored in those two `Object` slots have the semantic
+Closure family as their receiver domain. Finding either behavior does not make
+the original receiver a Closure. If ordinary lookup selects the standard
+`Object.future` or `Object.parallel` behavior for an original receiver that is
+not a semantic Closure, invocation signals the ordinary invalid-receiver
+`Error` required by `OBJECT_MODEL.md` before any Future/task creation or isolated
+parallel effect occurs. Failure of that selected behavior does not resume lookup
+at another slot with the same name.
+
+The selectors themselves are not reserved. A nearer local `future` or `parallel`
+slot shadows the inherited standard slot exactly as for any other name, including
+when the nearer value is not a Closure. A program-defined Closure-valued override
+has its own ordinary receiver contract and is not automatically restricted to
+Closure receivers merely because it uses one of these names. Subject to the
+ordinary open/closed/frozen and slot-creation rules, a Closure object may itself
+define a nearer local override.
+
+Reading `receiver.future` or `receiver.parallel` is an ordinary member read. When
+the selected value is a Closure, extraction follows §11 exactly: the resulting
+Closure retains the original receiver and selected slot owner as the ordinary
+receiver/`methodHome` binding metadata. No second bound-method kind or
+Closure-specific extraction rule is introduced.
+
+`FUTURES_AND_TASKS.md` remains the primary normative owner of what the standard
+`future()` behavior does after receiver-domain validation, including task,
+Future, scheduling, cancellation, failure, and structured-ownership semantics.
+`../concurrency/PARALLEL_EXECUTION.md` remains the primary normative owner of
+what the standard `parallel(arguments...)` behavior does after receiver-domain
+validation, including projection, transfer, isolation, execution, and result
+semantics.
+
+An implementation may realize either standard behavior using host primitives,
+intrinsics, cached dispatch, worker pools, scheduler machinery, or hidden host
+function pointers, but only as implementation machinery. Such machinery must
+preserve the ordinary local `Object` slots, lookup, reflection, receiver-domain
+validation, shadowing, extraction, invocation result/failure, and portable
+parent topology specified above.
 ## 12. Closures and `super`
 
 A closure created inside a method retains the information required to resolve `super`.
@@ -152,7 +207,7 @@ find: (items) => {
 A direct `^` in `find` targets the same home activation:
 
 ```js
-find: (items) => {
+find: () => {
     ^42
     null
 }
