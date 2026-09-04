@@ -69,6 +69,11 @@ public final class ProtosCoreBootstrap {
                     "Core Context prototype must delegate directly to Object");
         }
 
-        return new ProtosPrelude(contextPrototype);
+        ProtosObjectValue preludeBindings =
+                new ProtosObjectValue(contextPrototype);
+        preludeBindings.createLocalSlot("Context", contextPrototype);
+        preludeBindings.freeze();
+
+        return new ProtosPrelude(preludeBindings, contextPrototype);
     }
 }

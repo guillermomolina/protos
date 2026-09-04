@@ -20,11 +20,32 @@ package com.guillermomolina.protos.runtime;
 import java.util.Objects;
 
 public final class ProtosPrelude {
+    private final ProtosObjectValue bindings;
     private final ProtosObjectValue contextPrototype;
 
-    public ProtosPrelude(ProtosObjectValue contextPrototype) {
+    public ProtosPrelude(
+            ProtosObjectValue bindings,
+            ProtosObjectValue contextPrototype) {
+        this.bindings = Objects.requireNonNull(bindings, "bindings");
         this.contextPrototype =
                 Objects.requireNonNull(contextPrototype, "contextPrototype");
+
+        if (!bindings.isFrozen()) {
+            throw new IllegalArgumentException("prelude bindings must be frozen");
+        }
+        if (bindings.parent().orElse(null) != contextPrototype) {
+            throw new IllegalArgumentException(
+                    "prelude bindings must delegate to Context");
+        }
+        if (bindings.readLocalSlot("Context").orElse(null)
+                != contextPrototype) {
+            throw new IllegalArgumentException(
+                    "prelude Context binding must be the Context prototype");
+        }
+    }
+
+    public ProtosObjectValue bindings() {
+        return bindings;
     }
 
     public ProtosObjectValue contextPrototype() {
@@ -33,5 +54,13 @@ public final class ProtosPrelude {
 
     public ProtosObjectValue newExecutionContext() {
         return new ProtosObjectValue(contextPrototype);
+    }
+
+    public ProtosActivation newModuleActivation() {
+        ProtosObjectValue moduleContext = newExecutionContext();
+        return new ProtosActivation(
+                moduleContext,
+                java.util.List.of(bindings),
+                moduleContext);
     }
 }

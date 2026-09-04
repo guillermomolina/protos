@@ -77,8 +77,12 @@ class ProtosSourceCompilerTest {
     private static ProtosActivation freshTopLevelActivation() {
         ProtosObjectValue contextPrototype =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue bindings = new ProtosObjectValue(contextPrototype);
+        bindings.createLocalSlot("Context", contextPrototype);
+        bindings.freeze();
         ProtosObjectValue context =
-                new ProtosPrelude(contextPrototype).newExecutionContext();
+                new ProtosPrelude(bindings, contextPrototype)
+                        .newExecutionContext();
         return new ProtosActivation(context, List.of(), context);
     }
 }

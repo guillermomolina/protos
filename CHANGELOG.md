@@ -4,6 +4,34 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.14-SNAPSHOT] - 2026-09-04
+
+### Changed
+
+- `ProtosPrelude` now owns an explicit frozen ordinary Protos bindings context
+  rather than only retaining the `Context` prototype reference.
+- `ProtosCoreBootstrap` now constructs that real prelude context after loading
+  `Context`: it delegates to `Context`, contains the exact `Context` binding,
+  and is frozen before becoming observable to later runtime stages.
+- Added `ProtosPrelude.newModuleActivation()` so a fresh module context captures
+  the frozen standard prelude through the ordinary lexical-context mechanism.
+- Project implementation version changed from `0.2.13-SNAPSHOT` to
+  `0.2.14-SNAPSHOT`.
+
+### Tests
+
+- Added coverage for frozen prelude structure and ordinary lexical lookup of the
+  `Context` binding from a module activation.
+- Extended Core bootstrap coverage to verify the source-backed prelude context.
+
+### Notes
+
+- This does not add any new standard objects or hardcoded Core behavior.
+- The prelude remains explicit runtime state; no process-global mutable prelude
+  is introduced.
+- No normative specification change is introduced.
+
+
 ## [0.2.13-SNAPSHOT] - 2026-09-04
 
 ### Removed

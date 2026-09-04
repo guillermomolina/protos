@@ -24,17 +24,45 @@ import org.junit.jupiter.api.Test;
 
 class ProtosPreludeTest {
     @Test
-    void createsFreshExecutionContextsFromItsExplicitContextPrototype() {
+    void createsFreshExecutionContextsFromFrozenPreludeBindings() {
         ProtosObjectValue contextPrototype =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
-        ProtosPrelude prelude = new ProtosPrelude(contextPrototype);
+        ProtosObjectValue bindings = new ProtosObjectValue(contextPrototype);
+        bindings.createLocalSlot("Context", contextPrototype);
+        bindings.freeze();
+        ProtosPrelude prelude =
+                new ProtosPrelude(bindings, contextPrototype);
 
         ProtosObjectValue first = prelude.newExecutionContext();
         ProtosObjectValue second = prelude.newExecutionContext();
 
+        assertSame(bindings, prelude.bindings());
         assertSame(contextPrototype, prelude.contextPrototype());
         assertNotSame(first, second);
         assertSame(contextPrototype, first.parent().orElseThrow());
         assertSame(contextPrototype, second.parent().orElseThrow());
+    }
+
+    @Test
+    void moduleActivationCapturesFrozenPreludeForOrdinaryLexicalLookup() {
+        ProtosObjectValue contextPrototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue bindings = new ProtosObjectValue(contextPrototype);
+        bindings.createLocalSlot("Context", contextPrototype);
+        bindings.freeze();
+        ProtosPrelude prelude =
+                new ProtosPrelude(bindings, contextPrototype);
+
+        ProtosActivation activation = prelude.newModuleActivation();
+
+        assertSame(
+                contextPrototype,
+                activation.lookup("Context").orElseThrow());
+        assertSame(
+                bindings,
+                activation.capturedLexicalContexts().get(0));
+        assertSame(
+                contextPrototype,
+                activation.context().parent().orElseThrow());
     }
 }

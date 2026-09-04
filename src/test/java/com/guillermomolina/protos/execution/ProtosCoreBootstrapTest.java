@@ -35,12 +35,20 @@ class ProtosCoreBootstrapTest {
                         .bootstrap(Path.of("protos", "lib", "core"));
 
         ProtosObjectValue contextPrototype = prelude.contextPrototype();
+        ProtosObjectValue bindings = prelude.bindings();
         ProtosObjectValue first = prelude.newExecutionContext();
         ProtosObjectValue second = prelude.newExecutionContext();
 
         assertSame(
                 ProtosObjectValue.rootObject(),
                 contextPrototype.parent().orElseThrow());
+        assertSame(contextPrototype, bindings.parent().orElseThrow());
+        assertSame(
+                contextPrototype,
+                bindings.readLocalSlot("Context").orElseThrow());
+        assertSame(
+                ProtosObjectValue.MutationState.FROZEN,
+                bindings.mutationState());
         assertNotSame(first, second);
         assertSame(contextPrototype, first.parent().orElseThrow());
         assertSame(contextPrototype, second.parent().orElseThrow());
