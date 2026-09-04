@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.277] - 2026-09-04
+
+### Closed
+- Closed dynamic error handlers across Actor boundaries as already determined by
+  the existing task-local dynamic-handler and Actor value-transfer rules.
+- Defined dynamic handler frames as execution-local control state that is never
+  copied, inherited, serialized, proxied, forwarded, or remotely consulted
+  across an Actor boundary.
+- Clarified that sender handlers never become destination handlers, destination
+  handlers never propagate back to the sender, and Actor bootstrap/replacement
+  never inherits dynamic handler frames.
+- Reaffirmed that a Future re-signals its stored Error only in the consumer's
+  then-current dynamic handler context.
+- Prohibited transport, placement, routing, same-host, or shared-memory
+  optimizations from making handler propagation observable.
+- Removed `Dynamic error handlers across Actor boundaries` from Open Design
+  Topics.
+
+### Changed
+- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  277.
+
 ## [0.1.276] - 2026-09-04
 
 ### Closed

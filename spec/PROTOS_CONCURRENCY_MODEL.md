@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 276
+Document revision: 277
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -1751,6 +1751,58 @@ continuation crosses at all.
 A future explicit continuation or remote-workflow abstraction would need its own
 value, lifetime, authority, failure, cancellation, and distribution semantics.
 It must not retroactively turn ordinary `^` into cross-Actor control transfer.
+
+## 24I. Dynamic Error Handlers Never Cross Actor Boundaries
+
+**CLOSED**
+
+Core v0.1 dynamic error handlers are execution-local control state. They belong
+to the task/continuation whose dynamic execution installed them and never become
+Actor-global or cross-Actor state.
+
+An Actor boundary therefore never copies, inherits, snapshots, serializes,
+proxies, forwards, or remotely consults another Actor's active dynamic handler
+frames.
+
+Consequently:
+
+- a sender's active handlers do not become active while the destination Actor
+  handles `send()` or `request()` work;
+- a destination Actor's active handlers do not catch an Error merely because
+  that Error later becomes observable to the sender;
+- Actor bootstrap/initialization receives only its defined transferred values,
+  not the creator's dynamic handler stack;
+- Actor replacement starts with no dynamic handler frames inherited from the
+  terminated incarnation;
+- ActorRef/GroupRef transfer never carries handler authority;
+- routing, transport, placement, same-host optimization, or shared-memory
+  implementation does not weaken this boundary.
+
+An Error that escapes destination Actor execution follows the already-defined
+Actor failure/request uncertainty semantics. Core does not transport the
+destination's dynamic handler stack back to the sender.
+
+Likewise, if a Future later re-signals a stored Error through `value()`, handler
+selection occurs only in the consumer's then-current dynamic context. The
+producer's handler frames are not reconstructed or consulted.
+
+The same principle already applies inside one Actor across distinct asynchronous
+tasks: a new task does not inherit the creator's active dynamic handler frames.
+The Actor boundary is therefore not a special exception but a stricter instance
+of the same execution-local rule.
+
+Implementations may internally represent dynamic handlers using host exception
+frames, continuation metadata, stack records, tables, or another mechanism. Such
+representation must not make cross-Actor handler propagation observable.
+
+A future explicit distributed error-routing or workflow facility could transfer
+an Error value or define recovery policy, but it would need its own protocol.
+It must not retroactively make ordinary dynamic handler frames cross Actor
+boundaries.
+
+This closes the former open ledger item `Dynamic error handlers across Actor
+boundaries`; there is no remaining implementation-selectable behavior in Core
+v0.1 for this topic.
 
 ## 25. Parent Actor Versus Failure Authority
 
@@ -5637,7 +5689,6 @@ mechanism, or implementation detail that still requires design.
 -   Native global state
 -   Blocking foreign calls
 -   Blocking-operation offload
--   Dynamic error handlers across Actor boundaries
 -   Timers
 -   Clock semantics
 -   Resource limits and quotas
