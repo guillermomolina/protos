@@ -4,6 +4,31 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.304] - 2026-09-04
+
+### Fixed
+- Reconciled recoverable `Flushable` failure with `WriteShutdown` clean-frontier
+  semantics.
+- Preserved a failed flush Future as failed while allowing a later ordered
+  successful flush to repair its propagation requirement when the later frontier
+  fully covers the earlier failed flush frontier.
+- Required shutdown to wait for that recovering flush's terminal success before
+  relying on the recovered frontier.
+- Clarified that a recovering flush may cover later output as well and establish
+  one combined propagation frontier for all output inside its frontier.
+- Kept failed `ByteWritable.write` distinct: later flush of its committed prefix
+  does not repair the failed write for WriteShutdown.
+- Prohibited `shutdownWrite()` from implicitly retrying/replaying a failed flush;
+  without a later successful covering flush, the failed propagation remains an
+  unsatisfied shutdown prerequisite.
+- Preserved hidden-progress opacity: recovery does not expose the earlier flush's
+  partial propagation or rewrite its historical Future outcome.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 304. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.303] - 2026-09-04
 
 ### Fixed

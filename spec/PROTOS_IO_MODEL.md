@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 303
+Document revision: 304
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -1594,11 +1594,21 @@ A `flush()` ordered after the write-shutdown cutover is not accepted as new outp
 
 For a `flush()` and `shutdownWrite()` that are genuinely concurrent because they originate from independently progressing Actors through Actor-safe proxies for the same logical output direction, Protos defines no predetermined cross-Actor arrival order. Routing/admission may choose either request first. If flush is admitted first, it is the preceding operation described above; if shutdown establishes the cutover first, the competing flush is rejected. Once that relative order is chosen, host/backend scheduling cannot move the flush across the cutover.
 
-This rule fixes admission and ordering only. It does not redefine the ordinary aftermath of an already-admitted flush, does not make every preceding flush failure automatically recoverable or unrecoverable, and does not infer hidden propagation progress. Any such aftermath continues to compose with the existing `Flushable`, wrapper, and `WriteShutdown` clean-frontier rules.
+This rule fixes admission and ordering only. It does not redefine the ordinary aftermath of an already-admitted flush, does not infer hidden propagation progress, and does not by itself make every preceding flush failure permanently fatal to the output lifecycle. Recovery is governed by the `Flushable` progress rules below.
+
+A failed preceding `flush()` is distinct from a failed preceding `ByteWritable.write`. The failed flush Future remains failed and its already-permitted partial propagation is not rolled back, but `Flushable` already permits a receiver that retains exact internal propagation progress to continue from the unpropagated remainder with a later ordered flush.
+
+For `shutdownWrite()` clean-frontier purposes, such a failed flush is repaired only if, before the end-of-output frontier is established, a later ordered `flush()` completes successfully with a propagation frontier that covers all output belonging to the earlier failed flush's frontier. That later successful flush proves the required propagation state for the covered output; it does not rewrite the earlier flush Future as successful, erase its failure event, or expose how far the earlier flush had progressed.
+
+If output ordered after the failed flush also belongs to the later successful flush frontier, that later flush may establish one combined recovered propagation frontier for all of that covered output. `shutdownWrite()` waits for the recovering flush's terminal success before relying on that frontier.
+
+A failed `ByteWritable.write` is not repaired by this rule. Its Future remains a failed required output operation under the existing WriteShutdown rule even if a later flush can propagate the write's known committed prefix. Likewise, a later flush that itself fails, is cancelled before establishing the needed propagation frontier, or does not cover the failed flush's required frontier does not repair that earlier flush for shutdown purposes.
+
+`shutdownWrite()` does not itself implicitly retry or replay a failed flush merely because recovery would have been possible. If no later successful ordered flush establishes the required recovered frontier, a preceding failed flush remains an unsatisfied required propagation operation and causes shutdown to fail under the rule below.
 
 There is no universal implied flush. A wrapper that exposes `WriteShutdown` must first correctly finalize/propagate its own output state before propagating shutdown to the underlying output direction.
 
-If required preceding output fails, or if establishment of the end-of-output frontier itself fails, the shutdown Future fails rather than pretending that a clean end-of-output was established. The output direction remains permanently unavailable to new writes; failure never reopens it.
+If required preceding output remains failed or otherwise lacks the clean frontier required above, or if establishment of the end-of-output frontier itself fails, the shutdown Future fails rather than pretending that a clean end-of-output was established. A preceding failed flush whose required propagation frontier was subsequently covered by a later successful flush is no longer an unsatisfied propagation failure for this shutdown decision; a failed write remains failed as specified above. The output direction remains permanently unavailable to new writes; failure never reopens it.
 
 Write shutdown is logically idempotent. Calls made while shutdown is pending observe the same lifecycle rather than beginning independent shutdown attempts. After successful shutdown, later calls succeed without establishing another end-of-output frontier. After failed shutdown, later calls fail consistently with that failed lifecycle and do not retry the frontier or reopen output. Exact Future-object identity is not required.
 
