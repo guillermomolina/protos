@@ -17,6 +17,8 @@ Current expectation kinds:
 
 - `integer`: the program must complete normally with the exact mathematical
   Integer in field 3;
+- `fixed-integer`: the program must complete normally with a fixed-width
+  exact-integer value; field 3 is `Family:value`, for example `UInt8:255`;
 - `float-bits`: the program must complete normally with a Float whose raw IEEE
   binary64 bits equal the 16-hex-digit payload in field 3;
 - `float-nan`: the program must complete normally with the semantic Float NaN

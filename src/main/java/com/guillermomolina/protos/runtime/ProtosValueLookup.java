@@ -70,6 +70,14 @@ public final class ProtosValueLookup {
                 current = prelude.floatPrototype();
                 continue;
             }
+            if (current instanceof ProtosFixedIntegerValue fixed) {
+                if (prelude == null) {
+                    throw new UnsupportedOperationException(
+                            "represented fixed-width Integer lookup requires an owning Core prelude");
+                }
+                current = prelude.fixedIntegerPrototype(fixed.family());
+                continue;
+            }
 
             throw new UnsupportedOperationException(
                     "Standard prototype lookup is not yet implemented for runtime value representation "

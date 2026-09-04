@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -35,12 +36,36 @@ public final class ProtosStandardNumericConversionProtocol {
 
     public static void install(
             ProtosObjectValue integerPrototype,
-            ProtosObjectValue floatPrototype) {
+            ProtosObjectValue floatPrototype,
+            ProtosObjectValue uInt8Prototype,
+            ProtosObjectValue int8Prototype,
+            ProtosObjectValue uInt16Prototype,
+            ProtosObjectValue int16Prototype,
+            ProtosObjectValue uInt32Prototype,
+            ProtosObjectValue int32Prototype,
+            ProtosObjectValue uInt64Prototype,
+            ProtosObjectValue int64Prototype) {
         Objects.requireNonNull(integerPrototype, "integerPrototype");
         Objects.requireNonNull(floatPrototype, "floatPrototype");
+        Objects.requireNonNull(uInt8Prototype, "uInt8Prototype");
+        Objects.requireNonNull(int8Prototype, "int8Prototype");
+        Objects.requireNonNull(uInt16Prototype, "uInt16Prototype");
+        Objects.requireNonNull(int16Prototype, "int16Prototype");
+        Objects.requireNonNull(uInt32Prototype, "uInt32Prototype");
+        Objects.requireNonNull(int32Prototype, "int32Prototype");
+        Objects.requireNonNull(uInt64Prototype, "uInt64Prototype");
+        Objects.requireNonNull(int64Prototype, "int64Prototype");
 
         installIntegerFactory(integerPrototype);
         installFloatFactory(floatPrototype);
+        installFixedFactory(uInt8Prototype, ProtosFixedIntegerValue.Family.UINT8);
+        installFixedFactory(int8Prototype, ProtosFixedIntegerValue.Family.INT8);
+        installFixedFactory(uInt16Prototype, ProtosFixedIntegerValue.Family.UINT16);
+        installFixedFactory(int16Prototype, ProtosFixedIntegerValue.Family.INT16);
+        installFixedFactory(uInt32Prototype, ProtosFixedIntegerValue.Family.UINT32);
+        installFixedFactory(int32Prototype, ProtosFixedIntegerValue.Family.INT32);
+        installFixedFactory(uInt64Prototype, ProtosFixedIntegerValue.Family.UINT64);
+        installFixedFactory(int64Prototype, ProtosFixedIntegerValue.Family.INT64);
     }
 
     private static void installIntegerFactory(ProtosObjectValue integerPrototype) {
@@ -50,6 +75,9 @@ public final class ProtosStandardNumericConversionProtocol {
                     Object value = supplied.get(0);
                     if (value instanceof ProtosIntegerValue integer) {
                         return integer;
+                    }
+                    if (value instanceof ProtosFixedIntegerValue fixed) {
+                        return new ProtosIntegerValue(fixed.value());
                     }
                     if (value instanceof ProtosFloatValue floating) {
                         BigInteger exact = exactIntegralBinary64(floating.value());
@@ -74,7 +102,38 @@ public final class ProtosStandardNumericConversionProtocol {
                                 ProtosBinary64Rounding.divideExactIntegers(
                                         integer.value(), BigInteger.ONE));
                     }
+                    if (value instanceof ProtosFixedIntegerValue fixed) {
+                        return new ProtosFloatValue(
+                                ProtosBinary64Rounding.divideExactIntegers(
+                                        fixed.value(), BigInteger.ONE));
+                    }
                     return null;
+                });
+    }
+
+    private static void installFixedFactory(
+            ProtosObjectValue prototype,
+            ProtosFixedIntegerValue.Family family) {
+        installFactory(
+                prototype,
+                supplied -> {
+                    Object value = supplied.get(0);
+                    BigInteger exact = null;
+                    if (value instanceof ProtosIntegerValue integer) {
+                        exact = integer.value();
+                    } else if (value instanceof ProtosFixedIntegerValue fixed) {
+                        exact = fixed.value();
+                    } else if (value instanceof ProtosFloatValue floating) {
+                        exact = exactIntegralBinary64(floating.value());
+                    }
+                    if (exact == null || !family.contains(exact)) {
+                        return null;
+                    }
+                    if (value instanceof ProtosFixedIntegerValue fixed
+                            && fixed.family() == family) {
+                        return fixed;
+                    }
+                    return new ProtosFixedIntegerValue(family, exact);
                 });
     }
 

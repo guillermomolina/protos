@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import com.guillermomolina.protos.execution.ProtosSourceFileLoader;
+import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -82,6 +83,21 @@ final class ProtosLanguageConformanceTest {
                 assertEquals(
                         expectedBits,
                         Double.doubleToRawLongBits(floating.value()));
+            }
+            case "fixed-integer" -> {
+                Object result =
+                        loader.load(source).call(prelude.newModuleActivation());
+                ProtosFixedIntegerValue fixed =
+                        assertInstanceOf(ProtosFixedIntegerValue.class, result);
+                String[] expected = testCase.expectedValue().split(":", 2);
+                if (expected.length != 2) {
+                    throw new IllegalArgumentException(
+                            "fixed-integer expectation must be FAMILY:value");
+                }
+                assertEquals(
+                        ProtosFixedIntegerValue.Family.fromPrototypeName(expected[0]),
+                        fixed.family());
+                assertEquals(new BigInteger(expected[1]), fixed.value());
             }
             case "float-nan" -> {
                 Object result =

@@ -63,6 +63,30 @@ public final class ProtosCoreBootstrap {
                 .load(coreDirectory.resolve("float.protos"))
                 .call(bootstrapActivation);
         sourceLoader
+                .load(coreDirectory.resolve("uint8.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("int8.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("uint16.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("int16.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("uint32.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("int32.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("uint64.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("int64.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
                 .load(coreDirectory.resolve("error.protos"))
                 .call(bootstrapActivation);
         sourceLoader
@@ -96,10 +120,25 @@ public final class ProtosCoreBootstrap {
                 requirePrototype(bootstrapContext, "Integer", numberPrototype);
         ProtosObjectValue floatPrototype =
                 requirePrototype(bootstrapContext, "Float", numberPrototype);
+        ProtosObjectValue uInt8Prototype =
+                requirePrototype(bootstrapContext, "UInt8", integerPrototype);
+        ProtosObjectValue int8Prototype =
+                requirePrototype(bootstrapContext, "Int8", integerPrototype);
+        ProtosObjectValue uInt16Prototype =
+                requirePrototype(bootstrapContext, "UInt16", integerPrototype);
+        ProtosObjectValue int16Prototype =
+                requirePrototype(bootstrapContext, "Int16", integerPrototype);
+        ProtosObjectValue uInt32Prototype =
+                requirePrototype(bootstrapContext, "UInt32", integerPrototype);
+        ProtosObjectValue int32Prototype =
+                requirePrototype(bootstrapContext, "Int32", integerPrototype);
+        ProtosObjectValue uInt64Prototype =
+                requirePrototype(bootstrapContext, "UInt64", integerPrototype);
+        ProtosObjectValue int64Prototype =
+                requirePrototype(bootstrapContext, "Int64", integerPrototype);
         ProtosStandardIntegerProtocol.install(integerPrototype);
         ProtosStandardFloatProtocol.install(floatPrototype);
-        ProtosStandardNumericConversionProtocol.install(
-                integerPrototype, floatPrototype);
+        ProtosStandardNumericConversionProtocol.install(integerPrototype, floatPrototype, uInt8Prototype, int8Prototype, uInt16Prototype, int16Prototype, uInt32Prototype, int32Prototype, uInt64Prototype, int64Prototype);
 
         Object errorBinding =
                 bootstrapContext
@@ -160,6 +199,14 @@ public final class ProtosCoreBootstrap {
         preludeBindings.createLocalSlot("Number", numberPrototype);
         preludeBindings.createLocalSlot("Integer", integerPrototype);
         preludeBindings.createLocalSlot("Float", floatPrototype);
+        preludeBindings.createLocalSlot("UInt8", uInt8Prototype);
+        preludeBindings.createLocalSlot("Int8", int8Prototype);
+        preludeBindings.createLocalSlot("UInt16", uInt16Prototype);
+        preludeBindings.createLocalSlot("Int16", int16Prototype);
+        preludeBindings.createLocalSlot("UInt32", uInt32Prototype);
+        preludeBindings.createLocalSlot("Int32", int32Prototype);
+        preludeBindings.createLocalSlot("UInt64", uInt64Prototype);
+        preludeBindings.createLocalSlot("Int64", int64Prototype);
         preludeBindings.createLocalSlot("Error", errorPrototype);
         preludeBindings.createLocalSlot(
                 "InvalidReturn", invalidReturnPrototype);

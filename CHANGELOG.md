@@ -4,6 +4,32 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.48-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added source-backed standard prototypes `UInt8`, `Int8`, `UInt16`, `Int16`,
+  `UInt32`, `Int32`, `UInt64`, and `Int64`, each delegating directly through
+  `Integer`.
+- Added semantic fixed-width integer runtime values carrying exact family and
+  mathematical value with range-enforced construction.
+- Extended ordinary lookup to each fixed-width numeric prototype.
+- Added all eight explicit fixed-width conversion factories with exact range
+  checks for Integer, integral Float, and cross-family fixed-width inputs.
+- Extended `Integer(...)` and `Float(...)` to accept fixed-width exact integers.
+- Added Java and `.protos` conformance coverage and a `fixed-integer`
+  expectation kind.
+- Project implementation version changed from `0.2.47-SNAPSHOT` to
+  `0.2.47-SNAPSHOT`.
+
+### Notes
+
+- Fixed-width arithmetic is intentionally deferred to P64.
+- No implicit numeric promotion or wrapping is introduced.
+- D027/B003 remains untouched.
+- No normative specification change is introduced.
+
+
 ## [0.2.47-SNAPSHOT] - 2026-09-04
 
 ### Added
