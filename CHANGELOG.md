@@ -4,6 +4,38 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.49-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Implemented the standard Boolean protocol selectors `ifTrue`, `ifFalse`,
+  `and`, and `or` as ordinary Object-owned Closure-valued slots reached by the
+  canonical `true`/`false` delegation bridge.
+- Added exact Boolean receiver-domain enforcement: standard Boolean behavior
+  accepts only canonical `true` and `false`.
+- Implemented selected-path ordinary polymorphic callback invocation with zero
+  positional arguments and exact propagation of normal results for `ifTrue`
+  and `ifFalse`.
+- Implemented path-local callability validation: callbacks on unselected paths
+  are neither validated nor invoked.
+- Implemented canonical Boolean result validation for selected `and` and `or`
+  callbacks, with invalid normal results signaling Error.
+- Added `boolean` and `null` language-conformance expectation kinds and
+  executable `.protos` cases for selected/unselected paths, short-circuiting,
+  invalid callback results, and non-invokable selected callbacks.
+- Project implementation version changed from `0.2.48-SNAPSHOT` to
+  `0.2.49-SNAPSHOT`.
+
+### Notes
+
+- No standard `Boolean` prototype or prelude binding is introduced.
+- The already-published direct canonical Boolean delegation to `Object` remains
+  unchanged.
+- No truthiness conversion, implicit awaiting, hidden suspension, or callback
+  pre-validation is introduced.
+- No normative specification change is introduced.
+
+
 ## [0.2.48-SNAPSHOT] - 2026-09-04
 
 ### Added

@@ -92,3 +92,15 @@ fixed-width/int16-from-uint8.protos	fixed-integer	Int16:255
 fixed-width/int8-from-uint8-range-error.protos	error	-
 fixed-width/integer-from-uint8.protos	integer	255
 fixed-width/float-from-uint8.protos	float-bits	406fe00000000000
+boolean/iftrue-selected.protos	integer	42
+boolean/iffalse-selected.protos	integer	43
+boolean/iftrue-unselected.protos	null	-
+boolean/iffalse-unselected.protos	null	-
+boolean/and-short-circuit.protos	boolean	false
+boolean/or-short-circuit.protos	boolean	true
+boolean/and-selected-false.protos	boolean	false
+boolean/or-selected-true.protos	boolean	true
+boolean/and-invalid-result.protos	error	-
+boolean/or-invalid-result.protos	error	-
+boolean/iftrue-noninvokable.protos	error	-
+boolean/iffalse-noninvokable.protos	error	-

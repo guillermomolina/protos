@@ -15,6 +15,10 @@ future implementation can execute the same conformance corpus.
 
 Current expectation kinds:
 
+- `boolean`: the program must complete normally with canonical `true` or `false`
+  as named by field 3;
+- `null`: the program must complete normally with canonical `null`; field 3 is
+  `-`;
 - `integer`: the program must complete normally with the exact mathematical
   Integer in field 3;
 - `fixed-integer`: the program must complete normally with a fixed-width

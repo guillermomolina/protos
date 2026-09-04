@@ -23,7 +23,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import com.guillermomolina.protos.execution.ProtosSourceFileLoader;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -66,6 +68,23 @@ final class ProtosLanguageConformanceTest {
         Path source = ROOT.resolve(testCase.path());
 
         switch (testCase.expectation()) {
+            case "boolean" -> {
+                Object result =
+                        loader.load(source).call(prelude.newModuleActivation());
+                ProtosBooleanValue expected =
+                        switch (testCase.expectedValue()) {
+                            case "true" -> ProtosBooleanValue.TRUE;
+                            case "false" -> ProtosBooleanValue.FALSE;
+                            default -> throw new IllegalArgumentException(
+                                    "boolean expectation must be true or false");
+                        };
+                assertEquals(expected, result);
+            }
+            case "null" -> {
+                Object result =
+                        loader.load(source).call(prelude.newModuleActivation());
+                assertEquals(ProtosNullValue.INSTANCE, result);
+            }
             case "integer" -> {
                 Object result =
                         loader.load(source).call(prelude.newModuleActivation());

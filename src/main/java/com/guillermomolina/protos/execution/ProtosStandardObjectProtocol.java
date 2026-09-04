@@ -27,6 +27,7 @@ public final class ProtosStandardObjectProtocol {
 
     public static void install() {
         ProtosObjectValue object = ProtosObjectValue.rootObject();
+        ProtosStandardBooleanProtocol.install();
         if (!object.hasLocalSlot("call")) {
             object.createLocalSlot(
                     "call",
