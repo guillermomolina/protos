@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 294
+Document revision: 295
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -1599,6 +1599,14 @@ Buffered or future input may be discarded by read shutdown. Once read shutdown b
 Read shutdown has a receiver-visible cutover point: the irreversible transition into `read-shutting-down`. The outcome of every read competing with shutdown is determined relative to that cutover, not by which host/native completion callback happens to run first.
 
 A read whose `Bytes`, EOF, or error result committed before the read-shutdown cutover retains that committed result. A read accepted before shutdown but still uncommitted at the cutover completes with `null`; it does not remain pending indefinitely, consume/disclose buffered input after the cutover, or become `cancelled` merely because shutdown occurred. Thus invoking `shutdownRead()` while an earlier read Future is still pending intentionally terminates that uncommitted read rather than waiting behind it as `shutdownWrite()` waits behind preceding writes.
+
+Cancellation of that competing read is ordered by the same commitment boundary rather than by host callback timing. If the read's ordinary cancellation contract has already won and committed the Future to `cancelled` before the read-shutdown cutover reaches that read, the read remains `cancelled`; shutdown does not rewrite an already-terminal cancellation into `null`.
+
+Conversely, if the read is still uncommitted and not already terminally cancelled when the read-shutdown cutover reaches it, the shutdown-induced `null` outcome commits at that cutover. A cancellation request that arrives or would otherwise complete afterward loses: it cannot replace that committed `null` with `cancelled`, cannot resurrect the read as pending, and cannot restore discarded input.
+
+For a cancellation request and `shutdownRead()` that are genuinely concurrent because they progress independently, Protos defines no predetermined wall-clock winner. Their observable outcome is determined by which semantic event commits first under the existing read-cancellation and read-shutdown rules: terminal cancellation first yields `cancelled`; shutdown cutover first while the read is still uncommitted yields `null`. Once either outcome has committed, host/native completion scheduling cannot rewrite it.
+
+This rule introduces no extra read effect or restoration requirement. Successful cancellation still preserves the ordinary zero-consumption guarantee; shutdown winning still permits the existing discard behavior for uncommitted internal/native read-ahead. The distinction fixes only which terminal Future outcome owns the race.
 
 For operations issued through independently progressing Actors or Actor-safe proxies, routing/admission may determine whether a competing read commits before the shutdown request reaches the receiver's cutover. Protos defines no global cross-Actor arrival order. Once the receiver has established the cutover, however, host scheduling cannot retroactively move an uncommitted read to the pre-shutdown side or expose bytes that were discarded by shutdown.
 

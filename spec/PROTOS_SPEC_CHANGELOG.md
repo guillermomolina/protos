@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.295] - 2026-09-04
+
+### Fixed
+- Defined deterministic precedence between ordinary read cancellation and the
+  `shutdownRead()` cutover for the same pending read.
+- Required a cancellation that already won and committed `cancelled` before the
+  shutdown cutover to retain that terminal outcome.
+- Required the shutdown cutover to commit `null` when it reaches a read that is
+  still uncommitted and not already terminally cancelled.
+- Prohibited a later cancellation from rewriting shutdown-committed `null`, and
+  prohibited shutdown from rewriting an already-terminal cancellation.
+- Defined genuinely concurrent cancellation/shutdown races by whichever existing
+  semantic commitment event commits first, independent of host callback timing.
+- Preserved cancellation's zero-consumption guarantee and ReadShutdown's existing
+  permission to discard uncommitted internal/native input.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 295. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.294] - 2026-09-04
 
 ### Closed
