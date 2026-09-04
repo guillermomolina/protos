@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.286] - 2026-09-04
+
+### Closed
+- Closed `Behavior requirements before READY`.
+- Defined that Core does not require a dispatchable current behavior throughout
+  the whole `INITIALIZING` state because no external message is dispatched then.
+- Required exactly one valid ordinary behavior object at the
+  `INITIALIZING -> READY` cutover.
+- Prohibited hidden/default/bootstrap sentinel behavior objects from becoming a
+  portable semantic requirement.
+- Defined normal completion of initialization without an installed behavior as
+  initialization failure; the Actor never reaches `READY`.
+- Preserved the existing queued/accepted-message behavior for initialization
+  failure.
+- Left the exact behavior installation/replacement API and syntax open.
+
+### Changed
+- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  286.
+
 ## [0.1.285] - 2026-09-04
 
 ### Fixed
