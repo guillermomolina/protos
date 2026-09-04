@@ -4,6 +4,33 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.40-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added standard ordinary `Integer` arithmetic behavior for `+`, `-`, `*`, and
+  unary `negated`.
+- Ordinary Integer arithmetic now returns exact unbounded Integer values backed
+  by arbitrary-precision arithmetic and therefore does not expose host-machine
+  integer overflow.
+- Standard Integer binary arithmetic rejects arguments from other numeric
+  families instead of implicitly promoting or coercing them.
+- Added receiver-domain validation so copying a standard Integer arithmetic
+  Closure onto an ordinary object does not make that receiver a semantic
+  Integer.
+- Added coverage for large exact results, unary negation, mixed-family rejection,
+  and incompatible receivers.
+- Project implementation version changed from `0.2.39-SNAPSHOT` to `0.2.40-SNAPSHOT`.
+
+### Notes
+
+- Division, remainder/modulo, comparisons, conversion factories, Float
+  arithmetic, and fixed-width integer families remain separate implementation
+  work.
+- D027/B003 remains untouched.
+- No normative specification change is introduced.
+
+
 ## [0.2.39-SNAPSHOT] - 2026-09-04
 
 ### Fixed

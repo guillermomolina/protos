@@ -96,6 +96,7 @@ public final class ProtosCoreBootstrap {
                 requirePrototype(bootstrapContext, "Integer", numberPrototype);
         ProtosObjectValue floatPrototype =
                 requirePrototype(bootstrapContext, "Float", numberPrototype);
+        ProtosStandardIntegerProtocol.install(integerPrototype);
 
         Object errorBinding =
                 bootstrapContext
