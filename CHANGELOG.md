@@ -4,6 +4,33 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.23-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added `ProtosArgsNode`, an invocation-only execution node that returns the
+  exact standard frozen Array already established on the current Closure
+  activation.
+
+### Changed
+
+- Project implementation version changed from `0.2.22-SNAPSHOT` to `0.2.23-SNAPSHOT`.
+
+### Tests
+
+- Added focused coverage proving `args` returns the exact activation-owned Array,
+  retaining its source-backed standard `Array` parent and frozen state.
+
+### Notes
+
+- This increment intentionally does not enable `args` in the general
+  program/module lowerer because Core defines it as an invocation-context
+  binding and does not assign a substitute value outside invocation.
+- Callable-body/default lowering will use this node when the Closure execution
+  plan is connected.
+- No normative specification change is introduced.
+
+
 ## [0.2.22-SNAPSHOT] - 2026-09-04
 
 ### Added
