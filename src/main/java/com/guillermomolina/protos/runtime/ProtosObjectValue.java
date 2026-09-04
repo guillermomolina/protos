@@ -99,13 +99,14 @@ public final class ProtosObjectValue {
         return java.util.Collections.unmodifiableMap(new LinkedHashMap<>(localSlots));
     }
 
-    public ProtosObjectValue withoutLocalSlot(String name) {
+    public ProtosObjectValue withoutLocalSlot(String name, Object resultParent) {
         Objects.requireNonNull(name, "name");
+        Objects.requireNonNull(resultParent, "resultParent");
         if (!localSlots.containsKey(name)) {
             throw new IllegalStateException("local slot does not exist: " + name);
         }
 
-        ProtosObjectValue result = new ProtosObjectValue(parentForDerivedOrdinaryObject());
+        ProtosObjectValue result = new ProtosObjectValue(resultParent);
         for (Map.Entry<String, Object> entry : localSlots.entrySet()) {
             if (!entry.getKey().equals(name)) {
                 result.createLocalSlot(entry.getKey(), entry.getValue());
@@ -114,9 +115,13 @@ public final class ProtosObjectValue {
         return result;
     }
 
-    public ProtosObjectValue aliasLocalSlot(String sourceName, String aliasName) {
+    public ProtosObjectValue aliasLocalSlot(
+            String sourceName,
+            String aliasName,
+            Object resultParent) {
         Objects.requireNonNull(sourceName, "sourceName");
         Objects.requireNonNull(aliasName, "aliasName");
+        Objects.requireNonNull(resultParent, "resultParent");
         if (!localSlots.containsKey(sourceName)) {
             throw new IllegalStateException("local slot does not exist: " + sourceName);
         }
@@ -124,7 +129,7 @@ public final class ProtosObjectValue {
             throw new IllegalStateException("local slot already exists: " + aliasName);
         }
 
-        ProtosObjectValue result = new ProtosObjectValue(parentForDerivedOrdinaryObject());
+        ProtosObjectValue result = new ProtosObjectValue(resultParent);
         for (Map.Entry<String, Object> entry : localSlots.entrySet()) {
             result.createLocalSlot(entry.getKey(), entry.getValue());
         }
@@ -159,10 +164,6 @@ public final class ProtosObjectValue {
         }
 
         localSlots.putAll(contributions);
-    }
-
-    private Object parentForDerivedOrdinaryObject() {
-        return isRootObject() ? ROOT : parent;
     }
 
     public Optional<ProtosSlotLookupResult> lookupSlot(String name) {

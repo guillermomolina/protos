@@ -52,3 +52,36 @@ broad: repository policy and the runtime specification explicitly permit
 implementation-specific internal representations when observable Protos
 semantics are preserved. The blocker is therefore narrowed back to the actual
 unresolved observable case: the result of an empty `Sequence`.
+
+## B002 — Delegation parent of `without` / `alias` result objects
+
+Status: BLOCKED
+
+Implementation area:
+Standard `Object.without(name)` and `Object.alias(sourceName, aliasName)` message
+behavior and any runtime helper that constructs their result objects.
+
+Normative dependency:
+The normative object model requires both operations to return a new ordinary
+object containing copied local-slot bindings, but it does not currently state
+what delegation parent that result object has. The delegation parent is
+observable through ordinary lookup and therefore cannot be chosen as an
+implementation detail.
+
+Specification authority:
+- `spec/semantics/OBJECT_MODEL.md`
+
+Unblock condition:
+The current normative specification explicitly and uniquely defines the
+delegation parent of the ordinary object returned by both `without(name)` and
+`alias(sourceName, aliasName)`.
+
+Current consequence:
+The runtime copy helpers require the caller to provide the result parent
+explicitly, so no standard Protos-visible parent policy is encoded. The
+`without` and `alias` messages must not be exposed until this blocker is READY.
+
+Independent work:
+Composition conflict validation, local-slot snapshots, atomic contribution
+application, parser/canonical AST work, and unrelated execution/runtime work may
+continue independently.

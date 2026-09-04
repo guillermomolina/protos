@@ -229,12 +229,17 @@ class ProtosObjectValueTest {
         source.createLocalSlot("move", move);
         source.createLocalSlot("state", state);
 
-        ProtosObjectValue without = source.withoutLocalSlot("move");
+        ProtosObjectValue without =
+                source.withoutLocalSlot("move", ProtosObjectValue.rootObject());
         assertFalse(without.hasLocalSlot("move"));
         assertSame(state, without.readLocalSlot("state").orElseThrow());
         assertTrue(source.hasLocalSlot("move"));
 
-        ProtosObjectValue aliased = source.aliasLocalSlot("move", "swimMove");
+        ProtosObjectValue aliased =
+                source.aliasLocalSlot(
+                        "move",
+                        "swimMove",
+                        ProtosObjectValue.rootObject());
         assertSame(move, aliased.readLocalSlot("move").orElseThrow());
         assertSame(move, aliased.readLocalSlot("swimMove").orElseThrow());
         assertSame(state, aliased.readLocalSlot("state").orElseThrow());
@@ -251,13 +256,26 @@ class ProtosObjectValueTest {
         source.createLocalSlot("local", new Object());
         source.createLocalSlot("taken", new Object());
 
-        assertThrows(IllegalStateException.class, () -> source.withoutLocalSlot("inherited"));
         assertThrows(
                 IllegalStateException.class,
-                () -> source.aliasLocalSlot("inherited", "copy"));
+                () ->
+                        source.withoutLocalSlot(
+                                "inherited",
+                                ProtosObjectValue.rootObject()));
         assertThrows(
                 IllegalStateException.class,
-                () -> source.aliasLocalSlot("local", "taken"));
+                () ->
+                        source.aliasLocalSlot(
+                                "inherited",
+                                "copy",
+                                ProtosObjectValue.rootObject()));
+        assertThrows(
+                IllegalStateException.class,
+                () ->
+                        source.aliasLocalSlot(
+                                "local",
+                                "taken",
+                                ProtosObjectValue.rootObject()));
     }
 
     @Test
