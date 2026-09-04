@@ -26,6 +26,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceName;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.parser.ast.SurfaceUnary;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
+import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalMember;
@@ -55,24 +56,44 @@ public final class Canonicalizer {
     }
 
     private CanonicalExpression lowerBinary(SurfaceBinary binary) {
-        if (isDeferredStandardBinaryOperator(binary.operator())) {
-            throw new IllegalArgumentException(
-                    "Standard binary operator is not supported by this canonicalizer slice: "
-                            + binary.operator());
-        }
+        return switch (binary.operator()) {
+            case "||", "&&" ->
+                    throw new IllegalArgumentException(
+                            "Lazy Boolean operator is not supported by this canonicalizer slice: "
+                                    + binary.operator());
+            case "==" -> lowerEquality(binary);
+            case "!=" ->
+                    negate(lowerEquality(binary), binary.span());
+            case "===" ->
+                    lowerIdentity(binary);
+            case "!==" ->
+                    negate(lowerIdentity(binary), binary.span());
+            default ->
+                    new CanonicalSend(
+                            canonicalize(binary.left()),
+                            binary.operator(),
+                            List.of(canonicalize(binary.right())),
+                            binary.span());
+        };
+    }
 
+    private CanonicalExpression lowerEquality(SurfaceBinary binary) {
         return new CanonicalSend(
                 canonicalize(binary.left()),
-                binary.operator(),
+                "==",
                 List.of(canonicalize(binary.right())),
                 binary.span());
     }
 
-    private boolean isDeferredStandardBinaryOperator(String operator) {
-        return switch (operator) {
-            case "||", "&&", "==", "!=", "===", "!==" -> true;
-            default -> false;
-        };
+    private CanonicalExpression lowerIdentity(SurfaceBinary binary) {
+        return new CanonicalIdentity(
+                canonicalize(binary.left()),
+                canonicalize(binary.right()),
+                binary.span());
+    }
+
+    private CanonicalExpression negate(CanonicalExpression expression, com.guillermomolina.protos.source.SourceSpan span) {
+        return new CanonicalSend(expression, "not", List.of(), span);
     }
 
     private CanonicalExpression lowerUnary(SurfaceUnary unary) {
