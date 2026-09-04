@@ -97,7 +97,19 @@ class ProtosStandardNumberEqualityTest {
     void wrongAritySignalsError() throws IOException {
         ProtosPrelude prelude = corePrelude();
 
-        assertThrows(ProtosSignalException.class, () -> execute(prelude, "1.==(1, 2)"));
+        assertThrows(
+                ProtosSignalException.class,
+                () ->
+                        ProtosInvocation.invokeMessage(
+                                new com.guillermomolina.protos.runtime.ProtosIntegerValue(
+                                        java.math.BigInteger.ONE),
+                                "==",
+                                java.util.List.of(
+                                        new com.guillermomolina.protos.runtime.ProtosIntegerValue(
+                                                java.math.BigInteger.ONE),
+                                        new com.guillermomolina.protos.runtime.ProtosIntegerValue(
+                                                java.math.BigInteger.TWO)),
+                                prelude.newModuleActivation()));
     }
 
     private static void assertBoolean(ProtosPrelude prelude, String source, boolean expected) {

@@ -4,6 +4,25 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.51-SNAPSHOT] - 2026-09-04
+
+### Fixed
+
+- Corrected the standard numeric-equality wrong-arity regression test so it
+  invokes the `==` selector directly with two supplied arguments through
+  `ProtosInvocation`.
+- Removed the invalid source spelling `1.==(1, 2)`, which is rejected by the
+  parser before message dispatch and therefore could not test runtime arity
+  behavior.
+- Project implementation version changed from `0.2.50-SNAPSHOT` to
+  `0.2.51-SNAPSHOT`.
+
+### Notes
+
+- No numeric equality runtime semantics changed.
+- No normative specification change is introduced.
+
+
 ## [0.2.50-SNAPSHOT] - 2026-09-04
 
 ### Added
