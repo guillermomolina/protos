@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.260] - 2026-09-04
+
+### Fixed
+- Defined the standard String-family binary `+` behavior as exact String
+  concatenation, making existing examples such as `("hel" + "lo") === "hello"`
+  normative rather than illustrative-but-undefined.
+- Required both operands to be semantic String values and prohibited implicit
+  conversion of numbers, booleans, null, prototypes, or arbitrary objects.
+- Defined the result as exact receiver scalar sequence followed by right-operand
+  scalar sequence, with no Unicode normalization, locale processing, encoding,
+  decoding, callback, hash/equality dispatch, or hidden suspension.
+- Preserved String immutability, value identity, ordinary operator/message
+  overriding, and the semantic-family receiver-domain rule.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 260.
+  `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain normative
+  semantic content in this revision.
+
 ## [0.1.259] - 2026-09-04
 
 ### Fixed

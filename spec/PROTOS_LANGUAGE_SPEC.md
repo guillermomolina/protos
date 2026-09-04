@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 259
+Document revision: 260
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -4398,6 +4398,44 @@ This rule defines only the already-visible `String.size` and `String.at`
 semantics. It does not standardize the illustrative `graphemes()`,
 `codePoints()`, normalization, locale-sensitive segmentation, collation, or
 text-editing protocols mentioned elsewhere.
+
+
+
+### Standard String concatenation with `+`
+
+The standard String-family behavior for binary `+` concatenates two semantic
+String values.
+
+```js
+"hel" + "lo"     // "hello"
+```
+
+The original receiver must be a semantic String value, and the right operand
+must also be a semantic String value. No Number, Boolean, `null`, arbitrary
+object, prototype, or other value is implicitly converted to String.
+
+The result is the String whose Unicode-scalar sequence is exactly the receiver's
+scalar sequence followed by the right operand's scalar sequence. Concatenation
+performs no Unicode normalization, grapheme resegmentation beyond that implied
+later by ordinary String `size` / `at`, locale transformation, encoding, or
+decoding.
+
+String values are immutable, so concatenation mutates neither operand. The
+result obeys ordinary String value identity and equality. Consequently, when
+the concatenated scalar sequence equals an existing String value's scalar
+sequence, `===` observes the same String value semantics:
+
+```js
+("hel" + "lo") === "hello"   // true
+```
+
+The standard operation performs no user callback, textual coercion, `hash`,
+`==`, Encoding operation, or hidden suspension.
+
+This is a standard String-family specialization of the ordinary `+` message.
+Ordinary lookup and overriding rules remain unchanged. Merely delegating to a
+String value or String-family prototype does not make an incompatible receiver
+a semantic String.
 
 ## Maps, Hashing, and Key Equality
 

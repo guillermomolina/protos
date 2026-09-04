@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 259
+Document revision: 260
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -1519,6 +1519,34 @@ function semanticEqual(a, b):
 `==` is ordinary object behavior and may be customized, but it has a strict protocol result contract: the result must be canonical `true` or `false`, or the operation must signal an error.
 
 ---
+
+
+
+### Standard String concatenation runtime semantics
+
+Standard String `+` is conceptually:
+
+```text
+function standardStringAdd(receiver, right):
+    leftString = requireSemanticString(receiver)
+    rightString = requireSemanticString(right)
+
+    return stringFromExactUnicodeScalarSequence(
+        unicodeScalars(leftString) + unicodeScalars(rightString)
+    )
+```
+
+`requireSemanticString` validates semantic String-family membership without
+coercion and without invoking user behavior.
+
+`stringFromExactUnicodeScalarSequence` produces the semantic String value for
+the exact concatenated scalar sequence. It performs no normalization,
+encoding/decoding, locale processing, callback, equality/hash dispatch, or
+mutation.
+
+The String-family receiver-domain rule applies to the original receiver. A
+non-String right operand signals `Error` after ordinary left-to-right operand
+evaluation and before any concatenation result is produced.
 
 ## Equality and Comparison Result Validation
 
