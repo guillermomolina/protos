@@ -4,6 +4,29 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.6-SNAPSHOT] - 2026-09-04
+
+### Changed
+
+- Removed temporary Java-side `Number`, `Integer`, and `Float` prototype objects
+  from `ProtosCorePrelude`.
+- Removed the Java-side numeric-family prototype resolver and the tests that
+  treated those temporary objects as the implementation's standard numeric
+  prelude.
+- Kept only the explicitly documented temporary `Context` bootstrap scaffold.
+- Project implementation version changed from `0.2.5-SNAPSHOT` to
+  `0.2.6-SNAPSHOT`.
+
+### Notes
+
+- Numeric value representations and already-implemented numeric literal/identity
+  semantics are unchanged.
+- This corrects an implementation-architecture regression: standard numeric
+  prototype objects belong to the future `protos/lib/core/` bootstrap path
+  rather than a growing hardcoded Java standard library.
+- No normative specification change is introduced.
+
+
 ## [0.2.5-SNAPSHOT] - 2026-09-04
 
 ### Added
