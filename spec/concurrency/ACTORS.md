@@ -1855,8 +1855,6 @@ If policy requires continued capacity or service membership after
 failure, replacement creates a fresh Actor rather than repairing the
 failed Actor's heap.
 
-# Legacy concurrency integration migrated at revision 328
-
 ## 1. General Principle
 
 **CLOSED**

@@ -497,8 +497,6 @@ This closes the former open ledger item `Module implementation sharing`; the
 remaining module semantics are already fixed by the canonical Language and
 Runtime module-lifecycle rules.
 
-# Remaining concurrency/prelude integration migrated at revision 328
-
 ## 72. Standard Prelude Sharing
 
 **CLOSED**

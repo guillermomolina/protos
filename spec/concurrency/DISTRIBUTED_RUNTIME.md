@@ -12,8 +12,8 @@ contracts were normatively CLOSED in the former mixed concurrency ledger.
 
 Legacy section numbers are retained for citation continuity. Unresolved design
 topics remain in `docs/design/CONCURRENCY_DESIGN.md`, which is entirely
-non-normative after revision 328. Nothing in that ledger supplements or overrides
-the contracts in this document.
+non-normative. Nothing in those design notes supplements or overrides the
+contracts in this document.
 
 ## 37. Process Boundary
 
@@ -1550,8 +1550,6 @@ performed by the orchestrator.
 The same Protos program and runtime model should remain valid across
 standalone execution, Kubernetes, Nomad, or future infrastructure
 environments.
-
-# Remaining topology/runtime boundaries migrated at revision 328
 
 ## 72A. No Core Application or Service Identity
 

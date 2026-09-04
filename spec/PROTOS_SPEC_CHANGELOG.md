@@ -8,6 +8,17 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.337] - 2026-09-04
+
+### Post-modularization structural cleanup
+- Removed migration-only H1 markers from `spec/concurrency/ACTORS.md`,
+  `spec/concurrency/DISTRIBUTED_RUNTIME.md`, and `spec/semantics/MODULES.md`.
+- Reworded the distributed-runtime reference to concurrency design notes so its
+  non-normative status is stated directly rather than tied to migration revision 328.
+
+### Compatibility
+- No observable Protos behavior is changed.
+
 ## [0.1.336] - 2026-09-04
 
 ### Specification revision governance simplified
