@@ -75,6 +75,14 @@ portable Core one-shot encoding contract.
 
 A Process host may additionally provide an `Encoding` object describing a host-selected standard-stream encoding even when that encoding is not one of the portable named values above.
 
+
+An Encoding descriptor is an Encoding semantic value produced or provisioned by a normative Encoding-producing operation or by an explicit host Encoding-provisioning boundary permitted by this specification. The four mandatory portable values above are Encoding descriptors, as are additional host-provided Encoding values supplied through such an explicit boundary.
+
+Delegation, copying, composition, possession of similarly named slots, or structural/protocol compatibility does not confer Encoding semantic-family membership. In particular, an ordinary object that delegates to `Encoding` or to an Encoding descriptor, copies or composes one, or merely provides `encode`/`decode` behavior is not thereby an Encoding descriptor. A parameter whose domain is `Encoding descriptor` accepts only a semantic member of that family; there is no implicit duck typing or coercion.
+
+Standard Encoding-family behavior is subject to the general semantic-family receiver-domain rule in `../semantics/OBJECT_MODEL.md`. Reaching that standard behavior through delegation or copying does not bypass its receiver-domain check: if the original receiver is not an Encoding semantic value, invocation signals the ordinary invalid-receiver `Error` before Encoding-family computation or state effects.
+
+
 Per-flow encoder and decoder state is independent and may be stateful. Reusing an `Encoding` descriptor does not mean sharing one mutable encoder/decoder state across flows.
 
 The standardized one-shot operations are conceptually:

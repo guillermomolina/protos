@@ -9,6 +9,33 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.375] - 2026-09-04
+
+### Path equality versus semantic identity (D037)
+- Clarifies that portable Path equality is structural and filesystem-independent,
+  using rootedness plus the ordered component sequence, while Path semantic
+  identity remains ordinary individual object identity.
+- Therefore independently created structurally equal Paths compare equal through
+  the Path equality contract but remain distinct through `===`, `!==`,
+  `identityHashOf`, and `IdentityMap`; Path is not added to the closed Core
+  value-identity set.
+
+### Encoding semantic-family membership and receiver domain (D038)
+- Defines Encoding descriptors positively as Encoding semantic values produced
+  or provisioned by normative Encoding-producing operations or explicit
+  permitted host Encoding-provisioning boundaries.
+- Clarifies that delegation, copying, composition, similarly named slots, and
+  structural/protocol compatibility do not confer Encoding membership, and that
+  Encoding-descriptor parameters perform neither duck typing nor implicit
+  coercion.
+- Applies the general standard semantic-family receiver-domain rule to standard
+  Encoding behavior, so inherited or copied behavior cannot bypass an
+  incompatible-receiver check.
+
+### Compatibility
+- No standard prototype, delegation topology, physical Encoding representation,
+  implementation version, or Java implementation behavior is changed.
+
 ## [0.1.374] - 2026-09-04
 
 ### Future result identity semantics (D036)

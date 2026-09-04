@@ -582,7 +582,8 @@ ByteReadable cancellation/failure preservation follows that same established inp
 ByteSeekable seek operations are failure-atomic with respect to logical position; failed or successfully cancelled seeks leave that position unchanged.
 
 Path is a value, not filesystem authority.
-Portable Path identity is structural: rootedness plus ordered components; Filesystem lookup identity, host syntax, and resource identity are separate.
+Path equality is structural and filesystem-independent: it compares rootedness plus the ordered component sequence, as owned by `FILESYSTEM.md`.
+Path semantic identity is ordinary individual object identity under `../semantics/VALUES_AND_COLLECTIONS.md`; structural equality does not make Path a Core value-identity family. Filesystem lookup identity, host syntax, and resource identity remain separate.
 URL is a value, not resource-access authority.
 Filesystem carries filesystem authority.
 File access mode guarantees ByteReadable/ByteWritable as requested, while ByteSeekable, ByteSized, Truncatable, and Syncable are exposed only when that backend can meet each protocol's normative contract.
