@@ -18,7 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosExecutionContext;
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.source.SourceSpan;
@@ -41,8 +41,8 @@ public final class ProtosBareAssignNode extends ProtosExpressionNode {
 
     @Override
     public Object execute(VirtualFrame frame) {
-        ProtosExecutionContext executionContext =
-                ProtosFrameArguments.executionContext(frame);
+        ProtosActivation executionContext =
+                ProtosFrameArguments.activation(frame);
 
         ProtosObjectValue destination =
                 executionContext.writableLexicalContext(name)

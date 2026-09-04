@@ -20,7 +20,7 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.guillermomolina.protos.runtime.ProtosExecutionContext;
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.guillermomolina.protos.source.SourceSpan;
@@ -35,8 +35,8 @@ class CanonicalIntrinsicExecutionTest {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue context = new ProtosObjectValue(root);
         ProtosObjectValue receiver = new ProtosObjectValue(root);
-        ProtosExecutionContext activation =
-                new ProtosExecutionContext(context, List.of(), receiver);
+        ProtosActivation activation =
+                new ProtosActivation(context, List.of(), receiver);
 
         assertSame(receiver, execute(intrinsic(CanonicalIntrinsic.Kind.THIS), activation));
     }
@@ -46,8 +46,8 @@ class CanonicalIntrinsicExecutionTest {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue context = new ProtosObjectValue(root);
         ProtosObjectValue receiver = new ProtosObjectValue(root);
-        ProtosExecutionContext activation =
-                new ProtosExecutionContext(context, List.of(), receiver);
+        ProtosActivation activation =
+                new ProtosActivation(context, List.of(), receiver);
 
         assertSame(context, execute(intrinsic(CanonicalIntrinsic.Kind.CONTEXT), activation));
     }
@@ -61,7 +61,7 @@ class CanonicalIntrinsicExecutionTest {
 
     private Object execute(
             CanonicalIntrinsic intrinsic,
-            ProtosExecutionContext activation) {
+            ProtosActivation activation) {
         return ProtosExecution.createCallTarget(lowerer.lower(intrinsic)).call(activation);
     }
 

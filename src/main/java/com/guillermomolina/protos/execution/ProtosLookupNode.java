@@ -18,7 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosExecutionContext;
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.source.SourceSpan;
 import com.oracle.truffle.api.frame.VirtualFrame;
@@ -34,7 +34,7 @@ public final class ProtosLookupNode extends ProtosExpressionNode {
 
     @Override
     public Object execute(VirtualFrame frame) {
-        ProtosExecutionContext context = ProtosFrameArguments.executionContext(frame);
+        ProtosActivation context = ProtosFrameArguments.activation(frame);
         return context.lookup(name)
                 .orElseThrow(
                         () -> new ProtosSignalException(

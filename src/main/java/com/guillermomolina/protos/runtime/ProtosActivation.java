@@ -21,15 +21,15 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
-public final class ProtosExecutionContext {
+public final class ProtosActivation {
     private final ProtosObjectValue context;
     private final List<ProtosObjectValue> capturedLexicalContexts;
-    private final ProtosObjectValue receiver;
+    private final Object receiver;
 
-    public ProtosExecutionContext(
+    public ProtosActivation(
             ProtosObjectValue context,
             List<ProtosObjectValue> capturedLexicalContexts,
-            ProtosObjectValue receiver) {
+            Object receiver) {
         this.context = Objects.requireNonNull(context, "context");
         this.capturedLexicalContexts =
                 List.copyOf(Objects.requireNonNull(
@@ -45,7 +45,7 @@ public final class ProtosExecutionContext {
         return capturedLexicalContexts;
     }
 
-    public ProtosObjectValue receiver() {
+    public Object receiver() {
         return receiver;
     }
 
@@ -64,7 +64,12 @@ public final class ProtosExecutionContext {
             }
         }
 
-        return receiver.readSlot(name);
+        if (receiver instanceof ProtosObjectValue ordinaryReceiver) {
+            return ordinaryReceiver.readSlot(name);
+        }
+
+        throw new UnsupportedOperationException(
+                "Lookup on non-ordinary Protos receivers requires standard prototype bootstrap");
     }
 
     public Optional<ProtosObjectValue> writableLexicalContext(String name) {
@@ -80,8 +85,9 @@ public final class ProtosExecutionContext {
             }
         }
 
-        if (receiver.hasLocalSlot(name)) {
-            return Optional.of(receiver);
+        if (receiver instanceof ProtosObjectValue ordinaryReceiver
+                && ordinaryReceiver.hasLocalSlot(name)) {
+            return Optional.of(ordinaryReceiver);
         }
 
         return Optional.empty();

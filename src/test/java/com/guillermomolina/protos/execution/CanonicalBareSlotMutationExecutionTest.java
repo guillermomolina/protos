@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosExecutionContext;
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -43,8 +43,8 @@ class CanonicalBareSlotMutationExecutionTest {
         ProtosObjectValue current = new ProtosObjectValue(root);
         ProtosObjectValue captured = new ProtosObjectValue(root);
         ProtosObjectValue receiver = new ProtosObjectValue(root);
-        ProtosExecutionContext activation =
-                new ProtosExecutionContext(current, List.of(captured), receiver);
+        ProtosActivation activation =
+                new ProtosActivation(current, List.of(captured), receiver);
 
         Object result = execute(
                 new CanonicalCreate(
@@ -63,8 +63,8 @@ class CanonicalBareSlotMutationExecutionTest {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue current = new ProtosObjectValue(root);
         current.createLocalSlot("x", ProtosBooleanValue.TRUE);
-        ProtosExecutionContext activation =
-                new ProtosExecutionContext(current, List.of(), new ProtosObjectValue(root));
+        ProtosActivation activation =
+                new ProtosActivation(current, List.of(), new ProtosObjectValue(root));
 
         ProtosSignalException signal =
                 assertThrows(
@@ -92,8 +92,8 @@ class CanonicalBareSlotMutationExecutionTest {
         captured.createLocalSlot("captured", ProtosBooleanValue.TRUE);
         receiver.createLocalSlot("receiver", ProtosBooleanValue.TRUE);
 
-        ProtosExecutionContext activation =
-                new ProtosExecutionContext(current, List.of(captured), receiver);
+        ProtosActivation activation =
+                new ProtosActivation(current, List.of(captured), receiver);
 
         Object currentValue = execute(assign("current", "c"), activation);
         Object capturedValue = execute(assign("captured", "l"), activation);
@@ -111,8 +111,8 @@ class CanonicalBareSlotMutationExecutionTest {
         current.createLocalSlot("x", ProtosBooleanValue.TRUE);
         current.freeze();
 
-        ProtosExecutionContext activation =
-                new ProtosExecutionContext(current, List.of(), new ProtosObjectValue(root));
+        ProtosActivation activation =
+                new ProtosActivation(current, List.of(), new ProtosObjectValue(root));
 
         ProtosSignalException signal =
                 assertThrows(
@@ -132,8 +132,8 @@ class CanonicalBareSlotMutationExecutionTest {
 
         prototype.createLocalSlot("inherited", ProtosBooleanValue.TRUE);
 
-        ProtosExecutionContext activation =
-                new ProtosExecutionContext(current, List.of(), receiver);
+        ProtosActivation activation =
+                new ProtosActivation(current, List.of(), receiver);
 
         ProtosSignalException signal =
                 assertThrows(
@@ -146,7 +146,7 @@ class CanonicalBareSlotMutationExecutionTest {
 
     private Object execute(
             com.guillermomolina.protos.semantic.ast.CanonicalExpression expression,
-            ProtosExecutionContext activation) {
+            ProtosActivation activation) {
         return ProtosExecution.createCallTarget(lowerer.lower(expression)).call(activation);
     }
 

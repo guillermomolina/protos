@@ -18,7 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosExecutionContext;
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.source.SourceSpan;
 import com.oracle.truffle.api.frame.VirtualFrame;
@@ -40,8 +40,8 @@ public final class ProtosBareCreateNode extends ProtosExpressionNode {
 
     @Override
     public Object execute(VirtualFrame frame) {
-        ProtosExecutionContext executionContext =
-                ProtosFrameArguments.executionContext(frame);
+        ProtosActivation executionContext =
+                ProtosFrameArguments.activation(frame);
         Object value = valueNode.execute(frame);
 
         try {

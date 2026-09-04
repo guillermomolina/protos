@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosExecutionContext;
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
@@ -88,8 +88,8 @@ class ExtractedClosureBindingExecutionTest {
                 span);
     }
 
-    private ProtosExecutionContext activation(ProtosObjectValue receiver) {
-        return new ProtosExecutionContext(
+    private ProtosActivation activation(ProtosObjectValue receiver) {
+        return new ProtosActivation(
                 new ProtosObjectValue(ProtosObjectValue.rootObject()),
                 List.of(),
                 receiver);
@@ -97,7 +97,7 @@ class ExtractedClosureBindingExecutionTest {
 
     private Object execute(
             CanonicalMember expression,
-            ProtosExecutionContext activation) {
+            ProtosActivation activation) {
         return ProtosExecution.createCallTarget(lowerer.lower(expression)).call(activation);
     }
 }

@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosExecutionContext;
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.semantic.ast.CanonicalAssign;
@@ -41,8 +41,8 @@ class CanonicalExplicitMemberMutationExecutionTest {
     void explicitCreationCreatesLocalSlotAndReturnsRhs() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue receiver = new ProtosObjectValue(root);
-        ProtosExecutionContext activation =
-                new ProtosExecutionContext(new ProtosObjectValue(root), List.of(), receiver);
+        ProtosActivation activation =
+                new ProtosActivation(new ProtosObjectValue(root), List.of(), receiver);
 
         Object result = execute(
                 new CanonicalCreate(
@@ -63,8 +63,8 @@ class CanonicalExplicitMemberMutationExecutionTest {
         ProtosObjectValue prototype = new ProtosObjectValue(root);
         ProtosObjectValue receiver = new ProtosObjectValue(prototype);
         prototype.createLocalSlot("alive", ProtosBooleanValue.TRUE);
-        ProtosExecutionContext activation =
-                new ProtosExecutionContext(new ProtosObjectValue(root), List.of(), receiver);
+        ProtosActivation activation =
+                new ProtosActivation(new ProtosObjectValue(root), List.of(), receiver);
 
         ProtosSignalException signal =
                 assertThrows(
@@ -88,8 +88,8 @@ class CanonicalExplicitMemberMutationExecutionTest {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue receiver = new ProtosObjectValue(root);
         receiver.createLocalSlot("name", ProtosBooleanValue.TRUE);
-        ProtosExecutionContext activation =
-                new ProtosExecutionContext(new ProtosObjectValue(root), List.of(), receiver);
+        ProtosActivation activation =
+                new ProtosActivation(new ProtosObjectValue(root), List.of(), receiver);
 
         Object result = execute(
                 new CanonicalAssign(
@@ -109,8 +109,8 @@ class CanonicalExplicitMemberMutationExecutionTest {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue context = new ProtosObjectValue(root);
         context.createLocalSlot("value", ProtosBooleanValue.TRUE);
-        ProtosExecutionContext activation =
-                new ProtosExecutionContext(context, List.of(), new ProtosObjectValue(root));
+        ProtosActivation activation =
+                new ProtosActivation(context, List.of(), new ProtosObjectValue(root));
 
         ProtosSignalException signal =
                 assertThrows(
@@ -130,7 +130,7 @@ class CanonicalExplicitMemberMutationExecutionTest {
 
     private Object execute(
             com.guillermomolina.protos.semantic.ast.CanonicalExpression expression,
-            ProtosExecutionContext activation) {
+            ProtosActivation activation) {
         return ProtosExecution.createCallTarget(lowerer.lower(expression)).call(activation);
     }
 

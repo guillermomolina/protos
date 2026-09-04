@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosExecutionContext;
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -76,7 +76,7 @@ class CanonicalLookupExecutionTest {
     @Test
     void missingLookupSignalsCoreErrorWithoutInventingLookupErrorPrototype() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
-        ProtosExecutionContext activation =
+        ProtosActivation activation =
                 activation(new ProtosObjectValue(root), List.of(), new ProtosObjectValue(root));
 
         ProtosSignalException signal =
@@ -87,7 +87,7 @@ class CanonicalLookupExecutionTest {
                 signal.error().parent().orElseThrow());
     }
 
-    private Object execute(CanonicalLookup expression, ProtosExecutionContext activation) {
+    private Object execute(CanonicalLookup expression, ProtosActivation activation) {
         return ProtosExecution.createCallTarget(lowerer.lower(expression)).call(activation);
     }
 
@@ -95,10 +95,10 @@ class CanonicalLookupExecutionTest {
         return new CanonicalLookup(name, new SourceSpan(0, name.length()));
     }
 
-    private ProtosExecutionContext activation(
+    private ProtosActivation activation(
             ProtosObjectValue current,
             List<ProtosObjectValue> captured,
             ProtosObjectValue receiver) {
-        return new ProtosExecutionContext(current, captured, receiver);
+        return new ProtosActivation(current, captured, receiver);
     }
 }

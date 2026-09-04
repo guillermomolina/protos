@@ -17,18 +17,18 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosExecutionContext;
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.oracle.truffle.api.frame.VirtualFrame;
 
 final class ProtosFrameArguments {
     private ProtosFrameArguments() {}
 
-    static ProtosExecutionContext executionContext(VirtualFrame frame) {
+    static ProtosActivation activation(VirtualFrame frame) {
         Object[] arguments = frame.getArguments();
-        if (arguments.length == 0 || !(arguments[0] instanceof ProtosExecutionContext context)) {
+        if (arguments.length == 0 || !(arguments[0] instanceof ProtosActivation activation)) {
             throw new IllegalStateException(
-                    "Execution node requires a Protos execution context as frame argument 0");
+                    "Execution node requires a Protos activation as frame argument 0");
         }
-        return context;
+        return activation;
     }
 }

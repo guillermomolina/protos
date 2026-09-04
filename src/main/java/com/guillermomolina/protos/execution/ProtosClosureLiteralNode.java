@@ -18,7 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosExecutionContext;
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.source.SourceSpan;
@@ -39,8 +39,8 @@ public final class ProtosClosureLiteralNode extends ProtosExpressionNode {
 
     @Override
     public Object execute(VirtualFrame frame) {
-        ProtosExecutionContext activation =
-                ProtosFrameArguments.executionContext(frame);
+        ProtosActivation activation =
+                ProtosFrameArguments.activation(frame);
 
         List<ProtosObjectValue> captured =
                 new ArrayList<>(

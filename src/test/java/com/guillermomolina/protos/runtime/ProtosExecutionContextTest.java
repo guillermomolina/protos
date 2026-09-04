@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-class ProtosExecutionContextTest {
+class ProtosActivationTest {
     @Test
     void lookupPrefersCurrentContextThenCapturedLexicalContextsThenReceiver() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
@@ -43,8 +43,8 @@ class ProtosExecutionContextTest {
         inner.createLocalSlot("name", innerValue);
         current.createLocalSlot("name", currentValue);
 
-        ProtosExecutionContext activation =
-                new ProtosExecutionContext(current, List.of(inner, outer), receiver);
+        ProtosActivation activation =
+                new ProtosActivation(current, List.of(inner, outer), receiver);
 
         assertSame(currentValue, activation.lookup("name").orElseThrow());
 
@@ -68,8 +68,8 @@ class ProtosExecutionContextTest {
         outer.createLocalSlot("state", outerValue);
         inner.createLocalSlot("state", innerValue);
 
-        ProtosExecutionContext activation =
-                new ProtosExecutionContext(current, List.of(inner, outer), receiver);
+        ProtosActivation activation =
+                new ProtosActivation(current, List.of(inner, outer), receiver);
 
         assertSame(innerValue, activation.lookup("state").orElseThrow());
     }
@@ -84,8 +84,8 @@ class ProtosExecutionContextTest {
         Object inherited = new ProtosStringValue("inherited");
         prototype.createLocalSlot("name", inherited);
 
-        ProtosExecutionContext activation =
-                new ProtosExecutionContext(current, List.of(), receiver);
+        ProtosActivation activation =
+                new ProtosActivation(current, List.of(), receiver);
 
         assertSame(inherited, activation.lookup("name").orElseThrow());
     }
@@ -103,8 +103,8 @@ class ProtosExecutionContextTest {
         lexical.createLocalSlot("captured", ProtosBooleanValue.TRUE);
         current.createLocalSlot("local", ProtosBooleanValue.TRUE);
 
-        ProtosExecutionContext activation =
-                new ProtosExecutionContext(current, List.of(lexical), receiver);
+        ProtosActivation activation =
+                new ProtosActivation(current, List.of(lexical), receiver);
 
         assertSame(current, activation.writableLexicalContext("local").orElseThrow());
         assertSame(lexical, activation.writableLexicalContext("captured").orElseThrow());

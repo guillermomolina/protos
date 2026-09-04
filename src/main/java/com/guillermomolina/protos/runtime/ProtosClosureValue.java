@@ -24,20 +24,20 @@ import java.util.Objects;
 public final class ProtosClosureValue {
     private final CanonicalClosure definition;
     private final List<ProtosObjectValue> capturedLexicalContexts;
-    private final ProtosObjectValue capturedReceiver;
+    private final Object capturedReceiver;
     private final ProtosObjectValue methodHome;
 
     public ProtosClosureValue(
             CanonicalClosure definition,
             List<ProtosObjectValue> capturedLexicalContexts,
-            ProtosObjectValue capturedReceiver) {
+            Object capturedReceiver) {
         this(definition, capturedLexicalContexts, capturedReceiver, null);
     }
 
     private ProtosClosureValue(
             CanonicalClosure definition,
             List<ProtosObjectValue> capturedLexicalContexts,
-            ProtosObjectValue capturedReceiver,
+            Object capturedReceiver,
             ProtosObjectValue methodHome) {
         this.definition = Objects.requireNonNull(definition, "definition");
         this.capturedLexicalContexts =
@@ -58,7 +58,7 @@ public final class ProtosClosureValue {
         return capturedLexicalContexts;
     }
 
-    public ProtosObjectValue capturedReceiver() {
+    public Object capturedReceiver() {
         return capturedReceiver;
     }
 
@@ -67,7 +67,7 @@ public final class ProtosClosureValue {
     }
 
     public ProtosClosureValue bindMethod(
-            ProtosObjectValue receiver,
+            Object receiver,
             ProtosObjectValue home) {
         return new ProtosClosureValue(
                 definition,

@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosExecutionContext;
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
@@ -40,8 +40,8 @@ class CanonicalClosureMaterializationTest {
         ProtosObjectValue current = new ProtosObjectValue(root);
         ProtosObjectValue outer = new ProtosObjectValue(root);
         ProtosObjectValue receiver = new ProtosObjectValue(root);
-        ProtosExecutionContext activation =
-                new ProtosExecutionContext(
+        ProtosActivation activation =
+                new ProtosActivation(
                         current,
                         List.of(outer),
                         receiver);
@@ -61,8 +61,8 @@ class CanonicalClosureMaterializationTest {
     @Test
     void evaluatingClosureLiteralCreatesFreshClosureIdentity() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
-        ProtosExecutionContext activation =
-                new ProtosExecutionContext(
+        ProtosActivation activation =
+                new ProtosActivation(
                         new ProtosObjectValue(root),
                         List.of(),
                         new ProtosObjectValue(root));
@@ -80,8 +80,8 @@ class CanonicalClosureMaterializationTest {
     @Test
     void closureMaterializationDoesNotExecuteOrLowerItsBody() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
-        ProtosExecutionContext activation =
-                new ProtosExecutionContext(
+        ProtosActivation activation =
+                new ProtosActivation(
                         new ProtosObjectValue(root),
                         List.of(),
                         new ProtosObjectValue(root));

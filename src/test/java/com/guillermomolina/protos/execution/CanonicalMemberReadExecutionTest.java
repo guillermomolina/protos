@@ -22,7 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosExecutionContext;
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
@@ -73,8 +73,8 @@ class CanonicalMemberReadExecutionTest {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue context = new ProtosObjectValue(root);
         context.createLocalSlot("value", ProtosBooleanValue.TRUE);
-        ProtosExecutionContext activation =
-                new ProtosExecutionContext(context, List.of(), new ProtosObjectValue(root));
+        ProtosActivation activation =
+                new ProtosActivation(context, List.of(), new ProtosObjectValue(root));
 
         CanonicalMember expression =
                 new CanonicalMember(
@@ -100,8 +100,8 @@ class CanonicalMemberReadExecutionTest {
                 new SourceSpan(0, name.length() + 5));
     }
 
-    private ProtosExecutionContext activation(ProtosObjectValue receiver) {
-        return new ProtosExecutionContext(
+    private ProtosActivation activation(ProtosObjectValue receiver) {
+        return new ProtosActivation(
                 new ProtosObjectValue(ProtosObjectValue.rootObject()),
                 List.of(),
                 receiver);
@@ -109,7 +109,7 @@ class CanonicalMemberReadExecutionTest {
 
     private Object execute(
             CanonicalMember expression,
-            ProtosExecutionContext activation) {
+            ProtosActivation activation) {
         return ProtosExecution.createCallTarget(lowerer.lower(expression)).call(activation);
     }
 }
