@@ -44,14 +44,14 @@ public final class ProtosMemberReadNode extends ProtosExpressionNode {
     public Object execute(VirtualFrame frame) {
         Object receiverValue = receiverNode.execute(frame);
         if (!(receiverValue instanceof ProtosObjectValue receiver)) {
-            throw new ProtosSignalException(ProtosCoreErrors.newError());
+            throw new ProtosSignalException(ProtosCoreErrors.newError(ProtosFrameArguments.activation(frame)));
         }
 
         ProtosSlotLookupResult result =
                 receiver.lookupSlot(name)
                         .orElseThrow(
                                 () -> new ProtosSignalException(
-                                        ProtosCoreErrors.newError()));
+                                        ProtosCoreErrors.newError(ProtosFrameArguments.activation(frame))));
 
         if (result.value() instanceof ProtosClosureValue closure) {
             return closure.bindMethod(receiver, result.home());

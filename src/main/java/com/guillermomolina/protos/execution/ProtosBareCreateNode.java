@@ -47,7 +47,7 @@ public final class ProtosBareCreateNode extends ProtosExpressionNode {
         try {
             executionContext.context().createLocalSlot(name, value);
         } catch (IllegalStateException duplicateSlot) {
-            throw new ProtosSignalException(ProtosCoreErrors.newError());
+            throw new ProtosSignalException(ProtosCoreErrors.newError(ProtosFrameArguments.activation(frame)));
         }
 
         return value;

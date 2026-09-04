@@ -38,6 +38,6 @@ public final class ProtosLookupNode extends ProtosExpressionNode {
         return context.lookup(name)
                 .orElseThrow(
                         () -> new ProtosSignalException(
-                                ProtosCoreErrors.newUnqualifiedLookupError()));
+                                ProtosCoreErrors.newUnqualifiedLookupError(ProtosFrameArguments.activation(frame))));
     }
 }

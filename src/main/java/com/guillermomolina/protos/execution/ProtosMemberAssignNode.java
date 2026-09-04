@@ -45,14 +45,14 @@ public final class ProtosMemberAssignNode extends ProtosExpressionNode {
     public Object execute(VirtualFrame frame) {
         Object targetValue = targetNode.execute(frame);
         if (!(targetValue instanceof ProtosObjectValue target)) {
-            throw new ProtosSignalException(ProtosCoreErrors.newError());
+            throw new ProtosSignalException(ProtosCoreErrors.newError(ProtosFrameArguments.activation(frame)));
         }
 
         Object value = valueNode.execute(frame);
         try {
             target.assignLocalSlot(name, value);
         } catch (IllegalStateException invalidMutation) {
-            throw new ProtosSignalException(ProtosCoreErrors.newError());
+            throw new ProtosSignalException(ProtosCoreErrors.newError(ProtosFrameArguments.activation(frame)));
         }
         return value;
     }

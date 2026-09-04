@@ -48,13 +48,13 @@ public final class ProtosBareAssignNode extends ProtosExpressionNode {
                 executionContext.writableLexicalContext(name)
                         .orElseThrow(
                                 () -> new ProtosSignalException(
-                                        ProtosCoreErrors.newError()));
+                                        ProtosCoreErrors.newError(ProtosFrameArguments.activation(frame))));
 
         Object value = valueNode.execute(frame);
         try {
             destination.assignLocalSlot(name, value);
         } catch (IllegalStateException invalidMutation) {
-            throw new ProtosSignalException(ProtosCoreErrors.newError());
+            throw new ProtosSignalException(ProtosCoreErrors.newError(ProtosFrameArguments.activation(frame)));
         }
         return value;
     }

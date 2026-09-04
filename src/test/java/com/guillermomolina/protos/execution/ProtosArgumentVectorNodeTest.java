@@ -23,7 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosTestPrelude;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.source.SourceSpan;
@@ -134,7 +134,7 @@ class ProtosArgumentVectorNodeTest {
                         () -> execute(node));
 
         assertSame(
-                ProtosCoreErrors.errorPrototype(),
+                ProtosTestPrelude.errorPrototype(),
                 signal.error().parent().orElseThrow());
         assertEquals(List.of("invalid"), order);
     }
@@ -178,7 +178,7 @@ class ProtosArgumentVectorNodeTest {
         ProtosObjectValue context =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosActivation activation =
-                new ProtosActivation(context, List.of(), context);
+                ProtosTestPrelude.activation(context, List.of(), context);
         return ProtosExecution.createCallTarget(node).call(activation);
     }
 }

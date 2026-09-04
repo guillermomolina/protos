@@ -17,24 +17,34 @@
 
 package com.guillermomolina.protos.runtime;
 
-import java.util.Objects;
+import java.util.List;
 
-public final class ProtosCoreErrors {
-    private ProtosCoreErrors() {}
+public final class ProtosTestPrelude {
+    private static final ProtosPrelude PRELUDE = createPrelude();
 
-    public static ProtosObjectValue newError(ProtosActivation activation) {
-        Objects.requireNonNull(activation, "activation");
-        ProtosPrelude prelude =
-                activation.prelude()
-                        .orElseThrow(
-                                () ->
-                                        new IllegalStateException(
-                                                "standard Error is unavailable before Core prelude bootstrap"));
-        return prelude.newError();
+    private ProtosTestPrelude() {}
+
+    private static ProtosPrelude createPrelude() {
+        ProtosObjectValue context =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue error =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue bindings = new ProtosObjectValue(context);
+        bindings.createLocalSlot("Context", context);
+        bindings.createLocalSlot("Error", error);
+        bindings.freeze();
+        return new ProtosPrelude(bindings, context);
     }
 
-    public static ProtosObjectValue newUnqualifiedLookupError(
-            ProtosActivation activation) {
-        return newError(activation);
+    public static ProtosActivation activation(
+            ProtosObjectValue context,
+            List<ProtosObjectValue> capturedLexicalContexts,
+            Object receiver) {
+        return ProtosActivation.withPrelude(
+                context, capturedLexicalContexts, receiver, PRELUDE);
+    }
+
+    public static ProtosObjectValue errorPrototype() {
+        return PRELUDE.errorPrototype();
     }
 }

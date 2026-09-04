@@ -57,7 +57,7 @@ public final class ProtosArgumentVectorNode extends ProtosExpressionNode {
             }
 
             if (!(value instanceof ProtosArrayValue array)) {
-                throw new ProtosSignalException(ProtosCoreErrors.newError());
+                throw new ProtosSignalException(ProtosCoreErrors.newError(ProtosFrameArguments.activation(frame)));
             }
             supplied.addAll(array.indexedSnapshot());
         }

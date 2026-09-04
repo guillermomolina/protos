@@ -42,6 +42,14 @@ public final class ProtosPrelude {
             throw new IllegalArgumentException(
                     "prelude Context binding must be the Context prototype");
         }
+
+        Object errorBinding = bindings.readLocalSlot("Error").orElse(null);
+        if (!(errorBinding instanceof ProtosObjectValue errorPrototype)
+                || errorPrototype.parent().orElse(null)
+                        != ProtosObjectValue.rootObject()) {
+            throw new IllegalArgumentException(
+                    "prelude Error binding must be an ordinary child of Object");
+        }
     }
 
     public ProtosObjectValue bindings() {
@@ -50,6 +58,15 @@ public final class ProtosPrelude {
 
     public ProtosObjectValue contextPrototype() {
         return contextPrototype;
+    }
+
+    public ProtosObjectValue errorPrototype() {
+        return (ProtosObjectValue)
+                bindings.readLocalSlot("Error").orElseThrow();
+    }
+
+    public ProtosObjectValue newError() {
+        return new ProtosObjectValue(errorPrototype());
     }
 
     public ProtosObjectValue newExecutionContext() {

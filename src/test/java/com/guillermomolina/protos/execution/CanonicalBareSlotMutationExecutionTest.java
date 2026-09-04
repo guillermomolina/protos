@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosTestPrelude;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -44,7 +44,7 @@ class CanonicalBareSlotMutationExecutionTest {
         ProtosObjectValue captured = new ProtosObjectValue(root);
         ProtosObjectValue receiver = new ProtosObjectValue(root);
         ProtosActivation activation =
-                new ProtosActivation(current, List.of(captured), receiver);
+                ProtosTestPrelude.activation(current, List.of(captured), receiver);
 
         Object result = execute(
                 new CanonicalCreate(
@@ -64,7 +64,7 @@ class CanonicalBareSlotMutationExecutionTest {
         ProtosObjectValue current = new ProtosObjectValue(root);
         current.createLocalSlot("x", ProtosBooleanValue.TRUE);
         ProtosActivation activation =
-                new ProtosActivation(current, List.of(), new ProtosObjectValue(root));
+                ProtosTestPrelude.activation(current, List.of(), new ProtosObjectValue(root));
 
         ProtosSignalException signal =
                 assertThrows(
@@ -77,7 +77,7 @@ class CanonicalBareSlotMutationExecutionTest {
                                         new SourceSpan(0, 1)),
                                 activation));
 
-        assertSame(ProtosCoreErrors.errorPrototype(), signal.error().parent().orElseThrow());
+        assertSame(ProtosTestPrelude.errorPrototype(), signal.error().parent().orElseThrow());
         assertSame(ProtosBooleanValue.TRUE, current.readLocalSlot("x").orElseThrow());
     }
 
@@ -93,7 +93,7 @@ class CanonicalBareSlotMutationExecutionTest {
         receiver.createLocalSlot("receiver", ProtosBooleanValue.TRUE);
 
         ProtosActivation activation =
-                new ProtosActivation(current, List.of(captured), receiver);
+                ProtosTestPrelude.activation(current, List.of(captured), receiver);
 
         Object currentValue = execute(assign("current", "c"), activation);
         Object capturedValue = execute(assign("captured", "l"), activation);
@@ -112,14 +112,14 @@ class CanonicalBareSlotMutationExecutionTest {
         current.freeze();
 
         ProtosActivation activation =
-                new ProtosActivation(current, List.of(), new ProtosObjectValue(root));
+                ProtosTestPrelude.activation(current, List.of(), new ProtosObjectValue(root));
 
         ProtosSignalException signal =
                 assertThrows(
                         ProtosSignalException.class,
                         () -> execute(assign("x", "nope"), activation));
 
-        assertSame(ProtosCoreErrors.errorPrototype(), signal.error().parent().orElseThrow());
+        assertSame(ProtosTestPrelude.errorPrototype(), signal.error().parent().orElseThrow());
         assertSame(ProtosBooleanValue.TRUE, current.readLocalSlot("x").orElseThrow());
     }
 
@@ -133,14 +133,14 @@ class CanonicalBareSlotMutationExecutionTest {
         prototype.createLocalSlot("inherited", ProtosBooleanValue.TRUE);
 
         ProtosActivation activation =
-                new ProtosActivation(current, List.of(), receiver);
+                ProtosTestPrelude.activation(current, List.of(), receiver);
 
         ProtosSignalException signal =
                 assertThrows(
                         ProtosSignalException.class,
                         () -> execute(assign("inherited", "nope"), activation));
 
-        assertSame(ProtosCoreErrors.errorPrototype(), signal.error().parent().orElseThrow());
+        assertSame(ProtosTestPrelude.errorPrototype(), signal.error().parent().orElseThrow());
         assertSame(ProtosBooleanValue.TRUE, prototype.readLocalSlot("inherited").orElseThrow());
     }
 

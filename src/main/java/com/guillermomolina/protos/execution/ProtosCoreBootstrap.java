@@ -51,6 +51,9 @@ public final class ProtosCoreBootstrap {
         sourceLoader
                 .load(coreDirectory.resolve("context.protos"))
                 .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("error.protos"))
+                .call(bootstrapActivation);
 
         Object contextBinding =
                 bootstrapContext
@@ -69,9 +72,27 @@ public final class ProtosCoreBootstrap {
                     "Core Context prototype must delegate directly to Object");
         }
 
+        Object errorBinding =
+                bootstrapContext
+                        .readLocalSlot("Error")
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Core bootstrap did not define Error"));
+        if (!(errorBinding instanceof ProtosObjectValue errorPrototype)) {
+            throw new IllegalStateException(
+                    "Core Error binding is not an ordinary object");
+        }
+        if (errorPrototype.parent().orElse(null)
+                != ProtosObjectValue.rootObject()) {
+            throw new IllegalStateException(
+                    "Core Error prototype must delegate directly to Object");
+        }
+
         ProtosObjectValue preludeBindings =
                 new ProtosObjectValue(contextPrototype);
         preludeBindings.createLocalSlot("Context", contextPrototype);
+        preludeBindings.createLocalSlot("Error", errorPrototype);
         preludeBindings.freeze();
 
         return new ProtosPrelude(preludeBindings, contextPrototype);

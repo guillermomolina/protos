@@ -46,6 +46,13 @@ class ProtosCoreBootstrapTest {
         assertSame(
                 contextPrototype,
                 bindings.readLocalSlot("Context").orElseThrow());
+        ProtosObjectValue errorPrototype = prelude.errorPrototype();
+        assertSame(
+                errorPrototype,
+                bindings.readLocalSlot("Error").orElseThrow());
+        assertSame(
+                ProtosObjectValue.rootObject(),
+                errorPrototype.parent().orElseThrow());
         assertSame(
                 ProtosObjectValue.MutationState.FROZEN,
                 bindings.mutationState());

@@ -45,7 +45,7 @@ public final class ProtosComposeNode extends ProtosExpressionNode {
     public Object execute(VirtualFrame frame) {
         Object sourceValue = sourceNode.execute(frame);
         if (!(sourceValue instanceof ProtosObjectValue source)) {
-            throw new ProtosSignalException(ProtosCoreErrors.newError());
+            throw new ProtosSignalException(ProtosCoreErrors.newError(ProtosFrameArguments.activation(frame)));
         }
 
         ProtosActivation activation =
@@ -55,7 +55,7 @@ public final class ProtosComposeNode extends ProtosExpressionNode {
         try {
             target.composeLocalSlotsFrom(source, reservedNames);
         } catch (IllegalStateException failure) {
-            throw new ProtosSignalException(ProtosCoreErrors.newError());
+            throw new ProtosSignalException(ProtosCoreErrors.newError(ProtosFrameArguments.activation(frame)));
         }
 
         return target;

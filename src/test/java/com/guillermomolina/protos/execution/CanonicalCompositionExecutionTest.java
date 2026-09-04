@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosTestPrelude;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.semantic.Canonicalizer;
@@ -45,7 +45,7 @@ class CanonicalCompositionExecutionTest {
         ProtosObjectValue context = new ProtosObjectValue(root);
         context.createLocalSlot("source", source);
         ProtosActivation activation =
-                new ProtosActivation(
+                ProtosTestPrelude.activation(
                         context,
                         List.of(),
                         new ProtosObjectValue(root));
@@ -74,7 +74,7 @@ class CanonicalCompositionExecutionTest {
         ProtosObjectValue context = new ProtosObjectValue(root);
         context.createLocalSlot("source", source);
         ProtosActivation activation =
-                new ProtosActivation(
+                ProtosTestPrelude.activation(
                         context,
                         List.of(),
                         new ProtosObjectValue(root));
@@ -105,7 +105,7 @@ class CanonicalCompositionExecutionTest {
         context.createLocalSlot("first", first);
         context.createLocalSlot("second", second);
         ProtosActivation activation =
-                new ProtosActivation(
+                ProtosTestPrelude.activation(
                         context,
                         List.of(),
                         new ProtosObjectValue(root));
@@ -120,7 +120,7 @@ class CanonicalCompositionExecutionTest {
                                         activation));
 
         assertSame(
-                ProtosCoreErrors.errorPrototype(),
+                ProtosTestPrelude.errorPrototype(),
                 signal.error().parent().orElseThrow());
     }
 
@@ -128,7 +128,7 @@ class CanonicalCompositionExecutionTest {
     void nonOrdinaryCompositionSourceSignalsCoreError() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosActivation activation =
-                new ProtosActivation(
+                ProtosTestPrelude.activation(
                         new ProtosObjectValue(root),
                         List.of(),
                         new ProtosObjectValue(root));
@@ -139,7 +139,7 @@ class CanonicalCompositionExecutionTest {
                         () -> execute("{ ...true }", activation));
 
         assertSame(
-                ProtosCoreErrors.errorPrototype(),
+                ProtosTestPrelude.errorPrototype(),
                 signal.error().parent().orElseThrow());
     }
 

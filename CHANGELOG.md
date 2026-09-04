@@ -4,6 +4,42 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.16-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added distributable `protos/lib/core/error.protos`, defining the mandatory
+  standard `Error` prototype as an ordinary child of `Object`.
+
+### Changed
+
+- Core bootstrap now executes both `context.protos` and `error.protos`, validates
+  their exact required parent relationships, installs both bindings into the
+  frozen standard prelude, and exposes `Error` through that prelude.
+- Runtime language failures now create fresh error objects whose parent is the
+  exact source-backed `Error` prototype owned by the current activation's
+  prelude.
+- `ProtosCoreErrors` is now a stateless runtime factory; its process-global
+  `ERROR_PROTOTYPE` singleton and `errorPrototype()` accessor were removed.
+- Project implementation version changed from `0.2.15-SNAPSHOT` to
+  `0.2.16-SNAPSHOT`.
+
+### Tests
+
+- Runtime error tests now use an explicit test prelude rather than the removed
+  production Error singleton.
+- Core bootstrap coverage verifies the source-backed Error binding and its
+  direct delegation to Object.
+
+### Notes
+
+- A module-local binding named `Error` cannot redirect runtime-generated Core
+  errors because runtime failure identity is obtained from the activation's
+  owning prelude, not ordinary shadowable lexical lookup.
+- No second Error identity or process-global standard Error object remains.
+- No normative specification change is introduced.
+
+
 ## [0.2.15-SNAPSHOT] - 2026-09-04
 
 ### Changed

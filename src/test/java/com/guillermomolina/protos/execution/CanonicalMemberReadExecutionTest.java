@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosTestPrelude;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -65,7 +65,7 @@ class CanonicalMemberReadExecutionTest {
                         ProtosSignalException.class,
                         () -> execute(member("missing"), activation(receiver)));
 
-        assertSame(ProtosCoreErrors.errorPrototype(), signal.error().parent().orElseThrow());
+        assertSame(ProtosTestPrelude.errorPrototype(), signal.error().parent().orElseThrow());
     }
 
     @Test
@@ -74,7 +74,7 @@ class CanonicalMemberReadExecutionTest {
         ProtosObjectValue context = new ProtosObjectValue(root);
         context.createLocalSlot("value", ProtosBooleanValue.TRUE);
         ProtosActivation activation =
-                new ProtosActivation(context, List.of(), new ProtosObjectValue(root));
+                ProtosTestPrelude.activation(context, List.of(), new ProtosObjectValue(root));
 
         CanonicalMember expression =
                 new CanonicalMember(
@@ -88,7 +88,7 @@ class CanonicalMemberReadExecutionTest {
                         ProtosSignalException.class,
                         () -> execute(expression, activation));
 
-        assertSame(ProtosCoreErrors.errorPrototype(), signal.error().parent().orElseThrow());
+        assertSame(ProtosTestPrelude.errorPrototype(), signal.error().parent().orElseThrow());
     }
 
     private CanonicalMember member(String name) {
@@ -101,7 +101,7 @@ class CanonicalMemberReadExecutionTest {
     }
 
     private ProtosActivation activation(ProtosObjectValue receiver) {
-        return new ProtosActivation(
+        return ProtosTestPrelude.activation(
                 new ProtosObjectValue(ProtosObjectValue.rootObject()),
                 List.of(),
                 receiver);

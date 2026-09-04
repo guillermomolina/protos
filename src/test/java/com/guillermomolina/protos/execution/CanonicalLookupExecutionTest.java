@@ -21,7 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosTestPrelude;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -83,7 +83,7 @@ class CanonicalLookupExecutionTest {
                 assertThrows(ProtosSignalException.class, () -> execute(lookup("missing"), activation));
 
         assertSame(
-                ProtosCoreErrors.errorPrototype(),
+                ProtosTestPrelude.errorPrototype(),
                 signal.error().parent().orElseThrow());
     }
 
@@ -99,6 +99,6 @@ class CanonicalLookupExecutionTest {
             ProtosObjectValue current,
             List<ProtosObjectValue> captured,
             ProtosObjectValue receiver) {
-        return new ProtosActivation(current, captured, receiver);
+        return ProtosTestPrelude.activation(current, captured, receiver);
     }
 }

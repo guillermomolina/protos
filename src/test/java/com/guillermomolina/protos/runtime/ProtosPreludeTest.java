@@ -29,6 +29,9 @@ class ProtosPreludeTest {
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosObjectValue bindings = new ProtosObjectValue(contextPrototype);
         bindings.createLocalSlot("Context", contextPrototype);
+        bindings.createLocalSlot(
+                "Error",
+                new ProtosObjectValue(ProtosObjectValue.rootObject()));
         bindings.freeze();
         ProtosPrelude prelude =
                 new ProtosPrelude(bindings, contextPrototype);
@@ -49,6 +52,9 @@ class ProtosPreludeTest {
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosObjectValue bindings = new ProtosObjectValue(contextPrototype);
         bindings.createLocalSlot("Context", contextPrototype);
+        bindings.createLocalSlot(
+                "Error",
+                new ProtosObjectValue(ProtosObjectValue.rootObject()));
         bindings.freeze();
         ProtosPrelude prelude =
                 new ProtosPrelude(bindings, contextPrototype);
@@ -73,6 +79,9 @@ class ProtosPreludeTest {
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosObjectValue bindings = new ProtosObjectValue(contextPrototype);
         bindings.createLocalSlot("Context", contextPrototype);
+        bindings.createLocalSlot(
+                "Error",
+                new ProtosObjectValue(ProtosObjectValue.rootObject()));
         bindings.freeze();
         ProtosPrelude prelude =
                 new ProtosPrelude(bindings, contextPrototype);
