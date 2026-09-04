@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.288] - 2026-09-04
+
+### Closed
+- Closed `NUMA-aware scheduling` as an implementation-only scheduler concern
+  already constrained by the closed P scheduler-policy rules.
+- Defined no portable Core meaning for NUMA-node identity, memory-node identity,
+  CPU/package/socket/cache locality, or P-work affinity to physical topology.
+- Allowed runtimes to use or ignore NUMA-aware scheduling, placement, migration,
+  replication, pinning, and topology-sensitive cost models only when existing
+  isolation, determinism, fairness, progress, and Actor-turn semantics remain
+  unchanged.
+- Prohibited portable Core code from requesting or observing NUMA placement or
+  treating topology-sensitive optimization choices as semantic outcomes.
+- Left any future explicit hardware-placement/performance-control facility to
+  define its own contract.
+- Removed `NUMA-aware scheduling` from Open Design Topics.
+
+### Changed
+- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  288.
+
 ## [0.1.287] - 2026-09-04
 
 ### Fixed

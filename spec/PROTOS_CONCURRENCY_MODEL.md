@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 287
+Document revision: 288
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -5487,6 +5487,41 @@ scope, ownership, portability, interaction with fairness, and failure behavior.
 That future facility is not implied by the existence of the internal P
 scheduler.
 
+### 71.7C NUMA-Aware Scheduling Is Not a Core Semantic Surface
+
+Core v0.1 assigns no portable semantic meaning to NUMA topology, memory-node
+identity, socket/package topology, cache hierarchy, CPU locality, carrier
+affinity, or the placement of P work relative to those physical resources.
+
+A runtime may use NUMA-aware scheduling, memory placement, work stealing,
+replication, migration, pinning, or topology-sensitive cost models internally.
+It may also ignore NUMA entirely. Either choice is conforming only while
+preserving the already-defined P isolation, snapshot, deterministic
+result/failure, weak-fairness, bounded-carrier progress, Actor-turn isolation,
+and scheduler-policy rules.
+
+In particular, portable Core code cannot:
+
+- request a NUMA node or memory domain;
+- observe which NUMA node executed a P work item;
+- require data allocation on a particular NUMA node;
+- infer NUMA placement from Actor, Process, Node, or Cluster identity;
+- require a stable affinity between one logical P work item and one physical CPU,
+  package, socket, cache, or NUMA node;
+- treat a topology-sensitive optimization choice as a semantic success/failure
+  condition.
+
+Physical locality may influence performance, but not the result, failure
+selection, publication order, transfer semantics, or progress obligations already
+fixed by Core.
+
+A future explicit hardware-placement/performance-control extension may expose
+selected topology information or placement controls only by defining their own
+portable contract, scope, failure behavior, and interaction with isolation and
+fairness. Such an extension is not implied by Core's internal scheduler.
+
+This closes the former open ledger item `NUMA-aware scheduling`.
+
 ### 71.8 Failure and Cancellation
 
 Failure of an isolated parallel computation fails its result Future
@@ -6060,6 +6095,5 @@ mechanism, or implementation detail that still requires design.
 -   Code identity for remote Actor bootstrap
 -   Code availability and versioning across Nodes
 -   Hot code update
--   NUMA-aware scheduling
 -   Optional administrative application/service identity for deployment,
     configuration, observability, or ownership
