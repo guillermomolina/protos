@@ -85,11 +85,11 @@ During implementation, temporary Java-side construction is permitted only when
 it is clearly scaffolding required to reach the real Core-loading path and does
 not silently become the permanent semantic definition.
 
-The current Java-side `Context` construction in `ProtosCorePrelude` is such
-temporary scaffolding. It establishes the already-specified
-`activationContext -> Context -> Object` relationship while invocation and Core
-source loading are incomplete. It should be replaced by the Core bootstrap path
-once that path can construct `Context` faithfully.
+The earlier Java-side `Context` construction in `ProtosCorePrelude` was such
+temporary scaffolding. It has been removed now that the Core bootstrap path can
+construct `Context` faithfully from `protos/lib/core/context.protos`. Runtime
+code should consume explicit `ProtosPrelude` state rather than reintroduce a
+process-global standard `Context` object.
 
 New standard prototype families must not be added to this scaffolding merely
 because doing so is convenient.

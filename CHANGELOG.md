@@ -4,6 +4,33 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.13-SNAPSHOT] - 2026-09-04
+
+### Removed
+
+- Removed the temporary static `ProtosCorePrelude` and its Java-constructed
+  standard `Context` prototype.
+- Removed the obsolete tests that treated that static scaffold as the Core
+  prelude.
+
+### Changed
+
+- Migrated remaining test execution-context construction to explicit
+  `ProtosPrelude` state or, for the Core bootstrap test itself, to the
+  irreducible root-backed bootstrap context.
+- Updated the Core bootstrap architecture note to record that the Java-side
+  `Context` scaffold has been retired.
+- Project implementation version changed from `0.2.12-SNAPSHOT` to
+  `0.2.13-SNAPSHOT`.
+
+### Notes
+
+- The standard `Context` identity is now constructed by
+  `protos/lib/core/context.protos` through `ProtosCoreBootstrap`.
+- No replacement process-global standard prototype is introduced.
+- No normative specification change is introduced.
+
+
 ## [0.2.12-SNAPSHOT] - 2026-09-04
 
 ### Added

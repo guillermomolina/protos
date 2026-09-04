@@ -24,7 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.parser.ParseError;
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosCorePrelude;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.math.BigInteger;
@@ -75,7 +75,10 @@ class ProtosSourceCompilerTest {
     }
 
     private static ProtosActivation freshTopLevelActivation() {
-        ProtosObjectValue context = ProtosCorePrelude.newExecutionContext();
+        ProtosObjectValue contextPrototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue context =
+                new ProtosPrelude(contextPrototype).newExecutionContext();
         return new ProtosActivation(context, List.of(), context);
     }
 }

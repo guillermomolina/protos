@@ -21,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosCorePrelude;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.io.IOException;
 import java.nio.file.Path;
@@ -31,7 +30,8 @@ import org.junit.jupiter.api.Test;
 class ProtosCoreContextSourceTest {
     @Test
     void coreSourceConstructsContextAsAnOrdinaryObject() throws IOException {
-        ProtosObjectValue bootstrapContext = ProtosCorePrelude.newExecutionContext();
+        ProtosObjectValue bootstrapContext =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosActivation activation =
                 new ProtosActivation(
                         bootstrapContext,
