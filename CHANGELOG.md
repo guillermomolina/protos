@@ -4,6 +4,26 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.33-SNAPSHOT] - 2026-09-04
+
+### Fixed
+
+- Allowed semantic member lookup to traverse ordinary-object delegation chains
+  without requiring a Core prelude when no represented value boundary is
+  crossed.
+- Required the Core prelude lazily only when the semantic lookup walker actually
+  reaches represented Integer or Float values.
+- Restored extracted-Closure member-read execution in minimal activations while
+  preserving represented numeric lookup through source-backed Core prototypes.
+- Project implementation version changed from `0.2.32-SNAPSHOT` to `0.2.33-SNAPSHOT`.
+
+### Notes
+
+- D027/B003 remains untouched. No parent for canonical `true` or `false` is
+  selected and no `Boolean` prototype is introduced.
+- No normative specification change is introduced.
+
+
 ## [0.2.32-SNAPSHOT] - 2026-09-04
 
 ### Fixed

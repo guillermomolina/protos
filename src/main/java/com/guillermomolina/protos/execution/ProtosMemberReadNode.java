@@ -48,11 +48,7 @@ public final class ProtosMemberReadNode extends ProtosExpressionNode {
                 ProtosFrameArguments.activation(frame);
 
         com.guillermomolina.protos.runtime.ProtosPrelude prelude =
-                activation.prelude()
-                        .orElseThrow(
-                                () ->
-                                        new IllegalStateException(
-                                                "semantic member lookup requires an owning Core prelude"));
+                activation.prelude().orElse(null);
 
         ProtosSlotLookupResult result;
         try {

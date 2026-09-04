@@ -33,7 +33,6 @@ public final class ProtosValueLookup {
             ProtosPrelude prelude) {
         Objects.requireNonNull(receiver, "receiver");
         Objects.requireNonNull(name, "name");
-        Objects.requireNonNull(prelude, "prelude");
 
         Object current = receiver;
         while (true) {
@@ -51,10 +50,18 @@ public final class ProtosValueLookup {
             }
 
             if (current instanceof ProtosIntegerValue) {
+                if (prelude == null) {
+                    throw new UnsupportedOperationException(
+                            "represented Integer lookup requires an owning Core prelude");
+                }
                 current = prelude.integerPrototype();
                 continue;
             }
             if (current instanceof ProtosFloatValue) {
+                if (prelude == null) {
+                    throw new UnsupportedOperationException(
+                            "represented Float lookup requires an owning Core prelude");
+                }
                 current = prelude.floatPrototype();
                 continue;
             }
