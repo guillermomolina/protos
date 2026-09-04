@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 284
+Document revision: 285
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -573,7 +573,15 @@ Wrapping establishes data-flow dependency, not lifecycle ownership.
 
 By default, a reader/writer/decoder/encoder/buffering adapter does not own the wrapped source or target.
 
-Closing an adapter permanently terminates that adapter, rejects new adapter operations, and finalizes the adapter's own state. An output adapter's close also propagates all previously accepted output that belongs to that adapter layer as required by that adapter's contract.
+Closing an adapter permanently terminates that adapter, rejects new adapter operations, and finalizes the adapter's own state.
+
+For an output adapter, "state/output to finalize or propagate during close" means state and output that had already become semantically committed to that adapter before the close cutover, together with the normal terminal aftermath of any earlier adapter operation whose own irreversible semantic commitment boundary had already been crossed. Buffered bytes accepted by a successfully or otherwise committed earlier write remain adapter-owned output and are finalized/propagated as required by the adapter's contract.
+
+This wrapper-finalization rule does not override the ordinary `Closable` cutover rule. An adapter operation that was accepted before close but was still uncommitted at the close cutover is closure-terminated and fails with the ordinary closing-or-closed error. Reversible validation, speculative encoding, staged bytes, reserved buffer space, queued requests, or other implementation work belonging only to such an uncommitted operation do not become committed output merely because the receiver is an adapter and close has begun.
+
+Conversely, close must not discard or pretend away output/state that had already committed to the adapter before the cutover. If a committed preceding operation is still pending, it retains its normal aftermath under the ordinary `Closable` rule, and adapter close waits for that required terminal aftermath before completing successfully.
+
+Thus output-wrapper close reconciles two distinct obligations without an implementation-selected drain policy: uncommitted accepted operations fail at the cutover, while already-committed adapter state/output is finalized and propagated according to the wrapper's contract.
 
 Closing an adapter does not automatically close the wrapped source/target.
 
@@ -581,12 +589,12 @@ A concrete adapter API may explicitly acquire ownership. Exact ownership-option 
 
 When an adapter explicitly owns its target, close order is:
 
-1. finalize and propagate the adapter's own pending state/output;
+1. finalize and propagate the adapter's own committed state/output, including the required normal aftermath of any preceding adapter operation already committed before the close cutover; accepted-but-uncommitted adapter operations are instead closure-terminated under the ordinary `Closable` rule;
 2. close the owned target.
 
 Ownership is not a universal `Closable` property or method.
 
-`TextWriter.close()` finalizes encoder state, emits and propagates any required final bytes, and permanently closes the wrapper. It does not close its byte target by default.
+`TextWriter.close()` finalizes the encoder state that was committed before the close cutover, emits and propagates any required final bytes belonging to that committed state, waits for the required aftermath of any text-write operation already committed before the cutover, and permanently closes the wrapper. A text write that was accepted but still uncommitted at the cutover is closure-terminated under the ordinary `Closable` rule; speculative/staged encoding for that operation does not become part of finalization merely because close began. `TextWriter.close()` does not close its byte target by default.
 
 `TextReader.close()` permanently terminates decoder/wrapper state. It does not close its byte source by default.
 

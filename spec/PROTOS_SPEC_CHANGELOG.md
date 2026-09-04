@@ -4,6 +4,32 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.285] - 2026-09-04
+
+### Fixed
+- Reconciled output-wrapper close/finalization with the general deterministic
+  `Closable` cutover semantics.
+- Defined wrapper finalization/propagation to cover adapter state/output already
+  semantically committed before the close cutover, plus the normal aftermath of
+  preceding operations that had already crossed their own commitment boundary.
+- Clarified that accepted-but-uncommitted adapter operations are closure-terminated
+  at the cutover and do not become committed merely because close begins.
+- Prohibited reversible validation, speculative encoding, staged bytes, reserved
+  buffer space, or queued requests from leaking into wrapper finalization after
+  their owning operation is closure-terminated.
+- Required already-committed buffered/output state to remain subject to the
+  wrapper's normal finalization/propagation obligations rather than being discarded
+  by close.
+- Applied the same distinction to explicit wrapper ownership close order and to
+  `TextWriter.close()` encoder/final-byte finalization.
+- Preserved the existing rule that close is not a universal drain of reversible
+  pending work and did not change wrapper ownership of the underlying target.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 285. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.284] - 2026-09-04
 
 ### Closed
