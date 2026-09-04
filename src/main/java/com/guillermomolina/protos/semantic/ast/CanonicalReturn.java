@@ -18,8 +18,12 @@
 package com.guillermomolina.protos.semantic.ast;
 
 import com.guillermomolina.protos.source.SourceSpan;
+import java.util.Objects;
 
-public sealed interface CanonicalExpression
-        permits CanonicalAssign, CanonicalClosure, CanonicalCreate, CanonicalIdentity, CanonicalLiteral, CanonicalLookup, CanonicalMember, CanonicalReturn, CanonicalSend, CanonicalSequence {
-    SourceSpan span();
+public record CanonicalReturn(CanonicalExpression value, SourceSpan span)
+        implements CanonicalExpression {
+    public CanonicalReturn {
+        Objects.requireNonNull(value, "value");
+        Objects.requireNonNull(span, "span");
+    }
 }

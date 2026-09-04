@@ -26,6 +26,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceIndex;
 import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
 import com.guillermomolina.protos.parser.ast.SurfaceMember;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
+import com.guillermomolina.protos.parser.ast.SurfaceNonLocalReturn;
 import com.guillermomolina.protos.parser.ast.SurfaceParameter;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.parser.ast.SurfaceSlotCreation;
@@ -39,6 +40,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalMember;
 import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
+import com.guillermomolina.protos.semantic.ast.CanonicalReturn;
 import com.guillermomolina.protos.semantic.ast.CanonicalSend;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import java.util.List;
@@ -54,6 +56,9 @@ public final class Canonicalizer {
             case SurfaceMember member ->
                     new CanonicalMember(
                             canonicalize(member.receiver()), member.name(), member.span());
+            case SurfaceNonLocalReturn nonLocalReturn ->
+                    new CanonicalReturn(
+                            canonicalize(nonLocalReturn.expression()), nonLocalReturn.span());
             case SurfaceAssignment assignment -> lowerAssignment(assignment);
             case SurfaceBinary binary -> lowerBinary(binary);
             case SurfaceClosure closure -> lowerClosure(closure);
