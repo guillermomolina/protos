@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 308
+Document revision: 309
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2900,6 +2900,35 @@ merely unreachable.
 
 
 ### Unhandled Actor-turn failure
+
+## Actor bootstrap resolution
+
+Actor bootstrap is resolved inside the new Actor domain.
+
+Conceptually:
+
+```text
+initializeActor(actor, bootstrapModuleKey, bootstrapBindingName, transferredArgs):
+    module = ensureModuleInstance(actor, bootstrapModuleKey)
+    bootstrap = ordinaryLookup(module, bootstrapBindingName)
+    requireOrdinaryInvokable(bootstrap)
+    behavior = invoke(bootstrap, transferredArgs)
+    requireValidActorBehavior(behavior)
+    actor.currentBehavior = behavior
+    transition INITIALIZING -> READY
+```
+
+`ensureModuleInstance` uses the destination Actor's own module cache and module
+context. Neither the creator's module instance nor the creator's lexical/runtime
+context participates in this invocation.
+
+The bootstrap argument graph is formed under ordinary Actor transfer semantics
+before the destination invocation. The bootstrap invokable itself is not an
+Actor-transferred Closure.
+
+If module loading, lookup, callability validation, invocation, or behavior
+establishment fails, initialization fails and the Actor does not enter `READY`.
+No queued external message is dispatched before that cutover.
 
 Conceptually, every ordinary Actor turn has an outer runtime boundary:
 

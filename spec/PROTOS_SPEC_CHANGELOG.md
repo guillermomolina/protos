@@ -4,6 +4,30 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.309] - 2026-09-04
+
+### Closed
+- Closed the Actor bootstrap representation while leaving only the public
+  creation API spelling/syntax open.
+- Defined bootstrap code by canonical module identity plus one top-level
+  destination binding name and explicit initialization argument values.
+- Required the destination Actor to load/use its own Actor-local module instance,
+  perform ordinary binding lookup/callability validation, and invoke bootstrap
+  during `INITIALIZING`.
+- Required initialization arguments to cross only through existing Actor
+  pass-by-value semantics; no caller Closure, lexical context, module instance,
+  handler stack, return home, pending Future, or ambient capability crosses.
+- Defined the bootstrap invocation's normal result as the exact destination-local
+  behavior object installed for the `INITIALIZING -> READY` cutover.
+- Defined module-load, binding lookup/callability, bootstrap Error, and missing
+  behavior failures as ordinary Actor initialization failure.
+- Avoided introducing a second transferable function/code-value category.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 309.
+  `PROTOS_RUNTIME_SEMANTICS.md` and `PROTOS_CONCURRENCY_MODEL.md` gain normative
+  semantic content in this revision.
+
 ## [0.1.308] - 2026-09-04
 
 ### Fixed

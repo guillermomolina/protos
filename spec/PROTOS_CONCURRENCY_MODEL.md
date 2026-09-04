@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 308
+Document revision: 309
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -555,11 +555,56 @@ resource object.
 A normal Closure cannot silently carry actor-local lexical captures into
 another Actor.
 
-Actor bootstrap code may use closure-like syntax or code descriptors,
-but cross-Actor creation must not alter the existing semantics that
-Closures capture lexical contexts by reference.
+### Actor bootstrap representation
 
-The exact bootstrap API and syntax remain open.
+Core v0.1 bootstrap code is identified by destination-loadable module code, not
+by transferring a caller Closure or caller execution context.
+
+Conceptually, Actor creation fixes:
+
+```text
+bootstrap module identity
+bootstrap binding name
+explicit initialization argument values
+```
+
+The bootstrap module identity denotes one canonical module identity under the
+existing module-resolution rules. The destination Actor obtains its own
+Actor-local module instance for that identity through the ordinary module
+loading/cache lifecycle. No creator module instance or module context is
+transferred or shared.
+
+The bootstrap binding name identifies one top-level binding on that destination
+module instance. After the module is ready, bootstrap performs ordinary slot
+lookup of that binding and requires the resulting value to be ordinarily
+invokable.
+
+The explicit initialization arguments cross the Actor boundary under the
+existing Actor pass-by-value rules before bootstrap invocation. Bootstrap then
+invokes the destination-local binding with those transferred argument values
+during `INITIALIZING`.
+
+The normal result of that bootstrap invocation is the Actor incarnation's
+initial behavior object. That exact destination-local object is installed as the
+current behavior used for the `INITIALIZING -> READY` cutover and is then subject
+to the stable-behavior rule of §11.
+
+Bootstrap does not receive the creator's `this`, lexical context, `moduleContext`,
+return home, dynamic handler stack, pending Futures, mutable graph, or ambient
+capabilities. Any capability needed by bootstrap must be provisioned explicitly
+under the existing Actor/capability rules.
+
+Failure to load/initialize the bootstrap module, missing bootstrap binding,
+non-invokable bootstrap binding, an unhandled Error from bootstrap invocation,
+or failure to produce the required behavior prevents `READY` and is ordinary
+Actor initialization failure.
+
+This representation deliberately resembles a code-identity-plus-arguments model:
+code is resolved and executed inside the destination Actor while only permitted
+values cross the isolation boundary. It does not create a second transferable
+function kind.
+
+The exact public creation message/API name and surface syntax remain open.
 
 ## 9. Actor Initialization and Readiness
 
