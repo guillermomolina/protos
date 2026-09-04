@@ -4,6 +4,34 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.15-SNAPSHOT] - 2026-09-04
+
+### Changed
+
+- Activations created by a `ProtosPrelude` now retain an implementation-private
+  reference to that exact owning prelude.
+- Object-construction activations preserve the owning prelude from their
+  enclosing activation.
+- Legacy direct activation construction remains available for bootstrap and
+  focused runtime tests and carries no implicit process-global prelude.
+- Project implementation version changed from `0.2.14-SNAPSHOT` to
+  `0.2.15-SNAPSHOT`.
+
+### Tests
+
+- Added coverage that module activations retain their exact prelude and that
+  object-construction activations propagate it unchanged.
+
+### Notes
+
+- This is runtime plumbing only and introduces no Protos-visible binding,
+  lookup rule, identity, or behavior change.
+- The explicit prelude reference is the foundation for resolving standard Core
+  identities such as `Error` without using shadowable lexical lookup or
+  process-global standard-object singletons.
+- No normative specification change is introduced.
+
+
 ## [0.2.14-SNAPSHOT] - 2026-09-04
 
 ### Changed

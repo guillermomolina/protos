@@ -25,25 +25,41 @@ public final class ProtosActivation {
     private final ProtosObjectValue context;
     private final List<ProtosObjectValue> capturedLexicalContexts;
     private final Object receiver;
+    private final ProtosPrelude prelude;
     private final boolean construction;
 
     public ProtosActivation(
             ProtosObjectValue context,
             List<ProtosObjectValue> capturedLexicalContexts,
             Object receiver) {
-        this(context, capturedLexicalContexts, receiver, false);
+        this(context, capturedLexicalContexts, receiver, null, false);
+    }
+
+    static ProtosActivation withPrelude(
+            ProtosObjectValue context,
+            List<ProtosObjectValue> capturedLexicalContexts,
+            Object receiver,
+            ProtosPrelude prelude) {
+        return new ProtosActivation(
+                context,
+                capturedLexicalContexts,
+                receiver,
+                Objects.requireNonNull(prelude, "prelude"),
+                false);
     }
 
     private ProtosActivation(
             ProtosObjectValue context,
             List<ProtosObjectValue> capturedLexicalContexts,
             Object receiver,
+            ProtosPrelude prelude,
             boolean construction) {
         this.context = Objects.requireNonNull(context, "context");
         this.capturedLexicalContexts =
                 List.copyOf(Objects.requireNonNull(
                         capturedLexicalContexts, "capturedLexicalContexts"));
         this.receiver = Objects.requireNonNull(receiver, "receiver");
+        this.prelude = prelude;
         this.construction = construction;
     }
 
@@ -56,6 +72,7 @@ public final class ProtosActivation {
                 object,
                 enclosing.lexicalContextsForClosureCapture(),
                 object,
+                enclosing.prelude,
                 true);
     }
 
@@ -69,6 +86,10 @@ public final class ProtosActivation {
 
     public Object receiver() {
         return receiver;
+    }
+
+    public Optional<ProtosPrelude> prelude() {
+        return Optional.ofNullable(prelude);
     }
 
     public List<ProtosObjectValue> lexicalContextsForClosureCapture() {

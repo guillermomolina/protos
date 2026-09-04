@@ -64,5 +64,25 @@ class ProtosPreludeTest {
         assertSame(
                 contextPrototype,
                 activation.context().parent().orElseThrow());
+        assertSame(prelude, activation.prelude().orElseThrow());
+    }
+
+    @Test
+    void objectConstructionPreservesOwningPrelude() {
+        ProtosObjectValue contextPrototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue bindings = new ProtosObjectValue(contextPrototype);
+        bindings.createLocalSlot("Context", contextPrototype);
+        bindings.freeze();
+        ProtosPrelude prelude =
+                new ProtosPrelude(bindings, contextPrototype);
+        ProtosActivation module = prelude.newModuleActivation();
+        ProtosObjectValue object =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+
+        ProtosActivation construction =
+                ProtosActivation.forObjectConstruction(object, module);
+
+        assertSame(prelude, construction.prelude().orElseThrow());
     }
 }

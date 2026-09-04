@@ -58,9 +58,10 @@ public final class ProtosPrelude {
 
     public ProtosActivation newModuleActivation() {
         ProtosObjectValue moduleContext = newExecutionContext();
-        return new ProtosActivation(
+        return ProtosActivation.withPrelude(
                 moduleContext,
                 java.util.List.of(bindings),
-                moduleContext);
+                moduleContext,
+                this);
     }
 }
