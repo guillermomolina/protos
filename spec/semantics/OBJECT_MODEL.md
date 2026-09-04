@@ -662,6 +662,20 @@ time `slotNames()` performs its reflective observation. Subsequent slot
 creation, removal, or renaming-like library behavior does not retroactively
 change that already-returned Array.
 
+Each successful `slotNames()` invocation returns a fresh identity-bearing
+standard Array object. This includes repeated calls on an unchanged receiver and
+calls whose result is empty. Two independently returned reflection Arrays are
+therefore not identical under `===`, even when they contain exactly the same
+slot-name Strings in the same order.
+
+The indexed state of each returned Array is independent of both the reflected
+receiver and every other `slotNames()` result. Mutating one returned Array when
+ordinary Array state rules permit it cannot change the receiver's slot table,
+cannot change a previously or subsequently returned reflection Array, and cannot
+change what a later `slotNames()` observation snapshots. Implementations may
+avoid eager physical copying only when this fresh semantic identity and
+independent snapshot behavior remain observable exactly as specified.
+
 This ordering rule intentionally does not prescribe the receiver's internal slot
 storage order. Implementations may use shapes, hash tables, compact arrays,
 sorted tables, or any other representation; sorting may be performed lazily

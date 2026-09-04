@@ -9,6 +9,27 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.370] - 2026-09-04
+
+### Fresh reflection Array identity (D032)
+- Defines every successful `slotNames()` call as producing a fresh
+  identity-bearing standard Array, including repeated observations of an
+  unchanged object and empty results.
+- Makes reflection snapshots mutually independent: changing one returned Array
+  cannot mutate the reflected receiver, another reflection result, or a later
+  snapshot.
+- Preserves the existing canonical lexicographic slot-name ordering and shallow
+  snapshot contents while prohibiting semantic Array-result reuse/canonicalization.
+- Retains implementation freedom for lazy, virtual, persistent, or shared backing
+  representations when fresh Array identity and independent observable state are
+  preserved.
+
+### Compatibility
+- Closes previously implementation-selectable result identity for `slotNames()`.
+  Implementations that reused one semantic Array object across calls must instead
+  preserve fresh per-call Array identity; physical storage may still be shared
+  invisibly.
+
 ## [0.1.369] - 2026-09-04
 
 ### Path parent-component selector disambiguation (D028)
