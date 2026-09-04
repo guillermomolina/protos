@@ -4,6 +4,41 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.44-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added standard ordinary Float arithmetic for `+`, `-`, `*`, `/`, and unary
+  `negated`.
+- Standard Float arithmetic operates directly on semantic binary64 operands and
+  produces binary64 results, including signed zero, subnormal/underflow,
+  infinity, and NaN behavior required by IEEE 754-2019.
+- Float division by zero and invalid IEEE arithmetic now produce the
+  corresponding Float infinity or NaN rather than a Protos Error.
+- Added Float receiver-domain validation and rejection of mixed Float/Integer
+  arithmetic without implicit numeric promotion or coercion.
+- Added Java coverage for normal arithmetic, signed-zero negation, division by
+  zero, overflow, underflow, NaN-producing operations, mixed-family rejection,
+  and copied-method incompatible receivers.
+- Added executable `.protos` Float conformance programs and a semantic
+  `float-nan` expectation that does not expose implementation-specific NaN
+  payload or sign bits.
+- Project implementation version changed from `0.2.43-SNAPSHOT` to
+  `0.2.44-SNAPSHOT`.
+
+### Notes
+
+- Java `double` is used here only as the host representation of Protos binary64
+  primitive operations; no wider intermediate value is retained across a Protos
+  operation boundary.
+- NaN conformance intentionally tests semantic NaN membership rather than raw
+  NaN payload bits, which are not portable Protos surface semantics.
+- Numeric comparison/equality/hash and explicit numeric conversion factories
+  remain separate implementation slices.
+- D027/B003 remains untouched.
+- No normative specification change is introduced.
+
+
 ## [0.2.43-SNAPSHOT] - 2026-09-04
 
 ### Added

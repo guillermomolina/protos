@@ -83,6 +83,14 @@ final class ProtosLanguageConformanceTest {
                         expectedBits,
                         Double.doubleToRawLongBits(floating.value()));
             }
+            case "float-nan" -> {
+                Object result =
+                        loader.load(source).call(prelude.newModuleActivation());
+                ProtosFloatValue floating =
+                        assertInstanceOf(ProtosFloatValue.class, result);
+                org.junit.jupiter.api.Assertions.assertTrue(
+                        Double.isNaN(floating.value()));
+            }
             case "error" ->
                     assertThrows(
                             ProtosSignalException.class,

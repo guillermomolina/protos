@@ -19,6 +19,9 @@ Current expectation kinds:
   Integer in field 3;
 - `float-bits`: the program must complete normally with a Float whose raw IEEE
   binary64 bits equal the 16-hex-digit payload in field 3;
+- `float-nan`: the program must complete normally with the semantic Float NaN
+  value; field 3 is `-` because NaN payload/sign bits are not portable Protos
+  semantics;
 - `error`: the program must signal a Protos Error; field 3 is `-` because the
   current harness checks the semantic fact of signaling an Error, not a narrower
   Error category.
