@@ -27,18 +27,22 @@ import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
 import com.guillermomolina.protos.parser.ast.SurfaceMember;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
 import com.guillermomolina.protos.parser.ast.SurfaceNonLocalReturn;
+import com.guillermomolina.protos.parser.ast.SurfaceObject;
+import com.guillermomolina.protos.parser.ast.SurfaceObjectItem;
 import com.guillermomolina.protos.parser.ast.SurfaceParameter;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.parser.ast.SurfaceSlotCreation;
 import com.guillermomolina.protos.parser.ast.SurfaceUnary;
 import com.guillermomolina.protos.semantic.ast.CanonicalAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
+import com.guillermomolina.protos.semantic.ast.CanonicalCompose;
 import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalMember;
+import com.guillermomolina.protos.semantic.ast.CanonicalObject;
 import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
 import com.guillermomolina.protos.semantic.ast.CanonicalReturn;
 import com.guillermomolina.protos.semantic.ast.CanonicalSend;
@@ -59,6 +63,7 @@ public final class Canonicalizer {
             case SurfaceNonLocalReturn nonLocalReturn ->
                     new CanonicalReturn(
                             canonicalize(nonLocalReturn.expression()), nonLocalReturn.span());
+            case SurfaceObject object -> lowerObject(object);
             case SurfaceAssignment assignment -> lowerAssignment(assignment);
             case SurfaceBinary binary -> lowerBinary(binary);
             case SurfaceClosure closure -> lowerClosure(closure);
@@ -71,6 +76,23 @@ public final class Canonicalizer {
                             "Surface expression is not supported by this canonicalizer slice: "
                                     + expression.getClass().getSimpleName());
         };
+    }
+
+    private CanonicalExpression lowerObject(SurfaceObject object) {
+        return new CanonicalObject(
+                object.parent().map(this::canonicalize),
+                new CanonicalSequence(
+                        object.items().stream().map(this::canonicalizeObjectItem).toList(),
+                        object.span()),
+                object.span());
+    }
+
+    private CanonicalExpression canonicalizeObjectItem(SurfaceObjectItem item) {
+        CanonicalExpression expression = canonicalize(item.expression());
+        if (!item.composition()) {
+            return expression;
+        }
+        return new CanonicalCompose(expression, item.span());
     }
 
     private CanonicalExpression lowerAssignment(SurfaceAssignment assignment) {
