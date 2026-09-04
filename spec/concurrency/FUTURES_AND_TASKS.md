@@ -40,6 +40,22 @@ resultFuture: work.future()
 
 `future()` is a visible message whose fundamental implementation reaches a runtime primitive.
 
+### Ordinary ownership of `future`
+
+The standard `future` selector is the ordinary local Closure-valued
+`Object.future` slot specified by `../semantics/CALLABLES.md`. Ordinary lookup,
+reflection, extraction, shadowing/override behavior, and the semantic-Closure
+receiver-domain check are owned there. In particular, merely finding the
+inherited selector does not make a non-Closure receiver a Closure; if the
+standard behavior is selected for such a receiver, its invocation fails under
+that receiver-domain contract before this section creates or schedules work.
+
+This section owns the behavior after that standard receiver-domain validation:
+a valid Closure receiver requests the asynchronous execution described below and
+returns the corresponding Future. Reaching scheduler/runtime primitives is
+implementation machinery and does not replace the ordinary `Object.future` slot
+or its observable lookup behavior.
+
 Conceptually:
 
 ```text

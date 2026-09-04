@@ -60,6 +60,22 @@ computation is eligible to run in parallel is an execution property of this
 explicitly requested operation, not a new meaning silently attached to every
 Future.
 
+### Ordinary ownership of `parallel`
+
+The standard `parallel` selector is the ordinary local Closure-valued
+`Object.parallel` slot specified by `../semantics/CALLABLES.md`. Ordinary lookup,
+reflection, extraction, shadowing/override behavior, and the semantic-Closure
+receiver-domain check are owned there. Merely inheriting or finding that selector
+does not confer Closure-family membership. If ordinary lookup selects the
+standard behavior for a non-Closure receiver, invocation fails under that
+receiver-domain contract before projection, transfer, isolated execution, or
+result-Future creation begins.
+
+This document owns the isolated-parallel semantics after successful standard
+receiver-domain validation. Worker pools, runtime intrinsics, cached dispatch,
+and other host mechanisms remain implementation machinery and must not replace
+the observable ordinary `Object.parallel` slot.
+
 In particular, ordinary `closure.future()` semantics are not changed by
 this design. Actor-local Future work remains serialized with other
 Actor-local Protos execution according to the normal Actor turn model.

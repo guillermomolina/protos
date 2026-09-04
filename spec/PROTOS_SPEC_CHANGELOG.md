@@ -9,6 +9,36 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.366] - 2026-09-04
+
+### Closure asynchronous-method ownership (D025)
+- Fixes the standard Closure-specific selectors `future` and `parallel` as
+  ordinary local Closure-valued slots of `Object`; every Core Closure reaches
+  them through its D027 direct delegation edge to `Object`, with no standard
+  `Closure` prototype, hidden method table, or per-Closure slot materialization.
+- Defines the standard behaviors' receiver domain as semantic Closure values.
+  Other receivers may find the inherited selectors through ordinary lookup, but
+  invoking the selected standard behavior signals the normal invalid-receiver
+  Error before asynchronous/parallel effects and does not resume lookup.
+- Keeps `future` and `parallel` ordinary, non-reserved selector names: nearer
+  slots shadow normally, user Closure-valued overrides retain their own receiver
+  contracts, and Closure instances may define local overrides when ordinary
+  object-state rules permit.
+- Applies the existing extracted-method semantics unchanged: reading either
+  Closure-valued slot preserves the original receiver and selected slot owner as
+  receiver/`methodHome` binding metadata.
+- Keeps operation-specific ownership modular: `FUTURES_AND_TASKS.md` owns
+  asynchronous Future/task behavior after receiver validation and
+  `PARALLEL_EXECUTION.md` owns isolated-parallel behavior after validation.
+  Host primitives and scheduler/worker machinery remain implementation details
+  that must preserve ordinary lookup, reflection, shadowing, extraction,
+  receiver-domain behavior, and portable parent topology.
+
+### Compatibility
+- Closes previously implementation-selectable ownership/reflection behavior for
+  `future` and `parallel` without adding a Core object, prototype, executable
+  kind, dispatch path, or hidden semantic universe.
+
 ## [0.1.365] - 2026-09-04
 
 ### Portable Core delegation topology (D027)
