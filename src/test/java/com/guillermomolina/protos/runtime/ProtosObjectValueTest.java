@@ -46,6 +46,27 @@ class ProtosObjectValueTest {
     }
 
     @Test
+    void anyProtosValueMayBeADelegationParent() {
+        ProtosObjectValue stringChild = new ProtosObjectValue(new ProtosStringValue("parent"));
+        ProtosObjectValue numberChild =
+                new ProtosObjectValue(new ProtosIntegerValue(java.math.BigInteger.valueOf(42)));
+        ProtosObjectValue booleanChild = new ProtosObjectValue(ProtosBooleanValue.TRUE);
+        ProtosObjectValue nullChild = new ProtosObjectValue(ProtosNullValue.INSTANCE);
+
+        assertTrue(stringChild.parent().orElseThrow() instanceof ProtosStringValue);
+        assertTrue(numberChild.parent().orElseThrow() instanceof ProtosIntegerValue);
+        assertSame(ProtosBooleanValue.TRUE, booleanChild.parent().orElseThrow());
+        assertSame(ProtosNullValue.INSTANCE, nullChild.parent().orElseThrow());
+    }
+
+    @Test
+    void delegatedLookupThroughUnbootstrappedValueParentIsNotSilentlyMisresolved() {
+        ProtosObjectValue child = new ProtosObjectValue(new ProtosStringValue("parent"));
+
+        assertThrows(UnsupportedOperationException.class, () -> child.readSlot("size"));
+    }
+
+    @Test
     void readsDelegateToNearestSlot() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue parent = new ProtosObjectValue(root);

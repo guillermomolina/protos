@@ -25,14 +25,14 @@ import java.util.Optional;
 public final class ProtosObjectValue {
     private static final ProtosObjectValue ROOT = new ProtosObjectValue();
 
-    private final ProtosObjectValue parent;
+    private final Object parent;
     private final Map<String, Object> localSlots = new LinkedHashMap<>();
 
     private ProtosObjectValue() {
         this.parent = null;
     }
 
-    public ProtosObjectValue(ProtosObjectValue parent) {
+    public ProtosObjectValue(Object parent) {
         this.parent = Objects.requireNonNull(parent, "parent");
     }
 
@@ -44,7 +44,7 @@ public final class ProtosObjectValue {
         return this == ROOT;
     }
 
-    public Optional<ProtosObjectValue> parent() {
+    public Optional<Object> parent() {
         return Optional.ofNullable(parent);
     }
 
@@ -73,7 +73,13 @@ public final class ProtosObjectValue {
                 return Optional.empty();
             }
 
-            current = current.parent;
+            if (!(current.parent instanceof ProtosObjectValue parentObject)) {
+                throw new UnsupportedOperationException(
+                        "Delegated lookup through non-ordinary Protos values "
+                                + "requires standard prototype bootstrap");
+            }
+
+            current = parentObject;
         }
     }
 
