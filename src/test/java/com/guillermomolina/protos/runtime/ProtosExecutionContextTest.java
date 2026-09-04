@@ -91,6 +91,65 @@ class ProtosActivationTest {
     }
 
     @Test
+    void objectConstructionUsesObjectAsContextWithoutCapturingItLexically() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue enclosingContext = new ProtosObjectValue(root);
+        ProtosObjectValue outer = new ProtosObjectValue(root);
+        ProtosObjectValue enclosingReceiver = new ProtosObjectValue(root);
+        ProtosActivation enclosing =
+                new ProtosActivation(
+                        enclosingContext,
+                        List.of(outer),
+                        enclosingReceiver);
+        ProtosObjectValue object = new ProtosObjectValue(root);
+
+        ProtosActivation construction =
+                ProtosActivation.forObjectConstruction(object, enclosing);
+
+        assertSame(object, construction.context());
+        assertSame(object, construction.receiver());
+        assertSame(
+                enclosingContext,
+                construction.lexicalContextsForClosureCapture().get(0));
+        assertSame(
+                outer,
+                construction.lexicalContextsForClosureCapture().get(1));
+        assertTrue(
+                construction.lexicalContextsForClosureCapture().stream()
+                        .noneMatch(candidate -> candidate == object));
+    }
+
+    @Test
+    void nestedConstructionSkipsEveryConstructionObjectForClosureCapture() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue lexical = new ProtosObjectValue(root);
+        ProtosActivation enclosing =
+                new ProtosActivation(
+                        lexical,
+                        List.of(),
+                        new ProtosObjectValue(root));
+        ProtosObjectValue outerObject = new ProtosObjectValue(root);
+        ProtosObjectValue innerObject = new ProtosObjectValue(root);
+
+        ProtosActivation outerConstruction =
+                ProtosActivation.forObjectConstruction(
+                        outerObject,
+                        enclosing);
+        ProtosActivation innerConstruction =
+                ProtosActivation.forObjectConstruction(
+                        innerObject,
+                        outerConstruction);
+
+        assertSame(
+                lexical,
+                innerConstruction.lexicalContextsForClosureCapture().get(0));
+        assertTrue(
+                innerConstruction.lexicalContextsForClosureCapture().stream()
+                        .noneMatch(candidate ->
+                                candidate == outerObject || candidate == innerObject));
+    }
+
+    @Test
     void writableLookupNeverTraversesReceiverDelegationParents() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue prototype = new ProtosObjectValue(root);

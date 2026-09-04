@@ -23,8 +23,6 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.source.SourceSpan;
 import com.oracle.truffle.api.frame.VirtualFrame;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Objects;
 
 public final class ProtosClosureLiteralNode extends ProtosExpressionNode {
@@ -42,15 +40,9 @@ public final class ProtosClosureLiteralNode extends ProtosExpressionNode {
         ProtosActivation activation =
                 ProtosFrameArguments.activation(frame);
 
-        List<ProtosObjectValue> captured =
-                new ArrayList<>(
-                        1 + activation.capturedLexicalContexts().size());
-        captured.add(activation.context());
-        captured.addAll(activation.capturedLexicalContexts());
-
         return new ProtosClosureValue(
                 definition,
-                captured,
+                activation.lexicalContextsForClosureCapture(),
                 activation.receiver());
     }
 }

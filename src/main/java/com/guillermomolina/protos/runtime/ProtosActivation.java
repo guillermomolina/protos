@@ -25,16 +25,38 @@ public final class ProtosActivation {
     private final ProtosObjectValue context;
     private final List<ProtosObjectValue> capturedLexicalContexts;
     private final Object receiver;
+    private final boolean construction;
 
     public ProtosActivation(
             ProtosObjectValue context,
             List<ProtosObjectValue> capturedLexicalContexts,
             Object receiver) {
+        this(context, capturedLexicalContexts, receiver, false);
+    }
+
+    private ProtosActivation(
+            ProtosObjectValue context,
+            List<ProtosObjectValue> capturedLexicalContexts,
+            Object receiver,
+            boolean construction) {
         this.context = Objects.requireNonNull(context, "context");
         this.capturedLexicalContexts =
                 List.copyOf(Objects.requireNonNull(
                         capturedLexicalContexts, "capturedLexicalContexts"));
         this.receiver = Objects.requireNonNull(receiver, "receiver");
+        this.construction = construction;
+    }
+
+    public static ProtosActivation forObjectConstruction(
+            ProtosObjectValue object,
+            ProtosActivation enclosing) {
+        Objects.requireNonNull(object, "object");
+        Objects.requireNonNull(enclosing, "enclosing");
+        return new ProtosActivation(
+                object,
+                enclosing.lexicalContextsForClosureCapture(),
+                object,
+                true);
     }
 
     public ProtosObjectValue context() {
@@ -47,6 +69,18 @@ public final class ProtosActivation {
 
     public Object receiver() {
         return receiver;
+    }
+
+    public List<ProtosObjectValue> lexicalContextsForClosureCapture() {
+        if (construction) {
+            return capturedLexicalContexts;
+        }
+
+        java.util.ArrayList<ProtosObjectValue> contexts =
+                new java.util.ArrayList<>(1 + capturedLexicalContexts.size());
+        contexts.add(context);
+        contexts.addAll(capturedLexicalContexts);
+        return List.copyOf(contexts);
     }
 
     public Optional<Object> lookup(String name) {

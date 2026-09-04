@@ -4,6 +4,32 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.2-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added explicit object-construction activations whose current context and
+  receiver are the object under construction while Closure capture skips that
+  construction object.
+- Added transitive construction-scope skipping so Closures created inside nested
+  object bodies capture only genuine enclosing lexical contexts.
+
+### Changed
+
+- Closure materialization now obtains its lexical capture chain from activation
+  semantics instead of unconditionally capturing the activation's current
+  context.
+- Project implementation version changed from `0.2.1-SNAPSHOT` to
+  `0.2.2-SNAPSHOT`.
+
+### Notes
+
+- This is implementation architecture for already-specified object-construction
+  and lexical-capture semantics; no normative specification change is introduced.
+- The new construction-activation boundary is intended to support subsequent
+  canonical object execution and Core source bootstrap.
+
+
 ## [0.2.1-SNAPSHOT] - 2026-09-04
 
 ### Added

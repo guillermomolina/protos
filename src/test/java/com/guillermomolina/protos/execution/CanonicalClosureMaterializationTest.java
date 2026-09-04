@@ -59,6 +59,36 @@ class CanonicalClosureMaterializationTest {
     }
 
     @Test
+    void closureCreatedDuringObjectConstructionSkipsConstructionObject() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue lexical = new ProtosObjectValue(root);
+        ProtosActivation enclosing =
+                new ProtosActivation(
+                        lexical,
+                        List.of(),
+                        new ProtosObjectValue(root));
+        ProtosObjectValue object = new ProtosObjectValue(root);
+        ProtosActivation construction =
+                ProtosActivation.forObjectConstruction(
+                        object,
+                        enclosing);
+
+        ProtosClosureValue closure =
+                (ProtosClosureValue)
+                        ProtosExecution.createCallTarget(
+                                        lowerer.lower(closure()))
+                                .call(construction);
+
+        assertSame(
+                lexical,
+                closure.capturedLexicalContexts().get(0));
+        assertTrue(
+                closure.capturedLexicalContexts().stream()
+                        .noneMatch(candidate -> candidate == object));
+        assertSame(object, closure.capturedReceiver());
+    }
+
+    @Test
     void evaluatingClosureLiteralCreatesFreshClosureIdentity() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosActivation activation =
