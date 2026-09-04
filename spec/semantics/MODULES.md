@@ -1,7 +1,7 @@
 # Protos Modules v0.1
 
 Language version: 0.1
-Document revision: 327
+Document revision: 328
 Status: Draft
 Last updated: 2026-09-04
 
@@ -402,3 +402,135 @@ math.sin(x)
 No ES-module-style static binding declarations, CommonJS `exports`, Python namespaces, or another language's module syntax are introduced. Core v0.1 defines no export declaration syntax and no separate export mechanism: a module's directly observable surface is its top-level binding slots, accessed through the module instance. Cross-module visibility remains explicit.
 
 The exact resolver rules for files, packages, standard-library modules, search paths, and other host-specific sources are outside Core Language v0.1.
+
+# Actor/module isolation integration migrated from the legacy concurrency ledger
+
+## 34. Actor Module State
+
+**CLOSED --- REVISED**
+
+Each Actor owns its module state: an Actor-local module cache and the
+module contexts (module instances) belonging to that Actor.
+
+Actors do not inherit mutable module contexts from their creator.
+
+If two Actors import the same module, mutable module-level state is
+logically separate in each Actor.
+
+The runtime may physically share immutable implementation artifacts such
+as compiled code, immutable metadata, frozen core objects, or shared
+prelude implementation, provided that the sharing is not observable as
+shared mutable Protos state.
+
+Per canonical module identity, an Actor has at most one active cached
+module instance at a time; the Actor-local module cache is authoritative
+for the currently active module instance. Cache membership and ordinary
+object reachability are distinct. This is not a lifetime-wide "module
+singleton" guarantee: an Actor is not limited to a single historical
+object per canonical module identity. A module instance whose
+initialization failed and whose cache entry was removed may remain
+reachable through ordinary escaped references while a later fresh
+instance is the Actor's active cached module instance for the same
+canonical identity. Both objects belong to the same Actor, so their
+coexistence does not violate Actor isolation.
+
+The full module lifecycle rules (module instance equals its
+`moduleContext`, Actor-local cache-before-execute, cache states,
+cyclic-import and failure handling, and the initial module of an Actor)
+are defined in the canonical module-lifecycle sections of
+`MODULES.md` and the non-normative runtime integration model. This
+section states only the Actor isolation and ownership consequences that
+the concurrency model depends on.
+## 34A. Module Implementation Sharing Is Semantically Invisible
+
+**CLOSED**
+
+Core v0.1 fully separates **module semantic state** from **module implementation
+artifacts**.
+
+For a given canonical module identity, each Actor's active module instance,
+`moduleContext`, mutable slots, initialization state, and module-cache membership
+remain Actor-local exactly as defined by the language/runtime module lifecycle.
+No process-global mutable module instance exists.
+
+An implementation may physically share artifacts that do not constitute mutable
+Protos module state, including:
+
+- parsed syntax or immutable syntax trees;
+- bytecode or other executable intermediate representation;
+- machine code/JIT code;
+- immutable metadata;
+- immutable constant data whose sharing is already semantically permitted;
+- read-only loader/compiler/runtime bookkeeping whose identity is not exposed as
+  a Protos value.
+
+Such sharing is an implementation optimization only. Programs must not be able
+to distinguish, through portable Core observations, whether two Actors execute
+one physically shared code object or two physically duplicated ones.
+
+In particular, implementation-artifact sharing must not cause Actors importing
+the same canonical module to share:
+
+- mutable module slots;
+- lexical execution contexts;
+- closure captures;
+- mutable object identity created by module initialization;
+- initialization progress/failure state;
+- module-cache entries;
+- dynamic handlers, return homes, Futures/tasks, resources, or Actor-local
+  authority.
+
+Likewise, compiling, caching, deduplicating, interning, unloading, recompiling,
+or JIT-specializing implementation artifacts must not change the normative
+module-instance identity or lifecycle observed by Protos code.
+
+An implementation may choose per-Process, per-Node, or otherwise broader
+physical caches for immutable artifacts, or choose no sharing at all. Cache
+placement, eviction, code deduplication, compilation tiers, and artifact identity
+are not Core semantic surfaces.
+
+If a future facility exposes code identity, hot-update/version selection,
+reflection over compiled artifacts, or implementation-level module handles, that
+facility must define its own observable contract. It must not retroactively make
+ordinary module implementation sharing visible.
+
+This closes the former open ledger item `Module implementation sharing`; the
+remaining module semantics are already fixed by the canonical Language and
+Runtime module-lifecycle rules.
+
+# Remaining concurrency/prelude integration migrated at revision 328
+
+## 72. Standard Prelude Sharing
+
+**CLOSED**
+
+The standard prelude is shared between Actors and isolated P domains and is
+frozen. Freezing is shallow, so freezing the prelude does not by itself make
+arbitrary mutable objects referenced by its slots safe to share across isolation
+domains.
+
+Rule:
+
+> Any Protos object physically shared across Actor/P isolation boundaries
+> through the standard prelude must be semantically immutable for the duration
+> of that sharing. Mutable Protos state reachable through standard facilities
+> belongs to the isolation domain that uses it unless another normative rule
+> explicitly provides a safe capability boundary.
+
+Consequences:
+
+-   The prelude itself may be physically shared, and its slots may refer
+    to immutable Protos objects.
+-   A prelude slot must not let two Actor/P isolation domains share mutable
+    Protos state.
+-   Mutable standard-library or runtime state — such as an Actor's module cache
+    and module instances, or P-local mutable library state — belongs to the
+    isolation domain that uses it.
+-   The implementation may physically share immutable implementation
+    artifacts such as parsed syntax, bytecode, machine code, immutable
+    metadata, and immutable constant data where the sharing is
+    semantically unobservable.
+
+The existing rule that freeze is shallow is unchanged: no deep freeze is
+introduced. Actor isolation is not weakened, and implementations are not
+required to duplicate immutable data unnecessarily.

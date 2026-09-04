@@ -1,7 +1,7 @@
 # Protos Distributed Runtime v0.1
 
 Language version: 0.1
-Document revision: 326
+Document revision: 328
 Status: Draft
 Last updated: 2026-09-04
 
@@ -1551,3 +1551,323 @@ performed by the orchestrator.
 The same Protos program and runtime model should remain valid across
 standalone execution, Kubernetes, Nomad, or future infrastructure
 environments.
+
+# Remaining topology/runtime boundaries migrated at revision 328
+
+## 72A. No Core Application or Service Identity
+
+**CLOSED**
+
+Core v0.1 defines no intrinsic application identity, service identity,
+`ApplicationRoot`, deployment identity, or mandatory execution-hierarchy level
+above Process/RootActor, Node, Cluster, Group, and the other already-defined
+runtime identities.
+
+This is a deliberate semantic boundary rather than a missing hidden runtime
+object.
+
+An implementation, deployment system, orchestrator, observability platform, or
+administrative tool may associate Protos runtime entities with an external
+application/service identifier for purposes such as deployment, configuration,
+observability, metrics, ownership, tenancy, rollout grouping, or operational
+inventory.
+
+Such an identifier is administrative metadata unless a future normative facility
+explicitly promotes it into the Protos semantic universe.
+
+In Core v0.1, administrative application/service identity therefore must not:
+
+- become an implicit Actor sender identity;
+- create a mailbox, mutable object graph, execution domain, or lifecycle domain;
+- become a parent of Process RootActors;
+- alter ActorRef or GroupRef identity;
+- imply shared mutable state between Processes or Actors;
+- change same-sender FIFO, routing, placement, failure, supervision, or
+  cancellation semantics;
+- grant Process, Node, Cluster, resource, or capability authority merely by
+  association;
+- keep Actors, Processes, Groups, Nodes, or Clusters alive;
+- cause two otherwise distinct runtime identities to compare as the same Protos
+  identity;
+- impose distributed-runtime startup or coordination cost on programs that do
+  not use a separately defined facility.
+
+The same external application/service label may be associated with multiple
+Processes, Nodes, Clusters, Groups, or deployments without creating a new Core
+continuity guarantee among them. Conversely, one Protos Process or Cluster may be
+classified differently by external tooling over time without changing its Core
+identity.
+
+Distributed service continuity remains expressed through the already-defined
+semantic mechanisms such as Group identity, discovery, Cluster/runtime control
+state, and explicit durable state. An administrative label is not a substitute
+for those mechanisms.
+
+A future standard facility may introduce a first-class application/service
+identity only if a workload demonstrates a semantic boundary that cannot be
+expressed cleanly by the existing universe. Such a facility would need to define
+identity, lifetime, authority, topology relationships, transferability,
+persistence, failure behavior, and observable operations explicitly.
+
+This closes the former open ledger item `Optional administrative
+application/service identity for deployment, configuration, observability, or
+ownership` for Core v0.1. External administrative metadata remains permitted but
+non-semantic.
+
+## 72B. Service Discovery Implementation Is Not Core Semantics
+
+**CLOSED**
+
+Core v0.1 defines the observable meaning of discovery identities and rebinding
+where those semantics are already specified, but it does not standardize one
+service-discovery implementation.
+
+A conforming runtime or distributed facility may implement discovery through
+mechanisms such as:
+
+- in-process or per-Process registries;
+- Cluster control state;
+- external registries or naming services;
+- DNS-like systems;
+- orchestrator/service-platform APIs;
+- replicated metadata stores;
+- static configuration;
+- another mechanism that preserves the normative discovery semantics.
+
+The choice of implementation must not change the identity represented by a
+resolved `ActorRef` or `GroupRef`, make an existing concrete reference retarget
+after name rebinding, manufacture lifetime or durability, or grant authority not
+already carried by the resolved capability.
+
+Discovery implementation also must preserve the pay-as-you-grow rule. A program
+that does not use a discovery/distributed facility must not require a network
+listener, external registry, Cluster membership, background discovery protocol,
+or equivalent distributed runtime merely because an implementation supports
+such machinery.
+
+Core v0.1 therefore does not standardize:
+
+- registry protocol or wire format;
+- storage engine or replication algorithm;
+- cache topology or cache invalidation strategy;
+- polling versus push/watch implementation;
+- backend selection or fallback order;
+- registry server placement;
+- health-probe implementation;
+- implementation-specific TTL bookkeeping;
+- implementation-specific retry/backoff policy.
+
+Those mechanisms may affect performance and availability of the implementation,
+but they must not retroactively choose otherwise-unfixed portable semantics.
+
+This closure does not define a new public discovery API, namespace model,
+consistency level, TTL contract, watch/notification semantics, federation model,
+persistence guarantee, security model, or schema/versioning rule. Any such
+portable facility remains subject to its own normative design.
+
+This closes the former open ledger item `Service discovery implementation`.
+
+## 72C. ActorRef Routing Implementation Is Runtime Machinery
+
+**CLOSED**
+
+Core v0.1 defines the semantic identity and communication behavior of an
+`ActorRef`, but it does not standardize one internal mechanism for locating the
+concrete Actor incarnation denoted by that reference.
+
+A runtime may route an `ActorRef` through mechanisms such as:
+
+- direct in-Process tables;
+- Process- or Node-local routing tables;
+- Cluster directories;
+- distributed location metadata;
+- cached routes;
+- indirection through runtime-owned routing services;
+- transport-specific endpoint metadata;
+- another mechanism that preserves the normative ActorRef semantics.
+
+The routing mechanism is not part of ActorRef identity. Updating, invalidating,
+or replacing an internal route to the same live incarnation must not create a
+new ActorRef identity or make two distinct Actor incarnations compare as one.
+
+Routing machinery must preserve the existing rules that:
+
+- an `ActorRef` denotes exactly one concrete Actor incarnation;
+- the reference never retargets to a replacement Actor;
+- destination death does not authorize transparent replay to another Actor;
+- unreachability, unknown state, and known termination remain distinct;
+- same-sender FIFO, snapshot, acceptance, backpressure, cancellation, failure,
+  and delivery-uncertainty semantics do not depend on route-cache layout;
+- Group routing remains a separate semantic layer and cannot be simulated by
+  silently retargeting a concrete ActorRef.
+
+A stale or missing internal route may lead only to outcomes already permitted by
+the communication and reachability semantics. It must not cause a runtime to
+invent a replacement destination, duplicate an accepted operation, erase
+delivery uncertainty, or reinterpret one ActorRef as another.
+
+Core v0.1 therefore does not standardize:
+
+- ActorRef directory protocol;
+- route-cache shape or eviction policy;
+- route-refresh algorithm;
+- routing-table replication;
+- endpoint-address format;
+- route lookup batching;
+- implementation-specific forwarding hops;
+- location-cache consistency mechanism.
+
+These choices may affect performance and availability, but not portable ActorRef
+semantics.
+
+This closure does not define ActorRef persistence, serialization, external
+capability encoding, or durable resolution across runtime restarts. Those remain
+separate open design topics.
+
+This closes the former open ledger item `ActorRef routing implementation`.
+
+## 72D. Logical and Physical Topology Are Distinct
+
+**CLOSED**
+
+Core v0.1 distinguishes Protos logical topology from the physical topology used
+to host or optimize an implementation.
+
+The logical entities defined by the concurrency model retain only their
+normatively specified meanings. In particular, a Protos `Process` is execution
+capacity, a `Node` is runtime membership, and a `Cluster` is a coordination
+domain. None of those meanings, by itself, creates a portable one-to-one mapping
+to an operating-system process, host, virtual machine, container, pod, CPU
+package, NUMA domain, rack, availability zone, region, subnet, or equivalent
+infrastructure unit.
+
+An implementation or infrastructure adapter may map logical entities onto
+physical resources in any conforming way. It may co-locate multiple logical
+entities, separate them physically, move implementation resources, or change
+internal placement over time, provided every existing Protos-observable
+identity, isolation, lifetime, authority, communication, failure, placement, and
+continuity rule remains satisfied.
+
+Therefore physical co-location does not:
+
+- merge Actor, Process, Node, Group, or Cluster identity;
+- create cross-domain mutable Protos references;
+- grant authority or capability;
+- make a non-transferable value transferable;
+- imply same failure fate, shared lifecycle, or durable continuity;
+- authorize ActorRef retargeting or Actor identity migration;
+- imply that a particular transport must be used.
+
+Conversely, physical separation does not by itself create a new Protos identity,
+failure domain, message semantic, serialization contract, or distributed
+authority boundary beyond those explicitly defined by the normative model.
+
+Moving an implementation artifact or changing physical placement is not an Actor
+migration unless a normative Actor-migration facility explicitly preserves the
+Actor incarnation across that operation. Recreating an Actor elsewhere under the
+ordinary lifecycle rules remains a new Actor incarnation with a new ActorRef.
+
+Infrastructure topology may be used internally for placement, scheduling,
+transport selection, failure avoidance, resource accounting, and administrative
+diagnostics. Such use is implementation or policy machinery unless a separate
+portable facility explicitly exposes a topology concept.
+
+This closure does not decide the still-open APIs and policies for affinity,
+anti-affinity, hard placement constraints, failure-domain configuration,
+placement scoring, rebalancing, migration, capacity provisioning, or external
+infrastructure adapters. Those facilities may deliberately refer to selected
+physical concepts, but must define their own observable contracts.
+
+This closes the former open ledger item `Relationship between logical Protos
+topology and physical infrastructure topology`.
+
+## Open Design Topics
+
+The following topics remain intentionally open. Items whose fundamental
+semantics are already closed are listed only for the API, policy,
+mechanism, or implementation detail that still requires design.
+
+-   Failure-domain discovery and configuration
+-   Exact HA policy API and syntax
+-   Exact Group/GroupRef API and syntax
+-   Group creation/termination/durability API and ownership mechanics
+-   Group controller API and controller-election mechanics
+-   Group routing policy API
+-   Advanced Group routing policies
+-   Group broadcast and multicast semantics
+-   Group membership transition protocol
+-   Exact `spawn` API and syntax
+-   Actor bootstrap representation
+-   Exact SpawnOperation API
+-   Exact SpawnOperation states
+-   SpawnOperation timeout and cancellation API
+-   Exact current-behavior installation/replacement API
+-   Exact SendOperation API
+-   Exact SendOperation states
+-   Definition of what SendOperation `.value()` means
+-   Delivery acknowledgement levels
+-   Delivery guarantees
+-   Retry API and policies
+-   Message IDs and attempt IDs
+-   Deduplication
+-   Idempotency support
+-   Persistent messaging
+-   Special mailbox policies
+-   Drop policies
+-   Latest-only policies
+-   Batching
+-   Streaming
+-   Async streams
+-   Generators and suspendable iteration
+-   Pub/sub
+-   Advanced routers and load-balancing policies
+-   Actor capacity policy
+-   Process capacity provisioning policy
+-   Node capacity provisioning policy
+-   Capacity Demand API
+-   Scale-up policy in infrastructure adapters/controllers
+-   Scale-down policy in infrastructure adapters/controllers
+-   Proactive capacity-demand signals
+-   Draining policy and mechanics
+-   Infrastructure Controller integration APIs
+-   External infrastructure adapters such as Kubernetes or Nomad
+-   Authority-scope API/model representation
+-   Authority acquisition and transfer
+-   Authority leases/election/consensus implementation
+-   Authoritative/control-state storage and reconstruction
+-   Fencing-token/API design for strict authoritative roles
+-   Cluster authentication
+-   Placement scoring algorithm
+-   Placement stability and hysteresis
+-   Placement policy priorities
+-   Actor affinity and anti-affinity API
+-   Hard placement constraints
+-   Rebalancing algorithms and policy
+-   Optional live Actor migration mechanism
+-   Actor persistence
+-   Actor checkpointing
+-   Durable-state recovery API/mechanism
+-   State replication
+-   Replicated Actor/service semantics
+-   ActorRef persistence/serialization semantics, if any
+-   GroupRef persistence/serialization and capability semantics, if any
+-   Message serialization format
+-   Serialization versioning
+-   Schema evolution
+-   Timers
+-   Clock semantics
+-   Resource limits and quotas
+-   Runtime resource-pressure model
+-   Actor resource-cost estimation and learning
+-   ActorRef/GroupRef capability security and authorization
+-   Remote authentication
+-   Cluster configuration UX
+-   Cluster lazy startup
+-   Node lazy activation
+-   Durable Cluster bootstrap after zero active Nodes
+-   Runtime metrics architecture
+-   Scheduler/advisor interaction
+-   Scheduler/capacity-demand interaction
+-   Code identity for remote Actor bootstrap
+-   Code availability and versioning across Nodes
+-   Hot code update

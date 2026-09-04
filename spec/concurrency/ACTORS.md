@@ -1,7 +1,7 @@
 # Protos Actors v0.1
 
 Language version: 0.1
-Document revision: 325
+Document revision: 328
 Status: Draft
 Last updated: 2026-09-04
 
@@ -1855,3 +1855,271 @@ The runtime must not silently repair arbitrary mutable Actor state.
 If policy requires continued capacity or service membership after
 failure, replacement creates a fresh Actor rather than repairing the
 failed Actor's heap.
+
+# Legacy concurrency integration migrated at revision 328
+
+## 1. General Principle
+
+**CLOSED**
+
+Protos aims to hide concurrency complexity in a way analogous to how
+garbage collection hides manual memory management.
+
+Priorities:
+
+-   Ease of use
+-   Safety by default
+-   Performance
+-   Pay for what you use
+
+A simple Protos program must not pay the cost of distributed runtime
+infrastructure unless it actually uses it.
+
+A small command-line program such as `ls` should start quickly and
+should not require cluster membership, discovery, network listeners,
+external configuration, or heavyweight runtime services.
+
+Guiding rule:
+
+> If normal Protos code requires the programmer to reason about locks,
+> atomics, memory barriers, ownership graphs, or memory ordering, the
+> concurrency model has probably failed.
+
+The runtime should absorb as much complexity as possible without
+sacrificing ordinary execution performance.
+## 2. Fundamental Model
+
+**CLOSED**
+
+The fundamental programming model remains:
+
+-   Objects
+-   Slots
+-   Closures
+-   Delegation
+-   Message dispatch
+-   `this`
+
+Actors do not introduce a second object model or a second dispatch
+system.
+
+An Actor organizes ordinary Protos objects into an isolated domain
+containing:
+
+-   A private object graph
+-   Mutable state
+-   A current behavior object
+-   A mailbox
+-   Futures/tasks
+-   Lifecycle state
+
+Principle:
+
+> Objects, slots, closures, and dispatch are the molecule. Actors
+> organize those molecules into isolated domains of state, execution,
+> lifecycle, and parallelism.
+
+The Actor itself is not simply another ordinary Protos object.
+
+Its current behavior is an ordinary Protos object.
+## 3. Future Versus Actor
+
+**CLOSED --- REVISED**
+
+Future and Actor solve different scaling problems.
+
+> A Future represents an eventual result and scales with the amount of
+> concurrent work.
+
+> An Actor provides a persistent isolated domain of mutable state,
+> identity, lifecycle, messaging, and parallel execution relative to
+> other Actors.
+
+Ordinary Future/task execution created within an Actor remains
+Actor-local and cooperative. Such tasks behave conceptually like green
+threads or green tasks and may exist in very large numbers.
+
+Only one segment of ordinary Actor-local Protos code executes at a time.
+Therefore ordinary Futures inside the same Actor may interleave, but they
+do not execute Actor-local Protos code simultaneously.
+
+Protos additionally permits explicit isolated parallel computation as
+defined in Parallel Execution. Such work executes outside the caller's
+mutable Actor domain and may run simultaneously on other CPU carriers.
+Its eventual result may be represented by an ordinary Future without
+making the isolated parallel execution unit a new fundamental public
+identity-bearing object.
+
+Different Actors may also execute simultaneously on different CPU cores.
+
+An Actor is therefore a logical serial domain for its own mutable Protos
+state, not necessarily one operating-system thread and not necessarily
+the smallest unit capable of consuming a CPU core. Mapping Actors,
+Actor-local tasks, and isolated parallel work onto operating-system
+threads or other carrier mechanisms is a runtime implementation
+decision.
+## 4. Actor Isolation
+
+**CLOSED**
+
+There is no shared mutable Protos memory between Actors.
+
+Ordinary mutable Protos references never cross an Actor boundary.
+
+Therefore the normal Actor programming model does not require:
+
+-   Mutexes
+-   Locks
+-   Volatile variables
+-   Atomics
+-   Memory barriers
+
+The runtime may internally use shared memory, concurrent queues,
+atomics, locks, copy-on-write, or other mechanisms as long as those
+mechanisms are not observable through Protos semantics.
+
+The same principle applies to isolated parallel computation: physical
+storage may be shared internally when semantic isolation can still be
+preserved, but arbitrary simultaneously shared mutable Protos identity
+is not introduced merely to obtain CPU parallelism.
+## 6. I/O
+
+**CLOSED --- REVISED**
+
+The normative I/O capability, cancellation, lifecycle, text, filesystem, and Process-standard-I/O semantics are defined in `io/IO_CORE.md`.
+
+Normal Protos I/O should be non-blocking relative to the Actor and
+should return a Future or another awaitable operation.
+
+Suspension remains explicit through operations such as:
+
+    data: socket.read().value()
+
+If the result is already available, execution may continue immediately.
+
+If the result is pending, the current task suspends and the Actor may
+execute other work.
+
+Ordinary I/O must not transparently introduce hidden suspension points.
+
+Principle:
+
+> Looking at Protos code, the programmer should be able to identify
+> where Actor reentrancy may occur.
+
+Internally, an Actor may conceptually receive runnable work from a
+unified runtime event source containing:
+
+-   Mailbox messages
+-   I/O completions
+-   Timers
+-   Future resolutions
+
+An I/O completion is not normally exposed as an ordinary message to the
+Actor's current behavior. Instead, it makes the corresponding suspended
+task runnable.
+
+The implementation may use mechanisms such as epoll, kqueue, io_uring,
+callbacks, fibers, virtual threads, or other facilities without changing
+language semantics.
+## 32. Root Actor
+
+**CLOSED --- REVISED**
+
+Every Protos Process begins with a RootActor. Every Protos execution has a Process execution domain even when the RootActor is the only Actor ever created; the Process itself need not imply heavyweight Actor, Node, Cluster, routing, or distributed-runtime infrastructure.
+
+A trivial program may conceptually consist only of:
+
+    Process
+        |
+        v
+    RootActor
+
+The RootActor owns the initial Actor-local program state, including ordinary
+objects, module state, configuration, and Futures. The Process is the
+custodian of Process-local host authority such as arguments, environment,
+and standard I/O when those facilities are provisioned. Appropriate
+Process capabilities are made available to the RootActor at bootstrap;
+they are not thereby ordinary mutable state owned by the RootActor.
+
+The RootActor is an ordinary Protos Actor, so its initial program is not
+outside the module model merely because it started the Process. When the
+initial program corresponds to an importable canonical module, it is
+handled like the initial module of any other Actor and follows the same
+Actor-local module-cache identity rules.
+
+Within the RootActor, ordinary state access uses normal Protos semantics
+and does not incur Actor message-passing overhead.
+
+If the RootActor suffers a fatal unhandled failure in this minimal
+configuration, the Process terminates.
+
+No dedicated Supervisor Actor, Group controller, distributed membership
+service, or other unnecessary runtime machinery is required.
+
+Creating additional Actors explicitly introduces new isolation and
+parallelism boundaries.
+
+If a program never creates another Actor, the runtime or JIT may optimize
+away unnecessary Actor infrastructure.
+
+RootActor is strictly Process-scoped and ephemeral with its Process.
+Protos does not introduce an intrinsic distributed ApplicationRoot Actor.
+Distributed application or service continuity is expressed through
+Groups, discovery, Cluster/runtime control state, and explicit durable
+state as required.
+
+A future application identity may exist for deployment, configuration,
+observability, or ownership without becoming an Actor or a mandatory
+execution-hierarchy level.
+## 33. Global State
+
+**CLOSED**
+
+Protos does not introduce a special shared mutable global-state
+exception.
+
+State that is conceptually global to a simple program can initially
+remain ordinary mutable state owned by the RootActor.
+
+If additional Actors require access to that state, they communicate with
+the RootActor through Actor communication.
+
+Principle:
+
+> Global state starts as RootActor-local state and becomes distributed
+> only when the application introduces parallelism or isolation
+> boundaries.
+## 5. Actor Turns and Reentrancy
+
+**CLOSED**
+
+An Actor executes at most one segment or turn of Protos code at a time.
+
+A message handler or task retains exclusive execution within the Actor
+until it completes or reaches an explicit suspension point.
+
+For example:
+
+    data: socket.read().value()
+
+If `value()` must wait, the current task is suspended and the Actor may
+execute other runnable work.
+
+When the suspended task becomes runnable again, its continuation
+executes in a later turn.
+
+Consequently, Actor-local mutable state may have changed across an
+explicit suspension point.
+
+Between suspension points, Actor-local state is serialized and race-free
+with respect to other work in the same Actor.
+
+The model is therefore sequential but reentrant at explicit suspension
+points.
+
+Explicit isolated parallel computation does not weaken this rule. Code
+executing in such a computation does not execute as another simultaneous
+turn against the Actor's mutable object graph; it crosses a separate
+isolation boundary and may only interact with the Actor through the
+value/result semantics defined for parallel execution.

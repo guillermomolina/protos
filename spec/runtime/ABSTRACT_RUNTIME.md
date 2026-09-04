@@ -1,22 +1,22 @@
 # Protos Abstract Runtime v0.1
 
-Language version: 0.1  
-Document revision: 326
-Status: Draft  
+Language version: 0.1
+Document revision: 328
+Status: Informative — non-normative
 Last updated: 2026-09-04
-This document defines executable-style pseudocode for the core runtime operations of the language.
+This document is an informative abstract execution model and pseudocode aid.
 
-It complements:
+It does not independently define observable Protos semantics. Normative behavior
+is owned by `../PROTOS_LANGUAGE_SPEC.md`, `../PROTOS_GRAMMAR.md`, the semantic
+modules under `../semantics/`, the concurrency modules under `../concurrency/`,
+and the I/O modules under `../io/`.
 
-- `../PROTOS_LANGUAGE_SPEC.md`
-- `../PROTOS_GRAMMAR.md`
-- `../../io/IO_CORE.md`
+When pseudocode or explanatory prose in this document appears to conflict with a
+normative owner, the normative owner controls and this document must be corrected.
+Implementations may use different machinery whenever they preserve the normative
+observable behavior.
 
-- the normative CLOSED sections of `../PROTOS_CONCURRENCY_MODEL.md`
-
-Unresolved sections and explicitly open subtopics in the mixed concurrency
-document are non-normative.
-The goal is not to mandate an implementation strategy, but to define observable behavior precisely enough that different interpreters or VMs can behave consistently.
+`../PROTOS_CONCURRENCY_MODEL.md` is a non-normative historical/design ledger.
 
 ---
 
@@ -73,7 +73,7 @@ Future
     adoptedSource          // pending Future whose outcome is being adopted, or none
 ```
 
-These fields are conceptual. An implementation may represent them differently. The I/O-operation commitment state described in `../../io/IO_CORE.md` is not an additional Future state: a Future remains exactly pending, resolved, failed, or cancelled.
+These fields are conceptual. An implementation may represent them differently. The I/O-operation commitment state described in `../io/IO_CORE.md` is not an additional Future state: a Future remains exactly pending, resolved, failed, or cancelled.
 
 **The Lexical Parent of an Execution Context:**
 
@@ -2047,7 +2047,7 @@ programmer-visible lifecycle state, ordering rule, failure detector, partition
 policy, ownership edge, authority grant, bootstrap path, or Error-transfer
 mechanism.
 
-`../../io/IO_CORE.md` remains the primary owner of I/O-specific producer
+`../io/IO_CORE.md` remains the primary owner of I/O-specific producer
 commitment/cancellation consequences when Actor termination requests cancellation
 of outstanding I/O operations.
 

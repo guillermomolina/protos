@@ -1,17 +1,17 @@
 # Core Language Specification v0.1
 
-Language version: 0.1  
-Document revision: 327
-Status: Draft  
+Language version: 0.1
+Document revision: 328
+Status: Draft
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `io/IO_CORE.md`.
 
 Normative semantic-domain ownership is modularized under `semantics/`: `OBJECT_MODEL.md`, `EXECUTION_AND_CONTROL.md`, `CALLABLES.md`, `MODULES.md`, `ERRORS.md`, and `VALUES_AND_COLLECTIONS.md`. Compatibility headings retained in this document are navigation only.
 
 
-Normative Actor/Future/concurrency-domain semantics are also defined by the
-CLOSED sections of `PROTOS_CONCURRENCY_MODEL.md`; unresolved sections and
-explicitly open subtopics in that mixed document are non-normative.
+Normative concurrency-domain semantics are defined by the modular specifications
+under `concurrency/`. `PROTOS_CONCURRENCY_MODEL.md` is a non-normative historical
+and design ledger and must not be used as a source of observable behavior.
 ## Language Name
 
 The language defined by this specification is named **Protos**.
@@ -1567,7 +1567,7 @@ Blank-line whitespace stripping occurs only where the closing `"""` establishes 
 ```js
 """
     one
-    
+
     two
     """
 ```
@@ -1590,7 +1590,7 @@ When content flows into the closing delimiter on its source line, no structural 
 
 ```js
 """one
-       
+
 two"""
 ```
 

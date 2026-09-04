@@ -308,7 +308,7 @@ Normative domain models supplement those core documents for semantically substan
 - `spec/concurrency/FUTURES_AND_TASKS.md` — primary normative owner of migrated Core Future/task semantics.
 - `spec/concurrency/ACTORS.md` — primary normative owner of migrated Core Actor semantics.
 - `spec/concurrency/PARALLEL_EXECUTION.md` — primary normative owner of migrated Core isolated-parallel (P) semantics.
-- `spec/PROTOS_CONCURRENCY_MODEL.md` — transitional mixed design ledger. CLOSED material that has not yet been migrated remains normative there; compatibility anchors for migrated sections are non-owning references. OPEN/PENDING/DIRECTION/API-OPEN/design-only material remains non-normative.
+- `spec/PROTOS_CONCURRENCY_MODEL.md` — non-normative historical/design ledger; it contains no normative observable behavior after revision 328.
 - `spec/concurrency/DISTRIBUTED_RUNTIME.md` — primary normative owner of migrated Process/Node/Cluster/Group/distributed-runtime semantics; unresolved design-qualified material remains in the transitional ledger.
 
 Treat the canonical core documents together with applicable normative domain models as the source of truth for observable language/standard semantics in their respective domains.
@@ -321,7 +321,7 @@ The documents have distinct responsibilities:
 
 - `PROTOS_LANGUAGE_SPEC.md` defines the language model and observable semantics.
 - `PROTOS_GRAMMAR.md` defines lexical structure, syntax, precedence, parsing rules, mandatory desugarings, and the canonical semantic AST.
-- `runtime/ABSTRACT_RUNTIME.md` defines executable semantic rules and runtime pseudocode.
+- `runtime/ABSTRACT_RUNTIME.md` is a non-normative abstract execution/pseudocode model constrained by the normative owners.
 - `spec/io/IO_CORE.md` owns observable I/O-domain semantics and should be referenced rather than duplicated when another document only needs an I/O rule.
 
 Do not treat runtime pseudocode as permission to change language semantics.

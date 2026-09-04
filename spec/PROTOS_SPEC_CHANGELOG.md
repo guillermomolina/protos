@@ -8,6 +8,33 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.328] - 2026-09-04
+
+### Migrated
+- Migrated the remaining exact-CLOSED concurrency-ledger contracts.
+- Moved legacy §§1-4, §6, §32, and §33 to `concurrency/ACTORS.md`.
+- Split mixed legacy §5 by primary ownership: Actor-turn semantics to
+  `ACTORS.md`, task/error-handler integration to `FUTURES_AND_TASKS.md`,
+  P failure transfer to `PARALLEL_EXECUTION.md`, and Map comparison/suspension
+  integration to `semantics/VALUES_AND_COLLECTIONS.md`.
+- Moved legacy §34 and §34A Actor/module-state contracts to
+  `semantics/MODULES.md`.
+- Moved legacy §72 standard-prelude sharing to `semantics/MODULES.md`.
+- Moved legacy §72A-§72D application/service-identity, discovery, ActorRef-routing,
+  and logical-vs-physical-topology boundaries to
+  `concurrency/DISTRIBUTED_RUNTIME.md`.
+
+### Authority
+- Retired `PROTOS_CONCURRENCY_MODEL.md` as a normative source. It is now an
+  entirely non-normative historical/design ledger.
+- Reclassified `runtime/ABSTRACT_RUNTIME.md` as informative non-normative
+  pseudocode constrained by the modular normative specifications.
+- Updated Language and AGENTS authority descriptions accordingly.
+
+### Compatibility
+- This revision changes specification ownership and organization only; it does
+  not intentionally change observable Protos behavior.
+
 ## [0.1.327] - 2026-09-04
 
 ### Migrated
