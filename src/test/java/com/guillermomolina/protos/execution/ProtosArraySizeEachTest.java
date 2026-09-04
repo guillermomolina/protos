@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -52,51 +53,61 @@ class ProtosArraySizeEachTest {
     void eachVisitsSnapshotInOrderAndReturnsOriginalReceiver() throws IOException {
         ProtosPrelude prelude = corePrelude();
         ProtosActivation activation = prelude.newModuleActivation();
+        ProtosArrayValue xs =
+                prelude.newArray(
+                        java.util.List.of(
+                                new ProtosIntegerValue(BigInteger.TEN),
+                                new ProtosIntegerValue(BigInteger.valueOf(20))));
+        java.util.List<Object> seen = new java.util.ArrayList<>();
+        ProtosClosureValue callback =
+                ProtosClosureValue.nativeClosure(
+                        (callbackActivation, supplied) -> {
+                            seen.add(supplied.get(0));
+                            return supplied.get(0);
+                        });
+        activation.context().createLocalSlot("xs", xs);
+        activation.context().createLocalSlot("callback", callback);
 
-        Object result = execute(
-                activation,
-                """
-                xs: Array(10, 20)
-                seen: Array(0, 0)
-                i: 0
-                callback: (value) => {
-                    seen[i] = value
-                    i = i + 1
-                    value
-                }
-                xs.each(callback)
-                """);
+        Object result = execute(activation, "xs.each(callback)");
 
-        ProtosArrayValue xs = (ProtosArrayValue) activation.context().readLocalSlot("xs").orElseThrow();
-        ProtosArrayValue seen = (ProtosArrayValue) activation.context().readLocalSlot("seen").orElseThrow();
         assertSame(xs, result);
-        assertEquals(BigInteger.TEN, ((ProtosIntegerValue) seen.indexedAt(BigInteger.ZERO)).value());
-        assertEquals(BigInteger.valueOf(20), ((ProtosIntegerValue) seen.indexedAt(BigInteger.ONE)).value());
+        assertEquals(BigInteger.TEN, ((ProtosIntegerValue) seen.get(0)).value());
+        assertEquals(BigInteger.valueOf(20), ((ProtosIntegerValue) seen.get(1)).value());
     }
 
     @Test
     void eachUsesShallowSnapshotWhenCallbackReplacesLaterElement() throws IOException {
         ProtosPrelude prelude = corePrelude();
         ProtosActivation activation = prelude.newModuleActivation();
+        ProtosArrayValue xs =
+                prelude.newArray(
+                        java.util.List.of(
+                                new ProtosIntegerValue(BigInteger.ONE),
+                                new ProtosIntegerValue(BigInteger.TWO)));
+        java.util.List<Object> seen = new java.util.ArrayList<>();
+        java.util.concurrent.atomic.AtomicInteger invocation =
+                new java.util.concurrent.atomic.AtomicInteger();
+        ProtosClosureValue callback =
+                ProtosClosureValue.nativeClosure(
+                        (callbackActivation, supplied) -> {
+                            seen.add(supplied.get(0));
+                            if (invocation.getAndIncrement() == 0) {
+                                xs.indexedPut(
+                                        BigInteger.ONE,
+                                        new ProtosIntegerValue(BigInteger.valueOf(99)));
+                            }
+                            return supplied.get(0);
+                        });
+        activation.context().createLocalSlot("xs", xs);
+        activation.context().createLocalSlot("callback", callback);
 
-        execute(
-                activation,
-                """
-                xs: Array(1, 2)
-                seen: Array(0, 0)
-                i: 0
-                callback: (value) => {
-                    seen[i] = value
-                    i = i + 1
-                    xs[1] = 99
-                    value
-                }
-                xs.each(callback)
-                """);
+        execute(activation, "xs.each(callback)");
 
-        ProtosArrayValue seen = (ProtosArrayValue) activation.context().readLocalSlot("seen").orElseThrow();
-        assertEquals(BigInteger.ONE, ((ProtosIntegerValue) seen.indexedAt(BigInteger.ZERO)).value());
-        assertEquals(BigInteger.TWO, ((ProtosIntegerValue) seen.indexedAt(BigInteger.ONE)).value());
+        assertEquals(BigInteger.ONE, ((ProtosIntegerValue) seen.get(0)).value());
+        assertEquals(BigInteger.TWO, ((ProtosIntegerValue) seen.get(1)).value());
+        assertEquals(
+                BigInteger.valueOf(99),
+                ((ProtosIntegerValue) xs.indexedAt(BigInteger.ONE)).value());
     }
 
     @Test

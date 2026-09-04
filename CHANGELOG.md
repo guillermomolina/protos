@@ -4,6 +4,26 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.39-SNAPSHOT] - 2026-09-04
+
+### Fixed
+
+- Corrected P56 `Array.each` tests so they validate callback order and shallow
+  snapshot behavior without depending on the not-yet-implemented standard
+  numeric `+` operator.
+- The revised tests use ordinary invokable native-backed Closure values only as
+  test callbacks, preserving the same `Array.each` invocation path while
+  isolating the behavior under test.
+- Project implementation version changed from `0.2.38-SNAPSHOT` to `0.2.39-SNAPSHOT`.
+
+### Notes
+
+- No `Array.each` runtime semantics are changed.
+- No numeric arithmetic behavior is introduced.
+- D027/B003 remains untouched.
+- No normative specification change is introduced.
+
+
 ## [0.2.38-SNAPSHOT] - 2026-09-04
 
 ### Added
