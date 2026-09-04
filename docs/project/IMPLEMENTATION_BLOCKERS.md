@@ -53,6 +53,40 @@ implementation-specific internal representations when observable Protos
 semantics are preserved. The blocker is therefore narrowed back to the actual
 unresolved observable case: the result of an empty `Sequence`.
 
+## B003 — Delegation parent / lookup chain of canonical Boolean values
+
+Status: BLOCKED
+
+Implementation area:
+Standard prototype/delegation bridge for the canonical `true` and `false` runtime
+representations, including ordinary member lookup and polymorphic invocation
+through their delegation chains.
+
+Normative dependency:
+Core fixes `true` and `false` as the only semantic Boolean values and defines
+their standard Boolean-family protocol, but the implementation must not choose
+their immediate delegation parent or introduce a `Boolean` prototype merely as
+an implementation convenience. D027 owns the normative closure of that object
+model relationship.
+
+Specification authority:
+- `spec/semantics/OBJECT_MODEL.md`
+- `spec/semantics/VALUES_AND_COLLECTIONS.md`
+
+Unblock condition:
+The current normative specification explicitly and uniquely determines the
+delegation parent / ordinary lookup chain of canonical `true` and `false`,
+including whether any standard Boolean prototype object exists.
+
+Current consequence:
+The standard value-prototype bridge deliberately excludes `true` and `false`.
+No fallback to `Object`, synthetic `Boolean` prototype, or hidden host dispatch
+is permitted while this blocker remains open.
+
+Independent work:
+Numeric and other value families whose standard prototype/delegation hierarchy
+is already normatively closed may continue independently.
+
 ## B002 — Delegation parent of `without` / `alias` result objects
 
 Status: CLOSED

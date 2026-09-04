@@ -54,6 +54,15 @@ public final class ProtosCoreBootstrap {
                 .load(coreDirectory.resolve("context.protos"))
                 .call(bootstrapActivation);
         sourceLoader
+                .load(coreDirectory.resolve("number.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("integer.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("float.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
                 .load(coreDirectory.resolve("error.protos"))
                 .call(bootstrapActivation);
         sourceLoader
@@ -79,6 +88,14 @@ public final class ProtosCoreBootstrap {
             throw new IllegalStateException(
                     "Core Context prototype must delegate directly to Object");
         }
+
+        ProtosObjectValue numberPrototype =
+                requirePrototype(
+                        bootstrapContext, "Number", ProtosObjectValue.rootObject());
+        ProtosObjectValue integerPrototype =
+                requirePrototype(bootstrapContext, "Integer", numberPrototype);
+        ProtosObjectValue floatPrototype =
+                requirePrototype(bootstrapContext, "Float", numberPrototype);
 
         Object errorBinding =
                 bootstrapContext
@@ -135,6 +152,9 @@ public final class ProtosCoreBootstrap {
         ProtosObjectValue preludeBindings =
                 new ProtosObjectValue(contextPrototype);
         preludeBindings.createLocalSlot("Context", contextPrototype);
+        preludeBindings.createLocalSlot("Number", numberPrototype);
+        preludeBindings.createLocalSlot("Integer", integerPrototype);
+        preludeBindings.createLocalSlot("Float", floatPrototype);
         preludeBindings.createLocalSlot("Error", errorPrototype);
         preludeBindings.createLocalSlot(
                 "InvalidReturn", invalidReturnPrototype);
@@ -142,5 +162,27 @@ public final class ProtosCoreBootstrap {
         preludeBindings.freeze();
 
         return new ProtosPrelude(preludeBindings, contextPrototype);
+    }
+
+    private static ProtosObjectValue requirePrototype(
+            ProtosObjectValue bootstrapContext,
+            String name,
+            Object expectedParent) {
+        Object binding =
+                bootstrapContext
+                        .readLocalSlot(name)
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Core bootstrap did not define " + name));
+        if (!(binding instanceof ProtosObjectValue prototype)) {
+            throw new IllegalStateException(
+                    "Core " + name + " binding is not an ordinary object");
+        }
+        if (prototype.parent().orElse(null) != expectedParent) {
+            throw new IllegalStateException(
+                    "Core " + name + " prototype has the wrong delegation parent");
+        }
+        return prototype;
     }
 }

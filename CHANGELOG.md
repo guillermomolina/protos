@@ -4,6 +4,39 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.30-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added source-backed standard `Number`, `Integer`, and `Float` prototype objects
+  under `protos/lib/core/`.
+- Added the runtime value-lookup bridge that maps semantic Integer and Float
+  value representations into those source-backed ordinary prototype chains.
+- Added coverage for numeric prototype hierarchy, inherited numeric lookup,
+  exact receiver preservation, and ordinary objects delegating to numeric
+  values.
+- Added implementation blocker B003 so canonical Boolean parentage remains
+  explicitly deferred to D027 rather than being guessed by the runtime.
+
+### Changed
+
+- Core bootstrap now loads and validates `Number -> Object`,
+  `Integer -> Number`, and `Float -> Number`, then publishes those exact objects
+  in the frozen prelude.
+- Member lookup, invocation lookup, and activation receiver fallback now use the
+  semantic value lookup bridge when a Core prelude is available.
+- Project implementation version changed from `0.2.29-SNAPSHOT` to `0.2.30-SNAPSHOT`.
+
+### Notes
+
+- This change intentionally does not choose a parent for canonical `true` or
+  `false`, does not create a `Boolean` prototype, and does not install Boolean
+  lookup behavior. That work remains blocked on D027.
+- String/null and the remaining standard value families are not assigned
+  substitute parentage by this increment.
+- No normative specification change is introduced.
+
+
 ## [0.2.29-SNAPSHOT] - 2026-09-04
 
 ### Added

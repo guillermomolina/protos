@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosSlotLookupResult;
+import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import java.util.List;
 import java.util.Objects;
 
@@ -33,13 +34,15 @@ public final class ProtosInvocation {
         Objects.requireNonNull(receiver, "receiver");
         Objects.requireNonNull(supplied, "supplied");
         Objects.requireNonNull(caller, "caller");
-        if (!(receiver instanceof ProtosObjectValue objectReceiver)) {
-            throw new UnsupportedOperationException(
-                    "Polymorphic invocation through non-ordinary value prototypes requires standard prototype bootstrap");
-        }
+        com.guillermomolina.protos.runtime.ProtosPrelude prelude =
+                caller.prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "polymorphic invocation requires an owning Core prelude"));
         return invokeSelected(
                 receiver,
-                objectReceiver.lookupSlot("call").orElseThrow(
+                ProtosValueLookup.lookup(receiver, "call", prelude).orElseThrow(
                         () -> new ProtosSignalException(ProtosCoreErrors.newError(caller))),
                 supplied,
                 caller);

@@ -22,6 +22,7 @@ import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosSlotLookupResult;
+import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.source.SourceSpan;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node.Child;
@@ -43,18 +44,23 @@ public final class ProtosMemberReadNode extends ProtosExpressionNode {
     @Override
     public Object execute(VirtualFrame frame) {
         Object receiverValue = receiverNode.execute(frame);
-        if (!(receiverValue instanceof ProtosObjectValue receiver)) {
-            throw new ProtosSignalException(ProtosCoreErrors.newError(ProtosFrameArguments.activation(frame)));
-        }
+        com.guillermomolina.protos.runtime.ProtosActivation activation =
+                ProtosFrameArguments.activation(frame);
+        com.guillermomolina.protos.runtime.ProtosPrelude prelude =
+                activation.prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "member lookup requires an owning Core prelude"));
 
         ProtosSlotLookupResult result =
-                receiver.lookupSlot(name)
+                ProtosValueLookup.lookup(receiverValue, name, prelude)
                         .orElseThrow(
                                 () -> new ProtosSignalException(
-                                        ProtosCoreErrors.newError(ProtosFrameArguments.activation(frame))));
+                                        ProtosCoreErrors.newError(activation)));
 
         if (result.value() instanceof ProtosClosureValue closure) {
-            return closure.bindMethod(receiver, result.home());
+            return closure.bindMethod(receiverValue, result.home());
         }
         return result.value();
     }

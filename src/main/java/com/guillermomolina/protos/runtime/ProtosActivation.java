@@ -223,12 +223,16 @@ public final class ProtosActivation {
             }
         }
 
+        if (prelude != null) {
+            return ProtosValueLookup.lookup(receiver, name, prelude)
+                    .map(ProtosSlotLookupResult::value);
+        }
         if (receiver instanceof ProtosObjectValue ordinaryReceiver) {
             return ordinaryReceiver.readSlot(name);
         }
 
         throw new UnsupportedOperationException(
-                "Lookup on non-ordinary Protos receivers requires standard prototype bootstrap");
+                "Lookup on a represented Protos value requires an owning Core prelude");
     }
 
     public Optional<ProtosObjectValue> writableLexicalContext(String name) {
