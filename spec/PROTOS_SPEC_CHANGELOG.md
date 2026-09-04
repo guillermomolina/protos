@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.296] - 2026-09-04
+
+### Closed
+- Closed `Physical-locality discovery` as runtime/administrative machinery rather
+  than a portable Core semantic facility.
+- Allowed runtimes to discover same-process, same-host, NUMA, rack, zone, region,
+  network, or equivalent physical relationships using implementation-specific
+  mechanisms.
+- Prohibited discovered locality from changing Protos identity, transferability,
+  mutable-state isolation, authority, ordering, acceptance, failure,
+  cancellation, uncertainty, or transport requirements.
+- Defined inability to discover locality as non-semantic; runtimes may fall back
+  to any other conforming transport/placement mechanism.
+- Kept physical-topology diagnostics outside portable Core.
+- Preserved the broader logical-vs-physical topology relationship as a separate
+  open topic.
+- Removed `Physical-locality discovery` from Open Design Topics.
+
+### Changed
+- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  296.
+
 ## [0.1.295] - 2026-09-04
 
 ### Fixed

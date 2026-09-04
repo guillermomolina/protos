@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 295
+Document revision: 296
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -1172,6 +1172,59 @@ remain separate open topics because they concern the representation contract
 needed when a transport serializes values, not which transport is selected.
 
 This closes the former open ledger item `Transport selection and switching`.
+
+## 20C. Physical Locality Discovery Is Runtime Machinery
+
+**CLOSED**
+
+Core v0.1 does not expose physical-locality discovery as a portable language
+facility.
+
+A runtime may determine or infer physical relationships needed for internal
+optimization or administration, including whether two runtime entities are:
+
+- in the same operating-system process;
+- on the same host;
+- on different hosts;
+- connected through shared-memory-capable infrastructure;
+- associated with particular CPU packages, NUMA domains, racks, zones, regions,
+  networks, or other physical/infrastructure locality domains.
+
+How that information is discovered is implementation machinery. The runtime may
+use operating-system information, deployment metadata, orchestrator APIs,
+network topology, runtime registration, static configuration, probes, or other
+mechanisms.
+
+Physical-locality knowledge does not itself create a new Protos semantic
+relationship. In particular, discovering that two entities are physically close
+must not:
+
+- merge Actor, Process, Node, Group, or Cluster identity;
+- make an otherwise non-transferable value transferable;
+- create shared mutable Protos identity;
+- grant communication, resource, lifecycle, placement, or administrative
+  authority;
+- alter message snapshot, ordering, acceptance, failure, cancellation, or
+  uncertainty semantics;
+- imply that a shared-memory or other optimized transport must be selected;
+- create a portable locality guarantee for future operations.
+
+Likewise, failure to discover or retain locality information is not a Core
+semantic failure. The runtime may fall back to any other conforming placement or
+transport mechanism.
+
+Core therefore defines no portable `sameHost`, `physicalLocation`,
+`localityOf`, `rack`, `zone`, `region`, `numaNode`, or equivalent introspection
+surface merely for transport/runtime optimization.
+
+Administrative diagnostics may expose physical topology outside portable Core.
+A future normative placement/topology facility may expose selected locality
+concepts only by defining their own identity, stability, authority, failure, and
+placement semantics explicitly.
+
+This closes the former open ledger item `Physical-locality discovery`.
+The broader relationship between logical Protos topology and physical
+infrastructure topology remains a separate open design topic.
 
 ## 21. Mailbox Bounds
 
@@ -6246,7 +6299,6 @@ mechanism, or implementation detail that still requires design.
 -   ActorRef persistence/serialization semantics, if any
 -   GroupRef persistence/serialization and capability semantics, if any
 -   Service discovery implementation
--   Physical-locality discovery
 -   Message serialization format
 -   Serialization versioning
 -   Schema evolution
