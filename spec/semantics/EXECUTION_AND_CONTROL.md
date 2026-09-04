@@ -43,6 +43,21 @@ Object
 
 `Context` is not a reserved word, and it is distinct from the reserved intrinsic pseudo-identifier `context`, which denotes the current execution context. Behavior provided by `Context` is inherited through ordinary Protos delegation; there is no separate runtime object category for execution contexts and no special lookup mechanism associated with `Context`.
 
+### Lexical Parent Relation
+
+Every execution context that participates in lexical lookup has an immediate **lexical parent context**, or no lexical parent when it is the lexical root. This semantic relation is distinct from ordinary object delegation and is not the `Context -> Object` delegation chain.
+
+For Core v0.1:
+
+- a Closure invocation's fresh activation context has the Closure's captured lexical context as its immediate lexical parent;
+- an object-construction context uses the genuine lexical context of the enclosing execution as its lexical parent while the object body executes, but the object under construction is not thereby captured as a lexical parent by methods created in that body;
+- a module's `moduleContext` has the frozen standard prelude context as its immediate lexical parent while the module body executes;
+- the frozen standard prelude context has no lexical parent.
+
+Following lexical parents therefore visits execution-context objects, but it never follows any visited context object's ordinary delegation parent. In particular, `Context`, `Object`, or behavior inherited through them does not become an unqualified lexical binding merely because execution contexts delegate through `Context`.
+
+Implementations may represent lexical-parent associations in activation metadata, environment records, links between context objects, or another form. That representation is not observable; the lexical traversal defined in §6 is.
+
 ### Object Construction Is Not a Lexical Capture Scope
 
 An object body executes with the object being constructed as its current slot-creation context, but the object itself does **not** become a lexical environment captured by method closures declared in that body.
@@ -72,12 +87,14 @@ A method may still capture genuine enclosing lexical contexts, such as module bi
 Conceptually, bare-name lookup inside a method is therefore:
 
 ```text
-current activation context
-        ↓
-genuine captured lexical contexts
-        ↓
+current activation context (local slots only)
+        ↓ lexical parent
+genuine captured lexical contexts (local slots only)
+        ↓ lexical parent
+standard prelude when present in that lexical chain (local slots only)
+        ↓ after lexical exhaustion
 this
-        ↓
+        ↓ ordinary delegation
 parent of this
         ↓
 ...
@@ -120,73 +137,79 @@ keeps:
 this === rex
 ```
 
-`this` is an intrinsic pseudo-identifier supplied by the execution context.
+`this` is an intrinsic pseudo-identifier supplied by the current execution state. It is not an ordinary bare identifier and does not execute the unqualified-name algorithm in §6. The same distinction applies to the intrinsic pseudo-identifiers `context` and `args`. `super` is governed separately by §8 and is not a bare-name lookup.
 ## 6. Unqualified Lookup
 
-An expression such as:
+An ordinary bare identifier expression such as:
 
 ```js
 name
 ```
 
-performs implicit contextual lookup.
+performs unqualified contextual lookup. This section is the primary normative owner of that lookup algorithm.
 
-Lookup conceptually proceeds through:
+The algorithm is exactly:
 
-```text
-current context
-        ↓
-captured lexical contexts
-        ↓
-this
-        ↓
-parent of this
-        ↓
-parent of parent
-        ↓
-...
-```
+1. Start with the current execution context as the current lexical context.
+2. Inspect **only the local slots** of that lexical context for `name`. Do not consult that context object's ordinary delegation parent.
+3. If a local slot named `name` exists, return its exact current value and stop.
+4. Otherwise move to the immediate lexical parent defined in §4 and repeat steps 2-4 until the lexical chain is exhausted. The frozen standard prelude participates when, and only when, it is on that lexical chain.
+5. If the lexical chain is exhausted and the current execution has an ordinary receiver `this`, perform an ordinary member read for `name` starting at `this`. This receiver phase searches `this` and then its ordinary delegation parents under `OBJECT_MODEL.md`; when the selected value is a method Closure, the binding rules in `CALLABLES.md` preserve the original receiver.
+6. If no lexical local slot exists and the receiver phase is absent or also finds no slot, signal a fresh standard `SlotNotFound` failure under the Error-object construction and identity rules owned by `ERRORS.md`. Failed lookup never implicitly produces `null`.
 
-Lookup stops at the first matching slot.
+The order above is fixed. In particular:
 
-If no slot is found, a fresh standard `SlotNotFound` failure is signaled under
-the Error-object construction and identity rules owned by `ERRORS.md`. A failed
-lookup never implicitly produces `null`.
-## 7. Unqualified Assignment
+- ordinary delegation of an execution context never participates in the lexical phase, so a slot available only through `context -> Context -> Object` does not satisfy a bare read;
+- the entire lexical chain is searched before receiver fallback, so any lexical binding — including a prelude binding when the prelude is on that chain — shadows a same-named receiver slot;
+- receiver fallback is ordinary member lookup and may therefore find a slot inherited through the receiver's delegation chain;
+- no Process-wide, Actor-wide, module-cache-wide, host-global, or other implicit global namespace is searched;
+- an explicit member read such as `context.name` or `object.name` is a different operation: it follows the ordinary member-lookup rules of `OBJECT_MODEL.md`, including ordinary delegation.
 
-An assignment:
+Closure capture does not snapshot these slot values. Closures capture their genuine lexical execution contexts by reference under `CALLABLES.md`, so later mutation of an existing captured slot, and later creation of a slot in a still-captured context where creation is otherwise valid, is observed by subsequent bare lookup through that same context.
+
+At module top level, the current lexical context is the module's `moduleContext` and its lexical parent is the frozen standard prelude. Module execution has no additional implicit global receiver namespace. Consequently the module-top-level bare-name path is exactly: local module binding, then local prelude binding, then absence. Module-specific ownership, freezing, isolation, and import behavior remain owned by `MODULES.md`.
+## 7. Unqualified Assignment and Creation
+
+Bare read, bare assignment, and bare creation are distinct operations and do not share one generic lookup walk.
+
+For bare assignment:
 
 ```js
 x = value
 ```
 
-first searches writable lexical contexts.
+the right-hand side is evaluated under the ordinary evaluation-order rules, then the destination is selected as follows:
 
-If `x` is not found there, assignment may modify a slot belonging **locally to the receiver `this`**.
+1. Starting at the current execution context, inspect only local slots for `x`; if absent, continue through immediate lexical parents, again inspecting local slots only.
+2. The first lexical context with a local slot named `x` is the selected destination. If that selected slot cannot be modified under the ordinary object-state rules, assignment fails there; it does not continue to an outer lexical context or to `this`.
+3. If the complete lexical chain contains no local slot named `x` and the current execution has an ordinary receiver `this`, inspect **only `this`'s own local slots**. If `this` has a local `x`, that slot is the selected destination.
+4. Do not follow ordinary delegation from any lexical context or from `this` while selecting an assignment destination. In particular, an inherited receiver slot is readable through the §6 receiver fallback but is not a destination for bare `=`.
+5. If no destination exists, signal a fresh standard `SlotNotFound` failure under the Error-object construction and identity rules owned by `ERRORS.md`. Bare assignment never creates a slot.
 
-Assignment never traverses the delegation parents of `this`.
+This search is for the nearest existing local binding, not for the nearest writable binding. A local binding that exists but is frozen, closed against the requested mutation, or otherwise non-modifiable wins the search and then causes the ordinary assignment failure; lookup does not skip it in search of a farther binding.
 
-If no writable destination exists, the operation fails.
-
-Creation:
+Bare creation:
 
 ```js
 x: value
 ```
 
-creates `x` in the current local context.
+performs no lookup. After evaluating `value`, it attempts ordinary slot creation named `x` **only on the current execution context**. Normal local creation/open/frozen/conflict rules apply. A successful bare creation may therefore shadow an outer lexical binding, a prelude binding, a receiver slot, or a receiver-delegated slot without modifying any of them.
 
-Inside a function, it is conceptually equivalent to:
+Inside a function, bare creation is conceptually equivalent to creating the slot directly on the current `context` object:
 
 ```js
 context.x: value
 ```
 
-To explicitly create state on the receiver:
+To explicitly create or assign receiver state, source uses an explicit member operation such as:
 
 ```js
 this.x: value
+this.x = value
 ```
+
+Those explicit member operations are governed by `OBJECT_MODEL.md`; they are not bare-name lookup and do not alter the lexical-parent relation.
 ## 8. `super`
 
 `super` is not another receiver and is not a first-class value. It is special lookup syntax.

@@ -8,6 +8,18 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.348] - 2026-09-04
+
+### Fixed
+- Closed D002 by making `semantics/EXECUTION_AND_CONTROL.md` the complete normative owner of ordinary bare-identifier lookup.
+- Defined lexical lookup as local-slot-only traversal of the current execution context and its lexical parents, followed only after lexical exhaustion by ordinary delegating member lookup from `this`.
+- Defined bare `:` as local creation with no lookup and bare `=` as nearest local lexical assignment followed only by an own-slot receiver fallback; bare assignment never delegates or creates.
+- Fixed module/prelude lookup, Closure capture-by-reference consequences, execution-state intrinsics, structural `super`, and the absence of implicit global lookup without changing ordinary member operations.
+- Confirmed the informative `runtime/ABSTRACT_RUNTIME.md` already matches this algorithm and requires no change.
+
+### Compatibility
+- This revision makes the existing intended evaluator contract normative and closes D002 without unrelated semantic change.
+
 ## [0.1.347] - 2026-09-04
 
 ### Fixed
