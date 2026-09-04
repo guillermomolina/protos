@@ -9,6 +9,37 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.374] - 2026-09-04
+
+### Future result identity semantics (D036)
+- Defines the general Core-standard Future result-identity rule: unless an
+  operation expressly returns an already-existing Future, every successfully
+  dispatched invocation that produces a Future result produces a fresh standard
+  Future identity belonging to that invocation.
+- Makes distinct invocation results observably distinct through `===`, `!==`,
+  `identityHashOf`, and `IdentityMap`, including immediately resolved, failed,
+  or cancelled results; implementations may not cache one terminal Future or
+  accidentally share one pending Future as the semantic result of distinct
+  invocations.
+- Separates Future identity from outcome identity: adoption, resolved values,
+  and stored Error identity continue to follow their existing contracts, so
+  fresh result Futures do not imply fresh values or fresh Errors.
+- Excludes operations whose normative contract expressly returns a pre-existing
+  Future, including a receiver or another already-existing Future required by
+  that operation's own result rule.
+- Recasts idempotent I/O lifecycle identity as a specialization of the general
+  Future rule: distinct invocations keep distinct Future identities while still
+  observing the same single logical lifecycle and, where required, the same
+  recorded terminal Error.
+
+### Compatibility
+- Closes implementation-selectable Future-result aliasing and cross-invocation
+  cancellation/continuation coupling. Scalar replacement, allocation elision,
+  virtualization, pooling, shared immutable backing, canonical terminal-state
+  representation, cached completion metadata, and equivalent physical
+  optimizations remain permitted when observable Future identity and Future-local
+  effects are preserved.
+
 ## [0.1.373] - 2026-09-04
 
 ### Fresh and independent standard Bytes results (D035)

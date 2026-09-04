@@ -26,6 +26,42 @@ There are no `async` functions and no `await` keyword.
 
 An ordinary function may simply return a Future.
 
+### Future result identity
+
+Unless the normative contract of a Core-standard operation expressly says that
+its Future result is an already-existing Future object, every successfully
+dispatched invocation that produces a Future as its operation result produces a
+fresh standard Future identity belonging to that invocation. Futures produced
+by distinct such invocations are therefore distinct under `===` and `!==`, have
+their own identity as observed by `identityHashOf` and `IdentityMap`, and do not
+become the same Future merely because they have the same producer, arguments,
+logical operation, immediately known outcome, or eventual terminal outcome.
+
+This rule applies equally when the produced Future can be terminal immediately.
+An implementation must not reuse a cached resolved, failed, or cancelled Future
+as the result identity of distinct invocations, and it must not share one pending
+result Future between distinct invocations. Consequently, cancellation,
+continuation attachment, waiting, or other Future-local observation of one such
+result cannot act on another invocation merely through accidental Future
+aliasing.
+
+Fresh Future identity is distinct from the identity of the eventual outcome.
+Resolution and adoption retain the value/Error identity rules specified below;
+creating distinct result Futures does not by itself require copying, cloning, or
+freshening the values or Errors that those Futures eventually observe.
+
+The rule does not apply when an operation's normative contract expressly returns
+a pre-existing Future, including a Future receiver or another Future supplied or
+obtained under that contract. Such an operation preserves the identity required
+by its own result rule rather than manufacturing a replacement Future merely
+because the result happens to be a Future.
+
+Freshness is semantic, not an allocation prescription. Implementations may use
+scalar replacement, allocation elision, virtualization, pooling, shared immutable
+backing, canonical terminal-state representation, cached completion metadata, or
+other internal sharing provided all Protos-observable Future identities and
+Future-local effects remain exactly as specified.
+
 ## 27. Asynchronous Execution
 
 A closure may request asynchronous execution:

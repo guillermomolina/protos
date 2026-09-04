@@ -228,12 +228,11 @@ The exact internal mechanism used to preserve this contract is implementation-de
 
 ### Idempotent lifecycle Future identity
 
-For every standardized Future-returning lifecycle operation whose contract
-defines repeated invocation as logically idempotent, each successfully
-dispatched invocation produces a **fresh standard Future object**. Futures
-returned by distinct invocations are distinct under `===`, including calls made
-while the same lifecycle is still pending and calls made after that lifecycle
-has already reached a terminal outcome.
+The general Core-standard Future result-identity rule is owned by
+`../concurrency/FUTURES_AND_TASKS.md` §26. Therefore each successfully dispatched
+invocation of a standardized Future-returning idempotent lifecycle operation
+produces its own fresh standard Future identity unless that operation expressly
+specifies an existing Future result.
 
 Fresh Future identity does not begin a fresh lifecycle attempt. All invocations
 that observe one idempotent lifecycle observe that lifecycle's single logical
@@ -246,10 +245,11 @@ failed lifecycle rather than retrying it.
 
 Where the lifecycle contract requires preservation of an exact recorded Error
 object, every fresh Future that re-observes that failed lifecycle fails with
-that exact Error object within the same value/isolation domain. This rule
-changes only the identity of the returned Future objects; it does not weaken
-Error-identity guarantees, create a canonical lifecycle Future, introduce a
-Future subtype or wrapper, or add a hidden lifecycle token.
+that exact Error object within the same value/isolation domain. This
+specialization changes only lifecycle sharing and outcome observation; it does
+not weaken the general Future identity rule, weaken Error-identity guarantees,
+create a canonical lifecycle Future, introduce a Future subtype or wrapper, or
+add a hidden lifecycle token.
 
 ---
 ## 8. Closable
