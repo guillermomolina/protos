@@ -65,6 +65,9 @@ class ProtosCoreBootstrapTest {
                 prelude.newArray(java.util.List.of()).parent().orElseThrow());
         assertSame(
                 ProtosObjectValue.MutationState.FROZEN,
+                prelude.newFrozenArray(java.util.List.of()).mutationState());
+        assertSame(
+                ProtosObjectValue.MutationState.FROZEN,
                 bindings.mutationState());
         assertNotSame(first, second);
         assertSame(contextPrototype, first.parent().orElseThrow());

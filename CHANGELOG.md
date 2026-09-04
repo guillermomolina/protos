@@ -4,6 +4,36 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.18-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added implementation-private invocation-argument state to `ProtosActivation`.
+  Non-invocation activations expose no argument Array.
+- Added `ProtosPrelude.newFrozenArray(...)`, producing a fresh frozen standard
+  Array with the exact source-backed `Array` prototype.
+
+### Changed
+
+- Test preludes now include the mandatory standard `Array` binding introduced
+  by the source-backed Core bootstrap.
+- Project implementation version changed from `0.2.17-SNAPSHOT` to
+  `0.2.18-SNAPSHOT`.
+
+### Tests
+
+- Extended Core bootstrap coverage for fresh frozen standard Array
+  materialization.
+
+### Notes
+
+- This increment prepares the activation representation required by the
+  normative `args` semantics but does not yet establish callable activations,
+  bind parameters, or lower the `args` intrinsic.
+- No observable invocation shortcut or partial call execution is introduced.
+- No normative specification change is introduced.
+
+
 ## [0.2.17-SNAPSHOT] - 2026-09-04
 
 ### Added

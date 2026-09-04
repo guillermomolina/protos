@@ -32,6 +32,9 @@ public final class ProtosTestPrelude {
         ProtosObjectValue bindings = new ProtosObjectValue(context);
         bindings.createLocalSlot("Context", context);
         bindings.createLocalSlot("Error", error);
+        bindings.createLocalSlot(
+                "Array",
+                new ProtosObjectValue(ProtosObjectValue.rootObject()));
         bindings.freeze();
         return new ProtosPrelude(bindings, context);
     }

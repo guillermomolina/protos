@@ -82,6 +82,12 @@ public final class ProtosPrelude {
         return new ProtosArrayValue(arrayPrototype(), elements);
     }
 
+    public ProtosArrayValue newFrozenArray(java.util.List<?> elements) {
+        ProtosArrayValue array = newArray(elements);
+        array.freeze();
+        return array;
+    }
+
     public ProtosObjectValue newExecutionContext() {
         return new ProtosObjectValue(contextPrototype);
     }

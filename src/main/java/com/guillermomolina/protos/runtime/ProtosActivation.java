@@ -26,13 +26,14 @@ public final class ProtosActivation {
     private final List<ProtosObjectValue> capturedLexicalContexts;
     private final Object receiver;
     private final ProtosPrelude prelude;
+    private final ProtosArrayValue arguments;
     private final boolean construction;
 
     public ProtosActivation(
             ProtosObjectValue context,
             List<ProtosObjectValue> capturedLexicalContexts,
             Object receiver) {
-        this(context, capturedLexicalContexts, receiver, null, false);
+        this(context, capturedLexicalContexts, receiver, null, null, false);
     }
 
     static ProtosActivation withPrelude(
@@ -45,6 +46,7 @@ public final class ProtosActivation {
                 capturedLexicalContexts,
                 receiver,
                 Objects.requireNonNull(prelude, "prelude"),
+                null,
                 false);
     }
 
@@ -53,6 +55,7 @@ public final class ProtosActivation {
             List<ProtosObjectValue> capturedLexicalContexts,
             Object receiver,
             ProtosPrelude prelude,
+            ProtosArrayValue arguments,
             boolean construction) {
         this.context = Objects.requireNonNull(context, "context");
         this.capturedLexicalContexts =
@@ -60,6 +63,7 @@ public final class ProtosActivation {
                         capturedLexicalContexts, "capturedLexicalContexts"));
         this.receiver = Objects.requireNonNull(receiver, "receiver");
         this.prelude = prelude;
+        this.arguments = arguments;
         this.construction = construction;
     }
 
@@ -73,6 +77,7 @@ public final class ProtosActivation {
                 enclosing.lexicalContextsForClosureCapture(),
                 object,
                 enclosing.prelude,
+                null,
                 true);
     }
 
@@ -90,6 +95,10 @@ public final class ProtosActivation {
 
     public Optional<ProtosPrelude> prelude() {
         return Optional.ofNullable(prelude);
+    }
+
+    public Optional<ProtosArrayValue> arguments() {
+        return Optional.ofNullable(arguments);
     }
 
     public List<ProtosObjectValue> lexicalContextsForClosureCapture() {
