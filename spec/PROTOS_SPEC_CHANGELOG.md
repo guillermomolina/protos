@@ -8,6 +8,21 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.359] - 2026-09-04
+
+### String transformation surface (D020)
+- Closed the Core v0.1 status of `uppercase()` and `replace(...)`: neither
+  selector is a standard Core String operation.
+- Kept String immutability as the relevant Core rule while allowing libraries,
+  implementation extensions, and ordinary user objects to define those names
+  through normal slots and invocation.
+- Avoided importing platform/Unicode case-mapping, locale, normalization,
+  pattern, overlap, or empty-needle semantics into Core.
+
+### Compatibility
+- No existing Core String operation changes semantics; this only removes the
+  possibility of treating illustrative transformation names as portable Core.
+
 ## [0.1.358] - 2026-09-04
 
 ### GroupRef semantic identity (D021)
