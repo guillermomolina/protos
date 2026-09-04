@@ -56,6 +56,10 @@ does not imply filesystem, network, subprocess, Node, Cluster, or arbitrary nati
 authority. There is one logical Process domain but multiple Actor-local capability
 proxies may denote authority into it.
 
+### Root filesystem capability provisioning
+
+Filesystem authority remains separate from Process authority. When the host grants the initial program a default Core Filesystem capability, before the first source expression it provisions an additional local slot named `filesystem` on the same initial `moduleContext`. When no default filesystem authority is granted, that slot is absent rather than bound to `null`. The slot is bootstrap-local, not prelude/global state, an intrinsic, import side effect, or service locator; imported modules do not receive it automatically and Process possession alone cannot recover it. Additional/restricted Filesystem capabilities may be supplied explicitly. Filesystem capabilities have no Core P-transfer contract and cross Actor boundaries only through an explicit Actor-safe proxy/delegation contract; otherwise ordinary non-transferable-capability rules apply. Path and Encoding carry no such authority.
+
 Creating another Actor does not implicitly inherit Process. Explicitly supplying
 a Process capability in an Actor message or `Actor.spawn` initialization vector
 uses a Process-specific delegation contract: the destination receives an Actor-

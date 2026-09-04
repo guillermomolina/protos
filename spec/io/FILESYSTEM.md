@@ -42,7 +42,18 @@ write placement:
     append
 ```
 
-Exact construction/spelling of the options object is outside this document.
+### 18.0 Public open surface
+
+The portable call forms are `filesystem.open(path)` and `filesystem.open(path, options)`. The one-argument form means read access, existing target, preserved content, and positioned placement.
+
+`options` is an ordinary Protos object. Its standard option slots are exactly `read`, `write`, `create`, `createNew`, `truncate`, and `append`. Only local slots owned by that object participate; delegated slots are ignored. Each present standard slot must contain exactly canonical `true` or `false`. Missing slots default to `false`, except `read`, which defaults to `true`. Any other local slot makes the options invalid. The options object need not have a special prototype and need not be frozen or closed. Explicit `null` and non-object-domain values are invalid options.
+
+The tuple is: access from `read`/`write`; creation is `createNew` when true, otherwise `create` when true, otherwise `existing`; initial content is `truncate` when true, otherwise `preserve`; placement is `append` when true, otherwise `positioned`. `create` plus `createNew` is invalid, in addition to the combination rules below.
+
+After ordinary argument evaluation, `open` reads these local slots and snapshots their Boolean/default values exactly once during invocation. No getter/callback protocol is invoked. Later mutation cannot affect the captured configuration. An Error while evaluating the expression supplying `options` propagates before `open` is invoked.
+
+After successful dispatch, an invalid Path-domain argument, invalid options-domain value, invalid/unknown option slot, or invalid captured combination fails the returned Future with a fresh `InvalidIOArgument` under `IO_CORE.md`, before namespace/backend effects.
+
 
 `filesystem.open(path, options)` captures the complete semantic open configuration at invocation time, before the operation may remain pending, wait for another operation, or begin host/backend I/O. The captured configuration consists of the access, creation, initial-content, and write-placement choices defined above.
 
@@ -316,9 +327,12 @@ Possessing a `File` grants access only through the capabilities exposed by that 
 
 > Knowing a Path does not grant filesystem access. Filesystem authority is carried by a Filesystem capability.
 
-`Filesystem` is not a required Core-prelude binding. A Process host may provision one or more filesystem capabilities according to its policy.
+`Filesystem` is not a required Core-prelude binding and has no standard public constructor: authority cannot be manufactured by ordinary code. A Process host may provision zero or more filesystem capabilities according to policy. The Root bootstrap path is owned by `PROCESS_IO.md`; imported modules obtain Filesystem authority only when ordinary code explicitly passes a capability. Multiple capabilities may expose different bases, subtrees, virtual namespaces, or restrictions.
 
-`Path` is a standardized path value rather than merely an alias for `String`. Core v0.1 defines no special path literal syntax.
+`Path` is a standardized path value rather than merely an alias for `String`. Core v0.1 defines no special path literal syntax. `Path` is a standard frozen-prelude factory/prototype binding because it carries no filesystem authority.
+
+The minimum portable construction protocol is `Path.relative()` for the empty relative Path, `Path.rooted()` for the empty rooted Path, `path.child(name)` to append one normal component, and `path.parent()` to append one parent component. `child(name)` requires a String other than `""`, `"."`, or `".."`; it appends exactly that String as one component. Slash, backslash, colon, drive/UNC syntax, normalization, and host separators inside `name` acquire no structural meaning. No implicit String-to-Path coercion exists. All these operations are synchronous, immutable value construction and access no Filesystem.
+
 
 Every Filesystem defines the namespace/root/base used to interpret paths supplied to it.
 
@@ -361,7 +375,7 @@ Therefore unequal Path values may resolve to the same resource in a particular F
 
 A Path is immutable and carries no authority. It may cross Actor boundaries according to the ordinary rules for immutable values without transferring a Filesystem capability.
 
-The exact public constructors, parsing helpers, display syntax, and native-path conversion APIs remain outside Core v0.1. Any standardized constructor/parser that produces a portable Path must produce the semantic value described above rather than embedding the host platform's separator, drive, UNC, device-prefix, case-folding, or current-directory rules into Path identity.
+Beyond `Path.relative()`, `Path.rooted()`, `child(name)`, and `parent()`, display syntax, convenience parsers, and native-path conversion APIs remain outside Core v0.1. Any standardized constructor/parser that produces a portable Path must produce the semantic value described above rather than embedding the host platform's separator, drive, UNC, device-prefix, case-folding, or current-directory rules into Path identity.
 
 When a Filesystem maps a normal component to a concrete backend, that component is one logical child name. A backend that cannot represent that name may reject the operation, but it must not reinterpret one component as multiple components, a root/prefix change, a drive/device selector, or another authority-changing native syntax. Host-native path values that require such semantics belong behind an explicitly host-specific/native boundary.
 

@@ -71,18 +71,7 @@ portable Core one-shot encoding contract.
 
 
 
-`Encoding` is a standardized immutable/reusable descriptor/configuration abstraction outside the required Core prelude.
-
-The portable standardized encodings in v0.1 are:
-
-```text
-UTF8
-UTF16LE
-UTF16BE
-Latin1
-```
-
-Exact standard-library namespace/import spellings remain outside this document.
+`Encoding` is a standardized immutable/reusable descriptor/configuration abstraction and a standard frozen-prelude factory/prototype binding; it carries no I/O authority. The mandatory portable descriptors are obtained exactly as `Encoding.UTF8`, `Encoding.UTF16LE`, `Encoding.UTF16BE`, and `Encoding.Latin1`. Core v0.1 defines no String-name registry lookup, alias lookup, host codec discovery, or `Encoding("utf-8")` constructor. Host-provided additional Encoding values may be supplied explicitly by another capability.
 
 A Process host may additionally provide an `Encoding` object describing a host-selected standard-stream encoding even when that encoding is not one of the portable named values above.
 
@@ -169,6 +158,8 @@ This one-shot rule does not change streaming `TextWriter` state semantics. In pa
 ## 16. TextReader and readLine
 
 A standard `TextReader` layers decoding and text buffering over `ByteReadable`.
+
+`TextReader` and `TextWriter` are standard frozen-prelude factory/prototype bindings. Portable construction is `TextReader(source, encoding)` and `TextWriter(target, encoding)` for borrowing wrappers, and `TextReader.owning(source, encoding)` / `TextWriter.owning(target, encoding)` for owning wrappers. Each successful call creates a fresh wrapper identity and fresh per-flow codec state. Source must satisfy `ByteReadable`, target must satisfy `ByteWritable`, and encoding must be an Encoding descriptor; no coercion occurs. Invalid semantic arguments fail synchronously before wrapper creation or underlying I/O. Ownership follows `IO_CORE.md`, never enlarges authority, and wrapper construction introduces no hidden suspension.
 
 It may provide:
 

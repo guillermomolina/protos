@@ -8,6 +8,17 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.351] - 2026-09-04
+
+### Public Filesystem and I/O surface
+- Closed D011 with portable Path construction, ordinary Filesystem open option objects/defaults, and exact invocation-time option snapshot/validation.
+- Added authority-free prelude acquisition for Path, Encoding, BufferedReader/BufferedWriter, TextReader/TextWriter while keeping Filesystem authority explicitly host-provisioned and non-ambient.
+- Defined borrowed versus owning wrapper factories and portable InvalidIOArgument mapping for invalid open arguments/options without duplicating Error/Future semantics.
+- Integrated D010 by provisioning optional default Filesystem authority as a separate initial-module local capability rather than authority implicit in Process, imports, or prelude.
+
+### Compatibility
+- Closes previously unspecified public construction/acquisition spellings without changing existing I/O commitment, lifecycle, Future, Error-identity, Actor, or P owners.
+
 ## [0.1.350] - 2026-09-04
 
 ### Public Actor, P, and Process bootstrap surface

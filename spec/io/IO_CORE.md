@@ -31,8 +31,7 @@ The following are intentionally outside this I/O model:
 - portable or POSIX signal APIs;
 - process groups and sessions;
 - terminal/curses-style control protocols;
-- the exact public API for explicit wrapper-ownership acquisition;
-- exact standard-library namespace/import spellings;
+- exact standard-library namespace/import spellings beyond standard-prelude bindings explicitly required by sibling I/O modules;
 - filesystem operations beyond those explicitly defined here;
 - network authority acquisition and policy;
 - socket creation, `connect`, `bind`, `listen`, `accept`, datagram addressing, and transport-configuration APIs;
@@ -370,7 +369,7 @@ Thus output-wrapper close reconciles two distinct obligations without an impleme
 
 Closing an adapter does not automatically close the wrapped source/target.
 
-A concrete adapter API may explicitly acquire ownership. Exact ownership-option syntax is outside v0.1 I/O semantics.
+A concrete adapter API may explicitly acquire ownership. Standard Core byte wrappers use exact ordinary factory forms: `BufferedReader(source)` and `BufferedWriter(target)` borrow their underlying capability; `BufferedReader.owning(source)` and `BufferedWriter.owning(target)` own it. `BufferedReader` and `BufferedWriter` are standard frozen-prelude factory/prototype bindings. Each successful call creates a fresh wrapper. Invalid underlying protocol arguments fail synchronously before wrapper creation or underlying I/O. Ownership is fixed at construction, does not enlarge authority, and is not exclusive; multiple owning wrappers deliberately created for the same target observe the ordinary idempotent `Closable` consequences.
 
 When an adapter explicitly owns its target, close order is:
 
