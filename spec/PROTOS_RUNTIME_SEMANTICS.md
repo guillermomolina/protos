@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 302
+Document revision: 303
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2196,6 +2196,31 @@ function failFuture(future, error):
 
     future.state = failed
     future.error = error
+
+### Domain-local Future failure stores the exact Error object
+
+For an ordinary Future and an Error already in that Future's value/isolation
+domain:
+
+```text
+failFuture(future, error):
+    future.state = failed
+    future.error = error
+```
+
+the assignment to `future.error` is semantic object-reference preservation, not
+pseudocode shorthand for copying or reconstruction. `future.error === error`
+therefore holds for identity-bearing Error objects in that domain.
+
+A later `value()` observation re-signals that exact recorded object while still
+remaining a new consumer-side signaling event. Object identity preservation does
+not preserve the producer continuation, dynamic handlers, activation frames, or
+other control state.
+
+Boundary-specific transformations happen before this rule applies. In
+particular, P first transfers/reconstructs the Error into the caller domain and
+then fails the caller Future with that transferred object. No Actor-fatal Error
+is implicitly inserted into another Actor's Future.
 
     wakeWaiters(future)
 ```

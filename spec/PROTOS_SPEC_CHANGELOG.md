@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.303] - 2026-09-04
+
+### Fixed
+- Defined failed-Future Error object identity inside one Protos value/isolation
+  domain.
+- Required ordinary Future failure recording to preserve the exact Error object
+  rather than clone, wrap, snapshot, reconstruct, or substitute it.
+- Made repeated failed-Future observations re-signal that same Error object while
+  preserving the already-defined rule that each observation is a new
+  non-resumable signaling event.
+- Distinguished object identity from control state: preserving the Error object
+  does not preserve producer continuations, handlers, activations, or stacks.
+- Clarified that explicit boundaries remain authoritative: P transfers the Error
+  into the caller domain before caller-Future failure, while Actor-fatal Errors
+  do not implicitly cross Actor boundaries.
+- Aligned ordinary Future combinator "same Error" propagation with exact
+  domain-local Error identity unless a boundary-specific rule says otherwise.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 303.
+  `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain normative
+  clarification in this revision.
+
 ## [0.1.302] - 2026-09-04
 
 ### Fixed

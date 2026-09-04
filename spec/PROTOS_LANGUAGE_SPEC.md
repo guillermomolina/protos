@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 302
+Document revision: 303
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -2096,6 +2096,26 @@ inject a value into the producer computation that originally failed.
 Repeated observations of the same failed Future, where otherwise permitted by
 the Future contract, are repeated consumer-side signaling events. They never
 revive or re-enter the failed producer computation.
+
+### Failed Future preserves Error object identity within one value domain
+
+When a Future becomes failed with an `Error` that already belongs to the same
+Protos value/isolation domain as that Future, the Future records that exact Error
+object. Failure recording does not clone, wrap, snapshot, reconstruct, or
+otherwise substitute the Error.
+
+Consequently, repeated observations of one such failed Future re-signal the same
+Error object, and a handler may observe `===` identity with the object that
+originally caused that Future to fail.
+
+This rule applies only where no semantic value-transfer boundary intervenes.
+When failure crosses P, the P Error-transfer rules determine the caller-domain
+Error value before the caller-side Future is failed. Actor-fatal Errors do not
+implicitly cross Actor boundaries at all.
+
+Future combinators that normatively propagate "the same Error" likewise preserve
+the exact already-domain-local Error object unless an explicit boundary rule says
+otherwise.
 
 ## 30. Future Composition
 
