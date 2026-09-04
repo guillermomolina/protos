@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.302] - 2026-09-04
+
+### Fixed
+- Defined the exact argument domains of standard one-shot Encoding operations:
+  `Encoding.encode` requires a Protos `String`, and `Encoding.decode` requires a
+  Protos `Bytes` value.
+- Required invalid argument types to fail synchronously before conversion work,
+  preserving the explicitly non-Future API shape.
+- Prohibited implicit stringification, numeric/character collection conversion,
+  host-buffer adaptation, duck-typed extraction, and other
+  implementation-selected coercions.
+- Kept malformed-input, representability, replacement, and BOM policy evaluation
+  after successful establishment of the required semantic argument type.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 302. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.301] - 2026-09-04
 
 ### Fixed

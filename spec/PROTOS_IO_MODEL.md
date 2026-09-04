@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 301
+Document revision: 302
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -985,6 +985,14 @@ contract unless another standard explicitly says otherwise.
 
 
 They are in-memory operations and do not return Futures.
+
+For the standard one-shot operations, `encoding.encode(text)` requires `text` to be a Protos `String`, and `encoding.decode(bytes)` requires `bytes` to be a Protos `Bytes` value. These are exact semantic argument domains, not conversion requests.
+
+A non-`String` argument to `encode` and a non-`Bytes` argument to `decode` fail synchronously under ordinary argument/type-validation semantics before any encoding or decoding work is performed. Because these operations are explicitly synchronous/non-Future, such validation does not manufacture a failed Future.
+
+Standard one-shot conversion performs no implicit `toString`-style conversion, character/numeric collection conversion, byte-array adaptation, host-buffer coercion, duck-typed extraction, or other implementation-selected conversion merely because the supplied value could in principle be transformed into text or octets. Libraries may expose separate explicit conversion/adaptation facilities, but those facilities are not part of the standard `Encoding.encode` / `Encoding.decode` operation.
+
+This strict argument-domain rule is independent of the selected Encoding's malformed-input, representability, replacement, or BOM policy. Those policies are evaluated only after a valid `String` or `Bytes` argument has been established.
 
 One-shot decoding treats an incomplete final encoded sequence according to the selected decoding error policy. Under the default strict/fatal policy it is an error. Under an explicitly selected replacement policy, an incomplete final subsequence is malformed final input and is handled by the replacement rule below rather than being unconditionally fatal.
 
