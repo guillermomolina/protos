@@ -24,6 +24,7 @@ import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
+import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import java.util.Objects;
 
@@ -42,6 +43,9 @@ public final class CanonicalToTruffleLowerer {
                     identity.span(),
                     lower(identity.left()),
                     lower(identity.right()));
+        }
+        if (expression instanceof CanonicalLookup lookup) {
+            return new ProtosLookupNode(lookup.span(), lookup.name());
         }
 
         throw new UnsupportedOperationException(
