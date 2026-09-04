@@ -25,6 +25,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceClosure;
 import com.guillermomolina.protos.parser.ast.SurfaceExpression;
 import com.guillermomolina.protos.parser.ast.SurfaceGroup;
 import com.guillermomolina.protos.parser.ast.SurfaceIndex;
+import com.guillermomolina.protos.parser.ast.SurfaceIntrinsic;
 import com.guillermomolina.protos.parser.ast.SurfaceLiteral;
 import com.guillermomolina.protos.parser.ast.SurfaceMember;
 import com.guillermomolina.protos.parser.ast.SurfaceName;
@@ -42,6 +43,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalCompose;
 import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
+import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalMember;
@@ -60,6 +62,7 @@ public final class Canonicalizer {
             case SurfaceName name -> new CanonicalLookup(name.name(), name.span());
             case SurfaceGroup group -> canonicalize(group.expression());
             case SurfaceIndex index -> lowerIndex(index);
+            case SurfaceIntrinsic intrinsic -> lowerIntrinsic(intrinsic);
             case SurfaceMember member ->
                     new CanonicalMember(
                             canonicalize(member.receiver()), member.name(), member.span());
@@ -80,6 +83,15 @@ public final class Canonicalizer {
                             "Surface expression is not supported by this canonicalizer slice: "
                                     + expression.getClass().getSimpleName());
         };
+    }
+
+    private CanonicalExpression lowerIntrinsic(SurfaceIntrinsic intrinsic) {
+        CanonicalIntrinsic.Kind kind = switch (intrinsic.kind()) {
+            case THIS -> CanonicalIntrinsic.Kind.THIS;
+            case CONTEXT -> CanonicalIntrinsic.Kind.CONTEXT;
+            case ARGS -> CanonicalIntrinsic.Kind.ARGS;
+        };
+        return new CanonicalIntrinsic(kind, intrinsic.span());
     }
 
     private CanonicalExpression lowerCall(SurfaceCall call) {
