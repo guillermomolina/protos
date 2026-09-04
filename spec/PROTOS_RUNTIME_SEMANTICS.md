@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 234
+Document revision: 235
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -4678,6 +4678,59 @@ Standard keyed collection primitives validate that the original receiver owns
 the keyed-entry state required by the selected standard behavior.
 
 Conceptually:
+
+### Standard Map factory invocation
+
+`Map` and `IdentityMap` provide ordinary invocation-protocol specializations
+that create fresh empty keyed state rather than using `Object`'s default
+child-plus-`init` construction path.
+
+Conceptually:
+
+```text
+function standardMapFactoryInvoke(invocationReceiver, arguments):
+    requireArgumentCount(arguments, 0)
+
+    return newStandardMap(
+        parent = invocationReceiver,
+        state = open,
+        entries = empty
+    )
+
+function standardIdentityMapFactoryInvoke(invocationReceiver, arguments):
+    requireArgumentCount(arguments, 0)
+
+    return newStandardIdentityMap(
+        parent = invocationReceiver,
+        state = open,
+        entries = empty
+    )
+```
+
+`arguments` is the already-evaluated outgoing positional argument vector.
+Therefore argument-count failure occurs after ordinary argument evaluation but
+before allocation of the new standard Map object.
+
+`newStandardMap` and `newStandardIdentityMap` each create a fresh identity and
+fresh receiver-owned keyed-entry state. Their `parent` parameter fixes the new
+object's delegation parent; it neither copies keyed state from that parent nor
+requires the parent itself to own keyed state.
+
+The standard prelude `Map` and `IdentityMap` objects expose the corresponding
+factory behavior through ordinary polymorphic invocation. If another object
+inherits one of those factory behaviors through delegation, invocation uses the
+actual invocation receiver as the new object's parent while preserving the
+factory's map kind.
+
+The factory performs no `init` send and no insertion operation. It therefore
+performs no key `hash`, `==`, primitive identity hashing, `===` comparison,
+iteration snapshot, callback, or keyed-state mutation beyond establishing the
+new empty receiver-owned state itself.
+
+Implementations may allocate empty table storage eagerly, lazily, compactly, or
+through another representation, provided fresh object identity, exact map kind,
+empty insertion order, open state, delegation parent, and all subsequent
+standard keyed semantics are observationally identical.
 
 ```text
 function requireNormalMapReceiver(receiver):

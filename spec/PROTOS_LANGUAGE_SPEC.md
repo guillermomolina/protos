@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 234
+Document revision: 235
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -4078,6 +4078,78 @@ A normal `Map` uses semantic equality and hashing:
 key equality  -> ==
 key hash      -> hash
 ```
+
+### Standard Map construction through ordinary invocation
+
+The standard prelude objects `Map` and `IdentityMap` specialize the ordinary
+polymorphic invocation protocol as empty-map factories.
+
+The standard calls:
+
+```js
+Map()
+IdentityMap()
+```
+
+each create a fresh **open** standard keyed object with no entries.
+
+`Map()` creates ordinary Map keyed state, whose standard key matching uses the
+existing `hash` plus `==` rules. `IdentityMap()` creates IdentityMap keyed state,
+whose standard key matching uses the existing primitive identity-hash plus
+`===` rules.
+
+Both standard factories accept exactly zero positional arguments. A non-empty
+argument vector signals the ordinary argument-count error after all call
+arguments have already been evaluated under the existing left-to-right call
+rules. No Map object is created by that failing invocation, and argument effects
+are not rolled back.
+
+Core v0.1 deliberately defines no constructor form that consumes alternating
+key/value arguments, an Array of pairs, another Map, an iterator, `each`, or any
+other implicit entry source. Programs populate a newly created Map explicitly
+through ordinary keyed operations such as:
+
+```js
+m: Map()
+m.atPut(key, value)
+```
+
+This avoids introducing a hidden iterable/pair protocol or constructor-specific
+duplicate-key rule.
+
+Each successful invocation creates a fresh Map identity, including two
+successive empty-map calls. The new keyed state is empty and its insertion order
+therefore contains zero entries.
+
+The created object's delegation parent is the object whose standard Map-factory
+or IdentityMap-factory invocation behavior was selected as the invocation
+receiver. Consequently ordinary prototype specialization composes with Map
+construction:
+
+```js
+MyMap: Map {
+    label: "custom"
+}
+
+m: MyMap()
+```
+
+`m` owns fresh ordinary Map keyed state and delegates to `MyMap`; `MyMap` itself
+does not acquire keyed state merely by delegating to `Map`. The analogous rule
+applies to prototypes inheriting the `IdentityMap` factory behavior.
+
+Factory inheritance never changes map kind. Behavior inherited from `Map`
+creates ordinary Map keyed state; behavior inherited from `IdentityMap` creates
+IdentityMap keyed state.
+
+This rule does not weaken the standard keyed receiver-domain invariant.
+Inheriting or copying `at`, `atPut`, `containsKey`, `remove`, `each`, or other
+ordinary keyed behavior still does not confer keyed state on the receiver. The
+factory instead creates a distinct new object that owns that state.
+
+The standard Map factories do not send `init` to the created object and perform
+no key hashing, equality comparison, identity hashing, callback, iteration,
+entry insertion, or hidden suspension after invocation begins.
 
 Map relies on the language-wide Boolean-result contract of `==`: equality returns canonical `true` or `false`, or signals an error. Map introduces no separate truthiness or Map-specific interpretation rule.
 

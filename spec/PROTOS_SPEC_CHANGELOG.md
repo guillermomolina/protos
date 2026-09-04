@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.235] - 2026-09-04
+
+### Fixed
+- Defined standard `Map()` and `IdentityMap()` as zero-argument ordinary
+  invocation factories for fresh open empty keyed objects.
+- Kept normal Map and IdentityMap construction distinct so factory inheritance
+  preserves the corresponding key-matching semantics.
+- Defined non-empty factory argument vectors to fail with ordinary
+  argument-count semantics after argument evaluation and before Map allocation.
+- Deliberately avoided constructor consumption of pairs, Arrays, Maps, `each`,
+  iterators, or other implicit entry sources while Core has no general iterable
+  protocol.
+- Composed inherited factory behavior with prototypes by using the actual
+  invocation receiver as the new Map's delegation parent without granting the
+  prototype keyed state.
+- Defined factory creation to perform no `init`, key hashing/equality, identity
+  hashing, callbacks, iteration, or entry insertion.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 235.
+  Only `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain
+  normative semantic content in this revision.
+
 ## [0.1.234] - 2026-09-04
 
 ### Fixed
