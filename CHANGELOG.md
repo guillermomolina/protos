@@ -4,6 +4,36 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.24-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Closure lowering now prepares an implementation-private execution plan
+  containing the parameter-binding node and body node without invoking either.
+- Callable-plan lowering recognizes `args` in Closure defaults and bodies and
+  lowers it to `ProtosArgsNode`.
+- Materialized Closure values retain their prepared execution plan, including
+  across extracted-method binding.
+
+### Changed
+
+- General program/module lowering continues to reject `args`; only callable
+  plans receive invocation-context `args` lowering.
+- Project implementation version changed from `0.2.23-SNAPSHOT` to `0.2.24-SNAPSHOT`.
+
+### Tests
+
+- Added coverage proving both a default expression and a Closure body plan can
+  observe the exact activation-owned `args` Array.
+
+### Notes
+
+- This increment does not execute calls, parameter binding automatically, or
+  Closure bodies automatically; it only prepares the complete callable plan.
+- Return-home completion and `^` execution remain unopened.
+- No normative specification change is introduced.
+
+
 ## [0.2.23-SNAPSHOT] - 2026-09-04
 
 ### Added

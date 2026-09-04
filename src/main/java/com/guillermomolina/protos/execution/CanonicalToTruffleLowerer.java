@@ -45,7 +45,8 @@ public final class CanonicalToTruffleLowerer {
         if (expression instanceof CanonicalClosure closure) {
             return new ProtosClosureLiteralNode(
                     closure.span(),
-                    closure);
+                    closure,
+                    lowerCallablePlan(closure));
         }
         if (expression instanceof CanonicalSequence sequence) {
             return lowerSequence(sequence);
@@ -77,7 +78,7 @@ public final class CanonicalToTruffleLowerer {
         if (expression instanceof CanonicalIntrinsic intrinsic) {
             if (intrinsic.kind() == CanonicalIntrinsic.Kind.ARGS) {
                 throw new UnsupportedOperationException(
-                        "args execution requires standard frozen Array materialization");
+                        "args is only lowerable inside a Closure invocation plan");
             }
             return new ProtosIntrinsicNode(intrinsic.span(), intrinsic.kind());
         }
@@ -111,6 +112,45 @@ public final class CanonicalToTruffleLowerer {
         throw new UnsupportedOperationException(
                 "Canonical expression is not supported by this Truffle lowering slice: "
                         + expression.getClass().getSimpleName());
+    }
+
+    private ProtosClosureExecutionPlan lowerCallablePlan(CanonicalClosure closure) {
+        ProtosExpressionNode[] defaultNodes =
+                closure.parameters().stream()
+                        .map(
+                                parameter ->
+                                        parameter.defaultValue()
+                                                .map(this::lowerCallable)
+                                                .orElse(null))
+                        .toArray(ProtosExpressionNode[]::new);
+        ProtosParameterBindingNode binding =
+                new ProtosParameterBindingNode(
+                        closure.span(),
+                        closure.parameters(),
+                        defaultNodes);
+        ProtosExpressionNode body = lowerCallable(closure.body());
+        return new ProtosClosureExecutionPlan(binding, body);
+    }
+
+    private ProtosExpressionNode lowerCallable(CanonicalExpression expression) {
+        if (expression instanceof CanonicalIntrinsic intrinsic
+                && intrinsic.kind() == CanonicalIntrinsic.Kind.ARGS) {
+            return new ProtosArgsNode(intrinsic.span());
+        }
+        if (expression instanceof CanonicalSequence sequence) {
+            ProtosExpressionNode[] expressions =
+                    sequence.expressions().stream()
+                            .map(this::lowerCallable)
+                            .toArray(ProtosExpressionNode[]::new);
+            return new ProtosSequenceNode(sequence.span(), expressions);
+        }
+        if (expression instanceof CanonicalClosure closure) {
+            return new ProtosClosureLiteralNode(
+                    closure.span(),
+                    closure,
+                    lowerCallablePlan(closure));
+        }
+        return lower(expression);
     }
 
     private ProtosExpressionNode lowerLiteral(CanonicalLiteral literal) {

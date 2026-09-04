@@ -27,12 +27,16 @@ import java.util.Objects;
 
 public final class ProtosClosureLiteralNode extends ProtosExpressionNode {
     private final CanonicalClosure definition;
+    private final ProtosClosureExecutionPlan executionPlan;
 
     public ProtosClosureLiteralNode(
             SourceSpan span,
-            CanonicalClosure definition) {
+            CanonicalClosure definition,
+            ProtosClosureExecutionPlan executionPlan) {
         super(span);
         this.definition = Objects.requireNonNull(definition, "definition");
+        this.executionPlan =
+                Objects.requireNonNull(executionPlan, "executionPlan");
     }
 
     @Override
@@ -46,6 +50,7 @@ public final class ProtosClosureLiteralNode extends ProtosExpressionNode {
                 activation.receiver(),
                 activation.methodHome().orElse(null),
                 activation.returnHome().orElse(null),
-                activation.prelude().orElse(null));
+                activation.prelude().orElse(null),
+                executionPlan);
     }
 }

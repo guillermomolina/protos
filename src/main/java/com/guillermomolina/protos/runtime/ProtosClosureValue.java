@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.guillermomolina.protos.execution.ProtosClosureExecutionPlan;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import java.util.List;
 import java.util.Objects;
@@ -28,12 +29,13 @@ public final class ProtosClosureValue {
     private final ProtosObjectValue methodHome;
     private final ProtosReturnHome returnHome;
     private final ProtosPrelude prelude;
+    private final ProtosClosureExecutionPlan executionPlan;
 
     public ProtosClosureValue(
             CanonicalClosure definition,
             List<ProtosObjectValue> capturedLexicalContexts,
             Object capturedReceiver) {
-        this(definition, capturedLexicalContexts, capturedReceiver, null, null, null);
+        this(definition, capturedLexicalContexts, capturedReceiver, null, null, null, null);
     }
 
     public ProtosClosureValue(
@@ -47,6 +49,7 @@ public final class ProtosClosureValue {
                 capturedReceiver,
                 null,
                 returnHome,
+                null,
                 null);
     }
 
@@ -57,6 +60,24 @@ public final class ProtosClosureValue {
             ProtosObjectValue methodHome,
             ProtosReturnHome returnHome,
             ProtosPrelude prelude) {
+        this(
+                definition,
+                capturedLexicalContexts,
+                capturedReceiver,
+                methodHome,
+                returnHome,
+                prelude,
+                null);
+    }
+
+    public ProtosClosureValue(
+            CanonicalClosure definition,
+            List<ProtosObjectValue> capturedLexicalContexts,
+            Object capturedReceiver,
+            ProtosObjectValue methodHome,
+            ProtosReturnHome returnHome,
+            ProtosPrelude prelude,
+            ProtosClosureExecutionPlan executionPlan) {
         this.definition = Objects.requireNonNull(definition, "definition");
         this.capturedLexicalContexts =
                 List.copyOf(
@@ -68,6 +89,7 @@ public final class ProtosClosureValue {
         this.methodHome = methodHome;
         this.returnHome = returnHome;
         this.prelude = prelude;
+        this.executionPlan = executionPlan;
     }
 
     public CanonicalClosure definition() {
@@ -94,6 +116,10 @@ public final class ProtosClosureValue {
         return java.util.Optional.ofNullable(prelude);
     }
 
+    public java.util.Optional<ProtosClosureExecutionPlan> executionPlan() {
+        return java.util.Optional.ofNullable(executionPlan);
+    }
+
     public ProtosClosureValue bindMethod(
             Object receiver,
             ProtosObjectValue home) {
@@ -103,6 +129,7 @@ public final class ProtosClosureValue {
                 Objects.requireNonNull(receiver, "receiver"),
                 Objects.requireNonNull(home, "home"),
                 returnHome,
-                prelude);
+                prelude,
+                executionPlan);
     }
 }
