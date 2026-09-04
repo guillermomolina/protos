@@ -4,6 +4,23 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.58-SNAPSHOT] - 2026-09-04
+
+### Fixed
+
+- I007 follow-up — SlotNotFound test-prelude compatibility: updated the lightweight
+  test prelude to expose the normative `SlotNotFound -> Error` prototype and
+  corrected legacy lookup/member/message/bare-assignment assertions to expect
+  fresh `SlotNotFound` occurrences.
+- Repaired the malformed implementation version `0.2.57-SNAPSHOT-SNAPSHOT`
+  produced by the original I007 installer.
+
+### Notes
+
+- No normative specification change is introduced.
+- Maven remains intentionally outside the installer and is run manually.
+- Project implementation version is `0.2.58-SNAPSHOT`.
+
 ## [0.2.57-SNAPSHOT] - 2026-09-04
 
 ### Added

@@ -65,11 +65,13 @@ class CanonicalMemberReadExecutionTest {
                         ProtosSignalException.class,
                         () -> execute(member("missing"), activation(receiver)));
 
-        assertSame(ProtosTestPrelude.errorPrototype(), signal.error().parent().orElseThrow());
+        assertSame(
+                ProtosTestPrelude.slotNotFoundPrototype(),
+                signal.error().parent().orElseThrow());
     }
 
     @Test
-    void memberReadSignalsCoreErrorForUnsupportedValueReceiverInThisSlice() {
+    void memberReadSignalsSlotNotFoundForRepresentedValueWithoutMember() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue context = new ProtosObjectValue(root);
         context.createLocalSlot("value", ProtosBooleanValue.TRUE);
@@ -88,7 +90,9 @@ class CanonicalMemberReadExecutionTest {
                         ProtosSignalException.class,
                         () -> execute(expression, activation));
 
-        assertSame(ProtosTestPrelude.errorPrototype(), signal.error().parent().orElseThrow());
+        assertSame(
+                ProtosTestPrelude.slotNotFoundPrototype(),
+                signal.error().parent().orElseThrow());
     }
 
     private CanonicalMember member(String name) {

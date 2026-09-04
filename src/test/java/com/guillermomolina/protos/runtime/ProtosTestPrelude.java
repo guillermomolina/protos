@@ -33,6 +33,9 @@ public final class ProtosTestPrelude {
         bindings.createLocalSlot("Context", context);
         bindings.createLocalSlot("Error", error);
         bindings.createLocalSlot(
+                "SlotNotFound",
+                new ProtosObjectValue(error));
+        bindings.createLocalSlot(
                 "Array",
                 new ProtosObjectValue(ProtosObjectValue.rootObject()));
         bindings.freeze();
@@ -49,5 +52,13 @@ public final class ProtosTestPrelude {
 
     public static ProtosObjectValue errorPrototype() {
         return PRELUDE.errorPrototype();
+    }
+
+    public static ProtosObjectValue slotNotFoundPrototype() {
+        Object binding = PRELUDE.bindings().readLocalSlot("SlotNotFound").orElseThrow();
+        if (!(binding instanceof ProtosObjectValue prototype)) {
+            throw new IllegalStateException("test SlotNotFound binding is not an ordinary object");
+        }
+        return prototype;
     }
 }

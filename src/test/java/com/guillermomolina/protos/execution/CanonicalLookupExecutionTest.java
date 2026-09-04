@@ -74,7 +74,7 @@ class CanonicalLookupExecutionTest {
     }
 
     @Test
-    void missingLookupSignalsCoreErrorWithoutInventingLookupErrorPrototype() {
+    void missingLookupSignalsSlotNotFound() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosActivation activation =
                 activation(new ProtosObjectValue(root), List.of(), new ProtosObjectValue(root));
@@ -83,7 +83,7 @@ class CanonicalLookupExecutionTest {
                 assertThrows(ProtosSignalException.class, () -> execute(lookup("missing"), activation));
 
         assertSame(
-                ProtosTestPrelude.errorPrototype(),
+                ProtosTestPrelude.slotNotFoundPrototype(),
                 signal.error().parent().orElseThrow());
     }
 

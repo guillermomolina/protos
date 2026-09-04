@@ -22,6 +22,8 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosCoreErrors.StandardError;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -110,7 +112,11 @@ class ProtosMessageSendExecutionTest {
                         ProtosSignalException.class,
                         () -> execute(prelude, "({}).missing()"));
 
-        assertSame(prelude.errorPrototype(), signal.error().parent().orElseThrow());
+        assertSame(
+                ProtosCoreErrors.prototype(
+                        prelude.newModuleActivation(),
+                        StandardError.SLOT_NOT_FOUND),
+                signal.error().parent().orElseThrow());
     }
 
     private static Object execute(ProtosPrelude prelude, String source) {

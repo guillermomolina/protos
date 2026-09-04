@@ -140,7 +140,9 @@ class CanonicalBareSlotMutationExecutionTest {
                         ProtosSignalException.class,
                         () -> execute(assign("inherited", "nope"), activation));
 
-        assertSame(ProtosTestPrelude.errorPrototype(), signal.error().parent().orElseThrow());
+        assertSame(
+                ProtosTestPrelude.slotNotFoundPrototype(),
+                signal.error().parent().orElseThrow());
         assertSame(ProtosBooleanValue.TRUE, prototype.readLocalSlot("inherited").orElseThrow());
     }
 
