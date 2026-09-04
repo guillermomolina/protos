@@ -4,6 +4,44 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.27-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added source-backed standard `InvalidReturn` under `protos/lib/core/`, with
+  direct delegation to the standard `Error` prototype.
+- Added `ProtosReturnNode` and a dedicated internal non-local-return control
+  transfer carrying the exact target home and result value.
+- Callable-plan lowering now lowers canonical `^value` in Closure defaults and
+  bodies.
+- Added fresh `InvalidReturn` construction through the activation-owned Core
+  prelude.
+
+### Changed
+
+- Selected Closure invocation now catches a non-local return only when the
+  invocation owns the exact target home; nested invocations sharing a captured
+  home rethrow the transfer unchanged.
+- An owned home is still completed on every exit path, including a handled
+  non-local return.
+- Project implementation version changed from `0.2.26-SNAPSHOT` to `0.2.27-SNAPSHOT`.
+
+### Tests
+
+- Added integrated coverage for direct active `^`, `^` from a default
+  expression, nested captured-home propagation, escaped-Closure
+  `InvalidReturn`, fresh Error identity, and the exact source-backed
+  `InvalidReturn -> Error` prototype relationship.
+- Extended Core bootstrap coverage for the standard `InvalidReturn` prototype.
+
+### Notes
+
+- This block closes non-local return execution for already selected Closures.
+- Ordinary `CanonicalCall`, message send, `super`, and polymorphic object
+  invocation remain outside this block.
+- No normative specification change is introduced.
+
+
 ## [0.2.26-SNAPSHOT] - 2026-09-04
 
 ### Added

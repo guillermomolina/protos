@@ -32,6 +32,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalMember;
 import com.guillermomolina.protos.semantic.ast.CanonicalObject;
+import com.guillermomolina.protos.semantic.ast.CanonicalReturn;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import java.util.Objects;
 
@@ -136,6 +137,11 @@ public final class CanonicalToTruffleLowerer {
         if (expression instanceof CanonicalIntrinsic intrinsic
                 && intrinsic.kind() == CanonicalIntrinsic.Kind.ARGS) {
             return new ProtosArgsNode(intrinsic.span());
+        }
+        if (expression instanceof CanonicalReturn returnExpression) {
+            return new ProtosReturnNode(
+                    returnExpression.span(),
+                    lowerCallable(returnExpression.value()));
         }
         if (expression instanceof CanonicalSequence sequence) {
             ProtosExpressionNode[] expressions =

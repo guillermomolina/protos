@@ -33,6 +33,18 @@ public final class ProtosCoreErrors {
         return prelude.newError();
     }
 
+    public static ProtosObjectValue newInvalidReturn(
+            ProtosActivation activation) {
+        Objects.requireNonNull(activation, "activation");
+        ProtosPrelude prelude =
+                activation.prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "standard InvalidReturn is unavailable before Core prelude bootstrap"));
+        return prelude.newInvalidReturn();
+    }
+
     public static ProtosObjectValue newUnqualifiedLookupError(
             ProtosActivation activation) {
         return newError(activation);

@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import java.util.List;
 import java.util.Objects;
@@ -50,6 +51,12 @@ public final class ProtosClosureInvoker {
         try {
             plan.bind(activation);
             return plan.executeBody(activation);
+        } catch (ProtosNonLocalReturnException transfer) {
+            if (activation.ownsReturnHome()
+                    && transfer.target() == returnHome) {
+                return transfer.value();
+            }
+            throw transfer;
         } finally {
             if (activation.ownsReturnHome() && returnHome.isActive()) {
                 returnHome.complete();

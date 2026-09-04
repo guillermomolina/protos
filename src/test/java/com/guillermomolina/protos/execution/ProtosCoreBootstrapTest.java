@@ -53,6 +53,21 @@ class ProtosCoreBootstrapTest {
         assertSame(
                 ProtosObjectValue.rootObject(),
                 errorPrototype.parent().orElseThrow());
+        ProtosObjectValue invalidReturnPrototype =
+                prelude.invalidReturnPrototype();
+        assertSame(
+                invalidReturnPrototype,
+                bindings.readLocalSlot("InvalidReturn").orElseThrow());
+        assertSame(
+                errorPrototype,
+                invalidReturnPrototype.parent().orElseThrow());
+        assertNotSame(
+                prelude.newInvalidReturn(),
+                prelude.newInvalidReturn());
+        assertSame(
+                invalidReturnPrototype,
+                prelude.newInvalidReturn().parent().orElseThrow());
+
         ProtosObjectValue arrayPrototype = prelude.arrayPrototype();
         assertSame(
                 arrayPrototype,

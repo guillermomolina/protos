@@ -69,6 +69,24 @@ public final class ProtosPrelude {
         return new ProtosObjectValue(errorPrototype());
     }
 
+    public ProtosObjectValue invalidReturnPrototype() {
+        Object binding =
+                bindings.readLocalSlot("InvalidReturn").orElseThrow();
+        if (!(binding instanceof ProtosObjectValue invalidReturnPrototype)) {
+            throw new IllegalStateException(
+                    "standard InvalidReturn binding is not an ordinary object");
+        }
+        if (invalidReturnPrototype.parent().orElse(null) != errorPrototype()) {
+            throw new IllegalStateException(
+                    "standard InvalidReturn must delegate directly to Error");
+        }
+        return invalidReturnPrototype;
+    }
+
+    public ProtosObjectValue newInvalidReturn() {
+        return new ProtosObjectValue(invalidReturnPrototype());
+    }
+
     public ProtosObjectValue arrayPrototype() {
         Object binding = bindings.readLocalSlot("Array").orElseThrow();
         if (!(binding instanceof ProtosObjectValue arrayPrototype)) {
