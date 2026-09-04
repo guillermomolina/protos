@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 238
+Document revision: 239
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -97,6 +97,18 @@ WriteShutdown
 Binary I/O uses `Bytes`. `String` never carries an implicit binary encoding.
 
 I/O operations that may wait return `Future` values. They never introduce hidden Protos suspension. Suspension occurs only through the ordinary Future mechanisms, such as invoking `.value()` on a pending Future.
+
+For every standardized I/O operation whose contract in this document says that the operation returns a `Future`, semantic validation failures of that operation's I/O arguments are represented by a failed returned Future rather than by introducing a second synchronous failure channel after the operation has been successfully dispatched. This includes, for example, an invalid `read(maxBytes)` bound, a non-`Bytes` `write` payload, an invalid seek/truncate numeric argument, an invalid `readLine(maxBytes)` bound, or a non-`String` standard text-write payload.
+
+Such argument validation occurs before that operation performs receiver/backend I/O effects attributable to the invalid request. A failed validation therefore contributes no bytes, consumes no input, changes no logical position/size/content/lifecycle state, establishes no flush/sync/shutdown frontier, and does not exercise external authority merely to discover an error already determined by the supplied semantic argument values.
+
+When validation depends only on already-evaluated Protos values, an implementation may return an already-failed Future. The Future-returning API shape remains uniform whether the eventual failure is discovered immediately or only after asynchronous work.
+
+This rule begins only after ordinary Protos invocation has successfully identified and dispatched the standardized I/O operation. Ordinary language-level failures that prevent such an invocation from existing at all — for example message lookup failure, a receiver outside the operation's receiver domain, or ordinary call-arity failure before method body/operation dispatch — retain their normal language semantics rather than being retroactively wrapped in an I/O Future.
+
+The rule likewise does not change APIs that this document explicitly defines as synchronous/non-Future operations, such as one-shot `Encoding.encode/decode`, Process standard-stream accessors, or other ordinary in-memory/bootstrap queries. Their validation/failure behavior remains governed by their own synchronous contracts.
+
+A standardized Future-returning I/O operation therefore has one operation-result channel after successful dispatch: immediate semantic argument invalidity is an already-known failed Future outcome, while later I/O/backend failure is a later failed Future outcome.
 
 Unless a stronger protocol says otherwise, ordering guarantees are per logical receiver/flow. Distinct capability objects or Actor-local proxies may denote the same logical flow; object identity alone does not create an independent ordering domain. Conversely, two resources that happen to reach the same host destination are not one logical flow unless the capability semantics say so.
 

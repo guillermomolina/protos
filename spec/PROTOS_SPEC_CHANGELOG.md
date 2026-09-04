@@ -4,6 +4,30 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.239] - 2026-09-04
+
+### Fixed
+- Defined semantic argument-validation failures of standardized Future-returning
+  I/O operations to be reported through a failed returned Future after successful
+  operation dispatch, rather than through an implementation-selected synchronous
+  failure channel.
+- Covered invalid read bounds, non-Bytes writes, seek/truncate numeric arguments,
+  bounded line reads, and standard text-write payload validation through the same
+  general rule.
+- Required invalid requests to fail before operation-attributable I/O effects,
+  position/content/lifecycle changes, frontiers, or external-authority exercise.
+- Allowed already-failed Futures when validation depends only on already-evaluated
+  Protos argument values.
+- Kept ordinary lookup/receiver-domain/call-arity failures outside this rule when
+  they prevent the standardized I/O operation from being dispatched at all.
+- Kept explicitly synchronous APIs such as one-shot Encoding operations and
+  Process bootstrap accessors under their existing non-Future contracts.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 239. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.238] - 2026-09-04
 
 ### Fixed / Closed
