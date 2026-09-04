@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 305
+Document revision: 306
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -653,25 +653,34 @@ the normal Actor programming model.
 
 **CLOSED**
 
-Each Actor has a replaceable current behavior.
+Each Actor incarnation has one current behavior object established before
+the `INITIALIZING -> READY` cutover.
 
 The current behavior is an ordinary Protos object.
 
-External messages are dispatched against the behavior that is current
-when the corresponding Actor turn begins.
+Core v0.1 does not define a post-READY operation that replaces, stacks, swaps, or
+otherwise changes the Actor's current behavior reference. Once the Actor reaches
+`READY`, that reference remains the same for the lifetime of the incarnation.
 
-Changing the current behavior affects subsequent turns. It does not
-alter the receiver or semantics of an activation that is already
-running.
+External messages are therefore dispatched against that same behavior object for
+every ordinary Actor turn of the incarnation.
 
-Messages already queued in the mailbox are therefore dispatched using
-the behavior current when their turn begins, not necessarily the
-behavior that existed when the message was sent.
+This does not make Actor behavior immutable. The behavior object may use the
+ordinary Protos object model to change its own local state, delegate through its
+existing parent, mutate other Actor-local objects, or otherwise represent
+different application modes. Such changes are ordinary object semantics, not an
+Actor-specific behavior-transition mechanism.
 
-An ActorRef identifies the Actor, not its current behavior.
+In particular, Core defines no standard `become`, `unbecome`, behavior stack,
+implicit Actor-control binding, or special interpretation of a handler's return
+value as "next behavior". A handler's ordinary result retains its existing
+meaning; for `request()` it is the reply value, and for `send()` it is ignored.
 
-The exact API for installing or replacing the current behavior remains
-open.
+An ActorRef identifies the Actor incarnation, not the behavior object and not an
+application-defined mode represented inside that behavior.
+
+The exact bootstrap API or syntax by which initialization establishes the
+initial behavior remains a separate open topic.
 
 ## 11A. Behavior Requirement at the READY Cutover
 
@@ -715,13 +724,13 @@ the existing readiness and failure rules. They are not dispatched merely because
 a partial/bootstrap behavior exists internally, and they are lost with the
 incarnation if initialization fails before `READY`.
 
-Once the Actor is `READY`, §11 applies normally: each Actor has a replaceable
-current behavior, and each external message turn dispatches against the behavior
-that is current when that turn begins.
+Once the Actor is `READY`, §11 applies normally: the incarnation retains the
+behavior object established for the READY cutover, and each external message turn
+dispatches against that same object.
 
 This section closes the former open ledger item `Behavior requirements before
-READY`. The exact API or syntax by which bootstrap code installs/replaces the
-current behavior remains a separate open topic.
+READY`. The exact bootstrap API or syntax by which initialization establishes
+that initial behavior remains a separate open topic.
 
 ## 12. Actor Message Dispatch
 

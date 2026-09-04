@@ -4,6 +4,30 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.306] - 2026-09-04
+
+### Closed
+- Closed the open Core Actor behavior-replacement API topic by removing
+  post-READY behavior-reference replacement from Core v0.1.
+- Defined one ordinary behavior object per Actor incarnation, established before
+  the `INITIALIZING -> READY` cutover and retained for that incarnation's
+  lifetime.
+- Kept application mode/state changes in the ordinary Protos object model rather
+  than adding `become`, `unbecome`, behavior stacks, implicit Actor-control
+  bindings, or another Actor-specific state-transition mechanism.
+- Preserved existing handler-result semantics: `request()` handler results remain
+  reply values and `send()` handler results remain ignored, rather than acquiring
+  a second "next behavior" interpretation.
+- Clarified that ActorRef identifies the Actor incarnation, not its behavior
+  object or application-defined mode.
+- Left only the exact bootstrap API/syntax for establishing the initial behavior
+  as a separate open topic.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 306.
+  Only `PROTOS_CONCURRENCY_MODEL.md` gains normative semantic content in this
+  revision.
+
 ## [0.1.305] - 2026-09-04
 
 ### Fixed
