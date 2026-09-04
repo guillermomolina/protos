@@ -573,7 +573,7 @@ lifecycle semantics.
 dog.removeSlot("age")
 ```
 
-`removeSlot(name)` removes only a local slot of `this`. If the named slot is not local, the operation signals an error rather than searching the delegation chain. Removing a local overriding slot can therefore expose a delegated slot with the same name on subsequent reads.
+`removeSlot(name)` uses the common semantic-String name-domain rule defined by Core Reflection below, then removes only a local slot of `this`. If the named slot is not local, the operation signals an error rather than searching the delegation chain. Removing a local overriding slot can therefore expose a delegated slot with the same name on subsequent reads.
 
 ```js
 animal: { alive: true }
@@ -622,7 +622,24 @@ object.slotValue("name")
 object.parent()
 ```
 
-The slot-oriented reflective operations inspect only slots local to the receiver:
+The slot-oriented reflective operations inspect only slots local to the receiver.
+
+For every standard Object operation in this local-slot-name family whose public
+parameter is named `name` — `hasSlot(name)`, `slotValue(name)`, and
+`removeSlot(name)` — the argument must be a semantic `String` value. No implicit
+conversion, stringification, selector coercion, delegation-based String-like
+acceptance, or host-name adaptation is performed. After ordinary argument
+evaluation, an invalid non-String `name` signals an `Error` before the operation
+inspects the receiver's local slot table and, for `removeSlot`, before any
+structural mutation.
+
+A valid String denotes exactly its semantic Unicode scalar-value sequence as the
+slot name to test, read, or remove. Argument validation does not itself perform
+delegated slot lookup. After that validation, the existing local-only contracts
+apply: `hasSlot` returns canonical `false` for a valid String naming no local
+slot, while `slotValue` and `removeSlot` signal their ordinary missing-local-slot
+Error. A delegated slot with the same name never satisfies these local
+operations.
 
 ```text
 hasSlot(name)

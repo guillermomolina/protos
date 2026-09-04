@@ -9,6 +9,25 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.371] - 2026-09-04
+
+### Reflective local-slot name argument domain (D033)
+- Defines the standard `hasSlot(name)`, `slotValue(name)`, and
+  `removeSlot(name)` argument domain uniformly as semantic `String` values.
+- Rejects non-String names before local-slot inspection and before any
+  `removeSlot` structural mutation, with no implicit conversion, stringification,
+  String-like delegation, selector coercion, or host adaptation.
+- Defines a valid name by its exact semantic String scalar sequence and preserves
+  the existing local-only behavior: `hasSlot` returns `false` for absence, while
+  `slotValue` and `removeSlot` signal on a missing local slot.
+- Keeps delegated slots irrelevant to all three operations and leaves ordinary
+  member lookup as the separate delegating mechanism.
+
+### Compatibility
+- Closes previously unspecified reflective-name coercion/validation behavior.
+  Implementations accepting non-String designators for these standard operations
+  must reject them under the common semantic-String contract.
+
 ## [0.1.370] - 2026-09-04
 
 ### Fresh reflection Array identity (D032)
