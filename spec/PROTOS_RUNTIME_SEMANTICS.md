@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 291
+Document revision: 292
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -1853,7 +1853,10 @@ This protocol fixes the standard handler API and its observable dynamic extent.
 Implementations may represent handler frames, task continuations, and unwind
 machinery differently provided that these semantics are preserved.
 
-The runtime architecture should not prevent resumable conditions from being added later.
+Core v0.1 requires no retained resumable-condition continuation state in the
+runtime. A future explicit recovery/restart facility may introduce additional
+runtime control state only under a separate normative contract and must not make
+existing Core `Error.signal()` resumable.
 
 ---
 

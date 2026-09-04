@@ -4,6 +4,24 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.292] - 2026-09-04
+
+### Fixed
+- Removed the residual vague architectural promise that Core should preserve the
+  ability to add resumable conditions without redesigning the execution model.
+- Reconciled Language and Runtime with the closed Core v0.1 non-resumable Error
+  model: no resumable-condition continuation authority is retained by current
+  signaling semantics.
+- Preserved future extensibility only through an explicit recovery/restart
+  facility with its own normative control-state contract.
+- Required any such future facility not to reinterpret existing Core
+  `Error.signal()` operations as resumable.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 292.
+  `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain normative
+  clarification in this revision.
+
 ## [0.1.291] - 2026-09-04
 
 ### Closed

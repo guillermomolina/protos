@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 291
+Document revision: 292
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -1926,7 +1926,10 @@ and richer handling abstractions may be built from this single primitive
 dynamic-scope mechanism.
 An unhandled error propagates until an appropriate handler is found or the outermost execution boundary is reached.
 
-The architecture should allow resumable conditions to be added later without redesigning the execution model.
+Core v0.1 retains no resumable-condition authority or continuation state for
+error signaling. A future standard may add an explicit recovery/restart facility
+only through its own normative control-state contract; such a facility must not
+reinterpret existing Core `Error.signal()` operations as resumable.
 
 ### Core Error Taxonomy
 
