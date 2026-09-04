@@ -55,6 +55,7 @@ For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_
 
 ### Fixed
 
+- Fixed parser newline continuation while a member suffix or structural `super` message send is necessarily incomplete.
 - Fixed parser newline continuation after `...` in spread arguments and rest parameters, matching the grammar's necessarily-incomplete construct rule.
 ## [0.1.6-SNAPSHOT] - 2026-08-31
 

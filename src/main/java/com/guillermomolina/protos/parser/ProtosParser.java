@@ -484,8 +484,11 @@ public final class ProtosParser {
 
     private SurfaceExpression parseSuperMessageSend() {
         TokenOccurrence superToken = cursor.consume(TokenType.SUPER, "'super'");
+        consumeContinuationNewlines();
         cursor.consume(TokenType.DOT, "'.'");
+        consumeContinuationNewlines();
         TokenOccurrence message = consumeMemberName();
+        consumeContinuationNewlines();
         cursor.consume(TokenType.LPAREN, "'('");
         consumeNewlines();
 
@@ -522,6 +525,7 @@ public final class ProtosParser {
 
     private SurfaceExpression parseMemberSuffix(SurfaceExpression receiver) {
         cursor.consume(TokenType.DOT, "'.'");
+        consumeContinuationNewlines();
         TokenOccurrence name = consumeMemberName();
         return new SurfaceMember(
                 receiver,
