@@ -4,6 +4,30 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.290] - 2026-09-04
+
+### Fixed
+- Defined `flush()` admission and ordering relative to `shutdownWrite()` when one
+  logical output direction exposes both `Flushable` and `WriteShutdown`.
+- Required a flush admitted before the write-shutdown cutover to remain a
+  preceding accepted output operation that shutdown cannot overtake or
+  retroactively move to the post-shutdown side.
+- Required a flush ordered after the cutover to fail under the write-shut-down
+  lifecycle without establishing a new propagation frontier or becoming an
+  implementation-selected successful no-op.
+- Defined genuinely concurrent cross-Actor flush/shutdown requests to receive one
+  stable routing/admission order, matching the existing shared-flow ordering
+  model.
+- Preserved the ordinary success/failure/cancellation aftermath of a preceding
+  admitted flush and deliberately left flush-failure recovery to the already
+  existing Flushable/wrapper/clean-frontier semantics.
+- Preserved the rule that `shutdownWrite()` does not imply one universal flush.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 290. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.289] - 2026-09-04
 
 ### Fixed

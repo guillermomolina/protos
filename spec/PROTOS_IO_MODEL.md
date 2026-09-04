@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 289
+Document revision: 290
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -1569,6 +1569,16 @@ This rule applies equally when routing/admission placed a genuinely concurrent c
 Cancellation is deliberately distinct here from write failure. A failed preceding write remains a failed required output operation even when its hidden committed prefix length happens to be `k = 0`; under the existing WriteShutdown rule, such failure causes shutdown to fail rather than being reclassified as a clean cancellation. Portable code therefore cannot infer or substitute write-failure progress from this cancellation rule.
 
 Likewise, a cancellation request that loses because the preceding write has already committed does not turn that write into zero-contribution output. The write proceeds to its ordinary success/failure aftermath, and `shutdownWrite()` composes with that actual terminal outcome.
+
+When one logical output direction exposes both `Flushable` and `WriteShutdown`, `flush()` participates in that same output-direction lifecycle and is ordered relative to the write-shutdown cutover. This does not make `flush()` a write and does not introduce a universal implied flush.
+
+A `flush()` operation admitted before the `shutdownWrite()` cutover remains a preceding accepted output operation. Shutdown does not overtake, reject, or retroactively move that flush to the post-shutdown side merely because the flush Future is still pending. The flush retains its ordinary success/failure/cancellation semantics, and `shutdownWrite()` proceeds only after that preceding flush has reached its terminal aftermath required by the existing clean-frontier/output-lifecycle rules.
+
+A `flush()` ordered after the write-shutdown cutover is not accepted as new output-direction work. It fails under the receiver's write-shut-down lifecycle and establishes no new propagation frontier. In particular, successful write shutdown does not leave `flush()` as a separately usable post-shutdown control operation, and a later flush is not converted into a successful no-op merely because no new writes can be accepted.
+
+For a `flush()` and `shutdownWrite()` that are genuinely concurrent because they originate from independently progressing Actors through Actor-safe proxies for the same logical output direction, Protos defines no predetermined cross-Actor arrival order. Routing/admission may choose either request first. If flush is admitted first, it is the preceding operation described above; if shutdown establishes the cutover first, the competing flush is rejected. Once that relative order is chosen, host/backend scheduling cannot move the flush across the cutover.
+
+This rule fixes admission and ordering only. It does not redefine the ordinary aftermath of an already-admitted flush, does not make every preceding flush failure automatically recoverable or unrecoverable, and does not infer hidden propagation progress. Any such aftermath continues to compose with the existing `Flushable`, wrapper, and `WriteShutdown` clean-frontier rules.
 
 There is no universal implied flush. A wrapper that exposes `WriteShutdown` must first correctly finalize/propagate its own output state before propagating shutdown to the underlying output direction.
 
