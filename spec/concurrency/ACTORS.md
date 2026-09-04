@@ -1,7 +1,7 @@
 # Protos Actors v0.1
 
 Language version: 0.1
-Document revision: 323
+Document revision: 324
 Status: Draft
 Last updated: 2026-09-04
 
@@ -928,3 +928,53 @@ A future explicit yield/scheduling facility may add a new portable cooperative
 boundary if independently justified. Until then, Core defines no implicit
 `yield`, quantum expiration, fairness poll, or automatic conversion of CPU-bound
 Actor-local work into P.
+
+## 11A. Behavior Requirement at the READY Cutover
+
+**CLOSED**
+
+Core v0.1 does not require a newly created Actor to possess a dispatchable
+current behavior throughout its entire `INITIALIZING` state.
+
+No external message is dispatched while the Actor is `INITIALIZING`, so requiring
+a fully installed behavior before initialization code has established one would
+create no additional portable observation and would unnecessarily constrain Actor
+bootstrap representation.
+
+The normative requirement is instead at the lifecycle cutover:
+
+```text
+INITIALIZING -> READY
+    requires one valid current behavior
+```
+
+An Actor must not enter `READY` without a current behavior object available for
+ordinary message dispatch.
+
+The behavior that satisfies this requirement is an ordinary Protos object. Core
+does not introduce a special bootstrap-behavior kind, placeholder behavior,
+sentinel object, hidden default behavior, or magic "uninitialized behavior"
+object.
+
+During `INITIALIZING`, the runtime may internally represent the not-yet-installed
+behavior state however it chooses, including absence of a behavior reference,
+provided that representation is not exposed as a Protos value and no external
+message is dispatched against it.
+
+If initialization completes normally without establishing a valid current
+behavior, the Actor cannot perform the `INITIALIZING -> READY` transition. This
+is an initialization failure of that incarnation under the ordinary Actor
+initialization/failure rules; the Actor never becomes `READY`.
+
+Messages already accepted while the Actor is `INITIALIZING` remain governed by
+the existing readiness and failure rules. They are not dispatched merely because
+a partial/bootstrap behavior exists internally, and they are lost with the
+incarnation if initialization fails before `READY`.
+
+Once the Actor is `READY`, §11 applies normally: the incarnation retains the
+behavior object established for the READY cutover, and each external message turn
+dispatches against that same object.
+
+This section closes the former open ledger item `Behavior requirements before
+READY`. The exact bootstrap API or syntax by which initialization establishes
+that initial behavior remains a separate open topic.

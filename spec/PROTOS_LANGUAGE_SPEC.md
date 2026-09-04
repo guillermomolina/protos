@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 322
+Document revision: 324
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -2856,7 +2856,7 @@ array.parallelSort(less, arguments...)            -> Future
 
 Their normative isolation, snapshot, transfer, ordering, failure-selection,
 cancellation, publication, and implementation-freedom semantics are owned by
-`PROTOS_CONCURRENCY_MODEL.md` §71.6A–§71.6E.
+`concurrency/PARALLEL_EXECUTION.md` §71.6A–§71.6E.
 
 These operations remain ordinary standard Array behaviors reached through
 ordinary message lookup. They introduce no additional syntax or executable value

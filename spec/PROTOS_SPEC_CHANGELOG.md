@@ -8,6 +8,34 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.324] - 2026-09-04
+
+### Migrated
+- Promoted `concurrency/PARALLEL_EXECUTION.md` from a non-normative migration
+  index to the primary normative owner of the complete legacy §71 isolated
+  parallel-execution family.
+- Replaced legacy ledger §71 with a compact compatibility/navigation anchor.
+- Updated current Language and Abstract Runtime references from concurrency-ledger
+  §71 to `concurrency/PARALLEL_EXECUTION.md` §71.
+
+### Fixed
+- P9 audit found that legacy Actor section §11A was not moved because its
+  alphanumeric section number fell outside the numeric 7-18 extraction loop.
+  Moved §11A into `concurrency/ACTORS.md` and replaced the ledger copy with a
+  compatibility anchor.
+- Updated root `AGENTS.md` specification-authority guidance to describe the
+  modular Future, Actor, and Parallel owners that now exist, while retaining the
+  mixed concurrency ledger only for still-unmigrated CLOSED material and
+  unresolved design work.
+
+### Documentation
+- This revision changes specification location/ownership only and does not
+  intentionally change observable Protos behavior.
+- Updated `PROTOS_CONCURRENCY_MODEL.md`, `concurrency/ACTORS.md`,
+  `concurrency/PARALLEL_EXECUTION.md`, `PROTOS_LANGUAGE_SPEC.md`, and
+  `runtime/ABSTRACT_RUNTIME.md` to document revision 324.
+- Other revisioned normative documents are unaffected.
+
 ## [0.1.323] - 2026-09-04
 
 ### Migrated

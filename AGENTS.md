@@ -298,11 +298,15 @@ Normative domain models supplement those core documents for semantically substan
 
 - "spec/PROTOS_IO_MODEL.md" — observable I/O, text/binary adapter, filesystem-authority, and Process-I/O-bootstrap semantics.
 
-- "spec/PROTOS_CONCURRENCY_MODEL.md" — CLOSED or `CLOSED --- REVISED` sections are normative Actor/Future/concurrency-domain semantics; sections or explicitly named subtopics carrying OPEN, PENDING, DIRECTION, DETAILS OPEN, API OPEN, or design-only status remain non-normative.
+- `spec/concurrency/FUTURES_AND_TASKS.md` — primary normative owner of migrated Core Future/task semantics.
+- `spec/concurrency/ACTORS.md` — primary normative owner of migrated Core Actor semantics.
+- `spec/concurrency/PARALLEL_EXECUTION.md` — primary normative owner of migrated Core isolated-parallel (P) semantics.
+- `spec/PROTOS_CONCURRENCY_MODEL.md` — transitional mixed design ledger. CLOSED material that has not yet been migrated remains normative there; compatibility anchors for migrated sections are non-owning references. OPEN/PENDING/DIRECTION/API-OPEN/design-only material remains non-normative.
+- `spec/concurrency/DISTRIBUTED_RUNTIME.md` — currently a non-normative migration index until its ownership transfer is recorded by a specification revision.
 
 Treat the canonical core documents together with applicable normative domain models as the source of truth for observable language/standard semantics in their respective domains.
 
-Normative concurrency-domain semantics supplement the core specifications through the explicitly CLOSED portions of `spec/PROTOS_CONCURRENCY_MODEL.md`. That file remains a mixed design ledger rather than a canonical core language specification document; its section-local status controls normativity. See "Concurrency design work" below.
+During concurrency modularization, normative ownership is split deliberately between the migrated domain modules above and the still-unmigrated CLOSED portions of `spec/PROTOS_CONCURRENCY_MODEL.md`. A compatibility anchor in the ledger never creates a second authority. See "Concurrency design work" below.
 
 Before implementing or modifying syntax, parsing, object semantics, invocation, lookup, control flow, errors, concurrency, built-in protocols, or other observable language behavior, inspect the relevant specification sections first.
 

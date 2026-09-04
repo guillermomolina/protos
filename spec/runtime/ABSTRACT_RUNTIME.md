@@ -1,7 +1,7 @@
 # Protos Abstract Runtime v0.1
 
 Language version: 0.1  
-Document revision: 322
+Document revision: 324
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -2947,7 +2947,7 @@ No dispatch by argument type is implied. These mechanisms support dynamic arity,
 
 The normative semantics of the standard parallel Array operations
 `parallelMap`, `parallelFilter`, `parallelFindIndex`, `parallelReduce`, and
-`parallelSort` are owned by `../PROTOS_CONCURRENCY_MODEL.md` §71.6A–§71.6E.
+`parallelSort` are owned by `../concurrency/PARALLEL_EXECUTION.md` §71.6A–§71.6E.
 
 A runtime may realize those operations using any internal algorithm, task graph,
 chunking scheme, worker organization, vectorization strategy, or sequential
