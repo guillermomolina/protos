@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 250
+Document revision: 251
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3670,6 +3670,22 @@ Latin1
 Conversion between text and bytes is explicit:
 
 ```js
+### Canonical one-shot text/byte conversion dispatch
+
+The standard one-shot encoding/decoding receiver is the `Encoding` object:
+
+```js
+UTF8.encode(text)
+UTF8.decode(bytes)
+```
+
+In abstract form, the standardized operations are
+`encoding.encode(text)` and `encoding.decode(bytes)`.
+
+Core v0.1 does not additionally standardize `String.encode(encoding)` or
+`Bytes.decode(encoding)` convenience messages. Libraries may provide such
+ordinary messages, but portable Core code cannot rely on them.
+
 UTF8.decode(bytes)
 ### Canonical one-shot encoding dispatch
 

@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.251] - 2026-09-04
+
+### Fixed
+- Repaired the incomplete rev247 encoding-dispatch cleanup: stale
+  `text.encode(UTF8)` / `bytes.decode(UTF8)` examples remained in normative
+  Language/Grammar text despite the changelog claiming they had been removed.
+- Replaced every remaining stale concrete example with
+  `UTF8.encode(text)` / `UTF8.decode(bytes)`.
+- Added explicit normative clarification that the standard one-shot receiver is
+  the `Encoding` object and Core v0.1 does not additionally require reciprocal
+  String/Bytes convenience messages.
+- Preserved ordinary syntax for user/library-defined messages with those names
+  and preserved Encoding's existing availability boundary outside the mandatory
+  Core prelude.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 251.
+  `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`, and `PROTOS_IO_MODEL.md` gain
+  normative repair/clarification in this revision.
+
 ## [0.1.250] - 2026-09-04
 
 ### Fixed

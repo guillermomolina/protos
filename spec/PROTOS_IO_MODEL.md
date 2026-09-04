@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 250
+Document revision: 251
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -889,6 +889,14 @@ There is no `TextSeekable` protocol in Core v0.1.
 ---
 
 ## 15. Encoding Objects
+
+The `Encoding` object is the canonical receiver for the standard
+one-shot conversion operations. Core v0.1 does not additionally require
+`String.encode(encoding)` or `Bytes.decode(encoding)` convenience messages.
+Libraries may expose such ordinary conveniences, but they are not part of the
+portable Core one-shot encoding contract.
+
+
 
 `Encoding` is a standardized immutable/reusable descriptor/configuration abstraction outside the required Core prelude.
 
