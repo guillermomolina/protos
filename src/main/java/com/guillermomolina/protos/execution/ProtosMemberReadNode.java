@@ -46,18 +46,24 @@ public final class ProtosMemberReadNode extends ProtosExpressionNode {
         Object receiverValue = receiverNode.execute(frame);
         com.guillermomolina.protos.runtime.ProtosActivation activation =
                 ProtosFrameArguments.activation(frame);
-        com.guillermomolina.protos.runtime.ProtosPrelude prelude =
-                activation.prelude()
-                        .orElseThrow(
-                                () ->
-                                        new IllegalStateException(
-                                                "member lookup requires an owning Core prelude"));
+
+        java.util.Optional<ProtosSlotLookupResult> lookup;
+        if (receiverValue instanceof ProtosObjectValue ordinaryReceiver) {
+            lookup = ordinaryReceiver.lookupSlot(name);
+        } else {
+            com.guillermomolina.protos.runtime.ProtosPrelude prelude =
+                    activation.prelude()
+                            .orElseThrow(
+                                    () ->
+                                            new IllegalStateException(
+                                                    "represented-value member lookup requires an owning Core prelude"));
+            lookup = ProtosValueLookup.lookup(receiverValue, name, prelude);
+        }
 
         ProtosSlotLookupResult result =
-                ProtosValueLookup.lookup(receiverValue, name, prelude)
-                        .orElseThrow(
-                                () -> new ProtosSignalException(
-                                        ProtosCoreErrors.newError(activation)));
+                lookup.orElseThrow(
+                        () -> new ProtosSignalException(
+                                ProtosCoreErrors.newError(activation)));
 
         if (result.value() instanceof ProtosClosureValue closure) {
             return closure.bindMethod(receiverValue, result.home());

@@ -107,7 +107,7 @@ class ProtosNumericPrototypeBridgeTest {
                         .compile(
                                 """
                                 Integer.echoReceiver: () => this
-                                (23).echoReceiver()
+                                ((23).echoReceiver)()
                                 """)
                         .call(activation);
 
@@ -126,7 +126,7 @@ class ProtosNumericPrototypeBridgeTest {
                         prelude,
                         """
                         Number.echoReceiver: () => this
-                        (2.5).echoReceiver()
+                        ((2.5).echoReceiver)()
                         """);
 
         assertEquals(2.5d, ((ProtosFloatValue) result).value());

@@ -43,8 +43,6 @@ public final class ProtosPrelude {
                     "prelude Context binding must be the Context prototype");
         }
 
-        requireNumericPrototypeHierarchy();
-
         Object errorBinding = bindings.readLocalSlot("Error").orElse(null);
         if (!(errorBinding instanceof ProtosObjectValue errorPrototype)
                 || errorPrototype.parent().orElse(null)
@@ -60,24 +58,6 @@ public final class ProtosPrelude {
 
     public ProtosObjectValue contextPrototype() {
         return contextPrototype;
-    }
-
-    private void requireNumericPrototypeHierarchy() {
-        ProtosObjectValue number = requiredOrdinaryBinding("Number");
-        ProtosObjectValue integer = requiredOrdinaryBinding("Integer");
-        ProtosObjectValue floating = requiredOrdinaryBinding("Float");
-        if (number.parent().orElse(null) != ProtosObjectValue.rootObject()) {
-            throw new IllegalArgumentException(
-                    "standard Number must delegate directly to Object");
-        }
-        if (integer.parent().orElse(null) != number) {
-            throw new IllegalArgumentException(
-                    "standard Integer must delegate directly to Number");
-        }
-        if (floating.parent().orElse(null) != number) {
-            throw new IllegalArgumentException(
-                    "standard Float must delegate directly to Number");
-        }
     }
 
     private ProtosObjectValue requiredOrdinaryBinding(String name) {

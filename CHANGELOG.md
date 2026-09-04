@@ -4,6 +4,30 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.31-SNAPSHOT] - 2026-09-04
+
+### Fixed
+
+- Restored minimal/internal `ProtosPrelude` construction without requiring
+  source-backed `Number`, `Integer`, and `Float` bindings in every prelude.
+  Full Core bootstrap remains responsible for loading and validating the numeric
+  hierarchy.
+- Ordinary `ProtosObjectValue` member reads no longer require an owning Core
+  prelude. A prelude is required only when lookup crosses from a represented
+  non-ordinary runtime value into its source-backed standard prototype chain.
+- Corrected P52 numeric receiver-binding tests to use member extraction followed
+  by the already-supported ordinary `CanonicalCall` path instead of unsupported
+  `CanonicalSend` lowering.
+- Project implementation version changed from `0.2.30-SNAPSHOT` to `0.2.31-SNAPSHOT`.
+
+### Notes
+
+- Numeric hierarchy semantics from P52 are unchanged.
+- D027/B003 remains untouched: no parent is chosen for canonical `true` or
+  `false`, and no `Boolean` prototype is introduced.
+- No normative specification change is introduced.
+
+
 ## [0.2.30-SNAPSHOT] - 2026-09-04
 
 ### Added
