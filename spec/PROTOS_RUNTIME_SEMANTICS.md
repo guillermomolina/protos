@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 228
+Document revision: 229
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -5594,6 +5594,36 @@ caller-domain `NonParallelValue`.
 `closure.future()` created while the current activation belongs to a P domain
 creates an ordinary cooperative task owned by that P activation/domain. It keeps
 ordinary live P-local Closure captures and does not use parallel projection.
+
+### Standard byte-region submission
+
+Conceptually, standard `Bytes.parallelRange(start, length, worker, extras...)`:
+
+1. requires the current execution domain to be P, otherwise signals
+   `ParallelRegionOutsideP`;
+2. validates semantic Integer range bounds and Closure worker;
+3. rejects non-empty overlap on the same logical receiver with
+   `ParallelRegionOverlap`;
+4. validates worker/extra P inputs before publishing any reservation;
+5. reserves the exact half-open interval;
+6. snapshots that interval into a fixed-size child `ByteRegion`;
+7. launches a child P whose projected worker receives the region first, followed
+   by explicit extra arguments.
+
+Parent `Bytes.at`/`atPut` performs ordinary index/value validation and then
+signals `ParallelRegionInUse` before accessing a reserved index. Any standard
+operation that changes byte-sequence length or shifts indexes performs the same
+active-reservation rejection before structural mutation.
+
+On normal child completion, the runtime first validates/transfers the child
+result. Only then does it atomically substitute exactly the region's fixed number
+of final bytes into the reserved parent interval, release the reservation, and
+resolve the Future. Failure, cancellation, or result-transfer failure releases
+the reservation without committing region bytes.
+
+Disjoint reservations have no semantic ordering relative to each other. A
+`ByteRegion.parallelRange` recursively derives authority over a subrange and
+applies the same rules.
 
 At most one cooperative segment in the same P domain executes Protos code at a
 time. Explicit suspension may let another runnable P-local cooperative task run.

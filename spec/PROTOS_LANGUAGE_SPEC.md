@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 228
+Document revision: 229
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -5146,6 +5146,65 @@ region. Ordinary `closure.future()` created while executing inside P creates a
 cooperative P-local task. Such tasks may interleave at explicit suspension
 points but never execute Protos code simultaneously against the same P-local
 mutable state.
+
+#### Exclusive mutable byte regions
+
+Core v0.1 standardizes exclusive writable partitioning only for byte-indexed
+state whose mutable authority is intrinsically range-local: standard `Bytes` and
+the byte-region values created by the operation below.
+
+Inside an isolated P domain, standard `Bytes` provides:
+
+```text
+bytes.parallelRange(start, length, worker, arguments...)
+    -> Future
+```
+
+The operation is invalid outside P. `start` and `length` must be semantic
+Integers, `start >= 0`, `length >= 0`, and `start + length <= bytes.size`.
+`worker` must be a Closure.
+
+A successful submission reserves exactly the half-open indexed interval
+`[start, start + length)` of that receiver until the returned Future reaches a
+terminal state.
+
+The worker executes in a child P domain using ordinary Closure projection. Its
+first argument is a fresh standard `ByteRegion` capability representing exactly
+the reserved bytes, indexed locally from `0` through `length - 1`; the caller's
+explicit `arguments...` follow it.
+
+`ByteRegion` is an ordinary standard object capability with fixed `size`,
+`at(index)`, and `atPut(index, value)` behavior equivalent to the corresponding
+byte-indexed operations over its local interval. It has no operation that changes
+its length. It does not expose the parent `Bytes`, physical address, backing
+allocation, global offset, storage ownership, or another region.
+
+The child mutates only its isolated `ByteRegion`. On normal child completion,
+after the child result has itself been validated for P-boundary transfer, the
+region's final byte sequence replaces the reserved parent interval atomically and
+the parent Future resolves with the transferred child result. On child failure,
+cancellation, or an untransferable result, no region mutation is published to
+the parent.
+
+While a reservation is active, overlapping `parallelRange` submission signals
+`ParallelRegionOverlap`; parent `at`/`atPut` touching a reserved index signals
+`ParallelRegionInUse`; a parent operation that changes byte-sequence length or
+shifts indexes signals `ParallelRegionInUse`; unrelated accesses outside every
+active interval remain ordinary. `size` remains readable. No rule waits or
+suspends. Zero-length ranges reserve no indexed state and never overlap.
+
+`ParallelRegionOverlap`, `ParallelRegionInUse`, and `ParallelRegionOutsideP` are
+standard Error prototypes delegating directly to `Error`.
+
+A `ByteRegion` may itself use `parallelRange` inside its owning P domain, so
+exclusive byte authority composes recursively. It is not ordinarily P-/Actor-
+transferable and cannot escape as an ordinary result or explicit argument; only
+the dedicated parent-to-child region operation transfers its authority.
+
+Core v0.1 deliberately does not generalize this writable-region contract to
+ordinary `Array` or arbitrary objects. Array indexes may contain aliases to
+mutable object graphs, so disjoint index ranges alone do not establish disjoint
+mutable authority.
 
 Nested `closure.parallel(...)` crosses a fresh isolation boundary and may execute
 simultaneously, exactly as P created from an Actor may.

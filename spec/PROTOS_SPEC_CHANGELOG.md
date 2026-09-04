@@ -4,6 +4,40 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.229] - 2026-09-04
+
+### Closed
+- Standardized Core exclusive mutable partitioning for byte-indexed P-local state
+  through `Bytes.parallelRange(start, length, worker, arguments...)`.
+- Added fixed-size P-local `ByteRegion` capabilities with local zero-based byte
+  indexing and recursive `parallelRange`.
+- Restricted region creation to P so Actor source values remain unchanged.
+- Defined half-open range validation, zero-length behavior, reservation lifetime,
+  synchronous overlap rejection, and parent-access rejection without blocking.
+- Allowed unrelated unreserved byte access to proceed while disjoint children run.
+- Defined atomic successful publication of exactly the reserved bytes only after
+  normal child completion and successful child-result transfer.
+- Defined failure/cancellation/result-transfer failure to release authority without
+  publishing partial region mutation.
+- Defined `ByteRegion` as scoped P-local authority that cannot escape by ordinary
+  P/Actor transfer or serialization.
+- Deliberately left generic writable Array/object partitioning open because
+  disjoint indexes do not establish disjoint reachable mutable graphs.
+- Replaced the broad partition API/overlap open items with that narrower unresolved
+  generic-partition question.
+
+### Added
+- Added `ParallelRegionOverlap`, `ParallelRegionInUse`, and
+  `ParallelRegionOutsideP`, each delegating directly to `Error`.
+
+### Changed
+- Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`,
+  `PROTOS_CONCURRENCY_MODEL.md`, and `PROTOS_IO_MODEL.md` for the byte-region
+  authority boundary.
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 229.
+
 ## [0.1.228] - 2026-09-04
 
 ### Fixed

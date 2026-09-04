@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 228
+Document revision: 229
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -3850,10 +3850,15 @@ The governing rule is:
 > Physical storage may be shared, but two parallel computations must not
 > simultaneously hold mutable authority over the same logical state.
 
-A suitable Buffer, Array, or future partitionable value may therefore be
-split into logically disjoint writable regions. Several parallel
-computations may operate simultaneously on different regions while the
-runtime guarantees that the writable regions do not overlap.
+Core v0.1 standardizes this mechanism for byte-indexed state through standard
+`Bytes.parallelRange(...)` and recursive `ByteRegion.parallelRange(...)`.
+Several child P computations may operate simultaneously on disjoint byte ranges
+while the runtime guarantees that writable intervals do not overlap.
+
+Ordinary `Array` is not granted the same Core writable-region authority merely
+because its indexes are disjoint: its elements may alias arbitrary mutable object
+graphs. Future Array/object partition facilities require a stronger semantic
+proof than non-overlapping indexes.
 
 Conceptually:
 
@@ -3892,8 +3897,10 @@ same logical mutable state in a way forbidden by that child's exclusivity. When
 all relevant child authorities complete, the parent authority may be
 reconstituted according to the eventual partition API.
 
-The exact region/partition representation, eligibility rules, validation
-mechanism, recomposition operation, merge API, and surface syntax remain open.
+For Core byte regions, representation, validation, recomposition, and public
+surface are closed by §§71.18-71.20 below. Generic writable partitioning for
+Array or arbitrary object graphs remains open and is not implied by the byte
+mechanism.
 
 ### 71.6 Library-Level Parallel Patterns
 
@@ -4130,6 +4137,55 @@ that implementation.
 This leaves implementations free to exploit immutable representation aggressively
 without adding a second user-visible immutability/ownership system to Protos.
 
+### 71.18 Standard exclusive byte regions
+
+Inside P, standard `Bytes` provides `parallelRange(start, length, worker,
+arguments...) -> Future`. `ByteRegion` values created by this mechanism provide
+the same operation recursively.
+
+The operation is valid only in P. Outside P it signals
+`ParallelRegionOutsideP`. `start` and `length` are semantic Integers and define
+the half-open interval `[start, start + length)`, with non-negative bounds inside
+the receiver. `worker` must be a Closure and executes as a projected child-P
+Closure whose first argument is the fixed-size local `ByteRegion`.
+
+### 71.19 Reservation and overlap semantics
+
+A successful non-empty submission creates one exclusive reservation until its
+Future becomes terminal. Two non-empty intervals overlap exactly when each begins
+before the other ends. Overlap signals `ParallelRegionOverlap` synchronously and
+creates no Future/reservation. Zero-length intervals reserve nothing.
+
+While reserved, parent access inside the interval signals
+`ParallelRegionInUse`; access wholly outside active intervals remains ordinary;
+`size` remains readable; operations that can change length or shift indexed
+positions signal `ParallelRegionInUse` while any reservation exists. These rules
+fail rather than block or suspend.
+
+A `ByteRegion` exposes only local zero-based byte indexing, fixed `size`, and
+recursive `parallelRange`. It exposes no parent identity, absolute offset,
+physical backing, address, or sibling authority.
+
+### 71.20 Commit, failure, and recursive subdivision
+
+The child mutates isolated region state. Parent mutation occurs only at successful
+publication, after both normal child completion and successful P-boundary result
+transfer. Then exactly the region's fixed bytes atomically replace the reserved
+parent interval, the reservation is released, and the Future resolves. Failure,
+cancellation, or untransferable result releases the reservation without publishing
+region mutation.
+
+This atomicity is only the reserved-byte publication boundary, not a transaction
+over arbitrary P state. Disjoint commits have no added total order. Recursive
+`ByteRegion.parallelRange` subdivides authority with the same rules.
+
+`ByteRegion` is scoped P-local authority, not an ordinary transferable/serializable
+value. It moves only through the dedicated region operation that defines the
+authority transfer.
+
+Core deliberately leaves generic writable Array/object partitioning open because
+disjoint indexes do not prove disjoint mutable reachable graphs.
+
 ### 71.13 Standard `Closure.parallel(...)`
 
 The Core v0.1 public submission surface is:
@@ -4309,8 +4365,8 @@ mechanism, or implementation detail that still requires design.
 -   Async streams
 -   Generators and suspendable iteration
 -   Whether Task should become observable
--   Exclusive mutable partition/region API and representation
--   Partition overlap/alias validation mechanism
+-   Whether generic writable Array/object partitioning is standardized beyond
+    Core byte regions
 -   Parallel map/filter/reduce/sort/iteration standard-library APIs
 -   Parallel scheduling, work-stealing, and granularity heuristics
 -   Nested-parallelism admission and fairness
