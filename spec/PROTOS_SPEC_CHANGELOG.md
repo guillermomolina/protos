@@ -8,6 +8,17 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.356] - 2026-09-04
+
+### Ordinary computed-operation invocation spelling
+- Closed D014 by making standard `size`, `hash`, and exposed `identityHash` behaviors ordinary zero-argument Closure-valued slots invoked with parentheses; ordinary member reads such as `obj.hash` only retrieve/extract the selected value and never auto-invoke it.
+- Aligned Array, Map, IdentityMap, Bytes, String, numeric hashing, and parallel-result examples so actual operation execution uses `size()` / `hash()` consistently.
+- Kept `identityHashOf(value)` as the existing non-overridable primitive semantic operation used by identity-sensitive machinery; an exposed `identityHash()` convenience remains an ordinary overridable message and is not used by `IdentityMap`.
+- Clarified shadowing and extraction: a nearer non-Closure `size`/`hash` slot is readable normally but `obj.size()` / `obj.hash()` fails under ordinary invocation, with no ancestor fallback after the nearer slot was selected.
+
+### Compatibility
+- Removes computed-property/auto-call ambiguity without adding getters, descriptors, hidden built-in exceptions, or a second invocation protocol.
+
 ## [0.1.355] - 2026-09-04
 
 ### String normative ownership and migration cleanup
