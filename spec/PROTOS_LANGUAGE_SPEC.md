@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 319
+Document revision: 320
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -2119,37 +2119,104 @@ ordinary Protos code inline merely because the source Future becomes terminal.
 
 ## 29. Obtaining a Future's Value
 
-```js
-result: future.value()
+This section is the primary normative owner of the Core v0.1
+`Future.value()` observation semantics.
+
+```text
+future.value()
 ```
 
-returns immediately when resolved.
+observes the Future's stable state defined in §28.
 
-If pending, the current activation is suspended. This does not require blocking an operating-system thread.
+For a resolved Future, `value()` returns the resolved value immediately.
 
-The implementation may use threads, fibers, coroutines, an event loop, or another scheduling mechanism without changing language semantics.
-
-If the Future completed with an error, `value()` signals that error in the waiting activation.
-
-### Failed-Future observation is a new non-resumable signal
-
-When `Future.value()` observes a failed Future, the recorded `Error` is signaled
-again in the consumer's then-current dynamic handler context. This is a new Core
-error-signaling event at the consumer observation point.
-
-It is not a continuation of the producer's original signaling operation. The
-producer-side signaling continuation was already abandoned under the Core
-non-resumable error model. Storing an Error in a Future does not preserve a
+For a failed Future, `value()` signals the exact stored domain-local `Error`
+object in the consumer's then-current dynamic handler context. This is a new
+non-resumable signaling event at the consumer observation point. It is not a
+continuation of the producer's original signaling operation and carries no
 producer stack frame, handler frame, continuation token, return home, or other
 resumption authority.
 
 If a consumer handler handles that re-signaled Error, the handler result belongs
-only to the consumer-side `handle(...)` boundary. It cannot resume, retry, or
-inject a value into the producer computation that originally failed.
+only to the consumer-side handling boundary. It cannot resume, retry, or inject a
+value into the producer computation that originally failed. Repeated observations
+of the same failed Future are repeated consumer-side signaling events and
+re-signal the same stored Error object, subject to the value-domain boundary
+rules of §28.
 
-Repeated observations of the same failed Future, where otherwise permitted by
-the Future contract, are repeated consumer-side signaling events. They never
-revive or re-enter the failed producer computation.
+### Cancelled Future observation
+
+`Cancelled` is a standard Error prototype and standard-prelude binding delegating
+directly to `Error`.
+
+For a cancelled Future, `value()` signals the standard `Cancelled` object in the
+consumer's then-current dynamic handler context. Each observation is a new
+non-resumable signaling event; it does not resume or recreate the cancelled
+producer computation.
+
+This cancellation-observation Error is distinct from the Future's `cancelled`
+terminal state: the state is stored on the Future, while `Cancelled` is the
+ordinary Error object signaled when `value()` observes that state.
+
+### Pending Future observation and lost-wakeup exclusion
+
+For a pending Future, `value()` explicitly suspends the current execution until
+that Future becomes terminal or the waiting task observes its own cancellation.
+Suspension does not require blocking an operating-system thread.
+
+The decision to suspend and registration of the waiting continuation are
+semantically atomic with respect to the Future's first terminal transition.
+There is no interval in which `value()` has committed to waiting because it saw
+`pending` while the Future can become terminal without either observing that
+waiter or causing the attempted suspension to observe the terminal state.
+
+Equivalently, every conforming implementation must ensure one of these outcomes:
+
+```text
+Future terminal transition happens first
+    -> the consumer does not remain suspended on that Future
+
+waiter registration happens first
+    -> that terminal transition makes the registered consumer eligible to resume
+```
+
+When a Future makes its first terminal transition, every still-live continuation
+registered as waiting on that Future becomes eligible to resume. One waiter must
+not be skipped merely because another waiter is also registered. Terminalization
+must clear or make inert the pending waiter registrations so a terminal Future
+does not retain suspended continuations indefinitely.
+
+A waiter becoming eligible does not imply immediate execution and does not create
+a global ordering among independent runnable work. Implementations may use locks,
+CAS, generation counters, register-then-recheck, callbacks, waiter nodes, queues,
+condition variables, or another mechanism. Spurious internal wake-ups are
+permitted only when semantically invisible; lost terminal notifications and
+duplicate semantic resumptions are not.
+
+### Interaction with waiting-task cancellation
+
+Calling `value()` is an explicit suspension point, so a task-backed consumer is
+subject to the cooperative cancellation semantics owned by
+`PROTOS_CONCURRENCY_MODEL.md` §23.
+
+If cancellation of the waiting task is already pending at the suspension
+boundary, cancellation is honored instead of installing a live waiter. If the
+task is already suspended and cancellation is requested later, the task becomes
+cancellation-runnable without waiting for the observed Future to complete.
+
+Before a suspended task resumes ordinary Protos code or receives a successful
+`value()` result, the ordinary resume cancellation boundary applies. Therefore,
+if the observed Future becomes terminal and the waiting task also has cancellation
+pending at that resume boundary, cancellation of the waiting task wins for that
+consumer. The observed Future retains its own terminal outcome unchanged.
+
+Cancelling one waiting task never calls `cancel()` on the observed Future and
+does not affect other waiters on that Future.
+
+A non-task-backed execution context that is otherwise permitted to suspend may
+also call `value()`. It is not manufactured into a hidden task-backed Future
+merely to wait; it waits under its enclosing lifecycle and has no task
+cancellation flag to consult.
 
 ## 30. Future Composition
 

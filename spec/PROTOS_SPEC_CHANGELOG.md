@@ -8,6 +8,46 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.320] - 2026-09-04
+
+### Added / Closed
+- Closed the remaining `Future.value()` specification gap.
+- Defined `Cancelled` as a standard Error prototype and standard-prelude binding
+  delegating directly to `Error`.
+- Defined `Future.value()` on a cancelled Future to signal the standard
+  `Cancelled` object as a fresh non-resumable consumer-side signaling event.
+- Made `PROTOS_LANGUAGE_SPEC.md` §29 the primary normative owner of
+  `Future.value()` observation semantics.
+- Moved the existing lost-wakeup exclusion into that owning contract: observing
+  `pending` and registering the waiting continuation are semantically atomic with
+  respect to the Future's first terminal transition.
+- Required every still-live waiter registered before the first terminal transition
+  to become eligible to resume and required terminal waiter registrations to be
+  cleared or made inert.
+- Integrated waiting-task cancellation by reference to the existing concurrency
+  §23 boundaries without propagating cancellation upstream to the observed Future.
+
+### Changed
+- Removed the duplicate conceptual `wakeWaiters`, `awaitFutureValue`, and
+  `suspendOnPendingFuture` algorithms from `PROTOS_RUNTIME_SEMANTICS.md`; runtime
+  waiter machinery is now explicitly implementation freedom subject to Language
+  §29 and Concurrency §23.
+- Retained only the implementation-boundary rule that internal task/fiber/
+  continuation records are not Protos values.
+- Fixed two duplicate introductory lines accidentally left in Runtime during the
+  ownership-migration patches.
+- This revision deliberately standardizes the previously pseudocode-only
+  `Cancelled` observation category; it closes accidental implementation freedom
+  rather than adding a second cancellation mechanism.
+
+### Documentation
+- Updated `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` to document
+  revision 320.
+- `PROTOS_CONCURRENCY_MODEL.md` remains at document revision 319 because its
+  normative content is unchanged.
+- `PROTOS_GRAMMAR.md` and `PROTOS_IO_MODEL.md` are unaffected and remain
+  byte-for-byte unchanged.
+
 ## [0.1.319] - 2026-09-04
 
 ### Changed

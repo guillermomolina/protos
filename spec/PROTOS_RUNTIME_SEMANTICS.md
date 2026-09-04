@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 319
+Document revision: 320
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -1976,196 +1976,35 @@ state.
 
 ---
 
-# 32. Future Waiter Runtime Bookkeeping
+# 32. Future Observation Runtime Integration
 
-`wakeWaiters(future)` is conceptual runtime bookkeeping with the following
-observable contract:
-`wakeWaiters(future)` is conceptual runtime bookkeeping with the following
-observable contract:
+The normative semantics of `Future.value()`, including resolved/failed/cancelled
+observation, `Cancelled`, waiter registration, first-terminal-transition wake-up,
+lost-wakeup exclusion, waiter lifetime, and waiting-task cancellation interaction,
+are owned by `PROTOS_LANGUAGE_SPEC.md` §29 together with the cooperative
+cancellation rules of `PROTOS_CONCURRENCY_MODEL.md` §23.
 
-```text
-function wakeWaiters(future):
-    waiters = future.waiters
-    future.waiters = empty
-
-    for each waiter in waiters:
-        scheduler.makeRunnableLater(waiter)
-```
-
-Every execution continuation suspended by `awaitFutureValue(future, ...)` is one
-waiter on that Future. A waiter may belong to a task-backed execution or to
-another execution context that is permitted to suspend; waiter identity is the
-continuation to resume, not an assertion that every Future observer is itself a
-`Task`.
+A runtime may represent waiters, suspended continuations, atomic registration,
+wake-up, inert waiter cleanup, runnable queues, and resumption using any mechanism
+that preserves those contracts. This document does not define a second
+conceptual `awaitFutureValue`, `suspendOnPendingFuture`, or `wakeWaiters`
+algorithm and does not add an observable scheduling order.
 
 ### Internal task records are not Protos values
 
 Any runtime task/fiber/continuation record used to realize asynchronous work is
 internal execution machinery, not a Core Protos value or identity. Core exposes
-the Future outcome and the already-defined activation/execution-domain
-semantics, not a handle to the scheduler object that happens to produce that
-outcome.
+the Future outcome and the defined activation/execution-domain semantics, not a
+handle to the scheduler object that happens to produce or wait for that outcome.
 
 No runtime transformation may become observable by changing the number,
 identity, parentage, inlining, splitting, fusion, migration, or carrier
 assignment of internal task records while preserving the specified Future,
 cancellation, structured-ownership, Actor, and P behavior.
 
-
-
-Waiter registration and the Future's first terminal transition obey the atomic
-race rule defined by `suspendOnPendingFuture`: a completion cannot fall into a
-gap between observing `pending` and installing the waiter. When the Future makes
-its first terminal transition, every waiter that was still registered for that
-Future becomes eligible to resume; no waiter is skipped merely because another
-waiter was also registered.
-
-Clearing the waiter registration before making waiters runnable is semantic
-bookkeeping: once the Future is terminal, no task remains a pending waiter on
-that Future. A waiter that was independently cancelled before this wake-up may
-already have been removed or made inert according to the cancellation rules;
-such a waiter must not execute ordinary Protos code merely because a stale
-registration is later encountered.
-
-The operation is idempotent with respect to terminal Future state: there is one
-wake-up event for the Future's terminal transition, and later attempts to wake
-the same terminal Future do not enqueue duplicate semantic resumptions.
-
-Implementations may use intrusive lists, callbacks, waiter nodes, queues,
-condition variables, or another representation. They must release or make
-inert the Future's waiter registrations after terminal transition so that a
-terminal Future does not retain suspended-task continuation state indefinitely.
-A program-held reference to a task/Future remains governed by ordinary object
-reachability; this rule concerns runtime waiter bookkeeping only.
-
-A waiter becoming runnable does not imply that it will execute immediately, and
-it does not bypass the existing before-resume cancellation boundary or the
-weak-fairness rule.
-
-There is no separate promise-rejection type.
-
-The stored value is an ordinary language error object.
-
 ---
 
-# 33. Waiting for a Future
-
-For:
-
-```js
-future.value()
-```
-
-conceptually:
-
-```text
-function awaitFutureValue(future, activation):
-    switch future.state:
-
-        case resolved:
-            return future.value
-
-        case failed:
-            signal(
-                future.error,
-                activation
-            )
-
-        case cancelled:
-            signal(
-                Cancelled,
-                activation
-            )
-
-        case pending:
-            suspendOnPendingFuture(
-                future,
-                activation
-            )
-
-            return awaitFutureValue(
-                future,
-                activation
-            )
-```
-
-Conceptually:
-
-```text
-function suspendOnPendingFuture(future, activation):
-    task = taskContaining(activation)  // may be none
-    waiter = suspendedContinuationOf(activation)
-
-    // This is the ordinary explicit-suspension cancellation boundary when the
-    // current execution is task-backed and therefore has a cancellation target.
-    if task != none and task.future.cancellationRequested:
-        honorCancellation(task)
-        return
-
-    atomically with respect to future's first terminal transition:
-        if future.state != pending:
-            return
-
-        registerWaiter(
-            future,
-            waiter
-        )
-
-        mark waiter suspended waiting on future
-
-        if task != none:
-            associateSuspendedWaiter(task, waiter)
-```
-
-The atomic region above specifies an observable race property, not a required
-locking mechanism. There is no interval in which `awaitFutureValue` has decided
-to wait because the Future appeared pending but the Future can complete without
-either observing the registered waiter or causing the attempted suspension to
-notice that completion.
-
-Equivalently, every conforming implementation must ensure one of these outcomes:
-
-```text
-Future terminal transition happens first
-    -> the consumer does not remain suspended on that Future
-
-waiter registration happens first
-    -> that terminal transition includes the consumer in wakeWaiters(future)
-```
-
-A runtime may implement this with a lock, compare-and-set state, generation
-counter, register-then-recheck protocol, or another mechanism. Spurious internal
-wake-ups are permitted only when they remain semantically invisible; lost
-terminal notifications are not.
-
-A Future waiter denotes the suspended execution continuation that must become
-eligible to resume, not necessarily a `Task` object. Ordinary Actor turns,
-bootstrap/root execution, or another execution context that can explicitly wait
-on a Future need not be manufactured into a task-backed Future merely to use
-`value()`.
-
-When the waiting execution is task-backed, the waiter remains associated with
-that task so the existing cooperative-cancellation machinery can make the
-suspended continuation cancellation-runnable. If cancellation was already
-pending at the explicit suspension boundary, cancellation is honored instead of
-installing a live waiter. A cancellation request that arrives after that boundary
-follows the existing cancellation-runnable rules and cannot strand the registered
-waiter.
-
-For a non-task-backed execution there is no task cancellation flag to consult;
-this does not create an uncancellable hidden task. It only means that the
-execution is waiting under its own enclosing lifecycle rather than under a
-Future/task cancellation target.
-
-Returning from `suspendOnPendingFuture` because the Future was already terminal
-does not itself execute user code or consume the result. `awaitFutureValue`
-re-enters the normal state switch, which returns or signals the stable terminal
-outcome.
-
-Suspending an activation does not imply blocking an OS thread.
-
----
-
+# 34. Future Composition
 # 34. Future Composition
 
 The normative semantics of `Future.then(...)` are owned by
@@ -2195,8 +2034,6 @@ conceptual ownership or detachment algorithm.
 The Actor-termination integration below remains runtime-oriented realization of
 the separately owned Actor lifecycle contracts.
 
-Conceptually, Actor termination while its hosting runtime can still execute
-cleanup includes:
 Conceptually, Actor termination while its hosting runtime can still execute
 cleanup includes:
 
