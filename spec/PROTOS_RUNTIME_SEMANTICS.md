@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 278
+Document revision: 279
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -6163,6 +6163,27 @@ If the Error graph itself is not P-transferable, the Future instead fails with a
 caller-domain `NonParallelValue`.
 
 ### P-local cooperative Future work
+
+### Synchronous foreign-call offload preserves the Protos segment
+
+For any implementation/extension foreign call whose Protos-facing contract is
+synchronous, physical host offload must not become a semantic scheduler handoff.
+
+Conceptually:
+
+```text
+invokeSynchronousForeign(call):
+    preserve current Protos execution segment
+    result = executeForeignPhysically(call)   // may use any host worker
+    return result within the same semantic segment
+```
+
+The runtime may release the underlying carrier while the host work is pending,
+but it must not dispatch another Protos continuation against the same Actor
+mutable domain as a consequence of that release.
+
+Only an explicitly asynchronous foreign-operation contract may return control to
+the Actor scheduler while the external operation remains pending.
 
 ### Actor-boundary return-home confinement
 

@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.279] - 2026-09-04
+
+### Closed
+- Closed `Blocking foreign calls` and `Blocking-operation offload`.
+- Defined a synchronous foreign/host call as part of the current uninterrupted
+  Protos execution segment even when its physical work is offloaded.
+- Permitted runtimes to move blocking host work to helper threads/carriers or
+  equivalent machinery only as an observationally invisible optimization.
+- Prohibited physical offload from creating hidden Actor-local reentrancy or an
+  implicit Protos suspension point.
+- Required an explicit asynchronous/Future-returning extension contract when
+  foreign work should release the Actor for other runnable Protos work.
+- Clarified that a non-returning synchronous foreign call may stall its Actor
+  indefinitely; Core adds no hidden timeout, cancellation, or preemption.
+- Left worker-pool sizing, queueing, scheduling, and similar offload machinery as
+  implementation details.
+- Removed both corresponding items from Open Design Topics.
+
+### Changed
+- Updated `PROTOS_RUNTIME_SEMANTICS.md` and `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  279.
+
 ## [0.1.278] - 2026-09-04
 
 ### Fixed

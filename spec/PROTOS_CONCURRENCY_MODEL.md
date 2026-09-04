@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 278
+Document revision: 279
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -1803,6 +1803,92 @@ boundaries.
 This closes the former open ledger item `Dynamic error handlers across Actor
 boundaries`; there is no remaining implementation-selectable behavior in Core
 v0.1 for this topic.
+
+## 24J. Blocking Foreign Calls and Physical Offload
+
+**CLOSED**
+
+Core v0.1 does not standardize a general Java/FFI/native-call API. However, any
+implementation extension that invokes foreign or host code from ordinary Protos
+execution must preserve the existing Protos execution-segment semantics.
+
+A foreign operation exposed as a **synchronous** Protos call is part of the
+current Protos execution segment. If the foreign operation blocks, the calling
+Actor's semantic execution segment remains occupied until that call returns,
+fails, or otherwise completes according to the extension's synchronous contract.
+
+An implementation may physically offload that blocking host work to another OS
+thread, carrier, native worker, helper process, or equivalent mechanism to avoid
+blocking a runtime scheduler thread. Such physical offload is semantically
+invisible.
+
+In particular, physical offload of a synchronous foreign call does **not** create
+an implicit Protos suspension point. While that synchronous call is outstanding:
+
+- no other Actor-local Protos task or message handler may interleave in the same
+  Actor merely because the host call is running elsewhere;
+- Actor-local mutable state remains protected by the same uninterrupted segment
+  boundary as if the host call were executed directly on the current carrier;
+- cancellation is not newly observable inside the call unless the extension
+  explicitly defines a cancellation-aware foreign operation;
+- dynamic handlers, `this`, lexical state, return homes, and other execution
+  context remain those of the original synchronous call;
+- runtime carrier availability must not change whether Actor-local reentrancy is
+  observable.
+
+If an extension wants a foreign operation to permit Actor-local reentrancy while
+the external work is pending, it must expose an **explicit asynchronous
+boundary**, normally by returning a Future or another separately standardized
+asynchronous operation whose suspension/cancellation/commitment semantics are
+defined. Waiting through the ordinary Future protocol may then suspend at the
+already-defined explicit boundary.
+
+Therefore these two implementation strategies are semantically equivalent for a
+synchronous foreign operation:
+
+```text
+call host operation directly and block carrier
+```
+
+and:
+
+```text
+offload host operation physically
+park current implementation continuation
+resume same Protos segment when host result is ready
+```
+
+They are **not** equivalent to:
+
+```text
+offload host operation
+run unrelated Actor-local Protos work
+resume original call later
+```
+
+unless the language/extension contract explicitly introduced an asynchronous
+suspension boundary before that interleaving.
+
+This rule prevents implementation-selected host integration from weakening C's
+serialized mutable-state semantics or making Actor reentrancy depend on the
+runtime's foreign-call executor architecture.
+
+The number, size, queueing discipline, admission policy, thread identity,
+pinning, and scheduling of foreign-call offload workers remain implementation
+details unless an extension explicitly makes them semantic.
+
+A catastrophically non-returning foreign call may therefore stall the calling
+Actor indefinitely under a synchronous contract. Core does not invent hidden
+preemption, timeout, cancellation, or migration to recover from such a call.
+
+Future interoperability facilities may define stronger contracts, including
+interruptible calls, deadlines, host cancellation, resource isolation, process
+offload, or dedicated blocking pools. Such facilities must define their own
+observable semantics and must not retroactively change the meaning of an
+ordinary synchronous call.
+
+This closes the former open ledger items `Blocking foreign calls` and
+`Blocking-operation offload`.
 
 ## 25. Parent Actor Versus Failure Authority
 
@@ -5687,8 +5773,6 @@ mechanism, or implementation detail that still requires design.
 -   Java interoperability isolation
 -   Java static mutable state
 -   Native global state
--   Blocking foreign calls
--   Blocking-operation offload
 -   Timers
 -   Clock semantics
 -   Resource limits and quotas
