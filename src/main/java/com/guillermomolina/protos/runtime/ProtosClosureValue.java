@@ -48,7 +48,7 @@ public final class ProtosClosureValue {
                 returnHome);
     }
 
-    private ProtosClosureValue(
+    public ProtosClosureValue(
             CanonicalClosure definition,
             List<ProtosObjectValue> capturedLexicalContexts,
             Object capturedReceiver,

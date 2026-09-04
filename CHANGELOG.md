@@ -4,6 +4,33 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.20-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added implementation-private activation `methodHome` state matching the
+  normative `super` lookup model.
+- Closure literals now capture the current activation's `methodHome` together
+  with receiver and return-home metadata.
+
+### Changed
+
+- Object-construction execution preserves enclosing `methodHome` metadata while
+  continuing not to become a lexical capture scope.
+- Project implementation version changed from `0.2.19-SNAPSHOT` to `0.2.20-SNAPSHOT`.
+
+### Tests
+
+- Added focused coverage proving construction preserves the exact enclosing
+  method home.
+
+### Notes
+
+- This increment does not execute `super`, perform callable dispatch, or create
+  method activations yet.
+- No normative specification change is introduced.
+
+
 ## [0.2.19-SNAPSHOT] - 2026-09-04
 
 ### Added
