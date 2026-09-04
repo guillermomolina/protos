@@ -4,6 +4,31 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.307] - 2026-09-04
+
+### Closed
+- Closed the relationship between logical Protos topology and physical
+  infrastructure topology as an explicit semantic boundary.
+- Reaffirmed `Process` as execution capacity, `Node` as runtime membership, and
+  `Cluster` as a coordination domain rather than aliases for host infrastructure.
+- Defined no implicit one-to-one mapping from Protos identities to OS processes,
+  hosts, VMs, containers, pods, CPU/NUMA topology, racks, zones, regions, or
+  equivalent infrastructure units.
+- Allowed conforming implementations to co-locate, separate, or move physical
+  resources without changing logical identity, isolation, authority, lifetime,
+  communication, failure, placement, or continuity semantics.
+- Clarified that physical relocation is not Actor migration and cannot preserve
+  an Actor incarnation unless a future normative migration facility says so.
+- Preserved affinity, hard placement, failure-domain, rebalancing, migration,
+  capacity, and infrastructure-adapter APIs/policies as separate open topics.
+- Removed `Relationship between logical Protos topology and physical
+  infrastructure topology` from Open Design Topics.
+
+### Changed
+- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  307.
+
 ## [0.1.306] - 2026-09-04
 
 ### Closed

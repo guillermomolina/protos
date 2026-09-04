@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 306
+Document revision: 307
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -6393,6 +6393,61 @@ separate open design topics.
 
 This closes the former open ledger item `ActorRef routing implementation`.
 
+## 72D. Logical and Physical Topology Are Distinct
+
+**CLOSED**
+
+Core v0.1 distinguishes Protos logical topology from the physical topology used
+to host or optimize an implementation.
+
+The logical entities defined by the concurrency model retain only their
+normatively specified meanings. In particular, a Protos `Process` is execution
+capacity, a `Node` is runtime membership, and a `Cluster` is a coordination
+domain. None of those meanings, by itself, creates a portable one-to-one mapping
+to an operating-system process, host, virtual machine, container, pod, CPU
+package, NUMA domain, rack, availability zone, region, subnet, or equivalent
+infrastructure unit.
+
+An implementation or infrastructure adapter may map logical entities onto
+physical resources in any conforming way. It may co-locate multiple logical
+entities, separate them physically, move implementation resources, or change
+internal placement over time, provided every existing Protos-observable
+identity, isolation, lifetime, authority, communication, failure, placement, and
+continuity rule remains satisfied.
+
+Therefore physical co-location does not:
+
+- merge Actor, Process, Node, Group, or Cluster identity;
+- create cross-domain mutable Protos references;
+- grant authority or capability;
+- make a non-transferable value transferable;
+- imply same failure fate, shared lifecycle, or durable continuity;
+- authorize ActorRef retargeting or Actor identity migration;
+- imply that a particular transport must be used.
+
+Conversely, physical separation does not by itself create a new Protos identity,
+failure domain, message semantic, serialization contract, or distributed
+authority boundary beyond those explicitly defined by the normative model.
+
+Moving an implementation artifact or changing physical placement is not an Actor
+migration unless a normative Actor-migration facility explicitly preserves the
+Actor incarnation across that operation. Recreating an Actor elsewhere under the
+ordinary lifecycle rules remains a new Actor incarnation with a new ActorRef.
+
+Infrastructure topology may be used internally for placement, scheduling,
+transport selection, failure avoidance, resource accounting, and administrative
+diagnostics. Such use is implementation or policy machinery unless a separate
+portable facility explicitly exposes a topology concept.
+
+This closure does not decide the still-open APIs and policies for affinity,
+anti-affinity, hard placement constraints, failure-domain configuration,
+placement scoring, rebalancing, migration, capacity provisioning, or external
+infrastructure adapters. Those facilities may deliberately refer to selected
+physical concepts, but must define their own observable contracts.
+
+This closes the former open ledger item `Relationship between logical Protos
+topology and physical infrastructure topology`.
+
 ## Open Design Topics
 
 The following topics remain intentionally open. Items whose fundamental
@@ -6477,8 +6532,6 @@ mechanism, or implementation detail that still requires design.
 -   Cluster lazy startup
 -   Node lazy activation
 -   Durable Cluster bootstrap after zero active Nodes
--   Relationship between logical Protos topology and physical
-    infrastructure topology
 -   Runtime metrics architecture
 -   Scheduler/advisor interaction
 -   Scheduler/capacity-demand interaction
