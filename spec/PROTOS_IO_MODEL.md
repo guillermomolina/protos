@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 304
+Document revision: 305
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -49,6 +49,7 @@ The following are intentionally outside this I/O model:
 - network authority acquisition and policy;
 - socket creation, `connect`, `bind`, `listen`, `accept`, datagram addressing, and transport-configuration APIs;
 - DNS/name resolution and the relationship between names, addresses, and network authority;
+- pipe creation/pairing and pipe-specific cross-endpoint semantics, including writer-close-to-reader-EOF behavior, reader-close/broken-pipe behavior, pipe buffering/capacity, and any pipe-specific readiness or atomic-write guarantee;
 - a general incremental encoder/decoder feed/reset API;
 - `print` and the exact object textual-representation protocol.
 
@@ -838,9 +839,9 @@ Syncable      // only when the backend has a meaningful durability boundary
 
 A raw file is not required to expose `Flushable`; raw writes may already target the file's underlying byte boundary while durability remains a separate `sync()` concern.
 
-A `PipeReader` exposes `ByteReadable` and `Closable`.
+Core v0.1 does not standardize concrete `PipeReader` / `PipeWriter` endpoint types or a paired-pipe lifecycle contract. A library or host facility may provide a readable pipe endpoint exposing `ByteReadable` and `Closable`, and a writable pipe endpoint exposing `ByteWritable` and `Closable`, but those capability shapes alone do not define a portable relationship between two endpoints.
 
-A `PipeWriter` exposes `ByteWritable` and `Closable`.
+In particular, Core v0.1 does not infer from those Traits that closing a writable endpoint commits EOF on some reader, that closing a readable endpoint causes a specific later writer failure, that one endpoint has exactly one peer, that any particular buffering/capacity exists, or that writes have a pipe-specific atomicity/readiness guarantee beyond the ordinary `ByteWritable` contract. A future standard pipe facility must define those cross-endpoint semantics explicitly rather than inheriting POSIX, Java, Windows, or another host pipe model accidentally.
 
 A `Socket` exposes `ByteReadable`, `ByteWritable`, `ReadShutdown`, `WriteShutdown`, and `Closable`.
 

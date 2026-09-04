@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.305] - 2026-09-04
+
+### Fixed
+- Removed the accidental implication that Core v0.1 already standardizes concrete
+  `PipeReader` / `PipeWriter` endpoint types merely by listing capability shapes.
+- Kept readable and writable pipe-like endpoints free to expose ordinary
+  `ByteReadable`/`ByteWritable` plus `Closable` when provided by a library/host.
+- Explicitly left pipe creation/pairing and cross-endpoint lifecycle semantics
+  outside Core v0.1, including writer-close-to-reader-EOF, reader-close/broken-pipe,
+  buffering/capacity, readiness, peer cardinality, and pipe-specific atomic-write
+  guarantees.
+- Prohibited implementations from importing POSIX, Java, Windows, or another host
+  pipe model as portable Protos semantics merely from the generic I/O Traits.
+- Required any future standard pipe facility to define those cross-endpoint
+  semantics explicitly.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 305. Only
+  `PROTOS_IO_MODEL.md` gains normative clarification in this revision.
+
+
 ## [0.1.304] - 2026-09-04
 
 ### Fixed
