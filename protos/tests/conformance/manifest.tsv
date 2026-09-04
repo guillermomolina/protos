@@ -116,3 +116,11 @@ numeric-equality/integer-negative-zero-equal.protos	boolean	true
 numeric-equality/positive-infinity-equal.protos	boolean	true
 numeric-equality/opposite-infinity-not-equal.protos	boolean	false
 numeric-equality/non-number-false.protos	boolean	false
+equality/default-same-object.protos	boolean	true
+equality/default-distinct-objects.protos	boolean	false
+equality/numeric-inequality-true.protos	boolean	true
+equality/numeric-inequality-false.protos	boolean	false
+equality/fixed-inequality-false.protos	boolean	false
+equality/nonidentity-same-number.protos	boolean	false
+equality/nonidentity-cross-family.protos	boolean	true
+equality/nonidentity-distinct-objects.protos	boolean	true

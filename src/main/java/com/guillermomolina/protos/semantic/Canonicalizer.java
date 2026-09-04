@@ -44,6 +44,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalCompose;
 import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
+import com.guillermomolina.protos.semantic.ast.CanonicalNotIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalIndexedAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
@@ -233,11 +234,18 @@ public final class Canonicalizer {
             case "||" -> lowerLazyBoolean(binary, "or");
             case "==" -> lowerEquality(binary);
             case "!=" ->
-                    negate(lowerEquality(binary), binary.span());
+                    new CanonicalSend(
+                            canonicalize(binary.left()),
+                            "!=",
+                            List.of(canonicalize(binary.right())),
+                            binary.span());
             case "===" ->
                     lowerIdentity(binary);
             case "!==" ->
-                    negate(lowerIdentity(binary), binary.span());
+                    new CanonicalNotIdentity(
+                            canonicalize(binary.left()),
+                            canonicalize(binary.right()),
+                            binary.span());
             default ->
                     new CanonicalSend(
                             canonicalize(binary.left()),
@@ -276,10 +284,6 @@ public final class Canonicalizer {
                 canonicalize(binary.left()),
                 canonicalize(binary.right()),
                 binary.span());
-    }
-
-    private CanonicalExpression negate(CanonicalExpression expression, com.guillermomolina.protos.source.SourceSpan span) {
-        return new CanonicalSend(expression, "not", List.of(), span);
     }
 
     private CanonicalExpression lowerUnary(SurfaceUnary unary) {

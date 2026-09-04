@@ -28,6 +28,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalCompose;
 import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
+import com.guillermomolina.protos.semantic.ast.CanonicalNotIdentity;
 import com.guillermomolina.protos.semantic.ast.CanonicalIndexedAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
@@ -70,6 +71,12 @@ public final class CanonicalToTruffleLowerer {
         }
         if (expression instanceof CanonicalIdentity identity) {
             return new ProtosIdentityNode(
+                    identity.span(),
+                    lower(identity.left()),
+                    lower(identity.right()));
+        }
+        if (expression instanceof CanonicalNotIdentity identity) {
+            return new ProtosNotIdentityNode(
                     identity.span(),
                     lower(identity.left()),
                     lower(identity.right()));

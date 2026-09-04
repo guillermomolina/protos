@@ -4,6 +4,34 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.52-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Implemented standard `Object.==` using Protos semantic identity as the default
+  equality for receivers without a nearer equality override.
+- Implemented standard `Object.!=` as the strict Boolean complement of the
+  receiver's dynamically selected current `==` behavior.
+- `Object.!=` propagates equality errors and rejects a non-Boolean normal result
+  instead of applying truthiness.
+- Added a dedicated canonical non-identity form and Truffle execution node so
+  `!==` is the primitive Boolean complement of `===` with no `==`, `!=`, or
+  `not` message dispatch.
+- Corrected source `!=` lowering to send the ordinary `!=` selector rather than
+  synthesizing a `not` send after `==`.
+- Added Java and executable `.protos` conformance coverage for default object
+  equality, numeric inequality, fixed-width cross-family inequality, and
+  primitive non-identity.
+- Project implementation version changed from `0.2.51-SNAPSHOT` to
+  `0.2.52-SNAPSHOT`.
+
+### Notes
+
+- Prefix `!` remains a separate implementation/spec audit item; this patch does
+  not invent standard `not` behavior.
+- No normative specification change is introduced.
+
+
 ## [0.2.51-SNAPSHOT] - 2026-09-04
 
 ### Fixed

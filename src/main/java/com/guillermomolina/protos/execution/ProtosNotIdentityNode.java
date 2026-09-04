@@ -15,11 +15,34 @@
  * the specific language governing rights and limitations under the License.
  */
 
-package com.guillermomolina.protos.semantic.ast;
+package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
+import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.source.SourceSpan;
+import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.nodes.Node.Child;
+import java.util.Objects;
 
-public sealed interface CanonicalExpression
-        permits CanonicalAssign, CanonicalCall, CanonicalClosure, CanonicalCompose, CanonicalCreate, CanonicalIdentity, CanonicalNotIdentity, CanonicalIndexedAssign, CanonicalIntrinsic, CanonicalLiteral, CanonicalLookup, CanonicalMember, CanonicalObject, CanonicalReturn, CanonicalSend, CanonicalSequence, CanonicalSpread, CanonicalSuperSend {
-    SourceSpan span();
+public final class ProtosNotIdentityNode extends ProtosExpressionNode {
+    @Child private ProtosExpressionNode left;
+    @Child private ProtosExpressionNode right;
+
+    public ProtosNotIdentityNode(
+            SourceSpan span,
+            ProtosExpressionNode left,
+            ProtosExpressionNode right) {
+        super(span);
+        this.left = Objects.requireNonNull(left, "left");
+        this.right = Objects.requireNonNull(right, "right");
+    }
+
+    @Override
+    public Object execute(VirtualFrame frame) {
+        Object leftValue = left.execute(frame);
+        Object rightValue = right.execute(frame);
+        return ProtosIdentity.identical(leftValue, rightValue)
+                ? ProtosBooleanValue.FALSE
+                : ProtosBooleanValue.TRUE;
+    }
 }

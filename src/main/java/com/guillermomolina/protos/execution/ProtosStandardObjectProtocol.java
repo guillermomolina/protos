@@ -56,5 +56,45 @@ public final class ProtosStandardObjectProtocol {
                                 return activation.receiver();
                             }));
         }
+        if (!object.hasLocalSlot("==")) {
+            object.createLocalSlot(
+                    "==",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                if (supplied.size() != 1) {
+                                    throw new ProtosSignalException(
+                                            ProtosCoreErrors.newError(activation));
+                                }
+                                return com.guillermomolina.protos.runtime.ProtosIdentity.identical(
+                                                activation.receiver(), supplied.get(0))
+                                        ? com.guillermomolina.protos.runtime.ProtosBooleanValue.TRUE
+                                        : com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE;
+                            }));
+        }
+        if (!object.hasLocalSlot("!=")) {
+            object.createLocalSlot(
+                    "!=",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                if (supplied.size() != 1) {
+                                    throw new ProtosSignalException(
+                                            ProtosCoreErrors.newError(activation));
+                                }
+                                Object result =
+                                        ProtosInvocation.invokeMessage(
+                                                activation.receiver(),
+                                                "==",
+                                                java.util.List.of(supplied.get(0)),
+                                                activation);
+                                if (result == com.guillermomolina.protos.runtime.ProtosBooleanValue.TRUE) {
+                                    return com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE;
+                                }
+                                if (result == com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE) {
+                                    return com.guillermomolina.protos.runtime.ProtosBooleanValue.TRUE;
+                                }
+                                throw new ProtosSignalException(
+                                        ProtosCoreErrors.newError(activation));
+                            }));
+        }
     }
 }
