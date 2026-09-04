@@ -451,7 +451,7 @@ When possible, keep parsing and semantic validation separate. A construct that i
 
 Runtime
 
-Implement observable behavior from the language specification and runtime semantics, not from assumptions about Java objects.
+Implement observable behavior from the applicable normative specification owners, not from the informative runtime pseudocode or assumptions about Java objects.
 
 Do not expose Java "null" as Protos "null".
 

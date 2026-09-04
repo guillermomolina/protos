@@ -555,31 +555,11 @@ The primary normative contract formerly contained here has moved to `semantics/V
 
 ## Future Cancellation
 
-Future cancellation is explicit and cooperative.
-
-```js
-future.cancel()
-```
-
-`cancel()` requests cancellation; it does not forcibly terminate an arbitrary running activation.
-
-A task observes cancellation only at the portable cancellation boundaries defined
-for Future-producing asynchronous execution above, including mandatory explicit
-suspension boundaries and normatively cancellation-aware operations. Runtime,
-interpreter, JIT, GC, allocation, call, and loop checkpoints are not additional
-language-level cancellation boundaries merely because an implementation uses them
-internally. When cancellation becomes effective, the task exits through the normal
-unwind machinery so that `ensure` cleanup executes.
-
-A cancelled Future completes in the cancelled state. Observing its result:
-
-```js
-future.value()
-```
-
-signals the standard cancellation condition/error object, conceptually `Cancelled`.
-
-Core v0.1 does not define unsafe asynchronous thread-kill semantics.
+The primary normative owner of Future cancellation state, `cancel()`, cancellation
+boundaries, unwind effects, and cancelled-result observation is
+`concurrency/FUTURES_AND_TASKS.md`; standard Error construction/category semantics
+are owned by `semantics/ERRORS.md`. This heading remains as a
+compatibility/navigation anchor and is not an independent normative owner.
 
 ## Future Failure and Dynamic Error Context
 

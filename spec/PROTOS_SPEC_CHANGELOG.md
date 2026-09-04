@@ -8,6 +8,29 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.349] - 2026-09-04
+
+### Normative ownership and authority
+- Closed D009 by restoring single-owner authority across the modular Core v0.1
+  specification without changing observable language behavior.
+- Removed the remaining normative attribution to informative
+  `runtime/ABSTRACT_RUNTIME.md` from the Bytes contract and made
+  `semantics/VALUES_AND_COLLECTIONS.md` the explicit owner there.
+- Converted the duplicated Future-cancellation contract in the language overview
+  into a navigation anchor to `concurrency/FUTURES_AND_TASKS.md`, with Error
+  construction/category semantics owned by `semantics/ERRORS.md`.
+- Redirected Grammar's module and object-composition semantic references to
+  `semantics/MODULES.md` and `semantics/OBJECT_MODEL.md`, preserving Grammar as
+  the sole syntax/lowering owner.
+- Made Encoding encode/decode ownership explicit in `io/TEXT_IO.md`, removed
+  residual Language/Runtime wording from module lifecycle self-references, and
+  clarified repository documentation that the Abstract Runtime is informative.
+
+### Compatibility
+- No programmer-visible semantics are changed. This revision removes duplicate or
+  stale authority claims so independent implementations have one normative owner
+  for each affected rule.
+
 ## [0.1.348] - 2026-09-04
 
 ### Fixed

@@ -30,8 +30,8 @@ The exact programmer-visible semantics of those standard Bytes operations,
 including zero-argument empty construction, exact octet validation,
 replacement-only `atPut`, dynamic resizing through `add` / `removeAt`,
 ascending-snapshot `each`, callback callability, return values, and
-open/closed/frozen behavior, are defined normatively by
-`PROTOS_LANGUAGE_SPEC.md` and `runtime/ABSTRACT_RUNTIME.md`.
+open/closed/frozen behavior, are governed normatively by
+`../semantics/VALUES_AND_COLLECTIONS.md`.
 
 `Bytes` remains mutable and dynamically resizable through the explicit
 length-changing operations `add` and `removeAt`. No other operation acquires

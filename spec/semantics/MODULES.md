@@ -513,7 +513,7 @@ artifacts**.
 
 For a given canonical module identity, each Actor's active module instance,
 `moduleContext`, mutable slots, initialization state, and module-cache membership
-remain Actor-local exactly as defined by the language/runtime module lifecycle.
+remain Actor-local exactly as defined by this document's module lifecycle.
 No process-global mutable module instance exists.
 
 An implementation may physically share artifacts that do not constitute mutable
@@ -558,8 +558,8 @@ facility must define its own observable contract. It must not retroactively make
 ordinary module implementation sharing visible.
 
 This closes the former open ledger item `Module implementation sharing`; the
-remaining module semantics are already fixed by the canonical Language and
-Runtime module-lifecycle rules.
+remaining module semantics are already fixed by this document's normative
+module-lifecycle rules.
 
 ## 72. Standard Prelude Sharing
 

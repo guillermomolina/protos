@@ -370,13 +370,14 @@ mechanisms.
 
 ## Current specification
 
-The design is currently described by three documents:
+The normative Core v0.1 specification is modular. `PROTOS_GRAMMAR.md` owns
+lexical/syntactic rules and mandatory lowering; `PROTOS_LANGUAGE_SPEC.md` is the
+core language overview and compatibility/navigation surface; primary semantic
+owners live under `semantics/`, `concurrency/`, and `io/`.
 
--   `PROTOS_LANGUAGE_SPEC.md` --- object model and language
-    semantics.
--   `PROTOS_GRAMMAR.md` --- lexical and syntactic grammar
--   `runtime/ABSTRACT_RUNTIME.md` --- executable runtime model and
-    pseudocode
+`runtime/ABSTRACT_RUNTIME.md` is an informative, non-normative execution model
+and pseudocode aid. It must remain aligned with the normative owners but does
+not independently define observable Protos behavior.
 
 ## License
 
@@ -392,7 +393,7 @@ qualify as Independent Modules or Larger Work components under the APL.
 
 ## Specification Status
 
-Version 0.1 remains a draft, but the major semantic decisions currently tracked by the design are specified. The specification documents are periodically audited and consolidated so that the canonical grammar, language specification, and runtime pseudocode remain aligned.
+Version 0.1 remains a draft, but the major semantic decisions currently tracked by the design are specified. The normative specification modules are periodically audited for single ownership and consistency; the informative runtime pseudocode is kept aligned with those normative owners.
 
 ## Recent Design Decisions
 

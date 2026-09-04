@@ -1389,7 +1389,7 @@ UTF8.decode(bytes)
 ```
 
 The corresponding abstract form is `encoding.encode(text)` and
-`encoding.decode(bytes)`, as defined normatively by the I/O model.
+`encoding.decode(bytes)`, as defined normatively by `../io/TEXT_IO.md`.
 
 Core v0.1 does **not** additionally standardize reciprocal convenience messages
 `String.encode(encoding)` or `Bytes.decode(encoding)`. A library may provide
