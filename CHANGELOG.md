@@ -8,6 +8,8 @@ For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_
 
 ### Added
 
+- Established `.protos` as the project source-file extension and added initial non-normative tutorial, task-oriented example, and portable benchmark corpora.
+- Added benchmark workloads for recursion, slots, closure and method calls, object creation, delegation depth, and monomorphic/polymorphic dispatch.
 - Added parser support for same-line parameterless trailing closures as the final argument of ordinary call suffixes.
 - Added closure surface AST integration and deterministic parsing for closure parameters, defaults, rest parameters, and braced or expression bodies.
 - Added parser support for object expressions, parent expressions, and contextual object composition items.
