@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 293
+Document revision: 294
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -1121,6 +1121,57 @@ or alter snapshot semantics.
 This section closes the former open ledger items `Cross-process same-host
 optimization` and `Shared-memory transport eligibility and lifecycle`. Exact
 transport implementation and selection policy remain implementation concerns.
+
+## 20B. Transport Selection and Switching Are Runtime Policy
+
+**CLOSED**
+
+Core v0.1 exposes no portable API or observable state for choosing, pinning,
+querying, or constraining the physical transport used for Actor communication.
+
+Transport selection is runtime policy. An implementation may select among
+in-process queues, shared memory, local IPC, TCP, QUIC, or another transport
+mechanism according to locality, topology, security, resource pressure,
+capability, performance, or other implementation criteria.
+
+The runtime may also switch transport while a logical ActorRef, GroupRef,
+SendOperation, request Future, or other communication relationship remains live.
+
+Selection or switching is conforming only when the existing communication
+semantics remain unchanged. In particular it must not:
+
+- alter ActorRef or GroupRef identity;
+- reset or weaken same-sender FIFO ordering;
+- duplicate or replay an already accepted operation;
+- change the logical message snapshot;
+- change transferability or graph-copy semantics;
+- create shared mutable Protos identity;
+- change acceptance/backpressure boundaries;
+- erase or manufacture delivery uncertainty;
+- change cancellation or failure outcomes;
+- silently retry because one transport failed;
+- change the authority carried by a communication capability;
+- make physical locality, transport choice, or switching itself observable as a
+  new Core value or event.
+
+A transport failure may of course contribute to an already-defined communication
+failure or uncertainty outcome according to the ordinary communication rules.
+The runtime must not expose implementation-specific transport distinctions as
+new Core outcomes unless another normative facility explicitly defines them.
+
+Core therefore defines no `transport()`, `preferredTransport`,
+`requireSharedMemory`, `sameHost`, `pinTransport`, or equivalent portable
+communication control surface.
+
+Administrative diagnostics may report transport choices outside portable Core.
+Such diagnostics do not change language semantics and do not become valid input
+to portable program logic merely because an implementation exposes them.
+
+Message serialization format, serialization versioning, and schema evolution
+remain separate open topics because they concern the representation contract
+needed when a transport serializes values, not which transport is selected.
+
+This closes the former open ledger item `Transport selection and switching`.
 
 ## 21. Mailbox Bounds
 
@@ -6196,7 +6247,6 @@ mechanism, or implementation detail that still requires design.
 -   GroupRef persistence/serialization and capability semantics, if any
 -   Service discovery implementation
 -   Physical-locality discovery
--   Transport selection and switching
 -   Message serialization format
 -   Serialization versioning
 -   Schema evolution

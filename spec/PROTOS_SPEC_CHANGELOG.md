@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.294] - 2026-09-04
+
+### Closed
+- Closed `Transport selection and switching` as runtime policy already bounded by
+  the transport-independent Actor communication semantics.
+- Defined no portable Core API for choosing, pinning, querying, or constraining
+  physical communication transport.
+- Allowed runtimes to select and switch among in-process, shared-memory, IPC,
+  network, or equivalent transports only when identity, ordering, snapshots,
+  transferability, backpressure, acceptance, cancellation, failure, uncertainty,
+  and authority remain unchanged.
+- Prohibited transport switching from duplicating/replaying accepted operations
+  or silently retrying due solely to a transport change.
+- Kept administrative transport diagnostics outside portable Core semantics.
+- Preserved message serialization format/versioning/schema evolution as separate
+  open topics.
+- Removed `Transport selection and switching` from Open Design Topics.
+
+### Changed
+- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  294.
+
 ## [0.1.293] - 2026-09-04
 
 ### Closed
