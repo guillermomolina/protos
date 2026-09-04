@@ -20,7 +20,7 @@ package com.guillermomolina.protos.runtime;
 import java.math.BigInteger;
 import java.util.Objects;
 
-public final class ProtosFixedIntegerValue {
+public final class ProtosFixedIntegerValue implements ProtosRepresentedValue {
     public enum Family {
         UINT8("UInt8", BigInteger.ZERO, BigInteger.ONE.shiftLeft(8).subtract(BigInteger.ONE)),
         INT8("Int8", BigInteger.ONE.shiftLeft(7).negate(), BigInteger.ONE.shiftLeft(7).subtract(BigInteger.ONE)),
@@ -72,4 +72,11 @@ public final class ProtosFixedIntegerValue {
 
     public Family family() { return family; }
     public BigInteger value() { return value; }
+
+    @Override
+    public Object representedDelegationParent(ProtosPrelude prelude) {
+        return ProtosRepresentedValue.requirePrelude(prelude, "fixed-width Integer")
+                .fixedIntegerPrototype(family);
+    }
+
 }

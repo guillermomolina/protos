@@ -20,7 +20,7 @@ package com.guillermomolina.protos.runtime;
 import java.math.BigInteger;
 import java.util.Objects;
 
-public final class ProtosIntegerValue {
+public final class ProtosIntegerValue implements ProtosRepresentedValue {
     private final BigInteger value;
 
     public ProtosIntegerValue(BigInteger value) {
@@ -30,4 +30,10 @@ public final class ProtosIntegerValue {
     public BigInteger value() {
         return value;
     }
+
+    @Override
+    public Object representedDelegationParent(ProtosPrelude prelude) {
+        return ProtosRepresentedValue.requirePrelude(prelude, "Integer").integerPrototype();
+    }
+
 }

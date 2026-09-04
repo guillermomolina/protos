@@ -17,7 +17,7 @@
 
 package com.guillermomolina.protos.runtime;
 
-public final class ProtosFloatValue {
+public final class ProtosFloatValue implements ProtosRepresentedValue {
     private final double value;
 
     public ProtosFloatValue(double value) {
@@ -27,4 +27,10 @@ public final class ProtosFloatValue {
     public double value() {
         return value;
     }
+
+    @Override
+    public Object representedDelegationParent(ProtosPrelude prelude) {
+        return ProtosRepresentedValue.requirePrelude(prelude, "Float").floatPrototype();
+    }
+
 }

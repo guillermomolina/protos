@@ -14,30 +14,25 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
-
 package com.guillermomolina.protos.runtime;
 
-public final class ProtosBooleanValue implements ProtosRepresentedValue {
-    public static final ProtosBooleanValue TRUE = new ProtosBooleanValue(true);
-    public static final ProtosBooleanValue FALSE = new ProtosBooleanValue(false);
+/**
+ * Implementation-only bridge for Protos semantic values represented by specialized
+ * host objects rather than {@link ProtosObjectValue}.
+ *
+ * <p>The bridge supplies only the value's immediate Protos delegation parent for
+ * ordinary lookup. Implementing this interface does not define semantic-family
+ * membership, identity, mutability, receiver-domain compatibility, or any other
+ * language-visible property.
+ */
+interface ProtosRepresentedValue {
+    Object representedDelegationParent(ProtosPrelude prelude);
 
-    private final boolean value;
-
-    private ProtosBooleanValue(boolean value) {
-        this.value = value;
+    static ProtosPrelude requirePrelude(ProtosPrelude prelude, String family) {
+        if (prelude == null) {
+            throw new UnsupportedOperationException(
+                    "represented " + family + " lookup requires an owning Core prelude");
+        }
+        return prelude;
     }
-
-    public static ProtosBooleanValue of(boolean value) {
-        return value ? TRUE : FALSE;
-    }
-
-    public boolean value() {
-        return value;
-    }
-
-    @Override
-    public Object representedDelegationParent(ProtosPrelude prelude) {
-        return ProtosObjectValue.rootObject();
-    }
-
 }

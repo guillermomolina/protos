@@ -49,33 +49,11 @@ public final class ProtosValueLookup {
                 continue;
             }
 
-            if (current instanceof ProtosBooleanValue) {
-                current = ProtosObjectValue.rootObject();
-                continue;
-            }
-
-            if (current instanceof ProtosIntegerValue) {
-                if (prelude == null) {
-                    throw new UnsupportedOperationException(
-                            "represented Integer lookup requires an owning Core prelude");
-                }
-                current = prelude.integerPrototype();
-                continue;
-            }
-            if (current instanceof ProtosFloatValue) {
-                if (prelude == null) {
-                    throw new UnsupportedOperationException(
-                            "represented Float lookup requires an owning Core prelude");
-                }
-                current = prelude.floatPrototype();
-                continue;
-            }
-            if (current instanceof ProtosFixedIntegerValue fixed) {
-                if (prelude == null) {
-                    throw new UnsupportedOperationException(
-                            "represented fixed-width Integer lookup requires an owning Core prelude");
-                }
-                current = prelude.fixedIntegerPrototype(fixed.family());
+            if (current instanceof ProtosRepresentedValue represented) {
+                current =
+                        java.util.Objects.requireNonNull(
+                                represented.representedDelegationParent(prelude),
+                                "represented delegation parent");
                 continue;
             }
 

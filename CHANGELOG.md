@@ -4,6 +4,33 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.56-SNAPSHOT] - 2026-09-04
+
+### Changed
+
+- I002 — uniform represented-value lookup: introduced a small internal
+  `ProtosRepresentedValue` bridge that supplies only the immediate delegation
+  parent used by ordinary lookup for specialized runtime representations.
+- Migrated Integer, Float, fixed-width Integer, canonical Boolean, and canonical
+  `null` lookup onto the uniform bridge, removing the growing represented-value
+  `instanceof` chain from `ProtosValueLookup`.
+- Unified activation receiver lookup through `ProtosValueLookup`, preserving
+  ordinary-object lookup while allowing represented values whose normative
+  parent does not require the Core prelude to participate in the same path.
+- Added regression coverage for ordinary lookup, numeric/fixed-width lookup,
+  Boolean/null delegation, original-receiver binding, receiver-domain rejection,
+  bridge extensibility, and polymorphic invocation.
+- Project implementation version changed from `0.2.55-SNAPSHOT` to
+  `0.2.56-SNAPSHOT`.
+
+### Notes
+
+- No normative specification change is introduced.
+- No new Core family or standard prototype is materialized by I002. In
+  particular, the existing String runtime representation is left unchanged until
+  its standard Core bootstrap/protocol work is implemented; future specialized
+  families can adopt the same bridge without adding dispatcher cases.
+
 
 ## [0.2.55-SNAPSHOT] - 2026-09-04
 

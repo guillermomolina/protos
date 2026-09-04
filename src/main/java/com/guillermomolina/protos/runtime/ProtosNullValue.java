@@ -17,8 +17,14 @@
 
 package com.guillermomolina.protos.runtime;
 
-public final class ProtosNullValue {
+public final class ProtosNullValue implements ProtosRepresentedValue {
     public static final ProtosNullValue INSTANCE = new ProtosNullValue();
 
     private ProtosNullValue() {}
+
+    @Override
+    public Object representedDelegationParent(ProtosPrelude prelude) {
+        return ProtosObjectValue.rootObject();
+    }
+
 }
