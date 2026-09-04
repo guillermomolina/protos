@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 257
+Document revision: 258
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3036,6 +3036,47 @@ predicate result is `false`, the Future resolves with `null`.
 Physical predicate execution order is not observable. Higher-index work may be
 pruned only after it cannot affect the specified result or failure. Cancellation
 uses the ordinary Future/P structured-concurrency rules.
+
+
+## Standard Array Parallel Reduction
+
+Standard Array provides:
+
+```text
+array.parallelReduce(reducer, arguments...)
+    -> Future
+```
+
+The receiver must be a standard Array and `reducer` must be ordinarily invokable.
+An empty Array resolves to `null` without a P boundary. A one-element Array
+invokes no reducer but snapshots/transfers that sole value through the P value
+rules before resolving.
+
+For two or more elements, the operation uses a canonical adjacent-pair reduction
+tree independent of worker count:
+
+```text
+[a, b, c, d, e]
+    -> [r(a,b), r(c,d), e]
+    -> [r(r(a,b), r(c,d)), e]
+    -> [r(r(r(a,b), r(c,d)), e)]
+```
+
+An odd final value is carried unchanged to the next round. Each reducer
+invocation is a separate isolated P computation receiving the left value, right
+value, then the explicit extra arguments.
+
+The canonical tree is normative even for non-associative reducers. Physical
+chunking or scheduling must not choose a different parenthesization.
+
+All combine nodes in one logical round must succeed before the next logical round
+exists. If several nodes in one round fail, the leftmost failing pair determines
+the operation failure. Implementations may pipeline/speculate only when that is
+observationally invisible.
+
+Reducer results cross between nodes using ordinary P result/value rules. Failure
+or cancellation publishes no intermediate reduction state. The final successful
+canonical value crosses to the caller and resolves the Future.
 
 ## Invocation Arguments, Defaults, Rest, and Spread
 

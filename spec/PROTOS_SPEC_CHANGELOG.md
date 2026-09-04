@@ -4,6 +4,34 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.258] - 2026-09-04
+
+### Added / Closed
+- Standardized `Array.parallelReduce(reducer, arguments...) -> Future`.
+- Defined empty input as resolved `null`, singleton input as the isolated
+  snapshot/transfer of its sole element without invoking the reducer, and
+  non-empty multi-element input through isolated P reducer nodes.
+- Defined one canonical adjacent-pair reduction tree with odd final values
+  carried unchanged to the next round.
+- Made the canonical tree independent of worker count, chunking, scheduling, and
+  work stealing so non-associative reducers remain deterministic.
+- Defined each reducer invocation as its own P isolation domain over left/right
+  operands plus the reducer and explicit arguments.
+- Defined logical round barriers: a later round exists only if all combine nodes
+  in the preceding round succeed.
+- Defined multiple failures within one round by the leftmost failing pair.
+- Allowed physical pipelining/speculation only when it cannot alter canonical
+  parenthesization, failure selection, publication, or other observable state.
+- Required intermediate/final reducer values to cross according to ordinary P
+  result/value rules and prohibited partial reduction publication.
+- Narrowed the remaining parallel collection API topic to sort/iteration.
+
+### Changed
+- Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
+  `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  258.
+
 ## [0.1.257] - 2026-09-04
 
 ### Fixed

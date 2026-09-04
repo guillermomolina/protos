@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 257
+Document revision: 258
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -4321,6 +4321,118 @@ count, carrier count, SIMD width, or actual simultaneous execution. Batching,
 fusion, vectorization, sequential execution, and work stealing are allowed only
 when observationally equivalent to the logical per-index search defined above.
 
+### 71.6D Standard `Array.parallelReduce(...)`
+
+Core v0.1 standardizes:
+
+```text
+array.parallelReduce(reducer, arguments...)
+    -> Future
+```
+
+The Future resolves with the canonical reduction result, or with `null` for an
+empty source Array.
+
+`parallelReduce` is a parallel reduction, not a promise to reproduce an
+unspecified sequential fold. Core does not require the reducer to be associative
+and does not let worker count or scheduler policy choose the parenthesization.
+Instead, Core defines one canonical logical reduction tree.
+
+The receiver must satisfy the standard Array receiver-domain contract. `reducer`
+must be invokable through the ordinary polymorphic invocation protocol and need
+not be a Closure. Closure values crossing P follow the ordinary projection
+rules.
+
+After ordinary receiver/argument evaluation, Array receiver validation, and
+reducer-callability validation, the operation fixes a logical submission
+snapshot of the source element-reference sequence, reducer state, and explicit
+argument state. Any value that must cross a P boundary is governed by the
+ordinary P copy/projection/transfer rules. Later caller-domain mutation cannot
+change any logical reduction input.
+
+For an empty source, no reducer invocation exists and no P boundary is crossed.
+P-transferability of otherwise-unused reducer/argument values is not required.
+The operation returns a Future already resolved with `null`.
+
+For a one-element source, no reducer invocation occurs. The sole source value is
+nevertheless snapshotted through the ordinary P value boundary so the successful
+call fixes its reduction value independently of later caller mutation. If that
+value cannot cross P, the call synchronously signals `NonParallelValue`. On
+success the Future resolves with the corresponding caller-domain transferred
+value.
+
+For two or more source elements, all source values and the reducer/explicit
+argument submission state required to begin the canonical reduction must be
+validated/snapshotted before any reduction child becomes eligible and before the
+operation successfully returns its Future. A required input that cannot cross P
+causes synchronous `NonParallelValue`, creates no result Future, and makes no
+child eligible.
+
+The canonical reduction proceeds in logical rounds. A round consumes its input
+sequence from left to right in adjacent pairs:
+
+```text
+[x0, x1, x2, x3, x4]
+
+round 1:
+    reducer(x0, x1, arguments...)
+    reducer(x2, x3, arguments...)
+    x4
+
+round 2:
+    reducer(r01, r23, arguments...)
+    x4
+
+round 3:
+    reducer(r0123, x4, arguments...)
+```
+
+More generally, pair positions `(0,1)`, `(2,3)`, `(4,5)`, ... are combined.
+When a round has an odd final value, that value is carried unchanged into the
+next logical round. Rounds repeat until exactly one value remains.
+
+Every reducer invocation executes in its own isolated child P domain. Its two
+logical operand values plus the reducer and explicit arguments form that child's
+P input graph. Aliasing and cycles among values that enter the same child are
+preserved by ordinary P graph rules; distinct reducer invocations do not acquire
+shared mutable Protos identity.
+
+A reducer normal result crosses out of its child by ordinary P result rules and
+becomes the logical value supplied to a later canonical node. An untransferable
+normal result records caller-domain `NonParallelValue` as that node's failure.
+
+Logical rounds impose a deterministic failure boundary. A later logical round
+does not exist unless every combine node in the preceding round completed
+successfully. If more than one combine node in one round fails, the failure from
+the leftmost failing pair in that round is the operation failure. Thus scheduler
+timing and worker completion order never select among concurrent failures.
+
+A conforming implementation may pipeline or speculatively execute work from a
+later canonical round only when doing so is observationally invisible. Such
+speculation cannot replace the specified earlier-round failure, publish a value
+that the canonical tree would not reach, or expose mutable state/effects from
+logically nonexistent later work.
+
+On successful completion, the last canonical value crosses to the caller domain
+under the ordinary P result rules and resolves the result Future. No intermediate
+partial reduction state is published.
+
+Because the canonical tree is fixed, non-associative reducers are deterministic.
+For example, subtraction follows the specified adjacent-pair tree rather than an
+implementation-selected chunking tree. An implementation may reassociate only
+when the invoked API's semantics independently make that reassociation
+unobservable.
+
+Cancelling the result Future requests cooperative cancellation of unfinished P
+reduction work under the ordinary structured-concurrency rules and publishes no
+partial result. The ordinary first-terminal-transition Future rule governs races
+with an already established terminal reduction outcome.
+
+`parallelReduce` does not promise a worker count, chunk size, Task count, carrier
+count, SIMD width, or actual simultaneous execution. Physical batching, fusion,
+vectorization, sequential execution, work stealing, and storage reuse are
+allowed only when observationally equivalent to the canonical logical tree.
+
 ### 71.7 Scheduling and Oversubscription
 
 Requesting many parallel computations does not imply creating the same
@@ -4916,7 +5028,7 @@ mechanism, or implementation detail that still requires design.
 -   Streaming
 -   Async streams
 -   Generators and suspendable iteration
--   Parallel reduce/sort/iteration standard-library APIs
+-   Parallel sort/iteration standard-library APIs
 -   Parallel scheduling, work-stealing, and granularity heuristics
 -   Pub/sub
 -   Advanced routers and load-balancing policies

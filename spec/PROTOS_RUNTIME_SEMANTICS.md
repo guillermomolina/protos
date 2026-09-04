@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 257
+Document revision: 258
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3929,6 +3929,43 @@ when that cannot change other specified semantics.
 
 Scheduler timing, batching, chunking, vectorization, worker count, and physical
 completion order never alter the frontier rule.
+
+
+### Standard Array parallelReduce runtime semantics
+
+Conceptually, after receiver/callability validation, the runtime establishes the
+submission snapshot required by the reduction before returning a pending Future.
+
+For non-empty input, reduction state is a logical sequence of isolated values.
+Each round constructs nodes from adjacent positions:
+
+```text
+next = []
+for pairStart in 0, 2, 4, ...:
+    if pairStart + 1 exists:
+        next.add(
+            isolatedPInvoke(
+                reducerSnapshot,
+                current[pairStart],
+                current[pairStart + 1],
+                argumentSnapshot...
+            )
+        )
+    else:
+        next.add(current[pairStart])
+```
+
+The next logical round is admitted only after every combine node in the current
+round has a successful transferred result. On multiple failures in the same
+round, select the failing node with the smallest `pairStart`.
+
+A runtime may overlap physical implementation stages only when it preserves this
+logical round/failure relation exactly. The final sole value is transferred to
+the caller domain and resolves the Future.
+
+The empty case returns resolved `null`. The singleton case performs no reducer
+call but still realizes the required isolated value snapshot/transfer. No
+intermediate sequence is a public Protos value.
 
 ### Exact call-spread expansion
 
