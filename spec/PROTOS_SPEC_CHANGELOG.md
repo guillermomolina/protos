@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.259] - 2026-09-04
+
+### Fixed
+- Defined a preceding `ByteWritable.write` whose cancellation succeeds as a
+  clean zero-contribution outcome for `shutdownWrite()`.
+- Required write shutdown to wait for that preceding write's terminal cancelled
+  state without failing merely because cancellation occurred.
+- Applied the same rule to a cross-Actor write that routing/admission placed
+  before the shutdown cutover and that is then successfully cancelled.
+- Preserved the distinction between cancellation and write failure: a failed
+  preceding write still makes shutdown fail even when its hidden committed prefix
+  happens to be zero.
+- Clarified that a cancellation request that loses after write commitment does
+  not erase that write; shutdown composes with the write's actual later
+  success/failure aftermath.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 259. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.258] - 2026-09-04
 
 ### Added / Closed

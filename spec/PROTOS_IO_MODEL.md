@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 258
+Document revision: 259
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -1507,6 +1507,14 @@ For a write and shutdown request that are genuinely concurrent because they orig
 The cutover is a logical output-direction property shared by proxies that denote that same direction. It does not require one native syscall at a time and does not make proxy object identity an ordering primitive.
 
 Successful completion means that every required preceding output operation reached the outcome required for a clean frontier and that the underlying resource accepted the end-of-output frontier after that preceding output. It does not mean the peer application consumed the data.
+
+A preceding `ByteWritable.write` whose cancellation wins under the ordinary write-cancellation contract satisfies the clean-frontier requirement with zero contribution. `shutdownWrite()` waits until that preceding write has reached its terminal `cancelled` state, but it does not fail merely because the write was cancelled: successful write cancellation already guarantees that no byte from that write entered the logical output sequence.
+
+This rule applies equally when routing/admission placed a genuinely concurrent cross-Actor write before the shutdown cutover and that admitted write is subsequently cancelled successfully. Once the cancellation outcome is terminal, there is no hidden output contribution left for shutdown to await or propagate from that write.
+
+Cancellation is deliberately distinct here from write failure. A failed preceding write remains a failed required output operation even when its hidden committed prefix length happens to be `k = 0`; under the existing WriteShutdown rule, such failure causes shutdown to fail rather than being reclassified as a clean cancellation. Portable code therefore cannot infer or substitute write-failure progress from this cancellation rule.
+
+Likewise, a cancellation request that loses because the preceding write has already committed does not turn that write into zero-contribution output. The write proceeds to its ordinary success/failure aftermath, and `shutdownWrite()` composes with that actual terminal outcome.
 
 There is no universal implied flush. A wrapper that exposes `WriteShutdown` must first correctly finalize/propagate its own output state before propagating shutdown to the underlying output direction.
 
