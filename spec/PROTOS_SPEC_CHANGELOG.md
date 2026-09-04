@@ -8,6 +8,43 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.344] - 2026-09-04
+
+### Fixed
+- Made `semantics/VALUES_AND_COLLECTIONS.md` the single normative owner of the
+  complete Core v0.1 numeric arithmetic compatibility and conversion model.
+- Defined the exact portable numeric inventory: unbounded ordinary `Integer`,
+  IEEE 754-2019 binary64 `Float`, and the eight fixed-width signed/unsigned
+  integer families. Core v0.1 defines no generic `Int` / `UInt` family and no
+  portable `SmallInteger` / `BigInteger` representation prototypes.
+- Prohibited implicit arithmetic promotion between distinct numeric families and
+  fixed result families for same-family `+`, `-`, `*`, unary negation, `/`,
+  `div`, `mod`, and `%`, including checked fixed-width overflow.
+- Defined explicit numeric conversion factories, including exact/range-checked
+  integer conversion and normative `roundTiesToEven` precision loss for explicit
+  exact-integer-to-`Float` conversion.
+- Defined exact-integer `/` by direct exact-rational-to-binary64 rounding,
+  including infinity, subnormal, and signed-zero outcomes; exact-integer division
+  by zero signals an `Error`.
+- Completed cross-family numeric ordering without promotion and reconciled it
+  with existing exact numeric `==`, family-sensitive `===`, and cross-family
+  hash coherence.
+- Made arbitrary-precision Integer representation non-observable across
+  delegation, dispatch, reflection, equality, identity, hashing, Actor/P
+  transfer, optimization, and external encoding.
+- Scoped numeric arithmetic result-family terminology so independently owned
+  result contracts such as `Array.size`, `Map.size`, `IdentityMap.size`, and
+  `Bytes.size` remain unchanged.
+
+### Compatibility
+- Closes previously implementation-selectable numeric promotion, result-family,
+  fixed-width overflow, conversion precision, and internal-representation
+  behavior. Portable code requiring a family change must use explicit numeric
+  conversion rather than mixed-family standard arithmetic.
+- The existing numeric equality/hash model is preserved and completed for
+  ordering. The informative Abstract Runtime already requires exact
+  Integer/Float comparison and therefore needs no duplicate numeric matrix.
+
 ## [0.1.343] - 2026-09-04
 
 ### Clarified

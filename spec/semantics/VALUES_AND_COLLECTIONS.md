@@ -1307,8 +1307,8 @@ stringIdentity(a, b)
 
 No Unicode normalization is implicit in String construction, semantic identity,
 ordinary default `==`, or ordinary default `hash`. Canonically equivalent but
-differently encoded scalar sequences are distinct Core String values unless a
-program explicitly normalizes them.
+differently encoded scalar sequences are distinct String semantic values unless
+a program explicitly normalizes them.
 
 For example, a String containing U+00E9 LATIN SMALL LETTER E WITH ACUTE is not
 semantically identical to a String containing U+0065 LATIN SMALL LETTER E
@@ -1536,7 +1536,7 @@ When content flows into the closing delimiter on its source line, no structural 
 
 ```js
 """one
-       
+
 two"""
 ```
 
@@ -2168,7 +2168,7 @@ a == b  =>  a.hash == b.hash
 therefore remains a programmer-facing contract required for conventional map
 semantics, not a license for implementations to choose arbitrary behavior when
 it is violated. The same is true of the recommendation that a stored key's
-relevant equality/hash behavior remain stable while it is stored.
+relevant equality/hash behavior remain stable.
 
 Core does not prohibit mutable objects from being keys, does not implicitly
 freeze keys, and does not require hidden mutation tracking. Implementations may
@@ -2373,8 +2373,8 @@ For the standard `Map` and `IdentityMap` indexed-update protocols,
 after the update succeeds.
 
 This result is independent of whether the operation inserted a new entry or
-updated an existing entry. It does not return the previous mapped value and
-does not use `null`, a hidden sentinel, or another absence marker to distinguish
+updated an existing entry. It does not return the previous mapped value and does
+not use `null`, a hidden sentinel, or another absence marker to distinguish
 insertion from replacement.
 
 Consequently an explicit ordinary message send:
