@@ -97,6 +97,113 @@ retains `this === dog`.
 
 The language therefore does not reproduce JavaScript's lost-`this` behavior when a method is extracted.
 
+### Semantic identity of receiver-bound extractions
+
+A successful ordinary member read whose selected slot value is a Closure produces
+a **fresh Closure object** representing that one receiver-bound extraction. If
+ordinary lookup of `receiver.name` selects stored Closure `C` in slot owner `H`,
+the read result `B` is a Closure whose executable Closure semantics are those of
+`C`, whose bound receiver is the original `receiver`, and whose `methodHome` is
+`H`. `B` has its own individual semantic object identity, distinct from the
+stored Closure `C`.
+
+Freshness is per successful receiver lookup, not per `(receiver, slot, Closure)`
+tuple. Therefore repeating the same extraction produces another fresh Closure
+even when the receiver, selected slot, stored Closure, and `methodHome` are all
+unchanged:
+
+```js
+a: dog.speak
+b: dog.speak
+
+a === b  // false
+```
+
+This rule deliberately does not intern, canonicalize, memoize, or otherwise
+reuse a semantic bound-Closure identity. An implementation may cache dispatch
+metadata or avoid a physical wrapper allocation only when every observable
+result is exactly equivalent to distinct fresh Closure identities.
+
+Aliasing an already extracted Closure without performing another receiver lookup
+preserves that exact Closure object and therefore preserves identity:
+
+```js
+a: dog.speak
+b: a
+
+a === b  // true
+```
+
+The same applies to ordinary argument passing, local assignment, collection
+storage, or other operations whose existing contract preserves the exact object
+reference. Those operations do not silently re-extract or rebind the Closure.
+
+Storing an extracted Closure in an object slot stores that exact Closure object;
+the stored value itself is not mutated or rebound merely by storage. Reading that
+slot later through ordinary receiver lookup is a new extraction because the
+selected slot value is a Closure. The new read therefore produces another fresh
+Closure identity and replaces receiver/`methodHome` binding metadata only for the
+newly produced Closure; the Closure object still stored in the slot is unchanged.
+
+For example, if `bound: dog.speak` and `holder.saved: bound`, then `bound` remains
+bound to `dog`. A later `again: holder.saved` produces a fresh Closure with
+`this === holder` when invoked and with `methodHome` equal to the object that owns
+the selected `saved` slot. `again !== bound`. Re-reading `holder.saved` again
+produces yet another fresh Closure identity.
+
+Different original receivers therefore always produce distinct extracted Closure
+identities, even when lookup reaches the same stored Closure in the same ancestor:
+
+```js
+a: dog.speak
+b: otherDog.speak
+
+a === b  // false
+```
+
+Inherited lookup does not change this rule. If both reads select one Closure slot
+owned by ancestor `animal`, each result is still fresh; each result binds its own
+original receiver while preserving `animal` as that extraction's `methodHome`.
+Thus receiver identity and lookup origin remain invocation metadata, not a key
+used to canonicalize extracted Closure identity.
+
+Because extracted values are ordinary identity-bearing Closures, the general
+identity rules in `VALUES_AND_COLLECTIONS.md` apply without a special exception.
+Primitive `===` observes the individual Closure identity described above.
+`identityHashOf` follows the ordinary identity-hash contract: aliases of one
+extracted Closure necessarily have the same identity hash, while distinct
+extraction results are not required to have different hash integers because hash
+collisions remain legal. Identity is never inferred from hash equality.
+
+`IdentityMap` therefore treats distinct extraction results as distinct keys,
+using its existing `identityHashOf` plus primitive-`===` rules even if their
+identity hashes collide. An alias of one extraction denotes the same key. No
+bound-method-specific IdentityMap rule, hidden canonicalization table, or global
+identity registry is introduced.
+
+Extraction and invocation remain distinct operations. An immediate message
+invocation does not expose an extracted Closure value merely in order to call it:
+
+```js
+dog.speak()
+```
+
+Ordinary lookup selects the stored Closure and invocation preserves the original
+receiver and selected slot owner as `methodHome` under the existing method-call
+rules. An implementation need not materialize a fresh bound Closure for that
+immediate invocation because no extracted value is produced for the program to
+observe. By contrast, evaluating the member read as a value first, as in
+`f: dog.speak`, does perform the fresh extraction defined above; a later `f()`
+uses that extracted Closure's preserved receiver and `methodHome`.
+
+These identity rules do not create a separate `Method` value kind: every
+extraction result is still a Closure and follows the ordinary Closure capture,
+return-home, object-identity, delegation, slot, and invocation rules except for
+the receiver/`methodHome` binding established by the extraction. They also do
+not create a standard `Closure` prototype. Under `OBJECT_MODEL.md`'s portable
+Core topology, every such extracted Closure delegates directly to `Object`, just
+like every other Core Closure.
+
 ### Standard Closure-specific behavior ownership
 
 Core v0.1 installs the standard Closure-specific selectors `future` and

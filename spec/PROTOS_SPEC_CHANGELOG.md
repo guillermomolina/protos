@@ -9,6 +9,38 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.367] - 2026-09-04
+
+### Receiver-bound Closure semantic identity (D024)
+- Defines every successful receiver member-read selecting a Closure as producing
+  a fresh identity-bearing Closure value distinct from both the stored Closure
+  and every other extraction result, including repeated identical lookups.
+- Distinguishes aliasing from re-extraction: ordinary aliases preserve the exact
+  extracted Closure identity, while storing and later receiver-reading a Closure
+  performs a new extraction without mutating the stored value.
+- Fixes same-receiver, different-receiver, and inherited-lookup behavior:
+  extraction identity is never canonicalized by receiver, stored Closure, slot,
+  or `methodHome`; each extraction preserves its own original receiver and
+  selected slot owner for later invocation.
+- Derives `===`, `identityHashOf`, and `IdentityMap` behavior from the existing
+  general identity contracts: aliases are identical, separate extractions are
+  not, identity-hash collisions remain legal, and IdentityMap distinguishes
+  separate extraction identities through primitive identity.
+- Distinguishes immediate message invocation from extraction: `receiver.m()`
+  preserves receiver/`methodHome` without exposing a bound Closure value, while
+  `receiver.m` creates the fresh bound Closure whose identity can be observed.
+- Keeps Closure as the single executable value kind, introduces no `Method`
+  value type, no bound-method prototype, no standard `Closure` prototype, and no
+  interning/global identity registry.
+
+### Compatibility
+- Closes previously implementation-selectable identity behavior for extracted
+  receiver-bound Closures. Implementations that reused one semantic bound
+  Closure for repeated lookups, returned the stored Closure identity itself, or
+  keyed extracted-method identity by receiver/slot/`methodHome` must instead
+  preserve the fresh per-extraction semantics while remaining free to optimize
+  physical representation invisibly.
+
 ## [0.1.366] - 2026-09-04
 
 ### Closure asynchronous-method ownership (D025)
