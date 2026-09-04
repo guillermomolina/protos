@@ -4,6 +4,31 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.312] - 2026-09-04
+
+### Fixed
+- Reconciled invocation-time `ByteWritable.write` snapshot semantics with finite
+  end-to-end resource bounds and the no-hidden-suspension rule.
+- Defined write admission to include finite retention/reservation sufficient to
+  preserve the admitted write's immutable logical snapshot.
+- Permitted an already-failed Future for implementation/host resource-capacity
+  exhaustion when such bounded admission capacity is unavailable.
+- Required capacity rejection to occur before output admission, contribute zero
+  bytes/effects/frontiers, and leave an otherwise usable receiver unpoisoned.
+- Prohibited implementations from returning a pending write whose snapshot they
+  cannot preserve, blocking/suspending inside `write()` for capacity, or imposing
+  hidden borrow/freeze/pin restrictions on the caller's mutable `Bytes`.
+- Preserved argument-validation precedence where invalidity is already determined
+  from the supplied semantic values.
+- Clarified that pending-Future backpressure applies only to writes whose admitted
+  snapshot state fits within the finite retained-state bound; excess invocations
+  may instead terminate through the explicit capacity-failure channel.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 312. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.311] - 2026-09-04
 
 ### Fixed

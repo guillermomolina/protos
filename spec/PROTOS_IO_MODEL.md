@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 311
+Document revision: 312
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -327,12 +327,19 @@ ByteWritable {
 
 The argument must be `Bytes`.
 
-`write(bytes)` captures a logical snapshot of the argument's size and octet contents at invocation time. The snapshot is fixed before the operation can remain pending because of backpressure, wait behind an earlier operation, or begin host/native I/O. Later mutation of the supplied `Bytes` does not change the byte sequence belonging to that write, and each write invocation captures its own logical snapshot.
+For a write that is admitted as an outstanding output operation, `write(bytes)` captures a logical snapshot of the argument's size and octet contents during that invocation, before the call returns a pending/successful Future or begins host/native I/O. Later mutation of the supplied `Bytes` does not change the byte sequence belonging to that admitted write, and each admitted write invocation captures its own logical snapshot.
 
 This is a semantic snapshot, not a requirement for eager physical copying. An implementation may use immutable backing storage, copy-on-write, reference retention, scatter/gather I/O, or another representation strategy provided that ordinary later mutation of the caller's `Bytes` remains valid and cannot change the captured write sequence. `write` does not impose a hidden caller-visible borrow, freeze, pin, or "do not mutate until completion" lifetime rule.
 
-Snapshot capture does not itself commit output. A write whose cancellation wins before the I/O commitment boundary still contributes zero bytes to the observable output sequence.
+Because the API is non-blocking at invocation and the caller may mutate or discard the original `Bytes` immediately after the call returns, preserving an arbitrary number or volume of outstanding snapshots cannot be achieved by backpressure alone. Therefore admission includes obtaining whatever finite implementation-managed retention/reservation is required to preserve that write's snapshot until the operation no longer needs it.
 
+If that finite admission capacity is unavailable, the implementation may reject the write before admitting it as output work and return an already-failed Future representing resource/capacity exhaustion. Such rejection is an explicitly host/implementation-resource-dependent failure, not an implementation-selected change to the write's bytes. It contributes zero output bytes, creates no flush/sync/shutdown frontier contribution, changes no logical position or sequence state, and does not poison or close an otherwise usable receiver merely because capacity was temporarily unavailable.
+
+A capacity-rejected write need not retain an enduring snapshot after its failed Future outcome has been established. The implementation must nevertheless complete ordinary argument validation before reporting capacity exhaustion where those validation results are already determined by the supplied semantic values; resource pressure cannot be used to turn an invalid `write` argument into a different portable argument-validation outcome.
+
+An implementation must not instead block or suspend the Protos caller inside `write()` waiting for snapshot capacity, must not return a pending Future whose promised snapshot it has no bounded way to preserve, and must not borrow/freeze/pin the caller's mutable `Bytes` until capacity becomes available. If the write is admitted, the snapshot guarantee is unconditional for that operation.
+
+Snapshot capture/admission does not itself commit output. An admitted write whose cancellation wins before the I/O commitment boundary still contributes zero bytes to the observable output sequence.
 
 Writing `Bytes()` is valid and may complete immediately.
 
@@ -354,15 +361,15 @@ Backpressure may keep a write pending. Internally, an implementation may use par
 
 Invocation-time snapshotting does not make a `ByteWritable` an unbounded output queue.
 
-A logical output flow must have an effective finite bound on write work that has been accepted but has not progressed far enough for its retained state to be released. The bound may be fixed, adaptive, receiver-specific, or imposed by downstream capacity; its numeric value is not portable Protos behavior.
+A logical output flow must have an effective finite bound on admitted write work whose retained state, including any state needed to preserve invocation snapshots, has not progressed far enough to be released. The bound may be fixed, adaptive, receiver-specific, or imposed by downstream capacity; its numeric value is not portable Protos behavior.
 
-When that bound is reached, later writes remain pending at admission/backpressure rather than forcing the implementation to retain an unbounded number or volume of write snapshots. Backpressure must be capable of propagating toward the code issuing writes through the pending Futures.
+Backpressure propagates through pending Futures only for writes whose snapshot/admission state has actually been retained within that finite bound. Once no bounded retention/reservation is available for another invocation, the implementation uses the capacity-rejection rule above rather than accumulating an unbounded pre-admission snapshot queue or silently suspending the caller inside `write()`.
 
 This rule is end-to-end across adapters, Actor-safe proxies, routing layers, and native/backend buffering controlled by the Protos implementation. No intermediate Protos-managed queue may grow without bound merely because another layer has not yet applied pressure.
 
 The rule does not impose a one-write-at-a-time protocol. Implementations may admit and overlap multiple writes, batch them, coalesce representation, or use bounded pipelining while preserving invocation ordering, snapshot semantics, cancellation/commitment rules, and the receiver's observable output contract.
 
-A program that intentionally issues writes without waiting may therefore accumulate pending write Futures, but the runtime is not required to accept all corresponding payload state into an ever-growing output queue. Program-held Futures and arguments remain subject to ordinary reachability/lifetime rules; this backpressure guarantee concerns retention required by the I/O delivery path itself.
+A program that intentionally issues writes without waiting may therefore accumulate Future objects, including already-failed capacity-rejection Futures, but portable semantics do not require the runtime to preserve an unbounded amount of admitted output payload state. Program-held values remain subject to ordinary reachability/lifetime rules; the I/O delivery path itself retains only the bounded admitted state required by the operations it accepted.
 
 
 ### 6.2 ByteWritable cancellation and failure
