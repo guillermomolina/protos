@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 273
+Document revision: 274
 Status: Draft  
 Last updated: 2026-09-04
 ## Prelude Binding Note
@@ -3321,10 +3321,10 @@ are ordinary prelude/library bindings rather than grammar keywords. No new lexic
 Dynamic error handling introduces no special grammar.
 
 ```js
-protectedClosure.handle(errorPrototype, handlerClosure)
+matchPrototype.handle(body, handler)
 ```
 
-is an ordinary message send using existing closure and argument syntax. The language does not require `try`, `catch`, or `throw` syntax for Core v0.1.
+is an ordinary message send using existing closure and argument syntax. `matchPrototype` is the receiver, while `body` and `handler` are ordinary arguments; the parser assigns no handler semantics beyond ordinary message-send syntax. The language does not require `try`, `catch`, or `throw` syntax for Core v0.1.
 
 ## Future and Concurrency Grammar Note
 

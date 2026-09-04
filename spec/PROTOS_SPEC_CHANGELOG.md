@@ -4,6 +4,23 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.274] - 2026-09-04
+
+### Fixed
+- Removed the stale Grammar example
+  `protectedClosure.handle(errorPrototype, handlerClosure)`, which contradicted
+  the already-standardized Core handler API.
+- Aligned `PROTOS_GRAMMAR.md` with Language and Runtime on the canonical ordinary
+  message form `matchPrototype.handle(body, handler)`.
+- Clarified that Grammar assigns no special handler semantics: receiver and
+  arguments are parsed through ordinary message-send syntax, and dynamic handler
+  behavior remains defined by Language/Runtime.
+- Preserved the absence of dedicated `try`, `catch`, or `throw` syntax.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 274.
+  Only `PROTOS_GRAMMAR.md` gains normative clarification in this revision.
+
 ## [0.1.273] - 2026-09-04
 
 ### Closed
