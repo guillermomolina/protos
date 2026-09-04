@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 274
+Document revision: 275
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -1819,7 +1819,11 @@ This rule deliberately leaves the concrete native name repertoire at the host/en
 
 Environment lookup distinguishes an absent valid native name from a Protos String that cannot be losslessly represented as one native environment-variable name; the latter makes both get and contains fail rather than returning null/false.
 
-`each(block)` invokes the callback with `(name, value)` String pairs. Iteration order among valid entries is unspecified.
+`each(block)` invokes the callback with `(name, value)` String pairs in one canonical Environment iteration order.
+
+After the complete portable `(String, String)` representation validation described below succeeds, entries are ordered by their `name` Strings using lexicographic comparison of Unicode scalar values. At the first scalar position where two names differ, the name whose scalar value is numerically smaller comes first. If one name's scalar sequence is an exact prefix of the other, the shorter name comes first. Equal name Strings cannot occur as two distinct entries because the Environment is a single-valued mapping under its native name-identity rules.
+
+This ordering is defined directly for Environment enumeration; it does not require or define a general String ordering operator. It performs no Unicode normalization, locale collation, native case folding, filesystem-style comparison, or host-environment ordering. The already represented Protos String values are compared exactly as scalar sequences.
 
 `block` uses the same ordinary polymorphic callback-invocation domain as the standard Core `each` operations; `Environment.each` is not Closure-only. After ordinary receiver/argument evaluation has established the Environment and supplied `block`, the operation validates that `block` is callable without invoking it. A non-callable callback fails at that point, before Environment entry representability validation and before any user callback can run.
 
@@ -1833,7 +1837,9 @@ When all required validation succeeds and every callback invocation returns norm
 
 The rule does not require a particular physical representation or a second host-environment read. The Process Environment is already a stable snapshot; an implementation may validate eagerly when constructing that snapshot, cache validation state, retain native entries, or validate on first enumeration, provided each call has the observable behavior above.
 
-Once representability has been established, ordinary callback behavior applies. Because iteration order remains unspecified, the order of successful callback invocations is not portable. If `block` itself signals an error or otherwise performs an ordinary non-local control effect, callbacks that already occurred before that user-code outcome are not rolled back; the prevalidation guarantee concerns Environment-to-String representation failure, not transactional execution of arbitrary Protos code.
+Once representability has been established, callbacks are invoked in the canonical Environment name order defined above. The order is therefore portable for one standardized Environment snapshot and cannot depend on host enumeration order, native environment-block ordering, hash-table layout, decoder/materialization order, or implementation scheduling.
+
+If `block` itself signals an error or otherwise performs an ordinary non-local control effect, callbacks that already occurred earlier in that canonical order are not rolled back and later entries are not invoked by that call. The prevalidation guarantee concerns Environment-to-String representation failure, not transactional execution of arbitrary Protos code.
 
 No entry is silently omitted because it cannot be represented as String. Host-specific/native APIs may expose such entries losslessly through a separate native representation.
 

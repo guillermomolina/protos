@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.275] - 2026-09-04
+
+### Fixed
+- Replaced implementation-selected `Environment.each(block)` enumeration order
+  with one portable canonical order.
+- Defined Environment entries to be enumerated by lexicographic comparison of
+  their already-represented name Strings' Unicode scalar sequences.
+- Defined first differing scalar by numeric scalar value and exact-prefix ties by
+  shorter-name-first ordering.
+- Kept the ordering local to Environment enumeration; no general String ordering
+  operator is introduced.
+- Prohibited Unicode normalization, locale collation, native case folding,
+  host-environment ordering, hash-table layout, and materialization order from
+  changing callback order.
+- Defined callback error/non-local-control prefix behavior relative to that
+  canonical order, while preserving the existing non-transactional callback
+  semantics.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 275. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.274] - 2026-09-04
 
 ### Fixed
