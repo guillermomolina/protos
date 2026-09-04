@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 241
+Document revision: 242
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -762,6 +762,20 @@ A `PipeWriter` exposes `ByteWritable` and `Closable`.
 A `Socket` exposes `ByteReadable`, `ByteWritable`, `ReadShutdown`, `WriteShutdown`, and `Closable`.
 
 In this document, `Socket` describes the I/O/lifecycle capability shape of an already-provisioned connected byte-stream endpoint. It does **not** imply a standardized ambient socket constructor, ambient network namespace, or authority to create, connect, bind, listen, accept, resolve names, or select arbitrary remote/local addresses.
+
+For a standard `Socket`, a `ByteReadable.read(maxBytes)` result of `null` that represents remote/end-of-stream completion permanently establishes EOF for that Socket's input direction. While the Socket remains otherwise open, later ordinary reads on that same logical input direction return `null`; later backend activity cannot make new bytes appear after that established stream end.
+
+This is the concrete Socket specialization of the general ByteReadable EOF rule. A connected byte-stream endpoint is not a mutable regular-file sequence whose extent can later grow after EOF. An implementation must not treat one host/native end-of-stream indication as a temporary no-data condition, reconnect the endpoint implicitly, switch to a replacement connection, or resurrect input merely because a backend abstraction could do so internally.
+
+Remote input EOF terminates only the Socket's input byte sequence. It does not by itself invoke `ReadShutdown`, `WriteShutdown`, or `close()`, does not terminate the output direction, and does not imply that previously accepted output has been flushed or acknowledged. A program may continue to use the output direction when the Socket's other lifecycle/capability rules permit it.
+
+Local `shutdownRead()` remains a distinct irreversible local input cutover whose later reads also produce the specified EOF-like `null` result. The two states can therefore have the same ordinary read result while representing different causes: remote stream completion versus local refusal to receive. Neither state is allowed to resurrect ordinary input afterward.
+
+Whole-resource `close()` remains stronger. Once the close cutover occurs, new operations that require the Socket to remain open fail under the ordinary Closable lifecycle rather than being reclassified as successful EOF reads merely because remote EOF had previously been observed.
+
+Buffered bytes that logically precede remote EOF are delivered before `null` under the ordinary ByteReadable ordering rules. Only after all such preceding input has been delivered can the remote EOF result commit. A standard `BufferedReader` layered over this Socket may therefore memoize that committed EOF because the source contract itself makes it permanent.
+
+A standard Socket's remote/end-of-stream `null` is thus a permanent end of that connected input byte stream, not a resumable no-data observation.
 
 Possessing such a Socket transfers only the capabilities exposed by that endpoint. It does not implicitly transfer a broader capability to create sibling sockets, reconnect elsewhere, perform DNS/name resolution, inspect the host network namespace, or bypass the Process host's network policy.
 

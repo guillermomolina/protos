@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.242] - 2026-09-04
+
+### Fixed
+- Defined remote/end-of-stream EOF on a standard connected `Socket` input
+  direction as permanent for that logical byte stream.
+- Prohibited temporary-EOF treatment, implicit reconnect/replacement, or later
+  backend input resurrection after a Socket read has committed remote EOF.
+- Kept remote EOF directional: it does not invoke read shutdown, write shutdown,
+  or whole-resource close and does not terminate otherwise-usable output.
+- Distinguished remote EOF from local `shutdownRead()` while preserving their
+  common later-read `null` behavior before whole-resource close.
+- Preserved Closable precedence so reads issued after the whole-resource close
+  cutover fail under the close lifecycle rather than being rewritten as EOF.
+- Required buffered bytes preceding remote EOF to be delivered before the EOF
+  result and allowed BufferedReader to memoize this source-guaranteed EOF.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 242. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.241] - 2026-09-04
 
 ### Closed
