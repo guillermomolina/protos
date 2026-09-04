@@ -4,6 +4,17 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## 0.2.62-SNAPSHOT
+
+### Added
+- Added CLI001 basic executable CLI with file execution, `-e`, help/version, and persistent-context REPL.
+- Added non-normative value rendering, focused CLI/REPL tests, `bin/protos`, and executable shaded-JAR packaging.
+
+### Notes
+- CLI001 reuses the normal parser/canonical/lowering/Truffle pipeline.
+- Top-level script arguments remain unavailable because Core `args` is Closure-invocation-only.
+- No normative specification revision is changed.
+
 ## 0.2.61-SNAPSHOT
 
 ### Added
