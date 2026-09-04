@@ -98,6 +98,9 @@ public final class ProtosCoreBootstrap {
         sourceLoader
                 .load(coreDirectory.resolve("array.protos"))
                 .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("string.protos"))
+                .call(bootstrapActivation);
 
         Object contextBinding =
                 bootstrapContext
@@ -199,6 +202,11 @@ public final class ProtosCoreBootstrap {
         }
         ProtosStandardArrayProtocol.install(arrayPrototype);
 
+        ProtosObjectValue stringPrototype =
+                requirePrototype(
+                        bootstrapContext, "String", ProtosObjectValue.rootObject());
+        ProtosStandardStringProtocol.install(stringPrototype);
+
         ProtosObjectValue preludeBindings =
                 new ProtosObjectValue(contextPrototype);
         preludeBindings.createLocalSlot("Context", contextPrototype);
@@ -218,6 +226,7 @@ public final class ProtosCoreBootstrap {
                 "InvalidReturn", invalidReturnPrototype);
         ProtosCoreErrorTaxonomy.exportBindings(bootstrapContext, preludeBindings);
         preludeBindings.createLocalSlot("Array", arrayPrototype);
+        preludeBindings.createLocalSlot("String", stringPrototype);
         preludeBindings.freeze();
 
         return new ProtosPrelude(preludeBindings, contextPrototype);

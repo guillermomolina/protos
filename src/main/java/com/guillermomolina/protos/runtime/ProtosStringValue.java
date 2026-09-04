@@ -19,7 +19,7 @@ package com.guillermomolina.protos.runtime;
 
 import java.util.Objects;
 
-public final class ProtosStringValue {
+public final class ProtosStringValue implements ProtosRepresentedValue {
     private final String value;
 
     public ProtosStringValue(String value) {
@@ -28,5 +28,10 @@ public final class ProtosStringValue {
 
     public String value() {
         return value;
+    }
+
+    @Override
+    public Object representedDelegationParent(ProtosPrelude prelude) {
+        return ProtosRepresentedValue.requirePrelude(prelude, "String").stringPrototype();
     }
 }

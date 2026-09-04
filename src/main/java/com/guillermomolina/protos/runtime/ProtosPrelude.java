@@ -133,6 +133,10 @@ public final class ProtosPrelude {
         }
     }
 
+    public ProtosObjectValue stringPrototype() {
+        return requiredOrdinaryBinding("String");
+    }
+
     public ProtosObjectValue arrayPrototype() {
         Object binding = bindings.readLocalSlot("Array").orElseThrow();
         if (!(binding instanceof ProtosObjectValue arrayPrototype)) {

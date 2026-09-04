@@ -4,6 +4,29 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.59-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- I003 — implemented the standard semantic String prototype and represented-value
+  delegation through the generalized I002 lookup bridge.
+- Added standard String `size`, `at`, bracket-read, and binary `+` behavior with
+  receiver-domain validation and Protos Error signaling.
+- Pinned ICU4J 78.1 and require Unicode 17 data so `String.size` and `String.at`
+  use Unicode 17.0.0 default extended grapheme clusters rather than host/JDK text
+  segmentation.
+- Added conformance coverage for empty/ASCII/Unicode/supplementary Strings,
+  exact-scalar equality/identity, fixed-width Integer indexing, invalid indexes,
+  concatenation, and non-membership by delegation.
+
+### Notes
+
+- String semantic identity remains exact Unicode-scalar-sequence identity; no
+  normalization, coercion, encoding, Bytes, module, or text-I/O behavior is added.
+- No normative specification change is introduced.
+- Maven remains intentionally outside the installer and is run manually.
+- Project implementation version is `0.2.59-SNAPSHOT`.
+
 ## [0.2.58-SNAPSHOT] - 2026-09-04
 
 ### Fixed
