@@ -44,6 +44,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalCompose;
 import com.guillermomolina.protos.semantic.ast.CanonicalCreate;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalIdentity;
+import com.guillermomolina.protos.semantic.ast.CanonicalIndexedAssign;
 import com.guillermomolina.protos.semantic.ast.CanonicalIntrinsic;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
@@ -151,9 +152,12 @@ public final class Canonicalizer {
     }
 
     private CanonicalExpression lowerAssignment(SurfaceAssignment assignment) {
-        if (assignment.target() instanceof SurfaceIndex) {
-            throw new IllegalArgumentException(
-                    "Indexed assignment is not supported by this canonicalizer slice");
+        if (assignment.target() instanceof SurfaceIndex index) {
+            return new CanonicalIndexedAssign(
+                    canonicalize(index.receiver()),
+                    canonicalize(index.index()),
+                    canonicalize(assignment.value()),
+                    assignment.span());
         }
         SlotTarget target = slotTarget(assignment.target());
         return new CanonicalAssign(
