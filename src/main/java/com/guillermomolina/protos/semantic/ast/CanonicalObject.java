@@ -32,4 +32,14 @@ public record CanonicalObject(
         Objects.requireNonNull(body, "body");
         Objects.requireNonNull(span, "span");
     }
+
+    public java.util.Set<String> reservedLocalSlotNames() {
+        java.util.Set<String> names = new java.util.LinkedHashSet<>();
+        for (CanonicalExpression expression : body.expressions()) {
+            if (expression instanceof CanonicalCreate create && create.target().isEmpty()) {
+                names.add(create.name());
+            }
+        }
+        return java.util.Collections.unmodifiableSet(names);
+    }
 }

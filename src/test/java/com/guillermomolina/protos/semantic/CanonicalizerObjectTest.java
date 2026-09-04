@@ -54,6 +54,17 @@ class CanonicalizerObjectTest {
     }
 
     @Test
+    void objectReportsDirectLocalDeclarationsAsCompositionReservations() {
+        CanonicalObject object =
+                assertInstanceOf(
+                        CanonicalObject.class,
+                        canonicalizeOnly(
+                                "{ ...source\n local: value\n receiver.member: other }"));
+
+        assertEquals(java.util.Set.of("local"), object.reservedLocalSlotNames());
+    }
+
+    @Test
     void lowersCompositionItemToCanonicalCompose() {
         CanonicalObject object =
                 assertInstanceOf(
