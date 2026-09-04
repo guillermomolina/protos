@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 246
+Document revision: 247
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3630,6 +3630,29 @@ Conversion between text and bytes is explicit:
 
 ```js
 UTF8.decode(bytes)
+### Canonical one-shot encoding dispatch
+
+Core v0.1 has one canonical standard one-shot encoding/decoding dispatch
+direction: the `Encoding` object is the receiver.
+
+```js
+UTF8.encode(text)
+UTF8.decode(bytes)
+```
+
+The corresponding abstract form is `encoding.encode(text)` and
+`encoding.decode(bytes)`, as defined normatively by the I/O model.
+
+Core v0.1 does **not** additionally standardize reciprocal convenience messages
+`String.encode(encoding)` or `Bytes.decode(encoding)`. A library may provide
+such ordinary conveniences, but portable Core code cannot rely on them unless a
+later standard explicitly adds them.
+
+This choice introduces no special syntax. `UTF8` and other standardized
+encodings are ordinary Encoding objects when available through the applicable
+standard-library/I/O environment, and ordinary polymorphic message dispatch
+applies.
+
 UTF8.encode(text)
 ```
 
@@ -4082,7 +4105,7 @@ This keeps ordinary text operations aligned with user-perceived characters while
 ```js
 text.graphemes()
 text.codePoints()
-text.encode(UTF8)
+UTF8.encode(text)
 ```
 
 Because `String` is immutable, operations that conceptually modify text produce a new `String`:

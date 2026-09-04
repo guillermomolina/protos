@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 246
+Document revision: 247
 Status: Draft  
 Last updated: 2026-09-04
 ## Prelude Binding Note
@@ -3107,9 +3107,18 @@ For triple-double-quoted String literals, indentation normalization follows the 
 Character encoding is not determined by the source-level string literal syntax. Conversion to or from encoded bytes is performed explicitly through ordinary protocols such as:
 
 ```js
-text.encode(UTF8)
-bytes.decode(UTF8)
+UTF8.encode(text)
+UTF8.decode(bytes)
 ```
+
+The examples above use the canonical standard one-shot
+dispatch direction: the Encoding object is the receiver. Core v0.1 does not
+standardize `text.encode(encoding)` or `bytes.decode(encoding)` as reciprocal
+String/Bytes convenience messages. This is a semantic API rule, not a grammar
+restriction; ordinary user-defined messages with those names remain syntactically
+valid.
+
+
 
 Core Grammar v0.1 does not require separate literal forms for UTF-8, UTF-16, or other text encodings.
 
@@ -3285,7 +3294,7 @@ Malformed-text handling introduces no special syntax.
 Examples such as:
 
 ```js
-bytes.decode(UTF8)
+UTF8.decode(bytes)
 bytes.decode(UTF8, ReplaceInvalid)
 ```
 

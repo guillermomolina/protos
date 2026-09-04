@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 246
+Document revision: 247
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -907,6 +907,14 @@ The standardized one-shot operations are conceptually:
 encoding.encode(text)   -> Bytes
 encoding.decode(bytes)  -> String
 ```
+
+The Encoding receiver is the canonical standard one-shot dispatch direction.
+Core v0.1 does not additionally require reciprocal `String.encode(encoding)` or
+`Bytes.decode(encoding)` convenience messages. Implementations may expose such
+ordinary library conveniences only when they do not change the normative
+Encoding-operation semantics; portable Core code must use the Encoding-object
+contract unless another standard explicitly says otherwise.
+
 
 They are in-memory operations and do not return Futures.
 
