@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 268
+Document revision: 269
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -2075,6 +2075,34 @@ These rules do not impose a global ordering among independent continuations.
 They require only that a `then` transformation never run before its source Future
 is terminal and never run inline as part of the `then` call or source-completion
 transition.
+
+### Waiting for multiple Futures
+
+Core v0.1 standardizes:
+
+```text
+Future.all(future0, future1, ...)
+    -> Future
+```
+
+All arguments are evaluated normally and then synchronously validated as Future
+values from left to right. The returned object is a fresh non-task-backed Future;
+it observes the sources but does not own or cancel them.
+
+If all sources resolve, the aggregate resolves with a fresh standard Array of
+their values in argument order. Source completion order does not affect result
+order.
+
+If a source fails or is cancelled, aggregate terminal selection follows argument
+order rather than completion timing: the lowest non-resolved source index becomes
+decisive only after every lower index is known resolved. A decisive failure fails
+the aggregate with the same Error; a decisive cancellation cancels it.
+
+`Future.all()` resolves immediately with a fresh empty Array.
+
+Cancelling the aggregate abandons only this observation and does not cancel any
+source Future. This operation is deterministic wait-all, not first-completion
+`race`/`select`.
 
 ## 31. Structured Concurrency
 

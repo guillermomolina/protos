@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 268
+Document revision: 269
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -1482,6 +1482,107 @@ A future explicit yield/scheduling facility may add a new portable cooperative
 boundary if independently justified. Until then, Core defines no implicit
 `yield`, quantum expiration, fairness poll, or automatic conversion of CPU-bound
 Actor-local work into P.
+
+## 24E. Waiting for Multiple Futures with `Future.all(...)`
+
+**CLOSED**
+
+Core v0.1 standardizes the ordinary Future-protocol operation:
+
+```text
+Future.all(futures...)
+    -> Future
+```
+
+`Future` here denotes the standard Future prototype object; `all` is an ordinary
+message on that object and introduces no new syntax, Task kind, wait-set object,
+or scheduler identity.
+
+After ordinary argument evaluation left-to-right, every supplied argument must
+be a Future value in the current execution domain. Validation is synchronous in
+ascending argument-index order. The first non-Future argument signals an `Error`
+and no aggregate Future is created.
+
+The returned aggregate is a fresh non-task-backed Future representing only this
+multi-Future observation. It does not own, re-parent, detach, cancel, or otherwise
+change any source Future or its producer.
+
+For zero arguments:
+
+```text
+Future.all()
+```
+
+returns an already-resolved Future whose value is a fresh empty standard Array.
+
+For one or more source Futures, let their argument positions be `0 .. n-1`.
+The aggregate observes each source's stable terminal outcome and applies one
+deterministic ascending-index frontier.
+
+For each source position, the logical outcomes are:
+
+```text
+resolved(value)
+failed(error)
+cancelled
+```
+
+A resolved source contributes its resolved value at the same index of the final
+result Array.
+
+The aggregate may resolve successfully only when every source Future is resolved.
+Its value is then one fresh standard Array:
+
+```text
+[result0, result1, ..., resultN]
+```
+
+with exactly the source-argument order, independent of source completion order.
+
+Failure/cancellation selection is also argument-order deterministic. The
+aggregate becomes terminal at the lowest source index whose outcome is not
+`resolved`, but only after every lower index is known to be `resolved`.
+
+Therefore:
+
+- a failed source at index `i` fails the aggregate with that same Error only when
+  every source `0 .. i-1` is resolved;
+- a cancelled source at index `i` cancels the aggregate only when every source
+  `0 .. i-1` is resolved;
+- a later failure/cancellation cannot overtake an unresolved lower index;
+- if a lower source later fails/cancels, that lower outcome wins;
+- physical completion order, callback scheduling, carrier choice, or registration
+  order cannot select the aggregate terminal outcome.
+
+This ordered frontier intentionally differs from completion-race semantics.
+`Future.all(...)` is the deterministic wait-for-all combinator; first-completion
+selection remains a separate `select`/`race` design topic.
+
+Cancelling the aggregate Future abandons only the aggregate observation. It does
+not request cancellation of any source Future, does not alter any source terminal
+state, and does not propagate upstream cancellation. Once aggregate cancellation
+wins its ordinary first-terminal transition, later source completions are ignored
+by that aggregate.
+
+Repeated source Future identity is allowed. Each argument position is one logical
+observation slot. If the same Future appears more than once and resolves, its same
+resolved value occupies each corresponding result position; no source is
+duplicated or re-executed.
+
+The aggregate itself has no structured task-ownership edge. `detach()` therefore
+has the existing non-task-backed Future no-op behavior.
+
+A pending aggregate must not retain arbitrary completed-source implementation
+state beyond what is necessary to produce the specified result or deterministic
+frontier decision. Once the aggregate becomes terminal or its cancellation is
+honored, source registrations must be removed or made inert so long-lived source
+Futures cannot retain dead aggregate observation state without bound.
+
+The implementation may realize the operation with callbacks, compact waiter
+registrations, bitmaps, counters, continuation records, polling already-terminal
+state, or another mechanism. Such choices are non-observable provided the
+ordered result, terminal-outcome selection, cancellation isolation, and
+registration-lifetime rules above are preserved.
 
 ## 25. Parent Actor Versus Failure Authority
 
@@ -5373,7 +5474,6 @@ mechanism, or implementation detail that still requires design.
 -   Future ownership interaction with Actor lifecycle
 -   Timers
 -   Clock semantics
--   Waiting on multiple Futures
 -   Select/race operations
 -   Resource limits and quotas
 -   Runtime resource-pressure model

@@ -4,6 +4,33 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.269] - 2026-09-04
+
+### Added / Closed
+- Standardized `Future.all(futures...) -> Future` for deterministic waiting on
+  multiple Futures.
+- Defined `Future.all` as an ordinary message on the standard Future prototype,
+  with no new syntax, Task kind, or wait-set object.
+- Required synchronous left-to-right Future-argument validation.
+- Defined the returned aggregate as a fresh non-task-backed observation Future
+  that neither owns nor cancels its sources.
+- Defined zero arguments to resolve immediately with a fresh empty standard
+  Array and successful non-empty completion to preserve source argument order.
+- Defined deterministic failure/cancellation selection by an ascending argument
+  frontier rather than physical completion order.
+- Defined aggregate cancellation as observation-only, with no upstream source
+  cancellation.
+- Defined repeated source-Future identity as valid and source registrations as
+  removable/inert after aggregate terminalization to avoid unbounded retention.
+- Kept first-completion `select`/`race` semantics as a separate open topic.
+- Removed `Waiting on multiple Futures` from Open Design Topics.
+
+### Changed
+- Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
+  `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  269.
+
 ## [0.1.268] - 2026-09-04
 
 ### Fixed

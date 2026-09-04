@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 268
+Document revision: 269
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -6130,6 +6130,49 @@ If the Error graph itself is not P-transferable, the Future instead fails with a
 caller-domain `NonParallelValue`.
 
 ### P-local cooperative Future work
+
+### Future.all aggregate observation
+
+`Future.all(futures...)` creates a non-task-backed aggregate Future with one
+observation slot per argument index.
+
+Conceptually:
+
+```text
+aggregate.frontier = 0
+aggregate.outcomes = pending[n]
+
+onSourceTerminal(i, outcome):
+    if aggregate is terminal:
+        return
+
+    outcomes[i] = outcome
+
+    while frontier < n and outcomes[frontier] is resolved(value):
+        frontier += 1
+
+    if frontier == n:
+        resolve aggregate with fresh Array of resolved values in index order
+        unregister remaining source-observation records
+        return
+
+    if outcomes[frontier] is failed(error):
+        fail aggregate with error
+        unregister remaining source-observation records
+        return
+
+    if outcomes[frontier] is cancelled:
+        cancel aggregate
+        unregister remaining source-observation records
+```
+
+Callbacks for higher indexes may run earlier physically, but they only record
+stable source outcomes until the ascending frontier can advance. This prevents
+completion races from choosing failure/cancellation.
+
+Cancelling the aggregate unregisters or makes inert its observation records but
+does not call `cancel()` on any source. The aggregate has no producer Task and no
+structured ownership edge.
 
 `closure.future()` created while the current activation belongs to a P domain
 creates an ordinary cooperative task owned by that P activation/domain. It keeps
