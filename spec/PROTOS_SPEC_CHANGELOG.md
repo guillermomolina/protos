@@ -8,6 +8,21 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.333] - 2026-09-04
+
+### Migration ownership fixed
+- Corrected two nested subsections that were carried with the wrong parent H2
+  during revision 332.
+- Moved `Map comparison restriction across suspension` from Object Model to
+  `VALUES_AND_COLLECTIONS.md`, where Map keyed-state semantics are owned.
+- Removed duplicate `ensure` cleanup Error-precedence authority from
+  `EXECUTION_AND_CONTROL.md`; Error precedence remains owned by `ERRORS.md`.
+- Kept a compact cross-domain reference in Execution so cleanup/unwind and Error
+  semantics compose without becoming duplicate normative authorities.
+
+### Compatibility
+- No observable behavior is intentionally changed.
+
 ## [0.1.332] - 2026-09-04
 
 ### Migration completed

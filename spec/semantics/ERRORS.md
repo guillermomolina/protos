@@ -1,7 +1,7 @@
 # Protos Errors v0.1
 
 Language version: 0.1
-Document revision: 327
+Document revision: 333
 Status: Draft
 Last updated: 2026-09-04
 
@@ -232,3 +232,26 @@ This taxonomy rule does not introduce checked errors, declarations, hidden
 classes, or a parallel type system. It exists solely to make the already
 observable prototype-based handler matching deterministic across independent
 implementations.
+
+### Error precedence during `ensure` cleanup
+
+If execution enters `cleanup` because a control transfer is leaving the
+protected scope, normal completion of `cleanup` preserves that pending transfer.
+
+If `cleanup` instead signals an `Error`, the cleanup Error becomes the active
+error transfer and supersedes the transfer that caused cleanup to run. This
+applies when the prior transfer was normal scope exit, non-local return, Error
+unwind, or cancellation unwind.
+
+Therefore, when an Error `original` is already unwinding through an `ensure`
+scope and the cleanup signals `cleanupError`, outward handler search observes
+`cleanupError`, not `original`.
+
+Core v0.1 does not automatically wrap `cleanupError`, attach `original` as a
+language-visible cause, construct a suppressed-error list, or otherwise preserve
+both failures as a new composite Error. Libraries may build such reporting
+conventions explicitly with ordinary objects and handlers.
+
+This rule does not undo effects already performed before either Error was
+signaled. It fixes only which control transfer continues after the cleanup
+attempt.
