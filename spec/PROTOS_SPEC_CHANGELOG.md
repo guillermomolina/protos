@@ -8,6 +8,27 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.360] - 2026-09-04
+
+### Actor creator capability discipline (D019)
+- Removed the stale `parentActor` ambient capability from Core Actor semantics:
+  creation genealogy alone grants no reverse `ActorRef`, creator lookup, or
+  implicit reply channel to the created Actor.
+- Distinguished runtime creator/ancestry bookkeeping from program-visible
+  authority. Implementations may retain genealogy internally without exposing a
+  capability or synthesizing reverse distributed routing/lifetime state.
+- Required any capability toward a creator to arise through the existing
+  explicit provisioning/Actor-transfer mechanisms, including an explicitly
+  supplied `Actor.current()` value when permitted.
+- Kept failure authority separate from both genealogy and communication
+  authority; no supervisor API, restart/linking protocol, or new capability kind
+  is introduced.
+
+### Compatibility
+- Aligns §25 with the existing clean Actor bootstrap and capability discipline in
+  §8. `Actor.spawn(...) -> ActorRef`, `Actor.current()`, D015 error semantics,
+  and the D017 Core failure-policy/API boundary are unchanged.
+
 ## [0.1.359] - 2026-09-04
 
 ### String transformation surface (D020)

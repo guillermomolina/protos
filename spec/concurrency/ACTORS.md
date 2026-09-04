@@ -1645,26 +1645,48 @@ must have an explicit P crossing contract.
 
 This closes the former open ledger items `Non-transferable resource capabilities`
 and `Foreign-resource proxies`.
-## 25. Parent Actor Versus Failure Authority
+## 25. Actor Creation Genealogy Versus Authority
 
-**CLOSED**
+**CLOSED --- REVISED**
 
-Actor creation and Actor failure authority are separate relationships.
+Actor creation genealogy, communication capability, and Actor failure authority
+are separate relationships.
 
-`parentActor` identifies the Actor that created the current Actor.
+Core v0.1 defines no `parentActor`, parent/creator lookup operation, implicit
+reverse reply channel, or other program-visible capability obtained merely from
+the fact that one Actor created another. If Actor A creates Actor B, successful
+creation gives A the `ActorRef` for B as defined by §8; creation alone does not
+give B an `ActorRef` or other communication capability toward A.
 
-It represents genealogy/origin and provides an initial communication
-capability toward the creator.
+A new Actor therefore cannot communicate with, identify, or otherwise exercise
+authority over its creator through Core merely because of that genealogy. If B
+needs a capability toward A, A must explicitly provision a permitted capability,
+for example by including `Actor.current()` in B's initialization arguments under
+the ordinary Actor transfer/delegation rules. The resulting value is an ordinary
+explicitly provisioned `ActorRef`; it has no special parent identity or lifetime
+semantics.
 
-It does not imply ownership or automatic lifecycle propagation.
+This rule is transitive with respect to absence of ambient authority: if A
+creates B and B creates C, C acquires no capability toward B or A merely from
+those creation relationships. The same rule applies when creation is initiated
+or coordinated by bootstrap, Group reconciliation, runtime infrastructure, or
+remote placement rather than by ordinary Actor code.
 
-The entity with failure authority is responsible for applying failure
-policy. That authority need not be an ordinary Actor.
+An implementation may retain creator, ancestry, placement, scheduling,
+diagnostic, or failure-accounting metadata internally. Such runtime genealogy
+does not constitute a Core capability, does not make an `ActorRef` available to
+program code, and does not by itself require a reverse routing relationship or
+program-visible lifetime retention. Remote creation likewise does not require
+the runtime to synthesize or transfer a creator `ActorRef`.
 
-If Actor A creates Actor B and A later terminates, B does not
-automatically terminate merely because A was its creator.
+The entity with failure authority is responsible for applying failure policy.
+That authority need not be an ordinary Actor, and the failure-authority
+relationship does not grant ordinary Protos code communication authority toward
+a creator, child, supervisor, or other runtime entity.
 
-Lifecycle consequences are defined by failure policy, not parenthood.
+If Actor A creates Actor B and A later terminates, B does not automatically
+terminate merely because A was its creator. Lifecycle consequences are defined
+by the applicable failure/lifecycle policy, not by creation genealogy.
 ## 26. Supervision and Failure Authority
 
 **CLOSED --- REVISED**
