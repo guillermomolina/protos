@@ -206,87 +206,215 @@ callable kind or a privileged dispatch path.
 
 ## Invocation Arguments, Defaults, Rest, and Spread
 
-Every invocation exposes the arguments supplied by the caller through the reserved intrinsic `args`.
+This section is the primary normative owner of the argument vector and Closure
+parameter-binding algorithm. `../PROTOS_GRAMMAR.md` owns only the syntactic forms
+of ordinary, default, and rest parameters and of call spread. The standard Array
+representation used by `args`, rest bindings, and spread extraction is owned by
+`VALUES_AND_COLLECTIONS.md`; that representation does not define a second
+binding algorithm.
 
-`args` is not an ordinary writable identifier and cannot be shadowed by a parameter or local slot.
+### Caller-supplied positional vector
 
-`args` contains exactly the explicit argument expressions from the call site, after evaluation and in source order. It does not contain the receiver and does not contain the caller activation.
+A call first evaluates its call receiver/target as required by the ordinary call
+form, then evaluates its explicit argument items strictly from left to right.
+Argument evaluation completes before Closure activation creation or parameter
+binding begins.
 
-For example:
+For each ordinary argument item, its expression is evaluated exactly once and
+its resulting value contributes one element to the caller-supplied positional
+vector.
 
-```js
-dog.move(10, 20)
-```
+For each spread argument `...expression`, the spread expression is evaluated
+exactly once at its left-to-right position. Standard call-spread extraction then
+uses the standard Array rules in `VALUES_AND_COLLECTIONS.md`: the source must
+have standard Array indexed state and contributes a shallow ascending-index
+snapshot of its elements at that point. Those contributed elements are appended
+to the same positional vector. Empty spread contributes zero elements.
 
-inside `move`:
+A trailing closure that the grammar attaches and desugars is an ordinary final
+argument. Its creation occurs at the position established by that desugaring,
+after the preceding explicit argument items, and its Closure value contributes
+one final element to the same vector.
 
-```js
-this       // dog
-args[0]    // 10
-args[1]    // 20
-args.size  // 2
-```
+If evaluation of the call receiver/target, an ordinary argument, a spread
+expression, or spread extraction signals an Error or performs another non-local
+control transfer, evaluation stops immediately. No Closure activation for that
+call is created, no parameter/default binding begins, and effects already
+performed by earlier evaluation are not rolled back.
 
-The receiver remains available through `this`. Caller introspection, if exposed in the future, belongs to execution-context reflection rather than the argument collection.
+Once this phase completes, let `supplied` denote the resulting positional vector
+and let `N` be its length. Spread therefore composes with invocation by producing
+ordinary positional elements before binding; it does not invoke a second
+parameter-binding algorithm.
 
-Default parameters are supported. Defaults apply only when the corresponding argument was not supplied by the caller.
+### Activation establishment
 
-```js
-foo: (a, b = 10) => {
-    ...
-}
-```
+After the complete caller-supplied vector exists and ordinary dispatch has
+selected the Closure to invoke, the Closure invocation establishes its activation
+before evaluating any default expression.
 
-For:
+The activation has a fresh execution-context object with the ordinary lexical
+parent, receiver (`this`), `methodHome`, and captured lexical relationships
+specified elsewhere in this document and in `EXECUTION_AND_CONTROL.md`.
+The reserved intrinsic `context` denotes that fresh activation context throughout
+parameter binding and body execution.
 
-```js
-foo(1)
-```
+The activation's return-home relationship is also established before the first
+parameter is bound. An invocation that owns a fresh return home makes that home
+active for the whole dynamic extent of parameter binding and body execution. A
+nested Closure invocation that uses a captured home uses that same captured home
+while binding defaults, exactly as it does while executing its body.
 
-`b` is bound to `10`, while `args` still contains only the caller-supplied value:
+The reserved intrinsic `args` is established from `supplied` before parameter
+binding begins. It denotes a fresh frozen standard Array containing exactly the
+`N` caller-supplied positional elements in order. It contains neither the
+receiver nor the caller activation, and it never contains values produced by
+default expressions. `args` is not an ordinary writable identifier and cannot be
+shadowed by a parameter or local slot.
+
+### Normative parameter-binding algorithm
+
+Let `i = 0`. Process the declared parameters strictly from left to right. Parameter
+names are already unique by the grammar/signature rules.
+
+For each parameter:
+
+1. If it is the trailing rest parameter, create its local parameter slot with a
+   fresh frozen standard Array containing exactly `supplied[i]` through
+   `supplied[N - 1]` in order, or an empty Array when `i == N`. Then set `i = N`.
+   No default applies to a rest parameter.
+2. Otherwise, if `i < N`, take `supplied[i]` as the parameter value and increment
+   `i` by one. A default expression on that parameter is not evaluated at all.
+3. Otherwise, if the parameter has a default expression, evaluate that expression
+   exactly once in the current invocation activation. Do **not** increment `i`.
+   If evaluation completes normally, its exact resulting value becomes the
+   parameter value.
+4. Otherwise, signal an argument-count Error immediately. No later parameter,
+   default expression, rest binding, or body expression is evaluated.
+5. After a non-rest parameter value has been obtained normally, create that
+   parameter name as a local slot of the activation context with the exact value.
+
+After the final parameter, if `i < N`, signal an argument-count Error. A trailing
+rest parameter necessarily consumes the complete remaining suffix, so such an
+extra-argument failure cannot occur when rest is present.
+
+Binding a parameter is ordinary local-slot establishment on the activation
+context. There is no parameter hoisting, predeclaration, temporal-dead-zone
+object, hidden `uninitialized` Protos value, or second parameter namespace.
+Consequently, a parameter name becomes a local binding only after its supplied or
+default value has been obtained normally and its slot has been created.
+
+A default expression can therefore read every earlier successfully bound
+parameter through ordinary bare-name lookup. The parameter currently being
+bound and every later parameter are not yet local bindings. A bare reference to
+one of those names follows the ordinary unqualified lookup algorithm in
+`EXECUTION_AND_CONTROL.md`: it may resolve in a captured lexical context or, when
+applicable, on `this` and its delegation chain; if no such binding exists, the
+ordinary lookup Error is signaled. In particular, `(a = b, b = 1)` does not read
+the later parameter's future value `1` merely because `b` appears in the
+signature.
+
+Because defaults execute in the real activation, they may observe the ordinary
+`this`, `context`, and `args` intrinsics and may perform any effects otherwise
+permitted to an ordinary expression. If a default explicitly creates a local
+slot whose name must later be established as a parameter slot, the later
+parameter-slot creation follows ordinary slot-creation conflict semantics; no
+special overwrite or parameter reservation occurs.
+
+### `args`, rest, and default interaction
+
+`args` always denotes the complete flattened caller-supplied positional vector,
+including elements contributed by spread and any desugared trailing Closure.
+Defaults never add elements to `args`, replace elements in it, or shift positional
+assignment.
+
+A rest parameter contains only the still-unconsumed suffix of that same caller-
+supplied vector. Values produced by defaults are never inserted into rest. The
+rest Array is a distinct fresh frozen standard Array from `args`, including when
+both are empty or contain the same references. Both collections are shallow:
+the argument objects themselves retain their ordinary identities and aliasing.
+
+For example, for `(a = 1, ...rest)`:
 
 ```text
-args.size == 1
+call()        -> args = [],       a = 1,  rest = []
+call(10)      -> args = [10],     a = 10, rest = []
+call(10, 20)  -> args = [10, 20], a = 10, rest = [20]
 ```
 
-A closure may declare one trailing rest parameter:
+### Failure and control-transfer precedence
+
+The observable precedence is the order of the algorithm above, not a separate
+arity preflight:
+
+- receiver/target evaluation and argument/spread evaluation happen before
+  invocation and therefore before every arity, parameter-binding, or default
+  failure;
+- a missing required parameter is detected when left-to-right binding reaches
+  that parameter, so defaults and effects of earlier parameters may already have
+  occurred;
+- an excess-argument failure is detected only after all non-rest parameters have
+  consumed their supplied values; when excess supplied arguments exist, every
+  non-rest parameter necessarily receives a supplied value, so no default is
+  evaluated merely before discovering the excess;
+- a default-expression Error or other control transfer stops binding immediately
+  and takes precedence over every later missing-parameter/default/body outcome;
+- a parameter-slot creation failure likewise stops binding before later
+  parameters or the body.
+
+No parameter-binding failure rolls back effects already performed by argument
+expressions, earlier defaults, or other ordinary operations. Earlier parameter
+slots already created in the activation are likewise not conceptually rolled
+back. If `context` or a Closure capturing that context escaped through an effect
+before the invocation failed, ordinary object/capture lifetime rules continue to
+apply to the reachable partial activation context.
+
+Error signaling during a default uses the ordinary dynamic handler environment
+of the invocation. Binding installs no implicit handler frame. Core Error
+signaling remains non-resumable, so an Error that exits the default abandons the
+remaining binding/body path unless it was handled inside an ordinary nested
+handler boundary that itself returns a normal value to the default expression.
+
+A `^value` executed while evaluating a default uses exactly the same return home
+that the Closure body would use. If it targets an active home, ordinary non-local
+return unwinding begins immediately: the current parameter is not bound from that
+default, later parameters/defaults and the body do not execute, and applicable
+cleanup/structured-ownership rules run as for the same transfer from the body.
+If the captured home is no longer active, ordinary `InvalidReturn` semantics
+apply.
+
+Parameter binding itself creates no hidden suspension point. A default expression
+may explicitly suspend only through an operation that is already a suspension
+point under the concurrency/Future rules. Across such a suspension, the
+activation and every earlier established parameter binding remain live and
+ordinary Actor-local scheduling rules apply.
+
+### Representation and optimization boundary
+
+The fresh standard Arrays required for `args` and rest, and the spread snapshot
+semantics, are specified in `VALUES_AND_COLLECTIONS.md`. Implementations may
+scalar-replace, virtualize, share immutable backing storage, or otherwise avoid
+physical activation/Array copies only when `===`, reflection, mutation failure,
+capture, escape, evaluation order, and all other observable semantics remain as
+specified.
+
+These rules add no Actor transferability exception. The activation context and
+captured execution control remain subject to the existing Closure/context Actor
+and isolated-parallel boundaries; argument and rest values cross such boundaries
+only through the already-applicable value-transfer rules. Defaults do not grant
+ambient Process/I/O authority, do not create an additional task kind, and do not
+change Future ownership merely because they run during binding.
+
+These facilities make invocation forwarding and dynamic arity ordinary language
+operations:
 
 ```js
-foo: (first, ...rest) => {
-    ...
+forward: (...items) => {
+    target(...items)
 }
 ```
 
-The rest parameter is bound to the standard invocation-argument collection defined below, containing the remaining caller-supplied arguments.
-
-Argument spread is supported at call sites:
-
-```js
-pack: (...items) => items
-values: pack(10, 20, 30)
-f(...values)
-```
-
-which invokes `f` with the elements of `values` as individual positional arguments, preserving their order. Here `pack` is a rest-capturing closure: its rest parameter binds the ordinary collection containing `10`, `20`, and `30`, and the spread expands that collection's elements into `f`'s arguments.
-
-These facilities are intended to make invocation forwarding and dynamic arity ordinary language operations:
-
-```js
-forward: (...args) => {
-    target(...args)
-}
-```
-
-Protocols analogous to Smalltalk block invocation helpers may therefore be implemented using ordinary callable objects and spread, for example conceptually:
-
-```js
-f.value(10, 20)
-f.values(pack(10, 20))
-```
-
-where such protocol methods delegate to normal invocation. No overload resolution by argument type is introduced by these facilities.
-
-Argument lists and parameter lists are comma-separated lists: `,` is the only separator between elements, a comma is a separator rather than a terminator, and trailing commas are syntax errors. Newlines inside the delimiters are continuation/layout under the newline-continuation rules in Separators, Line Breaks, and Comments; they never substitute for a required comma.
+No overload resolution by argument type is introduced.
 
 ## Polymorphic Invocation and Object Construction
 

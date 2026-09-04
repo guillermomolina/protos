@@ -8,6 +8,26 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.340] - 2026-09-04
+
+### Deterministic Closure parameter binding
+- Made `spec/semantics/CALLABLES.md` the normative owner of the complete
+  Closure invocation binding algorithm for supplied positional arguments,
+  defaults, rest, `args`, spread, and trailing-closure contributions.
+- Fixed left-to-right incremental parameter-slot establishment and default
+  evaluation in the real invocation activation, including visibility of
+  earlier bindings and ordinary lookup for not-yet-bound later names.
+- Defined exact `args`/rest contents, spread composition, arity/error
+  precedence, partial-effect behavior, `this`/`context` visibility, handler
+  interaction, and default-expression non-local return semantics.
+- Aligned `spec/runtime/ABSTRACT_RUNTIME.md` so return-home state is
+  established before binding and owned homes are active while defaults run.
+
+### Compatibility
+- Previously underspecified combinations of default/rest/spread binding now
+  have one deterministic observable result; implementations relying on a
+  different default-binding order or environment must conform to this rule.
+
 ## [0.1.339] - 2026-09-04
 
 ### Documentation taxonomy cleanup

@@ -33,8 +33,10 @@ Activation
     context
     lexicalParent   // lexical parent context of `context`; see lexicalParentOf
     isConstruction  // true only for object-body construction activations
+    code            // Closure body for callable activations
+    parameters      // validated Closure parameter metadata
     receiver        // this
-    arguments       // caller-supplied positional arguments
+    arguments       // caller-supplied positional arguments; defaults excluded
     methodHome
     returnHome      // target of ^, optional outside callable execution
     ownsReturnHome  // true only for the invocation that established returnHome
@@ -769,15 +771,11 @@ function createActivation(
     activation = Activation(
         context = context,
         lexicalParent = closure.lexicalContext,
+        code = closure.code,
+        parameters = closure.parameters,
         receiver = receiver,
         arguments = immutableArgumentCollection(arguments),
         methodHome = methodHome
-    )
-
-    bindParametersLeftToRight(
-        activation = activation,
-        parameters = closure.parameters,
-        arguments = arguments
     )
 
     if establishReturnHome:
@@ -834,9 +832,18 @@ function bindParametersLeftToRight(
         signal ArgumentCountError()
 ```
 
-Default expressions therefore observe earlier parameter bindings and the invocation context. They do not alter `args`.
+This is only an informative rendering of the normative algorithm in
+`../semantics/CALLABLES.md`. Parameter slots are created incrementally: a default
+observes earlier successfully bound parameters, while the current and later
+parameter names are not yet local slots and therefore follow ordinary bare-name
+lookup. Default substitution never changes `activation.arguments` / `args`.
 
-A method invocation dynamically supplies `receiver` and `methodHome` and establishes a fresh return home. A module-level function closure with no captured return home likewise establishes one. A nested closure preserves its captured home.
+A method invocation dynamically supplies `receiver` and `methodHome` and
+establishes a fresh return home. A module-level function closure with no captured
+return home likewise establishes one. A nested closure preserves its captured
+home. Return-home metadata is established by `createActivation` before binding;
+an owned home becomes active in `executeActivation` before the first default is
+evaluated.
 
 # 17. `super`
 
@@ -889,6 +896,12 @@ function executeActivation(activation):
         mark activation.returnHome as ACTIVE
 
     try:
+        bindParametersLeftToRight(
+            activation = activation,
+            parameters = activation.parameters,
+            arguments = activation.arguments
+        )
+
         result = evaluateSequence(
             activation.code,
             activation
