@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 240
+Document revision: 241
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -4068,6 +4068,51 @@ A future explicit remote-compute facility may reuse compatible value and
 isolation rules, but remote placement is not implied by the existence of
 parallel execution and remains open.
 
+### 71.9A Core P is process-local
+
+Core v0.1 `Closure.parallel(...)` executes only within the current Protos
+Process. Its semantic contract does not include remote placement, Node selection,
+Cluster routing, code shipment, remote bootstrap, network transport, remote
+failure detection, or distributed result recovery.
+
+This is a normative locality boundary, not merely a minimum implementation
+requirement.
+
+A conforming implementation must not choose to execute a Core P computation in
+another Protos Process when doing so could introduce distributed-observable
+behavior that Core P does not define. In particular, Core P must not make any of
+the following newly observable merely because a runtime has remote capacity
+available:
+
+- network reachability or partition state;
+- remote Process/Node/Cluster lifecycle;
+- remote code availability/version mismatch;
+- transport serialization format or schema compatibility;
+- placement/routing policy;
+- remote authentication/authorization;
+- retry, duplicate execution, or delivery uncertainty;
+- distributed clock/timeout behavior;
+- failure distinctions that do not exist for process-local P.
+
+The existing P value/snapshot rules are therefore process-local isolation rules,
+not an implicit distributed-serialization contract. A value being P-transferable
+does not imply that it is serializable for an arbitrary network transport, and a
+projectable Closure does not imply that its executable body is remotely
+available under a portable code-identity/versioning scheme.
+
+An implementation may physically execute P work on any CPU carrier, OS thread,
+core, NUMA node, accelerator, or equivalent execution resource that belongs to
+the same Protos Process execution domain, provided every existing P semantic rule
+is preserved. Physical machine topology is not itself the semantic boundary; the
+Protos Process is.
+
+A future explicit remote-compute facility may reuse compatible P isolation,
+snapshot, projection, determinism, or Future-result rules, but it must define its
+own remote placement, code identity/availability, serialization, transport,
+authentication, cancellation, retry, uncertainty, failure, and lifecycle
+semantics. Such a facility is not `Closure.parallel(...)` with an
+implementation-selected remote scheduler.
+
 ### 71.10 Architectural Boundary
 
 The runtime/kernel must provide only the mechanisms that libraries cannot
@@ -4493,7 +4538,6 @@ mechanism, or implementation detail that still requires design.
     Core byte regions
 -   Parallel map/filter/reduce/sort/iteration standard-library APIs
 -   Parallel scheduling, work-stealing, and granularity heuristics
--   Whether remote isolated parallel execution is ever supported
 -   Pub/sub
 -   Advanced routers and load-balancing policies
 -   Actor capacity policy

@@ -4,6 +4,31 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.241] - 2026-09-04
+
+### Closed
+- Closed Core isolated parallel execution as strictly Protos-Process-local.
+- Defined `Closure.parallel(...)` not to imply remote placement, Node/Cluster
+  routing, code shipment, network transport, remote failure detection, retry, or
+  distributed result recovery.
+- Clarified that P-transferability is not a general network-serialization
+  contract and Closure projection is not a remote code-availability/versioning
+  contract.
+- Allowed arbitrary CPU/core/thread/NUMA/accelerator realization only while the
+  work remains inside the same Protos Process semantic execution domain.
+- Required any future remote-compute facility to be explicit and to define its
+  own placement, code identity/availability, serialization, transport,
+  authentication, cancellation, retry/uncertainty, failure, and lifecycle
+  semantics rather than silently extending `Closure.parallel(...)`.
+- Removed the now-closed remote isolated-parallel-execution item from Open Design
+  Topics.
+
+### Changed
+- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_IO_MODEL.md` to document revision 241.
+
 ## [0.1.240] - 2026-09-04
 
 ### Closed
