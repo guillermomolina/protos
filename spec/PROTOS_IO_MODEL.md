@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 248
+Document revision: 249
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -388,13 +388,19 @@ Flushable {
 
 The frontier is a logical position in the ordered output flow. Writes and `flush()` operations that target the same logical output flow are ordered relative to that frontier rather than by host/native completion timing.
 
-When a write and `flush()` have a Protos-defined order, that order is preserved. A write ordered before a flush belongs to that flush frontier: the flush cannot complete successfully while omitting that write's committed output merely because the write is still pending in an implementation queue. Conversely, a write ordered after the flush frontier is not required to be propagated by that flush.
+When a write and `flush()` have a Protos-defined order, that order is preserved. A write ordered before a flush belongs to that flush frontier even if that write has not yet committed any output when the flush is invoked or begins backend work. The flush cannot complete successfully until the terminal aftermath of every such preceding write is known and every byte contribution established by that aftermath has been propagated through the receiver-controlled buffering covered by the flush.
 
-For a write and `flush()` that are genuinely concurrent because they originate from independently progressing Actors through Actor-safe proxies, Protos defines no predetermined cross-Actor arrival order. Routing/admission may choose either request first. If the write is admitted before the flush frontier, it belongs to that flush frontier; if the flush frontier is established first, the competing write is later output and is not covered by that flush. Once the relative order is chosen, host scheduling cannot retroactively move the write across the frontier.
+Accordingly, a preceding write that later succeeds contributes its complete captured sequence to the flush frontier; a preceding write that later fails contributes exactly its permitted contiguous prefix, if any; and a preceding write whose cancellation wins contributes zero bytes. A successful flush may drive, wait for, or otherwise compose with those earlier writes internally, but it cannot resolve first and then allow an earlier-frontier write to create newly committed output behind the already-completed propagation frontier.
 
-A successful flush therefore establishes the required propagation frontier for exactly the output that was logically ordered before it. It does not establish a global memory-ordering or synchronization relation between unrelated Actors, and it does not force later writes to wait for the flush unless their own output ordering or a stronger protocol requires that relationship.
+This requirement concerns the write's terminal semantic aftermath, not merely its Future completion implementation mechanics. The implementation need not execute one operation at a time, but before reporting flush success it must know which output, if any, every preceding-frontier write contributed under its ordinary success/failure/cancellation contract and must have propagated that contribution to the flush boundary.
 
-Successful completion means that output committed to the receiver before that frontier has been propagated through buffering controlled by that receiver to the receiver's defined underlying output boundary.
+A failure of a preceding write does not automatically require the flush itself to fail merely because that earlier write Future failed. If the receiver remains usable and the exact committed prefix from that failed write is internally known well enough to satisfy the ordinary flush contract, the flush may successfully propagate that prefix together with the other preceding output. Conversely, if the receiver's state after the write failure prevents the flush contract from being established, the flush fails under its ordinary receiver/error semantics. Portable code does not infer the earlier write's hidden prefix length from the later flush outcome.
+
+For a write and `flush()` that are genuinely concurrent because they originate from independently progressing Actors through Actor-safe proxies, Protos defines no predetermined cross-Actor arrival order. Routing/admission may choose either request first. If the write is admitted before the flush frontier, it belongs to that flush frontier and the same terminal-aftermath rule applies; if the flush frontier is established first, the competing write is later output and is not covered by that flush. Once the relative order is chosen, host scheduling cannot retroactively move the write across the frontier.
+
+A successful flush therefore establishes the required propagation frontier for exactly the output contribution of every write logically ordered before it, including contributions whose commitment was still pending when the flush was invoked. It does not establish a global memory-ordering or synchronization relation between unrelated Actors, and it does not force writes ordered after the frontier to wait for the flush unless their own output ordering or a stronger protocol requires that relationship.
+
+Successful completion means that all output contributed by operations belonging to the flush frontier has reached the receiver's defined underlying output boundary through buffering controlled by that receiver. No operation already inside the frontier may later contribute additional output that was absent from the successful flush.
 
 A flush frontier is ordered within one logical output flow: writes ordered before it are covered, writes ordered after it are not, and genuinely concurrent cross-Actor write/flush requests are stably ordered by routing/admission.
 

@@ -4,6 +4,31 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.249] - 2026-09-04
+
+### Fixed
+- Closed the flush-frontier race for writes that are logically before a flush but
+  have not yet committed output when the flush begins.
+- Required successful flush to wait until every preceding-frontier write has a
+  terminal semantic aftermath and to propagate exactly the contribution left by
+  that outcome: complete sequence on success, permitted prefix on failure, or
+  zero bytes on successful cancellation.
+- Prohibited a flush from resolving successfully and then allowing an earlier
+  frontier write to commit new output behind the completed frontier.
+- Applied the same rule to writes admitted before a flush under cross-Actor
+  routing/admission ordering.
+- Kept pipelining and overlapping backend work implementation-defined while
+  making terminal contribution knowledge, rather than native call timing, the
+  semantic completion condition.
+- Clarified that an earlier write failure does not mechanically force flush
+  failure when the receiver remains usable and can still establish the complete
+  propagation contract for the exact committed prefix.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 249. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.248] - 2026-09-04
 
 ### Added / Closed
