@@ -4,6 +4,18 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## 0.2.63-SNAPSHOT
+
+### Added
+- Added CLI002 interactive terminal UX using JLine 3.30.6 for readline-style editing, session history, bracketed paste, Ctrl-C cancellation, and clean Ctrl-D exit.
+- Preserved the stream-based REPL path for automated tests and non-terminal input; pasted complete lines remain independent evaluations with one persistent Protos context.
+
+### Notes
+- CLI002 changes terminal input only; the existing parser/canonical/lowering/Truffle evaluation pipeline is unchanged.
+- Structured syntactic multiline input is not added because CLI002 does not introduce parser-completeness heuristics.
+- Protos Error rendering remains minimal (`Error: <object>`); Truffle/JDK `sun.misc.Unsafe` warnings are outside CLI002.
+- No normative specification revision is changed.
+
 ## 0.2.62-SNAPSHOT
 
 ### Added
