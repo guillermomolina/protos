@@ -8,6 +8,28 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.325] - 2026-09-04
+
+### Migrated
+- Completed the remaining CLOSED Actor-domain migration from the mixed
+  concurrency ledger into `concurrency/ACTORS.md`: Buffer transfer policy,
+  end-to-end backpressure, transport transparency/policy/locality, mailbox
+  bounds, communication timeout/deadline semantics, Actor-boundary control and
+  handler confinement, foreign-call/isolation/resource boundaries, failure
+  authority, incarnation identity, failure delivery consequences, lifecycle
+  monitoring, and Actor runtime-health semantics.
+- Moved the remaining CLOSED Future-specific §24F race/select boundary and §24G
+  Future/Actor ownership matrix into `concurrency/FUTURES_AND_TASKS.md`.
+- Replaced every migrated ledger body with a compatibility/navigation anchor;
+  no migrated rule remains independently normative in the mixed ledger.
+
+### Documentation
+- This revision changes specification location/ownership only and does not
+  intentionally change observable Protos behavior.
+- Updated `PROTOS_CONCURRENCY_MODEL.md`, `concurrency/ACTORS.md`, and
+  `concurrency/FUTURES_AND_TASKS.md` to document revision 325.
+- Other revisioned normative documents are unaffected.
+
 ## [0.1.324] - 2026-09-04
 
 ### Migrated
