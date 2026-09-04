@@ -93,13 +93,14 @@ public final class ProtosObjectValue {
                 : Optional.empty();
     }
 
-    public Optional<Object> readSlot(String name) {
+    public Optional<ProtosSlotLookupResult> lookupSlot(String name) {
         Objects.requireNonNull(name, "name");
 
         ProtosObjectValue current = this;
         while (true) {
             if (current.localSlots.containsKey(name)) {
-                return Optional.of(current.localSlots.get(name));
+                return Optional.of(
+                        new ProtosSlotLookupResult(current.localSlots.get(name), current));
             }
 
             if (current.parent == null) {
@@ -114,6 +115,10 @@ public final class ProtosObjectValue {
 
             current = parentObject;
         }
+    }
+
+    public Optional<Object> readSlot(String name) {
+        return lookupSlot(name).map(ProtosSlotLookupResult::value);
     }
 
     public void createLocalSlot(String name, Object value) {
