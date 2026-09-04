@@ -8,6 +8,20 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.335] - 2026-09-04
+
+### Design-governance cleanup
+- Corrected the provenance text in `docs/design/CONCURRENCY_DESIGN.md` after the
+  legacy ledger retirement.
+- Removed obsolete root-agent rules that could make `CLOSED` sections in the
+  non-normative design notes appear normative.
+- Established that all design-note status labels are non-normative and that a
+  design decision becomes language semantics only when incorporated into its
+  owning specification documents.
+
+### Compatibility
+- No observable Protos behavior is changed.
+
 ## [0.1.334] - 2026-09-04
 
 ### Legacy concurrency ledger retired

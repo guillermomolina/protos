@@ -715,12 +715,19 @@ Do not change licensing terms or make licensing-policy decisions implicitly as p
 
 ### Concurrency design work
 
-- `docs/design/CONCURRENCY_DESIGN.md` is a mixed document: a section whose status is exactly `CLOSED` or `CLOSED --- REVISED` is normative concurrency-domain semantics; a section whose status contains OPEN, PENDING, DIRECTION, DETAILS OPEN, API OPEN, or another design-only qualifier is non-normative unless and until its status is changed explicitly.
-- Normative status is section-local. A CLOSED section may explicitly state that a named API, syntax, policy, mechanism, or implementation detail remains open; that open subtopic is not made normative merely by appearing inside the CLOSED section.
-- The global specification revision is the revision of the newest entry in `spec/PROTOS_SPEC_CHANGELOG.md`.
-- A normative document's `Document revision` records the newest global specification revision that changed that document. Document revisions are intentionally not synchronized.
-- Never edit or stage an otherwise-unaffected specification document solely to advance its `Document revision`.
-- Record every normative or specification-structure change in `spec/PROTOS_SPEC_CHANGELOG.md`.
-- When a CLOSED decision from this ledger is incorporated into canonical specification documents, update the affected specification files and record that canonical change in `spec/PROTOS_SPEC_CHANGELOG.md`.
-- When concurrency semantics overlap responsibilities of a canonical core document or another normative domain model, update every affected normative document in the same change so the normative set remains mutually consistent.
-- Never infer semantics from OPEN, PENDING, DIRECTION, DETAILS OPEN, API OPEN, or design-only material.
+`docs/design/CONCURRENCY_DESIGN.md` is entirely non-normative. It preserves
+unresolved, directional, and historical concurrency-design material after the
+legacy concurrency ledger was retired.
+
+Status labels such as `CLOSED AS DIRECTION`, `DIRECTION CLOSED`,
+`DETAILS OPEN`, `API OPEN`, `OPEN`, or `PENDING` describe design-work state only.
+They never grant normative authority to the design document.
+
+When a design decision becomes language semantics:
+
+- update the real owning normative specification under `spec/`;
+- update every other normative owner genuinely affected by the decision;
+- record the change in `spec/PROTOS_SPEC_CHANGELOG.md`; and
+- update or annotate the design note so it no longer appears unresolved.
+
+Never implement observable behavior directly from `docs/design/CONCURRENCY_DESIGN.md`.

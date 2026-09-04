@@ -4,7 +4,8 @@ Status: Non-normative design material
 Last updated: 2026-09-04
 
 This document preserves unresolved and directional concurrency-design material
-from the retired `docs/design/CONCURRENCY_DESIGN.md` ledger.
+from the retired legacy concurrency ledger formerly stored at
+`spec/PROTOS_CONCURRENCY_MODEL.md`.
 
 It is not a language specification and defines no observable Protos behavior.
 Normative concurrency semantics are owned by the modular specifications under
