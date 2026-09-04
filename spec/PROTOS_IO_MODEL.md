@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 277
+Document revision: 278
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -1764,6 +1764,16 @@ size()
 at(index)
 each(block)
 ```
+
+For this Process-argument snapshot, `each(block)` uses the same ordinary polymorphic callback-invocation domain as the standard Core `each` operations; it is not Closure-only. After ordinary receiver/argument evaluation has established the snapshot receiver and supplied `block`, the operation validates that `block` is callable without invoking it. A non-callable callback fails before any argument callback runs.
+
+On a valid snapshot, callbacks are invoked exactly once for each argument String in ascending logical index order from `0` through `size() - 1`. Each callback receives that one String argument. Because the Process-argument snapshot is immutable and its complete String representability is already established by successful `process.args()` acquisition, iteration does not take a second mutable-state snapshot and cannot observe a host-native argument reorder or mutation during the call.
+
+When every callback returns normally, `each(block)` returns the Process-argument snapshot receiver itself. Callback return values are ignored for the `each` result. An empty argument snapshot invokes `block` zero times and still returns its receiver.
+
+If `block` signals an error or performs another ordinary non-local control effect at index `i`, callbacks already completed for lower indices are not rolled back and no callback for a higher index is invoked by that `each` call. The callback outcome follows the ordinary invocation/control semantics; Process-argument iteration does not introduce transactional rollback or an implementation-selected continuation policy.
+
+These rules define the observable `each` behavior of the immutable Process-argument sequence without requiring that the returned snapshot be a standard `Array` or have Array object identity.
 
 Every element is a valid Protos `String`.
 

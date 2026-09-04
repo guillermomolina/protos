@@ -4,6 +4,28 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.278] - 2026-09-04
+
+### Fixed
+- Completed the observable `each(block)` contract of the immutable sequence
+  returned by `process.args()`.
+- Reused the ordinary polymorphic callback-invocation domain of standard Core
+  `each` operations rather than making Process-argument iteration Closure-only.
+- Required callback callability validation before any argument callback executes.
+- Defined exactly one callback per argument String in ascending logical index
+  order, with no dependence on host-native argv layout or later host mutation.
+- Defined successful iteration to ignore callback return values and return the
+  Process-argument snapshot receiver itself, including for the empty snapshot.
+- Defined callback error/non-local-control prefix behavior: completed lower-index
+  callbacks are not rolled back and higher-index callbacks are not invoked.
+- Kept the returned snapshot free to use a non-Array representation/object
+  identity while preserving these sequence semantics.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 278. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.277] - 2026-09-04
 
 ### Closed
