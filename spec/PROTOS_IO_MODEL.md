@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 253
+Document revision: 254
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -1780,6 +1780,16 @@ Duplicate-equivalent entries are rejected even when their values happen to be eq
 The standardized view does not silently choose the first entry, choose the last entry, merge entries, or invent a canonical spelling. A host-specific/native environment API may expose a raw environment representation separately when an embedding needs to preserve host states that do not form a valid standardized Environment mapping.
 
 The standardized portable Environment view is immutable for the Process lifetime. Core v0.1 provides no operation to mutate or reload the current Process environment.
+
+The represented native/bootstrap environment itself is one stable Process-bootstrap snapshot. Repeated successful `process.environment()` calls observe the same native-name domain, the same set of native entries, the same native name-identity relationships, and therefore the same standardized Environment lookup/enumeration semantics. The implementation may return the same Environment object or equivalent immutable views; physical identity is not normative unless another specification explicitly makes it observable.
+
+Acquisition validity is part of that stable bootstrap contract. If the supplied bootstrap environment cannot form a valid standardized Environment — for example because it contains duplicate-equivalent native names under the represented environment's own identity rules — repeated `process.environment()` calls for that Process fail consistently with that same bootstrap condition. An implementation must not make one acquisition fail and a later one succeed by re-reading a changed host environment, observing native mutation, changing enumeration order, or switching first/last-winner policy.
+
+Conversely, once `process.environment()` has successfully established the standardized snapshot, later mutation of an operating-system environment block, embedding-host environment object, launcher state, or other native source does not add, remove, rename, or change bindings in that Protos Environment and cannot make a later `process.environment()` acquisition fail.
+
+This stability does not require eager copying, decoding, or complete String validation at Process startup. The implementation may capture a native snapshot representation, materialize the Environment lazily, cache duplicate-name or representation metadata, and validate individual String conversions according to the existing `get`, `contains`, and `each` rules. Those choices are permitted only when every acquisition is observationally equivalent to one bootstrap-time native Environment snapshot and the acquisition success/failure outcome is stable.
+
+`process.environment()` therefore does not re-query a live host environment on each invocation. A future host/native environment-inspection facility may expose mutable, refreshed, or raw native state separately, but such state is not the standardized Process Environment.
 
 Protos does not place invalid Unicode, surrogate escapes, or lossy replacements into `String` merely to preserve arbitrary host environment bytes. Host-specific/native APIs may expose exact native representations separately.
 

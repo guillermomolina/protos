@@ -4,6 +4,31 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.254] - 2026-09-04
+
+### Fixed
+- Defined the native/bootstrap Environment represented by `process.environment()`
+  as one stable Process-lifetime snapshot, not a live host re-query.
+- Required repeated successful acquisitions to preserve the same native-name
+  domain, entries, identity relationships, and standardized lookup/enumeration
+  semantics while leaving returned-object identity non-normative.
+- Made Environment acquisition validity a stable bootstrap outcome, including
+  duplicate-equivalent native-name rejection.
+- Prevented one acquisition from failing and a later one succeeding merely
+  because the host environment mutated, enumeration order changed, or a
+  different first/last-winner policy was used.
+- Prevented later host/native environment mutation from changing an already
+  established successful standardized Environment.
+- Preserved lazy materialization and per-operation String validation when they
+  remain observationally equivalent to one captured bootstrap snapshot.
+- Kept future live/raw native-environment inspection outside the standardized
+  Process Environment.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 254. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.253] - 2026-09-04
 
 ### Added / Closed
