@@ -54,6 +54,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
 import com.guillermomolina.protos.semantic.ast.CanonicalReturn;
 import com.guillermomolina.protos.semantic.ast.CanonicalSend;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
+import com.guillermomolina.protos.semantic.ast.CanonicalSpread;
 import com.guillermomolina.protos.semantic.ast.CanonicalSuperSend;
 import java.util.List;
 
@@ -90,16 +91,9 @@ public final class Canonicalizer {
     }
 
     private CanonicalExpression lowerSuperSend(SurfaceSuperSend superSend) {
-        if (superSend.arguments().stream().anyMatch(SurfaceArgument::spread)) {
-            throw new IllegalArgumentException(
-                    "Spread arguments in super sends are not supported by this canonicalizer slice");
-        }
         return new CanonicalSuperSend(
                 superSend.message(),
-                superSend.arguments().stream()
-                        .map(SurfaceArgument::expression)
-                        .map(this::canonicalize)
-                        .toList(),
+                canonicalizeArguments(superSend.arguments()),
                 superSend.span());
     }
 
@@ -113,15 +107,7 @@ public final class Canonicalizer {
     }
 
     private CanonicalExpression lowerCall(SurfaceCall call) {
-        if (call.arguments().stream().anyMatch(SurfaceArgument::spread)) {
-            throw new IllegalArgumentException(
-                    "Spread arguments are not supported by this canonicalizer slice");
-        }
-        List<CanonicalExpression> arguments =
-                call.arguments().stream()
-                        .map(SurfaceArgument::expression)
-                        .map(this::canonicalize)
-                        .toList();
+        List<CanonicalExpression> arguments = canonicalizeArguments(call.arguments());
 
         if (call.receiver() instanceof SurfaceMember member) {
             return new CanonicalSend(
@@ -132,6 +118,18 @@ public final class Canonicalizer {
         }
 
         return new CanonicalCall(canonicalize(call.receiver()), arguments, call.span());
+    }
+
+    private List<CanonicalExpression> canonicalizeArguments(List<SurfaceArgument> arguments) {
+        return arguments.stream().map(this::canonicalizeArgument).toList();
+    }
+
+    private CanonicalExpression canonicalizeArgument(SurfaceArgument argument) {
+        CanonicalExpression expression = canonicalize(argument.expression());
+        if (!argument.spread()) {
+            return expression;
+        }
+        return new CanonicalSpread(expression, argument.span());
     }
 
     private CanonicalExpression lowerObject(SurfaceObject object) {
