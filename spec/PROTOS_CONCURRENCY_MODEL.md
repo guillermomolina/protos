@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 255
+Document revision: 256
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -4217,6 +4217,110 @@ batch, fuse, inline, vectorize, or sequentialize physical execution only when
 the complete per-index isolation, stable-selection, deterministic-failure, and
 publication contract remains observationally identical.
 
+### 71.6C Standard `Array.parallelFindIndex(...)`
+
+Core v0.1 standardizes:
+
+```text
+array.parallelFindIndex(predicate, arguments...)
+    -> Future
+```
+
+The Future resolves with the semantic Integer index of the first matching source
+element, or with `null` when no source element matches.
+
+Returning an index rather than the selected element keeps `null` unambiguous:
+`null` means absence of a matching index even when an actual Array element is
+itself `null`.
+
+`parallelFindIndex` is standard Array behavior reached through ordinary message
+lookup. The receiver must satisfy the standard Array receiver-domain contract.
+`predicate` must be invokable through the ordinary polymorphic invocation
+protocol and need not be a Closure. Closure values crossing P follow the existing
+projection rules.
+
+After ordinary receiver/argument evaluation, Array receiver validation, and
+predicate-callability validation, the operation captures the source Array's
+current element-reference sequence in ascending index order.
+
+For every source index `i`, the logical predicate invocation is:
+
+```text
+predicate(sourceSnapshot[i], arguments...)
+```
+
+in an isolated child P domain. Per-index input isolation, Closure projection,
+graph preservation within one child, and absence of shared mutable identity
+between distinct child invocations are exactly the same as for
+`Array.parallelMap` and `Array.parallelFilter`.
+
+For a non-empty source, all logical child P input graphs are validated and
+snapshotted before any child becomes eligible and before the operation
+successfully returns its Future. Any required input that cannot cross P causes
+synchronous `NonParallelValue`; no result Future is created and no child becomes
+eligible. Observable validation order is ascending source-index order.
+
+For an empty source, no predicate invocation exists and no P boundary is crossed.
+Ordinary receiver and predicate-callability validation still occurs, but
+P-transferability of otherwise-unused predicate/argument values is not required.
+The operation returns a Future already resolved with `null`.
+
+Predicate results use the same strict Boolean contract as
+`Array.parallelFilter`: only canonical `true` and canonical `false` are valid.
+Any other normal predicate result records `InvalidPredicateResult` for that
+source index.
+
+The logical search order is ascending source index. Physical execution may occur
+in any order, but the operation behaves as if indexes were examined in ascending
+order until the first decisive outcome.
+
+For an index, the outcomes are:
+
+```text
+false
+    -> continue logical search
+
+true
+    -> successful decisive outcome: resolve with that index
+
+failure
+    -> failing decisive outcome: fail with that indexed failure
+```
+
+The terminal result is determined by the lowest source index whose completed
+logical outcome is either `true` or failure, once every lower index is known to
+have completed with `false`.
+
+Therefore:
+
+- a `true` at index `i` cannot resolve the operation while any lower index is
+  still unresolved;
+- a failure at index `j < i` defeats a later `true` at index `i`;
+- a failure at index `j > i` is irrelevant once index `i` is established as the
+  first match;
+- if every index completes with `false`, the Future resolves with `null`;
+- if no earlier `true` exists and failures occur, the lowest failing index is the
+  reported failure.
+
+This rule is deterministic and independent of worker start/completion order,
+carrier count, chunking, work stealing, or scheduler timing.
+
+Once a decisive index is established, an implementation may cancel, abandon, or
+avoid still-unneeded higher-index work when doing so cannot change any
+Protos-observable behavior. Such pruning is an optimization, not a different
+search result or failure rule.
+
+Cancelling the result Future requests cooperative cancellation of unfinished
+predicate P work under the ordinary structured-concurrency rules. The ordinary
+first-terminal-transition Future rule governs races with an already established
+search outcome.
+
+`parallelFindIndex` publishes no partial collection and grants no writable Array
+partition authority. It does not promise any worker count, chunk size, task
+count, carrier count, SIMD width, or actual simultaneous execution. Batching,
+fusion, vectorization, sequential execution, and work stealing are allowed only
+when observationally equivalent to the logical per-index search defined above.
+
 ### 71.7 Scheduling and Oversubscription
 
 Requesting many parallel computations does not imply creating the same
@@ -4812,7 +4916,7 @@ mechanism, or implementation detail that still requires design.
 -   Streaming
 -   Async streams
 -   Generators and suspendable iteration
--   Parallel reduce/search/sort/iteration standard-library APIs
+-   Parallel reduce/sort/iteration standard-library APIs
 -   Parallel scheduling, work-stealing, and granularity heuristics
 -   Pub/sub
 -   Advanced routers and load-balancing policies

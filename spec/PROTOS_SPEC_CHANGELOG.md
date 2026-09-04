@@ -4,6 +4,32 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.256] - 2026-09-04
+
+### Added / Closed
+- Standardized `Array.parallelFindIndex(predicate, arguments...) -> Future`.
+- Chose an Integer index or `null` result so absence remains unambiguous even
+  when an Array element is itself `null`.
+- Reused the existing parallelMap/parallelFilter per-index P input snapshot,
+  isolation, polymorphic predicate-callability, and strict Boolean-result rules.
+- Defined deterministic ascending-index search semantics independent of physical
+  execution order: `false` continues, while `true` and failure are decisive.
+- Required the first decisive logical index to determine the terminal outcome
+  only after every lower index is known to be `false`.
+- Defined lower-index failure to beat a higher-index match while failures after
+  the first established match are irrelevant to the search result.
+- Allowed higher-index work to be pruned/cancelled only after it cannot affect
+  the specified terminal outcome.
+- Defined empty input to resolve with `null` without crossing a P boundary.
+- Narrowed the remaining parallel collection API topic to
+  reduce/sort/iteration.
+
+### Changed
+- Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
+  `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  256.
+
 ## [0.1.255] - 2026-09-04
 
 ### Fixed

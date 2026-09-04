@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 255
+Document revision: 256
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3004,6 +3004,38 @@ failure publishes no partial result.
 
 `parallelFilter` does not mutate the source Array and does not grant writable
 partition authority over the Array or any reachable mutable element graph.
+
+
+## Standard Array Parallel Search
+
+Standard Array provides:
+
+```text
+array.parallelFindIndex(predicate, arguments...)
+    -> Future
+```
+
+The Future resolves with the first matching semantic Integer source index, or
+`null` if no source index matches. Returning an index keeps absence unambiguous
+even when `null` itself occurs as an Array element.
+
+Receiver, predicate callability, source snapshot, per-index P isolation,
+non-empty input validation, and empty-input behavior follow the standard
+`parallelFilter` rules. Predicate results must be exactly canonical `true` or
+`false`; any other normal result is `InvalidPredicateResult`.
+
+The logical search is ascending by source index. `false` continues the search.
+`true` is a successful decisive outcome. A predicate failure is a failing
+decisive outcome. The operation becomes terminal only when the lowest index whose
+outcome is `true` or failure is known and all lower indexes are known `false`.
+
+Thus a lower-index failure beats a higher-index match, while failures strictly
+after the first established matching index do not affect the result. If every
+predicate result is `false`, the Future resolves with `null`.
+
+Physical predicate execution order is not observable. Higher-index work may be
+pruned only after it cannot affect the specified result or failure. Cancellation
+uses the ordinary Future/P structured-concurrency rules.
 
 ## Invocation Arguments, Defaults, Rest, and Spread
 

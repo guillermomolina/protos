@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 255
+Document revision: 256
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3883,6 +3883,52 @@ If any indexed failure exists, the smallest failing source index is the
 deterministic operation failure. No partially assembled result Array is exposed.
 Physical batching, fusion, vectorization, sequential execution, chunking, worker
 count, and work stealing are unobservable implementation choices.
+
+
+### Standard Array parallelFindIndex runtime semantics
+
+Conceptually, preparation is identical to `parallelFilter`: validate the standard
+Array receiver and ordinary predicate callability, capture the ascending shallow
+source snapshot, prepare every non-empty per-index P invocation graph before any
+child becomes eligible, and return an already-resolved `null` Future for empty
+input.
+
+Each indexed child records exactly one logical outcome:
+
+```text
+FALSE
+TRUE
+FAIL(error)
+```
+
+where a non-Boolean normal result is normalized to
+`FAIL(InvalidPredicateResult)`.
+
+Completion processing maintains the smallest source index not yet proven
+`false`. The parent Future may become terminal when that frontier index has a
+decisive outcome:
+
+```text
+TRUE
+    -> resolve with that semantic Integer index
+
+FAIL(error)
+    -> fail with that error
+
+FALSE
+    -> advance the frontier across any consecutively completed FALSE indexes
+       until another unresolved or decisive index is reached
+```
+
+If the frontier advances past the final source index, resolve with `null`.
+
+A higher-index TRUE or failure may be recorded early but cannot become observable
+while any lower index is unresolved. Once a decisive frontier outcome becomes
+terminal, unfinished higher-index work may be cooperatively cancelled or omitted
+when that cannot change other specified semantics.
+
+Scheduler timing, batching, chunking, vectorization, worker count, and physical
+completion order never alter the frontier rule.
 
 ### Exact call-spread expansion
 
