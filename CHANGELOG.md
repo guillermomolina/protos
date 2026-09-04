@@ -4,6 +4,17 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## 0.2.66-SNAPSHOT
+
+### Fixed
+- Changed interactive REPL history handling so a bracketed paste containing multiple complete lines is stored as one JLine history entry per line, matching the already independent per-line evaluation behavior.
+- Added focused coverage for multiline history splitting and ordering.
+
+### Notes
+- History remains implemented by JLine; Protos does not introduce a separate readline/history subsystem.
+- Structured syntactic multiline parsing remains out of scope: pasted complete lines are still evaluated independently.
+- No normative specification revision is changed.
+
 ## 0.2.65-SNAPSHOT
 
 ### Fixed

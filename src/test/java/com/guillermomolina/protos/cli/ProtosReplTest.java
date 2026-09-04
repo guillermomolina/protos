@@ -3,6 +3,7 @@ package com.guillermomolina.protos.cli;
 import static org.junit.jupiter.api.Assertions.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import org.junit.jupiter.api.Test;
 final class ProtosReplTest {
     private R repl(String s) {
@@ -32,6 +33,17 @@ final class ProtosReplTest {
         assertFalse(exit);
         assertEquals("10\n10\n15\n",out.toString(StandardCharsets.UTF_8));
         assertTrue(err.toString(StandardCharsets.UTF_8).isBlank());
+    }
+
+
+    @Test void historySplitsMultilineInputIntoIndependentEntries() {
+        var history = new ProtosCli.ReplHistory();
+        history.add(Instant.EPOCH, "m: Map()\nm.atPut(\"a\", 10)\nm.at(\"no-existe\")\n1 + 1");
+        assertEquals(4, history.size());
+        assertEquals("m: Map()", history.get(history.first()));
+        assertEquals("m.atPut(\"a\", 10)", history.get(history.first() + 1));
+        assertEquals("m.at(\"no-existe\")", history.get(history.first() + 2));
+        assertEquals("1 + 1", history.get(history.last()));
     }
 
     @Test void streamFallbackDoesNotRequireATerminal() {

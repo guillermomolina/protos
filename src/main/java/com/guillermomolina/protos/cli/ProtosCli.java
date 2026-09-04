@@ -7,7 +7,9 @@ import com.guillermomolina.protos.runtime.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
+import java.time.Instant;
 import org.jline.reader.*;
+import org.jline.reader.impl.history.DefaultHistory;
 import org.jline.terminal.*;
 
 public final class ProtosCli {
@@ -50,6 +52,7 @@ public final class ProtosCli {
     private int interactiveRepl(Session s, PrintStream out, PrintStream err) throws IOException {
         try (Terminal terminal = TerminalBuilder.builder().system(true).streams(System.in, System.out).build()) {
             LineReader reader = LineReaderBuilder.builder().terminal(terminal)
+                    .history(new ReplHistory())
                     .option(LineReader.Option.BRACKETED_PASTE, true).build();
             for (;;) {
                 try {
@@ -126,5 +129,15 @@ public final class ProtosCli {
                 + "Interactive REPL: arrow-key editing/history; Ctrl-D exits.\n"
                 + "Top-level program args are not exposed: Core args is Closure-invocation-only.");
     }
+
+    static final class ReplHistory extends DefaultHistory {
+        @Override
+        public void add(Instant time, String input) {
+            for (String line : input.split("\\R", -1)) {
+                if (!line.isBlank()) super.add(time, line);
+            }
+        }
+    }
+
     private record Session(ProtosSourceCompiler compiler, ProtosActivation activation) {}
 }
