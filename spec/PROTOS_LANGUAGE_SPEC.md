@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 320
+Document revision: 322
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -1972,334 +1972,27 @@ implementations.
 
 ## 26. Futures
 
-`Future` is an ordinary object representing the eventual result of an execution.
-
-There are no `async` functions and no `await` keyword.
-
-An ordinary function may simply return a Future.
+The normative contract formerly contained in this section has moved to `concurrency/FUTURES_AND_TASKS.md`. This heading remains as a compatibility anchor during modularization; it defines no independent duplicate contract.
 
 ## 27. Asynchronous Execution
 
-A closure may request asynchronous execution:
-
-```js
-work: () => {
-    calculate()
-}
-
-resultFuture: work.future()
-```
-
-`future()` is a visible message whose fundamental implementation reaches a runtime primitive.
-
-Conceptually:
-
-```text
-closure
-   ↓
-create pending Future
-   ↓
-create/schedule closure execution
-   ↓
-return Future immediately
-```
-
-The same closure may execute synchronously:
-
-```js
-result: work()
-```
-
-or asynchronously:
-
-```js
-future: work.future()
-```
-
-Asynchrony belongs to **the execution of a closure**, not to its definition.
-
-### Cancellation of asynchronous execution
-
-Cancellation of Future-producing asynchronous work is a concurrency-domain
-facility. The normative semantics of `Future.cancel()`, cooperative cancellation,
-portable observation boundaries, cancellation-runnable suspended/pre-start work,
-resume precedence, cleanup, and producer-specific commitment boundaries are owned
-by `PROTOS_CONCURRENCY_MODEL.md` §23 and the structured-unwind rules of §24.
-
-The language-level fact that `closure.future()` requests asynchronous execution
-through an ordinary message is unchanged. No additional cancellation syntax,
-asynchronous exception mechanism, or hidden implementation-selected checkpoint is
-introduced by this language specification.
+The normative contract formerly contained in this section has moved to `concurrency/FUTURES_AND_TASKS.md`. This heading remains as a compatibility anchor during modularization; it defines no independent duplicate contract.
 
 ## 28. Future State, Resolution, Failure, and Adoption
 
-This section is the primary normative owner of the Core v0.1 Future
-state/resolution model.
-
-A Future has exactly one of four states:
-
-```text
-pending
-resolved(value)
-failed(error)
-cancelled
-```
-
-`pending` is the only non-terminal state. `resolved`, `failed`, and `cancelled`
-are terminal. The first terminal transition is stable: later producer,
-completion, cancellation, or adoption bookkeeping cannot rewrite the Future's
-terminal outcome.
-
-Normal completion with an ordinary non-Future value resolves the Future with
-that value. Unhandled asynchronous failure fails the Future with the applicable
-`Error`; there is no separate promise-rejection mechanism.
-
-### Domain-local failure preserves Error identity
-
-When a Future becomes failed with an `Error` already belonging to the same
-Protos value/isolation domain as that Future, the Future records that exact Error
-object. Failure recording does not clone, wrap, snapshot, reconstruct, or
-otherwise substitute it.
-
-Consequently, later observations that re-signal the stored failure use that same
-domain-local Error object. This identity rule does not preserve producer control
-state, dynamic handlers, activation frames, continuations, return homes, or
-resumption authority.
-
-Boundary-specific transformation happens before failure is recorded in the
-receiving Future. In particular, P first transfers/reconstructs an Error into the
-caller domain and then fails the caller Future with that transferred object.
-Actor-fatal Errors do not implicitly cross Actor boundaries.
-
-### Future resolution adopts Future outcomes
-
-When Future resolution is given another Future instead of an ordinary value, the
-destination adopts the source Future's eventual terminal outcome rather than
-resolving to a nested Future.
-
-While the adopted source is pending, the destination remains `pending`.
-Adoption bookkeeping is not a fifth Future state and is not a language-visible
-slot or object category.
-
-Adoption mirrors the source terminal outcome exactly:
-
-```text
-source resolved(value) -> destination resolved(value)
-source failed(error)    -> destination failed(error)
-source cancelled        -> destination cancelled
-```
-
-Resolution uses the same resolved value object. Failure uses the same Error
-object when both Futures are already in the same value/isolation domain, subject
-to the boundary rule above. Propagating an adopted terminal outcome does not
-invoke ordinary Protos transformation or handler code merely to perform that
-propagation.
-
-Adoption transfers only eventual outcome. It does not transfer Future identity,
-task identity, structured ownership, or detachment. It creates no upstream
-cancellation: cancelling an adopting destination never requests cancellation of
-the adopted source and never changes that source's ownership or detachment.
-Detaching a task-backed destination likewise does not detach or re-parent the
-adopted source.
-
-Adoption is a cancellation-aware pending operation under the cancellation rules
-owned by `PROTOS_CONCURRENCY_MODEL.md` §23. If destination cancellation and
-adopted-source completion race, the first terminal transition of the destination
-wins; later bookkeeping has no effect.
-
-Future-adoption cycles are invalid. Direct self-adoption and any transitive
-pending adoption that would make the destination reachable from the source's
-adoption chain fail the destination with the standard `FutureResolutionCycle`
-error prototype. `FutureResolutionCycle` delegates directly to `Error`. A cycle
-must not remain implementation-dependently pending.
-
-Implementations may represent adoption with callbacks, dependency nodes, waiter
-lists, graph edges, or another mechanism. Such bookkeeping must not execute
-ordinary Protos code inline merely because the source Future becomes terminal.
+The normative contract formerly contained in this section has moved to `concurrency/FUTURES_AND_TASKS.md`. This heading remains as a compatibility anchor during modularization; it defines no independent duplicate contract.
 
 ## 29. Obtaining a Future's Value
 
-This section is the primary normative owner of the Core v0.1
-`Future.value()` observation semantics.
-
-```text
-future.value()
-```
-
-observes the Future's stable state defined in §28.
-
-For a resolved Future, `value()` returns the resolved value immediately.
-
-For a failed Future, `value()` signals the exact stored domain-local `Error`
-object in the consumer's then-current dynamic handler context. This is a new
-non-resumable signaling event at the consumer observation point. It is not a
-continuation of the producer's original signaling operation and carries no
-producer stack frame, handler frame, continuation token, return home, or other
-resumption authority.
-
-If a consumer handler handles that re-signaled Error, the handler result belongs
-only to the consumer-side handling boundary. It cannot resume, retry, or inject a
-value into the producer computation that originally failed. Repeated observations
-of the same failed Future are repeated consumer-side signaling events and
-re-signal the same stored Error object, subject to the value-domain boundary
-rules of §28.
-
-### Cancelled Future observation
-
-`Cancelled` is a standard Error prototype and standard-prelude binding delegating
-directly to `Error`.
-
-For a cancelled Future, `value()` signals the standard `Cancelled` object in the
-consumer's then-current dynamic handler context. Each observation is a new
-non-resumable signaling event; it does not resume or recreate the cancelled
-producer computation.
-
-This cancellation-observation Error is distinct from the Future's `cancelled`
-terminal state: the state is stored on the Future, while `Cancelled` is the
-ordinary Error object signaled when `value()` observes that state.
-
-### Pending Future observation and lost-wakeup exclusion
-
-For a pending Future, `value()` explicitly suspends the current execution until
-that Future becomes terminal or the waiting task observes its own cancellation.
-Suspension does not require blocking an operating-system thread.
-
-The decision to suspend and registration of the waiting continuation are
-semantically atomic with respect to the Future's first terminal transition.
-There is no interval in which `value()` has committed to waiting because it saw
-`pending` while the Future can become terminal without either observing that
-waiter or causing the attempted suspension to observe the terminal state.
-
-Equivalently, every conforming implementation must ensure one of these outcomes:
-
-```text
-Future terminal transition happens first
-    -> the consumer does not remain suspended on that Future
-
-waiter registration happens first
-    -> that terminal transition makes the registered consumer eligible to resume
-```
-
-When a Future makes its first terminal transition, every still-live continuation
-registered as waiting on that Future becomes eligible to resume. One waiter must
-not be skipped merely because another waiter is also registered. Terminalization
-must clear or make inert the pending waiter registrations so a terminal Future
-does not retain suspended continuations indefinitely.
-
-A waiter becoming eligible does not imply immediate execution and does not create
-a global ordering among independent runnable work. Implementations may use locks,
-CAS, generation counters, register-then-recheck, callbacks, waiter nodes, queues,
-condition variables, or another mechanism. Spurious internal wake-ups are
-permitted only when semantically invisible; lost terminal notifications and
-duplicate semantic resumptions are not.
-
-### Interaction with waiting-task cancellation
-
-Calling `value()` is an explicit suspension point, so a task-backed consumer is
-subject to the cooperative cancellation semantics owned by
-`PROTOS_CONCURRENCY_MODEL.md` §23.
-
-If cancellation of the waiting task is already pending at the suspension
-boundary, cancellation is honored instead of installing a live waiter. If the
-task is already suspended and cancellation is requested later, the task becomes
-cancellation-runnable without waiting for the observed Future to complete.
-
-Before a suspended task resumes ordinary Protos code or receives a successful
-`value()` result, the ordinary resume cancellation boundary applies. Therefore,
-if the observed Future becomes terminal and the waiting task also has cancellation
-pending at that resume boundary, cancellation of the waiting task wins for that
-consumer. The observed Future retains its own terminal outcome unchanged.
-
-Cancelling one waiting task never calls `cancel()` on the observed Future and
-does not affect other waiters on that Future.
-
-A non-task-backed execution context that is otherwise permitted to suspend may
-also call `value()`. It is not manufactured into a hidden task-backed Future
-merely to wait; it waits under its enclosing lifecycle and has no task
-cancellation flag to consult.
+The normative contract formerly contained in this section has moved to `concurrency/FUTURES_AND_TASKS.md`. This heading remains as a compatibility anchor during modularization; it defines no independent duplicate contract.
 
 ## 30. Future Composition
 
-Core v0.1 standardizes the ordinary Future transformation operation:
-
-```text
-future.then(transform)
-    -> Future
-```
-
-`then` is an ordinary message on a Future value and introduces no new syntax or
-executable value kind. Its normative continuation-task ownership, execution
-domain, scheduling, source-outcome propagation, flattening, cancellation,
-detachment, and ordering semantics are owned by
-`PROTOS_CONCURRENCY_MODEL.md` under `Future then() continuations`.
-
-Automatic flattening uses the Future resolution/adoption semantics owned by
-this specification in §28. The concurrency model owns the continuation task's
-execution, ownership, cancellation, detachment, and scheduling consequences.
-General invocation and object-model rules from this language specification
-continue to apply to the transformation Closure where referenced by that
-contract.
-
-### Waiting for multiple Futures
-
-Core v0.1 standardizes the ordinary Future coordination operation:
-
-```text
-Future.all(futures...)
-    -> Future
-```
-
-`Future.all` is an ordinary message on the standard Future prototype and
-introduces no new syntax, Task kind, or wait-set object. Its normative argument
-validation, aggregate identity/kind, deterministic terminal selection, result
-ordering, source ownership, cancellation, failure propagation, and empty-input
-semantics are owned by `PROTOS_CONCURRENCY_MODEL.md` §24E.
-
-General argument-evaluation, Array, Error-object identity, and ordinary message
-rules from this language specification continue to apply where referenced by
-that owning contract.
-
-### No generic Future race/select in Core
-
-Core v0.1 defines no standard `Future.race(...)`, `Future.select(...)`, or
-equivalent first-completion combinator.
-
-Independent Future terminalizations do not acquire a portable global total order
-merely so a race API can pick a winner. Core therefore does not expose scheduler,
-callback, carrier, I/O-backend, polling, or host completion timing as a semantic
-selection rule.
-
-`Future.all(...)` is the standard deterministic multi-Future coordination
-operation. A future wait-any/select facility must define an independent semantic
-priority or event-ordering contract rather than deriving meaning from
-implementation-selected completion timing.
-
-### Non-local return and Actor boundaries
-
-A non-local return (`^`) never targets an activation in another Actor.
-
-Actor communication transfers values, not execution contexts, continuations, or
-return-home authority. Destination Actor code can unwind only through return
-homes belonging to its own execution domain. `send()` and `request()` do not
-become hidden control-transfer channels merely because destination code executes
-`^`.
-
-Actor replacement does not preserve or recreate return homes from the terminated
-incarnation.
+The normative contract formerly contained in this section has moved to `concurrency/FUTURES_AND_TASKS.md`. This heading remains as a compatibility anchor during modularization; it defines no independent duplicate contract.
 
 ## 31. Structured Concurrency
 
-Structured ownership of Future-producing child work is a concurrency-domain
-facility. Its normative ownership, normal-exit waiting, error/cancellation
-unwind, cleanup, detachment, Actor-local lifetime, and non-task-backed Future
-semantics are owned by `PROTOS_CONCURRENCY_MODEL.md` §24.
-
-The cooperative non-preemption rule for ordinary Actor-local
-`closure.future()` work is owned by `PROTOS_CONCURRENCY_MODEL.md` §24D.
-`Future.detach()` remains an ordinary Future message and introduces no syntax or
-new execution kind.
-
-The exact scheduler representation remains implementation machinery.
+The normative contract formerly contained in this section has moved to `concurrency/FUTURES_AND_TASKS.md`. This heading remains as a compatibility anchor during modularization; it defines no independent duplicate contract.
 
 ## 32. Primitives
 

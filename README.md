@@ -375,7 +375,7 @@ The design is currently described by three documents:
 -   `PROTOS_LANGUAGE_SPEC.md` --- object model and language
     semantics.
 -   `PROTOS_GRAMMAR.md` --- lexical and syntactic grammar
--   `PROTOS_RUNTIME_SEMANTICS.md` --- executable runtime model and
+-   `runtime/ABSTRACT_RUNTIME.md` --- executable runtime model and
     pseudocode
 
 ## License

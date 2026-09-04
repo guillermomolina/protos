@@ -1,7 +1,7 @@
 # Core Language Grammar v0.1
 
 Language version: 0.1  
-Document revision: 313
+Document revision: 322
 Status: Draft  
 Last updated: 2026-09-04
 ## Prelude Binding Note
@@ -631,7 +631,7 @@ uses exactly the same slot-creation syntax at module top level as it does elsewh
 
 No `global`, `var`, `let`, `const`, or equivalent declaration form is introduced.
 
-Core Grammar v0.1 defines no dedicated `import` declaration syntax and no `export` declaration syntax or separate export mechanism. `import(specifier)` is an ordinary call/message operation exposed by the standard environment; it yields the module instance, and cross-module access occurs explicitly by obtaining a module instance and accessing its slots through ordinary member lookup. Module identity, caching, initialization states, cycle handling, and host-specific module-specifier resolution are runtime/module-loader semantics rather than grammar rules (see the module rules in `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md`).
+Core Grammar v0.1 defines no dedicated `import` declaration syntax and no `export` declaration syntax or separate export mechanism. `import(specifier)` is an ordinary call/message operation exposed by the standard environment; it yields the module instance, and cross-module access occurs explicitly by obtaining a module instance and accessing its slots through ordinary member lookup. Module identity, caching, initialization states, cycle handling, and host-specific module-specifier resolution are runtime/module-loader semantics rather than grammar rules (see the module rules in `PROTOS_LANGUAGE_SPEC.md` and `runtime/ABSTRACT_RUNTIME.md`).
 
 ## 7. Expressions
 

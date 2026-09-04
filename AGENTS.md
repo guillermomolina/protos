@@ -292,7 +292,7 @@ The canonical core language definition is maintained in:
 
 - "spec/PROTOS_LANGUAGE_SPEC.md"
 - "spec/PROTOS_GRAMMAR.md"
-- "spec/PROTOS_RUNTIME_SEMANTICS.md"
+- "spec/runtime/ABSTRACT_RUNTIME.md"
 
 Normative domain models supplement those core documents for semantically substantial standard subsystems. The current normative domain model is:
 
@@ -310,7 +310,7 @@ The documents have distinct responsibilities:
 
 - `PROTOS_LANGUAGE_SPEC.md` defines the language model and observable semantics.
 - `PROTOS_GRAMMAR.md` defines lexical structure, syntax, precedence, parsing rules, mandatory desugarings, and the canonical semantic AST.
-- `PROTOS_RUNTIME_SEMANTICS.md` defines executable semantic rules and runtime pseudocode.
+- `runtime/ABSTRACT_RUNTIME.md` defines executable semantic rules and runtime pseudocode.
 - `PROTOS_IO_MODEL.md` owns observable I/O-domain semantics and should be referenced rather than duplicated when another document only needs an I/O rule.
 
 Do not treat runtime pseudocode as permission to change language semantics.

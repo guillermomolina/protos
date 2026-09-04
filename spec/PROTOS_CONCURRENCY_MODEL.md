@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 319
+Document revision: 322
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -289,61 +289,7 @@ does not prevent unrelated Actor-local work or operations on unrelated Maps.
 
 ### Future `then()` continuations
 
-This section is the primary normative owner of the Core v0.1
-`Future.then(transform) -> Future` concurrency-domain semantics.
-
-A call to `future.then(transform)` creates a distinct continuation task and a
-destination Future. The continuation is asynchronous work created by the
-activation that calls `then`, and therefore belongs to that activation under the
-ordinary structured-concurrency rule unless the destination Future is detached.
-
-Completion of the source Future only makes the continuation runnable. It does not
-execute the transformation closure inline, reentrantly, or inside the task or Actor
-turn that completes the source Future. This remains true when the source Future was
-already terminal when `then()` was called.
-
-The continuation executes as ordinary task work in the Actor/execution domain of
-the activation that created it. A resolved source invokes the transformation with
-the source value; a failed source fails the destination with the same error without
-invoking the transformation; a cancelled source cancels the destination without
-invoking the transformation. A Future returned by the transformation is flattened through the Future
-resolution/adoption semantics owned by `PROTOS_LANGUAGE_SPEC.md` §28.
-
-That generic adoption contract owns outcome mirroring, cycle failure,
-destination/source identity separation, first-terminal-transition stability, and
-the absence of upstream cancellation or ownership transfer during adoption.
-
-Cancellation and detachment are downstream-only for this continuation edge:
-cancelling the destination requests cancellation of the continuation but does not
-cancel the source Future, and detaching the destination detaches only the
-continuation task. Neither operation changes ownership or lifetime of the source
-Future.
-
-The first execution of every newly created asynchronous task is a portable
-cancellation-observation boundary before any ordinary Protos code in that task
-executes. A cancellation request for a not-yet-started task must make that task
-eligible to reach this boundary even when the task was waiting for a semantic
-prerequisite that has not become ready. Cancellation does not satisfy, complete,
-or otherwise modify that prerequisite.
-
-Therefore, if the destination of `then()` is cancelled while its continuation is
-waiting for a still-pending source Future, the continuation becomes
-cancellation-runnable without waiting for the source. The request is honored
-before inspecting the source outcome or invoking `transform`; the destination
-becomes cancelled and `transform` is not invoked. The source Future remains
-unchanged.
-
-The same rule applies when the source had already completed but the continuation
-had not yet begun its first turn. This prevents scheduler or source-completion
-timing from deciding whether a never-started continuation nevertheless performs
-ordinary Protos side effects.
-
-Once a task has begun ordinary Protos execution, no additional cancellation
-boundary is implied merely by method calls, closure invocation, allocations, loop
-back-edges, or other non-suspending execution. The existing explicit-suspension,
-resume, and cancellation-aware-operation boundaries remain unchanged.
-
-No additional total ordering is introduced between independent continuations.
+The normative Future/Task contract formerly contained here has moved to `concurrency/FUTURES_AND_TASKS.md`. This ledger heading remains only as a compatibility/navigation anchor and is not a second normative owner.
 
 ## 6. I/O
 
@@ -1370,217 +1316,11 @@ The exact APIs remain open.
 
 ## 23. Cancellation
 
-**CLOSED --- REVISED**
-
-This section is the primary normative owner of Core v0.1 cooperative
-cancellation semantics, including `Future.cancel()` and portable cancellation
-observation/wake-up boundaries unless a more specific domain contract explicitly
-specializes an operation's commitment/effect behavior.
-
-Cancellation is cooperative.
-
-Protos does not arbitrarily interrupt Actor code in the middle of an
-instruction by injecting asynchronous exceptions.
-
-Cancellation requests are observed at portable cancellation boundaries,
-not at implementation-selected runtime safepoints.
-
-Every explicit suspension point is a mandatory cancellation observation boundary.
-A pending request is observed before the task suspends or, if suspension has
-already occurred, before that task resumes ordinary Protos execution. An operation
-whose normative contract is cancellation-aware may additionally observe a request
-while its underlying work is pending, subject to that operation's commitment and
-effect rules.
-
-A cancellation request made while a task is already suspended must make that
-task eligible to resume for cancellation without waiting for the condition that
-originally suspended it to complete. Otherwise structured cancellation could
-wait forever for a child suspended on a Future, timer, I/O operation, or other
-condition that never becomes ready.
-
-Likewise, cancellation of a task that has been created but has not yet begun its
-first ordinary Protos instruction must not wait indefinitely for an unmet
-pre-start scheduling prerequisite. The task becomes eligible to reach its
-mandatory first-execution cancellation boundary without that prerequisite being
-made true. Making the task cancellation-runnable is idempotent and does not
-authorize duplicate execution, preemption of currently executing ordinary code,
-or satisfaction/cancellation of an unrelated prerequisite or upstream Future.
-
-This cancellation wake-up resumes only the waiting task's control flow. It does
-not by itself cancel, fail, complete, or otherwise modify the Future or other
-condition being awaited, and it does not request cancellation of an upstream
-producer. Multiple tasks may wait on the same Future without cancellation of one
-waiter affecting the others or the Future itself.
-
-The existing resume boundary remains authoritative. If a task was suspended and
-its cancellation request is pending when it is selected to resume into Protos,
-cancellation is honored before the suspended operation can return a successful
-result or execute further ordinary Protos code. Thus, if awaited completion made
-the task runnable but cancellation became pending before that resume boundary,
-the consumer observes cancellation; the awaited Future retains its own terminal
-outcome unchanged. If the task already crossed the resume boundary and completed
-the suspension operation before cancellation was requested, that completed
-observation is not retroactively rewritten.
-
-This is a prompt cancellation guarantee for the suspended consumer, not upstream
-cancellation propagation. Producer-specific cancellation remains explicit
-through that producer's own Future or capability contract.
-
-Ordinary non-suspending execution does not acquire hidden cancellation points from
-method calls, allocations, loop back-edges, interpreter/JIT polls, garbage
-collection, host calls, or similar runtime machinery. CPU-bound Protos code that
-does not explicitly suspend or enter a cancellation-aware operation may therefore
-complete normally after cancellation was requested.
-
-An implementation may use additional internal polling or carrier interruption only
-when it cannot change the Protos-observable point at which cancellation takes
-effect.
-
-Cancelling a Future requests cancellation of its work.
-
-`Future.cancel()` is an idempotent request operation and returns the same Future
-object on every call. If the Future is already terminal, `cancel()` is a no-op
-with respect to Future state and outcome and still returns that Future. For a
-pending Future, returning normally means only that the cancellation request was
-recorded; it does not assert that cancellation has already taken effect or that
-the eventual terminal state must be `cancelled`.
-
-Cancelling a SendOperation attempts to prevent further delivery while
-that remains safe.
-
-Before concrete-Actor acceptance, cancellation may remove or stop the
-operation where the runtime can still do so safely.
-
-If the destination has already accepted the message, cancellation cannot
-unsend it.
-
-If the runtime cannot determine whether acceptance occurred,
-cancellation may end in an uncertain delivery state rather than assuming
-that the message was cancelled before delivery. For `request()`, whose public result
-is an ordinary Future and therefore has no uncertain terminal state, this outcome
-is represented by failure with the standard `RequestOutcomeUncertain` error.
-
-Principle:
-
-> Cancellation never reverses effects that have already occurred.
+The normative Future/Task contract formerly contained here has moved to `concurrency/FUTURES_AND_TASKS.md`. This ledger heading remains only as a compatibility/navigation anchor and is not a second normative owner.
 
 ## 24. Structured Concurrency
 
-**CLOSED --- REVISED**
-
-This section is the primary normative owner of Core v0.1 structured ownership
-semantics for Future-producing child work, including structured lifetime,
-cancellation unwind, cleanup, task-backed versus non-task-backed detachment, and
-`Future.detach()`.
-
-The existing structured-concurrency semantics for Futures remain.
-
-Asynchronous child work created inside an execution context is owned by
-that context by default unless explicitly detached.
-
-Structured ownership bounds child lifetime but does not implicitly observe child
-results. When an owner reaches otherwise normal completion, it waits for every
-non-detached child to become terminal. A child's failed or cancelled terminal
-state does not by itself fail or cancel that normally completing owner. Failure
-or cancellation becomes observable to owner code only through the ordinary
-Future observation operations, such as `value()`.
-
-This deliberately avoids hidden "unobserved failure" or "failure consumed" state:
-whether an owner completes normally cannot depend on whether some previous read of
-a child Future happened to observe its failure. The Future remains an ordinary
-eventual-result object whose terminal outcome is stable and may be observed more
-than once.
-
-Cancellation unwind includes the task's applicable `ensure` cleanup.
-Once a cancellation request has been honored and has begun that unwind, the same
-request is not re-delivered at suspension boundaries reached by cleanup for that
-unwind. This permits resource cleanup to suspend without being immediately
-cancelled by the cancellation it is already handling. If cleanup fails, that
-failure replaces the cancellation transfer and the task fails; if cleanup
-completes, cancellation continues and the Future becomes cancelled only after
-cleanup is complete. This rule does not create a general user-visible
-cancellation-mask facility.
-
-Detachment removes a task from the structured lifetime of its creating
-activation only. `Future.detach()` always returns the same Future object and is
-idempotent. On a still-pending task-backed Future that is not already detached,
-it removes that task's activation-ownership edge. Repeated detachment is a
-state-preserving no-op.
-
-A non-task-backed Future, including one produced directly by an I/O facility,
-has no structured task ownership edge to remove; `detach()` on such a Future is
-therefore a state-preserving no-op. Calling `detach()` on an already terminal
-Future is also a no-op. These cases do not signal merely because no detachable
-ownership edge remains.
-
-Detachment never changes Future terminal outcome, requests cancellation, alters
-an I/O producer's lifecycle, or manufactures a new owner. It does not move
-Actor-local work out of the Actor execution domain, promote it to Process-global
-work, or give it an independent Actor-like lifecycle. A detached Actor-local task
-may outlive the activation that created it, but it cannot outlive the Actor
-incarnation whose mutable state and serial execution domain it uses.
-
-When termination of an Actor incarnation begins while its hosting runtime remains
-able to execute Protos cleanup, every pending Actor-local task belonging to that
-incarnation receives a cooperative cancellation request, including detached
-tasks.
-
-Termination also records a cancellation request on every still-pending
-non-task-backed Future representing an asynchronous operation initiated by that
-Actor incarnation. This includes, when applicable, I/O-operation Futures and
-communication-operation Futures such as `request()`. Actor termination is
-therefore a cancellation-request boundary for outstanding Actor-originated
-asynchronous operations; it is not permission for such operations to continue
-or disappear according to implementation accident.
-
-This Actor-lifecycle request does not invent stronger cancellation than the
-producer already provides. An operation that can still satisfy its ordinary
-cancellation contract may become cancelled. An operation that has already crossed
-its commitment/acceptance boundary keeps the effects and outcome constraints of
-its own protocol; Actor termination cannot roll those effects back, convert them
-into pre-commit cancellation, or transparently retry them.
-
-The incarnation stops accepting or dispatching new ordinary message work. Task
-execution that occurs thereafter is limited to reaching the existing portable
-cancellation boundaries and performing the cancellation unwind and applicable
-`ensure` cleanup required to terminate those tasks.
-
-A detached task is never silently re-parented to the RootActor, Process, a
-replacement Actor, or another runtime scope merely so it can continue running
-after its Actor terminates. Its Future follows the ordinary cancellation-unwind
-rule: successful cleanup permits the Future to become `cancelled`; a cleanup
-failure makes that Future `failed` with the cleanup error. Replacement creates a
-fresh Actor execution domain and inherits none of these tasks.
-
-Actor termination waits for the required cancellation unwind of Actor-local
-tasks, but does not generally wait for every non-task-backed producer Future to
-become terminal. Once the cancellation request has been recorded, any residual
-producer/backend work that cannot yet terminate safely remains under
-runtime/producer custody and may proceed only as allowed by that operation's
-existing commitment and cancellation rules. No continuation of the terminated
-Actor is resumed merely to observe such a later outcome.
-
-Termination cleanup may itself suspend and therefore has no bounded-time liveness
-guarantee. Catastrophic loss of the Process, runtime, or underlying execution
-capacity may make further Protos cleanup impossible; this does not authorize the
-task to continue in another Actor or execution domain. The portable guarantee
-here governs semantic Actor termination while the runtime remains capable of
-executing the required cleanup.
-
-When an explicit isolated parallel operation creates work whose result
-is represented by a Future, that work participates in the same
-structured ownership, waiting, failure, and cooperative-cancellation
-model unless an API explicitly provides different ownership semantics.
-Its isolated execution does not turn it into an Actor and does not give
-it Actor identity, a mailbox, independent supervision, or independent
-lifecycle semantics.
-
-Actor creation does not automatically establish the same ownership
-relationship.
-
-Structured concurrency therefore governs Future-producing child work,
-including isolated parallel computations, but not Actor lifetime in
-general.
+The normative Future/Task contract formerly contained here has moved to `concurrency/FUTURES_AND_TASKS.md`. This ledger heading remains only as a compatibility/navigation anchor and is not a second normative owner.
 
 ## 24A. Actor Termination Request and Graceful Stop
 
@@ -1829,107 +1569,7 @@ Actor-local work into P.
 
 ## 24E. Waiting for Multiple Futures with `Future.all(...)`
 
-**CLOSED**
-
-This section is the primary normative owner of the Core v0.1
-`Future.all(futures...) -> Future` concurrency-domain semantics.
-
-Core v0.1 standardizes the ordinary Future-protocol operation:
-
-```text
-Future.all(futures...)
-    -> Future
-```
-
-`Future` here denotes the standard Future prototype object; `all` is an ordinary
-message on that object and introduces no new syntax, Task kind, wait-set object,
-or scheduler identity.
-
-After ordinary argument evaluation left-to-right, every supplied argument must
-be a Future value in the current execution domain. Validation is synchronous in
-ascending argument-index order. The first non-Future argument signals an `Error`
-and no aggregate Future is created.
-
-The returned aggregate is a fresh non-task-backed Future representing only this
-multi-Future observation. It does not own, re-parent, detach, cancel, or otherwise
-change any source Future or its producer.
-
-For zero arguments:
-
-```text
-Future.all()
-```
-
-returns an already-resolved Future whose value is a fresh empty standard Array.
-
-For one or more source Futures, let their argument positions be `0 .. n-1`.
-The aggregate observes each source's stable terminal outcome and applies one
-deterministic ascending-index frontier.
-
-For each source position, the logical outcomes are:
-
-```text
-resolved(value)
-failed(error)
-cancelled
-```
-
-A resolved source contributes its resolved value at the same index of the final
-result Array.
-
-The aggregate may resolve successfully only when every source Future is resolved.
-Its value is then one fresh standard Array:
-
-```text
-[result0, result1, ..., resultN]
-```
-
-with exactly the source-argument order, independent of source completion order.
-
-Failure/cancellation selection is also argument-order deterministic. The
-aggregate becomes terminal at the lowest source index whose outcome is not
-`resolved`, but only after every lower index is known to be `resolved`.
-
-Therefore:
-
-- a failed source at index `i` fails the aggregate with that same Error only when
-  every source `0 .. i-1` is resolved;
-- a cancelled source at index `i` cancels the aggregate only when every source
-  `0 .. i-1` is resolved;
-- a later failure/cancellation cannot overtake an unresolved lower index;
-- if a lower source later fails/cancels, that lower outcome wins;
-- physical completion order, callback scheduling, carrier choice, or registration
-  order cannot select the aggregate terminal outcome.
-
-This ordered frontier intentionally differs from completion-race semantics.
-`Future.all(...)` is the deterministic wait-for-all combinator; first-completion
-selection remains a separate `select`/`race` design topic.
-
-Cancelling the aggregate Future abandons only the aggregate observation. It does
-not request cancellation of any source Future, does not alter any source terminal
-state, and does not propagate upstream cancellation. Once aggregate cancellation
-wins its ordinary first-terminal transition, later source completions are ignored
-by that aggregate.
-
-Repeated source Future identity is allowed. Each argument position is one logical
-observation slot. If the same Future appears more than once and resolves, its same
-resolved value occupies each corresponding result position; no source is
-duplicated or re-executed.
-
-The aggregate itself has no structured task-ownership edge. `detach()` therefore
-has the existing non-task-backed Future no-op behavior.
-
-A pending aggregate must not retain arbitrary completed-source implementation
-state beyond what is necessary to produce the specified result or deterministic
-frontier decision. Once the aggregate becomes terminal or its cancellation is
-honored, source registrations must be removed or made inert so long-lived source
-Futures cannot retain dead aggregate observation state without bound.
-
-The implementation may realize the operation with callbacks, compact waiter
-registrations, bitmaps, counters, continuation records, polling already-terminal
-state, or another mechanism. Such choices are non-observable provided the
-ordered result, terminal-outcome selection, cancellation isolation, and
-registration-lifetime rules above are preserved.
+The normative Future/Task contract formerly contained here has moved to `concurrency/FUTURES_AND_TASKS.md`. This ledger heading remains only as a compatibility/navigation anchor and is not a second normative owner.
 
 ## 24F. No Generic Future Race/Select in Core
 
@@ -2809,7 +2449,7 @@ The full module lifecycle rules (module instance equals its
 `moduleContext`, Actor-local cache-before-execute, cache states,
 cyclic-import and failure handling, and the initial module of an Actor)
 are defined in the canonical module-lifecycle sections of
-`PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md`. This
+`PROTOS_LANGUAGE_SPEC.md` and `runtime/ABSTRACT_RUNTIME.md`. This
 section states only the Actor isolation and ownership consequences that
 the concurrency model depends on.
 

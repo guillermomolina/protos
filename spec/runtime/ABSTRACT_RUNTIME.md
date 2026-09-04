@@ -1,18 +1,18 @@
-# Core Runtime Semantics v0.1
+# Protos Abstract Runtime v0.1
 
 Language version: 0.1  
-Document revision: 321
+Document revision: 322
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
 
 It complements:
 
-- `PROTOS_LANGUAGE_SPEC.md`
-- `PROTOS_GRAMMAR.md`
-- `PROTOS_IO_MODEL.md`
+- `../PROTOS_LANGUAGE_SPEC.md`
+- `../PROTOS_GRAMMAR.md`
+- `../PROTOS_IO_MODEL.md`
 
-- the normative CLOSED sections of `PROTOS_CONCURRENCY_MODEL.md`
+- the normative CLOSED sections of `../PROTOS_CONCURRENCY_MODEL.md`
 
 Unresolved sections and explicitly open subtopics in the mixed concurrency
 document are non-normative.
@@ -73,7 +73,7 @@ Future
     adoptedSource          // pending Future whose outcome is being adopted, or none
 ```
 
-These fields are conceptual. An implementation may represent them differently. The I/O-operation commitment state described in `PROTOS_IO_MODEL.md` is not an additional Future state: a Future remains exactly pending, resolved, failed, or cancelled.
+These fields are conceptual. An implementation may represent them differently. The I/O-operation commitment state described in `../PROTOS_IO_MODEL.md` is not an additional Future state: a Future remains exactly pending, resolved, failed, or cancelled.
 
 **The Lexical Parent of an Execution Context:**
 
@@ -92,7 +92,7 @@ Reserved-word matching is case-sensitive. After lexical identifier recognition, 
 
 **String Literal Lexical Forms:**
 
-The valid lexical token shapes for the three Core v0.1 String forms — single-quoted (`'...'`), double-quoted (`"..."`), and triple-double-quoted (`"""..."""`) — including the `escape-sequence` grammar, are defined formally in `PROTOS_GRAMMAR.md`; that grammar is the source spelling the lexer recognizes for String tokens.
+The valid lexical token shapes for the three Core v0.1 String forms — single-quoted (`'...'`), double-quoted (`"..."`), and triple-double-quoted (`"""..."""`) — including the `escape-sequence` grammar, are defined formally in `../PROTOS_GRAMMAR.md`; that grammar is the source spelling the lexer recognizes for String tokens.
 
 **String Escape Validation:**
 
@@ -112,8 +112,8 @@ The lexer must validate escape sequences and reject invalid ones before the pars
 - Source files may freely mix `LF`, `CR`, and `CRLF` logical newlines; mixed line-ending styles are not lexical errors.
 - Newline recognition does not depend on the host operating system, editor settings, Git line-ending conversion, or any host line-separator convention.
 - A `//` line comment terminates immediately before the next logical source newline or at end of file. The terminating logical source newline is not consumed as part of the comment; it remains available for ordinary newline tokenization.
-- Whether a `NEWLINE` token separates expressions or is consumed as continuation is decided entirely by the parser (see `PROTOS_GRAMMAR.md`); the lexer emits `NEWLINE` tokens uniformly. A continuation newline produces no runtime node and has no runtime semantic effect.
-- Commas between elements of argument and parameter lists are likewise resolved entirely by the parser (see `PROTOS_GRAMMAR.md`). A comma separates list elements and produces no runtime node and no runtime semantic effect; only the parsed list elements appear in the semantic representation.
+- Whether a `NEWLINE` token separates expressions or is consumed as continuation is decided entirely by the parser (see `../PROTOS_GRAMMAR.md`); the lexer emits `NEWLINE` tokens uniformly. A continuation newline produces no runtime node and has no runtime semantic effect.
+- Commas between elements of argument and parameter lists are likewise resolved entirely by the parser (see `../PROTOS_GRAMMAR.md`). A comma separates list elements and produces no runtime node and no runtime semantic effect; only the parsed list elements appear in the semantic representation.
 
 **Block Comments (Lexer Contract):**
 
@@ -141,7 +141,7 @@ The lexer must enforce the following rules for String literals:
 - Newline characters must be represented in single-quoted and double-quoted literals using the escape sequences `\n` (line feed) or `\r` (carriage return); these escapes denote String content and are distinct from raw source-newline recognition.
 - Triple-double-quoted (`"""..."""`) String literals permit logical source newlines as part of the literal content. Each logical source newline counts as one logical newline for structural processing — delimiter placement, content-line splitting, and indentation normalization — regardless of whether it is spelled `LF`, `CR`, or `CRLF`.
 - Retained source newlines in triple-double-quoted literals preserve their original source code points in the resulting String: `LF` remains U+000A, `CR` remains U+000D, and `CRLF` remains U+000D U+000A. There is no implicit newline normalization of String content.
-- The escape-sequence rules for triple-double-quoted literals are unchanged; escape processing does not treat an escape sequence as source indentation. Opening/trailing newline removal removes the complete logical newline sequence. Multiline indentation normalization for triple-double-quoted literals follows the Core v0.1 closing-delimiter indentation rule defined in `PROTOS_GRAMMAR.md`; it does not change the valid triple-double token shapes.
+- The escape-sequence rules for triple-double-quoted literals are unchanged; escape processing does not treat an escape sequence as source indentation. Opening/trailing newline removal removes the complete logical newline sequence. Multiline indentation normalization for triple-double-quoted literals follows the Core v0.1 closing-delimiter indentation rule defined in `../PROTOS_GRAMMAR.md`; it does not change the valid triple-double token shapes.
 
 **String Literal Delimiter Recognition (Lexer Contract):**
 
@@ -1950,7 +1950,7 @@ is allowed only when observationally equivalent to these rules.
 ### Future cancellation runtime integration
 
 The normative semantics of Future cancellation are owned by
-`PROTOS_CONCURRENCY_MODEL.md` §23, with cancellation-unwind and structured
+`../PROTOS_CONCURRENCY_MODEL.md` §23, with cancellation-unwind and structured
 ownership consequences owned by §24.
 
 A runtime may represent cancellation-request flags, runnable-state transitions,
@@ -1965,12 +1965,13 @@ preemption point, propagation direction, cleanup outcome, or terminal-state rule
 # 31. Future State and Resolution Runtime Integration
 
 The normative Future state, terminal-transition, failure-identity, and
-resolution/adoption semantics are owned by `PROTOS_LANGUAGE_SPEC.md` §28.
+resolution/adoption semantics are owned by
+`../concurrency/FUTURES_AND_TASKS.md` §28.
 
 A runtime may represent terminal state, stored values/errors, adoption edges,
 cycle detection, dependency callbacks, and source-to-destination propagation
 using any mechanism that preserves that contract and the cancellation semantics
-owned by `PROTOS_CONCURRENCY_MODEL.md` §23. This document does not define a
+owned by `../concurrency/FUTURES_AND_TASKS.md` §23. This document does not define a
 second conceptual resolution/adoption algorithm or additional observable Future
 state.
 
@@ -1981,8 +1982,8 @@ state.
 The normative semantics of `Future.value()`, including resolved/failed/cancelled
 observation, `Cancelled`, waiter registration, first-terminal-transition wake-up,
 lost-wakeup exclusion, waiter lifetime, and waiting-task cancellation interaction,
-are owned by `PROTOS_LANGUAGE_SPEC.md` §29 together with the cooperative
-cancellation rules of `PROTOS_CONCURRENCY_MODEL.md` §23.
+are owned by `../concurrency/FUTURES_AND_TASKS.md` §29 together with that document's
+cooperative cancellation rules in §23.
 
 A runtime may represent waiters, suspended continuations, atomic registration,
 wake-up, inert waiter cleanup, runnable queues, and resumption using any mechanism
@@ -2007,8 +2008,8 @@ cancellation, structured-ownership, Actor, and P behavior.
 # 34. Future Composition
 
 The normative semantics of `Future.then(...)` are owned by
-`PROTOS_CONCURRENCY_MODEL.md` under `Future then() continuations`, together with
-the Future-resolution/adoption rules referenced by that contract.
+`../concurrency/FUTURES_AND_TASKS.md`, including its continuation-task and
+Future-resolution/adoption contracts.
 
 A runtime may represent continuation eligibility, dependency observation,
 runnable queues, task records, callbacks, or equivalent machinery in any way
@@ -2022,7 +2023,7 @@ ordering rule.
 # 35. Concurrency and Actor Runtime Integration
 
 The normative semantics of structured Future/task ownership, cancellation unwind,
-and `Future.detach()` are owned by `PROTOS_CONCURRENCY_MODEL.md` §24.
+and `Future.detach()` are owned by `../PROTOS_CONCURRENCY_MODEL.md` §24.
 Actor-local cooperative non-preemption is owned there by the corresponding
 Actor-local execution contract.
 
@@ -2046,7 +2047,7 @@ programmer-visible lifecycle state, ordering rule, failure detector, partition
 policy, ownership edge, authority grant, bootstrap path, or Error-transfer
 mechanism.
 
-`PROTOS_IO_MODEL.md` remains the primary owner of I/O-specific producer
+`../PROTOS_IO_MODEL.md` remains the primary owner of I/O-specific producer
 commitment/cancellation consequences when Actor termination requests cancellation
 of outstanding I/O operations.
 
@@ -2478,7 +2479,7 @@ same `handlerMatches` algorithm for those objects; no separate error type system
 exists.\n
 ## Module Instances and the Actor-Local Module Cache
 
-Module identity, caching, initialization, cycle handling, and failure are Actor-local. Each Actor owns a module cache keyed by canonical internal module identity. An Actor is an isolated domain of mutable Protos state and execution, with no shared mutable Protos memory between Actors. The module cache and the module instances it holds are part of that Actor's isolated runtime state. The broader Actor concurrency model is developed in `PROTOS_CONCURRENCY_MODEL.md`; this section depends only on the isolation and ownership consequences stated here.
+Module identity, caching, initialization, cycle handling, and failure are Actor-local. Each Actor owns a module cache keyed by canonical internal module identity. An Actor is an isolated domain of mutable Protos state and execution, with no shared mutable Protos memory between Actors. The module cache and the module instances it holds are part of that Actor's isolated runtime state. The broader Actor concurrency model is developed in `../PROTOS_CONCURRENCY_MODEL.md`; this section depends only on the isolation and ownership consequences stated here.
 
 Conceptually, the Actor-owned module state is:
 
@@ -2946,7 +2947,7 @@ No dispatch by argument type is implied. These mechanisms support dynamic arity,
 
 The normative semantics of the standard parallel Array operations
 `parallelMap`, `parallelFilter`, `parallelFindIndex`, `parallelReduce`, and
-`parallelSort` are owned by `PROTOS_CONCURRENCY_MODEL.md` §71.6A–§71.6E.
+`parallelSort` are owned by `../PROTOS_CONCURRENCY_MODEL.md` §71.6A–§71.6E.
 
 A runtime may realize those operations using any internal algorithm, task graph,
 chunking scheme, worker organization, vectorization strategy, or sequential
@@ -5186,7 +5187,7 @@ representations do not create a Core-visible cross-Actor return path.
 ### Future.all runtime integration
 
 The normative semantics of `Future.all(futures...)` are owned by
-`PROTOS_CONCURRENCY_MODEL.md` §24E.
+`../PROTOS_CONCURRENCY_MODEL.md` §24E.
 
 A runtime may represent source observation, readiness bookkeeping, argument-index
 frontiers, waiter registration, cancellation abandonment, and aggregate

@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 313
+Document revision: 322
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -10,7 +10,7 @@ It complements:
 
 - `PROTOS_LANGUAGE_SPEC.md`
 - `PROTOS_GRAMMAR.md`
-- `PROTOS_RUNTIME_SEMANTICS.md`
+- `runtime/ABSTRACT_RUNTIME.md`
 - `PROTOS_CONCURRENCY_MODEL.md`
 
 The language specification owns language constructs, the grammar owns syntax and mandatory lowering, the runtime-semantics document owns executable core evaluation rules, the CLOSED normative sections of the concurrency model own Actor/Future/concurrency-domain semantics, and this document owns observable I/O-domain semantics. Unresolved concurrency-ledger sections and explicitly open subtopics are non-normative.
@@ -144,7 +144,7 @@ including zero-argument empty construction, exact octet validation,
 replacement-only `atPut`, dynamic resizing through `add` / `removeAt`,
 ascending-snapshot `each`, callback callability, return values, and
 open/closed/frozen behavior, are defined normatively by
-`PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md`.
+`PROTOS_LANGUAGE_SPEC.md` and `runtime/ABSTRACT_RUNTIME.md`.
 
 `Bytes` remains mutable and dynamically resizable through the explicit
 length-changing operations `add` and `removeAt`. No other operation acquires

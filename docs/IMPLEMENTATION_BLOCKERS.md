@@ -31,7 +31,7 @@ The current normative specifications do not uniquely state the language value
 produced by evaluating a `Sequence` containing no expressions.
 
 Specification authority:
-- `spec/PROTOS_RUNTIME_SEMANTICS.md`
+- `spec/runtime/ABSTRACT_RUNTIME.md`
 - `spec/PROTOS_LANGUAGE_SPEC.md`
 
 Unblock condition:

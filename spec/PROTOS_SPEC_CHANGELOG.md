@@ -8,6 +8,45 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.322] - 2026-09-04
+
+### Added / Migrated
+- Began the physical modularization of `spec/`; this is the first revision in
+  which the target directory structure exists in the repository rather than only
+  as an architectural plan.
+- Created `spec/semantics/`, `spec/concurrency/`, `spec/io/`, and `spec/runtime/`.
+- Moved `PROTOS_RUNTIME_SEMANTICS.md` to
+  `runtime/ABSTRACT_RUNTIME.md` and updated current repository references.
+- Created `concurrency/FUTURES_AND_TASKS.md` as the primary normative owner of
+  the Future/task family already canonicalized in revisions 316-320.
+- Moved the full Language Future sections 26-31 and the concurrency-owned
+  `Future.then`, cancellation §23, structured-task §24, and `Future.all` §24E
+  contracts into `concurrency/FUTURES_AND_TASKS.md`.
+- Left compact compatibility/navigation anchors in the former Language and mixed
+  concurrency documents; those anchors explicitly define no duplicate contract.
+
+### Structure
+- Materialized the planned target files for semantic, Actor/parallel/distributed,
+  and I/O modules as explicit non-normative migration indexes.
+- Those migration-index files do not acquire normative authority merely by
+  existing; each domain becomes normative there only when a later migration
+  revision transfers its actual contract.
+- The modular tree now includes:
+  `semantics/{OBJECT_MODEL,EXECUTION_AND_CONTROL,CALLABLES,MODULES,ERRORS,VALUES_AND_COLLECTIONS}.md`,
+  `concurrency/{FUTURES_AND_TASKS,ACTORS,PARALLEL_EXECUTION,DISTRIBUTED_RUNTIME}.md`,
+  `io/{IO_CORE,BYTE_IO,TEXT_IO,FILESYSTEM,PROCESS_IO}.md`, and
+  `runtime/ABSTRACT_RUNTIME.md`.
+
+### Documentation
+- This revision is primarily structural/ownership migration; it does not
+  intentionally change observable Protos behavior.
+- Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
+  `PROTOS_CONCURRENCY_MODEL.md`, `PROTOS_IO_MODEL.md`, and the moved
+  `runtime/ABSTRACT_RUNTIME.md` to document revision 322 because each current
+  document/path reference changes in this revision.
+- Updated current README/AGENTS/documentation references to the new Runtime path.
+- Historical changelog entries retain historical filenames.
+
 ## [0.1.321] - 2026-09-04
 
 ### Changed
