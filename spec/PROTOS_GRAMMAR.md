@@ -1,8 +1,8 @@
 # Core Language Grammar v0.1
 
-Language version: 0.1  
-Document revision: 322
-Status: Draft  
+Language version: 0.1
+Document revision: 331
+Status: Draft
 Last updated: 2026-09-04
 ## Prelude Binding Note
 
@@ -13,6 +13,8 @@ Freezing is shallow: because the prelude is shared between Actors, any Protos ob
 ## 1. Scope
 
 This document defines the lexical grammar, expression grammar, precedence rules, and mandatory syntactic desugarings of the language.
+
+For Closure syntax, trailing closures, and custom symbolic operators, this document is the primary normative owner of accepted source forms, tokenization/parsing constraints, precedence/associativity, attachment, and mandatory desugaring. The semantic behavior of the resulting ordinary Closure values and message sends is owned by the applicable semantic modules, especially `semantics/CALLABLES.md`.
 
 It does not redefine the object model or runtime semantics specified in `PROTOS_LANGUAGE_SPEC.md`.
 

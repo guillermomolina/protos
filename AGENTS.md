@@ -300,7 +300,7 @@ Normative domain models supplement those core documents for semantically substan
 
 - `spec/semantics/OBJECT_MODEL.md` — primary normative owner of migrated object-model semantics.
 - `spec/semantics/EXECUTION_AND_CONTROL.md` — primary normative owner of execution contexts, lookup/evaluation, and iteration/control semantics.
-- `spec/semantics/CALLABLES.md` — primary normative owner of Closure, callable/invocation, trailing-closure, and custom symbolic message-send semantics.
+- `spec/semantics/CALLABLES.md` — primary normative owner of Closure value/capture and callable/invocation semantics; syntax, trailing-closure attachment, operator precedence, and mandatory desugaring remain owned by `spec/PROTOS_GRAMMAR.md`.
 - `spec/semantics/MODULES.md` — primary normative owner of migrated module semantics.
 - `spec/semantics/ERRORS.md` — primary normative owner of migrated Error semantics.
 - `spec/semantics/VALUES_AND_COLLECTIONS.md` — primary normative owner of value-family, equality/identity, indexing, and collection semantics.

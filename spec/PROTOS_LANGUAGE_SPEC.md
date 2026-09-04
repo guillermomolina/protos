@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1
-Document revision: 330
+Document revision: 331
 Status: Draft
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `io/IO_CORE.md`.
@@ -104,8 +104,10 @@ The primary normative contract formerly contained here has moved to `semantics/E
 
 ## 9. Closures
 
-The primary normative contract formerly contained here has moved to `semantics/CALLABLES.md`. This heading remains as a compatibility and navigation anchor; it is not a second normative owner.
-
+Closure syntax and mandatory syntactic desugaring are owned by
+`PROTOS_GRAMMAR.md`. Closure value/capture/invocation semantics are owned by
+`semantics/CALLABLES.md`. This heading is a compatibility/navigation anchor and
+is not an independent normative owner.
 ## 10. Closures and Methods
 
 The primary normative contract formerly contained here has moved to `semantics/CALLABLES.md`. This heading remains as a compatibility and navigation anchor; it is not a second normative owner.
@@ -140,8 +142,10 @@ The primary normative contract formerly contained here has moved to `semantics/E
 
 ## 18. Trailing Closures
 
-The primary normative contract formerly contained here has moved to `semantics/CALLABLES.md`. This heading remains as a compatibility and navigation anchor; it is not a second normative owner.
-
+Trailing-closure syntax, attachment, and mandatory desugaring are owned by
+`PROTOS_GRAMMAR.md`; the resulting Closure obeys
+`semantics/CALLABLES.md`. This heading is a compatibility/navigation anchor and
+is not an independent normative owner.
 ## 19. Separators, Line Breaks, and Comments
 
 There is no Automatic Semicolon Insertion.
@@ -452,8 +456,10 @@ The primary normative contract formerly contained here has moved to `semantics/V
 
 ## 21.1 Custom Symbolic Binary Operators
 
-The primary normative contract formerly contained here has moved to `semantics/CALLABLES.md`. This heading remains as a compatibility and navigation anchor; it is not a second normative owner.
-
+Custom symbolic operator lexing, parsing, precedence, associativity, and
+mandatory lowering are owned by `PROTOS_GRAMMAR.md`. The lowered ordinary
+message send obeys the applicable callable/object semantics. This heading is a
+compatibility/navigation anchor and is not an independent normative owner.
 ## 22. Open Objects
 
 The primary normative contract formerly contained here has moved to `semantics/OBJECT_MODEL.md`. This heading remains as a compatibility and navigation anchor; it is not a second normative owner.

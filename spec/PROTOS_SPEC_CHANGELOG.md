@@ -8,6 +8,23 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.331] - 2026-09-04
+
+### Ownership clarified
+- Split syntax/desugaring ownership from callable semantics after the modular
+  ownership audit.
+- Re-established `PROTOS_GRAMMAR.md` as the sole primary owner of Closure source
+  forms, trailing-closure attachment, custom symbolic operator lexing/parsing,
+  precedence/associativity, and mandatory syntactic desugarings.
+- Reduced `CALLABLES.md` §§9, 18, and 21.1 to callable-semantic consequences and
+  direct references to the Grammar instead of duplicating syntax contracts.
+- Updated Language compatibility anchors and root authority guidance to reflect
+  the split ownership boundary.
+
+### Compatibility
+- No observable behavior is intentionally changed; duplicated normative wording
+  is removed so independent implementations have one syntax authority.
+
 ## [0.1.330] - 2026-09-04
 
 ### Ownership corrected
