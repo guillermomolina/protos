@@ -4,6 +4,23 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.221] - 2026-09-04
+
+### Fixed
+- Clarified generic ByteReadable EOF as an observation of current sequence state,
+  not an unconditional permanent latch for every mutable-sequence receiver.
+- Defined standard readable File EOF at each ordered read evaluation point.
+- Required EOF reads to leave File position unchanged and allowed later reads to
+  observe bytes made visible by later authorized growth without an intervening seek.
+- Kept growth visibility/order under existing backend/cross-capability semantics.
+- Defined current-EOF reads to complete with `null` rather than wait for future growth.
+- Preserved TextReader's stronger permanent text-EOF lifecycle.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 221. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.220] - 2026-09-03
 
 ### Fixed

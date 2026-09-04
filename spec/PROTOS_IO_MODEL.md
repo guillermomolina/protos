@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 220
+Document revision: 221
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -210,7 +210,7 @@ ByteReadable {
 
 A successful non-EOF result is a `Bytes` object containing from 1 through `maxBytes` octets.
 
-`null` means permanent end-of-file/end-of-sequence for the receiver's current sequence state.
+`null` means end-of-file/end-of-sequence for the receiver's current sequence state. For a receiver whose sequence state cannot subsequently gain readable data, that EOF is permanent. For a receiver that explicitly represents a mutable sequence whose contents/extent may change, a later state change may make data readable again according to that concrete receiver's contract.
 
 For `read(maxBytes)` with `maxBytes > 0`, an empty `Bytes()` result is never used to mean either "no data yet" or EOF. If data is not yet available and EOF has not been established, the Future remains pending.
 
@@ -218,7 +218,7 @@ A read may complete with fewer octets than requested.
 
 I/O errors fail the Future and are distinct from EOF.
 
-If data remains before EOF, that data is returned before EOF is reported. Once EOF has been observed, subsequent reads return `null` unless an operation such as seeking changes the sequence state.
+If data remains before EOF, that data is returned before EOF is reported. Once EOF has been observed, subsequent reads return `null` while the receiver remains in the same relevant sequence state. A seek is one explicit way to change that state; a concrete mutable-sequence receiver may also specify that independently authorized changes to its represented sequence can make later data readable without a seek. A concrete receiver must define that distinction rather than inheriting accidental host EOF-latching behavior.
 
 Multiple outstanding reads against the same logical receiver share one input-consumption ordering domain.
 
@@ -1228,6 +1228,16 @@ When separately opened `File` capabilities refer to the same underlying resource
 In particular, Protos does not make two successful opens of one resource behave like two handles to one Protos logical receiver merely because the host reports a common inode, file identifier, object, or equivalent identity. A write through one File may become observable through another according to the underlying Filesystem's resource semantics, but the timing and ordering of such cross-capability observation are not elevated into a portable Protos guarantee by File identity alone.
 
 Observable interactions between independently opened capabilities are therefore governed by the resource/backend semantics and the Protos ordering rules for each logical receiver, not by `Path` equality.
+
+For a readable standard `File`, EOF is evaluated against the represented file resource at each ordered read evaluation point; observing `null` does not permanently latch that File at EOF while the resource can still change. If the File's current logical position is at or beyond the then-current file size, that read returns `null` and does not advance the logical position. If a later independently authorized change grows or otherwise changes the same represented resource so that readable octets then exist at that unchanged logical position, a later read on this File may return those octets without requiring an intervening seek.
+
+The same rule applies whether the resource growth came through another standard File capability, another authorized Process/host agent, or another backend mechanism whose effects are visible under the Filesystem's resource semantics. Protos does not add a new ordering or visibility guarantee for when such an independent change becomes observable; it only defines the result once that changed resource state is the state applicable to the later File read.
+
+Conversely, merely observing EOF does not make a pending File read wait for hypothetical future growth. A read evaluated at a state where its logical position is at or beyond current EOF completes with `null`; following growth is considered only by a later read operation. This keeps regular-file EOF distinct from stream readiness and avoids turning ordinary File reads into implicit tail/follow operations.
+
+This File rule does not alter a `TextReader` wrapper's stronger text-stream lifecycle. A TextReader that has itself committed its standardized permanent text EOF remains at text EOF according to section 14/16 even if its separately accessible underlying File later grows; Core v0.1 defines no TextReader reset/reopen operation. Programs that need to observe later file growth use the raw File/byte capability or construct a new text-reading layer under the ordinary authority/lifecycle rules.
+
+A readable File therefore treats EOF as a point-in-sequence-state observation, not as permanent closure of a mutable file resource: later visible growth past the File's unchanged logical position can make a subsequent read return data.
 
 If the backend cannot maintain a stable binding from the successful open to the selected resource for the lifetime of the returned `File`, or cannot otherwise emulate the required stable-resource semantics, it must not expose that resource as the standard `File` capability merely because the host API returned a handle-like value.
 
