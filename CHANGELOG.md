@@ -4,6 +4,32 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.10-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added `ProtosSourceFileLoader` to read UTF-8 Protos source from a host `Path`
+  and compile it through the existing ordinary source compiler pipeline.
+- Added focused coverage for successful UTF-8 loading and host file-loading
+  failure propagation.
+
+### Changed
+
+- Project implementation version changed from `0.2.9-SNAPSHOT` to
+  `0.2.10-SNAPSHOT`.
+
+### Notes
+
+- This is host-side implementation plumbing, not the Protos language I/O model.
+  It does not expose `Path`, Java NIO, or file-loading behavior to Protos code.
+- The loader deliberately does not define module identity, import caching,
+  bootstrap order, or Core object identities. Those higher-level semantics stay
+  outside this increment.
+- This entry point is intended for the upcoming `protos/lib/core/` bootstrap
+  loader and ordinary module-loading machinery.
+- No normative specification change is introduced.
+
+
 ## [0.2.9-SNAPSHOT] - 2026-09-04
 
 ### Added
