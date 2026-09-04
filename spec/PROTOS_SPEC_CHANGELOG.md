@@ -4,6 +4,26 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.224] - 2026-09-04
+
+### Fixed
+- Defined successful reads on a receiver whose ByteReadable and ByteSeekable
+  capabilities share one logical sequence position to advance that position by
+  exactly the number of octets actually returned.
+- Defined EOF to advance the shared logical position by zero.
+- Reaffirmed successful cancellation and ordinary read failure as zero-position-
+  advance outcomes even when implementation read-ahead moved a native cursor.
+- Prevented `maxBytes`, native read size, prefetch size, or hidden buffering from
+  changing the observable post-read logical position.
+- Kept independently authorized mutable-resource changes under their existing
+  visibility semantics while making each successful read's position aftermath
+  deterministic.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 224. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.223] - 2026-09-04
 
 ### Fixed

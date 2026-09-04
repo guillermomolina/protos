@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 223
+Document revision: 224
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -558,6 +558,18 @@ Seeking beyond the current end is allowed unless the concrete resource cannot re
 Reading beyond the current EOF returns `null`. A later write beyond the end may grow a concrete resource according to that resource's write semantics.
 
 Reads, writes, and seeks that affect one shared sequence position are ordered in invocation order.
+
+When a receiver exposes `ByteReadable` and `ByteSeekable` over the same logical sequence position, a successful non-EOF `read(maxBytes)` starts at the logical position applicable at that read's ordered evaluation point. If the returned `Bytes` contains `n` octets, the read consumes exactly those next `n` logical octet positions and the receiver's logical position after the read is the starting position plus `n`. The position advances by the actual successful result length, not by `maxBytes`, a native/backend read size, or an implementation-selected buffer extent.
+
+A `null` EOF result consumes zero octets and leaves the logical position unchanged. Therefore repeatedly reading at the same unchanged EOF position continues to observe that position until a seek or a concrete mutable-sequence state change makes data readable there according to that receiver's contract.
+
+The existing cancellation/failure rule remains failure-atomic for position: a successfully cancelled or failed ordinary read consumes zero logical octets and leaves the shared logical position unchanged even if backend read-ahead occurred and had to be preserved internally.
+
+This position aftermath is determined by the Protos read result, not by native cursor movement. An implementation may prefetch, use positional I/O, virtualize a cursor, or obtain more backend bytes than it returns in one Protos read, but only the octets delivered by that successful read advance the receiver's observable logical position. Preserved read-ahead remains unread logical input.
+
+Independently authorized changes to a mutable underlying resource do not alter this arithmetic. They may affect which bytes are visible to the read under the resource/backend semantics, but once a successful read returns `n` octets from starting logical position `p`, that operation's position aftermath is exactly `p + n`.
+
+A successful position-sharing ByteReadable read advances the receiver's logical position by exactly the number of octets returned; EOF, cancellation, and ordinary read failure advance it by zero.
 
 When a `ByteWritable` write on such a receiver fails after contributing a prefix of length `k`, the shared logical position advances exactly by the committed contribution that the receiver's positioned-write semantics place into the sequence. A later ordered position-sensitive operation therefore starts from the post-prefix logical position, not from the pre-write position merely because the write's Future failed.
 
