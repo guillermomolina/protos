@@ -18,36 +18,38 @@ Blocker states:
 Do not mark a blocker `READY` merely because a relevant specification file
 changed. Verify the stated unblock condition against the current normative text.
 
-## B001 — Runtime value materialization
+## B001 — Empty Sequence execution
 
 Status: BLOCKED
 
 Implementation area:
-Truffle execution of canonical expressions that produce language values,
-including literals and the result of an empty `CanonicalSequence`.
+Truffle lowering / execution of a `CanonicalSequence` containing zero
+expressions.
 
 Normative dependency:
-The implementation needs a complete, implementation-independent runtime
-representation contract for Core Protos values at the Truffle execution
-boundary. In particular, execution must not expose Java `null` as a substitute
-for the Protos `null` value, and the representation must preserve the semantic
-distinctions required by the normative value model.
+The current normative specifications do not uniquely state the language value
+produced by evaluating a `Sequence` containing no expressions.
 
 Specification authority:
 - `spec/PROTOS_RUNTIME_SEMANTICS.md`
 - `spec/PROTOS_LANGUAGE_SPEC.md`
 
 Unblock condition:
-The current normative specifications uniquely determine the observable value
-produced by the affected canonical expressions and provide sufficient runtime
-value semantics to implement that behavior without inventing a host-language
-representation rule.
+The current normative specifications explicitly and uniquely determine the
+result of evaluating an empty `Sequence`.
 
 Current consequence:
-`ProtosSequenceNode` deliberately requires at least one expression. Empty
-sequence execution remains blocked. Literal execution is likewise not started
-where doing so would require inventing the runtime representation contract.
+`ProtosSequenceNode` and Canonical-to-Truffle lowering deliberately reject empty
+sequences. Non-empty sequence execution is implemented.
 
 Independent work:
-Execution infrastructure and runtime work whose observable behavior does not
-depend on unresolved value materialization may continue.
+Literal/value representation and all other execution work whose observable
+semantics are already defined may continue. Internal host representation is an
+implementation choice and is not, by itself, a normative blocker.
+
+History:
+B001 was temporarily broadened to "Runtime value materialization". That was too
+broad: repository policy and the runtime specification explicitly permit
+implementation-specific internal representations when observable Protos
+semantics are preserved. The blocker is therefore narrowed back to the actual
+unresolved observable case: the result of an empty `Sequence`.
