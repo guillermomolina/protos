@@ -1,7 +1,7 @@
 # Protos Values and Collections v0.1
 
 Language version: 0.1
-Document revision: 333
+Document revision: 334
 Status: Draft
 Last updated: 2026-09-04
 
@@ -494,7 +494,7 @@ by this language specification continue to apply where referenced by the
 concurrency-domain contract.
 
 Core v0.1 defines no standard `Array.parallelEach(...)`; that concurrency-domain
-boundary is likewise owned by `PROTOS_CONCURRENCY_MODEL.md`.
+boundary is likewise owned by `../docs/design/CONCURRENCY_DESIGN.md`.
 
 # Actor-suspension integration for Map comparison scopes
 

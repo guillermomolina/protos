@@ -1,7 +1,7 @@
 # Protos Distributed Runtime v0.1
 
 Language version: 0.1
-Document revision: 329
+Document revision: 334
 Status: Draft
 Last updated: 2026-09-04
 
@@ -12,7 +12,7 @@ membership, partition/split-brain safety, and distributed Authority where those
 contracts were normatively CLOSED in the former mixed concurrency ledger.
 
 Legacy section numbers are retained for citation continuity. Unresolved design
-topics remain in `../PROTOS_CONCURRENCY_MODEL.md`, which is entirely
+topics remain in `docs/design/CONCURRENCY_DESIGN.md`, which is entirely
 non-normative after revision 328. Nothing in that ledger supplements or overrides
 the contracts in this document.
 

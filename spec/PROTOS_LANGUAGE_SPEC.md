@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1
-Document revision: 332
+Document revision: 334
 Status: Draft
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `io/IO_CORE.md`.
@@ -10,8 +10,8 @@ Normative semantic-domain ownership is modularized under `semantics/`: `OBJECT_M
 
 
 Normative concurrency-domain semantics are defined by the modular specifications
-under `concurrency/`. `PROTOS_CONCURRENCY_MODEL.md` is a non-normative historical
-and design ledger and must not be used as a source of observable behavior.
+under `concurrency/`. Non-normative unresolved concurrency design notes live in
+`../docs/design/CONCURRENCY_DESIGN.md` and are not a source of observable behavior.
 ## Language Name
 
 The language defined by this specification is named **Protos**.

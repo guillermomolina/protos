@@ -1,12 +1,12 @@
 # Protos Parallel Execution v0.1
 
 Language version: 0.1
-Document revision: 328
+Document revision: 334
 Status: Draft
 Last updated: 2026-09-04
 
 This document is the primary normative owner of Core isolated parallel execution
-(P) semantics migrated from `../PROTOS_CONCURRENCY_MODEL.md`.
+(P) semantics migrated from `docs/design/CONCURRENCY_DESIGN.md`.
 
 Legacy §71 numbering is intentionally retained during modularization so existing
 citations remain understandable. The compatibility heading left in the mixed

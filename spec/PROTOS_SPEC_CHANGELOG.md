@@ -8,6 +8,21 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.334] - 2026-09-04
+
+### Legacy concurrency ledger retired
+- Removed `docs/design/CONCURRENCY_DESIGN.md` after completing normative
+  concurrency modularization and ownership verification.
+- Preserved substantive unresolved/directional design material in the
+  non-normative `docs/design/CONCURRENCY_DESIGN.md`.
+- Discarded migration-only redirect sections; Git history remains the record of
+  those relocations.
+- Updated active authority/navigation references so no normative document
+  depends on the retired ledger.
+
+### Compatibility
+- No observable Protos behavior is changed.
+
 ## [0.1.333] - 2026-09-04
 
 ### Migration ownership fixed
@@ -88,7 +103,7 @@ advance its revision.
   documented it consistently as informative.
 - Expanded root authority guidance to list all five normative I/O modules.
 - Rewrote stale cross-document citations that still treated
-  `PROTOS_CONCURRENCY_MODEL.md` as a normative owner.
+  `docs/design/CONCURRENCY_DESIGN.md` as a normative owner.
 - Updated `DISTRIBUTED_RUNTIME.md` to state that the legacy ledger is entirely
   non-normative and contains only unresolved design/history material.
 - Updated specification-agent guidance from ongoing-migration language to the
@@ -115,7 +130,7 @@ advance its revision.
   `concurrency/DISTRIBUTED_RUNTIME.md`.
 
 ### Authority
-- Retired `PROTOS_CONCURRENCY_MODEL.md` as a normative source. It is now an
+- Retired `docs/design/CONCURRENCY_DESIGN.md` as a normative source. It is now an
   entirely non-normative historical/design ledger.
 - Reclassified `runtime/ABSTRACT_RUNTIME.md` as informative non-normative
   pseudocode constrained by the modular normative specifications.
@@ -188,7 +203,7 @@ advance its revision.
 ### Documentation
 - This revision changes specification location/ownership only and does not
   intentionally change observable Protos behavior.
-- Updated `PROTOS_CONCURRENCY_MODEL.md`, `concurrency/ACTORS.md`, and
+- Updated `docs/design/CONCURRENCY_DESIGN.md`, `concurrency/ACTORS.md`, and
   `concurrency/FUTURES_AND_TASKS.md` to document revision 325.
 - Other revisioned normative documents are unaffected.
 
@@ -215,7 +230,7 @@ advance its revision.
 ### Documentation
 - This revision changes specification location/ownership only and does not
   intentionally change observable Protos behavior.
-- Updated `PROTOS_CONCURRENCY_MODEL.md`, `concurrency/ACTORS.md`,
+- Updated `docs/design/CONCURRENCY_DESIGN.md`, `concurrency/ACTORS.md`,
   `concurrency/PARALLEL_EXECUTION.md`, `PROTOS_LANGUAGE_SPEC.md`, and
   `runtime/ABSTRACT_RUNTIME.md` to document revision 324.
 - Other revisioned normative documents are unaffected.
@@ -242,7 +257,7 @@ advance its revision.
   intentionally change observable Protos behavior.
 
 ### Documentation
-- Updated `PROTOS_CONCURRENCY_MODEL.md`, `concurrency/ACTORS.md`, and
+- Updated `docs/design/CONCURRENCY_DESIGN.md`, `concurrency/ACTORS.md`, and
   `concurrency/FUTURES_AND_TASKS.md` to document revision 323.
 - Other normative documents are unaffected.
 
@@ -279,7 +294,7 @@ advance its revision.
 - This revision is primarily structural/ownership migration; it does not
   intentionally change observable Protos behavior.
 - Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_CONCURRENCY_MODEL.md`, `PROTOS_IO_MODEL.md`, and the moved
+  `docs/design/CONCURRENCY_DESIGN.md`, `PROTOS_IO_MODEL.md`, and the moved
   `runtime/ABSTRACT_RUNTIME.md` to document revision 322 because each current
   document/path reference changes in this revision.
 - Updated current README/AGENTS/documentation references to the new Runtime path.
@@ -295,7 +310,7 @@ advance its revision.
   termination classification, Cluster membership, and split-brain/Authority
   handling.
 - Replaced those algorithms with a compact integration section referring to
-  `PROTOS_CONCURRENCY_MODEL.md` as the primary normative owner and
+  `docs/design/CONCURRENCY_DESIGN.md` as the primary normative owner and
   `PROTOS_IO_MODEL.md` for I/O-specific commitment/cancellation specialization.
 - Preserved runtime freedom to use internal lifecycle records, queues, membership
   views, callbacks, probes, epochs, compact terminal metadata, or distributed
@@ -311,7 +326,7 @@ advance its revision.
   authority; it does not intentionally change observable Protos behavior.
 - Updated only `PROTOS_RUNTIME_SEMANTICS.md` to document revision 321.
 - `PROTOS_LANGUAGE_SPEC.md` remains at document revision 320.
-- `PROTOS_CONCURRENCY_MODEL.md` remains at document revision 319.
+- `docs/design/CONCURRENCY_DESIGN.md` remains at document revision 319.
 - `PROTOS_GRAMMAR.md` and `PROTOS_IO_MODEL.md` are unaffected.
 
 ## [0.1.320] - 2026-09-04
@@ -349,7 +364,7 @@ advance its revision.
 ### Documentation
 - Updated `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` to document
   revision 320.
-- `PROTOS_CONCURRENCY_MODEL.md` remains at document revision 319 because its
+- `docs/design/CONCURRENCY_DESIGN.md` remains at document revision 319 because its
   normative content is unchanged.
 - `PROTOS_GRAMMAR.md` and `PROTOS_IO_MODEL.md` are unaffected and remain
   byte-for-byte unchanged.
@@ -388,7 +403,7 @@ advance its revision.
 - This revision changes specification ownership and exposes an existing gap; it
   does not intentionally change observable Protos behavior.
 - Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
-  `PROTOS_CONCURRENCY_MODEL.md` to document revision 319.
+  `docs/design/CONCURRENCY_DESIGN.md` to document revision 319.
 - `PROTOS_GRAMMAR.md` and `PROTOS_IO_MODEL.md` are unaffected and remain
   byte-for-byte unchanged.
 
@@ -397,10 +412,10 @@ advance its revision.
 ### Changed
 - Canonicalized the broader Core Future cancellation and structured-ownership
   family in one migration unit.
-- Made `PROTOS_CONCURRENCY_MODEL.md` §23 the explicit primary normative owner of
+- Made `docs/design/CONCURRENCY_DESIGN.md` §23 the explicit primary normative owner of
   cooperative cancellation, `Future.cancel()`, portable cancellation boundaries,
   cancellation-runnable pre-start/suspended work, and cancellation wake-up rules.
-- Made `PROTOS_CONCURRENCY_MODEL.md` §24 the explicit primary normative owner of
+- Made `docs/design/CONCURRENCY_DESIGN.md` §24 the explicit primary normative owner of
   structured Future/task ownership, structured completion/unwind, cleanup, and
   `Future.detach()` semantics.
 - Kept Actor-local cooperative non-preemption under the existing §24D ownership.
@@ -416,7 +431,7 @@ advance its revision.
 - This revision changes specification ownership and removes duplicate authority;
   it does not intentionally change observable Protos behavior.
 - Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
-  `PROTOS_CONCURRENCY_MODEL.md` to document revision 318.
+  `docs/design/CONCURRENCY_DESIGN.md` to document revision 318.
 - `PROTOS_GRAMMAR.md` and `PROTOS_IO_MODEL.md` are unaffected and remain
   byte-for-byte unchanged.
 
@@ -425,7 +440,7 @@ advance its revision.
 ### Changed
 - Continued canonicalization of duplicated normative authority under the
   one-primary-owner discipline.
-- Made `PROTOS_CONCURRENCY_MODEL.md` §24E the explicit primary normative owner
+- Made `docs/design/CONCURRENCY_DESIGN.md` §24E the explicit primary normative owner
   of `Future.all(futures...) -> Future` concurrency-domain semantics.
 - Replaced the duplicated full `Future.all(...)` contract in
   `PROTOS_LANGUAGE_SPEC.md` with a compact language-surface and cross-domain
@@ -440,7 +455,7 @@ advance its revision.
 - This revision changes specification ownership and removes duplicate authority;
   it does not intentionally change observable Protos behavior.
 - Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
-  `PROTOS_CONCURRENCY_MODEL.md` to document revision 317.
+  `docs/design/CONCURRENCY_DESIGN.md` to document revision 317.
 - `PROTOS_GRAMMAR.md` and `PROTOS_IO_MODEL.md` are unaffected and remain
   byte-for-byte unchanged.
 
@@ -450,7 +465,7 @@ advance its revision.
 - Continued canonicalization of duplicated normative authority under the
   one-primary-owner discipline.
 - Made the `Future then() continuations` section of
-  `PROTOS_CONCURRENCY_MODEL.md` the explicit primary normative owner of
+  `docs/design/CONCURRENCY_DESIGN.md` the explicit primary normative owner of
   `Future.then(transform) -> Future` concurrency-domain semantics.
 - Replaced the duplicated full `Future.then(...)` contract in
   `PROTOS_LANGUAGE_SPEC.md` with a compact language-surface and cross-domain
@@ -466,7 +481,7 @@ advance its revision.
 - This revision changes specification ownership and removes duplicate authority;
   it does not intentionally change observable Protos behavior.
 - Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
-  `PROTOS_CONCURRENCY_MODEL.md` to document revision 316.
+  `docs/design/CONCURRENCY_DESIGN.md` to document revision 316.
 - `PROTOS_GRAMMAR.md` and `PROTOS_IO_MODEL.md` are unaffected and remain
   byte-for-byte unchanged.
 
@@ -475,7 +490,7 @@ advance its revision.
 ### Changed
 - Began canonicalization of existing duplicated normative authority under the
   one-primary-owner discipline introduced by revision 0.1.314.
-- Made `PROTOS_CONCURRENCY_MODEL.md` §71.6A–§71.6E the primary normative owner
+- Made `docs/design/CONCURRENCY_DESIGN.md` §71.6A–§71.6E the primary normative owner
   of the concurrency-domain semantics for the standard
   `Array.parallelMap(...)`, `Array.parallelFilter(...)`,
   `Array.parallelFindIndex(...)`, `Array.parallelReduce(...)`, and
@@ -497,7 +512,7 @@ advance its revision.
   duplicate authority; it does not intentionally change observable Protos
   language or concurrency behavior.
 - Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
-  `PROTOS_CONCURRENCY_MODEL.md` to document revision 315.
+  `docs/design/CONCURRENCY_DESIGN.md` to document revision 315.
 - `PROTOS_GRAMMAR.md` and `PROTOS_IO_MODEL.md` are unaffected and remain
   byte-for-byte unchanged.
 
@@ -547,7 +562,7 @@ advance its revision.
 ### Changed
 - Synchronized all revisioned specification documents to revision 313.
   `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
-  `PROTOS_CONCURRENCY_MODEL.md` gain normative clarification in this revision.
+  `docs/design/CONCURRENCY_DESIGN.md` gain normative clarification in this revision.
 
 ## [0.1.312] - 2026-09-04
 
@@ -588,7 +603,7 @@ advance its revision.
 
 ### Changed
 - Synchronized all revisioned specification documents to revision 311.
-  `PROTOS_RUNTIME_SEMANTICS.md` and `PROTOS_CONCURRENCY_MODEL.md` gain normative
+  `PROTOS_RUNTIME_SEMANTICS.md` and `docs/design/CONCURRENCY_DESIGN.md` gain normative
   clarification in this revision.
 
 ## [0.1.310] - 2026-09-04
@@ -610,7 +625,7 @@ advance its revision.
 
 ### Changed
 - Synchronized all revisioned specification documents to revision 310.
-  `PROTOS_CONCURRENCY_MODEL.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain normative
+  `docs/design/CONCURRENCY_DESIGN.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain normative
   clarification in this revision.
 
 ## [0.1.309] - 2026-09-04
@@ -634,7 +649,7 @@ advance its revision.
 
 ### Changed
 - Synchronized all revisioned specification documents to revision 309.
-  `PROTOS_RUNTIME_SEMANTICS.md` and `PROTOS_CONCURRENCY_MODEL.md` gain normative
+  `PROTOS_RUNTIME_SEMANTICS.md` and `docs/design/CONCURRENCY_DESIGN.md` gain normative
   semantic content in this revision.
 
 ## [0.1.308] - 2026-09-04
@@ -683,7 +698,7 @@ advance its revision.
   infrastructure topology` from Open Design Topics.
 
 ### Changed
-- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Updated `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   307.
 
@@ -708,7 +723,7 @@ advance its revision.
 
 ### Changed
 - Synchronized all revisioned specification documents to revision 306.
-  Only `PROTOS_CONCURRENCY_MODEL.md` gains normative semantic content in this
+  Only `docs/design/CONCURRENCY_DESIGN.md` gains normative semantic content in this
   revision.
 
 ## [0.1.305] - 2026-09-04
@@ -816,7 +831,7 @@ advance its revision.
 
 ### Changed
 - Synchronized all revisioned specification documents to revision 301.
-  `PROTOS_RUNTIME_SEMANTICS.md` and `PROTOS_CONCURRENCY_MODEL.md` gain normative
+  `PROTOS_RUNTIME_SEMANTICS.md` and `docs/design/CONCURRENCY_DESIGN.md` gain normative
   clarification in this revision.
 
 ## [0.1.300] - 2026-09-04
@@ -859,7 +874,7 @@ advance its revision.
 - Removed `ActorRef routing implementation` from Open Design Topics.
 
 ### Changed
-- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Updated `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   299.
 
@@ -885,7 +900,7 @@ advance its revision.
 - Removed `Service discovery implementation` from Open Design Topics.
 
 ### Changed
-- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Updated `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   298.
 
@@ -910,7 +925,7 @@ advance its revision.
 ### Changed
 - Synchronized all revisioned specification documents to revision 297.
   `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
-  `PROTOS_CONCURRENCY_MODEL.md` gain normative clarification in this revision.
+  `docs/design/CONCURRENCY_DESIGN.md` gain normative clarification in this revision.
 
 ## [0.1.296] - 2026-09-04
 
@@ -931,7 +946,7 @@ advance its revision.
 - Removed `Physical-locality discovery` from Open Design Topics.
 
 ### Changed
-- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Updated `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   296.
 
@@ -975,7 +990,7 @@ advance its revision.
 - Removed `Transport selection and switching` from Open Design Topics.
 
 ### Changed
-- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Updated `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   294.
 
@@ -1000,7 +1015,7 @@ advance its revision.
 - Removed both corresponding items from Open Design Topics.
 
 ### Changed
-- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Updated `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   293.
 
@@ -1043,7 +1058,7 @@ advance its revision.
 - Removed the corresponding item from Open Design Topics.
 
 ### Changed
-- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Updated `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   291.
 
@@ -1110,7 +1125,7 @@ advance its revision.
 - Removed `NUMA-aware scheduling` from Open Design Topics.
 
 ### Changed
-- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Updated `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   288.
 
@@ -1152,7 +1167,7 @@ advance its revision.
 - Left the exact behavior installation/replacement API and syntax open.
 
 ### Changed
-- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Updated `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   286.
 
@@ -1200,7 +1215,7 @@ advance its revision.
 - Removed `Module implementation sharing` from Open Design Topics.
 
 ### Changed
-- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Updated `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   284.
 
@@ -1222,7 +1237,7 @@ advance its revision.
 - Removed both corresponding items from Open Design Topics.
 
 ### Changed
-- Updated `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+- Updated `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md`.
 - Synchronized all five revisioned specification documents to document revision
   283.
@@ -1247,7 +1262,7 @@ advance its revision.
 ### Changed
 - Synchronized all revisioned specification documents to revision 282.
   `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
-  `PROTOS_CONCURRENCY_MODEL.md` gain normative clarification in this revision.
+  `docs/design/CONCURRENCY_DESIGN.md` gain normative clarification in this revision.
 
 ## [0.1.281] - 2026-09-04
 
@@ -1292,7 +1307,7 @@ advance its revision.
 - Removed all three corresponding items from Open Design Topics.
 
 ### Changed
-- Updated `PROTOS_RUNTIME_SEMANTICS.md` and `PROTOS_CONCURRENCY_MODEL.md`.
+- Updated `PROTOS_RUNTIME_SEMANTICS.md` and `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   280.
 
@@ -1315,7 +1330,7 @@ advance its revision.
 - Removed both corresponding items from Open Design Topics.
 
 ### Changed
-- Updated `PROTOS_RUNTIME_SEMANTICS.md` and `PROTOS_CONCURRENCY_MODEL.md`.
+- Updated `PROTOS_RUNTIME_SEMANTICS.md` and `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   279.
 
@@ -1360,7 +1375,7 @@ advance its revision.
   Topics.
 
 ### Changed
-- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Updated `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   277.
 
@@ -1383,7 +1398,7 @@ advance its revision.
 
 ### Changed
 - Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
-  `PROTOS_CONCURRENCY_MODEL.md`.
+  `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   276.
 
@@ -1446,7 +1461,7 @@ advance its revision.
 - Removed the corresponding item from Open Design Topics.
 
 ### Changed
-- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Updated `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   273.
 
@@ -1489,7 +1504,7 @@ advance its revision.
 - Removed `Select/race operations` from Open Design Topics.
 
 ### Changed
-- Updated `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_CONCURRENCY_MODEL.md`.
+- Updated `PROTOS_LANGUAGE_SPEC.md` and `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   271.
 
@@ -1539,7 +1554,7 @@ advance its revision.
 
 ### Changed
 - Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
-  `PROTOS_CONCURRENCY_MODEL.md`.
+  `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   269.
 
@@ -1605,7 +1620,7 @@ advance its revision.
 
 ### Changed
 - Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
-  `PROTOS_CONCURRENCY_MODEL.md`.
+  `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   266.
 
@@ -1648,7 +1663,7 @@ advance its revision.
   Design Topics.
 
 ### Changed
-- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Updated `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   264.
 
@@ -1699,7 +1714,7 @@ advance its revision.
 
 ### Changed
 - Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
-  `PROTOS_CONCURRENCY_MODEL.md`.
+  `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   262.
 
@@ -1722,7 +1737,7 @@ advance its revision.
   parallel collection API topic to parallel sort only.
 
 ### Changed
-- Updated `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_CONCURRENCY_MODEL.md`.
+- Updated `PROTOS_LANGUAGE_SPEC.md` and `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   261.
 
@@ -1790,7 +1805,7 @@ advance its revision.
 
 ### Changed
 - Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
-  `PROTOS_CONCURRENCY_MODEL.md`.
+  `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   258.
 
@@ -1841,7 +1856,7 @@ advance its revision.
 
 ### Changed
 - Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
-  `PROTOS_CONCURRENCY_MODEL.md`.
+  `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   256.
 
@@ -1912,7 +1927,7 @@ advance its revision.
 
 ### Changed
 - Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
-  `PROTOS_CONCURRENCY_MODEL.md`.
+  `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all five revisioned specification documents to document revision
   253.
 
@@ -1969,9 +1984,9 @@ advance its revision.
   semantics.
 
 ### Changed
-- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Updated `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 250.
 
 ## [0.1.249] - 2026-09-04
@@ -2027,9 +2042,9 @@ advance its revision.
 
 ### Changed
 - Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
-  `PROTOS_CONCURRENCY_MODEL.md`.
+  `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 248.
 
 ## [0.1.247] - 2026-09-04
@@ -2096,9 +2111,9 @@ advance its revision.
   Open Design Topics.
 
 ### Changed
-- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Updated `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 245.
 
 ## [0.1.244] - 2026-09-04
@@ -2122,10 +2137,10 @@ advance its revision.
   Design Topics.
 
 ### Changed
-- Updated `PROTOS_CONCURRENCY_MODEL.md` and, when its current stable semantic
+- Updated `docs/design/CONCURRENCY_DESIGN.md` and, when its current stable semantic
   anchor is present, `PROTOS_RUNTIME_SEMANTICS.md`.
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 244.
 
 ## [0.1.243] - 2026-09-04
@@ -2194,9 +2209,9 @@ advance its revision.
   Topics.
 
 ### Changed
-- Updated `PROTOS_CONCURRENCY_MODEL.md`.
+- Updated `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 241.
 
 ## [0.1.240] - 2026-09-04
@@ -2220,10 +2235,10 @@ advance its revision.
   Topics.
 
 ### Changed
-- Updated `PROTOS_CONCURRENCY_MODEL.md` and, where the current structure permits
+- Updated `docs/design/CONCURRENCY_DESIGN.md` and, where the current structure permits
   a stable anchor, `PROTOS_RUNTIME_SEMANTICS.md`.
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 240.
 
 ## [0.1.239] - 2026-09-04
@@ -2262,7 +2277,7 @@ advance its revision.
 - Updated normative P semantics from the repository state observed by this
   application attempt, without assuming a particular starting revision or SHA.
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 238.
 
 ## [0.1.237] - 2026-09-04
@@ -2472,10 +2487,10 @@ advance its revision.
 
 ### Changed
 - Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`,
-  `PROTOS_CONCURRENCY_MODEL.md`, and `PROTOS_IO_MODEL.md` for the byte-region
+  `docs/design/CONCURRENCY_DESIGN.md`, and `PROTOS_IO_MODEL.md` for the byte-region
   authority boundary.
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 229.
 
 ## [0.1.228] - 2026-09-04
@@ -2566,9 +2581,9 @@ advance its revision.
 
 ### Changed
 - Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
-  `PROTOS_CONCURRENCY_MODEL.md` with the closed physical-sharing boundary.
+  `docs/design/CONCURRENCY_DESIGN.md` with the closed physical-sharing boundary.
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 225.
 
 ## [0.1.224] - 2026-09-04
@@ -2650,9 +2665,9 @@ advance its revision.
 
 ### Changed
 - Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
-  `PROTOS_CONCURRENCY_MODEL.md` with the closed P bootstrap/API semantics.
+  `docs/design/CONCURRENCY_DESIGN.md` with the closed P bootstrap/API semantics.
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 222.
 
 ## [0.1.221] - 2026-09-04
@@ -2750,7 +2765,7 @@ advance its revision.
   normative I/O capability model to reflect the closed P isolation,
   publication, and authority boundaries.
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 218.
 
 ## [0.1.217] - 2026-09-03
@@ -2797,7 +2812,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 216.
 
 ## [0.1.215] - 2026-09-03
@@ -2865,7 +2880,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 213.
 
 ## [0.1.212] - 2026-09-03
@@ -2929,7 +2944,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 210.
 
 ## [0.1.209] - 2026-09-03
@@ -2978,7 +2993,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 208.
 
 ## [0.1.207] - 2026-09-03
@@ -3021,7 +3036,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 206.
 
 ## [0.1.205] - 2026-09-03
@@ -3104,7 +3119,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 202.
 
 ## [0.1.201] - 2026-09-03
@@ -3145,7 +3160,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 200.
 
 ## [0.1.199] - 2026-09-03
@@ -3232,7 +3247,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 196.
 
 ## [0.1.195] - 2026-09-03
@@ -3253,7 +3268,7 @@ advance its revision.
 ### Changed
 - Synchronized all revisioned specification documents to revision 195.
   `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
-  `PROTOS_CONCURRENCY_MODEL.md` gain normative semantic content in this revision.
+  `docs/design/CONCURRENCY_DESIGN.md` gain normative semantic content in this revision.
 
 ## [0.1.194] - 2026-09-03
 
@@ -3295,7 +3310,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 193.
 
 ## [0.1.192] - 2026-09-03
@@ -3373,7 +3388,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 189.
 
 ## [0.1.188] - 2026-09-03
@@ -3418,7 +3433,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 187.
 
 ## [0.1.186] - 2026-09-03
@@ -3593,7 +3608,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 178.
 
 ## [0.1.177] - 2026-09-03
@@ -3663,7 +3678,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 175.
 
 ## [0.1.174] - 2026-09-03
@@ -3733,7 +3748,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 172.
 
 ## [0.1.171] - 2026-09-03
@@ -3794,7 +3809,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 169.
 
 ## [0.1.168] - 2026-09-03
@@ -3856,7 +3871,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 166.
 
 ## [0.1.165] - 2026-09-03
@@ -3897,7 +3912,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 164.
 
 ## [0.1.163] - 2026-09-03
@@ -4006,7 +4021,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 159.
 
 ## [0.1.158] - 2026-09-03
@@ -4079,7 +4094,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 156.
 
 ## [0.1.155] - 2026-09-03
@@ -4156,7 +4171,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 152.
 
 ## [0.1.151] - 2026-09-03
@@ -4207,7 +4222,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 150.
 
 ## [0.1.149] - 2026-09-03
@@ -4338,7 +4353,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 144.
 
 ## [0.1.143] - 2026-09-03
@@ -4405,7 +4420,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 141.
 
 ## [0.1.140] - 2026-09-03
@@ -4489,7 +4504,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 137.
 
 ## [0.1.136] - 2026-09-03
@@ -4590,7 +4605,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 132.
 
 ## [0.1.131] - 2026-09-03
@@ -4651,7 +4666,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 129.
 
 ## [0.1.128] - 2026-09-03
@@ -4692,7 +4707,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 127.
 
 ## [0.1.126] - 2026-09-03
@@ -4735,7 +4750,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 125.
 
 ## [0.1.124] - 2026-09-03
@@ -4814,7 +4829,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 121.
 
 ## [0.1.120] - 2026-09-03
@@ -4888,7 +4903,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 117.
 
 ## [0.1.116] - 2026-09-03
@@ -4918,7 +4933,7 @@ advance its revision.
   reply, Actor-failure, and uncertainty semantics; this is an API vocabulary
   change, not a behavior change.
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 115.
 
 ### Rationale
@@ -4967,7 +4982,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 113.
 
 ## [0.1.112] - 2026-09-03
@@ -5022,7 +5037,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 110.
 
 ## [0.1.109] - 2026-09-03
@@ -5101,7 +5116,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 106.
 
 ## [0.1.105] - 2026-09-03
@@ -5117,7 +5132,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 105.
 
 ## [0.1.104] - 2026-09-03
@@ -5236,7 +5251,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 99.
 
 ## [0.1.98] - 2026-09-03
@@ -5276,7 +5291,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 97.
 
 ## [0.1.96] - 2026-09-03
@@ -5405,7 +5420,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 90.
 
 ## [0.1.89] - 2026-09-03
@@ -5428,7 +5443,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 89.
 
 ## [0.1.88] - 2026-09-03
@@ -5470,7 +5485,7 @@ advance its revision.
   implementation-extensible. Numeric and String identity continue to use their
   existing family-specific semantic rules.
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 87. No syntax,
   concurrency-model, or I/O-model semantics change in this revision.
 
@@ -5478,7 +5493,7 @@ advance its revision.
 ## [0.1.86] - 2026-09-03
 
 ### Fixed
-- Closed the concurrency specification-authority ambiguity. `PROTOS_CONCURRENCY_MODEL.md`
+- Closed the concurrency specification-authority ambiguity. `docs/design/CONCURRENCY_DESIGN.md`
   remains a mixed design ledger, but sections whose status is exactly `CLOSED` or
   `CLOSED --- REVISED` are now explicitly normative for Actor/Future/concurrency
   semantics. Sections carrying OPEN, PENDING, DIRECTION, DETAILS OPEN, API OPEN,
@@ -5495,7 +5510,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 86. No Actor, Future,
   scheduling, ordering, cancellation, I/O, or grammar behavior changes in this
   revision.
@@ -5514,7 +5529,7 @@ advance its revision.
 
 ### Changed
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 85. Only
   `PROTOS_IO_MODEL.md` gains normative semantic content in this revision; the
   other revisioned documents receive the common revision/date synchronization
@@ -5546,7 +5561,7 @@ advance its revision.
   errors merely because overflow, underflow, division by zero, or an invalid
   floating-point operation occurred.
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 84. No syntax,
   concurrency-model, or I/O-model semantics change in this revision.
 
@@ -5579,7 +5594,7 @@ advance its revision.
   object body. Composition may be performed incrementally while preserving the
   structural priority of direct local declarations.
 - Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`,
-  `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and
+  `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and
   `PROTOS_IO_MODEL.md` to document revision 83. No grammar,
   concurrency-model, or I/O-model semantics change in this revision.
 
@@ -5590,7 +5605,7 @@ advance its revision.
 - Fixed Core v0.1 to The Unicode Standard, Version 17.0.0 as the normative Unicode repertoire and property version. `XID_Start` and `XID_Continue` used by identifier recognition are now explicitly the Unicode 17.0.0 properties, and identifier NFC conformance is tied to the Unicode normalization specification applicable to Unicode 17.0.0.
 - Made host Unicode support non-normative: a JDK, VM, operating system, library, or other host Unicode database may be used only when it produces behavior equivalent to the Core v0.1 Unicode 17.0.0 requirements. Host-version differences must not change whether the same Protos source is lexically valid.
 - Defined the normative Unicode version as part of the Protos language version rather than the document revision. Changing the normative Unicode version therefore requires a language-version change.
-- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`, `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and `PROTOS_IO_MODEL.md` to document revision 82. Only `PROTOS_GRAMMAR.md` gains normative semantic content in this revision; the other revisioned documents receive the common revision/date synchronization only.
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`, `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and `PROTOS_IO_MODEL.md` to document revision 82. Only `PROTOS_GRAMMAR.md` gains normative semantic content in this revision; the other revisioned documents receive the common revision/date synchronization only.
 
 ### Implementation note
 - The current Java 21 lexer implementation derives Unicode identifier properties and NFC checks from host JDK Unicode facilities. After this specification change, that implementation remains incomplete for full Core v0.1 Unicode 17.0.0 conformance until its Unicode data path is made independent of host-version differences.
@@ -5598,14 +5613,14 @@ advance its revision.
 ## [0.1.81] - 2026-09-02
 
 ### Fixed
-- Removed the remaining ambiguity in `PROTOS_CONCURRENCY_MODEL.md` that listed the Process capability among runtime references an Actor may have implicitly. Process authority is not ambient and is available to an Actor only when explicitly provisioned at creation or explicitly delegated later; granting a subordinate Process-local facility does not implicitly grant the whole Process capability.
+- Removed the remaining ambiguity in `docs/design/CONCURRENCY_DESIGN.md` that listed the Process capability among runtime references an Actor may have implicitly. Process authority is not ambient and is available to an Actor only when explicitly provisioned at creation or explicitly delegated later; granting a subordinate Process-local facility does not implicitly grant the whole Process capability.
 - Made `Closable.close()` cancellation lifecycle semantics explicit in `PROTOS_IO_MODEL.md`: invoking `close()` begins permanent closing, and successful cancellation of the close operation never restores the receiver to the open state or re-enables operations requiring an open resource. Cancellation can only prevent close effects that have not yet become irreversible.
 - Made the default BOM rule deterministic: UTF8, UTF16LE, and UTF16BE consume an initial matching BOM by default; an explicit configuration may preserve it as U+FEFF.
 - Defined successful completion values for completion-only I/O operations. `write`, `flush`, `close`, `sync`, `writeText`, `writeLine`, `shutdownRead`, and `shutdownWrite` resolve their Futures to the receiver. Existing operations with value-bearing results, including `read`, `position`, `seek`, `size`, `truncate`, `readText`, and `readLine`, retain their previously specified result semantics.
-- Restored `PROTOS_CONCURRENCY_MODEL.md` Scope Roots to `DIRECTION CLOSED, DETAILS OPEN --- REVISED`; revision 80 closed the Process direction but did not close every remaining NodeRoot/ClusterRoot API/detail.
+- Restored `docs/design/CONCURRENCY_DESIGN.md` Scope Roots to `DIRECTION CLOSED, DETAILS OPEN --- REVISED`; revision 80 closed the Process direction but did not close every remaining NodeRoot/ClusterRoot API/detail.
 
 ### Changed
-- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`, `PROTOS_RUNTIME_SEMANTICS.md`, `PROTOS_CONCURRENCY_MODEL.md`, and `PROTOS_IO_MODEL.md` to document revision 81. No grammar production, core evaluator rule, or language syntax changes in this revision.
+- Synchronized `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_GRAMMAR.md`, `PROTOS_RUNTIME_SEMANTICS.md`, `docs/design/CONCURRENCY_DESIGN.md`, and `PROTOS_IO_MODEL.md` to document revision 81. No grammar production, core evaluator rule, or language syntax changes in this revision.
 
 ## [0.1.80] - 2026-09-02
 
@@ -5613,12 +5628,12 @@ advance its revision.
 - Added `PROTOS_IO_MODEL.md` as the normative domain model for Protos I/O. It defines byte-oriented asynchronous I/O capabilities (`ByteReadable`, `ByteWritable`, `Flushable`, `Closable`, `ByteSeekable`, `ByteSized`, `Truncatable`, `Syncable`, `ReadShutdown`, and `WriteShutdown`), I/O-operation commitment/cancellation, wrapper ownership, text adapters, encoding semantics, line reading, file-open dimensions, filesystem authority, Path/URL separation, Process I/O bootstrap, environment/argument snapshots, standard-stream availability/encoding, Actor-safe capability delegation, and pay-as-you-grow requirements.
 
 ### Changed
-- Refined `Process` in `PROTOS_CONCURRENCY_MODEL.md`: a Protos Process is an execution/isolation/failure domain, not normatively an operating-system process or address-space boundary. Every Protos execution has a lightweight Process and one RootActor even when no additional Actor is ever created. The former conceptual `ProcessRoot` role is folded into the Process runtime entity/capability itself.
+- Refined `Process` in `docs/design/CONCURRENCY_DESIGN.md`: a Protos Process is an execution/isolation/failure domain, not normatively an operating-system process or address-space boundary. Every Protos execution has a lightweight Process and one RootActor even when no additional Actor is ever created. The former conceptual `ProcessRoot` role is folded into the Process runtime entity/capability itself.
 - Defined Process as custodian of Process-local application-facing host authority. The RootActor owns initial Actor-local application state but receives appropriate Process capabilities at bootstrap; additional Actors do not implicitly inherit host/Process capabilities and receive only explicitly provisioned or delegated capabilities.
 - Added the I/O-domain cross-reference to `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and the concurrency I/O section. Clarified in Runtime Semantics that I/O `COMMITTED` is an operation-level concept and does not add a fifth Future state.
 - Replaced the stale frozen-prelude example based on an assumed `print` binding with an `Object` binding example. `print` is not made a required Core-prelude binding by this revision.
 - Updated the Language Specification encoding example to use encoding-owned one-shot operations (`UTF8.decode(bytes)` / `UTF8.encode(text)`) and delegated the standard encoding catalogue, decoding policy, BOM, and text-I/O rules to `PROTOS_IO_MODEL.md`.
-- Updated `AGENTS.md` so normative domain models are treated as source-of-truth documents for their semantic domains, while preserving the special design-ledger status of `PROTOS_CONCURRENCY_MODEL.md`.
+- Updated `AGENTS.md` so normative domain models are treated as source-of-truth documents for their semantic domains, while preserving the special design-ledger status of `docs/design/CONCURRENCY_DESIGN.md`.
 - Synchronized all revisioned specification/design documents to document revision 80. `PROTOS_GRAMMAR.md` receives only the common revision bump; revision 80 introduces no new I/O syntax and no grammar production changes.
 
 ### Scope
@@ -5629,18 +5644,18 @@ advance its revision.
 ### Changed
 - Corrected the canonical evaluator's evaluation order for explicit-target slot creation and assignment in `PROTOS_RUNTIME_SEMANTICS.md`: `Create(targetExpr?, name, valueExpr)` and `Assign(targetExpr?, name, valueExpr)` now evaluate the target expression before the value expression, matching the normative left-to-right order already stated in `PROTOS_LANGUAGE_SPEC.md`. `getObject().x = makeValue()` and `getObject().x: makeValue()` evaluate the target first, then the RHS, then perform the operation. When no target expression exists, only the RHS is evaluated, as before. Indexed Access Lowering already followed the same left-to-right order and is unchanged. No other assignment or slot-creation semantics changed.
 - Made the lexical-binding model of `PROTOS_RUNTIME_SEMANTICS.md` unambiguous. The conceptual operation `lexicalParentOf(context)` now formally returns the immediate lexical parent context of an execution context, and the association is established when the context is created: activation contexts take the closure's captured lexical context, construction contexts take the genuine lexical context chain of the enclosing activation, module contexts take the frozen prelude context, and the prelude context is the root of the lexical chain. `Activation.lexicalParent` holds `lexicalParentOf(activation.context)`, `lookupName` and `assignName` traverse the lexical chain only through `lexicalParentOf`, and `lexicalContextForClosureCreation` returns `activation.lexicalParent` for construction activations. Object delegation and lexical parenthood are now formally distinct: `Context` is the delegation prototype of execution contexts (`activationContext → Context → Object`), never their lexical parent, and bare-name lookup never walks a context's delegation chain. No observable lookup, capture, assignment, or construction semantics changed.
-- Replaced the shared-mutable-memory formulation of concurrency memory semantics with the Actor model already decided in `PROTOS_CONCURRENCY_MODEL.md`. `PROTOS_LANGUAGE_SPEC.md` (Concurrency Memory Semantics) and `PROTOS_RUNTIME_SEMANTICS.md` (Future Completion Visibility) no longer promise a general model of shared mutable objects, arbitrary data races, and explicit synchronization primitives. Both documents now state: ordinary Actor-local Future/task execution is cooperative and interleaves only at explicit suspension points, never executing Protos code simultaneously against the same mutable Actor state; between suspension points Actor-local state is serialized; different Actors share no mutable Protos references; explicit isolated parallel computation (whose API remains open) may execute simultaneously but crosses an isolation boundary and receives no arbitrary live mutable aliases to the calling Actor's state. The Future completion visibility guarantee is preserved. The empty `Futures and Concurrency` heading in `PROTOS_LANGUAGE_SPEC.md` was removed.
+- Replaced the shared-mutable-memory formulation of concurrency memory semantics with the Actor model already decided in `docs/design/CONCURRENCY_DESIGN.md`. `PROTOS_LANGUAGE_SPEC.md` (Concurrency Memory Semantics) and `PROTOS_RUNTIME_SEMANTICS.md` (Future Completion Visibility) no longer promise a general model of shared mutable objects, arbitrary data races, and explicit synchronization primitives. Both documents now state: ordinary Actor-local Future/task execution is cooperative and interleaves only at explicit suspension points, never executing Protos code simultaneously against the same mutable Actor state; between suspension points Actor-local state is serialized; different Actors share no mutable Protos references; explicit isolated parallel computation (whose API remains open) may execute simultaneously but crosses an isolation boundary and receives no arbitrary live mutable aliases to the calling Actor's state. The Future completion visibility guarantee is preserved. The empty `Futures and Concurrency` heading in `PROTOS_LANGUAGE_SPEC.md` was removed.
 - Replaced argument-spread examples in `PROTOS_LANGUAGE_SPEC.md` that used array-literal syntax Core v0.1 does not define (`values: [10, 20, 30]` and the neighboring `f.values([10, 20])`) with Core-valid code: the rest-capturing closure `pack: (...items) => items` produces the ordinary collection that is then spread. The `args == [1]` pseudo-example in the same section became `args.size == 1`. Core v0.1 still has no array literal syntax, and no grammar production changed.
-- Updated document revisions: `PROTOS_LANGUAGE_SPEC.md` 78 -> 79 and `PROTOS_RUNTIME_SEMANTICS.md` 78 -> 79. `PROTOS_GRAMMAR.md` 78 -> 79 and `PROTOS_CONCURRENCY_MODEL.md` 07 -> 79 are synchronized to the common revision 79: no semantic content changed in either document. All four documentation documents now share the same `Document revision`.
-- `spec/PROTOS_CONCURRENCY_MODEL.md` is now explicitly part of the documentation, with design-ledger status: it carries the shared `Document revision`, it no longer has its own independent ledger version (the title `Protos Multithreading Design Ledger v1` became `Protos Multithreading Design Ledger`), and every change to the document must be recorded in this changelog. The governing policy is stated in `AGENTS.md`.
+- Updated document revisions: `PROTOS_LANGUAGE_SPEC.md` 78 -> 79 and `PROTOS_RUNTIME_SEMANTICS.md` 78 -> 79. `PROTOS_GRAMMAR.md` 78 -> 79 and `docs/design/CONCURRENCY_DESIGN.md` 07 -> 79 are synchronized to the common revision 79: no semantic content changed in either document. All four documentation documents now share the same `Document revision`.
+- `docs/design/CONCURRENCY_DESIGN.md` is now explicitly part of the documentation, with design-ledger status: it carries the shared `Document revision`, it no longer has its own independent ledger version (the title `Protos Multithreading Design Ledger v1` became `Protos Multithreading Design Ledger`), and every change to the document must be recorded in this changelog. The governing policy is stated in `AGENTS.md`.
 
 ### Fixed
-- `PROTOS_CONCURRENCY_MODEL.md` still carried `Document revision: 07` although revision 0.1.78 synchronized all four documents to the common revision 78. Its content (including the CLOSED section 72 added in 0.1.78) corresponds to the revision described by that changelog entry, so the header now reads 79, sharing the common documentation revision; no semantic content changed. The document remains a design ledger with CLOSED and OPEN sections, and nothing OPEN in it was promoted to Core by this revision.
+- `docs/design/CONCURRENCY_DESIGN.md` still carried `Document revision: 07` although revision 0.1.78 synchronized all four documents to the common revision 78. Its content (including the CLOSED section 72 added in 0.1.78) corresponds to the revision described by that changelog entry, so the header now reads 79, sharing the common documentation revision; no semantic content changed. The document remains a design ledger with CLOSED and OPEN sections, and nothing OPEN in it was promoted to Core by this revision.
 
 ## [0.1.78] - 2026-09-02
 
 ### Changed
-- Synchronized document revisions: all four canonical documents now carry document revision 78. `PROTOS_LANGUAGE_SPEC.md` 77 -> 78, `PROTOS_RUNTIME_SEMANTICS.md` 76 -> 78, `PROTOS_GRAMMAR.md` 75 -> 78, and `PROTOS_CONCURRENCY_MODEL.md` from its former independent document revision 07 to the common revision 78. Language version remains 0.1.
+- Synchronized document revisions: all four canonical documents now carry document revision 78. `PROTOS_LANGUAGE_SPEC.md` 77 -> 78, `PROTOS_RUNTIME_SEMANTICS.md` 76 -> 78, `PROTOS_GRAMMAR.md` 75 -> 78, and `docs/design/CONCURRENCY_DESIGN.md` from its former independent document revision 07 to the common revision 78. Language version remains 0.1.
 - Formalized `Context` as the standard prototype for execution-context objects (design option A). Execution contexts remain ordinary Protos objects with ordinary delegation: an activation context and a `moduleContext` each delegate through `Context` to `Object`. `Context` is a standard prelude prototype, is not a reserved word, and is distinct from the reserved intrinsic pseudo-identifier `context`. Runtime pseudocode no longer refers to an undefined `standardContextPrototype`: activation contexts and module contexts are created with `parent = Context`, and behavior provided by `Context` is inherited through ordinary Protos delegation with no special lookup mechanism.
 - Closed the shared-prelude / shallow-freeze / Actor-isolation hole. New invariant: any Protos object physically shared between Actors through the standard prelude must be semantically immutable for the duration of that sharing, and mutable Protos state reachable through standard facilities must be Actor-local. Freezing the prelude remains shallow and is not by itself sufficient to make objects referenced by its slots safe to share. No deep freeze is introduced; Actor isolation is not weakened; and implementations may physically share immutable implementation artifacts (parsed syntax, bytecode, machine code, immutable metadata, immutable constant data) where sharing is semantically unobservable, without being required to duplicate immutable data unnecessarily.
 - Removed stale export terminology from the module rules. Core v0.1 has no export declarations, no export namespace, no `exports` object, and no separate export mechanism: `import(specifier)` is an ordinary operation exposed by the standard environment, it yields the module instance, and cross-module access occurs explicitly by obtaining a module instance and accessing its slots through ordinary member lookup. The obsolete wording "module/import/export mechanism" and "Import/export syntax is intentionally not defined ... and will be specified with the module system" was replaced consistently. Host-specific resolution of files, packages, standard-library modules, and search paths remains outside Core v0.1.
@@ -5649,7 +5664,7 @@ advance its revision.
 
 ### Fixed
 - Corrected broken "the language" wording artifacts in `PROTOS_RUNTIME_SEMANTICS.md` (e.g., "a the language object" -> "a language object", "ordinary the language error object" -> "ordinary language error object").
-- `PROTOS_CONCURRENCY_MODEL.md` gains a CLOSED section 72, Standard Prelude Sharing, making the Actor-isolation rule and the standard-prelude rule explicitly agree; the document's module-state section already permitted sharing immutable implementation artifacts.
+- `docs/design/CONCURRENCY_DESIGN.md` gains a CLOSED section 72, Standard Prelude Sharing, making the Actor-isolation rule and the standard-prelude rule explicitly agree; the document's module-state section already permitted sharing immutable implementation artifacts.
 
 ## [0.1.77] - 2026-09-02
 
@@ -5667,11 +5682,11 @@ advance its revision.
 - `PROTOS_GRAMMAR.md` revision 73 -> 74: `closure-expression = closure-parameters, "=>", closure-body`, with `closure-parameters = parameter-list | identifier`; `closure-body = braced-closure-body | expression`; `braced-closure-body = "{", expression-sequence, "}"`; and `trailing-closure = braced-closure-body`. Closures §16 was extended with subsections specifying parameter forms, body forms and exact equivalence, composition with the expression grammar, right association of nested expression-bodied Closures, newline handling, and valid/invalid examples; the Whitespace and Newlines section now makes the `=>` continuation and identifier/`=>` newline cases explicit; the Compact EBNF and the trailing-closure section were updated consistently.
 - `PROTOS_LANGUAGE_SPEC.md` revision 76 -> 77: the Closures section now presents the expression-body and single-parameter shorthand spellings and their exact equivalence and identical runtime semantics; Return Semantics notes that in an expression-bodied Closure the single body expression supplies the normal return value; the Trailing Closures section clarifies that the shorthand never reintroduces trailing closures.
 - `PROTOS_RUNTIME_SEMANTICS.md` was not modified and remains at revision 76: no normative runtime behavior changed. Expression-bodied Closures are pure syntax and desugar before reaching the runtime; the existing Closure Creation, method binding, non-local return, Future, and error semantics apply unchanged to every spelling.
-- `PROTOS_CONCURRENCY_MODEL.md` was not modified and remains at its independent document revision 07.
+- `docs/design/CONCURRENCY_DESIGN.md` was not modified and remains at its independent document revision 07.
 - Closed audit defect G1: the rev-77 production `closure-body = braced-closure-body | expression` formally admitted a second derivation for any Closure body whose first parser token is `{` — `x => { value: x }` could derive through `expression` reaching `object-expression` -> `object-body` as well as through `braced-closure-body` — although this revision's normative text already specifies that the `{` immediately after `=>` always begins the Closure's braced body. G1 is a formalization defect, not a semantic one: no Closure semantics are changed, and no new semantic decision is made. The grammar now expresses the already-decided rule itself: `closure-body = braced-closure-body | [ lookahead != "{" ], expression`. The single-expression alternative carries a first-token guard (new EBNF notation defined in the grammar's Scope section) permitting entry only when the next parser token in the continuing token sequence is not `{`; because `braced-closure-body` begins with the literal `{`, the two alternatives are disjoint on the body's first token, and a `{`-initial body has exactly one derivation — the braced form.
 - The correction does not change any other expression: object expressions keep their full grammar and semantics (`x => parent { value: x }` remains an expression-bodied Closure returning an object whose parent is `parent`); trailing-closure syntax remains `trailing-closure = braced-closure-body`, parameterless and braced-only; and every expression-bodied spelling valid in 0.1.77 remains valid (`x => x + 1`, `x => foo(x)`, `x => this.value = x`, `x => ^x`, `x => y => x + y`, `x => ({ ... })`, `(x => x * 2)(10)`, and newline-continued bodies such as `x =>` followed by an indented body). No new keyword, no new callable category, no parser heuristic, no speculative parse, and no type-based or semantic disambiguation is introduced; the boundary is decided by the formal grammar. `x => { value: x }` is a braced Closure whose body is the slot-creation expression `value: x`, and `x => ({ value: x })` is the expression-bodied Closure whose parenthesized body evaluates to the object.
 - `PROTOS_GRAMMAR.md` revision 74 -> 75: the normative `closure-body` production in Closures §16 and its copy in the Compact EBNF now carry the `[ lookahead != "{" ]` guard on the single-expression alternative; the EBNF notation list in Scope defines the guard; Closures §16 states that the two body forms are disjoint on the body's first token and adds the boundary examples `x => { value: x }` (braced body) versus `x => ({ value: x })` (expression body yielding an object); the Compact EBNF explanatory note is updated consistently.
-- `PROTOS_LANGUAGE_SPEC.md` was not modified and remains at revision 77: its normative statement that the `{` immediately after `=>` always begins the Closure's braced body is the already-decided semantics, and no normative rule needed to change for a grammar formalization correction. `PROTOS_RUNTIME_SEMANTICS.md` was not modified and remains at revision 76. `PROTOS_CONCURRENCY_MODEL.md` was not modified and remains at its independent document revision 07.
+- `PROTOS_LANGUAGE_SPEC.md` was not modified and remains at revision 77: its normative statement that the `{` immediately after `=>` always begins the Closure's braced body is the already-decided semantics, and no normative rule needed to change for a grammar formalization correction. `PROTOS_RUNTIME_SEMANTICS.md` was not modified and remains at revision 76. `docs/design/CONCURRENCY_DESIGN.md` was not modified and remains at its independent document revision 07.
 
 ## [0.1.76] - 2026-09-02
 
@@ -5684,7 +5699,7 @@ advance its revision.
 - The module body corresponding to a previously standalone entry may execute again and its side effects may occur again when it is later imported. This does not violate cache-before-execute or the D6 invariant of at most one active cached module instance per `ModuleKey`, because the standalone instance never was the cached module instance of that `ModuleKey`.
 - The rev-75 formulation that the "normal canonical-identity rules apply if the host later gives it a canonical identity" is superseded: the later appearance of an importable canonical identity does not apply those rules retroactively to an existing standalone instance.
 - No syntax and no grammar production changed; D5 and D6 semantics remain unchanged in full (module instance = `moduleContext`; Actor-local module instances and caches; canonical `ModuleKey` identity; cache-before-execute; `INITIALIZING` and `READY`; at most one active cached instance per `ModuleKey` per Actor; cache membership distinct from object reachability; cyclic imports legal; recursive import of an `INITIALIZING` module returns the same partial instance immediately; no hidden suspension; no module TDZ, slot predeclaration, or hoisting; ordinary missing-slot semantics; successful initialization retains the cached instance; failed initialization removes the cache entry and a later import may retry with a fresh instance; escaped failed partial instances remain ordinary reachable objects; no rollback or revocation; importable initial module cached as `INITIALIZING` before execution; host-specific specifier resolution outside Core v0.1; `import()` remains eager and injects no lexical bindings).
-- Updated canonical documents to revision 76: `PROTOS_LANGUAGE_SPEC.md` (entry classification fixed at execution start; standalone instances never retroactively adopted; later import of equivalent code may create a distinct instance) and `PROTOS_RUNTIME_SEMANTICS.md` (clarity that the standalone/importable choice is made before the entry executes, that `executeStandaloneEntry` instances remain outside the cache and cannot be adopted later, and that `executeInitialModule` never adopts an existing standalone instance). `PROTOS_GRAMMAR.md` was not modified and remains at revision 73. `PROTOS_CONCURRENCY_MODEL.md` required no change for D7 and remains at its independent document revision 07 (revision 07 was established earlier for the unrelated Isolated Parallel Execution design section); its module/ownership statements are already consistent with D7.
+- Updated canonical documents to revision 76: `PROTOS_LANGUAGE_SPEC.md` (entry classification fixed at execution start; standalone instances never retroactively adopted; later import of equivalent code may create a distinct instance) and `PROTOS_RUNTIME_SEMANTICS.md` (clarity that the standalone/importable choice is made before the entry executes, that `executeStandaloneEntry` instances remain outside the cache and cannot be adopted later, and that `executeInitialModule` never adopts an existing standalone instance). `PROTOS_GRAMMAR.md` was not modified and remains at revision 73. `docs/design/CONCURRENCY_DESIGN.md` required no change for D7 and remains at its independent document revision 07 (revision 07 was established earlier for the unrelated Isolated Parallel Execution design section); its module/ownership statements are already consistent with D7.
 
 ## [0.1.75] - 2026-09-02
 
@@ -5697,7 +5712,7 @@ advance its revision.
 - Failed-instance references are not revoked, not rolled back, and do not enter a hidden invalid-object state; removing a cache entry does not invalidate the instance object. No tombstone, revocation, identity mutation, or hidden invalidation is introduced.
 - Runtime pseudocode in `PROTOS_RUNTIME_SEMANTICS.md` is factored so that ordinary import and Actor startup of an importable initial module share one module-instance lifecycle (`ensureModuleInstance`, called by `importModule` and `executeInitialModule`), making creation of a duplicate instance for the same canonical identity impossible. A non-importable host entry point is executed directly by `executeStandaloneEntry` without fake cache registration.
 - No syntax and no grammar production changed; D5 semantics remain unchanged in full (module instance = `moduleContext`; Actor-local module caches; canonical `ModuleKey`; cache-before-execute; `INITIALIZING` and `READY`; cyclic imports are legal; recursive import of an `INITIALIZING` module returns the same partial instance immediately; no hidden suspension; no module TDZ, slot predeclaration, or hoisting; ordinary missing-slot semantics; successful initialization retains the cached instance; failed initialization removes the cache entry and a later import may retry with a fresh instance; no rollback of side effects; escaped references to failed partial instances are not revoked; host-specific module-specifier resolution remains host-defined; module instances remain Actor-local; immutable compiled/code artifacts may be shared invisibly).
-- Updated canonical documents to revision 75: `PROTOS_LANGUAGE_SPEC.md` (initial-module cache registration, module-cache authority, escaped-failed-instance coexistence) and `PROTOS_RUNTIME_SEMANTICS.md` (factored module-instance lifecycle pseudocode). `PROTOS_GRAMMAR.md` was not modified. `PROTOS_CONCURRENCY_MODEL.md` (a design ledger, not a canonical document) was updated to its independent document revision 06 to replace the imprecise "module singleton per Actor" wording with the active-cached-instance invariant and to confirm that the RootActor's initial module is not outside the module model merely because it started the Process.
+- Updated canonical documents to revision 75: `PROTOS_LANGUAGE_SPEC.md` (initial-module cache registration, module-cache authority, escaped-failed-instance coexistence) and `PROTOS_RUNTIME_SEMANTICS.md` (factored module-instance lifecycle pseudocode). `PROTOS_GRAMMAR.md` was not modified. `docs/design/CONCURRENCY_DESIGN.md` (a design ledger, not a canonical document) was updated to its independent document revision 06 to replace the imprecise "module singleton per Actor" wording with the active-cached-instance invariant and to confirm that the RootActor's initial module is not outside the module model merely because it started the Process.
 
 ## [0.1.74] - 2026-09-02
 

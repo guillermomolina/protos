@@ -1,12 +1,12 @@
 # Protos Actors v0.1
 
 Language version: 0.1
-Document revision: 328
+Document revision: 334
 Status: Draft
 Last updated: 2026-09-04
 
 This document is the primary normative owner of the Core Actor-domain semantics
-migrated from `../PROTOS_CONCURRENCY_MODEL.md`.
+migrated from `docs/design/CONCURRENCY_DESIGN.md`.
 
 Legacy section numbers are intentionally retained during modularization so
 existing citations remain understandable. Compatibility headings left in the

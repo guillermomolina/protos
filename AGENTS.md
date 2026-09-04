@@ -314,14 +314,13 @@ Normative domain models supplement those core documents for semantically substan
 - `spec/concurrency/FUTURES_AND_TASKS.md` — primary normative owner of migrated Core Future/task semantics.
 - `spec/concurrency/ACTORS.md` — primary normative owner of migrated Core Actor semantics.
 - `spec/concurrency/PARALLEL_EXECUTION.md` — primary normative owner of migrated Core isolated-parallel (P) semantics.
-- `spec/PROTOS_CONCURRENCY_MODEL.md` — non-normative historical/design ledger; it contains no normative observable behavior after revision 328.
-- `spec/concurrency/DISTRIBUTED_RUNTIME.md` — primary normative owner of migrated Process/Node/Cluster/Group/distributed-runtime semantics; unresolved design-qualified material remains in the transitional ledger.
+- `spec/concurrency/DISTRIBUTED_RUNTIME.md` — primary normative owner of migrated Process/Node/Cluster/Group/distributed-runtime semantics. Unresolved concurrency design work is non-normative and lives in `docs/design/CONCURRENCY_DESIGN.md`.
 
 Treat the canonical core documents together with applicable normative domain models as the source of truth for observable language/standard semantics in their respective domains.
 
-Concurrency modularization is complete for normative CLOSED material. The
-legacy `spec/PROTOS_CONCURRENCY_MODEL.md` is design/history only; compatibility
-anchors there never create normative authority.
+Concurrency modularization is complete for normative material. Historical and
+unresolved concurrency design notes live outside the normative specification in
+`docs/design/CONCURRENCY_DESIGN.md`.
 
 Before implementing or modifying syntax, parsing, object semantics, invocation, lookup, control flow, errors, concurrency, built-in protocols, or other observable language behavior, inspect the relevant specification sections first.
 
@@ -716,7 +715,7 @@ Do not change licensing terms or make licensing-policy decisions implicitly as p
 
 ### Concurrency design work
 
-- `spec/PROTOS_CONCURRENCY_MODEL.md` is a mixed document: a section whose status is exactly `CLOSED` or `CLOSED --- REVISED` is normative concurrency-domain semantics; a section whose status contains OPEN, PENDING, DIRECTION, DETAILS OPEN, API OPEN, or another design-only qualifier is non-normative unless and until its status is changed explicitly.
+- `docs/design/CONCURRENCY_DESIGN.md` is a mixed document: a section whose status is exactly `CLOSED` or `CLOSED --- REVISED` is normative concurrency-domain semantics; a section whose status contains OPEN, PENDING, DIRECTION, DETAILS OPEN, API OPEN, or another design-only qualifier is non-normative unless and until its status is changed explicitly.
 - Normative status is section-local. A CLOSED section may explicitly state that a named API, syntax, policy, mechanism, or implementation detail remains open; that open subtopic is not made normative merely by appearing inside the CLOSED section.
 - The global specification revision is the revision of the newest entry in `spec/PROTOS_SPEC_CHANGELOG.md`.
 - A normative document's `Document revision` records the newest global specification revision that changed that document. Document revisions are intentionally not synchronized.

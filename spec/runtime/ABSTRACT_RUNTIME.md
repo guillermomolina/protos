@@ -1,7 +1,7 @@
 # Protos Abstract Runtime v0.1
 
 Language version: 0.1
-Document revision: 329
+Document revision: 334
 Status: Informative — non-normative
 Last updated: 2026-09-04
 This document is an informative abstract execution model and pseudocode aid.
@@ -16,7 +16,7 @@ normative owner, the normative owner controls and this document must be correcte
 Implementations may use different machinery whenever they preserve the normative
 observable behavior.
 
-`../PROTOS_CONCURRENCY_MODEL.md` is a non-normative historical/design ledger.
+`docs/design/CONCURRENCY_DESIGN.md` is a non-normative historical/design ledger.
 
 ---
 
@@ -2479,7 +2479,7 @@ same `handlerMatches` algorithm for those objects; no separate error type system
 exists.\n
 ## Module Instances and the Actor-Local Module Cache
 
-Module identity, caching, initialization, cycle handling, and failure are Actor-local. Each Actor owns a module cache keyed by canonical internal module identity. An Actor is an isolated domain of mutable Protos state and execution, with no shared mutable Protos memory between Actors. The module cache and the module instances it holds are part of that Actor's isolated runtime state. The broader Actor concurrency model is developed in `../PROTOS_CONCURRENCY_MODEL.md`; this section depends only on the isolation and ownership consequences stated here.
+Module identity, caching, initialization, cycle handling, and failure are Actor-local. Each Actor owns a module cache keyed by canonical internal module identity. An Actor is an isolated domain of mutable Protos state and execution, with no shared mutable Protos memory between Actors. The module cache and the module instances it holds are part of that Actor's isolated runtime state. The broader Actor concurrency model is developed in `docs/design/CONCURRENCY_DESIGN.md`; this section depends only on the isolation and ownership consequences stated here.
 
 Conceptually, the Actor-owned module state is:
 

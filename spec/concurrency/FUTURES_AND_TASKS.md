@@ -1,13 +1,13 @@
 # Protos Futures and Tasks v0.1
 
 Language version: 0.1
-Document revision: 328
+Document revision: 334
 Status: Draft
 Last updated: 2026-09-04
 
 This document is the primary normative owner of Core Future and task semantics
 that have been migrated out of `../PROTOS_LANGUAGE_SPEC.md` and
-`../PROTOS_CONCURRENCY_MODEL.md`.
+`docs/design/CONCURRENCY_DESIGN.md`.
 
 During modularization, legacy section numbers are retained where useful so
 existing citations remain understandable. Compatibility headings left in the
