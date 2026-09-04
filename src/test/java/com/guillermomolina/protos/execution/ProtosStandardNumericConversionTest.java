@@ -60,7 +60,7 @@ class ProtosStandardNumericConversionTest {
 
         assertThrows(
                 ProtosSignalException.class,
-                () -> execute(prelude, "Integer(9007199254740991.5)"));
+                () -> execute(prelude, "Integer(1.5)"));
     }
 
     @Test

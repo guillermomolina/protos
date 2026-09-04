@@ -4,6 +4,27 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.46-SNAPSHOT] - 2026-09-04
+
+### Fixed
+
+- Corrected the P62 non-integral Float-to-Integer rejection test to use `1.5`,
+  a binary64 value that is actually finite and mathematically non-integral.
+- Removed the incorrect test assumption that the source literal
+  `9007199254740991.5` remains non-integral after Float literal rounding; that
+  decimal source rounds to the exact binary64 value `9007199254740992.0`,
+  which is mathematically integral and therefore valid input to `Integer(...)`.
+- Project implementation version changed from `0.2.45-SNAPSHOT` to
+  `0.2.46-SNAPSHOT`.
+
+### Notes
+
+- No runtime conversion semantics changed.
+- Existing P62 implementation remains unchanged.
+- No normative specification change is introduced.
+- D027/B003 remains untouched.
+
+
 ## [0.2.45-SNAPSHOT] - 2026-09-04
 
 ### Added
