@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 229
+Document revision: 230
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3498,6 +3498,60 @@ Consistent with the existing assignment-expression rule, indexed assignment eval
 
 
 ## Standard Array Indexed-State Semantics
+
+### Standard Array factory invocation
+
+The standard invocation behavior provided by `Array` creates fresh receiver-owned
+standard Array indexed state instead of using `Object`'s default
+child-plus-`init` constructor.
+
+Conceptually:
+
+```text
+function standardArrayFactoryInvoke(invocationReceiver, arguments):
+    return newStandardArrayWithElements(
+        elements = arguments,
+        parent = invocationReceiver,
+        state = open
+    )
+```
+
+`arguments` is the already-evaluated outgoing positional argument vector.
+Construction preserves its order and stores the exact argument object
+references.
+
+`newStandardArrayWithElements` creates a fresh identity and fresh standard Array
+indexed state. Its optional `parent` parameter fixes the new Array's delegation
+parent; it does not copy indexed state from that parent and does not require the
+parent itself to own Array state.
+
+The standard prelude `Array` object exposes this invocation behavior through the
+ordinary invocation protocol. If another prototype inherits that same behavior
+through ordinary delegation, invoking that prototype uses the actual invocation
+receiver as `parent` for the fresh Array. Thus inherited factory behavior creates
+new Array state without reclassifying the prototype receiver itself.
+
+No `init` message is sent by this standard factory behavior. No argument value
+is interpreted as a requested length or capacity. In particular, one semantic
+Integer argument is one Array element exactly like any other object.
+
+The operation performs no Protos user-code callback after invocation begins.
+Implementations may allocate backing storage eagerly, lazily, compactly, or
+through copy-on-write machinery provided fresh Array identity, exact element
+references, element order, parent, open state, and all ordinary Array semantics
+remain observationally identical.
+
+The existing conceptual use:
+
+```text
+newStandardArrayWithElements(values)
+```
+
+for runtime-created Arrays such as `args` and rest bindings remains valid; when
+no explicit parent is shown there, it denotes the standard `Array` parent unless
+that surrounding rule explicitly specifies another parent.
+
+
 
 Standard Array primitives operate on receiver-owned dense indexed state.
 

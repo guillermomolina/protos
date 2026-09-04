@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 229
+Document revision: 230
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -2680,6 +2680,77 @@ object.foo[index]: value
 
 
 ## Standard Array Indexed Semantics
+
+### Standard Array construction through ordinary invocation
+
+The standard prelude `Array` object specializes the ordinary polymorphic
+invocation protocol as an Array factory.
+
+A call:
+
+```js
+Array()
+Array(a)
+Array(a, b, c)
+```
+
+creates a fresh **open standard Array** whose receiver-owned indexed elements
+are exactly the supplied positional argument objects, in order.
+
+There is no argument-type overload. In particular:
+
+```js
+Array(3)
+```
+
+creates a one-element Array whose element at index `0` is the exact supplied
+Integer object `3`. It does **not** mean "create an Array of length 3".
+Core v0.1 defines no implicit length constructor, fill constructor, or
+numeric-special constructor behavior.
+
+The factory is shallow: argument objects are neither cloned nor frozen. The new
+Array contains the exact supplied object references.
+
+Each successful invocation creates a fresh Array identity, including
+zero-argument invocation. Two empty Arrays created by separate calls are not
+identical under `===`.
+
+The created Array's delegation parent is the object whose standard Array-factory
+invocation behavior was selected as the invocation receiver. Therefore the
+ordinary prototype mechanism composes with Array construction:
+
+```js
+MyArray: Array {
+    label: "custom"
+}
+
+values: MyArray(10, 20)
+```
+
+`values` owns standard Array indexed state, while its delegation parent is
+`MyArray`. `MyArray` itself does not acquire indexed state merely by delegating
+to `Array`.
+
+This rule does not weaken the standard Array receiver-domain invariant.
+Inheriting or copying ordinary indexed operations such as `at`, `atPut`,
+`size`, or `each` still does not confer indexed state on their receiver.
+The Array-factory invocation behavior is different: it creates a **new** object
+with standard Array state and does not mutate or reclassify the invocation
+receiver.
+
+The standard Array factory does not send `init` to the created Array and does
+not use `Object`'s default child-plus-`init` construction path. This is an
+ordinary specialization of the existing polymorphic invocation protocol, not a
+second construction syntax or callable category. A prototype that wants
+different construction behavior may specialize its ordinary invocation
+behavior in the same way any other object may.
+
+Argument expressions and call spread are evaluated before invocation under the
+existing left-to-right call rules. Once invocation begins, standard Array
+construction performs no user callback, conversion, equality, hashing,
+iteration, or hidden suspension.
+
+
 
 A standard `Array` is an identity-bearing object with receiver-owned indexed
 element state. Its indexed contents are distinct from its ordinary local slots,

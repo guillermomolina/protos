@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.230] - 2026-09-04
+
+### Fixed
+- Defined the standard `Array` invocation behavior as an ordinary polymorphic
+  factory for fresh open standard Arrays.
+- Defined supplied positional arguments as the new Array's exact elements in
+  order, with no numeric-length overload: `Array(3)` is one element `3`.
+- Defined each call, including `Array()`, to create a fresh Array identity with
+  shallow element references.
+- Composed inherited Array-factory behavior with prototypes by making the actual
+  invocation receiver the new Array's delegation parent without granting that
+  receiver indexed state.
+- Kept indexed-state receiver-domain rules intact: ordinary Array methods do not
+  confer state; the factory creates a separate new state-owning object.
+- Defined the standard Array factory not to send `init`, run callbacks, perform
+  conversions, or introduce hidden suspension after ordinary argument
+  evaluation.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 230.
+  Only `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain
+  normative semantic content in this revision.
+
 ## [0.1.229] - 2026-09-04
 
 ### Closed
