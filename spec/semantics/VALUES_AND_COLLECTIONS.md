@@ -1726,6 +1726,40 @@ operations `add(value)` and `removeAt(index)`. This does not change the existing
 `atPut(index, value)` contract: `atPut` replaces one existing octet and never
 changes sequence length.
 
+#### Standard Bytes-producing results
+
+Unless an operation's normative contract explicitly says that it returns an
+existing object, every successful Core-standard operation whose normal result
+is specified as a `Bytes` object produces a fresh **open** standard Bytes
+identity. This rule applies independently to every successful invocation,
+including an invocation whose resulting byte sequence is empty. The result has
+the standardized `Bytes` factory object as its delegation parent, exactly as a
+direct invocation of that factory does, and owns its ordinary local slots and
+mutable byte-sequence state.
+
+No such result is identical to a Bytes object returned by another invocation,
+to a source or argument Bytes object, to the producing receiver, or to an
+implementation-controlled buffer. Consequently, mutation of the result through
+ordinary slot operations, `atPut`, `add`, or `removeAt` cannot change another
+result, a source/argument object, the producer, or any later operation's result;
+mutation of those objects cannot change the returned result. Primitive identity,
+`identityHashOf`, `IdentityMap`, default `==`/`hash`, and open/closed/frozen
+observations follow from these distinct ordinary Bytes identities and states.
+
+This is a semantic identity and mutable-state guarantee, not a physical-copy
+requirement. Immutable backing, copy-on-write, slicing, persistent storage,
+zero-copy, lazy materialization, scalar replacement, and other physical sharing
+or virtualization remain permitted when no Protos observation can reveal shared
+mutable state or collapsed identity.
+
+An operation that fails, is cancelled before successful result commitment, or
+otherwise has no normal Bytes result exposes no partially constructed Bytes
+result merely because an implementation had begun producing or buffering its
+octets. Actor and isolated-P boundaries do not preserve a source-domain result
+object's identity: if this Bytes later crosses such a boundary, the applicable
+value-transfer rules independently determine the destination-domain logical
+copy or reconstruction.
+
 #### Standard empty Bytes construction
 
 Where the standardized `Bytes` factory object is available, its ordinary
@@ -1736,7 +1770,8 @@ Bytes()
 ```
 
 and creates a fresh **open**, empty standard Bytes object with receiver-owned
-byte-sequence state.
+byte-sequence state, consistently with the general standard Bytes-producing
+result rule above.
 
 Core v0.1 does not require `Bytes` to be a binding of the Core prelude; that
 availability boundary remains owned by the I/O model and standard-library

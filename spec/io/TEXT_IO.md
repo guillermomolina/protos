@@ -94,6 +94,13 @@ contract unless another standard explicitly says otherwise.
 
 They are in-memory operations and do not return Futures.
 
+Every successful `encoding.encode(text)` result is a standard Bytes-producing
+result governed by `../semantics/VALUES_AND_COLLECTIONS.md`. Each invocation
+therefore returns its own fresh open Bytes identity and independent mutable
+state, including when the encoded result is empty; it is not mutable state of
+the reusable Encoding descriptor or an implementation-controlled encoder
+buffer.
+
 For the standard one-shot operations, `encoding.encode(text)` requires `text` to be a Protos `String`, and `encoding.decode(bytes)` requires `bytes` to be a Protos `Bytes` value. These are exact semantic argument domains, not conversion requests.
 
 A non-`String` argument to `encode` and a non-`Bytes` argument to `decode` fail synchronously under ordinary argument/type-validation semantics before any encoding or decoding work is performed. Because these operations are explicitly synchronous/non-Future, such validation does not manufacture a failed Future.

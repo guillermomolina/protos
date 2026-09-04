@@ -59,7 +59,11 @@ ByteReadable {
 
 `maxBytes` must be an `Integer` greater than zero. `read(0)` is an error.
 
-A successful non-EOF result is a `Bytes` object containing from 1 through `maxBytes` octets.
+A successful non-EOF result is a `Bytes` object containing from 1 through
+`maxBytes` octets. It is a standard Bytes-producing result governed by
+`../semantics/VALUES_AND_COLLECTIONS.md`: each successful non-EOF read resolves
+to its own fresh open Bytes identity and independent mutable state, not to the
+receiver's internal buffer or a Bytes object reused by another read.
 
 `null` means end-of-file/end-of-sequence for the receiver's current sequence state. For a receiver whose sequence state cannot subsequently gain readable data, that EOF is permanent. For a receiver that explicitly represents a mutable sequence whose contents/extent may change, a later state change may make data readable again according to that concrete receiver's contract.
 
