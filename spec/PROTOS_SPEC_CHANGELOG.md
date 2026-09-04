@@ -8,6 +8,34 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+
+## [0.1.365] - 2026-09-04
+
+### Portable Core delegation topology (D027)
+- Closes the observable standard-object topology with one general rule: every
+  Core-standard visible object whose immediate parent is not otherwise specified
+  delegates directly to `Object`.
+- Preserves existing explicit exceptions, including the numeric hierarchy,
+  standard Error taxonomy, `Context` ancestry, factory-result parentage, and
+  capability/value relations explicitly owned by their domain specifications.
+- Fixes canonical `true`, `false`, `null`, and Closure objects as direct children
+  of `Object`; no standard `Boolean`, `Closure`, `Value`, `Collection`,
+  `Callable`, or `AsyncValue` object is introduced.
+- Fixes `String.parent() === Object` and semantic String-value parentage through
+  `String`; fixes `Array`, `Map`, and `IdentityMap` themselves as direct children
+  of `Object` while retaining factory-produced collection parentage through the
+  actual invocation receiver.
+- Fixes `Future.parent() === Object` and Core-produced Future values as direct
+  children of `Future`.
+- Makes explicit that `IdentityMap` does not implicitly delegate to `Map` and
+  forbids implementation-defined Protos-visible intermediate ancestors.
+
+### Compatibility
+- Implementations that inserted unnamed or non-standard visible ancestors into
+  Core delegation chains must remove them. Hidden representation remains free
+  provided `parent()`, lookup, `super`, receiver-domain behavior, and reflection
+  observe the normative topology.
+
 ## [0.1.364] - 2026-09-04
 
 ### Boolean standard-object surface (D026)

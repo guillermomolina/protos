@@ -212,6 +212,12 @@ semantic equality.
 
 `String` objects are immutable value objects. An operation on a String never changes that String in place; an operation that produces different text produces another String value. Implementations may freely share or intern String storage because such sharing cannot change observable identity semantics.
 
+The standard prelude `String` object delegates directly to `Object`. Every
+semantic String value has `String` as its immediate delegation parent. This
+delegation supplies standard String behavior through ordinary lookup; it does
+not make an ordinary object that merely delegates to `String` a semantic String
+value.
+
 `true`, `false`, and `null` are canonical singleton values.
 
 Ordinary mutable objects, closures, arrays and other identity-bearing objects retain individual object identity even when their contents happen to be equal. The exact collection model is specified separately.
@@ -329,6 +335,8 @@ object.foo[index]: value
 ## Standard Array Indexed Semantics
 
 ### Standard Array construction through ordinary invocation
+
+The standard prelude `Array` object delegates directly to `Object`.
 
 The standard prelude `Array` object specializes the ordinary polymorphic
 invocation protocol as an Array factory.
@@ -1990,6 +1998,11 @@ key hash      -> hash
 ```
 
 ### Standard Map construction through ordinary invocation
+
+The standard prelude `Map` and `IdentityMap` objects each delegate directly to
+`Object`. `IdentityMap` does not delegate to `Map`; their shared collection
+surface does not create an implicit collection hierarchy.
+
 
 ### Standard Map size
 

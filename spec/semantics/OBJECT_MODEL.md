@@ -66,6 +66,54 @@ slots:
 
 The delegation parent is fixed at object creation and cannot subsequently be changed. `Object` is the sole exception to the requirement that an object have exactly one parent: it has none.
 
+### Portable topology of Core standard objects
+
+Because delegation is observable through ordinary `parent()`, lookup, `super`, and
+reflection, the immediate parent of every Core-standard visible object is part of
+the portable language semantics.
+
+The general Core v0.1 rule is:
+
+> A standard visible object whose immediate delegation parent is not specified by
+> a more specific normative rule delegates directly to `Object`.
+
+This default applies equally to standard prelude objects, canonical singleton
+values, Closures, capabilities, descriptors, and other standard objects. It does
+not create a hidden prototype category and does not infer an intermediate parent
+from a semantic-family name, protocol name, implementation representation, or
+conceptual similarity. Implementations must not insert additional
+Protos-visible ancestors such as `Value`, `Collection`, `Callable`,
+`AsyncValue`, or any other organizational object unless a normative Core rule
+explicitly defines that object and parent relation.
+
+A more specific owner overrides this default only by normatively identifying the
+immediate parent. Existing examples include the numeric hierarchy, the Error
+taxonomy, execution contexts delegating to `Context`, factory-produced
+collections delegating to the actual factory invocation receiver, and
+runtime-backed capabilities whose owner explicitly names a standard prototype.
+Such specialization fixes exactly the stated edge; it does not authorize further
+implementation-defined ancestors.
+
+For Core v0.1 this has several deliberate consequences where no narrower owner
+exists: canonical `true`, canonical `false`, canonical `null`, and every Closure
+delegate directly to `Object`. Core defines no standard `Boolean` or `Closure`
+prototype merely to organize those values. Likewise, ordinary standard
+prelude/factory/protocol objects such as `Array`, `Map`, `IdentityMap`, `Future`,
+`Actor`, `Path`, `Encoding`, and I/O wrapper prototypes delegate directly to
+`Object` unless their owning normative document explicitly states another
+immediate parent.
+
+Semantic-family membership, ownership of family-specific state, and delegation
+remain distinct. A semantic value delegates to a family prototype only where
+the family owner explicitly requires that relation; conversely, delegating to a
+family prototype does not confer semantic-family membership or receiver-owned
+state.
+
+This rule is closed over the Core v0.1 standard surface: a conforming
+implementation may use arbitrary hidden implementation metadata or host
+inheritance internally, but no additional Protos-visible parent may appear in
+`parent()` or ordinary lookup.
+
 ### Every Object May Serve as a Delegation Parent
 
 Every Protos object may serve as the delegation parent of another object. There is no distinct "prototype object" category and no parentability capability, flag, type, predicate, or hidden classification. "Prototype" describes a role that an object plays when another object delegates to it; it is not a separate kind of object.

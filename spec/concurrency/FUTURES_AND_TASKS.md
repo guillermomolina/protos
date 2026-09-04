@@ -15,7 +15,12 @@ normative authority.
 
 ## 26. Futures
 
-`Future` is an ordinary object representing the eventual result of an execution.
+`Future` is the standard prototype object for Core Future values and delegates
+directly to `Object`. Every Future object produced by a Core Future-producing
+operation has `Future` as its immediate delegation parent unless that operation
+explicitly specifies a different standard parent relation. Future state,
+ownership, producer kind, cancellation, or distribution never inserts another
+Protos-visible ancestor.
 
 There are no `async` functions and no `await` keyword.
 
