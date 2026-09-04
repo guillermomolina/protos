@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 288
+Document revision: 289
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -1764,13 +1764,43 @@ Conceptually:
 
 ```text
 function transferToHandler(frame, error):
-    unwindThroughProtectedExtent(frame)
     deactivate(frame)
+    unwindThroughProtectedExtent(frame)
     return invokeClosure(
         frame.handler,
         arguments = [error]
     )
 ```
+
+### Handler selection consumes the frame before cleanup unwind
+
+Handler selection and frame deactivation form one semantic step. The selected
+frame becomes inactive before any `ensure` cleanup required to unwind from the
+signaling point to that handler boundary executes.
+
+Conceptually:
+
+```text
+function transferToHandler(frame, error):
+    deactivate(frame)
+    unwindThroughProtectedExtent(frame)
+    return invokeClosure(
+        frame.handler,
+        arguments = [error]
+    )
+```
+
+If `unwindThroughProtectedExtent(frame)` completes normally, control reaches the
+selected handler closure with the frame already inactive.
+
+If cleanup during that unwind signals `cleanupError`, the existing cleanup Error
+precedence replaces the pending transfer to `frame`. Handler search for
+`cleanupError` cannot include `frame`; it begins from the remaining active
+dynamic handler context at the cleanup signaling point.
+
+No implementation may defer semantic frame deactivation until after cleanup in a
+way that makes the selected handler recursively catch a cleanup failure merely
+because physical stack unwinding has not yet reached the handler boundary.
 
 The handler Closure's normal return value becomes the normal return value of the
 corresponding `handle` invocation. The selected frame is already inactive while

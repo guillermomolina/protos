@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 288
+Document revision: 289
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -1874,6 +1874,27 @@ Because the selected handler is inactive while its handler Closure executes, an
 error signaled by that Closure is searched only against still-active outer
 handlers. The same handler cannot recursively catch its own failure merely
 because the new error also matches `matchPrototype`.
+
+### Selected handler deactivation precedes unwind cleanup
+
+Selecting a matching handler consumes that dynamic handler frame before control
+begins unwinding protected scopes toward the handler boundary.
+
+Therefore any `ensure` cleanup executed while unwinding toward the selected
+handler runs with that selected handler already inactive. If such cleanup
+signals a new `Error`, the cleanup Error follows ordinary handler search among
+still-active outer handlers and any handlers explicitly installed by the cleanup
+itself. It cannot select the already-consumed handler frame.
+
+This ordering applies even when the cleanup Error would also match the selected
+handler's `matchPrototype`. The selected handler does not recursively catch a
+failure that occurs while unwinding toward itself.
+
+If all crossed cleanup completes normally, the originally selected handler is
+invoked with the original Error under the existing rules. If cleanup instead
+signals a new Error, the general cleanup-Error precedence rule supersedes the
+original transfer; the originally selected handler is not invoked for either
+Error unless some separate still-active installation selects it independently.
 
 Nested `handle` calls define ordering structurally: the dynamically innermost
 matching handler is selected first. Core v0.1 therefore needs no separate

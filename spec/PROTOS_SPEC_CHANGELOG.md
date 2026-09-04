@@ -4,6 +4,27 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.289] - 2026-09-04
+
+### Fixed
+- Fixed the observable ordering between handler selection and `ensure` cleanup
+  during unwind.
+- Defined handler selection to consume/deactivate the selected dynamic frame
+  before cleanup runs on the path to that handler boundary.
+- Required a cleanup Error raised during that unwind to search only still-active
+  outer handlers and handlers explicitly installed by cleanup itself.
+- Prohibited the already-selected handler from recursively catching a cleanup
+  failure merely because the cleanup Error also matches its prototype.
+- Aligned `transferToHandler` Runtime pseudocode with this ordering.
+- Combined this rule with the existing cleanup-Error precedence: a cleanup Error
+  supersedes the pending original transfer and prevents invocation of the
+  consumed originally selected handler.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 289.
+  `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain normative
+  clarification in this revision.
+
 ## [0.1.288] - 2026-09-04
 
 ### Closed
