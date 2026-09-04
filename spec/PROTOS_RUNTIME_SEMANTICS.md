@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 261
+Document revision: 262
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -3994,6 +3994,45 @@ the caller domain and resolves the Future.
 The empty case returns resolved `null`. The singleton case performs no reducer
 call but still realizes the required isolated value snapshot/transfer. No
 intermediate sequence is a public Protos value.
+
+
+### Standard Array parallelSort runtime semantics
+
+The normative model is a stable recursive merge sort over the logical source
+snapshot. Runtime data structures used to realize the tree are not Protos values.
+
+Conceptually:
+
+```text
+sort(values):
+    if values.size <= 1:
+        return values
+
+    split = floor(values.size / 2)
+
+    leftResult  = sort(values[0 .. split])
+    rightResult = sort(values[split .. size])
+
+    require both successful
+    return merge(leftResult, rightResult)
+```
+
+The two recursive sorts may run in parallel. If both fail, the left failure is
+selected.
+
+`merge` proceeds by output position. For current heads `a` and `b`, it performs
+the two isolated Boolean comparator invocations for `(a,b)` and `(b,a)` and
+applies the normative decision table. Comparator failures are ordered first by
+merge output position and then forward comparison before reverse comparison.
+
+When both comparisons are false, merge takes the left value and therefore
+preserves source-relative order for equivalent values. When both are true,
+`InvalidComparatorOrder` is recorded for that merge decision.
+
+A physical implementation need not allocate this exact recursive structure, but
+its result, comparator-visible behavior, failure selection, stability, P
+boundaries, and cancellation/publication semantics must be observationally
+equivalent.
 
 ### Exact call-spread expansion
 

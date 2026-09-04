@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 261
+Document revision: 262
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -3095,6 +3095,43 @@ state, or another non-P-transferable capability usable from isolated P work.
 Implementations may eliminate unused result materialization internally when that
 optimization preserves the observable semantics of the actual standard
 operation.
+
+
+## Standard Array Parallel Sorting
+
+Standard Array provides:
+
+```text
+array.parallelSort(less, arguments...)
+    -> Future
+```
+
+The operation returns a fresh sorted standard Array and does not mutate the
+source. `less` is ordinarily invokable and must return exactly canonical `true`
+or `false`; another normal result is `InvalidComparatorResult`.
+
+Sorting uses one canonical stable merge-sort semantics. Each logical sequence is
+split into contiguous halves using `floor(n / 2)` for the left half. Both halves
+are recursively sorted and then merged.
+
+For each merge pair `(a, b)`, both `less(a, b, ...)` and `less(b, a, ...)` are
+evaluated in isolated P comparisons. Exactly one `true` selects the corresponding
+smaller value; two `false` results mean equivalence and preserve the left/source
+value first; two `true` results fail with `InvalidComparatorOrder`.
+
+`InvalidComparatorResult` and `InvalidComparatorOrder` delegate directly to
+`Error`.
+
+The canonical tree, stable tie rule, and failure precedence are normative and
+independent of worker count or physical sort algorithm. Left recursive-sort
+failure precedes right recursive-sort failure; within one merge decision the
+forward comparison precedes the reverse comparison; earlier merge output
+positions precede later ones.
+
+Empty input returns a resolved Future containing a fresh empty Array. Singleton
+input invokes no comparator but still crosses the P value boundary before
+resolving with a fresh one-element Array. Failure or cancellation publishes no
+partial sorted Array.
 
 ## Invocation Arguments, Defaults, Rest, and Spread
 

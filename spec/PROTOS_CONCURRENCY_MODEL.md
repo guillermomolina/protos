@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 261
+Document revision: 262
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -4010,7 +4010,6 @@ Examples may include:
 -   Parallel filter
 -   Parallel reduce
 -   Parallel search
--   Parallel sort
 -   Partitioned Buffer/Array processing
 -   Parallel pipelines
 
@@ -4483,6 +4482,125 @@ completion/failure/resource semantics may justify a parallel iteration facility.
 If introduced, that facility must define its effect authority, result/failure
 meaning, cancellation, ownership, ordering, and P transfer semantics explicitly
 rather than inheriting them from an otherwise result-discarding loop.
+
+### 71.6F Standard `Array.parallelSort(...)`
+
+Core v0.1 standardizes:
+
+```text
+array.parallelSort(less, arguments...)
+    -> Future
+```
+
+The Future resolves with one fresh standard Array containing the source values in
+the canonical stable sorted order defined below. The source Array is not mutated.
+
+`less` must be invokable through the ordinary polymorphic invocation protocol and
+need not be a Closure. Each comparator result must be exactly canonical `true` or
+canonical `false`; another normal result is `InvalidComparatorResult`. The
+standard `InvalidComparatorResult` error delegates directly to `Error`.
+
+Core does not let the implementation choose an observable sorting algorithm.
+`parallelSort` is defined by one canonical logical stable merge-sort tree.
+
+After ordinary receiver/argument evaluation, standard Array receiver validation,
+and comparator-callability validation, the operation captures the source Array's
+element-reference sequence in ascending index order.
+
+For empty input, no comparator invocation or P boundary exists. The operation
+returns a Future already resolved with a fresh empty standard Array.
+
+For singleton input, no comparator invocation occurs. The sole element is
+snapshotted/transferred through the ordinary P value rules before successful
+submission completes. An untransferable singleton causes synchronous
+`NonParallelValue`. On success, the Future resolves with a fresh one-element
+standard Array containing the caller-domain transferred value.
+
+For two or more elements, all source values plus comparator and explicit argument
+state required by the canonical sort are validated/snapshotted before any sort
+child becomes eligible and before the operation successfully returns its Future.
+A required non-transferable input causes synchronous `NonParallelValue`, creates
+no result Future, and makes no child eligible.
+
+The canonical logical split of a sequence of length `n >= 2` is:
+
+```text
+leftLength  = floor(n / 2)
+rightLength = n - leftLength
+
+left  = first leftLength values
+right = remaining rightLength values
+```
+
+Both halves are recursively sorted by the same rule. Their successful sorted
+results are then merged from left to right.
+
+For each current merge pair `(leftValue, rightValue)`, Core evaluates two
+isolated comparator invocations:
+
+```text
+lr = less(leftValue, rightValue, arguments...)
+rl = less(rightValue, leftValue, arguments...)
+```
+
+Each invocation is a separate child P domain governed by the ordinary P
+copy/projection/result rules. Both Boolean outcomes belong to one logical merge
+decision.
+
+The decision table is:
+
+```text
+lr == true  && rl == false
+    -> take leftValue
+
+lr == false && rl == true
+    -> take rightValue
+
+lr == false && rl == false
+    -> values are equivalent for this merge decision
+    -> take leftValue first (stable tie)
+
+lr == true  && rl == true
+    -> fail with InvalidComparatorOrder
+```
+
+`InvalidComparatorOrder` delegates directly to `Error`.
+
+When one side of a merge is exhausted, the remaining values of the other side
+are appended unchanged. Stability is therefore normative: values that compare
+equivalent preserve their original source-index order.
+
+The two recursive child sorts of one logical node may execute simultaneously.
+The merge of that node exists only after both child sorts succeed. For failures
+from the two child sorts, the left child has deterministic precedence over the
+right child. Within one merge decision, `lr` has failure precedence over `rl`.
+Across successive merge decisions, the earlier output position has precedence
+over later positions. Thus scheduler timing never selects the reported failure.
+
+A comparator result that cannot cross its child P boundary is treated as
+caller-domain `NonParallelValue` at that comparator invocation and participates
+in the same canonical failure ordering.
+
+The canonical merge tree and comparison schedule are semantic. A conforming
+implementation may use another physical algorithm, vectorization, chunking,
+sampling, fusion, in-place temporary buffers, or work stealing only when every
+observable result, stable ordering, comparator invocation/failure decision, and
+publication outcome is identical to the canonical definition.
+
+This requirement intentionally favors portable semantics over giving arbitrary
+stateful or inconsistent comparators implementation-dependent behavior. A
+well-behaved strict ordering naturally satisfies the canonical contract, while
+encountered contradictory pair ordering (`a < b` and `b < a`) fails
+deterministically rather than being resolved by sort internals.
+
+On success, every selected output value crosses to the caller domain according
+to ordinary P result/value semantics and the Future resolves with the fresh
+sorted Array. Failure or cancellation publishes no partial Array.
+
+Cancelling the result Future requests cooperative cancellation of unfinished P
+sort/comparator work under ordinary structured-concurrency rules. The ordinary
+first-terminal-transition Future rule governs races with an already established
+terminal sort outcome.
 
 ### 71.7 Scheduling and Oversubscription
 
@@ -5079,7 +5197,6 @@ mechanism, or implementation detail that still requires design.
 -   Streaming
 -   Async streams
 -   Generators and suspendable iteration
--   Parallel sort standard-library API
 -   Parallel scheduling, work-stealing, and granularity heuristics
 -   Pub/sub
 -   Advanced routers and load-balancing policies

@@ -4,6 +4,34 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.262] - 2026-09-04
+
+### Added / Closed
+- Standardized `Array.parallelSort(less, arguments...) -> Future` as the final
+  Core v0.1 high-level parallel Array API in the §71 collection set.
+- Defined a canonical stable logical merge-sort tree so physical algorithm,
+  worker count, chunking, or work stealing cannot change observable ordering.
+- Required comparator results to be exactly canonical `true`/`false`; other
+  normal results fail with standard `InvalidComparatorResult`.
+- Defined each merge decision by both `less(a,b,...)` and `less(b,a,...)`:
+  one true selects that side, two false values are a stable tie, and two true
+  values fail with standard `InvalidComparatorOrder`.
+- Defined both comparator errors as delegating directly to `Error`.
+- Defined deterministic failure precedence across recursive child sorts, merge
+  positions, and forward/reverse comparator calls.
+- Kept all comparator calls isolated P computations and all source/result values
+  governed by ordinary P snapshot/transfer rules.
+- Defined empty and singleton behavior without unnecessary comparator calls and
+  prohibited partial sorted-Array publication on failure/cancellation.
+- Removed parallel sort from §71 examples/Open Design Topics, closing the
+  map/filter/search/reduce/sort/iteration Core collection-API pass.
+
+### Changed
+- Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
+  `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  262.
+
 ## [0.1.261] - 2026-09-04
 
 ### Closed
