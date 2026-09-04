@@ -8,6 +8,39 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.345] - 2026-09-04
+
+### Error identity and portable taxonomy
+- Made `semantics/ERRORS.md` the single normative owner of standard Error-object
+  construction, identity, portable prototype taxonomy, handler matching, and
+  Core v0.1 non-resumable signaling semantics.
+- Required every independent standard failure occurrence to create a fresh Error
+  instance delegating to the promised prototype; standard Error prototypes are
+  category/protocol objects and are never implicitly reused as singleton failures.
+- Preserved exact identity when an existing Error is signaled or re-signaled and
+  when one same-domain failure outcome records an Error, including repeated
+  observation of a failed Future.
+- Defined cancelled-Future observation as a fresh `Cancelled` Error instance per
+  `value()` call while `failed(error)` retains and re-signals the exact stored
+  Error within one isolation domain.
+- Standardized the minimal portable I/O Error family rooted at `IOError`, with
+  `InvalidIOArgument`, `IOLifecycleError`, `IOCapacityExhausted`, `EncodingError`,
+  and `LineTooLong`; other operational/backend/open/path/filesystem failures
+  remain `IOError` unless a narrower category is explicitly named.
+- Reaffirmed that fatal Actor Errors remain Actor-local, P/value-transfer
+  boundaries reconstruct Error values under ordinary transfer rules, and Core
+  handlers cannot resume or retry an abandoned signaling point.
+- Kept retry safety dependent on I/O commitment/effect contracts rather than
+  Error category. The informative Abstract Runtime already conforms and required
+  no duplicate normative authority.
+
+### Compatibility
+- Closes previously implementation-selectable Error identity and I/O category
+  behavior. Implementations that reused standard Error prototypes/singletons for
+  runtime failures must create semantically fresh instances where required;
+  portable programs may distinguish recorded identity with `===` and categories
+  by ordinary delegation.
+
 ## [0.1.344] - 2026-09-04
 
 ### Fixed

@@ -149,7 +149,9 @@ parent of parent
 
 Lookup stops at the first matching slot.
 
-If no slot is found, a lookup error is signaled. A failed lookup never implicitly produces `null`.
+If no slot is found, a fresh standard `SlotNotFound` failure is signaled under
+the Error-object construction and identity rules owned by `ERRORS.md`. A failed
+lookup never implicitly produces `null`.
 ## 7. Unqualified Assignment
 
 An assignment:
@@ -316,7 +318,12 @@ Any previously active return, error unwind, or cancellation unwind is abandoned
 in favor of the newly signaled error. Thus a cleanup failure during cancellation
 makes the task fail with that cleanup error rather than complete as cancelled.
 
-A future resumable-condition mechanism is compatible with this rule: a condition that is handled and resumed without leaving the protected scope does not trigger cleanup merely because it was signaled.
+Core v0.1 Error signaling is non-resumable as owned by `ERRORS.md`. Every Error
+transfer that reaches this cleanup rule has abandoned the signaling continuation;
+a handler cannot keep the protected computation active by returning, resuming,
+retrying, or supplying a value to the signal point. A future recovery facility,
+if standardized, must be a distinct control mechanism with its own cleanup
+contract rather than an alternate interpretation of Core `Error.signal()`.
 
 Higher-level resource protocols such as `use`, `withOpen`, or similar APIs may be implemented on top of this guarantee using ordinary messages and closures.
 
