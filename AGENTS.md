@@ -296,6 +296,13 @@ The canonical core language definition is maintained in:
 
 Normative domain models supplement those core documents for semantically substantial standard subsystems. The current normative domain model is:
 
+- `spec/semantics/OBJECT_MODEL.md` — primary normative owner of migrated object-model semantics.
+- `spec/semantics/EXECUTION_AND_CONTROL.md` — primary normative owner of migrated execution/control semantics.
+- `spec/semantics/CALLABLES.md` — primary normative owner of migrated callable/invocation semantics.
+- `spec/semantics/MODULES.md` — primary normative owner of migrated module semantics.
+- `spec/semantics/ERRORS.md` — primary normative owner of migrated Error semantics.
+- `spec/semantics/VALUES_AND_COLLECTIONS.md` — primary normative owner of migrated value/collection semantics.
+
 - "spec/io/IO_CORE.md" — observable I/O, text/binary adapter, filesystem-authority, and Process-I/O-bootstrap semantics.
 
 - `spec/concurrency/FUTURES_AND_TASKS.md` — primary normative owner of migrated Core Future/task semantics.

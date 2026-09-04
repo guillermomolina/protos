@@ -8,6 +8,31 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.327] - 2026-09-04
+
+### Migrated
+- Promoted all six `spec/semantics/` migration-index files to normative Draft
+  modules in one macro migration.
+- Moved the Language object-model family into `semantics/OBJECT_MODEL.md`.
+- Moved execution/control sections into `semantics/EXECUTION_AND_CONTROL.md`.
+- Moved Closure/method/invocation/return sections into `semantics/CALLABLES.md`.
+- Moved module-context and module-loading/lifecycle sections into
+  `semantics/MODULES.md`.
+- Moved Core Error semantics into `semantics/ERRORS.md`.
+- Moved immutable-value, equality/identity, indexed-access, Array/Map/Bytes and
+  related collection semantics into `semantics/VALUES_AND_COLLECTIONS.md`.
+- Replaced migrated Language bodies with compatibility/navigation anchors.
+
+### Ownership
+- `PROTOS_LANGUAGE_SPEC.md` remains the language front door and integration
+  specification; migrated semantic-domain rules have exactly one primary owner
+  under `spec/semantics/`.
+- Updated root specification-authority guidance for the six semantic modules.
+
+### Compatibility
+- This revision changes specification location/ownership only and does not
+  intentionally change observable Protos behavior.
+
 ## [0.1.326] - 2026-09-04
 
 ### Migrated
