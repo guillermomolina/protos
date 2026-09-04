@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 225
+Document revision: 226
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -5057,6 +5057,48 @@ Persisted hash values must therefore not rely on the ordinary `hash` protocol.
 
 Map iteration preserves insertion order as an observable collection property.
 
+
+### Standard Map iteration callback validation
+
+Standard `Map.each(block)` and `IdentityMap.each(block)` use the same
+`requireInvokable` callability test as standard `Array.each`.
+
+Conceptually, before association-snapshot establishment:
+
+```text
+function beginStandardMapEach(receiver, block, identityMode):
+    if identityMode:
+        map = requireIdentityMapReceiver(receiver)
+    else:
+        map = requireNormalMapReceiver(receiver)
+
+    requireInvokable(block)
+    snapshot = snapshotMapAssociations(map)
+
+    return iterateMapSnapshot(snapshot, block)
+```
+
+`requireInvokable` is the ordinary polymorphic-callability check defined for
+Array iteration. It does not invoke `block` and does not create a Map-specific
+callback category.
+
+For each snapshot association, callback execution is equivalent to:
+
+```text
+invoke(block, [snapshotKey, snapshotValue])
+```
+
+using the ordinary polymorphic invocation machinery. No Closure-only fast path
+may change observable callback eligibility.
+
+The callability check occurs after standard receiver validation but before
+snapshot establishment. If it fails, no association snapshot is established
+and no callback is invoked. It performs no key `hash`, key `==`,
+`identityHashOf`, keyed-entry mutation, or other Map search behavior.
+
+The check establishes only that the value is invokable. Argument-count and
+other invocation errors are determined by the actual two-argument invocation
+and propagate through the existing Map iteration failure semantics.
 
 ### Stable Map iteration snapshot
 

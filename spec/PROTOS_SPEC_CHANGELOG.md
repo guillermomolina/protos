@@ -4,6 +4,25 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.226] - 2026-09-04
+
+### Fixed
+- Defined standard `Map.each` and `IdentityMap.each` callbacks through the same
+  ordinary polymorphic invocation domain already used by `Array.each`.
+- Allowed user-defined invokable objects as callbacks instead of leaving
+  callback eligibility implementation-selected or accidentally Closure-only.
+- Defined receiver validation before callback-callability validation and
+  callability validation before association-snapshot establishment.
+- Kept callback arity checking at the actual two-argument invocation rather
+  than inventing a separate preflight signature mechanism.
+- Required non-invokable callbacks to fail before snapshot capture and without
+  key search, hashing, equality, identity hashing, or keyed-state mutation.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 226.
+  Only `PROTOS_LANGUAGE_SPEC.md` and `PROTOS_RUNTIME_SEMANTICS.md` gain
+  normative semantic content in this revision.
+
 ## [0.1.225] - 2026-09-04
 
 ### Closed

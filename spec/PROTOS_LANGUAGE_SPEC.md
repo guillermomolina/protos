@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 225
+Document revision: 226
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -4643,6 +4643,27 @@ The standard iteration selector for `Map` and `IdentityMap` is:
 ```js
 map.each(block)
 ```
+
+`block` must be invokable through the ordinary polymorphic invocation protocol.
+It need not be a Closure: any value accepted by an ordinary parenthesized call
+is a valid standard Map iteration callback.
+
+After ordinary receiver and argument evaluation, standard `Map.each` /
+`IdentityMap.each` first validates the receiver under the existing standard Map
+receiver-domain rule, then validates `block` callability, and only then
+establishes the iteration snapshot. A non-invokable `block` therefore signals an
+`Error` before snapshot establishment and before any callback invocation.
+
+Callability validation does not validate callback arity in advance. Each
+snapshot association is subsequently supplied through one ordinary polymorphic
+invocation with exactly two positional arguments:
+
+```text
+block(key, value)
+```
+
+Any arity or invocation error from that actual call propagates normally and
+stops iteration under the existing `each` error/unwind rule.
 
 At the start of the standard `each` invocation, after ordinary receiver and
 argument evaluation, the operation establishes a shallow logical snapshot of
