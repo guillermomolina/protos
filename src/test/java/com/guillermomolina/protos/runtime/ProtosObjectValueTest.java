@@ -259,4 +259,54 @@ class ProtosObjectValueTest {
                 IllegalStateException.class,
                 () -> source.aliasLocalSlot("local", "taken"));
     }
+
+    @Test
+    void compositionContributionIsAtomicAndHonorsReservations() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue target = new ProtosObjectValue(root);
+        ProtosObjectValue source = new ProtosObjectValue(root);
+        Object contributed = new Object();
+        Object reserved = new Object();
+
+        source.createLocalSlot("contributed", contributed);
+        source.createLocalSlot("reserved", reserved);
+
+        target.composeLocalSlotsFrom(source, java.util.Set.of("reserved"));
+
+        assertSame(contributed, target.readLocalSlot("contributed").orElseThrow());
+        assertFalse(target.hasLocalSlot("reserved"));
+        assertSame(reserved, source.readLocalSlot("reserved").orElseThrow());
+
+        ProtosObjectValue conflictingSource = new ProtosObjectValue(root);
+        Object fresh = new Object();
+        conflictingSource.createLocalSlot("fresh", fresh);
+        conflictingSource.createLocalSlot("contributed", new Object());
+
+        assertThrows(
+                IllegalStateException.class,
+                () -> target.composeLocalSlotsFrom(conflictingSource, java.util.Set.of()));
+        assertFalse(target.hasLocalSlot("fresh"));
+        assertSame(contributed, target.readLocalSlot("contributed").orElseThrow());
+    }
+
+    @Test
+    void compositionContributionRejectsClosedAndFrozenTargetsWithoutPartialWrites() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue source = new ProtosObjectValue(root);
+        source.createLocalSlot("x", new Object());
+
+        ProtosObjectValue closed = new ProtosObjectValue(root);
+        closed.close();
+        assertThrows(
+                IllegalStateException.class,
+                () -> closed.composeLocalSlotsFrom(source, java.util.Set.of()));
+        assertFalse(closed.hasLocalSlot("x"));
+
+        ProtosObjectValue frozen = new ProtosObjectValue(root);
+        frozen.freeze();
+        assertThrows(
+                IllegalStateException.class,
+                () -> frozen.composeLocalSlotsFrom(source, java.util.Set.of()));
+        assertFalse(frozen.hasLocalSlot("x"));
+    }
 }

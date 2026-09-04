@@ -132,6 +132,35 @@ public final class ProtosObjectValue {
         return result;
     }
 
+    public void composeLocalSlotsFrom(
+            ProtosObjectValue source,
+            java.util.Set<String> reservedNames) {
+        Objects.requireNonNull(source, "source");
+        Objects.requireNonNull(reservedNames, "reservedNames");
+
+        if (mutationState == MutationState.FROZEN) {
+            throw new IllegalStateException("object is frozen");
+        }
+        if (mutationState == MutationState.CLOSED) {
+            throw new IllegalStateException("object is closed");
+        }
+
+        Map<String, Object> contributions = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> entry : source.localSlots.entrySet()) {
+            if (!reservedNames.contains(entry.getKey())) {
+                contributions.put(entry.getKey(), entry.getValue());
+            }
+        }
+
+        for (String name : contributions.keySet()) {
+            if (localSlots.containsKey(name)) {
+                throw new IllegalStateException("composition conflict: " + name);
+            }
+        }
+
+        localSlots.putAll(contributions);
+    }
+
     private Object parentForDerivedOrdinaryObject() {
         return isRootObject() ? ROOT : parent;
     }
