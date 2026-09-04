@@ -4,6 +4,38 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## [0.2.5-SNAPSHOT] - 2026-09-04
+
+### Added
+
+- Added an internal standard-Array object representation with receiver-owned
+  dense indexed state distinct from ordinary object slots.
+- Array indexed reads and updates use mathematical `BigInteger` indices,
+  preserve exact element references, reject negative/out-of-range indices, and
+  never grow or create holes.
+- Closed Arrays may replace existing indexed elements while frozen Arrays reject
+  replacement before index validation.
+- Added detached shallow indexed snapshots for future call-spread and iteration
+  semantics.
+
+### Changed
+
+- `ProtosObjectValue` is now extensible internally so specialized object
+  representations can retain the ordinary object/delegation/slot model without
+  adding parallel language object categories.
+- Project implementation version changed from `0.2.4-SNAPSHOT` to
+  `0.2.5-SNAPSHOT`.
+
+### Notes
+
+- This increment adds representation only. It does not hardcode or expose the
+  standard `Array` prelude object or its protocol methods in Java.
+- The explicit parent supplied to each Array instance preserves the normative
+  Array-factory rule and will allow `protos/lib/core/` to own the standard
+  prototype object when Core bootstrap is available.
+- No normative specification change is introduced.
+
+
 ## [0.2.4-SNAPSHOT] - 2026-09-04
 
 ### Added

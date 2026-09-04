@@ -22,7 +22,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-public final class ProtosObjectValue {
+public class ProtosObjectValue {
     public enum MutationState {
         OPEN,
         CLOSED,
