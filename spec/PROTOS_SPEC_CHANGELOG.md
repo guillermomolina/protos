@@ -4,6 +4,23 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.255] - 2026-09-04
+
+### Fixed
+- Removed the accidental implication that `String.graphemes()` and
+  `String.codePoints()` are standardized Core v0.1 protocols.
+- Clarified that Core String's normative grapheme access remains the existing
+  `size` / `at` contract rather than an additional collection/view API.
+- Left libraries free to provide ordinary `graphemes` / `codePoints`
+  conveniences and left any future lower-level text-view protocol to a later
+  explicit standardization decision.
+- Preserved Encoding-object one-shot conversion (`UTF8.encode(text)`) as the
+  standardized text/byte boundary.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 255.
+  Only `PROTOS_LANGUAGE_SPEC.md` gains normative clarification in this revision.
+
 ## [0.1.254] - 2026-09-04
 
 ### Fixed

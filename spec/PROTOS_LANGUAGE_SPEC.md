@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 254
+Document revision: 255
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -4194,11 +4194,17 @@ text[0]
 
 conceptually correspond to grapheme-count and grapheme-at-index operations.
 
-This keeps ordinary text operations aligned with user-perceived characters while preserving explicit lower-level access through separate protocols such as:
+This keeps ordinary text operations aligned with user-perceived characters.
+
+Core v0.1 does not standardize separate `String.graphemes()` or
+`String.codePoints()` convenience protocols. Libraries may provide ordinary
+messages with those names, and a later standard may define explicit lower-level
+text views, but portable Core code cannot rely on either protocol.
+
+Explicit conversion between text and encoded bytes remains standardized through
+the Encoding-object contract defined by the I/O model, for example:
 
 ```js
-text.graphemes()
-text.codePoints()
 UTF8.encode(text)
 ```
 
