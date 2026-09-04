@@ -8,6 +8,30 @@ most recent global revision that changed that document; document revisions are
 not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
+## [0.1.361] - 2026-09-04
+
+### Canonical Process bootstrap snapshot identity (D018)
+- Administratively records the already-published Process bootstrap snapshot
+  identity semantics: each logical Process has one canonical identity-bearing
+  `process.args()` snapshot and one canonical identity-bearing
+  `process.environment()` snapshot, and repeated successful acquisition through
+  capabilities/proxies denoting that Process preserves that semantic identity.
+- Consequently, repeated successful acquisitions preserve `===`,
+  `identityHashOf(...)`, and `IdentityMap` key identity; no special
+  `IdentityMap` rule is introduced.
+- Keeps physical representation implementation-private: wrappers/views, shared
+  backing, lazy materialization, caching, eviction/rematerialization, scalar
+  replacement, and moving storage remain permitted when they preserve the
+  required semantic observations.
+- Introduces no new value-identity category or special transfer capability;
+  ordinary isolation/pass-by-value identity rules remain authoritative when a
+  snapshot is transferred.
+
+### Compatibility
+- This revision only records D018 administratively. The corresponding normative
+  semantics were already published in `spec/io/PROCESS_IO.md`; this revision
+  does not modify them.
+
 ## [0.1.360] - 2026-09-04
 
 ### Actor creator capability discipline (D019)
