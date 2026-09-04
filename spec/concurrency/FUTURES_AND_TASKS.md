@@ -152,9 +152,11 @@ wins; later bookkeeping has no effect.
 
 Future-adoption cycles are invalid. Direct self-adoption and any transitive
 pending adoption that would make the destination reachable from the source's
-adoption chain fail the destination with the standard `FutureResolutionCycle`
-error prototype. `FutureResolutionCycle` delegates directly to `Error`. A cycle
-must not remain implementation-dependently pending.
+adoption chain fail the destination with a fresh standard
+`FutureResolutionCycle` failure occurrence. `FutureResolutionCycle` delegates
+directly to `Error`; creation and identity of the Error instance are owned by
+`../semantics/ERRORS.md`. A cycle must not remain implementation-dependently
+pending.
 
 Implementations may represent adoption with callbacks, dependency nodes, waiter
 lists, graph edges, or another mechanism. Such bookkeeping must not execute
@@ -192,14 +194,25 @@ rules of §28.
 `Cancelled` is a standard Error prototype and standard-prelude binding delegating
 directly to `Error`.
 
-For a cancelled Future, `value()` signals the standard `Cancelled` object in the
-consumer's then-current dynamic handler context. Each observation is a new
+A cancelled Future stores only the `cancelled` terminal state; cancellation does
+not store a `Cancelled` Error object in the Future.
+
+Each call to `value()` that observes a cancelled Future creates a **fresh standard
+failure occurrence** whose Error instance delegates directly to `Cancelled`, then
+signals that fresh instance in the consumer's then-current dynamic handler
+context under `../semantics/ERRORS.md`. The `Cancelled` prototype itself is never
+implicitly signaled by cancellation observation.
+
+Consequently, two distinct observations of the same cancelled Future receive
+distinct Error identities, while each individual handler receives the exact
+fresh Error object created for that observation. Each observation is a new
 non-resumable signaling event; it does not resume or recreate the cancelled
 producer computation.
 
 This cancellation-observation Error is distinct from the Future's `cancelled`
-terminal state: the state is stored on the Future, while `Cancelled` is the
-ordinary Error object signaled when `value()` observes that state.
+terminal state: the state is stored on the Future, while the fresh `Cancelled`
+instance exists only as the Error outcome of that particular `value()`
+observation unless ordinary program references keep it reachable.
 
 ### Pending Future observation and lost-wakeup exclusion
 

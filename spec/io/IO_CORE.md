@@ -33,7 +33,6 @@ The following are intentionally outside this I/O model:
 - terminal/curses-style control protocols;
 - the exact public API for explicit wrapper-ownership acquisition;
 - exact standard-library namespace/import spellings;
-- exact error prototype names where this document only requires that an error be signaled;
 - filesystem operations beyond those explicitly defined here;
 - network authority acquisition and policy;
 - socket creation, `connect`, `bind`, `listen`, `accept`, datagram addressing, and transport-configuration APIs;
@@ -87,7 +86,69 @@ Binary I/O uses `Bytes`. `String` never carries an implicit binary encoding.
 
 I/O operations that may wait return `Future` values. They never introduce hidden Protos suspension. Suspension occurs only through the ordinary Future mechanisms, such as invoking `.value()` on a pending Future.
 
-For every standardized I/O operation whose contract in this document says that the operation returns a `Future`, semantic validation failures of that operation's I/O arguments are represented by a failed returned Future rather than by introducing a second synchronous failure channel after the operation has been successfully dispatched. This includes, for example, an invalid `read(maxBytes)` bound, a non-`Bytes` `write` payload, an invalid seek/truncate numeric argument, an invalid `readLine(maxBytes)` bound, or a non-`String` standard text-write payload.
+### Portable I/O Error categories
+
+Core Error-object construction, freshness, identity, handler matching, and
+prototype parentage are owned by `../semantics/ERRORS.md`. This I/O model owns
+only which already-standardized category applies to an I/O failure and the
+I/O-specific effect/lifecycle consequences of that failure.
+
+The portable I/O categories are deliberately small:
+
+- `IOError` is the general I/O failure category. A standardized I/O failure for
+  which this model does not require a narrower category is a fresh `IOError`
+  occurrence.
+- `InvalidIOArgument` is used when a successfully dispatched standardized I/O
+  operation rejects semantic I/O argument or option values before receiver/backend
+  effects attributable to that invalid request. For a Future-returning operation,
+  the returned Future fails with that fresh Error occurrence.
+- `IOLifecycleError` is used when an operation is rejected or
+  closure-terminated because the relevant receiver/resource/direction is already
+  closing, closed, shut down, or otherwise permanently unavailable through that
+  lifecycle, unless the operation is instead specified to re-observe an already
+  recorded terminal lifecycle Error.
+- `IOCapacityExhausted` is used when a bounded standard output facility cannot
+  admit additional required retained output state and rejects the operation under
+  its capacity/admission contract before contribution.
+- `EncodingError` is used for strict standard encoding/decoding or required
+  native-to-Protos text-representation failure where the text/encoding contract
+  defines failure rather than replacement.
+- `LineTooLong` is used when `readLine(maxBytes)` exceeds its standardized
+  maximum-line bound.
+
+All other standard operational/backend/open/path/filesystem failures remain
+`IOError` in Core v0.1 unless a sibling normative I/O rule explicitly names one
+of the narrower categories above. In particular, Core v0.1 does not standardize
+separate Error prototypes merely for target absence, target already existing,
+permission denial, confinement rejection, host path syntax, native errno/status,
+backend availability, or generic open failure. Implementations may retain such
+information privately for diagnostics but must not turn it into additional
+Protos-visible standard ancestry.
+
+Cancellation is not an I/O Error category. A successfully cancelled I/O Future
+has the ordinary Future `cancelled` terminal state and is observed through the
+standard fresh `Cancelled` occurrence rule owned by
+`../concurrency/FUTURES_AND_TASKS.md` and `../semantics/ERRORS.md`.
+
+Error category does not determine whether an I/O operation is safe to repeat.
+Commitment, consumption, contribution, lifecycle cutovers, and uncertainty remain
+owned by the operation contracts below and by the sibling I/O modules. Handling
+an `IOError`, `EncodingError`, or another I/O Error never resumes or retries the
+abandoned signal point. A program that decides a later attempt is semantically
+safe performs a new ordinary invocation; Core v0.1 provides no privileged
+handler-level retry operation.
+
+When one I/O lifecycle explicitly records an Error as its stable terminal failure
+cause, every later same-domain operation that this specification says observes
+**that same recorded failure outcome** uses the exact recorded Error object. It
+does not manufacture a new Error merely because the outcome is observed again.
+This applies, for example, to repeated observation of one failed close lifecycle.
+A later operation that merely encounters the same lifecycle category but is not
+re-observing such a recorded cause creates a fresh `IOLifecycleError` occurrence.
+Actor/P/value-transfer boundaries remain subject to their ordinary reconstruction
+and isolation rules; this paragraph does not leak source-domain Error identity.
+
+For every standardized I/O operation whose contract in this document says that the operation returns a `Future`, semantic validation failures of that operation's I/O arguments are represented by a failed returned Future with a fresh `InvalidIOArgument` occurrence rather than by introducing a second synchronous failure channel after the operation has been successfully dispatched. This includes, for example, an invalid `read(maxBytes)` bound, a non-`Bytes` `write` payload, an invalid seek/truncate numeric argument, an invalid `readLine(maxBytes)` bound, or a non-`String` standard text-write payload.
 
 Such argument validation occurs before that operation performs receiver/backend I/O effects attributable to the invalid request. A failed validation therefore contributes no bytes, consumes no input, changes no logical position/size/content/lifecycle state, establishes no flush/sync/shutdown frontier, and does not exercise external authority merely to discover an error already determined by the supplied semantic argument values.
 
@@ -95,7 +156,7 @@ When validation depends only on already-evaluated Protos values, an implementati
 
 This rule begins only after ordinary Protos invocation has successfully identified and dispatched the standardized I/O operation. Ordinary language-level failures that prevent such an invocation from existing at all — for example message lookup failure, a receiver outside the operation's receiver domain, or ordinary call-arity failure before method body/operation dispatch — retain their normal language semantics rather than being retroactively wrapped in an I/O Future.
 
-The rule likewise does not change APIs that this document explicitly defines as synchronous/non-Future operations, such as one-shot `Encoding.encode/decode`, Process standard-stream accessors, or other ordinary in-memory/bootstrap queries. Their validation/failure behavior remains governed by their own synchronous contracts.
+The rule likewise does not change APIs that this document explicitly defines as synchronous/non-Future operations, such as one-shot `Encoding.encode/decode`, Process standard-stream accessors, or other ordinary in-memory/bootstrap queries. Their validation/failure behavior remains governed by their own synchronous contracts and the same portable category mapping where applicable.
 
 A standardized Future-returning I/O operation therefore has one operation-result channel after successful dispatch: immediate semantic argument invalidity is an already-known failed Future outcome, while later I/O/backend failure is a later failed Future outcome.
 
@@ -199,7 +260,7 @@ crossed its own irreversible semantic commitment boundary.
 
 At the close cutover, every previously accepted operation that has not yet crossed
 its own irreversible semantic commitment boundary is closure-terminated. Its
-Future fails with the receiver/resource closing-or-closed error, and that operation
+Future fails with a fresh `IOLifecycleError` occurrence, and that operation
 contributes no effect beyond whatever its ordinary pre-commitment contract already
 permits — which for a correctly uncommitted operation is no irreversible
 operation effect. Close does not leave such an operation implementation-selectably
@@ -212,7 +273,7 @@ success/failure aftermath under its own contract. Close waits for that terminal
 aftermath before it can complete successfully.
 
 An operation ordered after the close cutover is not accepted as resource work: it
-fails with the receiver/resource closing-or-closed error and has no operation
+fails with a fresh `IOLifecycleError` occurrence and has no operation
 effect. It does not race the close by starting a later native/backend operation
 merely because host scheduling happens to run it first.
 
@@ -233,10 +294,10 @@ and does not make proxy object identity an ordering primitive.
 
 Closure-induced termination of an operation is distinct from cancellation of that
 operation. A previously accepted uncommitted operation terminated by close fails
-with the closing-or-closed error; close does not report it as `cancelled`. If an
-independent cancellation request satisfies that operation's own cancellation
-contract before the close cutover terminates it, the operation may instead become
-`cancelled`.
+with a fresh `IOLifecycleError` occurrence; close does not report it as
+`cancelled`. If an independent cancellation request satisfies that operation's own
+cancellation contract before the close cutover terminates it, the operation may
+instead become `cancelled`.
 
 Operations that had already committed when closing began are not rolled back and
 are never rewritten as cancelled or closing-failed merely because of close. They
@@ -262,7 +323,7 @@ Close is logically idempotent. A call made while closing observes the same close
 
 `close()` does not imply `flush()` or `sync()` unless a more specific receiver protocol explicitly requires such behavior.
 
-A failed close does not make the object usable again. The object remains permanently failed/unusable. Later `close()` calls observe that failed close lifecycle and fail consistently with that outcome; they do not begin a fresh lifecycle or pretend that closure succeeded.
+A failed close does not make the object usable again. The object remains permanently failed/unusable. The Error that made the close lifecycle fail is recorded as that lifecycle's terminal failure cause. Later `close()` calls observe that same failed close lifecycle and fail with that exact recorded Error object within the same value/isolation domain; they do not begin a fresh lifecycle, manufacture a new same-category Error, or pretend that closure succeeded. Boundary reconstruction remains governed by `../semantics/ERRORS.md`.
 
 Invoking `close()` also permanently transfers program-facing release custody of the receiver's underlying resource to that close lifecycle. After close begins, the program never regains an open/retryable resource through the same receiver merely because close later fails.
 
@@ -301,7 +362,7 @@ Closing an adapter permanently terminates that adapter, rejects new adapter oper
 
 For an output adapter, "state/output to finalize or propagate during close" means state and output that had already become semantically committed to that adapter before the close cutover, together with the normal terminal aftermath of any earlier adapter operation whose own irreversible semantic commitment boundary had already been crossed. Buffered bytes accepted by a successfully or otherwise committed earlier write remain adapter-owned output and are finalized/propagated as required by the adapter's contract.
 
-This wrapper-finalization rule does not override the ordinary `Closable` cutover rule. An adapter operation that was accepted before close but was still uncommitted at the close cutover is closure-terminated and fails with the ordinary closing-or-closed error. Reversible validation, speculative encoding, staged bytes, reserved buffer space, queued requests, or other implementation work belonging only to such an uncommitted operation do not become committed output merely because the receiver is an adapter and close has begun.
+This wrapper-finalization rule does not override the ordinary `Closable` cutover rule. An adapter operation that was accepted before close but was still uncommitted at the close cutover is closure-terminated and fails with a fresh `IOLifecycleError` occurrence. Reversible validation, speculative encoding, staged bytes, reserved buffer space, queued requests, or other implementation work belonging only to such an uncommitted operation do not become committed output merely because the receiver is an adapter and close has begun.
 
 Conversely, close must not discard or pretend away output/state that had already committed to the adapter before the cutover. If a committed preceding operation is still pending, it retains its normal aftermath under the ordinary `Closable` rule, and adapter close waits for that required terminal aftermath before completing successfully.
 
@@ -457,6 +518,9 @@ readText and both readLine forms on one logical TextReader share one ordered dec
 
 I/O that may wait returns Future.
 I/O introduces no hidden Protos suspension point.
+I/O Error instances use the fresh-or-recorded identity rules owned by ERRORS.md; standard Error prototypes are category objects, never implicit singleton failures.
+Invalid semantic I/O arguments use InvalidIOArgument; lifecycle rejection/termination uses IOLifecycleError; bounded admission exhaustion uses IOCapacityExhausted; strict text conversion uses EncodingError; readLine limit failure uses LineTooLong; other standard I/O failures use IOError unless a narrower rule applies.
+I/O Error category never implies retry safety; commitment/effect semantics remain authoritative and Core handlers are non-resumable.
 
 ByteWritable.write captures its Bytes value snapshot at invocation.
 Later mutation of the caller's Bytes cannot change that write.
@@ -476,6 +540,7 @@ Wrapped capabilities do not propagate automatically.
 Wrapping does not imply lifecycle ownership.
 Owning-wrapper close uses deterministic first-failure precedence in mandated close order: wrapper finalization failure remains primary, while owned-target close is still committed and any later target-close failure cannot replace it.
 Invoking close commits permanent lifecycle termination; close itself cannot subsequently become cancelled.
+A failed close records one stable Error cause for that close lifecycle; same-domain re-observation uses that exact Error rather than a new instance.
 A failed close never returns release custody to the program and never authorizes blind native-close retry; uncertain residual backend release state remains implementation/host custody.
 Object unreachability/GC never semantically invokes close; deterministic resource release requires an explicit lifecycle operation, while best-effort unreachable-resource reclamation remains non-portable implementation/host cleanup.
 
