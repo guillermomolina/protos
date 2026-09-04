@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.246] - 2026-09-04
+
+### Fixed
+- Defined `ByteSeekable.position()` and `ByteSized.size()` as observation-only
+  Future-returning I/O queries with explicit cancellation boundaries.
+- Allowed cancellation to win until the query's result or failure outcome
+  commits, since these queries have no irreversible Protos sequence effect.
+- Defined successful cancellation to contribute no position/size/content state
+  change and no additional observation/frontier in the sequence-state domain.
+- Required residual backend/native query work that cannot be physically stopped
+  to remain under implementation/runtime custody and to discard its eventual
+  value/error rather than resurrecting a cancelled Future.
+- Clarified that cancelled queries reach an ordinary terminal Future state, so
+  later ordered operations compose with the actual aftermath of state-changing
+  predecessors rather than an implementation-selected query residue.
+- Prevented post-cancellation backend query completion from mutating sequence
+  state or retroactively changing later Protos observations.
+
+### Changed
+- Synchronized all revisioned specification documents to revision 246. Only
+  `PROTOS_IO_MODEL.md` gains normative semantic content in this revision.
+
+
 ## [0.1.245] - 2026-09-04
 
 ### Closed

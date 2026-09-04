@@ -1,7 +1,7 @@
 # Protos I/O Model v0.1
 
 Language version: 0.1  
-Document revision: 245
+Document revision: 246
 Status: Draft  
 Last updated: 2026-09-04
 This document is the normative domain model for Protos input/output semantics.
@@ -611,6 +611,14 @@ When a `ByteWritable` write on such a receiver fails after contributing a prefix
 
 `position()` is asynchronous for uniform no-hidden-suspension semantics even when a concrete implementation can answer immediately.
 
+`position()` is an observation-only I/O query. Its operation commits only when its non-negative Integer result or its failure outcome has been determined for that query. Before that commitment, cancellation may win and the Future becomes `cancelled`. A successfully cancelled `position()` contributes no logical-position change, no sequence-state effect, no ordering frontier beyond reaching its own terminal cancellation outcome, and no Protos-visible position observation.
+
+Because `position()` is read-only, implementation/backend work performed while answering it does not create an irreversible Protos sequence effect that by itself makes cancellation lose. If host/backend query work cannot be physically stopped after cancellation, that residual work remains under implementation/runtime custody: its eventual value or error is discarded, cannot resurrect or re-complete the cancelled Future, and cannot later modify the receiver's logical position or sequence state.
+
+The query remains an ordinary member of the receiver's sequence-state ordering domain until it reaches a terminal Future state. Successful cancellation is itself such a terminal outcome. A later ordered sequence-state operation therefore observes the aftermath of all earlier operations that actually changed state, but there is no additional state transition or observation frontier contributed by the cancelled `position()` query merely because backend work for it may still be unwinding internally.
+
+Once a `position()` result or failure has committed, cancellation cannot replace that terminal outcome.
+
 Seeking after EOF re-enables reading according to the new position.
 
 Standard `seek(position)`, `seekBy(offset)`, and `seekToEnd()` are failure-atomic with respect to the receiver's logical sequence position. If a seek Future fails, that seek operation leaves the logical position exactly as it was immediately before that seek's ordered evaluation.
@@ -642,6 +650,14 @@ ByteSized {
 ```
 
 `size()` returns a `Future` resolving to the current underlying byte-sequence length as a non-negative Integer measured in octets.
+
+`size()` is an observation-only I/O query with the same cancellation shape as `position()`. Its operation commits only when the non-negative Integer size result or its failure outcome has been determined for that query. Before that commitment, cancellation may win and the Future becomes `cancelled`.
+
+A successfully cancelled `size()` contributes no sequence-content, size, logical-position, durability, propagation, or lifecycle effect and establishes no observation/frontier that later ordered operations must preserve beyond the fact that the query itself reached a terminal cancelled state. Later ordered sequence-state operations are evaluated from the aftermath of the other operations in that ordering domain.
+
+Backend/native metadata work already started for a cancelled `size()` may finish only as residual implementation/runtime work when it cannot be physically stopped safely. Its eventual value or error is discarded and cannot re-complete the cancelled Future, mutate the represented sequence, or retroactively constrain which sequence state a later Protos query/change observes under the existing ordering rules.
+
+Once a `size()` result or failure has committed, cancellation cannot replace that terminal outcome.
 
 `Truncatable` is conceptually:
 
