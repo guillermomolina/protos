@@ -4,6 +4,29 @@ All notable changes to the Protos language specification and the concurrency des
 
 Specification version follows the document revision number: 0.1.X where X is the revision.
 
+## [0.1.276] - 2026-09-04
+
+### Closed
+- Closed non-local return across Actor boundaries as impossible in Core v0.1.
+- Defined Actor return homes as execution-domain-local control metadata that is
+  never transferred, proxied, remapped, or remotely targeted.
+- Clarified that destination Actor `^` may unwind only within destination-owned
+  execution structure and can never return into sender/creator/bootstrap
+  activations or another Actor's suspended continuation.
+- Preserved ordinary Actor communication as value transfer rather than hidden
+  continuation, reply, exception, or remote-stack control transfer.
+- Clarified that Actor replacement cannot resurrect a return home from the dead
+  incarnation.
+- Mirrored the existing P principle that isolation boundaries do not preserve
+  caller return-home authority.
+- Removed `Non-local return across Actor boundaries` from Open Design Topics.
+
+### Changed
+- Updated `PROTOS_LANGUAGE_SPEC.md`, `PROTOS_RUNTIME_SEMANTICS.md`, and
+  `PROTOS_CONCURRENCY_MODEL.md`.
+- Synchronized all five revisioned specification documents to document revision
+  276.
+
 ## [0.1.275] - 2026-09-04
 
 ### Fixed

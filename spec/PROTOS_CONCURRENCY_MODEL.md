@@ -1,7 +1,7 @@
 # Protos Concurrency Model v0.1
 
 Language version: 0.1
-Document revision: 275
+Document revision: 276
 Status: Draft
 Last updated: 2026-09-04
 # Protos Multithreading Design Ledger
@@ -1701,6 +1701,56 @@ producer contract.
 This section is a consolidation of existing normative rules, not a new lifetime
 mechanism. It closes the former open ledger item `Future ownership interaction
 with Actor lifecycle`.
+
+## 24H. Non-Local Return Never Crosses an Actor Boundary
+
+**CLOSED**
+
+Core v0.1 non-local return is always confined to the execution domain that owns
+the captured return home. An Actor boundary never transports, proxies, preserves,
+or remotely targets another Actor's return home.
+
+A `^` executed in destination-Actor code may therefore unwind only to a return
+home that belongs to that destination Actor's own current execution/closure
+structure. It cannot return into:
+
+- the sender's message-send or request activation;
+- the sender's Closure invocation;
+- a creator Actor's activation;
+- an activation that supplied bootstrap/initialization values;
+- a suspended task or continuation in another Actor;
+- a replacement incarnation of an Actor that once owned the original home.
+
+Actor messaging transfers ordinary permitted values under the Actor snapshot
+rules. It does not transfer execution contexts, call stacks, dynamic
+continuations, return homes, or lexical-control authority.
+
+Likewise, Actor bootstrap does not execute a transported caller Closure with its
+caller capture intact. The destination Actor executes code it already owns, with
+only explicitly supplied initialization values crossing by ordinary Actor
+transfer semantics.
+
+Consequently no implementation may realize cross-Actor control flow by treating
+a non-local return as a hidden reply, exception, continuation jump, remote stack
+unwind, or callback into the sender. `send()`/`request()` outcomes remain governed
+solely by their communication contracts.
+
+If a value graph that would require transferring a caller execution context,
+continuation, or equivalent return-home authority is otherwise offered for Actor
+transfer, it remains non-transferable under the existing Actor value-transfer
+rules. This section introduces no special cross-Actor return error category.
+
+Actor replacement cannot revive a dead return home. Return homes belong to
+concrete execution structure, not stable ActorRef or GroupRef identity.
+
+This rule is the Actor-domain counterpart of the existing P projection rule:
+P explicitly creates a fresh P-local return home rather than preserving the
+caller's. Across Actors the boundary is stricter still: no caller executable
+continuation crosses at all.
+
+A future explicit continuation or remote-workflow abstraction would need its own
+value, lifetime, authority, failure, cancellation, and distribution semantics.
+It must not retroactively turn ordinary `^` into cross-Actor control transfer.
 
 ## 25. Parent Actor Versus Failure Authority
 
@@ -5587,7 +5637,6 @@ mechanism, or implementation detail that still requires design.
 -   Native global state
 -   Blocking foreign calls
 -   Blocking-operation offload
--   Non-local return across Actor boundaries
 -   Dynamic error handlers across Actor boundaries
 -   Timers
 -   Clock semantics

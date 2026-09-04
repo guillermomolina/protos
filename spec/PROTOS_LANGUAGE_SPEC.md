@@ -1,7 +1,7 @@
 # Core Language Specification v0.1
 
 Language version: 0.1  
-Document revision: 275
+Document revision: 276
 Status: Draft  
 Last updated: 2026-09-04
 Normative I/O-domain semantics are defined in `PROTOS_IO_MODEL.md`.
@@ -2144,6 +2144,19 @@ selection rule.
 operation. A future wait-any/select facility must define an independent semantic
 priority or event-ordering contract rather than deriving meaning from
 implementation-selected completion timing.
+
+### Non-local return and Actor boundaries
+
+A non-local return (`^`) never targets an activation in another Actor.
+
+Actor communication transfers values, not execution contexts, continuations, or
+return-home authority. Destination Actor code can unwind only through return
+homes belonging to its own execution domain. `send()` and `request()` do not
+become hidden control-transfer channels merely because destination code executes
+`^`.
+
+Actor replacement does not preserve or recreate return homes from the terminated
+incarnation.
 
 ## 31. Structured Concurrency
 

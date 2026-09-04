@@ -1,7 +1,7 @@
 # Core Runtime Semantics v0.1
 
 Language version: 0.1  
-Document revision: 275
+Document revision: 276
 Status: Draft  
 Last updated: 2026-09-04
 This document defines executable-style pseudocode for the core runtime operations of the language.
@@ -6163,6 +6163,27 @@ If the Error graph itself is not P-transferable, the Future instead fails with a
 caller-domain `NonParallelValue`.
 
 ### P-local cooperative Future work
+
+### Actor-boundary return-home confinement
+
+Runtime representations of a return home are execution-domain-local control
+metadata. Actor transfer must never serialize, proxy, remap, or reconnect such
+metadata to another Actor.
+
+Conceptually:
+
+```text
+evaluateNonLocalReturn(currentExecution, home, value):
+    require home belongs to current Actor execution domain
+    unwind locally to home
+```
+
+A destination Actor never receives a sender home through message payload,
+bootstrap state, request metadata, or ActorRef/GroupRef routing state.
+
+If an implementation internally represents calls/continuations using host
+futures, stacks, fibers, continuations, callbacks, or RPC frames, those
+representations do not create a Core-visible cross-Actor return path.
 
 ### Future.all aggregate observation
 
