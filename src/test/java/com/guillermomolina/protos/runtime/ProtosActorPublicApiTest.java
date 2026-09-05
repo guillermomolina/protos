@@ -38,7 +38,7 @@ final class ProtosActorPublicApiTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
 
     @Test
-    void corePreludePublishesFrozenActorWithExactlySpawnAndCurrent() throws Exception {
+    void corePreludePublishesFrozenActorWithExactlySpawnCurrentAndGroup() throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
         Object binding = prelude.bindings().readLocalSlot("Actor").orElseThrow();
 
@@ -46,9 +46,11 @@ final class ProtosActorPublicApiTest {
         ProtosObjectValue actorObject = (ProtosObjectValue) binding;
         assertSame(ProtosObjectValue.rootObject(), actorObject.parent().orElseThrow());
         assertTrue(actorObject.isFrozen());
-        assertEquals(Set.of("spawn", "current"), actorObject.localSlotsSnapshot().keySet());
+        assertEquals(Set.of("spawn", "current", "group"), actorObject.localSlotsSnapshot().keySet());
         assertInstanceOf(ProtosClosureValue.class, actorObject.readLocalSlot("spawn").orElseThrow());
         assertInstanceOf(ProtosClosureValue.class, actorObject.readLocalSlot("current").orElseThrow());
+        assertInstanceOf(ProtosClosureValue.class, actorObject.readLocalSlot("group").orElseThrow());
+        assertFalse(prelude.bindings().hasLocalSlot("Group"));
         assertFalse(prelude.bindings().hasLocalSlot("SpawnOperation"));
         assertFalse(prelude.bindings().hasLocalSlot("ActorId"));
         assertFalse(prelude.bindings().hasLocalSlot("Mailbox"));
@@ -73,7 +75,7 @@ final class ProtosActorPublicApiTest {
 
         assertSame(sourceObject, installed);
         assertTrue(installed.isFrozen());
-        assertEquals(Set.of("spawn", "current"), installed.localSlotsSnapshot().keySet());
+        assertEquals(Set.of("spawn", "current", "group"), installed.localSlotsSnapshot().keySet());
         assertTrue(actorRefPrototype.isFrozen());
         assertEquals(
                 Set.of("send", "request", "stop", "termination"),
@@ -91,10 +93,16 @@ final class ProtosActorPublicApiTest {
                 assertInstanceOf(
                         ProtosClosureValue.class,
                         installed.readLocalSlot("current").orElseThrow());
+        ProtosClosureValue group =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        installed.readLocalSlot("group").orElseThrow());
         assertTrue(spawn.nativeBody().isPresent());
         assertTrue(current.nativeBody().isPresent());
+        assertTrue(group.nativeBody().isPresent());
         assertNull(spawn.definition());
         assertNull(current.definition());
+        assertNull(group.definition());
     }
 
     @Test

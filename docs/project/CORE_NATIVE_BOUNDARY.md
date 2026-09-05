@@ -62,14 +62,14 @@ the standard native boundary.
 | `ProtosStandardErrorProtocol.java` | 1 | host-irreducible | `Error.signal` performs the language Error control transfer with exact signaled-object preservation. |
 | `ProtosStandardFutureProtocol.java` | 2 | concurrency/runtime bridge | `future`, `value`, `cancel`, `detach`, `then`, and `all` depend on Task ownership, suspension, observation, terminal states, cancellation, and Actor-local execution domains. |
 | `ProtosParallelRuntime.java` | 2 | concurrency/runtime bridge | `parallel`, Array parallel operations, Bytes/ByteRegion `parallelRange`, snapshot transfer, reservations, commitment, and bounded host carriers form the P execution substrate. |
-| `ProtosStandardActorProtocol.java` | 8 | concurrency/runtime bridge | `spawn`/`current`, ActorRef `send`/`request`/`stop`/`termination`, GroupRef `send`/`request`, and SendOperation `cancel`/`retry` cross Actor/Group routing, transfer, admission, scheduler, uncertainty, and lifecycle boundaries. ActorRef and GroupRef receive distinct Closure values from the same two audited communication construction helpers; ActorRef, GroupRef, and SendOperation prototype identities are source-backed. |
+| `ProtosStandardActorProtocol.java` | 9 | concurrency/runtime bridge | `spawn`/`current`/`group`, ActorRef `send`/`request`/`stop`/`termination`, GroupRef `send`/`request`, and SendOperation `cancel`/`retry` cross Actor/Group routing, transfer, admission, scheduler, uncertainty, and lifecycle boundaries. ActorRef and GroupRef receive distinct Closure values from the same two audited communication construction helpers; ActorRef, GroupRef, and SendOperation prototype identities are source-backed. |
 | `ProtosStandardImportProtocol.java` | 1 | resource/capability bridge | The source-backed `import` facility's `call` crosses the host resolver, canonical ModuleKey, Actor-local module cache, loading, cycle, and initialization boundary. |
 | `ProtosStandardByteIoProtocol.java` | 12 | resource/capability bridge | Byte I/O operations are capability-honest wrappers over ordered flow state, Future commitment, positioning, sizing, truncation, sync, and directional shutdown. |
 | `ProtosStandardBufferedByteIoProtocol.java` | 6 | resource/capability bridge | Source-backed factories retain native construction bridges because wrappers attach buffering, ownership, underlying-capability validation, Future, and lifecycle state. |
 | `ProtosStandardFileProtocol.java` | 10 | resource/capability bridge | File objects are acquired resource capabilities whose exact local surface depends on backend-provided authority and whose operations own cursor/append/sync/close/commitment state. |
 | `ProtosStandardFilesystemProtocol.java` | 1 | resource/capability bridge | Host-provisioned Filesystem authority exposes the standard `open` bridge; its backend owns confined/race-free namespace selection, create/truncate commitment, stable-resource acquisition, cancellation cleanup, and standard File materialization. |
 
-Total audited production construction sites: **102 across 28 providers**.
+Total audited production construction sites: **103 across 28 providers**.
 
 I018-L closed with the 90-site/22-provider baseline. I016-D1 was an explicitly
 reviewed post-I018 resource/capability extension adding exactly one
@@ -133,6 +133,16 @@ confinement and conformance but no Java `nativeClosure` construction site.
 The final I017 boundary therefore remains exactly **102 sites across 28 providers**.
 The executable architecture guard still fixes both the provider/site inventory
 and the eight-selector native surface of the source-backed `Process` prototype.
+
+
+I011-21 is a reviewed concurrency/runtime-boundary extension implementing D039's
+only Core ActorGroup acquisition selector. `Actor.group(...)` adds exactly one
+native-Closure construction site to `ProtosStandardActorProtocol`, because the
+operation crosses current-Actor/Process ownership, Group identity/membership,
+and GroupRef capability construction in one synchronous cutover. It creates no
+public Group object, discovery registry, controller, placement, endpoint, or
+transport-selection API. The current boundary is therefore **103 sites across
+28 providers**.
 
 ## Source-backed I018 invariants
 

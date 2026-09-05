@@ -42,7 +42,7 @@ an item.
 | I008 | Modules | CLOSED | historical; see git history / CHANGELOG | — |
 | I009 | Future / Task | CLOSED | historical; see git history / CHANGELOG | I009A + I009B complete |
 | I010 | Parallel Execution | CLOSED | `f94362d50f9c809e62d2a84665f75b091bead2ca` | I009 |
-| I011 | Actors complete | IN_PROGRESS | — | build on I009/I010; see the verified I011 slice ledger below |
+| I011 | Actors complete | CLOSED | `SAME_COMMIT` | I011-1 through I011-21 complete; D039 acquisition implemented; B004 closed |
 | I012 | Standard Bytes | CLOSED | historical; see git history / CHANGELOG | — |
 | I013 | Standard Path | CLOSED | historical; see git history / CHANGELOG | — |
 | I014 | Standard Byte I/O | CLOSED | `2462ba74298e94181489e13de4e25dbbb82b21f9` | I009 + I012 |
@@ -55,7 +55,7 @@ an item.
 
 ### I011 — Actors
 
-Status: IN_PROGRESS
+Status: CLOSED
 
 Description: Core Actor runtime and communication semantics, implemented incrementally on the
 existing I009 Future/Task and I010 isolated-parallel infrastructure.
@@ -90,11 +90,12 @@ Published slices:
 | I011-18 | CLOSED | `0.2.126-SNAPSHOT` | `SAME_COMMIT` | Final local/cross-Process ActorGroup race/conformance slice: GroupRef continuity across member replacement; Process-loss rerouting only before concrete acceptance; accepted Group request loss maps to RequestOutcomeUncertain with no fallback replay; READY/cancel races admit exactly one legal outcome without duplicate execution. B004 records the still-undefined public Group/GroupRef acquisition/discovery API. |
 | I011-19 | CLOSED | `0.2.129-SNAPSHOT` | `SAME_COMMIT` | Host-neutral remote ActorRef communication-route foundation: preserved ActorRef identity; transport-owned acceptance knowledge; send cancellation/retry over known failure or uncertainty; request uncertainty (including cancellation ambiguity) -> RequestOutcomeUncertain; normal replies re-snapshot at the caller boundary. No public transport/discovery API or physical transport policy is added. |
 | I011-20 | CLOSED | `0.2.133-SNAPSHOT` | `SAME_COMMIT` | Remote ActorGroup routing over the I011-19 Actor transport boundary: runtime-only remote ActorRef members participate in ordinary Group selection; known pre-acceptance transport failure may reroute to another eligible member; accepted/acceptance-uncertain transport outcomes never transparently reroute; Group send uncertainty is explicitly retryable and Group request uncertainty maps to RequestOutcomeUncertain. No public Group membership/discovery/transport API is introduced. |
+| I011-21 | CLOSED | `0.2.137-SNAPSHOT` | `SAME_COMMIT` | D039 public ActorGroup acquisition: frozen `Actor.group(firstMember, additionalMembers...) -> GroupRef` validates the complete ActorRef vector before cutover, creates fresh Group/GroupRef identities with deduplicated initial membership, binds Group lifetime to the caller Actor's Process, preserves READY-gated/remote-capable routing, and terminates owned Groups at Process termination without stopping members. B004 closes; no public Group/controller/discovery/placement/endpoint API is added. |
 
-Remaining implemented-surface gaps before top-level closure:
-- B004 is READY after specification revision `0.1.376` / D039: the exact Core v0.1 `Actor.group(firstMember, additionalMembers...) -> GroupRef` acquisition surface is closed, while service discovery and post-creation Group control remain explicitly outside Core; I011 now has implementation work but no remaining normative blocker for acquisition;
-- I017 Process/bootstrap integration is now CLOSED: RootActor launcher/bootstrap provisioning, standard Process authority exposure, Process-local snapshots/streams/Encodings, explicit Actor delegation and P exclusion are reconciled; I011 has no remaining dependency on I017.
-- I011-18 closed the deterministic local/cross-Process race pass and I011-20 closes the remaining host-neutral remote Group-routing uncertainty path; no additional implemented Actor/Group communication gap remains outside B004 and whatever the current I017 ledger still requires for final Process/bootstrap reconciliation.
+Top-level closure reconciliation:
+- B004 is CLOSED: D039's exact Core v0.1 `Actor.group(firstMember, additionalMembers...) -> GroupRef` acquisition surface and caller-Process-owned Group lifetime are implemented and validated; service discovery and post-creation Group control remain explicitly outside Core v0.1 rather than implementation gaps.
+- I017 Process/bootstrap integration is CLOSED, so every Core Actor executes inside the Process ownership model required by D039.
+- I011-1 through I011-21 now cover Actor identity/lifecycle/bootstrap, transfer, bounded messaging, Future integration, graceful termination, GroupRef identity/routing, local/cross-Process/remote acceptance uncertainty, and the final public Group acquisition surface. No remaining Core v0.1 Actor implementation gap is recorded.
 
 
 ### I015 — Encoding / Text I/O

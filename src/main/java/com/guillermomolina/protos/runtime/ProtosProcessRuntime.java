@@ -21,6 +21,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 /**
  * Internal local Protos Process failure-domain and RootActor failure-authority substrate.
@@ -66,6 +67,7 @@ public final class ProtosProcessRuntime {
     private final ProtosActor rootActor;
     private final ProtosFilesystemValue rootFilesystem;
     private final Set<ProtosActor> liveActors = new LinkedHashSet<>();
+    private final Set<ProtosActorGroupRuntime> ownedGroups = new LinkedHashSet<>();
     private LifecycleState lifecycle = LifecycleState.RUNNING;
     private Object rootFailureCause;
     private ArgumentsSnapshotState argumentsSnapshotState =
@@ -431,6 +433,46 @@ public final class ProtosProcessRuntime {
         return actor;
     }
 
+    /**
+     * Creates one D039 ActorGroup owned by this Process and returns its first GroupRef acquisition.
+     *
+     * <p>The caller validates the complete public argument vector before entering this boundary.
+     * Construction keeps the exact ActorRef capabilities, collapses repeated Actor incarnations by
+     * Group membership identity, and publishes no Group/control handle. If Process termination has
+     * already begun concurrently with the caller's non-preemptive segment, the newly established
+     * Group is immediately terminated before this method returns; its members are never stopped by
+     * that Group termination.
+     */
+    public ProtosGroupRefValue createActorGroupForRuntime(
+            ProtosObjectValue groupRefPrototype, List<ProtosActorRefValue> initialMembers) {
+        Objects.requireNonNull(groupRefPrototype, "groupRefPrototype");
+        Objects.requireNonNull(initialMembers, "initialMembers");
+        if (initialMembers.isEmpty()) {
+            throw new IllegalArgumentException("ActorGroup requires at least one initial member");
+        }
+        for (ProtosActorRefValue member : initialMembers) {
+            Objects.requireNonNull(member, "initial ActorGroup member");
+        }
+
+        // The Group/GroupRef are not externally reachable until the complete cutover returns.
+        ProtosActorGroupRuntime group = new ProtosActorGroupRuntime();
+        for (ProtosActorRefValue member : initialMembers) {
+            group.addInitialMemberReferenceForRuntime(member);
+        }
+        ProtosGroupRefValue reference =
+                group.acquireReferenceForRuntime(groupRefPrototype, UUID.randomUUID());
+
+        boolean terminateImmediately;
+        synchronized (this) {
+            ownedGroups.add(group);
+            terminateImmediately = lifecycle != LifecycleState.RUNNING;
+        }
+        if (terminateImmediately) {
+            group.markTerminatedForRuntime();
+        }
+        return reference;
+    }
+
     /** Internal failure-authority entry used only for an unhandled fatal Actor failure. */
     void actorFatalFailureForRuntime(ProtosActor actor, Object failure) {
         Objects.requireNonNull(actor, "actor");
@@ -451,6 +493,7 @@ public final class ProtosProcessRuntime {
 
     private boolean beginTermination(Object rootFailure) {
         Set<ProtosActor> terminate;
+        Set<ProtosActorGroupRuntime> terminateGroups;
         synchronized (this) {
             if (rootFailure != null && rootFailureCause == null) {
                 rootFailureCause = rootFailure;
@@ -460,6 +503,13 @@ public final class ProtosProcessRuntime {
             }
             lifecycle = LifecycleState.TERMINATING;
             terminate = Set.copyOf(liveActors);
+            terminateGroups = Set.copyOf(ownedGroups);
+        }
+
+        // Stop Group routing at the Process cutover before member-Actor termination can trigger
+        // routing eligibility callbacks. Group termination itself never stops a member Actor.
+        for (ProtosActorGroupRuntime group : terminateGroups) {
+            group.markTerminatedForRuntime();
         }
 
         // Never hold the Process monitor while entering Actor termination. Actor cleanup can invoke
@@ -501,6 +551,10 @@ public final class ProtosProcessRuntime {
 
     synchronized int liveActorCountForTesting() {
         return liveActors.size();
+    }
+
+    synchronized int ownedGroupCountForTesting() {
+        return ownedGroups.size();
     }
 
     synchronized Optional<Object> rootFailureCauseForTesting() {

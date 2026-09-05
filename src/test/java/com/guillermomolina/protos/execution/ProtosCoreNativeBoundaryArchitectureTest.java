@@ -64,7 +64,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardBytesProtocol.java", 7),
                     Map.entry("execution/ProtosStandardByteIoProtocol.java", 12),
                     Map.entry("execution/ProtosStandardObjectProtocol.java", 2),
-                    Map.entry("execution/ProtosStandardActorProtocol.java", 8),
+                    Map.entry("execution/ProtosStandardActorProtocol.java", 9),
                     Map.entry("execution/ProtosStandardIdentityMapProtocol.java", 7),
                     Map.entry("execution/ProtosStandardStringProtocol.java", 3),
                     Map.entry("execution/ProtosStandardBufferedByteIoProtocol.java", 6),
@@ -100,7 +100,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actual);
         assertEquals(28, actual.size());
-        assertEquals(102, actual.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(103, actual.values().stream().mapToInt(Integer::intValue).sum());
 
         String inventory =
                 Files.readString(Path.of("docs", "project", "CORE_NATIVE_BOUNDARY.md"));
@@ -208,7 +208,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertNativeSelectors(
                 "Actor",
                 ordinaryBinding(prelude, "Actor"),
-                Set.of("spawn", "current"));
+                Set.of("spawn", "current", "group"));
         assertNativeSelectors(
                 "Process",
                 prelude.processPrototype(),
@@ -296,7 +296,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 "GroupRef", groupRefPrototype, Set.of("send", "request"));
         assertNativeSelectors(
                 "SendOperation", sendOperationPrototype, Set.of("cancel", "retry"));
-        assertNativeSelectors("Actor", actorObject, Set.of("spawn", "current"));
+        assertNativeSelectors("Actor", actorObject, Set.of("spawn", "current", "group"));
 
         String parallel =
                 Files.readString(

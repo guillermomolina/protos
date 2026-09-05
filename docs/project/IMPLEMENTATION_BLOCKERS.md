@@ -129,7 +129,7 @@ continue independently.
 
 ## B004 — Public Group/GroupRef acquisition and discovery API
 
-Status: READY
+Status: CLOSED
 
 Implementation area:
 I011 public ActorGroup acquisition through the exact Core v0.1 surface closed by D039.
@@ -156,12 +156,18 @@ ownership/lifetime, result identity, authority boundary, and explicit absence of
 without choosing new observable semantics.
 
 Current consequence:
-I011 may implement exactly `Actor.group(firstMember, additionalMembers...) -> GroupRef` and the
-required Process-owned Group lifetime integration. Do not add a public `Group` object,
-Group/GroupRef lookup/reacquisition selector, post-creation membership/controller API, registry,
-discovery namespace, endpoint syntax, placement policy, or transport-selection surface as part
-of B004 implementation. B004 remains READY until the specified acquisition surface is implemented,
-validated, and published; only then should it become CLOSED.
+Implemented and published by I011-21. The frozen Core `Actor` object exposes exactly
+`spawn`, `current`, and `group`; `Actor.group(firstMember, additionalMembers...)` validates the
+complete ActorRef vector before cutover, establishes one Process-owned Group with set membership,
+and returns one fresh GroupRef acquisition. Owning-Process termination terminates the Group
+without stopping members. No public Group object, lookup/reacquisition selector, post-creation
+membership/controller API, registry, discovery namespace, endpoint syntax, placement policy, or
+transport-selection surface was introduced.
+
+History:
+B004 moved `BLOCKED -> READY` when specification revision `0.1.376` / D039 closed the exact
+portable acquisition surface and explicitly excluded Core service discovery. I011-21 implements
+that surface and its Process-owned lifetime integration, so the blocker is now `CLOSED`.
 
 Independent work:
 Optional service discovery, post-creation Group control/membership, desired-cardinality/controller

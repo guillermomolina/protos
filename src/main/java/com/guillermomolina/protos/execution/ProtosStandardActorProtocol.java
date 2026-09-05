@@ -31,8 +31,10 @@ import com.guillermomolina.protos.runtime.ProtosGroupRefValue;
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.Executor;
@@ -44,6 +46,7 @@ public final class ProtosStandardActorProtocol {
     private final ProtosActorScheduler actorScheduler;
     private final ProtosObjectValue sendOperationPrototype;
     private final ProtosObjectValue actorRefPrototype;
+    private ProtosObjectValue groupRefPrototype;
 
     public ProtosStandardActorProtocol(
             ProtosModuleRuntime moduleRuntime,
@@ -105,7 +108,8 @@ public final class ProtosStandardActorProtocol {
         validateSourcePrototype(prototype, "GroupRef");
         prototype.createLocalSlot("send", newSendClosure());
         prototype.createLocalSlot("request", newRequestClosure());
-        return prototype.freeze();
+        groupRefPrototype = prototype.freeze();
+        return groupRefPrototype;
     }
 
     /*
@@ -170,6 +174,10 @@ public final class ProtosStandardActorProtocol {
                 "current",
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) -> current(activation, supplied)));
+        actorObject.createLocalSlot(
+                "group",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> group(activation, supplied)));
         return actorObject.freeze();
     }
 
@@ -235,6 +243,44 @@ public final class ProtosStandardActorProtocol {
             terminateAfterCutover(actor);
         }
         return reference;
+    }
+
+    private Object group(ProtosActivation activation, List<?> supplied) {
+        Objects.requireNonNull(activation, "activation");
+        Objects.requireNonNull(supplied, "supplied");
+        if (supplied.isEmpty()) {
+            throw error(activation);
+        }
+
+        // D039: validate the complete evaluated vector before creating either identity.
+        List<ProtosActorRefValue> initialMembers = new ArrayList<>(supplied.size());
+        for (Object suppliedMember : supplied) {
+            if (!(suppliedMember instanceof ProtosActorRefValue reference)) {
+                throw error(activation);
+            }
+            initialMembers.add(reference);
+        }
+
+        ProtosObjectValue installedGroupRefPrototype = groupRefPrototype;
+        if (installedGroupRefPrototype == null) {
+            throw new IllegalStateException("Actor.group requires the installed Core GroupRef prototype");
+        }
+
+        ProtosActor creator =
+                activation.executionDomain()
+                        .currentActorForRuntime()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Actor.group requires execution inside an Actor incarnation"));
+        ProtosProcessRuntime owningProcess =
+                creator.processForRuntime()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Actor.group requires the caller Actor's Process"));
+        return owningProcess.createActorGroupForRuntime(
+                installedGroupRefPrototype, initialMembers);
     }
 
     private Object send(ProtosActivation activation, List<?> supplied) {

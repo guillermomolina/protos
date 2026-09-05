@@ -76,6 +76,30 @@ public final class ProtosActorGroupRuntime {
     }
 
     /**
+     * Establishes one D039 initial member from the exact supplied ActorRef capability.
+     *
+     * <p>The reference itself is retained so an already-materialized transport route remains usable,
+     * while the currently known Actor lifecycle supplies readiness/termination eligibility. This is
+     * construction-only runtime machinery, not a public post-creation membership operation.
+     */
+    boolean addInitialMemberReferenceForRuntime(ProtosActorRefValue reference) {
+        Objects.requireNonNull(reference, "reference");
+        Member member = Member.initial(reference);
+        boolean added;
+        synchronized (this) {
+            if (lifecycle != LifecycleState.LIVE) {
+                throw new IllegalStateException("terminated Group cannot acquire members");
+            }
+            added = members.putIfAbsent(member.identity(), member) == null;
+        }
+        if (added) {
+            member.localActor.registerRoutingGroupForRuntime(this);
+            drainPendingForRuntime();
+        }
+        return added;
+    }
+
+    /**
      * Adds one remotely routed ActorRef already known eligible in the caller's Group membership view.
      *
      * <p>This is not a public membership/discovery API. The caller owns remote READY/membership
@@ -363,6 +387,10 @@ public final class ProtosActorGroupRuntime {
 
         private static Member local(ProtosActor actor) {
             return new Member(actor.reference(), actor);
+        }
+
+        private static Member initial(ProtosActorRefValue reference) {
+            return new Member(reference, reference.localActorForRuntime());
         }
 
         private static Member remote(ProtosActorRefValue reference) {

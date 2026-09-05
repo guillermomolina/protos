@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.137-SNAPSHOT
+
+- Implement I011-21 / D039 public ActorGroup acquisition with the exact frozen-Core selector `Actor.group(firstMember, additionalMembers...) -> GroupRef`: validate the complete evaluated argument vector as ActorRefs before cutover, create one fresh Group identity plus one fresh GroupRef acquisition, and collapse duplicate Actor incarnations into set membership.
+- Bind Core-created Group lifetime to the caller Actor's Process without exposing a Group/controller handle: owning-Process termination terminates the Group before member-lifecycle callbacks can continue routing, while Group termination never stops member Actors and existing GroupRefs remain bound to the same terminated Group identity.
+- Reuse the I011-15..20 GroupRef/routing/transport machinery and keep service discovery, post-creation membership control, placement, endpoints, and transport selection outside Core v0.1. Close B004 and top-level I011 after focused and full-suite validation; record the reviewed native boundary expansion from 102 to 103 sites across the same 28 providers.
+
 ## 0.2.136-SNAPSHOT
 
 - Close I019-A by renaming the Core Actor source from `actor.protos` to `Actor.protos`: `Actor` is the dominant public owner of the source while `_coreActorRefPrototype`, `_coreGroupRefPrototype`, and `_coreSendOperationPrototype` are private subordinate bootstrap identities.
