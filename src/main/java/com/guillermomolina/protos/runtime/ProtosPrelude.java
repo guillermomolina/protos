@@ -171,10 +171,19 @@ public final class ProtosPrelude {
 
     public ProtosActivation newModuleActivation() {
         ProtosObjectValue moduleContext = newExecutionContext();
-        return ProtosActivation.withPrelude(
-                moduleContext,
+        return newModuleActivation(new ProtosActorModuleState(), null, moduleContext);
+    }
+
+    public ProtosActivation newModuleActivation(
+            ProtosActorModuleState actorModuleState,
+            ProtosModuleKey moduleKey,
+            ProtosObjectValue moduleContext) {
+        return ProtosActivation.withPreludeAndModuleState(
+                Objects.requireNonNull(moduleContext, "moduleContext"),
                 java.util.List.of(bindings),
                 moduleContext,
-                this);
+                this,
+                Objects.requireNonNull(actorModuleState, "actorModuleState"),
+                moduleKey);
     }
 }

@@ -41,7 +41,12 @@ public final class ProtosClosureInvoker {
         Objects.requireNonNull(supplied, "supplied");
         com.guillermomolina.protos.runtime.ProtosPrelude fallbackPrelude =
                 caller == null ? null : caller.prelude().orElse(null);
-        ProtosActivation activation = ProtosActivation.forClosureInvocation(closure, supplied, fallbackPrelude);
+        ProtosActivation activation =
+                caller == null
+                        ? ProtosActivation.forClosureInvocation(closure, supplied, fallbackPrelude)
+                        : ProtosActivation.forClosureInvocation(
+                                closure, supplied, fallbackPrelude, caller.actorModuleState(),
+                                caller.currentModuleKey().orElse(null));
         ProtosReturnHome returnHome =
                 activation.returnHome()
                         .orElseThrow(

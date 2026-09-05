@@ -31,12 +31,14 @@ public final class ProtosActivation {
     private final ProtosObjectValue methodHome;
     private final boolean ownsReturnHome;
     private final boolean construction;
+    private final ProtosActorModuleState actorModuleState;
+    private final ProtosModuleKey currentModuleKey;
 
     public ProtosActivation(
             ProtosObjectValue context,
             List<ProtosObjectValue> capturedLexicalContexts,
             Object receiver) {
-        this(context, capturedLexicalContexts, receiver, null, null, null, null, false, false);
+        this(context, capturedLexicalContexts, receiver, null, null, null, null, false, false, new ProtosActorModuleState(), null);
     }
 
     static ProtosActivation withPrelude(
@@ -53,7 +55,22 @@ public final class ProtosActivation {
                 null,
                 null,
                 false,
-                false);
+                false,
+                new ProtosActorModuleState(),
+                null);
+    }
+
+    static ProtosActivation withPreludeAndModuleState(
+            ProtosObjectValue context,
+            List<ProtosObjectValue> capturedLexicalContexts,
+            Object receiver,
+            ProtosPrelude prelude,
+            ProtosActorModuleState actorModuleState,
+            ProtosModuleKey currentModuleKey) {
+        return new ProtosActivation(
+                context, capturedLexicalContexts, receiver,
+                Objects.requireNonNull(prelude, "prelude"), null, null, null, false, false,
+                Objects.requireNonNull(actorModuleState, "actorModuleState"), currentModuleKey);
     }
 
     public static ProtosActivation withReturnHome(
@@ -70,7 +87,9 @@ public final class ProtosActivation {
                 Objects.requireNonNull(returnHome, "returnHome"),
                 null,
                 false,
-                false);
+                false,
+                new ProtosActorModuleState(),
+                null);
     }
 
     public static ProtosActivation withMethodHome(
@@ -87,7 +106,9 @@ public final class ProtosActivation {
                 null,
                 Objects.requireNonNull(methodHome, "methodHome"),
                 false,
-                false);
+                false,
+                new ProtosActorModuleState(),
+                null);
     }
 
     public static ProtosActivation forClosureInvocation(
@@ -100,8 +121,18 @@ public final class ProtosActivation {
             ProtosClosureValue closure,
             java.util.List<?> supplied,
             ProtosPrelude fallbackPrelude) {
+        return forClosureInvocation(closure, supplied, fallbackPrelude, new ProtosActorModuleState(), null);
+    }
+
+    public static ProtosActivation forClosureInvocation(
+            ProtosClosureValue closure,
+            java.util.List<?> supplied,
+            ProtosPrelude fallbackPrelude,
+            ProtosActorModuleState actorModuleState,
+            ProtosModuleKey currentModuleKey) {
         Objects.requireNonNull(closure, "closure");
         Objects.requireNonNull(supplied, "supplied");
+        Objects.requireNonNull(actorModuleState, "actorModuleState");
 
         ProtosPrelude prelude = closure.prelude().orElse(fallbackPrelude);
         if (prelude == null) {
@@ -121,7 +152,9 @@ public final class ProtosActivation {
                 invocationHome,
                 closure.methodHome().orElse(null),
                 ownsReturnHome,
-                false);
+                false,
+                actorModuleState,
+                currentModuleKey);
     }
 
     private ProtosActivation(
@@ -133,7 +166,9 @@ public final class ProtosActivation {
             ProtosReturnHome returnHome,
             ProtosObjectValue methodHome,
             boolean ownsReturnHome,
-            boolean construction) {
+            boolean construction,
+            ProtosActorModuleState actorModuleState,
+            ProtosModuleKey currentModuleKey) {
         this.context = Objects.requireNonNull(context, "context");
         this.capturedLexicalContexts =
                 List.copyOf(Objects.requireNonNull(
@@ -145,6 +180,8 @@ public final class ProtosActivation {
         this.methodHome = methodHome;
         this.ownsReturnHome = ownsReturnHome;
         this.construction = construction;
+        this.actorModuleState = Objects.requireNonNull(actorModuleState, "actorModuleState");
+        this.currentModuleKey = currentModuleKey;
     }
 
     public static ProtosActivation forObjectConstruction(
@@ -161,7 +198,9 @@ public final class ProtosActivation {
                 enclosing.returnHome,
                 enclosing.methodHome,
                 false,
-                true);
+                true,
+                enclosing.actorModuleState,
+                enclosing.currentModuleKey);
     }
 
     public ProtosObjectValue context() {
@@ -179,6 +218,10 @@ public final class ProtosActivation {
     public Optional<ProtosPrelude> prelude() {
         return Optional.ofNullable(prelude);
     }
+
+    public ProtosActorModuleState actorModuleState() { return actorModuleState; }
+
+    public Optional<ProtosModuleKey> currentModuleKey() { return Optional.ofNullable(currentModuleKey); }
 
     public Optional<ProtosArrayValue> arguments() {
         return Optional.ofNullable(arguments);

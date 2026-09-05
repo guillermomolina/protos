@@ -4,6 +4,13 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## 0.2.69-SNAPSHOT
+
+- Implement I008 standard module runtime semantics: exact semantic-String `import(specifier)`, host-produced canonical `ModuleKey`, Actor-local module caches, cache-before-execute cycles, single evaluation, failure eviction, and retry.
+- Execute imported module source exclusively through `ProtosSourceCompiler`; module instances are their ordinary `moduleContext` objects and partially initialized state is directly observable during cycles.
+- Translate host resolver/source/compiler failures to Core `Error` signaling without exposing Java exceptions, while leaving host resolution policy and Filesystem APIs outside I008.
+- Add focal module conformance coverage for semantic membership, canonical identity, Actor isolation, cycles, cache behavior, retry, and host-error translation.
+
 ## 0.2.68-SNAPSHOT
 
 - Implement Standard Bytes semantics: add receiver-owned mutable standard Bytes state and an explicitly installable standardized Bytes factory/prototype without adding a mandatory Core-prelude binding.

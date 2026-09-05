@@ -38,7 +38,12 @@ public final class ProtosCoreBootstrap {
     }
 
     public ProtosPrelude bootstrap(Path coreDirectory) throws IOException {
+        return bootstrap(coreDirectory, ProtosModuleResolver.rejecting());
+    }
+
+    public ProtosPrelude bootstrap(Path coreDirectory, ProtosModuleResolver moduleResolver) throws IOException {
         Objects.requireNonNull(coreDirectory, "coreDirectory");
+        Objects.requireNonNull(moduleResolver, "moduleResolver");
 
         ProtosStandardObjectProtocol.install();
 
@@ -248,6 +253,10 @@ public final class ProtosCoreBootstrap {
         preludeBindings.createLocalSlot("Map", mapPrototype);
         preludeBindings.createLocalSlot("IdentityMap", identityMapPrototype);
         preludeBindings.createLocalSlot("Path", pathPrototype);
+        preludeBindings.createLocalSlot(
+                "import",
+                ProtosStandardImportProtocol.createImportFacility(
+                        new ProtosModuleRuntime(moduleResolver)));
         preludeBindings.freeze();
 
         return new ProtosPrelude(preludeBindings, contextPrototype);
