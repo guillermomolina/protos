@@ -110,21 +110,19 @@ Published slices:
 | I016-C | CLOSED | `0.2.90-SNAPSHOT` | `SAME_COMMIT` | Append-mode File semantics: each non-empty write selects then-current EOF at contribution time; empty append preserves the cursor; failed-prefix aftermath is exact; same-resource File aliases use a backend-wide atomic append-placement boundary with nondeterministic relative order and no overlap/interleaving; pre-commit cancellation/Actor termination contribute nothing. |
 | I016-D1 | CLOSED | `0.2.109-SNAPSHOT` | `SAME_COMMIT` | Host-provisioned open-only Filesystem capability; `open` integration with I016-A and standard File materialization from B/C; exact ordinary options domain; authority/confinement/stable-resource backend contract; minimal mandatory I018 native-boundary registration. |
 | I016-D2 | CLOSED | `0.2.110-SNAPSHOT` | `SAME_COMMIT` | Explicit runtime File/Filesystem authority markers; actual standard protocol materialization uses those markers; direct live authority and authority-bearing ordinary descendants fail Actor transfer with `NonTransferableValue` and P transfer with `NonParallelValue`; no native-Closure boundary expansion. |
-| I016-D3 | READY | — | — | Run deterministic confinement/stable-binding/open-cancellation/capability-shape conformance and re-audit/reconcile the complete then-current I018 native boundary. |
-| I016-D4 | BLOCKED_BY_DEPENDENCIES | — | — | Final cross-slice conformance, project-status/dependency closure, mark I016 CLOSED and release I017 to READY after a fresh current-main audit. |
+| I016-D3 | CLOSED | `0.2.111-SNAPSHOT` | `SAME_COMMIT` | Integrated authority/open conformance covers pre/post-commit cancellation, late custody cleanup, stable selected-resource binding, independent out-of-order opens, backend confinement-policy rejection, and descriptor-owned optional capability shape; post-D2 I018 boundary re-audit confirms 23 providers / 91 sites and no Filesystem prelude binding. |
+| I016-D4 | READY | — | — | Final cross-slice conformance, project-status/dependency closure, mark I016 CLOSED and release I017 to READY after a fresh current-main audit. |
 
 Current I016-D completion plan:
 - **D1 — Filesystem open integration (CLOSED by this slice):** expose only a host-provisioned `open` capability, connect A to B/C, enforce exact ordinary options, and register the unavoidable resource bridge with the I018 guard.
 - **D2 — authority/transfer boundaries (CLOSED):** explicit File/Filesystem runtime authority markers now back the real standard capabilities; Actor/P reject direct and delegation-carried live authority without broadening the standard message surface.
-- **D3 — deterministic authority/race conformance + I018 re-audit (READY):** exercise confinement/stable selected-resource/open-cancellation/capability-shape invariants and reconcile the complete then-current native boundary.
-- **D4 — final I016 closure (blocked by D3):** run final cross-slice conformance, close I016 in the ledger, and move I017 to READY after re-auditing its current dependencies.
+- **D3 — deterministic authority/race conformance + I018 re-audit (CLOSED):** integrated tests now cover cancellation commitment, stable selected-resource custody, independent opens, backend authority rejection, and descriptor-owned capability shape; the post-D2 native boundary remains exactly 23 providers / 91 sites.
+- **D4 — final I016 closure (READY):** run final cross-slice conformance, close I016 in the ledger, and move I017 to READY after re-auditing its current dependencies.
 
 Dependency chain: `I016-D1 -> I016-D2 -> I016-D3 -> I016-D4`.
 
-Remaining implemented-surface gaps before top-level closure:
-- deterministic confinement/stable-resource/open-race conformance on the integrated capability path;
-- final post-D2 I018 native-boundary re-audit;
-- final D4 cross-slice validation and ledger/dependency closure.
+Remaining implemented-surface gap before top-level closure:
+- final D4 cross-slice validation and ledger/dependency closure, including a fresh current-main dependency audit before releasing I017.
 
 
 ### I018 — Core self-hosting / bootstrap minimization

@@ -94,6 +94,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         }
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actual);
+        assertEquals(23, actual.size());
         assertEquals(91, actual.values().stream().mapToInt(Integer::intValue).sum());
 
         String inventory =
@@ -109,6 +110,10 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
     @Test
     void staticCoreSurfaceKeepsOnlyTheAuditedNativeSelectors() throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+
+        assertTrue(
+                prelude.bindings().readLocalSlot("Filesystem").isEmpty(),
+                "Filesystem authority must remain host-provisioned, not a Core-prelude binding");
 
         assertNativeSelectors(
                 "Object",

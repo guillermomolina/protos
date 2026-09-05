@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.111-SNAPSHOT
+
+- Implement I016-D3 integrated Filesystem/File conformance: deterministic pre-commit cancellation and late-custody release, post-commit cancellation precedence, stable selected-resource binding across simulated namespace replacement, independent same-path opens with out-of-order completion, backend authority rejection without fallback, and descriptor-owned optional capability shape.
+- Re-audit the complete post-D2 I018 native boundary and confirm it remains 23 providers / 91 native-Closure construction sites; strengthen the architecture guard with the explicit provider count and the invariant that Filesystem authority is absent from the Core prelude. I016-D4 becomes READY for final cross-slice validation and project-status/dependency closure.
+
 ## 0.2.110-SNAPSHOT
 
 - Implement I016-D2 authority/transfer boundaries with explicit runtime markers for live File and host-provisioned Filesystem capabilities while keeping their language-visible ordinary-object protocols unchanged.

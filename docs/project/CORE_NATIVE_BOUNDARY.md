@@ -66,10 +66,15 @@ the standard native boundary.
 
 Total audited production construction sites: **91 across 23 providers**.
 
-I018-L closed with the 90-site/22-provider baseline. I016-D1 is an explicitly
+I018-L closed with the 90-site/22-provider baseline. I016-D1 was an explicitly
 reviewed post-I018 resource/capability extension adding exactly one
-`Filesystem.open` native-Closure construction site. I016-D3 must re-audit the
-complete then-current boundary before I016 final closure.
+`Filesystem.open` native-Closure construction site.
+
+I016-D3 re-audited the complete boundary after D2. The current result remains
+**91 sites across 23 providers**: D2's File/Filesystem authority markers and
+Actor/P transfer guards add no native Closure construction site, and D3 adds
+only conformance/architecture evidence. `Filesystem` remains absent from the
+Core prelude. No source-expressible standard behavior has moved back into Java.
 
 ## Source-backed I018 invariants
 
