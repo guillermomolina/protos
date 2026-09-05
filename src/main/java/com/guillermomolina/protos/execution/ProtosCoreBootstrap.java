@@ -133,6 +133,9 @@ public final class ProtosCoreBootstrap {
                 .load(coreDirectory.resolve("TextReader.protos"))
                 .call(bootstrapActivation);
         sourceLoader
+                .load(coreDirectory.resolve("TextWriter.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
                 .load(coreDirectory.resolve("BufferedReader.protos"))
                 .call(bootstrapActivation);
         sourceLoader
@@ -290,6 +293,9 @@ public final class ProtosCoreBootstrap {
         ProtosObjectValue textReaderFactory =
                 requirePrototype(
                         bootstrapContext, "TextReader", ProtosObjectValue.rootObject());
+        ProtosObjectValue textWriterFactory =
+                requirePrototype(
+                        bootstrapContext, "TextWriter", ProtosObjectValue.rootObject());
         ProtosObjectValue bufferedReaderFactory =
                 requirePrototype(
                         bootstrapContext, "BufferedReader", ProtosObjectValue.rootObject());
@@ -323,6 +329,8 @@ public final class ProtosCoreBootstrap {
 
         ProtosStandardTextReaderProtocol.installFactory(
                 textReaderFactory, bootstrapActivation);
+        ProtosStandardTextWriterProtocol.installFactory(
+                textWriterFactory, bootstrapActivation);
         ProtosStandardBufferedByteIoProtocol.installReaderFactory(
                 bufferedReaderFactory, bufferedBytesPrototype, bootstrapActivation);
         ProtosStandardBufferedByteIoProtocol.installWriterFactory(

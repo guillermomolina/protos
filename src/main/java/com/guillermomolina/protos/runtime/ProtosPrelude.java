@@ -163,6 +163,10 @@ public final class ProtosPrelude {
 
     public ProtosObjectValue processPrototype() { return requiredOrdinaryBinding("Process"); }
 
+    public ProtosObjectValue textWriterPrototype() {
+        return requiredOrdinaryBinding("TextWriter");
+    }
+
     /** Runtime-only exact source-backed Bytes prototype omitted from public prelude bindings. */
     public ProtosObjectValue bytesPrototypeForRuntime() {
         if (runtimeBytesPrototype == null) {

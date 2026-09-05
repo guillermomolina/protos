@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.144-SNAPSHOT
+
+- Implement I015-D source-backed standard `TextWriter` with borrowing `TextWriter(target, encoding)` and explicit `TextWriter.owning(target, encoding)` construction. Construction validates ByteWritable authority, exact portable Encoding-family membership and owning Closable authority synchronously before wrapper creation or target I/O; each success creates a fresh wrapper exposing exactly `writeText`, `writeLine`, `flush`, and `close`.
+- Add one ordered text-output domain. `writeText(text)` and `writeLine(text)` validate complete portable UTF8/UTF16LE/UTF16BE/Latin1 payload encoding before target contribution; `writeLine` appends canonical LF in the same logical operation. `writeText("")` performs no encoder invocation/state transition/BOM/flush/reset/target write but remains ordered behind earlier operations. Encoding failure is zero-output and non-poisoning; once target write/flush delegation crosses the wrapper commitment frontier, downstream failure permanently fails later output without guessed replay.
+- Compose Flushable and Closable/ownership semantics with I014 lifecycle machinery. Wrapper `flush()` propagates through an immediate Flushable target and otherwise ends at the ByteWritable boundary; close cuts over accepted-but-uncommitted operations, waits for already-committed output aftermath, does not imply flush, and closes the target only for `owning`. A prior wrapper-output failure remains the primary close failure while owned-target close is still attempted. I015-D covers portable encoders; host-provided incremental encoder integration remains I015-E. Register the two-site TextWriter resource bridge in I018, growing the definitive boundary by exactly one provider and two construction sites. I015-D is CLOSED and I015-E becomes READY.
+
 ## 0.2.143-SNAPSHOT
 
 - Close the focused LIB001-E audit and complete `std:collections/Array` with eager sequential `reduce(array, reducer, ...initial)` and stable `sort(array, less)` as ordinary Protos library behavior; close top-level LIB001 after final cross-slice validation.

@@ -140,6 +140,7 @@ class ProtosCoreBootstrapTest {
                         "Actor",
                         "Process",
                         "TextReader",
+                        "TextWriter",
                         "BufferedReader",
                         "BufferedWriter",
                         "import"),

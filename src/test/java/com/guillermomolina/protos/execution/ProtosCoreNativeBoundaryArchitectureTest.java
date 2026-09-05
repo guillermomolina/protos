@@ -61,6 +61,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardEnvironmentProtocol.java", 3),
                     Map.entry("execution/ProtosStandardEncodingProtocol.java", 2),
                     Map.entry("execution/ProtosStandardTextReaderProtocol.java", 2),
+                    Map.entry("execution/ProtosStandardTextWriterProtocol.java", 2),
                     Map.entry("execution/ProtosStandardProcessStreamProtocol.java", 2),
                     Map.entry("execution/ProtosStandardProcessProtocol.java", 1),
                     Map.entry("execution/ProtosStandardBytesProtocol.java", 7),
@@ -101,8 +102,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         }
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actual);
-        assertEquals(29, actual.size());
-        assertEquals(105, actual.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(30, actual.size());
+        assertEquals(107, actual.values().stream().mapToInt(Integer::intValue).sum());
 
         String inventory =
                 Files.readString(Path.of("docs", "project", "CORE_NATIVE_BOUNDARY.md"));
@@ -228,6 +229,10 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 ordinaryBinding(prelude, "TextReader"),
                 Set.of("call", "owning"));
         assertNativeSelectors(
+                "TextWriter",
+                ordinaryBinding(prelude, "TextWriter"),
+                Set.of("call", "owning"));
+        assertNativeSelectors(
                 "BufferedReader",
                 ordinaryBinding(prelude, "BufferedReader"),
                 Set.of("call", "owning"));
@@ -291,6 +296,24 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 "TextReaderWrapper",
                 textReader,
                 Set.of("readText", "readLine", "close"));
+
+        ProtosObjectValue textTarget =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        textTarget.createLocalSlot(
+                "write",
+                ProtosClosureValue.nativeClosure(
+                        (activation, arguments) -> activation.receiver()));
+        ProtosObjectValue textWriter =
+                (ProtosObjectValue)
+                        ProtosInvocation.invokeMessage(
+                                ordinaryBinding(helperPrelude, "TextWriter"),
+                                "call",
+                                java.util.List.of(textTarget, utf8),
+                                textActivation);
+        assertNativeSelectors(
+                "TextWriterWrapper",
+                textWriter,
+                Set.of("writeText", "writeLine", "flush", "close"));
 
         ProtosObjectValue bytesPrototype =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());

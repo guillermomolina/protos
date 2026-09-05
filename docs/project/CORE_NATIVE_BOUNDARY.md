@@ -54,6 +54,7 @@ the standard native boundary.
 | `ProtosStandardEnvironmentProtocol.java` | 3 | representation bridge | Standardized Environment snapshots retain opaque native-name identity/representability state. `get`/`contains` preserve native query semantics and selective value decoding; `each` performs eager callability plus whole-snapshot portable String validation before canonical Unicode-scalar-order callbacks. Environment remains outside the required Core prelude and is not a Map subtype. |
 | `ProtosStandardEncodingProtocol.java` | 2 | representation bridge | Encoding semantic-family receiver validation and exact one-shot String/Bytes conversion cross immutable descriptor and codec representations. The source-backed Encoding factory exposes only the four required portable descriptors plus native `encode`/`decode`; default UTF decoding is strict, matching initial BOMs are consumed, Latin1 is ISO-8859-1, and each encode produces fresh standard Bytes. |
 | `ProtosStandardTextReaderProtocol.java` | 2 | resource/capability bridge | Source-backed `TextReader` construction validates ByteReadable/optional owning-Closable authority plus exact Encoding-family membership; one helper constructs borrowing/owning forms and one shared wrapper helper dispatches `readText`/`readLine`/`close`. The runtime owns the single ordered Future/cancellation/close decoder domain, transactional portable UTF/Latin1 readText decoding, deterministic LF/CR/CRLF line framing and encoded-octet line-budget accounting. I015-C widens selectors without adding a native Closure construction site. |
+| `ProtosStandardTextWriterProtocol.java` | 2 | resource/capability bridge | Source-backed `TextWriter` construction validates ByteWritable/optional owning-Closable authority plus exact portable Encoding-family membership; one helper constructs borrowing/owning forms and one shared wrapper helper dispatches `writeText`/`writeLine`/`flush`/`close`. The runtime owns ordered complete-payload encoding validation, target-write commitment and failure frontier, compositional flush propagation, close cutover and ownership release. |
 | `ProtosStandardProcessStreamProtocol.java` | 2 | resource/capability bridge | Process standard-stream views expose exactly one byte direction (`read` for stdin or `write` for stdout/stderr) over Process-local shared ordering/backpressure bindings. Actor transfer rematerializes an Actor-local proxy to the same binding; P rejects the live authority; no Closable/File/text/seek/flush surface is inferred. |
 | `ProtosStandardProcessProtocol.java` | 1 | resource/capability bridge | The source-backed authority-free `Process` prototype receives eight synchronous accessors from one audited Closure-construction helper. Each selector requires an actual represented Process capability, reads only already-established Process bootstrap state, rejects unavailable/invalid state, and rejects every proxy after the Process termination cutover; no accessor performs host discovery, waiting, filesystem recovery, or capability construction. |
 | `ProtosStandardMapProtocol.java` | 7 | representation bridge | Map storage, recorded hashes, reentrancy restrictions, mutation state, lookup equality callbacks, and iteration snapshots are receiver-owned keyed representation semantics. |
@@ -70,7 +71,7 @@ the standard native boundary.
 | `ProtosStandardFileProtocol.java` | 10 | resource/capability bridge | File objects are acquired resource capabilities whose exact local surface depends on backend-provided authority and whose operations own cursor/append/sync/close/commitment state. |
 | `ProtosStandardFilesystemProtocol.java` | 1 | resource/capability bridge | Host-provisioned Filesystem authority exposes the standard `open` bridge; its backend owns confined/race-free namespace selection, create/truncate commitment, stable-resource acquisition, cancellation cleanup, and standard File materialization. |
 
-Total audited production construction sites: **105 across 29 providers**.
+Total audited production construction sites: **107 across 30 providers**.
 
 I018-L closed with the 90-site/22-provider baseline. I016-D1 was an explicitly
 reviewed post-I018 resource/capability extension adding exactly one
@@ -155,6 +156,17 @@ encoded-octet accounting, cancellation and permanent LineTooLong/failure state
 live inside the existing runtime resource bridge. The audited provider/site
 totals therefore remain unchanged from the definitive I015-B baseline.
 
+I015-D is a reviewed resource/capability-boundary extension. The public
+`TextWriter` factory/prototype identity is source-backed in
+`protos/lib/core/TextWriter.protos`; Java adds exactly two native-Closure
+construction helpers, one shared by borrowing/owning factory selectors and one
+shared by wrapper `writeText`/`writeLine`/`flush`/`close`. Complete portable
+encoding validation, ordered output commitment/failure, Flushable propagation,
+close cutover and explicit ownership cross representation/resource boundaries.
+The audited boundary therefore grows by exactly **2 sites / 1 provider** from the
+definitive I015-C baseline. Streaming support for host-provided Encoding state
+remains I015-E because I015-A's HostCodec contract is one-shot.
+
 
 I011-21 is a reviewed concurrency/runtime-boundary extension implementing D039's
 only Core ActorGroup acquisition selector. `Actor.group(...)` adds exactly one
@@ -176,7 +188,7 @@ regressing to Java-only implementation:
 
 It also moved Java-allocated standard identities into Core source for:
 
-- the public `Actor`, `Process`, `TextReader`, `BufferedReader`, `BufferedWriter`, and `import` objects;
+- the public `Actor`, `Process`, `TextReader`, `TextWriter`, `BufferedReader`, `BufferedWriter`, and `import` objects;
 - the construction-only standard `Bytes`, `ActorRef`, `GroupRef`, and `SendOperation`
   prototypes;
 - the final frozen prelude bindings object itself.
