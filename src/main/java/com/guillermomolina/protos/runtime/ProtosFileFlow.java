@@ -7,12 +7,13 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * I016-B ordered positioned File capability core.
+ * I016-C ordered positioned/append File capability core.
  *
  * <p>The Protos logical cursor lives here rather than in a native/backend cursor. Backends receive
  * explicit positions, so speculative/native cursor movement cannot leak into the standard File
- * position contract. One File owns one sequence-state/lifecycle ordering domain; separately opened
- * Files remain independent even when a later backend maps them to one resource.
+ * position contract. Append-mode writes instead obtain their placement from an underlying-resource
+ * append boundary shared across aliases. One File still owns one sequence-state/lifecycle ordering
+ * domain and therefore one independent logical cursor.
  */
 public final class ProtosFileFlow {
     @FunctionalInterface
@@ -80,6 +81,32 @@ public final class ProtosFileFlow {
         Cancellation writeAt(BigInteger position, byte[] bytes, WriteCompletion completion);
     }
 
+    /**
+     * Completion handshake for one append operation.
+     *
+     * <p>The backend selects {@code startPosition} from the then-current EOF inside the same
+     * underlying-resource append-placement critical section that protects the operation's complete
+     * contributed prefix. It calls {@link #commitFirstContribution(BigInteger)} immediately before
+     * the first byte contribution. While that operation is contributing, no other standard Protos
+     * append targeting the same underlying resource may place bytes between its contributed bytes.
+     */
+    public interface AppendCompletion {
+        boolean commitFirstContribution(BigInteger startPosition);
+        void succeeded();
+        void failed(int contributedPrefix);
+    }
+
+    /**
+     * Append boundary shared by every standard File alias that selects the same underlying resource.
+     *
+     * <p>Implementations must coordinate across distinct Resource/handle objects that name the same
+     * selected resource. Per-handle native append serialization is insufficient if it permits two
+     * Protos append writes to overlap or interleave.
+     */
+    public interface AppendWritableResource extends Resource {
+        Cancellation append(byte[] bytes, AppendCompletion completion);
+    }
+
     /** Internal end-position support needed for ByteSeekable.seekToEnd; does not imply ByteSized. */
     public interface SeekableResource extends Resource {
         Cancellation endPosition(IntegerCompletion completion);
@@ -104,13 +131,27 @@ public final class ProtosFileFlow {
             boolean seekable,
             boolean sized,
             boolean truncatable,
-            boolean syncable) {
+            boolean syncable,
+            boolean append) {
+        public Capabilities(
+                boolean readable,
+                boolean writable,
+                boolean seekable,
+                boolean sized,
+                boolean truncatable,
+                boolean syncable) {
+            this(readable, writable, seekable, sized, truncatable, syncable, false);
+        }
+
         public Capabilities {
             if (!readable && !writable) {
                 throw new IllegalArgumentException("File requires read and/or write access");
             }
             if (truncatable && !writable) {
                 throw new IllegalArgumentException("Truncatable File must be writable");
+            }
+            if (append && !writable) {
+                throw new IllegalArgumentException("append-mode File must be writable");
             }
         }
     }
@@ -414,6 +455,11 @@ public final class ProtosFileFlow {
     }
 
     private void startWrite(Request request) {
+        if (capabilities.append()) {
+            startAppendWrite(request);
+            return;
+        }
+
         BigInteger start = currentPosition();
         request.startPosition = start;
         if (request.bytes.length == 0) {
@@ -452,11 +498,7 @@ public final class ProtosFileFlow {
 
                                         @Override
                                         public void failed(int contributedPrefix) {
-                                            if (contributedPrefix < 0
-                                                    || contributedPrefix > request.bytes.length) {
-                                                throw new IllegalArgumentException(
-                                                        "invalid contributed write prefix");
-                                            }
+                                            validateContributedPrefix(request, contributedPrefix);
                                             if (contributedPrefix > 0) {
                                                 if (!request.operation.committed()) {
                                                     failIo(request);
@@ -476,8 +518,96 @@ public final class ProtosFileFlow {
         }
     }
 
+    private void startAppendWrite(Request request) {
+        // Successful empty append contributes no byte, does not consult EOF, and leaves the File's
+        // logical position unchanged.
+        if (request.bytes.length == 0) {
+            if (request.operation.commit()) {
+                request.operation.resolve(receiver);
+            }
+            finish(request);
+            return;
+        }
+
+        try {
+            setCancellation(
+                    request,
+                    ((AppendWritableResource) resource)
+                            .append(
+                                    request.bytes.clone(),
+                                    new AppendCompletion() {
+                                        @Override
+                                        public boolean commitFirstContribution(
+                                                BigInteger startPosition) {
+                                            if (startPosition == null
+                                                    || startPosition.signum() < 0) {
+                                                throw new IllegalArgumentException(
+                                                        "negative/null append start position");
+                                            }
+                                            if (!request.operation.commit()) {
+                                                return false;
+                                            }
+                                            synchronized (ProtosFileFlow.this) {
+                                                request.startPosition = startPosition;
+                                            }
+                                            return true;
+                                        }
+
+                                        @Override
+                                        public void succeeded() {
+                                            if (!request.operation.committed()
+                                                    || appendStart(request) == null) {
+                                                failIo(request);
+                                                finish(request);
+                                                return;
+                                            }
+                                            setPositionAfterWrite(
+                                                    request, request.bytes.length);
+                                            request.operation.resolve(receiver);
+                                            finish(request);
+                                        }
+
+                                        @Override
+                                        public void failed(int contributedPrefix) {
+                                            validateContributedPrefix(request, contributedPrefix);
+                                            if (contributedPrefix > 0) {
+                                                if (!request.operation.committed()
+                                                        || appendStart(request) == null) {
+                                                    failIo(request);
+                                                    finish(request);
+                                                    return;
+                                                }
+                                                setPositionAfterWrite(
+                                                        request, contributedPrefix);
+                                            }
+                                            // k == 0 deliberately leaves logicalPosition unchanged.
+                                            failIo(request);
+                                            finish(request);
+                                        }
+                                    }));
+        } catch (RuntimeException backendFailure) {
+            failIo(request);
+            finish(request);
+        }
+    }
+
+    private static void validateContributedPrefix(Request request, int contributedPrefix) {
+        if (contributedPrefix < 0 || contributedPrefix > request.bytes.length) {
+            throw new IllegalArgumentException("invalid contributed write prefix");
+        }
+    }
+
+    private BigInteger appendStart(Request request) {
+        synchronized (this) {
+            return request.startPosition;
+        }
+    }
+
     private void setPositionAfterWrite(Request request, int contributedPrefix) {
         synchronized (this) {
+            if (request.startPosition == null) {
+                throw new IllegalStateException("write contribution without start position");
+            }
             logicalPosition =
                     request.startPosition.add(BigInteger.valueOf(contributedPrefix));
         }
@@ -780,8 +910,16 @@ public final class ProtosFileFlow {
         if (capabilities.readable() && !(resource instanceof ReadableResource)) {
             throw new IllegalArgumentException("readable File requires ReadableResource");
         }
-        if (capabilities.writable() && !(resource instanceof WritableResource)) {
-            throw new IllegalArgumentException("writable File requires WritableResource");
+        if (capabilities.writable()
+                && capabilities.append()
+                && !(resource instanceof AppendWritableResource)) {
+            throw new IllegalArgumentException(
+                    "append-mode writable File requires AppendWritableResource");
+        }
+        if (capabilities.writable()
+                && !capabilities.append()
+                && !(resource instanceof WritableResource)) {
+            throw new IllegalArgumentException("positioned writable File requires WritableResource");
         }
         if (capabilities.seekable() && !(resource instanceof SeekableResource)) {
             throw new IllegalArgumentException("seekable File requires SeekableResource");

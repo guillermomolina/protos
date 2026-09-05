@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.90-SNAPSHOT
+
+- Implement I016-C append-mode File placement and aliasing semantics: every non-empty append write selects the then-current EOF at the operation's contribution boundary, successful empty append leaves the logical cursor unchanged, failed writes preserve the exact contributed-prefix aftermath, and an earlier seek never turns append into positioned output.
+- Define the backend AppendWritableResource contract as an underlying-resource-wide atomic append-placement boundary shared across distinct File/resource aliases, preventing overlap/interleaving while leaving concurrent alias order nondeterministic. Add deterministic cancellation, Actor-termination, ordering, capability-honesty, and cross-alias conformance coverage. Filesystem authority/confinement and public open materialization remain for the final I016 slice.
+
 ## 0.2.89-SNAPSHOT
 
 - Implement I016-B positioned standard File capability: stable per-File logical cursor beginning at zero, explicit positional read/write backend boundary, ordered read/write/position/seek/seekToEnd/size/truncate/sync operations, exact failed-write prefix position aftermath, bounded write snapshot admission, and capability-honest stable protocol shape.
