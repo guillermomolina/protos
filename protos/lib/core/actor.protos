@@ -17,4 +17,6 @@ Actor: {}
 
 _coreActorRefPrototype: {}
 
+_coreGroupRefPrototype: {}
+
 _coreSendOperationPrototype: {}

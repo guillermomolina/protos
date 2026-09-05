@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.124-SNAPSHOT
+
+- Implement I011-17 language-visible GroupRef communication surface: create the hidden source-backed GroupRef delegation prototype in Core bootstrap and install exactly `send` / `request`, with no `stop`, `termination`, controller, Authority, broadcast, or acquisition selector.
+- Reuse the already-audited Actor communication native construction helpers to create distinct ActorRef/GroupRef send/request Closures; receiver-directed dispatch selects concrete ActorRef or local ActorGroup routing while preserving synchronous whole-graph snapshot, caller Actor identity, SendOperation cancel/retry, Future reply transfer, and RequestOutcomeUncertain semantics from I011-8/9/16.
+- Keep the I018 Java native construction-site inventory unchanged: ProtosStandardActorProtocol remains at eight sites and the repository-wide provider/site totals do not grow. Public/distributed Group acquisition and genuinely remote transport/acceptance uncertainty remain outside this slice.
+
 ## 0.2.123-SNAPSHOT
 
 - Implement I017-D2 stable Process-bootstrap associations between each independently optional stdin/stdout/stderr byte binding and its host-selected immutable Encoding descriptor. Portable and explicitly host-provided Encoding descriptors from I015-A are both valid association values.

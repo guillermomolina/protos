@@ -27,6 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosSendOperationValue;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosGroupRefValue;
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -86,14 +87,8 @@ public final class ProtosStandardActorProtocol {
     }
 
     private ProtosObjectValue installActorRefPrototype(ProtosObjectValue prototype) {
-        prototype.createLocalSlot(
-                "send",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> send(activation, supplied)));
-        prototype.createLocalSlot(
-                "request",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> request(activation, supplied)));
+        prototype.createLocalSlot("send", newSendClosure());
+        prototype.createLocalSlot("request", newRequestClosure());
         prototype.createLocalSlot(
                 "stop",
                 ProtosClosureValue.nativeClosure(
@@ -103,6 +98,29 @@ public final class ProtosStandardActorProtocol {
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) -> termination(activation, supplied)));
         return prototype.freeze();
+    }
+
+    /** Installs the standard communication-only surface on one source-created GroupRef prototype. */
+    public ProtosObjectValue installGroupRefPrototype(ProtosObjectValue prototype) {
+        validateSourcePrototype(prototype, "GroupRef");
+        prototype.createLocalSlot("send", newSendClosure());
+        prototype.createLocalSlot("request", newRequestClosure());
+        return prototype.freeze();
+    }
+
+    /*
+     * These helpers are deliberately the same two audited native construction sites used by
+     * ActorRef. Each call still creates a distinct Closure value, so installing GroupRef does not
+     * manufacture observable Closure identity sharing between the two standard prototypes.
+     */
+    private ProtosClosureValue newSendClosure() {
+        return ProtosClosureValue.nativeClosure(
+                (activation, supplied) -> send(activation, supplied));
+    }
+
+    private ProtosClosureValue newRequestClosure() {
+        return ProtosClosureValue.nativeClosure(
+                (activation, supplied) -> request(activation, supplied));
     }
 
     private static ProtosObjectValue installSendOperationPrototype(
@@ -222,7 +240,9 @@ public final class ProtosStandardActorProtocol {
     private Object send(ProtosActivation activation, List<?> supplied) {
         Objects.requireNonNull(activation, "activation");
         Objects.requireNonNull(supplied, "supplied");
-        if (!(activation.receiver() instanceof ProtosActorRefValue destination)
+        Object destination = activation.receiver();
+        if ((!(destination instanceof ProtosActorRefValue)
+                        && !(destination instanceof ProtosGroupRefValue))
                 || supplied.isEmpty()) {
             throw error(activation);
         }
@@ -231,7 +251,7 @@ public final class ProtosStandardActorProtocol {
             throw error(activation);
         }
 
-        // Snapshot formation is synchronous and atomic before any admission attempt exists.
+        // Snapshot formation is synchronous and atomic before either routing/admission path exists.
         List<Object> snapshot =
                 ProtosActorValueTransfer.snapshotArguments(
                         supplied.subList(1, supplied.size()), activation);
@@ -241,19 +261,26 @@ public final class ProtosStandardActorProtocol {
                         .orElseThrow(
                                 () ->
                                         new IllegalStateException(
-                                                "ActorRef.send requires execution inside an Actor incarnation"));
-        return ProtosSendOperationValue.begin(
-                sendOperationPrototype,
-                destination,
-                sender,
-                selector.value(),
-                snapshot);
+                                                "send requires execution inside an Actor incarnation"));
+        if (destination instanceof ProtosActorRefValue actorDestination) {
+            return ProtosSendOperationValue.begin(
+                    sendOperationPrototype,
+                    actorDestination,
+                    sender,
+                    selector.value(),
+                    snapshot);
+        }
+        return ((ProtosGroupRefValue) destination)
+                .beginSendForRuntime(
+                        sendOperationPrototype, sender, selector.value(), snapshot);
     }
 
     private Object request(ProtosActivation activation, List<?> supplied) {
         Objects.requireNonNull(activation, "activation");
         Objects.requireNonNull(supplied, "supplied");
-        if (!(activation.receiver() instanceof ProtosActorRefValue destination)
+        Object destination = activation.receiver();
+        if ((!(destination instanceof ProtosActorRefValue)
+                        && !(destination instanceof ProtosGroupRefValue))
                 || supplied.isEmpty()) {
             throw error(activation);
         }
@@ -262,7 +289,7 @@ public final class ProtosStandardActorProtocol {
             throw error(activation);
         }
 
-        // Request shares send's synchronous whole-graph snapshot and concrete-Actor admission.
+        // Request shares send's synchronous whole-graph snapshot before routing/admission.
         List<Object> snapshot =
                 ProtosActorValueTransfer.snapshotArguments(
                         supplied.subList(1, supplied.size()), activation);
@@ -272,9 +299,13 @@ public final class ProtosStandardActorProtocol {
                         .orElseThrow(
                                 () ->
                                         new IllegalStateException(
-                                                "ActorRef.request requires execution inside an Actor incarnation"));
-        return ProtosActorRequest.begin(
-                destination, sender, selector.value(), snapshot, activation);
+                                                "request requires execution inside an Actor incarnation"));
+        if (destination instanceof ProtosActorRefValue actorDestination) {
+            return ProtosActorRequest.begin(
+                    actorDestination, sender, selector.value(), snapshot, activation);
+        }
+        return ((ProtosGroupRefValue) destination)
+                .beginRequestForRuntime(sender, selector.value(), snapshot, activation);
     }
 
     private static Object stop(ProtosActivation activation, List<?> supplied) {

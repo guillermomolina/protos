@@ -261,6 +261,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         ProtosObjectValue actorRefPrototype =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue groupRefPrototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosObjectValue sendOperationPrototype =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosObjectValue actorObject =
@@ -272,10 +274,13 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                         Runnable::run,
                         actorRefPrototype,
                         sendOperationPrototype);
+        actorProtocol.installGroupRefPrototype(groupRefPrototype);
         actorProtocol.installActorObject(actorObject);
 
         assertNativeSelectors(
                 "ActorRef", actorRefPrototype, Set.of("send", "request", "stop", "termination"));
+        assertNativeSelectors(
+                "GroupRef", groupRefPrototype, Set.of("send", "request"));
         assertNativeSelectors(
                 "SendOperation", sendOperationPrototype, Set.of("cancel", "retry"));
         assertNativeSelectors("Actor", actorObject, Set.of("spawn", "current"));

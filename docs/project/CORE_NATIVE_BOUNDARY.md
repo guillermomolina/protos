@@ -61,7 +61,7 @@ the standard native boundary.
 | `ProtosStandardErrorProtocol.java` | 1 | host-irreducible | `Error.signal` performs the language Error control transfer with exact signaled-object preservation. |
 | `ProtosStandardFutureProtocol.java` | 2 | concurrency/runtime bridge | `future`, `value`, `cancel`, `detach`, `then`, and `all` depend on Task ownership, suspension, observation, terminal states, cancellation, and Actor-local execution domains. |
 | `ProtosParallelRuntime.java` | 2 | concurrency/runtime bridge | `parallel`, Array parallel operations, Bytes/ByteRegion `parallelRange`, snapshot transfer, reservations, commitment, and bounded host carriers form the P execution substrate. |
-| `ProtosStandardActorProtocol.java` | 8 | concurrency/runtime bridge | `spawn`/`current`, ActorRef `send`/`request`/`stop`/`termination`, and SendOperation `cancel`/`retry` cross Actor incarnation, transfer, admission, scheduler, uncertainty, and lifecycle boundaries. All three ordinary prototype identities are source-backed after I018-K. |
+| `ProtosStandardActorProtocol.java` | 8 | concurrency/runtime bridge | `spawn`/`current`, ActorRef `send`/`request`/`stop`/`termination`, GroupRef `send`/`request`, and SendOperation `cancel`/`retry` cross Actor/Group routing, transfer, admission, scheduler, uncertainty, and lifecycle boundaries. ActorRef and GroupRef receive distinct Closure values from the same two audited communication construction helpers; ActorRef, GroupRef, and SendOperation prototype identities are source-backed. |
 | `ProtosStandardImportProtocol.java` | 1 | resource/capability bridge | The source-backed `import` facility's `call` crosses the host resolver, canonical ModuleKey, Actor-local module cache, loading, cycle, and initialization boundary. |
 | `ProtosStandardByteIoProtocol.java` | 12 | resource/capability bridge | Byte I/O operations are capability-honest wrappers over ordered flow state, Future commitment, positioning, sizing, truncation, sync, and directional shutdown. |
 | `ProtosStandardBufferedByteIoProtocol.java` | 6 | resource/capability bridge | Source-backed factories retain native construction bridges because wrappers attach buffering, ownership, underlying-capability validation, Future, and lifecycle state. |
@@ -110,6 +110,13 @@ Java adds exactly two native-Closure construction sites for represented one-shot
 The immutable descriptors carry no I/O authority; there is no String-name registry,
 alias lookup, host codec discovery, or public constructor.
 
+I011-17 widens the audited Actor communication selector surface without adding a Java
+native-Closure construction site. `ActorRef` and `GroupRef` each receive distinct
+`send`/`request` Closure values created through the same two already-counted communication
+construction helpers in `ProtosStandardActorProtocol`; the provider remains at eight sites
+and the repository-wide provider/site totals therefore remain whatever the definitive
+baseline records. The new internal `GroupRef` prototype identity is source-backed.
+
 ## Source-backed I018 invariants
 
 I018 specifically prevents the following ordinary derived behavior from
@@ -122,7 +129,7 @@ regressing to Java-only implementation:
 It also moved Java-allocated standard identities into Core source for:
 
 - the public `Actor`, `BufferedReader`, `BufferedWriter`, and `import` objects;
-- the construction-only standard `Bytes`, `ActorRef`, and `SendOperation`
+- the construction-only standard `Bytes`, `ActorRef`, `GroupRef`, and `SendOperation`
   prototypes;
 - the final frozen prelude bindings object itself.
 
