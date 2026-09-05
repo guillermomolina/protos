@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.92-SNAPSHOT
+
+- Start I018 Core self-hosting/bootstrap minimization by moving standard `Object.init` and the body of standard `Object.!=` out of Java and into distributable `protos/lib/core/object.protos`.
+- Load those source-backed Object Closures in an isolated frozen bootstrap context, promote them through a narrow host selector bridge, and prevent the process-global root `Object` from retaining the main Core-construction bindings.
+- Keep observable Object initialization and inequality semantics unchanged; remaining Java-installed standard protocols are left for later bounded I018 slices rather than expanded. I016-C was already published before this slice; I018 does not advance I016 further.
+
 ## 0.2.91-SNAPSHOT
 
 - Implement I011-7 concrete-Actor pre-acceptance delivery admission/backpressure substrate: keep pending logical operations outside the bounded accepted mailbox, wake admission deterministically as capacity is released, and preserve known acceptance/cancellation boundaries.

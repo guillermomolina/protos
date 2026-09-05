@@ -49,6 +49,7 @@ an item.
 | I015 | Encoding / Text I/O | READY | — | I014 closed |
 | I016 | Filesystem / File | IN_PROGRESS | — | I013 + I014 closed |
 | I017 | Process I/O / bootstrap | BLOCKED_BY_DEPENDENCIES | — | requires I016; re-audit exact current dependencies before starting |
+| I018 | Core self-hosting / bootstrap minimization | IN_PROGRESS | — | independent implementation-placement initiative; I016-C was already published concurrently and I018 freezes further I016 progress |
 
 ### I011 — Actors
 
@@ -85,6 +86,8 @@ Remaining implemented-surface gaps before top-level closure:
 
 Status: IN_PROGRESS
 
+Coordination note: the requested pause after I016-B was overtaken by the already-published I016-C slice before I018-A could run. I018 does not revert that published history and freezes further I016 progress at I016-C; the remaining I016 gaps below are not started by I018.
+
 Description: Core Filesystem/File semantics implemented incrementally on I013 Path and I014 byte-I/O commitment/lifecycle infrastructure.
 
 Normative owners:
@@ -105,6 +108,33 @@ Remaining implemented-surface gaps before top-level closure:
 - language-visible Filesystem capability open surface once returned File capabilities are complete;
 - confinement/stable-resource-binding backend integration and deterministic race/conformance coverage;
 - capability transfer/provisioning boundaries plus final ledger/dependency closure.
+
+
+### I018 — Core self-hosting / bootstrap minimization
+
+Status: IN_PROGRESS
+
+Description: Reduce Java-side Core bootstrap to irreducible host/runtime machinery and narrow representation/selector bridges, moving faithfully expressible distributable Core behavior to `protos/lib/core/` without changing observable Protos semantics.
+
+Architecture owner:
+- `docs/project/CORE_BOOTSTRAP_ARCHITECTURE.md`
+
+Normative constraints:
+- applicable normative semantic owners remain authoritative;
+- I018 changes implementation placement only and must not redefine Protos behavior;
+- source-backed Core behavior must continue to use ordinary objects, Closures, lookup, invocation, errors, and delegation.
+
+Published slices:
+
+| Slice | Status | Version | Closure evidence | Implemented surface |
+|---|---|---|---|---|
+| I018-A | CLOSED | `0.2.92-SNAPSHOT` | `SAME_COMMIT` | Source-backed standard `Object.init` and `Object.!=` bodies loaded from `protos/lib/core/object.protos`; isolated frozen capture context prevents the process-global `Object` from retaining the main Core-construction bindings; Java retains only the current installation bridge and host-backed primitives needed by this slice. |
+
+Remaining implementation work before top-level closure:
+- inventory every Java-installed standard slot and classify it as host-irreducible, representation/selector bridge, or source-expressible;
+- migrate source-expressible named and derived standard behavior in bounded semantic-family slices while preserving exact receiver domains, errors, identity, ordering, mutation, snapshot, lifecycle, and concurrency semantics;
+- reduce `ProtosCoreBootstrap` prelude/factory construction and `ProtosStandard*Protocol` families where ordinary Core source can faithfully own them;
+- add architectural regression coverage that prevents new source-expressible standard behavior from being introduced only in Java.
 
 
 ## CLI implementation

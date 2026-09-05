@@ -18,6 +18,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.IOException;
@@ -46,6 +47,7 @@ public final class ProtosCoreBootstrap {
         Objects.requireNonNull(moduleResolver, "moduleResolver");
 
         ProtosStandardObjectProtocol.install();
+        installSourceBackedObjectBehavior(coreDirectory);
 
         ProtosObjectValue bootstrapContext =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
@@ -280,6 +282,82 @@ public final class ProtosCoreBootstrap {
         preludeBindings.freeze();
 
         return new ProtosPrelude(preludeBindings, contextPrototype);
+    }
+
+
+    private void installSourceBackedObjectBehavior(Path coreDirectory)
+            throws IOException {
+        ProtosObjectValue sourceContext =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosActivation sourceActivation =
+                new ProtosActivation(sourceContext, List.of(), sourceContext);
+
+        sourceLoader
+                .load(coreDirectory.resolve("object.protos"))
+                .call(sourceActivation);
+
+        ProtosClosureValue init =
+                requireSourceBackedClosure(sourceContext, "_coreObjectInit");
+        ProtosClosureValue notEquals =
+                requireSourceBackedClosure(
+                        sourceContext, "_coreObjectNotEquals");
+
+        sourceContext.removeLocalSlot("_coreObjectInit");
+        sourceContext.removeLocalSlot("_coreObjectNotEquals");
+        if (!sourceContext.localSlotsSnapshot().isEmpty()) {
+            throw new IllegalStateException(
+                    "Core object source left unexpected bootstrap bindings");
+        }
+        sourceContext.freeze();
+
+        ProtosObjectValue object = ProtosObjectValue.rootObject();
+        synchronized (object) {
+            validateExistingSourceBackedClosure(object, "init");
+            validateExistingSourceBackedClosure(object, "!=");
+            if (!object.hasLocalSlot("init")) {
+                object.createLocalSlot("init", init);
+            }
+            if (!object.hasLocalSlot("!=")) {
+                object.createLocalSlot("!=", notEquals);
+            }
+        }
+    }
+
+    private static ProtosClosureValue requireSourceBackedClosure(
+            ProtosObjectValue sourceContext, String name) {
+        Object value =
+                sourceContext
+                        .readLocalSlot(name)
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Core object source did not define "
+                                                        + name));
+        if (!(value instanceof ProtosClosureValue closure)
+                || closure.definition() == null
+                || closure.executionPlan().isEmpty()
+                || closure.nativeBody().isPresent()) {
+            throw new IllegalStateException(
+                    "Core " + name + " must be a source-backed Closure");
+        }
+        return closure;
+    }
+
+    private static void validateExistingSourceBackedClosure(
+            ProtosObjectValue object, String selector) {
+        Object existing = object.readLocalSlot(selector).orElse(null);
+        if (existing == null) {
+            return;
+        }
+        if (!(existing instanceof ProtosClosureValue closure)
+                || closure.definition() == null
+                || closure.executionPlan().isEmpty()
+                || closure.nativeBody().isPresent()) {
+            throw new IllegalStateException(
+                    "Core Object."
+                            + selector
+                            + " is not installed from distributable Core source");
+        }
     }
 
     private static ProtosObjectValue requirePrototype(

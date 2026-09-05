@@ -45,17 +45,6 @@ public final class ProtosStandardObjectProtocol {
                                 return instance;
                             }));
         }
-        if (!object.hasLocalSlot("init")) {
-            object.createLocalSlot(
-                    "init",
-                    ProtosClosureValue.nativeClosure(
-                            (activation, supplied) -> {
-                                if (!supplied.isEmpty()) {
-                                    throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
-                                }
-                                return activation.receiver();
-                            }));
-        }
         if (!object.hasLocalSlot("==")) {
             object.createLocalSlot(
                     "==",
@@ -76,31 +65,6 @@ public final class ProtosStandardObjectProtocol {
                 if (!supplied.isEmpty()) throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
                 return new com.guillermomolina.protos.runtime.ProtosIntegerValue(com.guillermomolina.protos.runtime.ProtosIdentity.identityHash(activation.receiver()));
             }));
-        }
-        if (!object.hasLocalSlot("!=")) {
-            object.createLocalSlot(
-                    "!=",
-                    ProtosClosureValue.nativeClosure(
-                            (activation, supplied) -> {
-                                if (supplied.size() != 1) {
-                                    throw new ProtosSignalException(
-                                            ProtosCoreErrors.newError(activation));
-                                }
-                                Object result =
-                                        ProtosInvocation.invokeMessage(
-                                                activation.receiver(),
-                                                "==",
-                                                java.util.List.of(supplied.get(0)),
-                                                activation);
-                                if (result == com.guillermomolina.protos.runtime.ProtosBooleanValue.TRUE) {
-                                    return com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE;
-                                }
-                                if (result == com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE) {
-                                    return com.guillermomolina.protos.runtime.ProtosBooleanValue.TRUE;
-                                }
-                                throw new ProtosSignalException(
-                                        ProtosCoreErrors.newError(activation));
-                            }));
         }
     }
 }

@@ -17,9 +17,15 @@
 
 package com.guillermomolina.protos.execution;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.IOException;
@@ -92,4 +98,51 @@ class ProtosCoreBootstrapTest {
         assertSame(contextPrototype, first.parent().orElseThrow());
         assertSame(contextPrototype, second.parent().orElseThrow());
     }
+
+    @Test
+    void installsDerivedObjectBehaviorFromDistributableCoreSource()
+            throws IOException {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(Path.of("protos", "lib", "core"));
+
+        ProtosObjectValue object = ProtosObjectValue.rootObject();
+        ProtosClosureValue init =
+                assertSourceBackedObjectClosure(object, "init");
+        ProtosClosureValue notEquals =
+                assertSourceBackedObjectClosure(object, "!=");
+
+        assertEquals(1, init.capturedLexicalContexts().size());
+        assertEquals(1, notEquals.capturedLexicalContexts().size());
+        assertSame(
+                init.capturedLexicalContexts().get(0),
+                notEquals.capturedLexicalContexts().get(0));
+        ProtosObjectValue sourceContext =
+                init.capturedLexicalContexts().get(0);
+        assertTrue(sourceContext.isFrozen());
+        assertFalse(sourceContext.hasLocalSlot("_coreObjectInit"));
+        assertFalse(sourceContext.hasLocalSlot("_coreObjectNotEquals"));
+
+        ProtosObjectValue receiver = new ProtosObjectValue(object);
+        assertSame(
+                receiver,
+                ProtosInvocation.invokeMessage(
+                        receiver,
+                        "init",
+                        java.util.List.of(),
+                        prelude.newModuleActivation()));
+    }
+
+    private static ProtosClosureValue assertSourceBackedObjectClosure(
+            ProtosObjectValue object, String selector) {
+        ProtosClosureValue closure =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        object.readLocalSlot(selector).orElseThrow());
+        assertNotNull(closure.definition());
+        assertTrue(closure.executionPlan().isPresent());
+        assertTrue(closure.nativeBody().isEmpty());
+        return closure;
+    }
+
 }
