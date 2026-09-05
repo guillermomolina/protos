@@ -15,6 +15,7 @@ All Protos source files use the canonical `.protos` extension. Examples are non-
 | Create a closure | `closures/basic.protos` |
 | Capture local state | `closures/captured-state.protos` |
 | Pass behavior as a value | `closures/higher-order.protos` |
+| Work with closure call arguments | `closures/rest-arguments.protos` |
 | Express conditional control flow | `control-flow/conditional.protos` |
 | Compute Fibonacci recursively | `algorithms/fibonacci-recursive.protos` |
 | Compute factorial recursively | `algorithms/factorial-recursive.protos` |

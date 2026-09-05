@@ -14,3 +14,4 @@ Current progression:
 4. `04-control-flow/`
 5. `05-collections/`
 6. `06-path-values/`
+7. `07-call-arguments/`

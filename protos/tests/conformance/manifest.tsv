@@ -132,3 +132,7 @@ path/structural-equality-vs-identity.protos	boolean	true
 path/rootedness-affects-equality.protos	boolean	true
 regression/closure-captured-mutable-binding.protos	integer	2
 regression/delegated-shadowing.protos	integer	2
+collections/array-construction-and-indexing.protos	boolean	true
+collections/array-replacement-keeps-size.protos	boolean	true
+regression/rest-arguments-preserve-supplied-vector.protos	integer	360
+regression/default-reads-earlier-parameter.protos	integer	42
