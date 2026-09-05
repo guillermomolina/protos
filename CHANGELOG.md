@@ -4,6 +4,14 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## 0.2.68-SNAPSHOT
+
+- Implement Standard Bytes semantics: add receiver-owned mutable standard Bytes state and an explicitly installable standardized Bytes factory/prototype without adding a mandatory Core-prelude binding.
+- Add exact octet validation (semantic Integer 0..255), zero-based size/at, replacement-only atPut, open-only add/removeAt, and ascending-snapshot each through ordinary polymorphic invocation.
+- Preserve identity-bearing defaults for ==, hash, === and identityHash; byte contents are not traversed for equality or hashing.
+- Add focal I012 conformance tests for construction, membership, lookup, numeric boundaries, mutation state, snapshot iteration, identity/equality/hash, bracket indexing, and Core Error paths.
+- Do not add String/Encoding/Text I/O, UTF-8 coercion, slicing, concatenation, iterators, Array conversion, Filesystem, Set, or IdentitySet behavior.
+
 ## 0.2.67-SNAPSHOT
 
 ### Added
