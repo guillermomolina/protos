@@ -237,6 +237,10 @@ public final class ProtosCoreBootstrap {
         ProtosStandardFutureProtocol.install(futurePrototype);
         ProtosParallelRuntime.installObjectParallel();
 
+        // Buffered byte wrappers need an internal standard Bytes prototype; Bytes is not a required prelude binding.
+        ProtosObjectValue bufferedBytesPrototype = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosStandardBytesProtocol.install(bufferedBytesPrototype);
+
         ProtosObjectValue preludeBindings =
                 new ProtosObjectValue(contextPrototype);
         preludeBindings.createLocalSlot("Context", contextPrototype);
@@ -261,6 +265,10 @@ public final class ProtosCoreBootstrap {
         preludeBindings.createLocalSlot("IdentityMap", identityMapPrototype);
         preludeBindings.createLocalSlot("Path", pathPrototype);
         preludeBindings.createLocalSlot("Future", futurePrototype);
+        preludeBindings.createLocalSlot("BufferedReader",
+                ProtosStandardBufferedByteIoProtocol.readerFactory(bufferedBytesPrototype, bootstrapActivation));
+        preludeBindings.createLocalSlot("BufferedWriter",
+                ProtosStandardBufferedByteIoProtocol.writerFactory(bufferedBytesPrototype, bootstrapActivation));
         preludeBindings.createLocalSlot(
                 "import",
                 ProtosStandardImportProtocol.createImportFacility(

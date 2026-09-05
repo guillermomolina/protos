@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.78-SNAPSHOT
+
+- Implement I014-F standard buffered byte I/O: frozen `BufferedReader`/`BufferedWriter` factories with borrowing/owning forms, ordered bounded buffering, transparent/resumable EOF, recursive flush propagation, deterministic wrapper close ownership/failure handling, permanent output-side failure after ambiguous propagation, fresh standard Futures, and focal conformance tests.
+
 ## 0.2.77-SNAPSHOT
 
 - Implement I014-E standard byte I/O directional shutdown: capability-honest `ReadShutdown`/`WriteShutdown`, irreversible directional cutovers, idempotent fresh-Future lifecycle observation, pending-read cutover, output-frontier ordering, cancellation/commitment behavior, and focal tests.
