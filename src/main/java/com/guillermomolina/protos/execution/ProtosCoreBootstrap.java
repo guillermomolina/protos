@@ -132,6 +132,9 @@ public final class ProtosCoreBootstrap {
         sourceLoader
                 .load(coreDirectory.resolve("import.protos"))
                 .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("bytes.protos"))
+                .call(bootstrapActivation);
 
         Object contextBinding =
                 bootstrapContext
@@ -267,8 +270,11 @@ public final class ProtosCoreBootstrap {
         new ProtosStandardActorProtocol(moduleRuntime).installActorObject(actorObject);
         ProtosStandardImportProtocol.installImportFacility(importFacility, moduleRuntime);
 
-        // Buffered byte wrappers need an internal standard Bytes prototype; Bytes is not a required prelude binding.
-        ProtosObjectValue bufferedBytesPrototype = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        // Bytes is standardized but intentionally not a required Core-prelude binding.
+        ProtosObjectValue bufferedBytesPrototype =
+                requirePrototype(
+                        bootstrapContext, "Bytes", ProtosObjectValue.rootObject());
+        bootstrapContext.removeLocalSlot("Bytes");
         ProtosStandardBytesProtocol.install(bufferedBytesPrototype);
         ProtosStandardBufferedByteIoProtocol.installReaderFactory(
                 bufferedReaderFactory, bufferedBytesPrototype, bootstrapActivation);

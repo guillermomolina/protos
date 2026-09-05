@@ -94,6 +94,7 @@ class ProtosCoreBootstrapTest {
         assertSame(
                 ProtosObjectValue.MutationState.FROZEN,
                 bindings.mutationState());
+        assertFalse(bindings.hasLocalSlot("Bytes"));
         assertNotSame(first, second);
         assertSame(contextPrototype, first.parent().orElseThrow());
         assertSame(contextPrototype, second.parent().orElseThrow());

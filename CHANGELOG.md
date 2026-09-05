@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.97-SNAPSHOT
+
+- Continue I018 Core self-hosting/bootstrap minimization by constructing the internal standard `Bytes` factory/prototype used by buffered byte wrappers from distributable `protos/lib/core/bytes.protos` instead of allocating that standard identity in Java.
+- Preserve the existing native Bytes constructor/indexing/mutation/snapshot/parallel-region protocol unchanged, including factory-receiver parentage of produced Bytes values; remove the construction-only `Bytes` binding before the frozen standard prelude is built because Core v0.1 does not require a `Bytes` prelude binding.
+- Add a bootstrap regression that `Bytes` remains absent from the standard prelude. I016 remains frozen at I016-C.
+
 ## 0.2.96-SNAPSHOT
 
 - Continue I018 Core self-hosting/bootstrap minimization by constructing the standard frozen-prelude `import` facility from distributable `protos/lib/core/import.protos` instead of allocating that public standard identity in Java.
