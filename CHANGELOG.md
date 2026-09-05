@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.131-SNAPSHOT
+
+- Implement CLI005 portable Standard Library naming: `std:` logical names preserve ASCII letter case as part of canonical `ModuleKey` identity and every physical path component must match the distributed spelling exactly even on case-insensitive filesystems.
+- Reject case-fold-equivalent path ambiguity, every case spelling of the reserved `core` first segment, and Windows reserved device-name segments while preserving absolute no-fallback resolution and the hidden `.protos` extension.
+- Rename the initial LIB001 modules to canonical `std:collections/Set` and `std:collections/IdentitySet`, backed physically by `Set.protos` and `IdentitySet.protos`, with no aliases for the superseded lowercase spellings; LIB001-B remains READY.
+
 ## 0.2.130-SNAPSHOT
 
 - Implement I017-E3 standalone host/CLI Process bootstrap. `protos <file> [args...]` and `protos -e <source> [args...]` now capture only trailing application arguments into the stable Process args snapshot; launcher file/source identity is excluded. The REPL owns one persistent Process with an empty args snapshot for the whole session.

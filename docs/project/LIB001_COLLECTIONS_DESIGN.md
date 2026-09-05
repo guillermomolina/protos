@@ -233,16 +233,16 @@ The closed initial laws are:
 The portable modules are:
 
 ```text
-std:collections/set
-std:collections/identity_set
+std:collections/Set
+std:collections/IdentitySet
 ```
 
 Their imported module instances are ordinarily invokable. No separate `empty`,
 `of`, `new`, constructor object, or syntax is introduced:
 
 ```protos
-sets: import("std:collections/set")
-identitySets: import("std:collections/identity_set")
+sets: import("std:collections/Set")
+identitySets: import("std:collections/IdentitySet")
 
 empty: sets()
 values: sets(a, b, c)
@@ -455,6 +455,10 @@ silently added to Array.
 
 ## Import and distribution convention
 
+The general naming contract is recorded in `docs/project/STANDARD_LIBRARY_NAMING.md`.
+CLI004 introduced standard-distribution resolution; CLI005 closes exact-case
+portable naming before further LIB001 surface accumulates.
+
 CLI004 closes the standard-library resolution prerequisite without changing Core
 module semantics. The official CLI host resolver uses the reserved distribution
 specifier namespace:
@@ -466,7 +470,7 @@ std:<logical-module-name>
 For LIB001, the portable form is therefore, for example:
 
 ```protos
-sets: import("std:collections/set")
+sets: import("std:collections/Set")
 ```
 
 The resolver contract is intentionally narrow:
@@ -477,17 +481,24 @@ The resolver contract is intentionally narrow:
   of the installation filesystem path and importing module;
 - the physical `.protos` extension is a distribution detail and is not part of
   the specifier;
-- portable logical-name segments use lowercase ASCII letters, digits after the
-  first character, and `_`, with `/` only as the segment separator;
-- `core` and `core/...` are excluded because `protos/lib/core/` is bootstrap Core,
-  not importable Standard Library;
+- portable logical-name segments begin with an ASCII letter and then use only
+  ASCII letters, digits, or `_`, with `/` only as the segment separator;
+- case is significant in the canonical `std:` identity, and each physical
+  directory/file component must match the distributed spelling exactly even
+  on a case-insensitive host filesystem;
+- sibling distribution entries that differ only by case are forbidden and
+  are rejected as ambiguous if encountered;
+- the first segment `core`, in any ASCII case, is excluded because
+  `protos/lib/core/` is bootstrap Core, not importable Standard Library;
+- Windows reserved device-name segments are excluded case-insensitively so
+  one standard distribution remains materializable across supported hosts;
 - a missing or invalid `std:` name fails through the existing Core import Error
   path with no fallback to a local file or package of the same name;
 - the official resolver introduced by CLI004 intentionally does not define
   third-party package, relative-file, registry, versioning, or network lookup.
 
-The source file for `std:collections/set` is distributed at
-`protos/lib/collections/set.protos`. That physical mapping is host/distribution
+The source file for `std:collections/Set` is distributed at
+`protos/lib/collections/Set.protos`. That physical mapping is host/distribution
 policy under the existing module-resolution boundary; it is not a new Core
 language rule.
 

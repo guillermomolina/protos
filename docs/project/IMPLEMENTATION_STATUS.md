@@ -263,6 +263,7 @@ Closure result:
 | CLI002 | Interactive terminal UX | CLOSED | — | historical; not backfilled | — |
 | CLI003 | Multiline REPL input | CLOSED | `0.2.80-SNAPSHOT` | `254c80c0fb9e70f1dd07ef711f06ce71faa93829` | published multiline REPL input; parser-EOF accumulation, one-unit bracketed paste, persistent top-level context, recovery/history/stream coverage; recursive factorial regression is covered after standard numeric ordering completion |
 | CLI004 | Standard-library module resolution | CLOSED | `0.2.120-SNAPSHOT` | `SAME_COMMIT` | official CLI host resolver for reserved `std:<logical-name>` distribution modules; logical relocation-independent ModuleKey identity; no search-path shadowing/fallback; bootstrap `core/` excluded; no normative Core module change |
+| CLI005 | Portable Standard Library naming | CLOSED | `0.2.131-SNAPSHOT` | `SAME_COMMIT` | case-significant ASCII `std:` identities; exact distributed path spelling independent of host filesystem case rules; case-fold ambiguity, bootstrap `core`, and Windows reserved device-name segments rejected; canonical LIB001 `Set`/`IdentitySet` spellings |
 
 
 ## Standard Library
@@ -287,7 +288,7 @@ work may proceed without waiting for an earlier-numbered roadmap item.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| LIB001 | Collections library | IN_PROGRESS | — | I004 + I005 + I006 + I008 + CLI004 closed; LIB001-A is CLOSED at `0.2.125-SNAPSHOT`, LIB001-B is READY, and later slices remain dependency/audit gated. |
+| LIB001 | Collections library | IN_PROGRESS | — | I004 + I005 + I006 + I008 + CLI004 + CLI005 closed; LIB001-A is CLOSED at `0.2.125-SNAPSHOT`, LIB001-B is READY, and later slices remain dependency/audit gated. |
 | LIB002 | Text / encoding conveniences | BLOCKED_BY_DEPENDENCIES | — | I015 is not closed; ordinary library conveniences may build on Encoding/Text I/O but must not redefine their Core semantics. |
 | LIB003 | JSON / serialization | BLOCKED_BY_DEPENDENCIES | — | LIB001 is not closed; design exact text/encoding and stream-adapter dependencies from the then-current repository rather than assuming roadmap order is dependency order. |
 | LIB004 | Filesystem / process conveniences | BLOCKED_BY_DEPENDENCIES | — | I016 and I017 are not closed; convenience APIs must preserve Filesystem/Process authority boundaries and may not manufacture ambient host authority. |
@@ -305,8 +306,9 @@ Design record:
 - `docs/project/LIB001_COLLECTIONS_DESIGN.md` records the completed comparative
   architecture audit and the focused Set/IdentitySet API audit;
 - the record is non-normative: it constrains Standard Library implementation but
-  does not redefine Core semantics; CLI004's `std:` spelling remains host/
-  distribution policy under the existing Core module-resolution boundary;
+  does not redefine Core semantics; CLI004 introduced the `std:` host/distribution boundary and CLI005 closes
+  its portable case-significant naming policy; neither changes Core module
+  semantics;
 - the focused audit closes the initial Set/IdentitySet representation and public
   contract, including the correction from "arbitrary Map role" to a well-formed
   ordinary Map/IdentityMap `key -> true` library invariant.
@@ -317,8 +319,8 @@ Implementation boundary:
   Core and are not reclassified as library work;
 - Set/IdentitySet add no runtime value family, tag, wrapper, privileged transfer
   identity, generic Collection hierarchy, or native boundary;
-- portable modules are `std:collections/set` and
-  `std:collections/identity_set`;
+- portable modules are `std:collections/Set` and
+  `std:collections/IdentitySet`;
 - Set stores every introduced member as an ordinary Map key mapped to canonical
   `true`; IdentitySet does the same over IdentityMap;
 - module invocation is the constructor (`sets(...)` / `identitySets(...)`), and
@@ -349,7 +351,8 @@ Dependencies:
 - I005 Standard Map — CLOSED;
 - I006 IdentityMap / identity hashing — CLOSED;
 - I008 Modules — CLOSED;
-- CLI004 Standard-library module resolution — CLOSED.
+- CLI004 Standard-library module resolution — CLOSED;
+- CLI005 Portable Standard Library naming — CLOSED.
 
 ### LIB002 — Text / encoding conveniences
 

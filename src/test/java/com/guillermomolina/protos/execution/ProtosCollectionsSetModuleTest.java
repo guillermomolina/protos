@@ -20,6 +20,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
@@ -27,6 +28,7 @@ import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.math.BigInteger;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
@@ -41,16 +43,16 @@ class ProtosCollectionsSetModuleTest {
         ProtosArrayValue result =
                 runArray(
                         """
-                        sets: import("std:collections/set")
-                        emptyA: sets()
-                        emptyB: sets()
-                        values: sets("Ada", "Grace")
+                        Set: import("std:collections/Set")
+                        emptyA: Set()
+                        emptyB: Set()
+                        values: Set("Ada", "Grace")
                         Array(
-                            sets.size(emptyA),
+                            Set.size(emptyA),
                             emptyA === emptyB,
-                            sets.size(values),
-                            sets.contains(values, "Ada"),
-                            sets.contains(values, "Linus"),
+                            Set.size(values),
+                            Set.contains(values, "Ada"),
+                            Set.contains(values, "Linus"),
                             values.at("Ada") === true,
                             values
                         )
@@ -71,8 +73,8 @@ class ProtosCollectionsSetModuleTest {
         ProtosArrayValue result =
                 runArray(
                         """
-                        sets: import("std:collections/set")
-                        values: sets(1, 1.0)
+                        Set: import("std:collections/Set")
+                        values: Set(1, 1.0)
                         representative: null
                         marker: null
                         values.each((key, value) => {
@@ -80,8 +82,8 @@ class ProtosCollectionsSetModuleTest {
                             marker = value
                         })
                         Array(
-                            sets.size(values),
-                            sets.contains(values, 1.0),
+                            Set.size(values),
+                            Set.contains(values, 1.0),
                             representative === 1,
                             representative === 1.0,
                             marker === true
@@ -101,12 +103,12 @@ class ProtosCollectionsSetModuleTest {
         ProtosArrayValue result =
                 runArray(
                         """
-                        identitySets: import("std:collections/identity_set")
-                        values: identitySets(1, 1.0, 1)
+                        IdentitySet: import("std:collections/IdentitySet")
+                        values: IdentitySet(1, 1.0, 1)
                         Array(
-                            identitySets.size(values),
-                            identitySets.contains(values, 1),
-                            identitySets.contains(values, 1.0),
+                            IdentitySet.size(values),
+                            IdentitySet.contains(values, 1),
+                            IdentitySet.contains(values, 1.0),
                             values.at(1) === true,
                             values.at(1.0) === true,
                             values
@@ -132,23 +134,49 @@ class ProtosCollectionsSetModuleTest {
         var actorA = prelude.newModuleActivation();
         var actorB = prelude.newModuleActivation();
 
-        Object first = compiler.compile("import(\"std:collections/set\")").call(actorA);
-        Object repeated = compiler.compile("import(\"std:collections/set\")").call(actorA);
-        Object otherActor = compiler.compile("import(\"std:collections/set\")").call(actorB);
+        Object first = compiler.compile("import(\"std:collections/Set\")").call(actorA);
+        Object repeated = compiler.compile("import(\"std:collections/Set\")").call(actorA);
+        Object otherActor = compiler.compile("import(\"std:collections/Set\")").call(actorB);
 
         assertSame(first, repeated);
         assertNotSame(first, otherActor);
+    }
+
+    @Test
+    void obsoleteLowercaseCollectionModuleSpellingsDoNotRemainAsAliases()
+            throws Exception {
+        ProtosStandardLibraryModuleResolver resolver =
+                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+
+        for (String specifier :
+                new String[] {
+                    "std:collections/set", "std:collections/identity_set"
+                }) {
+            assertThrows(
+                    ProtosSignalException.class,
+                    () ->
+                            new ProtosSourceCompiler()
+                                    .compile("import(\"" + specifier + "\")")
+                                    .call(prelude.newModuleActivation()),
+                    specifier);
+        }
     }
 
     private static ProtosArrayValue runArray(String source) throws Exception {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        Object result = new ProtosSourceCompiler().compile(source).call(prelude.newModuleActivation());
+        Object result =
+                new ProtosSourceCompiler()
+                        .compile(source)
+                        .call(prelude.newModuleActivation());
         return assertInstanceOf(ProtosArrayValue.class, result);
     }
 
     private static void assertInteger(BigInteger expected, Object value) {
-        assertEquals(expected, assertInstanceOf(ProtosIntegerValue.class, value).value());
+        assertEquals(
+                expected,
+                assertInstanceOf(ProtosIntegerValue.class, value).value());
     }
 }

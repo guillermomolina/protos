@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -32,23 +33,27 @@ import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class ProtosStandardLibraryModuleResolverTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
+    private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
 
     @TempDir Path libraryRoot;
 
     @Test
-    void canonicalIdentityIsLogicalAndIndependentOfImporterAndInstallationRoot()
+    void canonicalIdentityPreservesExactCaseAndIsIndependentOfImporterAndInstallationRoot()
             throws Exception {
         Path otherRoot = Files.createTempDirectory("protos-stdlib-other-");
         try {
-            writeModule(libraryRoot, "collections/probe", "value: 1");
-            writeModule(otherRoot, "collections/probe", "value: 2");
+            writeModule(libraryRoot, "collections/Probe", "value: 1");
+            writeModule(otherRoot, "collections/Probe", "value: 2");
 
             ProtosStandardLibraryModuleResolver first =
                     new ProtosStandardLibraryModuleResolver(libraryRoot);
@@ -57,11 +62,14 @@ class ProtosStandardLibraryModuleResolverTest {
             Optional<ProtosModuleKey> importer =
                     Optional.of(new ProtosModuleKey("file:/application/main.protos"));
 
-            ProtosModuleKey fromTopLevel = first.resolve("std:collections/probe", Optional.empty());
-            ProtosModuleKey fromImporter = first.resolve("std:collections/probe", importer);
-            ProtosModuleKey afterRelocation = second.resolve("std:collections/probe", Optional.empty());
+            ProtosModuleKey fromTopLevel =
+                    first.resolve("std:collections/Probe", Optional.empty());
+            ProtosModuleKey fromImporter =
+                    first.resolve("std:collections/Probe", importer);
+            ProtosModuleKey afterRelocation =
+                    second.resolve("std:collections/Probe", Optional.empty());
 
-            assertEquals(new ProtosModuleKey("std:collections/probe"), fromTopLevel);
+            assertEquals(new ProtosModuleKey("std:collections/Probe"), fromTopLevel);
             assertEquals(fromTopLevel, fromImporter);
             assertEquals(fromTopLevel, afterRelocation);
         } finally {
@@ -70,13 +78,83 @@ class ProtosStandardLibraryModuleResolverTest {
     }
 
     @Test
-    void sourceLookupUsesHiddenProtosExtensionAndUtf8() throws Exception {
-        writeModule(libraryRoot, "collections/text_probe", "value: \"olá\"");
+    void sourceLookupUsesHiddenLowercaseProtosExtensionAndUtf8() throws Exception {
+        writeModule(libraryRoot, "collections/TextProbe", "value: \"olá\"");
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(libraryRoot);
 
-        ProtosModuleKey key = resolver.resolve("std:collections/text_probe", Optional.empty());
+        ProtosModuleKey key =
+                resolver.resolve("std:collections/TextProbe", Optional.empty());
         assertEquals("value: \"olá\"", resolver.loadSource(key));
+    }
+
+    @Test
+    void exactDistributedCaseIsRequiredForEveryPathComponent() throws Exception {
+        writeModule(libraryRoot, "collections/Probe", "value: 1");
+        ProtosStandardLibraryModuleResolver resolver =
+                new ProtosStandardLibraryModuleResolver(libraryRoot);
+
+        assertEquals(
+                new ProtosModuleKey("std:collections/Probe"),
+                resolver.resolve("std:collections/Probe", Optional.empty()));
+        assertThrows(
+                IOException.class,
+                () -> resolver.resolve("std:collections/probe", Optional.empty()));
+        assertThrows(
+                IOException.class,
+                () -> resolver.resolve("std:Collections/Probe", Optional.empty()));
+    }
+
+    @Test
+    void caseFoldEquivalentSiblingNamesAreRejectedAsAmbiguous() throws Exception {
+        writeModule(libraryRoot, "collections/Probe", "value: 1");
+        writeModule(libraryRoot, "collections/probe", "value: 2");
+        Path collections = libraryRoot.resolve("collections");
+        long foldedMatches;
+        try (var children = Files.list(collections)) {
+            foldedMatches =
+                    children
+                            .filter(
+                                    child ->
+                                            child.getFileName()
+                                                    .toString()
+                                                    .equalsIgnoreCase("Probe.protos"))
+                            .count();
+        }
+        if (foldedMatches < 2) {
+            return; // This host filesystem cannot materialize the invalid collision.
+        }
+
+        ProtosStandardLibraryModuleResolver resolver =
+                new ProtosStandardLibraryModuleResolver(libraryRoot);
+        assertThrows(
+                IOException.class,
+                () -> resolver.resolve("std:collections/Probe", Optional.empty()));
+        assertThrows(
+                IOException.class,
+                () -> resolver.resolve("std:collections/probe", Optional.empty()));
+    }
+
+    @Test
+    void reservedCoreAndWindowsDeviceSegmentsAreRejected() {
+        ProtosStandardLibraryModuleResolver resolver =
+                new ProtosStandardLibraryModuleResolver(libraryRoot);
+
+        for (String specifier :
+                List.of(
+                        "std:core/Object",
+                        "std:Core/Object",
+                        "std:CORE/Object",
+                        "std:collections/NUL",
+                        "std:collections/nul",
+                        "std:collections/Com1")) {
+            IOException failure =
+                    assertThrows(
+                            IOException.class,
+                            () -> resolver.resolve(specifier, Optional.empty()),
+                            specifier);
+            assertEquals("invalid standard-library module name", failure.getMessage());
+        }
     }
 
     @Test
@@ -85,17 +163,14 @@ class ProtosStandardLibraryModuleResolverTest {
                 new ProtosStandardLibraryModuleResolver(libraryRoot);
         List<String> invalid =
                 List.of(
-                        "collections/set",
+                        "collections/Set",
                         "std:",
-                        "std:core",
-                        "std:core/object",
-                        "std:collections/set.protos",
-                        "std:collections/../set",
-                        "std:/collections/set",
-                        "std:collections//set",
-                        "std:Collections/set",
+                        "std:collections/Set.protos",
+                        "std:collections/../Set",
+                        "std:/collections/Set",
+                        "std:collections//Set",
                         "std:collections/set-name",
-                        "std:collections\\set");
+                        "std:collections\\Set");
 
         for (String specifier : invalid) {
             assertThrows(
@@ -108,7 +183,7 @@ class ProtosStandardLibraryModuleResolverTest {
     @Test
     void ordinaryImportCachingAndActorLocalInstancesUseTheCanonicalStandardKey()
             throws Exception {
-        writeModule(libraryRoot, "collections/probe", "value: 7");
+        writeModule(libraryRoot, "collections/Probe", "value: 7");
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(libraryRoot);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
@@ -118,13 +193,13 @@ class ProtosStandardLibraryModuleResolverTest {
 
         ProtosObjectValue first =
                 (ProtosObjectValue)
-                        compiler.compile("import(\"std:collections/probe\")").call(actorA);
+                        compiler.compile("import(\"std:collections/Probe\")").call(actorA);
         ProtosObjectValue repeated =
                 (ProtosObjectValue)
-                        compiler.compile("import(\"std:collections/probe\")").call(actorA);
+                        compiler.compile("import(\"std:collections/Probe\")").call(actorA);
         ProtosObjectValue otherActor =
                 (ProtosObjectValue)
-                        compiler.compile("import(\"std:collections/probe\")").call(actorB);
+                        compiler.compile("import(\"std:collections/Probe\")").call(actorB);
 
         assertSame(first, repeated);
         assertNotSame(first, otherActor);
@@ -143,8 +218,35 @@ class ProtosStandardLibraryModuleResolverTest {
                 ProtosSignalException.class,
                 () ->
                         new ProtosSourceCompiler()
-                                .compile("import(\"std:collections/missing\")")
+                                .compile("import(\"std:collections/Missing\")")
                                 .call(prelude.newModuleActivation()));
+    }
+
+    @Test
+    void distributedLibraryHasNoCaseFoldEquivalentSiblingNames() throws Exception {
+        assertNoCaseFoldEquivalentSiblings(STANDARD_LIBRARY);
+    }
+
+    private static void assertNoCaseFoldEquivalentSiblings(Path directory) throws IOException {
+        Map<String, Path> seen = new HashMap<>();
+        try (var children = Files.list(directory)) {
+            for (Path child : children.toList()) {
+                String folded =
+                        child.getFileName().toString().toLowerCase(Locale.ROOT);
+                Path previous = seen.putIfAbsent(folded, child);
+                if (previous != null) {
+                    throw new AssertionError(
+                            "case-fold-equivalent distribution siblings: "
+                                    + previous
+                                    + " and "
+                                    + child);
+                }
+                assertNotNull(child.getFileName());
+                if (Files.isDirectory(child)) {
+                    assertNoCaseFoldEquivalentSiblings(child);
+                }
+            }
+        }
     }
 
     private static void writeModule(Path root, String logicalName, String source)
