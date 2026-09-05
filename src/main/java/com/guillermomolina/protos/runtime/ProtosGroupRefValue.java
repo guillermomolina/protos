@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.runtime;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -92,6 +93,31 @@ public final class ProtosGroupRefValue implements ProtosRepresentedValue {
 
     UUID restrictionIdentityForRuntime() {
         return descriptor.restrictionIdentity;
+    }
+
+    /** Starts one local Group-routed send operation over an already-formed logical snapshot. */
+    public ProtosGroupSendOperationValue beginSendForRuntime(
+            ProtosObjectValue sendOperationPrototype,
+            ProtosActorRefValue sender,
+            String selector,
+            List<Object> snapshot) {
+        ProtosActorGroupRuntime group =
+                localGroupForRuntime()
+                        .orElseThrow(() -> new IllegalStateException("GroupRef has no local routing target"));
+        return ProtosGroupSendOperationValue.begin(
+                sendOperationPrototype, this, group, sender, selector, snapshot);
+    }
+
+    /** Starts one local Group-routed request/reply operation over the original snapshot. */
+    public ProtosFutureValue beginRequestForRuntime(
+            ProtosActorRefValue sender,
+            String selector,
+            List<Object> snapshot,
+            ProtosActivation callerActivation) {
+        ProtosActorGroupRuntime group =
+                localGroupForRuntime()
+                        .orElseThrow(() -> new IllegalStateException("GroupRef has no local routing target"));
+        return ProtosGroupRequest.begin(this, group, sender, selector, snapshot, callerActivation);
     }
 
     /** Rematerializes the same capability without copying Group/control-plane mutable state. */

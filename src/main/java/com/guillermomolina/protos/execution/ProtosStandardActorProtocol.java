@@ -22,6 +22,7 @@ import com.guillermomolina.protos.runtime.ProtosActorRefValue;
 import com.guillermomolina.protos.runtime.ProtosActorRequest;
 import com.guillermomolina.protos.runtime.ProtosActorScheduler;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
+import com.guillermomolina.protos.runtime.ProtosSendOperationControl;
 import com.guillermomolina.protos.runtime.ProtosSendOperationValue;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -301,7 +302,7 @@ public final class ProtosStandardActorProtocol {
 
     private static Object cancelSendOperation(
             ProtosActivation activation, List<?> supplied) {
-        if (!(activation.receiver() instanceof ProtosSendOperationValue operation)
+        if (!(activation.receiver() instanceof ProtosSendOperationControl operation)
                 || !supplied.isEmpty()) {
             throw error(activation);
         }
@@ -312,11 +313,11 @@ public final class ProtosStandardActorProtocol {
 
     private static Object retrySendOperation(
             ProtosActivation activation, List<?> supplied) {
-        if (!(activation.receiver() instanceof ProtosSendOperationValue operation)
+        if (!(activation.receiver() instanceof ProtosSendOperationControl operation)
                 || !supplied.isEmpty()) {
             throw error(activation);
         }
-        ProtosSendOperationValue retry = operation.retryAfterFailure();
+        ProtosObjectValue retry = operation.retryAfterFailure();
         if (retry == null) {
             throw error(activation);
         }

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.121-SNAPSHOT
+
+- Implement I011-16 local ActorGroup communication-operation foundation over I011-15 membership: GroupRef runtime send/request keep the original Actor-transfer snapshot while a live Group has zero eligible members, select one READY member when routing can progress, and wake pending routing when an INITIALIZING member becomes READY.
+- Keep concrete-Actor acceptance authoritative: membership removal or selected-member pre-acceptance failure cancels/requeues only while cancellation is known to beat acceptance; accepted work is never transparently rerouted, Group termination fails only still-pre-acceptance work, and accepted request loss resolves as RequestOutcomeUncertain.
+- Reuse the existing SendOperation cancel/retry contract through a shared runtime control interface, and keep every concrete/group SendOperation local by rejecting the common control type at Actor and P transfer boundaries, without adding a new native Closure site. Public Group acquisition/GroupRef selector installation and genuinely distributed transport ambiguity remain for later I011 slices.
+
 ## 0.2.120-SNAPSHOT
 
 - Implement CLI004 standard-library module resolution for the official CLI with a reserved `std:<logical-name>` distribution namespace, logical relocation-independent `ModuleKey` identity, hidden `.protos` file mapping under `protos/lib/`, and explicit exclusion of bootstrap `core/`.

@@ -28,7 +28,8 @@ import java.util.Objects;
  * re-reads the source argument graph. Direct concrete-Actor accepted-work loss is recorded as a
  * post-acceptance delivery failure; distributed transport uncertainty remains a later integration.
  */
-public final class ProtosSendOperationValue extends ProtosObjectValue {
+public final class ProtosSendOperationValue extends ProtosObjectValue
+        implements ProtosSendOperationControl {
     private final ProtosObjectValue sendOperationPrototype;
     private final ProtosActorRefValue destination;
     private final ProtosActorRefValue sender;

@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.runtime;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -24,22 +25,23 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
-/**
- * Internal local ActorGroup identity, membership, and routing-eligibility substrate.
- *
- * <p>The Group is stable independently of its current members. Membership is runtime/control-plane
- * state and is never exposed by GroupRef transfer. A live Group may have zero current or eligible
- * members. Selection here is deliberately an internal deterministic round-robin implementation
- * policy; Core promises neither this policy nor Group-wide FIFO ordering.
- */
+/** Internal local ActorGroup identity, membership, and pre-acceptance routing substrate. */
 public final class ProtosActorGroupRuntime {
     public enum LifecycleState {
         LIVE,
         TERMINATED
     }
 
+    interface RoutingOperation {
+        void routeToForRuntime(ProtosActor actor);
+        void memberBecameIneligibleForRuntime(ProtosActor actor);
+        void groupTerminatedBeforeAcceptanceForRuntime();
+    }
+
     private final UUID groupIdentity = UUID.randomUUID();
     private final Set<ProtosActor> members = new LinkedHashSet<>();
+    private final ArrayDeque<RoutingOperation> pending = new ArrayDeque<>();
+    private final Set<RoutingOperation> active = new LinkedHashSet<>();
     private LifecycleState lifecycle = LifecycleState.LIVE;
     private int nextSelectionIndex;
 
@@ -51,35 +53,54 @@ public final class ProtosActorGroupRuntime {
         return lifecycle;
     }
 
-    /** Adds one concrete Actor to this Group's membership without changing Group identity. */
-    public synchronized boolean addMemberForRuntime(ProtosActor actor) {
+    /** Adds membership without changing Group identity and wakes pending routing when useful. */
+    public boolean addMemberForRuntime(ProtosActor actor) {
         Objects.requireNonNull(actor, "actor");
-        if (lifecycle != LifecycleState.LIVE) {
-            throw new IllegalStateException("terminated Group cannot acquire members");
+        boolean added;
+        synchronized (this) {
+            if (lifecycle != LifecycleState.LIVE) {
+                throw new IllegalStateException("terminated Group cannot acquire members");
+            }
+            added = members.add(actor);
         }
-        return members.add(actor);
+        if (added) {
+            actor.registerRoutingGroupForRuntime(this);
+            drainPendingForRuntime();
+        }
+        return added;
     }
 
-    /** Removes membership only; it does not stop or otherwise mutate the Actor incarnation. */
-    public synchronized boolean removeMemberForRuntime(ProtosActor actor) {
+    /** Removes membership only; already accepted concrete-Actor work is not revoked. */
+    public boolean removeMemberForRuntime(ProtosActor actor) {
         Objects.requireNonNull(actor, "actor");
-        boolean removed = members.remove(actor);
-        if (removed && nextSelectionIndex > members.size()) {
-            nextSelectionIndex = 0;
+        List<RoutingOperation> operations;
+        boolean removed;
+        synchronized (this) {
+            removed = members.remove(actor);
+            if (!removed) {
+                return false;
+            }
+            if (nextSelectionIndex >= members.size()) {
+                nextSelectionIndex = 0;
+            }
+            operations = List.copyOf(active);
         }
-        return removed;
+        actor.unregisterRoutingGroupForRuntime(this);
+        for (RoutingOperation operation : operations) {
+            operation.memberBecameIneligibleForRuntime(actor);
+        }
+        drainPendingForRuntime();
+        return true;
     }
 
-    /**
-     * Selects one currently routing-eligible concrete Actor.
-     *
-     * <p>Membership and routing eligibility are distinct: INITIALIZING, TERMINATING, and
-     * TERMINATED members are not eligible. A live Group with no eligible member returns empty so a
-     * later communication layer can apply bounded backpressure rather than fabricate failure.
-     */
+    /** Selects one current READY member; the round-robin choice is not language-visible policy. */
     public synchronized Optional<ProtosActor> selectEligibleMemberForRuntime() {
+        return Optional.ofNullable(selectEligibleMemberLocked());
+    }
+
+    private ProtosActor selectEligibleMemberLocked() {
         if (lifecycle != LifecycleState.LIVE || members.isEmpty()) {
-            return Optional.empty();
+            return null;
         }
         List<ProtosActor> eligible = new ArrayList<>();
         for (ProtosActor actor : members) {
@@ -88,14 +109,14 @@ public final class ProtosActorGroupRuntime {
             }
         }
         if (eligible.isEmpty()) {
-            return Optional.empty();
+            return null;
         }
         if (nextSelectionIndex >= eligible.size()) {
             nextSelectionIndex = 0;
         }
         ProtosActor selected = eligible.get(nextSelectionIndex);
         nextSelectionIndex = (nextSelectionIndex + 1) % eligible.size();
-        return Optional.of(selected);
+        return selected;
     }
 
     /** Runtime acquisition of a new GroupRef capability to this exact Group identity. */
@@ -106,25 +127,118 @@ public final class ProtosActorGroupRuntime {
         if (lifecycle != LifecycleState.LIVE) {
             throw new IllegalStateException("terminated Group cannot issue a new GroupRef");
         }
-        return ProtosGroupRefValue.acquireForRuntime(
-                groupRefPrototype, this, restrictionIdentity);
+        return ProtosGroupRefValue.acquireForRuntime(groupRefPrototype, this, restrictionIdentity);
     }
 
-    /**
-     * Ends this Group identity without terminating member Actors.
-     *
-     * <p>Existing GroupRefs remain permanently bound to this terminated identity. Member Actor
-     * lifecycle is independent; accepted concrete-Actor work remains owned by that Actor.
-     */
-    public synchronized boolean markTerminatedForRuntime() {
-        if (lifecycle == LifecycleState.TERMINATED) {
-            return false;
+    void submitRoutingForRuntime(RoutingOperation operation) {
+        Objects.requireNonNull(operation, "operation");
+        boolean terminated;
+        synchronized (this) {
+            terminated = lifecycle != LifecycleState.LIVE;
+            if (!terminated) {
+                active.add(operation);
+                pending.addLast(operation);
+            }
         }
-        lifecycle = LifecycleState.TERMINATED;
+        if (terminated) {
+            operation.groupTerminatedBeforeAcceptanceForRuntime();
+            return;
+        }
+        drainPendingForRuntime();
+    }
+
+    /** Requeues after a known concrete-Actor pre-acceptance failure; never retries accepted work. */
+    boolean requeueAfterPreacceptFailureForRuntime(RoutingOperation operation) {
+        synchronized (this) {
+            if (lifecycle != LifecycleState.LIVE || !active.contains(operation)) {
+                return false;
+            }
+            if (!pending.contains(operation)) {
+                pending.addLast(operation);
+            }
+            return true;
+        }
+    }
+
+    /** Cancels Group-owned routing even if a drain already selected but has not submitted a child. */
+    boolean cancelRoutingBeforeAcceptanceForRuntime(RoutingOperation operation) {
+        synchronized (this) {
+            if (!active.contains(operation)) {
+                return false;
+            }
+            pending.remove(operation);
+            return true;
+        }
+    }
+
+    void operationFinishedForRuntime(RoutingOperation operation) {
+        synchronized (this) {
+            pending.remove(operation);
+            active.remove(operation);
+        }
+    }
+
+    /** READY/termination changes can make a pending route possible or invalidate one target. */
+    void memberLifecycleChangedForRuntime(ProtosActor actor) {
+        Objects.requireNonNull(actor, "actor");
+        synchronized (this) {
+            if (!members.contains(actor) || lifecycle != LifecycleState.LIVE) {
+                return;
+            }
+        }
+        drainPendingForRuntime();
+    }
+
+    private void drainPendingForRuntime() {
+        while (true) {
+            RoutingOperation operation;
+            ProtosActor selected;
+            synchronized (this) {
+                if (lifecycle != LifecycleState.LIVE) {
+                    return;
+                }
+                operation = pending.peekFirst();
+                if (operation == null) {
+                    return;
+                }
+                selected = selectEligibleMemberLocked();
+                if (selected == null) {
+                    return;
+                }
+                pending.removeFirst();
+            }
+            // Group monitor is deliberately not held while entering concrete Actor admission.
+            operation.routeToForRuntime(selected);
+        }
+    }
+
+    /** Ends this Group identity without stopping members or revoking already accepted Actor work. */
+    public boolean markTerminatedForRuntime() {
+        List<RoutingOperation> operations;
+        List<ProtosActor> currentMembers;
+        synchronized (this) {
+            if (lifecycle == LifecycleState.TERMINATED) {
+                return false;
+            }
+            lifecycle = LifecycleState.TERMINATED;
+            pending.clear();
+            operations = List.copyOf(active);
+            currentMembers = List.copyOf(members);
+        }
+        for (ProtosActor actor : currentMembers) {
+            actor.unregisterRoutingGroupForRuntime(this);
+        }
+        for (RoutingOperation operation : operations) {
+            operation.groupTerminatedBeforeAcceptanceForRuntime();
+        }
         return true;
     }
 
     synchronized int memberCountForTesting() {
         return members.size();
+    }
+
+    synchronized int pendingOperationCountForTesting() {
+        return pending.size();
     }
 }

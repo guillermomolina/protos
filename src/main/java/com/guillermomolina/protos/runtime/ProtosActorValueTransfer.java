@@ -143,7 +143,7 @@ public final class ProtosActorValueTransfer {
 
             // These are explicitly non-transferable Actor-domain/execution/resource values.
             if (value instanceof ProtosClosureValue
-                    || value instanceof ProtosSendOperationValue
+                    || value instanceof ProtosSendOperationControl
                     || value instanceof ProtosFutureValue
                     || value instanceof ProtosTask
                     || value instanceof ProtosByteRegionValue

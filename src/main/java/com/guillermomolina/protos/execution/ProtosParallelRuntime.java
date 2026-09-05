@@ -348,7 +348,7 @@ public final class ProtosParallelRuntime {
                 if(memo.containsKey(v))return memo.get(v);
                 ProtosEnvironmentValue y=x.rematerializeForParallelTransfer();memo.put(v,y);return y;
             }
-            if(v instanceof ProtosFutureValue||v instanceof ProtosByteRegionValue||v instanceof ProtosTask||v instanceof ProtosFileValue||v instanceof ProtosFilesystemValue||v instanceof ProtosProcessStandardStreamValue||v==null)throw new NonParallel();
+            if(v instanceof ProtosFutureValue||v instanceof ProtosByteRegionValue||v instanceof ProtosTask||v instanceof ProtosFileValue||v instanceof ProtosFilesystemValue||v instanceof ProtosProcessStandardStreamValue||v instanceof ProtosSendOperationControl||v==null)throw new NonParallel();
             if(memo.containsKey(v))return memo.get(v);
             ProtosPrelude p=a.prelude().orElseThrow();
             if(v==ProtosObjectValue.rootObject()||prelude(v,p))return v;

@@ -57,6 +57,7 @@ public final class ProtosActor {
             new AtomicReference<>();
     private final Set<ProtosActorTerminationObservation> terminationObservers =
             new LinkedHashSet<>();
+    private final Set<ProtosActorGroupRuntime> routingGroups = new LinkedHashSet<>();
     private boolean terminationCutoverCleanupComplete;
 
     public ProtosActor(ProtosObjectValue actorRefPrototype) {
@@ -166,6 +167,28 @@ public final class ProtosActor {
                 : processRuntime.createHostedActorForRuntime(actorRefPrototype);
     }
 
+    void registerRoutingGroupForRuntime(ProtosActorGroupRuntime group) {
+        synchronized (this) {
+            routingGroups.add(Objects.requireNonNull(group, "group"));
+        }
+    }
+
+    void unregisterRoutingGroupForRuntime(ProtosActorGroupRuntime group) {
+        synchronized (this) {
+            routingGroups.remove(group);
+        }
+    }
+
+    private void notifyRoutingGroupsForRuntime() {
+        List<ProtosActorGroupRuntime> groups;
+        synchronized (this) {
+            groups = List.copyOf(routingGroups);
+        }
+        for (ProtosActorGroupRuntime group : groups) {
+            group.memberLifecycleChangedForRuntime(this);
+        }
+    }
+
     /**
      * Reports an unhandled fatal Actor failure to the nearest runtime failure authority.
      *
@@ -247,23 +270,32 @@ public final class ProtosActor {
      * <p>If termination wins the lifecycle race first, this returns false and never reopens
      * the Actor. The installed behavior reference is never replaced.
      */
-    public synchronized boolean completeInitialization(ProtosObjectValue behavior) {
+    public boolean completeInitialization(ProtosObjectValue behavior) {
         Objects.requireNonNull(behavior, "behavior");
-        while (true) {
+        boolean transitioned;
+        synchronized (this) {
             if (lifecycle.get() != LifecycleState.INITIALIZING) {
                 return false;
             }
             ProtosObjectValue existing = currentBehavior.get();
-            if (existing != null) {
+            if (existing != null && existing != behavior) {
+                throw new IllegalStateException("Actor initial behavior is already fixed");
+            }
+            if (existing == null && !currentBehavior.compareAndSet(null, behavior)) {
+                existing = currentBehavior.get();
                 if (existing != behavior) {
                     throw new IllegalStateException("Actor initial behavior is already fixed");
                 }
-                return markReady();
             }
-            if (currentBehavior.compareAndSet(null, behavior)) {
-                return markReady();
-            }
+            transitioned =
+                    lifecycle.compareAndSet(
+                            LifecycleState.INITIALIZING, LifecycleState.READY);
         }
+        if (transitioned) {
+            mailbox.signalRuntime();
+            notifyRoutingGroupsForRuntime();
+        }
+        return transitioned;
     }
 
     long incarnationIdentityForRuntime() {
@@ -275,25 +307,18 @@ public final class ProtosActor {
      *
      * @return true only for the call that performs the transition
      */
-    public synchronized boolean markReady() {
-        while (true) {
-            LifecycleState current = lifecycle.get();
-            switch (current) {
-                case INITIALIZING -> {
-                    if (lifecycle.compareAndSet(
-                            LifecycleState.INITIALIZING, LifecycleState.READY)) {
-                        mailbox.signalRuntime();
-                        return true;
-                    }
-                }
-                case READY -> {
-                    return false;
-                }
-                case TERMINATING, TERMINATED -> {
-                    return false;
-                }
-            }
+    public boolean markReady() {
+        boolean transitioned;
+        synchronized (this) {
+            transitioned =
+                    lifecycle.compareAndSet(
+                            LifecycleState.INITIALIZING, LifecycleState.READY);
         }
+        if (transitioned) {
+            mailbox.signalRuntime();
+            notifyRoutingGroupsForRuntime();
+        }
+        return transitioned;
     }
 
     /**
@@ -324,6 +349,7 @@ public final class ProtosActor {
         // The cutover owns cancellation, but producer callbacks may acquire another Actor's
         // admission lock. Never hold this Actor monitor while requesting those cancellations.
         deliveryAdmission.lifecycleChanged();
+        notifyRoutingGroupsForRuntime();
         executionDomain.actorTerminationBegun();
         mailbox.signalRuntime();
         synchronized (this) {
@@ -389,6 +415,7 @@ public final class ProtosActor {
             terminationObservers.clear();
         }
         deliveryAdmission.lifecycleChanged();
+        notifyRoutingGroupsForRuntime();
         mailbox.signalRuntime();
         for (ProtosActorTerminationObservation observation : notify) {
             observation.targetTerminated();
