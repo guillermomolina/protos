@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.126-SNAPSHOT
+
+- Implement I011-18 final local/cross-Process ActorGroup conformance: prove GroupRef continuity across member replacement, pre-acceptance rerouting when a selected member's Process terminates, and no rerouting after concrete acceptance.
+- Add deterministic request-loss and cancellation races spanning Process, Actor, Group, and communication boundaries: accepted Group requests lost to Process termination fail with RequestOutcomeUncertain, while READY-versus-cancel races produce exactly one legal pre/post-acceptance outcome and never duplicate handler execution.
+- Record B004 for the remaining public Group/GroupRef acquisition/discovery API: the distributed-runtime spec closes identity/routing semantics but explicitly leaves exact Group/GroupRef API/syntax and any new public discovery API undefined. I011 remains IN_PROGRESS; genuinely remote transport/acceptance uncertainty and I017 reconciliation may continue independently.
+
 ## 0.2.125-SNAPSHOT
 
 - Implement LIB001-A as ordinary distributable Protos modules `std:collections/set` and `std:collections/identity_set`, with variadic module-call construction over fresh open Map/IdentityMap state and canonical `key -> true` representation.

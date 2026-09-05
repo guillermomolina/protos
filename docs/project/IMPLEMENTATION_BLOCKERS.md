@@ -126,3 +126,43 @@ Independent work:
 Composition conflict validation, local-slot snapshots, atomic contribution
 application, parser/canonical AST work, and unrelated execution/runtime work may
 continue independently.
+
+## B004 — Public Group/GroupRef acquisition and discovery API
+
+Status: BLOCKED
+
+Implementation area:
+I011 public/distributed Group acquisition/discovery and any language-visible operation that
+creates, resolves, or reacquires a Group or GroupRef by a portable discovery facility.
+
+Normative dependency:
+The distributed-runtime specification closes Group identity, GroupRef semantic identity,
+transfer, routing, acceptance, rerouting, and communication semantics. However, its Open Design
+Topics explicitly leave the exact Group/GroupRef API and syntax unresolved, and §72B explicitly
+states that Core v0.1 does not define a new public discovery API, namespace model, consistency
+level, TTL contract, watch semantics, federation model, persistence guarantee, security model, or
+schema/versioning rule. Choosing selectors, constructors, names, registry behavior, or authority
+for acquisition in implementation would therefore invent observable language semantics.
+
+Specification authority:
+- `spec/concurrency/DISTRIBUTED_RUNTIME.md` §50 Runtime Groups
+- `spec/concurrency/DISTRIBUTED_RUNTIME.md` §72B Service Discovery Implementation Is Not Core Semantics
+- `spec/concurrency/DISTRIBUTED_RUNTIME.md` Open Design Topics
+
+Unblock condition:
+The current normative specification defines an exact portable Group/GroupRef acquisition and/or
+discovery surface sufficiently to implement it without choosing new selector names, syntax,
+namespace semantics, authority, rebinding behavior, consistency, or failure outcomes in the
+implementation.
+
+Current consequence:
+Do not add a public `Group`, `GroupRef` constructor/acquire/lookup selector, magic discovery name,
+ambient registry, or implementation-selected discovery namespace. Existing internal runtime
+GroupRef acquisition and the already-published language-visible GroupRef `send`/`request` surface
+remain valid because their observable semantics are independently closed.
+
+Independent work:
+Genuinely remote transport/routing machinery that preserves already-closed acceptance and
+uncertainty semantics may continue behind internal runtime boundaries without exposing a new
+discovery API. I017 Process/bootstrap integration and unrelated Actor/Group conformance work may
+also continue independently.
