@@ -1,6 +1,6 @@
 # LIB001 Collections Design Record
 
-Status: Set/IdentitySet contract closed; LIB001-A and LIB001-B closed; LIB001-C ready
+Status: Set/IdentitySet implementation complete through LIB001-C; LIB001-D remains pending its fresh Array API audit
 Work item: `LIB001`
 Nature: Project design record; **non-normative**
 

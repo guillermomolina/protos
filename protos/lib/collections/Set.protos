@@ -45,3 +45,73 @@ each: (set, block) => {
     })
     set
 }
+
+union: (left, right) => {
+    result: Map()
+    left.each((element, marker) => {
+        result.atPut(element, true)
+    })
+    right.each((element, marker) => {
+        result.atPut(element, true)
+    })
+    result
+}
+
+intersection: (left, right) => {
+    result: Map()
+    left.each((element, marker) => {
+        right.containsKey(element).ifTrue(() => {
+            result.atPut(element, true)
+        })
+    })
+    result
+}
+
+difference: (left, right) => {
+    result: Map()
+    left.each((element, marker) => {
+        right.containsKey(element).ifFalse(() => {
+            result.atPut(element, true)
+        })
+    })
+    result
+}
+
+sameMembers: (left, right) => {
+    (left.size() == right.size()).ifFalse(() => {
+        ^false
+    })
+    left.each((element, marker) => {
+        right.containsKey(element).ifFalse(() => {
+            ^false
+        })
+    })
+    true
+}
+
+isSubset: (left, right) => {
+    left.each((element, marker) => {
+        right.containsKey(element).ifFalse(() => {
+            ^false
+        })
+    })
+    true
+}
+
+isSuperset: (left, right) => {
+    right.each((element, marker) => {
+        left.containsKey(element).ifFalse(() => {
+            ^false
+        })
+    })
+    true
+}
+
+isDisjoint: (left, right) => {
+    left.each((element, marker) => {
+        right.containsKey(element).ifTrue(() => {
+            ^false
+        })
+    })
+    true
+}

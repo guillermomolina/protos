@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.139-SNAPSHOT
+
+- Close LIB001-C by completing the initial `std:collections/Set` and `std:collections/IdentitySet` surfaces with fresh `union`, `intersection`, and `difference` results plus `sameMembers`, `isSubset`, `isSuperset`, and `isDisjoint`; no runtime Set family, wrapper, tag, generic collection hierarchy, or production Java path is added.
+- Preserve deterministic algebra order and representatives through ordinary Map/IdentityMap operations: union inserts left then right into a fresh keyed result, intersection/difference retain matching/nonmatching left representatives in left traversal order, and every result remains a fresh open Map-backed Set with canonical `true` markers.
+- Implement predicate short-circuiting with the existing Protos non-local return mechanism, keep ordinary Map `==`/`hash` unchanged in favor of explicit `sameMembers`, and add focal conformance for numeric-equality versus identity membership, traversal order, short-circuit key-search effects, freshness/open state, and Actor transfer of Set data while module behavior remains Actor-local.
+
 ## 0.2.138-SNAPSHOT
 
 - Close LIB001-B for `std:collections/Set` and `std:collections/IdentitySet` with ordinary Protos `add`, `remove`, and member-only `each`: `add` performs exactly one underlying `atPut(element, true)`, `remove` exactly one keyed removal, and both return the exact Set object after normal completion.

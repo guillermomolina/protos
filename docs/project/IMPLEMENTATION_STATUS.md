@@ -291,7 +291,7 @@ work may proceed without waiting for an earlier-numbered roadmap item.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| LIB001 | Collections library | IN_PROGRESS | — | I004 + I005 + I006 + I008 + CLI004 + CLI005 closed; LIB001-A and LIB001-B are CLOSED; LIB001-C is READY; LIB001-D remains OPEN pending its fresh Array API audit. |
+| LIB001 | Collections library | IN_PROGRESS | — | I004 + I005 + I006 + I008 + CLI004 + CLI005 closed; LIB001-A, LIB001-B, and LIB001-C are CLOSED; LIB001-D remains OPEN pending its fresh Array API audit. |
 | LIB002 | Text / encoding conveniences | BLOCKED_BY_DEPENDENCIES | — | I015 is not closed; ordinary library conveniences may build on Encoding/Text I/O but must not redefine their Core semantics. |
 | LIB003 | JSON / serialization | BLOCKED_BY_DEPENDENCIES | — | LIB001 is not closed; design exact text/encoding and stream-adapter dependencies from the then-current repository rather than assuming roadmap order is dependency order. |
 | LIB004 | Filesystem / process conveniences | READY | — | I016 + I017 closed; begin with a fresh focused convenience-layer design/audit. Any text-oriented convenience that needs I015/LIB002 remains individually dependency-gated and must preserve explicit authority boundaries. |
@@ -345,7 +345,7 @@ Planned slices:
 |---|---|---|---|---|
 | LIB001-A | CLOSED | `0.2.125-SNAPSHOT` | `SAME_COMMIT` | Set/IdentitySet ordinary modules: `key -> true` representation, variadic module-call construction, `contains`, `size`, focal real-`std:` conformance. |
 | LIB001-B | CLOSED | `0.2.138-SNAPSHOT` | `SAME_COMMIT` | `Set`/`IdentitySet` `add` and `remove` delegate exactly once to the underlying keyed mutation and return the exact receiver; one-argument `each` adapts the existing insertion-order shallow Map/IdentityMap snapshot; open/closed/frozen, absent-remove, callback-arity/invocation, order and mutation-during-iteration conformance published. |
-| LIB001-C | READY | — | — | Fresh Set algebra + predicates + Set-area Actor/identity/order/final conformance; LIB001-B is CLOSED. |
+| LIB001-C | CLOSED | `0.2.139-SNAPSHOT` | `SAME_COMMIT` | Fresh `union`/`intersection`/`difference` and explicit membership predicates published for Set/IdentitySet with deterministic left-derived order, short-circuit traversal, Map-vs-membership equality boundary, fresh/open result conformance, and Actor-local behavior versus transferable Map-backed data conformance. |
 | LIB001-D | OPEN | — | — | Eager Array `map`/`filter`/`findIndex`; becomes READY only after a fresh current-main audit closes callback, snapshot/mutation, and `findIndex` absence contracts. |
 | LIB001-E | BLOCKED_BY_DEPENDENCIES | — | — | Eager Array `reduce`/`sort` plus final cross-slice LIB001 validation/closure; requires LIB001-D CLOSED and the reduce/sort contracts audited before implementation. |
 
