@@ -18,9 +18,12 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -72,6 +75,37 @@ class ProtosStandardFloatArithmeticTest {
 
         assertNaN(prelude, "(1.0 / 0.0) - (1.0 / 0.0)");
         assertNaN(prelude, "0.0 * (1.0 / 0.0)");
+    }
+
+    @Test
+    void negatedIsSourceBackedAndPreservesFloatReceiverDomain() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        ProtosClosureValue negated =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        prelude.floatPrototype().readLocalSlot("negated").orElseThrow());
+        assertNotNull(negated.definition());
+        assertTrue(negated.executionPlan().isPresent());
+        assertTrue(negated.nativeBody().isEmpty());
+
+        ProtosClosureValue multiply =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        prelude.floatPrototype().readLocalSlot("*").orElseThrow());
+        assertTrue(multiply.nativeBody().isPresent());
+
+        var activation = prelude.newModuleActivation();
+        var incompatible =
+                new com.guillermomolina.protos.runtime.ProtosObjectValue(
+                        prelude.floatPrototype());
+        activation.context().createLocalSlot("incompatibleFloatChild", incompatible);
+
+        assertThrows(
+                ProtosSignalException.class,
+                () ->
+                        new ProtosSourceCompiler()
+                                .compile("incompatibleFloatChild.negated()")
+                                .call(activation));
     }
 
     @Test

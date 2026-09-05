@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.101-SNAPSHOT
+
+- Continue I018 Core self-hosting/bootstrap minimization by moving the standard `Float.negated()` body from Java into distributable `protos/lib/core/float.protos`.
+- Express Float negation as `(0.0 - 1.0) * this`: constructing semantic binary64 `-1.0` through native subtraction avoids recursive use of `negated`, and native Float multiplication then validates the original receiver while producing exact binary64 sign inversion, including `+0.0`/`-0.0`, infinities, subnormals, and Core NaN semantics.
+- Add focused provenance and receiver-domain regression coverage proving `Float.negated` is source-backed while the binary64 `*` representation primitive remains native-backed. No normative specification changes are made, and I016 remains frozen at I016-C.
+
 ## 0.2.100-SNAPSHOT
 
 - Continue I018 Core self-hosting/bootstrap minimization by moving the standard ordinary `Integer.%` derived body from Java into distributable `protos/lib/core/integer.protos`.

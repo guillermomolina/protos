@@ -30,26 +30,12 @@ public final class ProtosStandardFloatProtocol {
 
     public static void install(ProtosObjectValue floatPrototype) {
         Objects.requireNonNull(floatPrototype, "floatPrototype");
+        requireSourceBackedClosure(floatPrototype, "negated");
 
         installBinary(floatPrototype, "+", (left, right) -> left + right);
         installBinary(floatPrototype, "-", (left, right) -> left - right);
         installBinary(floatPrototype, "*", (left, right) -> left * right);
         installBinary(floatPrototype, "/", (left, right) -> left / right);
-
-        if (floatPrototype.hasLocalSlot("negated")) {
-            throw new IllegalStateException("Core Float already defines a local negated slot");
-        }
-        floatPrototype.createLocalSlot(
-                "negated",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            ProtosFloatValue receiver = requireFloatReceiver(activation);
-                            if (!supplied.isEmpty()) {
-                                throw new ProtosSignalException(
-                                        ProtosCoreErrors.newError(activation));
-                            }
-                            return new ProtosFloatValue(-receiver.value());
-                        }));
     }
 
     private static void installBinary(
@@ -73,6 +59,25 @@ public final class ProtosStandardFloatProtocol {
                             return new ProtosFloatValue(
                                     operation.applyAsDouble(receiver.value(), argument.value()));
                         }));
+    }
+
+    private static void requireSourceBackedClosure(
+            ProtosObjectValue prototype, String selector) {
+        Object value =
+                prototype
+                        .readLocalSlot(selector)
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Core Float source did not define " + selector));
+        if (!(value instanceof ProtosClosureValue closure)
+                || closure.definition() == null
+                || closure.executionPlan().isEmpty()
+                || closure.nativeBody().isPresent()) {
+            throw new IllegalStateException(
+                    "Core Float." + selector
+                            + " must be installed from distributable Core source");
+        }
     }
 
     private static ProtosFloatValue requireFloatReceiver(
