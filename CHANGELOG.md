@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.88-SNAPSHOT
+
+- Implement I011-6 internal bounded Actor mailbox ownership and READY-gated implicit event-loop dispatch; accepted message turns remain finite, FIFO in accepted order, and undispatched while the destination is INITIALIZING.
+- Add automatic Actor-local scheduler wakeups and a weak-fair cross-Actor scheduler that selects one non-preemptive segment per Actor turn, permits independent Actors to use different carriers, and never executes two Protos segments concurrently in one Actor incarnation. I011 remains IN_PROGRESS; pre-acceptance admission/backpressure/FIFO fairness and the public send/request operation semantics remain for later slices.
+
 ## 0.2.87-SNAPSHOT
 
 - Implement I016-A Filesystem open preflight/acquisition substrate: exact invocation-time capture of local standard open options, deterministic invalid-combination rejection before backend authority, host-neutral asynchronous acquisition, and independent open dispatch without an implicit Filesystem/Path FIFO.

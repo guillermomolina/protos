@@ -169,6 +169,14 @@ public final class ProtosTask {
         return true;
     }
 
+    synchronized boolean beginDirectDispatch() {
+        if (state != State.RUNNABLE || queued) {
+            return false;
+        }
+        state = State.RUNNING;
+        return true;
+    }
+
     void runContinuation() {
         Object deferredFailure;
         Object deferredCompletion;

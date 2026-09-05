@@ -18,10 +18,13 @@ import java.util.Set;
  * runnable tasks when dispatch continues.
  */
 public final class ProtosActorExecutionDomain {
+    private static final Runnable NOOP_WAKEUP = () -> {};
+
     private final ArrayDeque<ProtosTask> runnable = new ArrayDeque<>();
     private final Set<ProtosTask> liveTasks = new LinkedHashSet<>();
     private final Set<ProtosIoOperation> actorIoOperations = new LinkedHashSet<>();
     private ProtosActor ownerActor;
+    private Runnable schedulerWakeup = NOOP_WAKEUP;
 
     public ProtosTask createTask(
             ProtosTask parent, Object associatedFuture, ProtosTask.Continuation continuation) {
@@ -46,12 +49,17 @@ public final class ProtosActorExecutionDomain {
 
     void enqueue(ProtosTask task) {
         Objects.requireNonNull(task, "task");
+        Runnable wakeup = null;
         synchronized (this) {
             requireOwned(task);
             if (task.markQueued()) {
                 runnable.addLast(task);
                 notifyAll();
+                wakeup = schedulerWakeup;
             }
+        }
+        if (wakeup != null) {
+            wakeup.run();
         }
     }
 
@@ -70,6 +78,20 @@ public final class ProtosActorExecutionDomain {
         return true;
     }
 
+    /** Starts one already-accepted mailbox message as the current Actor segment. */
+    ProtosTask dispatchAcceptedTurn(ProtosTask.Continuation continuation) {
+        Objects.requireNonNull(continuation, "continuation");
+        ProtosTask task = new ProtosTask(this, null, null, continuation);
+        synchronized (this) {
+            liveTasks.add(task);
+        }
+        if (!task.beginDirectDispatch()) {
+            throw new IllegalStateException("fresh mailbox task could not begin dispatch");
+        }
+        task.runContinuation();
+        return task;
+    }
+
     public void dispatchUntilIdle() {
         while (dispatchOne()) {
             // Cooperative segments themselves decide whether to suspend or terminate.
@@ -83,6 +105,10 @@ public final class ProtosActorExecutionDomain {
 
     public synchronized int runnableCount() {
         return runnable.size();
+    }
+
+    synchronized boolean hasRunnableForRuntime() {
+        return !runnable.isEmpty();
     }
 
     public synchronized int liveTaskCount() {
@@ -126,6 +152,16 @@ public final class ProtosActorExecutionDomain {
                 throw new IllegalStateException("execution domain already belongs to another Actor");
             }
             ownerActor = actor;
+        }
+    }
+
+    void bindSchedulerWakeup(Runnable wakeup) {
+        Objects.requireNonNull(wakeup, "wakeup");
+        synchronized (this) {
+            if (schedulerWakeup != NOOP_WAKEUP) {
+                throw new IllegalStateException("execution domain is already attached to a scheduler");
+            }
+            schedulerWakeup = wakeup;
         }
     }
 

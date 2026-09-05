@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosActorRefValue;
+import com.guillermomolina.protos.runtime.ProtosActorScheduler;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
@@ -35,23 +36,27 @@ import java.util.concurrent.Executor;
 public final class ProtosStandardActorProtocol {
     private final ProtosModuleRuntime moduleRuntime;
     private final ProtosActorBootstrap actorBootstrap;
-    private final Executor bootstrapExecutor;
+    private final ProtosActorScheduler actorScheduler;
     private final ProtosObjectValue actorRefPrototype;
 
     public ProtosStandardActorProtocol(ProtosModuleRuntime moduleRuntime) {
-        this(moduleRuntime, command -> Thread.startVirtualThread(command));
+        this(moduleRuntime, new ProtosActorScheduler());
     }
 
     /**
-     * Runtime/test constructor. The executor is internal machinery and is never exposed to Protos.
-     * Callers must provide an executor whose execute method only schedules the command; it must not
-     * wait for command completion.
+     * Runtime/test constructor. The executor is internal carrier machinery and is never exposed to
+     * Protos. The injected form intentionally uses one scheduler worker for deterministic tests.
      */
     public ProtosStandardActorProtocol(
             ProtosModuleRuntime moduleRuntime, Executor bootstrapExecutor) {
+        this(moduleRuntime, new ProtosActorScheduler(bootstrapExecutor, 1));
+    }
+
+    private ProtosStandardActorProtocol(
+            ProtosModuleRuntime moduleRuntime, ProtosActorScheduler actorScheduler) {
         this.moduleRuntime = Objects.requireNonNull(moduleRuntime, "moduleRuntime");
         this.actorBootstrap = new ProtosActorBootstrap(moduleRuntime);
-        this.bootstrapExecutor = Objects.requireNonNull(bootstrapExecutor, "bootstrapExecutor");
+        this.actorScheduler = Objects.requireNonNull(actorScheduler, "actorScheduler");
         this.actorRefPrototype =
                 new ProtosObjectValue(ProtosObjectValue.rootObject()).freeze();
     }
@@ -116,10 +121,12 @@ public final class ProtosStandardActorProtocol {
                     }
                 };
         try {
-            bootstrapExecutor.execute(bootstrap);
+            actorScheduler.attach(actor);
+            actorScheduler.submitControl(actor, bootstrap);
         } catch (RuntimeException admissionFailure) {
-            // Capacity/admission after the semantic creation cutover cannot retroactively fail
-            // spawn. Preserve the already-created incarnation and make it terminal instead.
+            // Scheduler/carrier failure is after the semantic creation cutover and therefore cannot
+            // retroactively fail spawn. Preserve the fixed incarnation and make it terminal.
+            actorScheduler.detach(actor);
             terminateAfterCutover(actor);
         }
         return reference;

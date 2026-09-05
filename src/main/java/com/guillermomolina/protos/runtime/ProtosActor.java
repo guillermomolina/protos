@@ -23,11 +23,13 @@ public final class ProtosActor {
     }
 
     private static final AtomicLong NEXT_INCARNATION_ID = new AtomicLong();
+    private static final int DEFAULT_MAILBOX_CAPACITY = 256;
 
     private final long incarnationIdentity;
     private final ProtosActorExecutionDomain executionDomain;
     private final ProtosActorModuleState moduleState;
     private final ProtosActorRefValue reference;
+    private final ProtosActorMailbox mailbox;
     private final AtomicReference<LifecycleState> lifecycle =
             new AtomicReference<>(LifecycleState.INITIALIZING);
     private final AtomicReference<ProtosObjectValue> currentBehavior =
@@ -37,16 +39,26 @@ public final class ProtosActor {
         this(
                 actorRefPrototype,
                 new ProtosActorExecutionDomain(),
-                new ProtosActorModuleState());
+                new ProtosActorModuleState(),
+                DEFAULT_MAILBOX_CAPACITY);
     }
 
     ProtosActor(
             ProtosObjectValue actorRefPrototype,
             ProtosActorExecutionDomain executionDomain,
             ProtosActorModuleState moduleState) {
+        this(actorRefPrototype, executionDomain, moduleState, DEFAULT_MAILBOX_CAPACITY);
+    }
+
+    ProtosActor(
+            ProtosObjectValue actorRefPrototype,
+            ProtosActorExecutionDomain executionDomain,
+            ProtosActorModuleState moduleState,
+            int mailboxCapacity) {
         this.executionDomain =
                 Objects.requireNonNull(executionDomain, "executionDomain");
         this.moduleState = Objects.requireNonNull(moduleState, "moduleState");
+        this.mailbox = new ProtosActorMailbox(mailboxCapacity);
         long nextIdentity = NEXT_INCARNATION_ID.incrementAndGet();
         if (nextIdentity <= 0) {
             throw new IllegalStateException("Actor incarnation identity space exhausted");
@@ -72,6 +84,18 @@ public final class ProtosActor {
 
     public ProtosActorRefValue reference() {
         return reference;
+    }
+
+    synchronized boolean tryAcceptMessageForRuntime(ProtosTask.Continuation turn) {
+        LifecycleState state = lifecycle.get();
+        if (state == LifecycleState.TERMINATING || state == LifecycleState.TERMINATED) {
+            return false;
+        }
+        return mailbox.tryAccept(turn);
+    }
+
+    ProtosActorMailbox mailboxForRuntime() {
+        return mailbox;
     }
 
     /** Destination-local behavior installed by successful bootstrap. */
@@ -120,6 +144,7 @@ public final class ProtosActor {
                 case INITIALIZING -> {
                     if (lifecycle.compareAndSet(
                             LifecycleState.INITIALIZING, LifecycleState.READY)) {
+                        mailbox.signalRuntime();
                         return true;
                     }
                 }
@@ -144,6 +169,7 @@ public final class ProtosActor {
             switch (current) {
                 case INITIALIZING, READY -> {
                     if (lifecycle.compareAndSet(current, LifecycleState.TERMINATING)) {
+                        mailbox.signalRuntime();
                         return true;
                     }
                 }
@@ -166,6 +192,7 @@ public final class ProtosActor {
                 case TERMINATING -> {
                     if (lifecycle.compareAndSet(
                             LifecycleState.TERMINATING, LifecycleState.TERMINATED)) {
+                        mailbox.signalRuntime();
                         return true;
                     }
                 }
