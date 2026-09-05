@@ -144,3 +144,11 @@ regression/nested-closure-retains-method-receiver-state.protos	integer	9
 regression/inherited-call-slot-keeps-receiver.protos	integer	9
 regression/local-nonclosure-call-shadows-inherited-call.protos	error	-
 regression/inherited-member-assignment-signals-error.protos	error	-
+regression/lexical-read-beats-receiver-slot.protos	integer	4
+regression/multilevel-delegated-method-uses-leaf-receiver.protos	integer	17
+regression/extracted-inherited-method-observes-later-receiver-mutation.protos	integer	12
+regression/multilevel-inherited-call-keeps-leaf-receiver.protos	integer	18
+regression/default-argument-uses-dynamic-receiver.protos	integer	23
+regression/rest-arguments-on-inherited-method-keep-receiver.protos	integer	423
+collections/map-equal-path-keys-collapse.protos	boolean	true
+collections/identity-map-equal-path-keys-remain-distinct.protos	boolean	true

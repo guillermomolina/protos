@@ -23,4 +23,5 @@ All Protos source files use the canonical `.protos` extension. Examples are non-
 | Compute factorial recursively | `algorithms/factorial-recursive.protos` |
 | Use value-keyed maps | `collections/maps.protos` |
 | Use identity-keyed maps | `collections/identity-map.protos` |
+| Use structurally equal values as Map vs IdentityMap keys | `collections/path-keys.protos` |
 | Build and compare portable paths | `paths/portable-paths.protos` |
