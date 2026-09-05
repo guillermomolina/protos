@@ -97,7 +97,7 @@ public final class ProtosActorBootstrap {
             actor.bindMessageEnvironmentForRuntime(prelude, canonicalModuleKey);
             return actor.completeInitialization(behavior);
         } catch (ProtosSignalException failure) {
-            terminateFailedInitialization(actor);
+            terminateFailedInitialization(actor, failure.error());
             throw failure;
         }
     }
@@ -106,7 +106,7 @@ public final class ProtosActorBootstrap {
         return new ProtosSignalException(ProtosCoreErrors.newError(activation));
     }
 
-    private static void terminateFailedInitialization(ProtosActor actor) {
-        actor.requestTerminationForRuntime();
+    private static void terminateFailedInitialization(ProtosActor actor, Object failure) {
+        actor.failForRuntime(failure);
     }
 }

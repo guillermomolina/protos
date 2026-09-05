@@ -80,11 +80,12 @@ Published slices:
 | I011-10 | CLOSED | `0.2.105-SNAPSHOT` | `SAME_COMMIT` | Graceful Actor lifecycle: public idempotent `ActorRef.stop()` and fresh independent `ActorRef.termination()` observation Futures; TERMINATING-cutover cancellation of Actor-local tasks, Actor-originated pending non-task Futures and I/O; accepted-undispatched loss preservation; TERMINATED only after required task cancellation unwind. |
 | I011-11 | CLOSED | `0.2.107-SNAPSHOT` | `SAME_COMMIT` | Actor-boundary `Map`/`IdentityMap` keyed-state transfer with alias/cycle and mutation-state preservation; destination hash/identity-hash bookkeeping rebuilt without executing user comparison/hash code; default Object hash uses semantic identity so rematerialized ActorRef capabilities remain valid keyed identities. |
 | I011-12 | CLOSED | `0.2.108-SNAPSHOT` | `SAME_COMMIT` | GroupRef capability-identity and Actor-transfer foundation: semantic GroupRef identity is distinct from Group identity and physical wrappers; repeated transfer/rematerialization preserves identityHash, target Group identity, and effective restriction descriptor; independent GroupRef acquisitions remain distinct. No public Group routing/acquisition surface is introduced. |
+| I011-13 | CLOSED | `0.2.112-SNAPSHOT` | `SAME_COMMIT` | Internal Process failure-domain / failure-authority substrate: one RootActor plus hosted Actor set; non-root fatal failure terminates only that incarnation; RootActor fatal failure terminates the Process and all hosted Actors; Process termination waits for Actor-required cancellation unwind; process-bound `Actor.spawn` retains local Process hosting. No public Process capability or launcher provisioning yet. |
 
 Remaining implemented-surface gaps before top-level closure:
 - distributed/Group acquisition, membership/routing, send/request delivery and delivery uncertainty beyond the direct concrete-Actor path, including remaining SendOperation uncertainty finalization; GroupRef semantic identity and Actor-transfer rematerialization are wired;
-- remaining capability-transfer integration whose state/authority has its own contract: Process capability materialization/delegation;
-- failure authority, RootActor/process integration, and final deterministic cross-domain race/conformance coverage.
+- Process capability materialization/delegation plus RootActor launcher/bootstrap provisioning and standard Process authority exposure; the internal local Process failure domain and RootActor/non-root failure-authority consequences are wired;
+- final deterministic cross-domain Process/Actor/communication race and conformance coverage before top-level I011 closure.
 
 
 ### I016 — Filesystem / File

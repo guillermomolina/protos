@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.112-SNAPSHOT
+
+- Implement I011-13 internal Process failure-domain and RootActor failure-authority substrate: one Process owns exactly one RootActor plus its currently hosted Actors, Process termination requests termination of every hosted incarnation, and Process TERMINATED is reached only after Actor-required cancellation/cleanup has completed.
+- Distinguish fatal Actor failure from graceful lifecycle termination. A non-root fatal Actor failure terminates only that incarnation under Core v0.1, while a RootActor fatal failure drives authoritative local Process termination without transferring the internal failure object to another Actor.
+- Keep Actor.spawn creation inside the caller's already-bound local Process when such a Process runtime exists, while preserving the pre-existing standalone Actor path for unbound runtime/tests. No public Process capability, standard-stream provisioning, Group routing, replacement policy, Node/Cluster machinery, or OS-process termination API is introduced; I011 remains IN_PROGRESS.
+
 ## 0.2.111-SNAPSHOT
 
 - Implement I016-D3 integrated Filesystem/File conformance: deterministic pre-commit cancellation and late-custody release, post-commit cancellation precedence, stable selected-resource binding across simulated namespace replacement, independent same-path opens with out-of-order completion, backend authority rejection without fallback, and descriptor-owned optional capability shape.

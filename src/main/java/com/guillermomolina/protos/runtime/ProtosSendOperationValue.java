@@ -149,9 +149,21 @@ public final class ProtosSendOperationValue extends ProtosObjectValue {
 
         switch (task.state()) {
             case COMPLETED -> delivery.markCompletedForRuntime();
-            case FAILED, CANCELLED -> {
+            case FAILED -> {
                 delivery.markFailedAfterAcceptanceForRuntime();
-                terminateAfterUnhandledOrCancelledTurn(target);
+                Object failure =
+                        task.failure()
+                                .orElseThrow(
+                                        () ->
+                                                new IllegalStateException(
+                                                        "failed Actor turn lost failure value"));
+                target.failForRuntime(failure);
+            }
+            case CANCELLED -> {
+                delivery.markFailedAfterAcceptanceForRuntime();
+                // Cancellation is not itself an Actor fatal Error. The surrounding lifecycle
+                // request, if any, already owns termination.
+                target.requestTerminationForRuntime();
             }
             case SUSPENDED -> {
                 // The same task continuation resumes later in this Actor domain.
@@ -162,7 +174,4 @@ public final class ProtosSendOperationValue extends ProtosObjectValue {
         }
     }
 
-    private static void terminateAfterUnhandledOrCancelledTurn(ProtosActor actor) {
-        actor.requestTerminationForRuntime();
-    }
 }

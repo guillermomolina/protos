@@ -163,9 +163,19 @@ public final class ProtosActorRequest {
 
         switch (task.state()) {
             case COMPLETED -> completeReply(task, turnActivation, delivery);
-            case FAILED, CANCELLED -> {
+            case FAILED -> {
                 delivery.markFailedAfterAcceptanceForRuntime();
-                terminateAfterUnhandledOrCancelledTurn(target);
+                Object failure =
+                        task.failure()
+                                .orElseThrow(
+                                        () ->
+                                                new IllegalStateException(
+                                                        "failed Actor request turn lost failure value"));
+                target.failForRuntime(failure);
+            }
+            case CANCELLED -> {
+                delivery.markFailedAfterAcceptanceForRuntime();
+                target.requestTerminationForRuntime();
             }
             case SUSPENDED -> {
                 // The same task/evaluator continuation resumes as another Actor segment.
@@ -212,7 +222,4 @@ public final class ProtosActorRequest {
                         ProtosCoreErrors.StandardError.REQUEST_OUTCOME_UNCERTAIN));
     }
 
-    private static void terminateAfterUnhandledOrCancelledTurn(ProtosActor actor) {
-        actor.requestTerminationForRuntime();
-    }
 }

@@ -44,6 +44,8 @@ public final class ProtosActor {
     private final long incarnationIdentity;
     private final ProtosActorExecutionDomain executionDomain;
     private final ProtosActorModuleState moduleState;
+    private final ProtosProcessRuntime processRuntime;
+    private final boolean rootActor;
     private final ProtosActorRefValue reference;
     private final ProtosActorMailbox mailbox;
     private final ProtosActorDeliveryAdmission deliveryAdmission;
@@ -62,14 +64,35 @@ public final class ProtosActor {
                 actorRefPrototype,
                 new ProtosActorExecutionDomain(),
                 new ProtosActorModuleState(),
-                DEFAULT_MAILBOX_CAPACITY);
+                DEFAULT_MAILBOX_CAPACITY,
+                null,
+                false);
     }
 
     ProtosActor(
             ProtosObjectValue actorRefPrototype,
             ProtosActorExecutionDomain executionDomain,
             ProtosActorModuleState moduleState) {
-        this(actorRefPrototype, executionDomain, moduleState, DEFAULT_MAILBOX_CAPACITY);
+        this(
+                actorRefPrototype,
+                executionDomain,
+                moduleState,
+                DEFAULT_MAILBOX_CAPACITY,
+                null,
+                false);
+    }
+
+    ProtosActor(
+            ProtosObjectValue actorRefPrototype,
+            ProtosProcessRuntime processRuntime,
+            boolean rootActor) {
+        this(
+                actorRefPrototype,
+                new ProtosActorExecutionDomain(),
+                new ProtosActorModuleState(),
+                DEFAULT_MAILBOX_CAPACITY,
+                Objects.requireNonNull(processRuntime, "processRuntime"),
+                rootActor);
     }
 
     ProtosActor(
@@ -77,9 +100,24 @@ public final class ProtosActor {
             ProtosActorExecutionDomain executionDomain,
             ProtosActorModuleState moduleState,
             int mailboxCapacity) {
+        this(actorRefPrototype, executionDomain, moduleState, mailboxCapacity, null, false);
+    }
+
+    private ProtosActor(
+            ProtosObjectValue actorRefPrototype,
+            ProtosActorExecutionDomain executionDomain,
+            ProtosActorModuleState moduleState,
+            int mailboxCapacity,
+            ProtosProcessRuntime processRuntime,
+            boolean rootActor) {
         this.executionDomain =
                 Objects.requireNonNull(executionDomain, "executionDomain");
         this.moduleState = Objects.requireNonNull(moduleState, "moduleState");
+        if (rootActor && processRuntime == null) {
+            throw new IllegalArgumentException("RootActor requires an owning Process runtime");
+        }
+        this.processRuntime = processRuntime;
+        this.rootActor = rootActor;
         this.mailbox = new ProtosActorMailbox(mailboxCapacity);
         this.deliveryAdmission = new ProtosActorDeliveryAdmission(this);
         this.mailbox.bindAdmissionWakeup(deliveryAdmission::capacityAvailable);
@@ -108,6 +146,40 @@ public final class ProtosActor {
 
     public ProtosActorRefValue reference() {
         return reference;
+    }
+
+    /** Internal hosting Process, if this Actor is attached to one. */
+    public java.util.Optional<ProtosProcessRuntime> processForRuntime() {
+        return java.util.Optional.ofNullable(processRuntime);
+    }
+
+    /** True only for the unique RootActor created by the owning Process runtime. */
+    public boolean isRootActorForRuntime() {
+        return rootActor;
+    }
+
+    /** Creates one Actor in the same local Process when this Actor has Process hosting. */
+    public ProtosActor createHostedActorForRuntime(ProtosObjectValue actorRefPrototype) {
+        Objects.requireNonNull(actorRefPrototype, "actorRefPrototype");
+        return processRuntime == null
+                ? new ProtosActor(actorRefPrototype)
+                : processRuntime.createHostedActorForRuntime(actorRefPrototype);
+    }
+
+    /**
+     * Reports an unhandled fatal Actor failure to the nearest runtime failure authority.
+     *
+     * <p>Standalone Actors retain the existing consequence (terminate this incarnation). For a
+     * Process-bound Actor, the Process runtime distinguishes non-root failure from RootActor
+     * failure without exposing or transferring the internal failure object.
+     */
+    public void failForRuntime(Object failure) {
+        Objects.requireNonNull(failure, "failure");
+        if (processRuntime == null) {
+            requestTerminationForRuntime();
+            return;
+        }
+        processRuntime.actorFatalFailureForRuntime(this, failure);
     }
 
     synchronized boolean tryAcceptMessageForRuntime(ProtosTask.Continuation turn) {
@@ -320,6 +392,9 @@ public final class ProtosActor {
         mailbox.signalRuntime();
         for (ProtosActorTerminationObservation observation : notify) {
             observation.targetTerminated();
+        }
+        if (processRuntime != null) {
+            processRuntime.actorTerminatedForRuntime(this);
         }
         return true;
     }

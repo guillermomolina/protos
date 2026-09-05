@@ -226,6 +226,11 @@ public final class ProtosActorExecutionDomain {
         }
     }
 
+    /** Runtime owner lookup; Actor identity remains local to this execution domain. */
+    public synchronized Optional<ProtosActor> currentActorForRuntime() {
+        return Optional.ofNullable(ownerActor);
+    }
+
     /** Runtime substrate for the future Actor.current() primitive; no global current Actor. */
     public synchronized Optional<ProtosActorRefValue> currentActorReference() {
         return ownerActor == null ? Optional.empty() : Optional.of(ownerActor.reference());

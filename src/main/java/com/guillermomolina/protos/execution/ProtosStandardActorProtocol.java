@@ -181,7 +181,14 @@ public final class ProtosStandardActorProtocol {
                         supplied.subList(2, supplied.size()), activation);
 
         // Semantic creation cutover: nothing above this point creates an Actor or ActorRef.
-        ProtosActor actor = new ProtosActor(actorRefPrototype);
+        ProtosActor creator =
+                activation.executionDomain()
+                        .currentActorForRuntime()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Actor.spawn requires execution inside an Actor incarnation"));
+        ProtosActor actor = creator.createHostedActorForRuntime(actorRefPrototype);
         ProtosActorRefValue reference = actor.reference();
         Runnable bootstrap =
                 () -> {
