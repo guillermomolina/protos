@@ -152,3 +152,12 @@ regression/default-argument-uses-dynamic-receiver.protos	integer	23
 regression/rest-arguments-on-inherited-method-keep-receiver.protos	integer	423
 collections/map-equal-path-keys-collapse.protos	boolean	true
 collections/identity-map-equal-path-keys-remain-distinct.protos	boolean	true
+future/closure-future-integer.protos	future-integer	42
+future/closure-future-null.protos	future-null	-
+future/fresh-future-identity.protos	boolean	true
+future/then-transforms.protos	future-integer	42
+future/then-flattens.protos	future-integer	42
+future/all-preserves-input-order.protos	future-integer	42
+future/all-empty.protos	future-integer	0
+future/cancel-before-start.protos	future-cancelled	-
+future/then-rejects-noninvokable.protos	error	-

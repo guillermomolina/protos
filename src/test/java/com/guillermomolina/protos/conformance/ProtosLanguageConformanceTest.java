@@ -23,10 +23,12 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import com.guillermomolina.protos.execution.ProtosSourceFileLoader;
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
+import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -126,6 +128,41 @@ final class ProtosLanguageConformanceTest {
                 org.junit.jupiter.api.Assertions.assertTrue(
                         Double.isNaN(floating.value()));
             }
+            case "future-integer" -> {
+                ProtosActivation activation = prelude.newModuleActivation();
+                ProtosFutureValue future =
+                        assertInstanceOf(
+                                ProtosFutureValue.class,
+                                loader.load(source).call(activation));
+                awaitTerminal(future, activation);
+                assertEquals(ProtosFutureValue.State.RESOLVED, future.state());
+                ProtosIntegerValue integer =
+                        assertInstanceOf(
+                                ProtosIntegerValue.class,
+                                future.resolvedValue().orElseThrow());
+                assertEquals(new BigInteger(testCase.expectedValue()), integer.value());
+            }
+            case "future-null" -> {
+                ProtosActivation activation = prelude.newModuleActivation();
+                ProtosFutureValue future =
+                        assertInstanceOf(
+                                ProtosFutureValue.class,
+                                loader.load(source).call(activation));
+                awaitTerminal(future, activation);
+                assertEquals(ProtosFutureValue.State.RESOLVED, future.state());
+                assertEquals(
+                        ProtosNullValue.INSTANCE,
+                        future.resolvedValue().orElseThrow());
+            }
+            case "future-cancelled" -> {
+                ProtosActivation activation = prelude.newModuleActivation();
+                ProtosFutureValue future =
+                        assertInstanceOf(
+                                ProtosFutureValue.class,
+                                loader.load(source).call(activation));
+                awaitTerminal(future, activation);
+                assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
+            }
             case "error" ->
                     assertThrows(
                             ProtosSignalException.class,
@@ -136,6 +173,22 @@ final class ProtosLanguageConformanceTest {
                     throw new IllegalArgumentException(
                             "unsupported conformance expectation: "
                                     + testCase.expectation());
+        }
+    }
+
+    private static void awaitTerminal(
+            ProtosFutureValue future, ProtosActivation activation) {
+        int dispatches = 0;
+        while (future.state() == ProtosFutureValue.State.PENDING) {
+            if (!activation.executionDomain().dispatchOne()) {
+                throw new AssertionError(
+                        "Future conformance case is pending with no runnable work");
+            }
+            dispatches++;
+            if (dispatches > 100000) {
+                throw new AssertionError(
+                        "Future conformance case exceeded bounded runner progress");
+            }
         }
     }
 

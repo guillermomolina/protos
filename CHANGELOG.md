@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.145-SNAPSHOT
+
+- Start `LM005 — Concurrent Language Maturity` with `LM005-A`: extend the implementation-independent language-conformance corpus with terminal-Future expectations, while keeping assertions in the host runner rather than adding test-only Protos syntax or privileged testing objects.
+- Add Protos conformance for closure `future()`, fresh Future identity, `then` transformation and automatic Future flattening, deterministic `Future.all` input ordering/empty input, pre-start cancellation, and eager rejection of a non-invokable `then` transform. Add an executable Future-chain example and tutorial `09-futures`. No runtime or normative specification behavior changes; LM005 remains IN_PROGRESS and LM005-B becomes READY.
+
 ## 0.2.144-SNAPSHOT
 
 - Implement I015-D source-backed standard `TextWriter` with borrowing `TextWriter(target, encoding)` and explicit `TextWriter.owning(target, encoding)` construction. Construction validates ByteWritable authority, exact portable Encoding-family membership and owning Closable authority synchronously before wrapper creation or target I/O; each success creates a fresh wrapper exposing exactly `writeText`, `writeLine`, `flush`, and `close`.

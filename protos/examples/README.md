@@ -25,3 +25,4 @@ All Protos source files use the canonical `.protos` extension. Examples are non-
 | Use identity-keyed maps | `collections/identity-map.protos` |
 | Use structurally equal values as Map vs IdentityMap keys | `collections/path-keys.protos` |
 | Build and compare portable paths | `paths/portable-paths.protos` |
+| Run work asynchronously and compose Futures | `concurrency/future-chain.protos` |

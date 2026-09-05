@@ -31,6 +31,13 @@ Current expectation kinds:
 - `error`: the program must signal a Protos Error; field 3 is `-` because the
   current harness checks the semantic fact of signaling an Error, not a narrower
   Error category.
+- `future-integer`: the program must return a Future; the runner waits for that
+  Future to become terminal and requires resolution to the exact mathematical
+  Integer in field 3;
+- `future-null`: the program must return a Future that eventually resolves to
+  canonical `null`; field 3 is `-`;
+- `future-cancelled`: the program must return a Future whose terminal state is
+  `cancelled`; field 3 is `-`.
 
 The harness deliberately keeps assertions outside the Protos language. Adding
 test-only assertion syntax or a privileged testing object would be a language or
