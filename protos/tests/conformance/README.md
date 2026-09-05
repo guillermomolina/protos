@@ -39,6 +39,11 @@ Current expectation kinds:
 - `future-cancelled`: the program must return a Future whose terminal state is
   `cancelled`; field 3 is `-`.
 
+LM005 Actor cases live under `actor/` with their own `actor/manifest.tsv` because
+they require a real RootActor/Process plus deterministic test-host module and
+scheduler boundaries. The tested entry programs and Actor bootstrap modules are
+still ordinary `.protos` sources; only orchestration and assertions are host-side.
+
 The harness deliberately keeps assertions outside the Protos language. Adding
 test-only assertion syntax or a privileged testing object would be a language or
 library design decision and is not required for conformance testing.

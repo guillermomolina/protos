@@ -26,3 +26,6 @@ All Protos source files use the canonical `.protos` extension. Examples are non-
 | Use structurally equal values as Map vs IdentityMap keys | `collections/path-keys.protos` |
 | Build and compare portable paths | `paths/portable-paths.protos` |
 | Run work asynchronously and compose Futures | `concurrency/future-chain.protos` |
+| Observe the current Actor identity | `concurrency/actor-current.protos` |
+| Spawn an Actor and request a reply | `concurrency/actor-request-reply.protos` |
+| Observe same-sender FIFO with send then request | `concurrency/actor-send-fifo.protos` |

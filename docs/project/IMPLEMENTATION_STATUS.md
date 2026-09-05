@@ -471,7 +471,7 @@ the already-published implementation commit.
 | LM002 | Language-level conformance and tutorials | CLOSED | `c0ba8b3f5bf3dc0a0997ca5fbfae6035db04d1d9` | Retrospective canonical ID; call-argument, Array and tutorial/example coverage. |
 | LM003 | Language interaction conformance | CLOSED | `dbc086ed294ead0b4219952c02b00ec28a492472` | Retrospective canonical ID; delegation, dynamic receiver, captured-state and inherited-call interaction coverage. |
 | LM004 | Extended language interaction conformance | CLOSED | `d390c0c642c5d2d907fcf9e384d1cbc080dd4783` | Retrospective canonical ID; deeper delegation/call-argument interactions plus Map/IdentityMap Path-key behavior. |
-| LM005 | Concurrent Language Maturity | IN_PROGRESS | — | LM005-A Future conformance/examples/tutorials closed by `SAME_COMMIT`; LM005-B Actor conformance READY; LM005-C Group/interactions waits for B. |
+| LM005 | Concurrent Language Maturity | IN_PROGRESS | — | LM005-A Future and LM005-B Actor conformance/examples/tutorials closed; LM005-C Group/interactions READY. |
 
 ### LM005 — Concurrent Language Maturity
 
@@ -485,8 +485,8 @@ closed semantics is a bug to report rather than a license to add a feature.
 | Slice | Status | Closure evidence | Surface |
 |---|---|---|---|
 | LM005-A | CLOSED | `SAME_COMMIT` | Future conformance runner support for terminal Future expectations; closure `future()`, fresh Future identity, `then` transformation/flattening, `Future.all`, pre-start cancellation; executable Future example and tutorial progression. |
-| LM005-B | READY | — | Actor language-level conformance/examples/tutorials over the already-closed I011 public Actor/ActorRef surface. |
-| LM005-C | BLOCKED_BY_DEPENDENCIES | — | Group/GroupRef interaction conformance/examples/tutorials after LM005-B, including stable capability identity and routing tests that do not assume scheduler-selected recipients. |
+| LM005-B | CLOSED | `SAME_COMMIT` | Actor-aware language conformance plus Actor.current identity, module bootstrap/spawn, request/reply transfer, synchronous snapshotting, Actor-local state, same-sender send/request FIFO, graceful stop/termination, negative validation cases, examples and tutorial progression. No runtime or normative behavior added. |
+| LM005-C | READY | — | Group/GroupRef interaction conformance/examples/tutorials, including stable capability identity and routing tests that do not assume scheduler-selected recipients. LM005-B is CLOSED. |
 
 Dependency chain: `LM005-A -> LM005-B -> LM005-C`.
 

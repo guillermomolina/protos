@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.146-SNAPSHOT
+
+- Continue `LM005 — Concurrent Language Maturity` with `LM005-B`: add a deterministic Actor-aware conformance harness that executes ordinary `.protos` programs inside a real Process RootActor while a test-only module resolver and scheduler executor drive spawned Actor bootstrap and turns. Assertions stay host-side; no test-only Protos syntax, privileged language object, production runtime behavior, or normative specification change is introduced.
+- Add language-level coverage for stable `Actor.current()` identity, module-based `Actor.spawn`, request/reply and snapshot transfer, child/root ActorRef identity, persistent Actor-local state, same-sender concrete-Actor `send` then `request` FIFO, graceful `stop`/`termination`, and synchronous invalid/non-transferable spawn failures. Add Actor examples and tutorial `10-actors`. LM005-B is CLOSED and LM005-C becomes READY.
+
 ## 0.2.145-SNAPSHOT
 
 - Start `LM005 — Concurrent Language Maturity` with `LM005-A`: extend the implementation-independent language-conformance corpus with terminal-Future expectations, while keeping assertions in the host runner rather than adding test-only Protos syntax or privileged testing objects.
