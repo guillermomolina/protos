@@ -234,6 +234,117 @@ In particular:
 More specific instructions may add or refine rules for their scope, but they do
 not silently discard repository-wide requirements.
 
+## Mandatory pre-implementation audit
+
+Before designing, modifying, or generating a patch for implementation work,
+agents MUST audit the repository sources that define the intended behavior and
+the constraints of the work. Reading source code alone is not sufficient.
+
+Before implementation:
+
+1. Find and read every applicable `AGENTS.md`, including this repository-root
+   file and any more specific file governing code, tests, documentation, or
+   specification material involved in the task.
+
+2. Search and inspect the relevant project documentation under `docs/**/*.md`.
+
+3. Search and inspect the relevant normative specification under
+   `spec/**/*.md`.
+
+4. Inspect the actual implementation and tests in the current repository
+   revision.
+
+The required reasoning order is:
+
+    applicable AGENTS.md
+            ↓
+    relevant docs/**/*.md
+            ↓
+    relevant spec/**/*.md
+            ↓
+    current implementation and tests
+            ↓
+    derive constraints
+            ↓
+    design
+            ↓
+    implementation
+
+Do not design an implementation first and then search the specification for
+justification.
+
+### Search, do not guess the relevant documents
+
+Actively search documentation and specification using the concepts, symbols,
+operations, issue identifiers, dependencies, and cross-references relevant to
+the task.
+
+Files or search terms named in a task are minimum hints, not an exhaustive
+scope. Do not assume that the document directly associated with an
+implementation item contains every applicable requirement. Follow relevant
+cross-references.
+
+Historical information supplied in a prompt, previous conversation, blocker,
+ledger, or earlier implementation report is context only until verified against
+the current repository revision.
+
+### Specification and documentation disagreements
+
+Apply the normative authority and document responsibilities defined elsewhere
+in this file and in the applicable `spec/AGENTS.md`.
+
+If documentation, specification, tests, and implementation appear to disagree:
+
+- identify the exact files and relevant clauses;
+- determine which source owns the behavior;
+- report any genuine contradiction;
+- do not silently choose the implementation or invent semantics.
+
+Implementation difficulty is not a normative gap. Declare a normative blocker
+only when the applicable normative material leaves an observable semantic
+choice genuinely unresolved.
+
+### Audit evidence is required
+
+Generic statements such as:
+
+    AGENTS inspected
+    docs inspected
+    spec inspected
+
+are not sufficient evidence of an audit.
+
+For implementation work, the final report MUST enumerate the files materially
+inspected, grouped as:
+
+    AGENTS.md read:
+    - ...
+
+    docs read:
+    - ...
+
+    spec read:
+    - ...
+
+The report MUST also summarize the implementation-relevant constraints derived
+from those sources.
+
+This requirement allows later review to distinguish a real
+normative/documentation audit from a source-code-only implementation.
+
+### Patch-authoring environments
+
+Lack of a local checkout, Maven, or other build tooling in the agent environment
+does not waive this audit when repository contents are available through another
+read-capable mechanism.
+
+Such an environment limitation also does not by itself prevent patch authoring
+when the required repository contents can be inspected and the generated patch
+is intended to be executed and validated later in the user's real checkout.
+
+Do not declare an implementation item blocked merely because the patch-authoring
+environment lacks a local checkout or build toolchain.
+
 ## Unresolved language-design questions
 
 When a request raises an unresolved question about what Protos should mean,
