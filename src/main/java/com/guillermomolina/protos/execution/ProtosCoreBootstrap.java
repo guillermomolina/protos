@@ -129,6 +129,9 @@ public final class ProtosCoreBootstrap {
         sourceLoader
                 .load(coreDirectory.resolve("buffered_writer.protos"))
                 .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("import.protos"))
+                .call(bootstrapActivation);
 
         Object contextBinding =
                 bootstrapContext
@@ -256,9 +259,13 @@ public final class ProtosCoreBootstrap {
         ProtosObjectValue bufferedWriterFactory =
                 requirePrototype(
                         bootstrapContext, "BufferedWriter", ProtosObjectValue.rootObject());
+        ProtosObjectValue importFacility =
+                requirePrototype(
+                        bootstrapContext, "import", ProtosObjectValue.rootObject());
         ProtosParallelRuntime.installObjectParallel();
         ProtosModuleRuntime moduleRuntime = new ProtosModuleRuntime(moduleResolver);
         new ProtosStandardActorProtocol(moduleRuntime).installActorObject(actorObject);
+        ProtosStandardImportProtocol.installImportFacility(importFacility, moduleRuntime);
 
         // Buffered byte wrappers need an internal standard Bytes prototype; Bytes is not a required prelude binding.
         ProtosObjectValue bufferedBytesPrototype = new ProtosObjectValue(ProtosObjectValue.rootObject());
@@ -295,9 +302,7 @@ public final class ProtosCoreBootstrap {
         preludeBindings.createLocalSlot("Actor", actorObject);
         preludeBindings.createLocalSlot("BufferedReader", bufferedReaderFactory);
         preludeBindings.createLocalSlot("BufferedWriter", bufferedWriterFactory);
-        preludeBindings.createLocalSlot(
-                "import",
-                ProtosStandardImportProtocol.createImportFacility(moduleRuntime));
+        preludeBindings.createLocalSlot("import", importFacility);
         preludeBindings.freeze();
 
         return new ProtosPrelude(preludeBindings, contextPrototype);

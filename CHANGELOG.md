@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.96-SNAPSHOT
+
+- Continue I018 Core self-hosting/bootstrap minimization by constructing the standard frozen-prelude `import` facility from distributable `protos/lib/core/import.protos` instead of allocating that public standard identity in Java.
+- Keep module-specifier validation, host resolution, canonical ModuleKey handling, Actor-local caching, cache-before-execute, cycles, initialization failure, and retry semantics in the existing runtime; Java now installs only the `call` primitive bridge into the exact source-created import object and freezes that same object.
+- Add focused regression coverage for direct-`Object` parentage, exact `call` surface, native bridge provenance, and installer identity preservation. Restore the required full APL Part 5 notice on the touched import protocol/module runtime test sources. I016 remains frozen at I016-C.
+
 ## 0.2.95-SNAPSHOT
 
 - Continue I018 Core self-hosting/bootstrap minimization by constructing the standard `BufferedReader` and `BufferedWriter` frozen-prelude factory/prototype objects from distributable Core source instead of allocating those public standard identities in Java.
