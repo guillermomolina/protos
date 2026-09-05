@@ -22,13 +22,25 @@ import java.util.Objects;
 public final class ProtosPrelude {
     private final ProtosObjectValue bindings;
     private final ProtosObjectValue contextPrototype;
+    private final ProtosObjectValue runtimeBytesPrototype;
+    private final ProtosObjectValue runtimeActorRefPrototype;
 
     public ProtosPrelude(
             ProtosObjectValue bindings,
             ProtosObjectValue contextPrototype) {
+        this(bindings, contextPrototype, null, null);
+    }
+
+    public ProtosPrelude(
+            ProtosObjectValue bindings,
+            ProtosObjectValue contextPrototype,
+            ProtosObjectValue runtimeBytesPrototype,
+            ProtosObjectValue runtimeActorRefPrototype) {
         this.bindings = Objects.requireNonNull(bindings, "bindings");
         this.contextPrototype =
                 Objects.requireNonNull(contextPrototype, "contextPrototype");
+        this.runtimeBytesPrototype = runtimeBytesPrototype;
+        this.runtimeActorRefPrototype = runtimeActorRefPrototype;
 
         if (!bindings.isFrozen()) {
             throw new IllegalArgumentException("prelude bindings must be frozen");
@@ -150,6 +162,24 @@ public final class ProtosPrelude {
     public ProtosObjectValue futurePrototype() { return requiredOrdinaryBinding("Future"); }
 
     public ProtosObjectValue processPrototype() { return requiredOrdinaryBinding("Process"); }
+
+    /** Runtime-only exact source-backed Bytes prototype omitted from public prelude bindings. */
+    public ProtosObjectValue bytesPrototypeForRuntime() {
+        if (runtimeBytesPrototype == null) {
+            throw new IllegalStateException(
+                    "this prelude does not retain the standard runtime Bytes prototype");
+        }
+        return runtimeBytesPrototype;
+    }
+
+    /** Runtime-only exact source-backed ActorRef prototype omitted from public prelude bindings. */
+    public ProtosObjectValue actorRefPrototypeForRuntime() {
+        if (runtimeActorRefPrototype == null) {
+            throw new IllegalStateException(
+                    "this prelude does not retain the standard runtime ActorRef prototype");
+        }
+        return runtimeActorRefPrototype;
+    }
 
     public ProtosObjectValue arrayPrototype() {
         Object binding = bindings.readLocalSlot("Array").orElseThrow();

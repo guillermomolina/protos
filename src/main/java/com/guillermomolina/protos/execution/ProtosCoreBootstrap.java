@@ -329,7 +329,11 @@ public final class ProtosCoreBootstrap {
         bootstrapContext.removeLocalSlot("_corePreludeBindings");
         preludeBindings.freeze();
 
-        return new ProtosPrelude(preludeBindings, contextPrototype);
+        return new ProtosPrelude(
+                preludeBindings,
+                contextPrototype,
+                bufferedBytesPrototype,
+                actorRefPrototype);
     }
 
 

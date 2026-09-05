@@ -111,6 +111,40 @@ public final class ProtosActorBootstrap {
         }
     }
 
+    /**
+     * Creates one non-importable standalone RootActor entry activation with the exact E2
+     * bootstrap-local authority model before any entry source expression executes.
+     */
+    static ProtosActivation newStandaloneInitialActivation(
+            ProtosProcessRuntime process, ProtosPrelude prelude) {
+        Objects.requireNonNull(process, "process");
+        Objects.requireNonNull(prelude, "prelude");
+        if (process.lifecycleState() != ProtosProcessRuntime.LifecycleState.RUNNING) {
+            throw new IllegalStateException(
+                    "standalone entry bootstrap requires a running Process");
+        }
+        ProtosActor root = process.rootActorForRuntime();
+        if (root.lifecycleState() != ProtosActor.LifecycleState.INITIALIZING) {
+            throw new IllegalStateException(
+                    "standalone RootActor entry requires INITIALIZING lifecycle");
+        }
+        ProtosObjectValue moduleContext = prelude.newExecutionContext();
+        for (Map.Entry<String, Object> entry : rootBootstrapLocals(root, prelude).entrySet()) {
+            moduleContext.createLocalSlot(entry.getKey(), entry.getValue());
+        }
+        ProtosActivation activation =
+                prelude.newModuleActivation(
+                        root.moduleState(), null, moduleContext, root.executionDomain());
+        ProtosActorRefValue current =
+                activation.executionDomain().currentActorReference().orElseThrow(
+                        () -> new IllegalStateException(
+                                "standalone RootActor execution domain lost its owner"));
+        if (!ProtosIdentity.identical(current, root.reference())) {
+            throw new IllegalStateException("standalone entry activation belongs to another Actor");
+        }
+        return activation;
+    }
+
     private static Map<String, Object> rootBootstrapLocals(
             ProtosActor actor, ProtosPrelude prelude) {
         ProtosProcessRuntime process =

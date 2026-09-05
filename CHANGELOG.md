@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.130-SNAPSHOT
+
+- Implement I017-E3 standalone host/CLI Process bootstrap. `protos <file> [args...]` and `protos -e <source> [args...]` now capture only trailing application arguments into the stable Process args snapshot; launcher file/source identity is excluded. The REPL owns one persistent Process with an empty args snapshot for the whole session.
+- Capture the host Environment exactly once before the first source expression. Native environment-name representability and identity are probed through an isolated `ProcessBuilder.environment()` map, preserving the JDK native platform rules without hard-coded POSIX/Windows case folding or mutation of the real environment. stdin/stdout/stderr are independently established byte bindings over the CLI-supplied streams and the CLI explicitly selects standard UTF-8 descriptors as its host text associations.
+- Add host-neutral `ProtosStandaloneProcessBootstrap`, route non-importable standalone entries through the same E2 RootActor bootstrap-local `process`/optional `filesystem` authority model, and retain the exact source-backed hidden Core ActorRef/Bytes prototypes as runtime-only Prelude metadata so no duplicate standard identity is manufactured. The CLI deliberately grants no default Filesystem capability: launcher authority used to read source is not ambient application Filesystem authority, and I016 host filesystem policy remains explicit. No native Closure site is added; I018 stays 28 providers / 102 sites. I017-E3 and coordinating I017-E are CLOSED; I017-F is READY.
+
 ## 0.2.129-SNAPSHOT
 
 - Implement I011-19 host-neutral remote ActorRef communication transport state: one internal route SPI carries the existing logical message snapshot while preserving ActorRef identity and exposes only delivery knowledge needed by Core (pending, accepted, known pre/post-acceptance failure, cancellation, completion, or acceptance uncertainty).

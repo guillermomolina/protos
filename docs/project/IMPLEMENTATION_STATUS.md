@@ -48,7 +48,7 @@ an item.
 | I014 | Standard Byte I/O | CLOSED | `2462ba74298e94181489e13de4e25dbbb82b21f9` | I009 + I012 |
 | I015 | Encoding / Text I/O | IN_PROGRESS | — | I014 closed; I015-A Encoding closed; streaming TextReader/TextWriter slices remain |
 | I016 | Filesystem / File | CLOSED | `SAME_COMMIT` | I013 + I014; I016-A/B/C/D1/D2/D3/D4 complete |
-| I017 | Process I/O / bootstrap | IN_PROGRESS | — | I017-A/B/C/D1/D2/E1/E2 closed; I017-E3 READY for standalone host/CLI bootstrap capture and wiring |
+| I017 | Process I/O / bootstrap | IN_PROGRESS | — | I017-A/B/C/D1/D2/E1/E2/E3 closed; coordinating I017-E CLOSED; I017-F READY for final authority/termination/native-boundary conformance |
 | I018 | Core self-hosting / bootstrap minimization | CLOSED | `SAME_COMMIT` | I018-L exhaustive native-boundary inventory and architectural guard complete; I016-D pause lifted |
 
 ### I011 — Actors
@@ -200,22 +200,24 @@ Published / planned slices:
 | I017-C | CLOSED | `0.2.118-SNAPSHOT` | `SAME_COMMIT` | Canonical read-only Environment snapshot with stable Process acquisition outcome/identity; duplicate-native-name rejection; exact query representability and native identity; selective value decoding for get/contains; polymorphic each with whole-snapshot String prevalidation and canonical Unicode-scalar ordering; ordinary Actor/P value-copy identity; reviewed 3-site I018 representation bridge. |
 | I017-D1 | CLOSED | `0.2.119-SNAPSHOT` | `SAME_COMMIT` | Stable independently optional stdin/stdout/stderr bindings; repeated/Actor-delegated views share one logical per-binding queue; exact read-only/write-only surface with no implicit lifecycle/File/text authority; Actor-local Futures use I014 cancellation/commitment machinery; termination blocks new work; P rejects live stream authority; reviewed 2-site I018 resource bridge. |
 | I017-D2 | CLOSED | `0.2.123-SNAPSHOT` | `SAME_COMMIT` | Stable exactly-once stdin/stdout/stderr Encoding association states coupled to D1 stream availability; portable or host-provided immutable Encoding accepted; unavailable is distinct from invalid availability/Encoding mismatch; no hidden host lookup/default and no native-boundary expansion. |
-| I017-E | IN_PROGRESS | — | — | Subdivided after D2 audit into E1 public Process accessors, E2 RootActor bootstrap-local authority provisioning/import confinement, and E3 host/CLI bootstrap capture and wiring. |
+| I017-E | CLOSED | `0.2.130-SNAPSHOT` | `SAME_COMMIT` | E1 public Process accessors, E2 RootActor bootstrap-local authority provisioning/import confinement, and E3 standalone host/CLI bootstrap capture/wiring are all published and integrated. |
 | I017-E1 | CLOSED | `0.2.127-SNAPSHOT` | `SAME_COMMIT` | Source-backed frozen authority-free `Process` prototype; exactly eight synchronous Process accessors over A/B/C/D1/D2 state; exact represented-capability receiver domain; canonical snapshot acquisition; stable stream/Encoding lookup failure; all proxies rejected after Process termination; one audited native Closure construction helper. |
 | I017-E2 | CLOSED | `0.2.128-SNAPSHOT` | `SAME_COMMIT` | RootActor canonical initial-module context receives bootstrap-local `process` before first source expression and optional exact host-granted `filesystem`; cache-before-execute/cycles preserved; ordinary imports and non-root Actor bootstrap receive no ambient Process/Filesystem authority; explicit Process Actor delegation remains the only transfer path; no I018 boundary expansion. |
-| I017-E3 | READY | — | — | Standalone host/CLI captures application args, native Environment snapshot/domain, independently available standard byte streams and host-selected Encodings; constructs the optional default Filesystem grant; and routes both importable RootActor initial modules and non-importable standalone entry execution through the E2 bootstrap-local authority model before first source expression. |
-| I017-F | BLOCKED_BY_DEPENDENCIES | — | — | Final Process/Actor/termination authority conformance, post-I017 I018 native-boundary re-audit, CLI/runtime integration regression suite and canonical I017 closure. |
+| I017-E3 | CLOSED | `0.2.130-SNAPSHOT` | `SAME_COMMIT` | Standalone host/CLI captures trailing application args excluding launcher identity, one native Environment snapshot/domain, stdin/stdout/stderr byte bindings and explicit UTF-8 host associations before first source expression; non-importable entries use the E2 RootActor authority model; optional Filesystem grants are accepted explicitly but the standard CLI grants none rather than converting launcher source-read authority into ambient application authority; exact hidden ActorRef/Bytes Core identities retained; no I018 expansion. |
+| I017-F | READY | — | — | Final Process/Actor/termination authority conformance, post-I017 I018 native-boundary re-audit, CLI/runtime integration regression suite and canonical I017 closure. |
 
 Dependency chain: `I017-A -> I017-B -> I017-C -> I017-D1 -> I017-D2 -> I017-E1 -> I017-E2 -> I017-E3 -> I017-F`. I017-E is the coordinating parent for E1/E2/E3. The Encoding-family dependency of D2 was satisfied by published I015-A; remaining I015 TextReader/TextWriter work is independent.
 
-Current implementation boundary after I017-E2:
-- I017 continues to reuse the single `ProtosProcessCapabilityValue` representation from I011-14 and the E1 source-backed authority-free `Process` prototype/accessors;
-- RootActor canonical initial-module creation now installs a fresh Actor-local Process capability as local `process` before the module record is cached and before any source expression executes; cache-before-execute and recursive import identity remain unchanged;
-- a Process construction-time optional default `ProtosFilesystemValue` grant is injected as local `filesystem` on that same RootActor initial module only; absence means the local slot is absent, not null, and Process cannot recover the capability;
-- ordinary imported modules use the unchanged module-loading path and receive neither bootstrap-local slot; non-root hosted Actors use the unchanged Actor bootstrap path and likewise receive no ambient Process/Filesystem authority;
-- explicit Actor transfer of a Process capability remains the only standard delegation path into another Actor; E2 does not make Filesystem transferable and does not create any implicit Actor inheritance;
-- E2 adds no native Closure construction site, so the audited I018 boundary remains 28 providers / 102 sites;
-- standalone host/CLI capture of args, Environment, byte streams, Encodings, optional default Filesystem construction, and non-importable initial-entry wiring remains I017-E3.
+Current implementation boundary after I017-E3:
+- I017 uses one source-backed authority-free public `Process` prototype and one runtime `ProtosProcessCapabilityValue` representation; the standalone CLI creates exactly one logical Process/RootActor pair per one-shot execution or REPL session;
+- file and `-e` launcher/source identities are excluded from `process.args()` while all trailing arguments are captured atomically before the first source expression; REPL args are the stable empty snapshot;
+- Environment is captured once from the launcher host; native name validity/identity is delegated to an isolated JDK ProcessBuilder environment-map probe, while portable String conversion and duplicate-equivalent validation remain the I017-C snapshot rules;
+- stdin/stdout/stderr are established from the CLI-supplied byte streams and remain independent Process bindings; the CLI host explicitly selects UTF-8 for all three text Encoding associations without changing the byte-oriented stream API;
+- the exact hidden source-backed Core Bytes and ActorRef prototypes are retained as runtime-only Prelude metadata, not public bindings, so standalone Process bootstrap does not fabricate parallel standard identities;
+- both importable RootActor initial modules (E2) and non-importable standalone entry contexts (E3) receive bootstrap-local `process` and only an explicitly supplied optional `filesystem` before first source execution; imports and non-root Actors remain ambient-authority-free;
+- the standard CLI intentionally supplies no default Filesystem capability because its launcher authority to locate/read program source is not application Filesystem authority; embedding hosts may pass an already-provisioned restricted/default Filesystem explicitly;
+- one-shot CLI execution terminates its Process after evaluation and the REPL terminates its Process on session exit; E3 adds no native Closure construction site, so I018 remains 28 providers / 102 sites;
+- final cross-slice authority, lifecycle/termination, Actor delegation, P exclusion, CLI regression and post-I017 native-boundary conformance remains I017-F.
 ### I018 — Core self-hosting / bootstrap minimization
 
 Status: CLOSED
