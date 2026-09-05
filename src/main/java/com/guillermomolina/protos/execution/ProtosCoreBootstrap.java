@@ -124,7 +124,7 @@ public final class ProtosCoreBootstrap {
                 .load(coreDirectory.resolve("Future.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("actor.protos"))
+                .load(coreDirectory.resolve("Actor.protos"))
                 .call(bootstrapActivation);
         sourceLoader
                 .load(coreDirectory.resolve("Process.protos"))

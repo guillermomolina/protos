@@ -55,6 +55,7 @@ class ProtosCoreSourceNamingArchitectureTest {
                     "IdentityMap.protos",
                     "Path.protos",
                     "Future.protos",
+                    "Actor.protos",
                     "Process.protos",
                     "BufferedReader.protos",
                     "BufferedWriter.protos",
@@ -62,7 +63,6 @@ class ProtosCoreSourceNamingArchitectureTest {
 
     private static final Set<String> REVIEWED_RESPONSIBILITY_SOURCES =
             Set.of(
-                    "actor.protos",
                     "error_taxonomy.protos",
                     "import.protos",
                     "prelude.protos");

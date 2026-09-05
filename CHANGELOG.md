@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.136-SNAPSHOT
+
+- Close I019-A by renaming the Core Actor source from `actor.protos` to `Actor.protos`: `Actor` is the dominant public owner of the source while `_coreActorRefPrototype`, `_coreGroupRefPrototype`, and `_coreSendOperationPrototype` are private subordinate bootstrap identities.
+- Refine the Core naming rule from strict one-object ownership to dominant public conceptual ownership with subordinate private helpers; keep `error_taxonomy.protos` and `prelude.protos` descriptive because they are true aggregation/responsibility sources, and keep `import.protos` because it already preserves the exact lowercase public facility name.
+- Update Core bootstrap, the executable source-naming guard, current architecture documentation, and the canonical implementation ledger without changing normative semantics or the native boundary.
+
 ## 0.2.135-SNAPSHOT
 
 - Implement I019 Core source naming reconciliation without changing normative semantics: rename the 26 distributable one-owner Core sources so each filename preserves the exact canonical Protos object/prototype name and case.
