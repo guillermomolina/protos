@@ -1,6 +1,4 @@
-# Changelog
-
-## 0.2.78-SNAPSHOT
+# Changelog\n\n## 0.2.79-SNAPSHOT\n\n- Complete I014-G buffered byte-I/O lifecycle/cancellation conformance: close cutover now terminates accepted-but-uncommitted adapter operations with fresh lifecycle failures, active cancellation is propagated to lower Futures without rolling back committed effects, close retains its activation across asynchronous completion, in-flight buffered flushes are reconciled without duplicate propagation, and owning close waits for the owned target close while preserving a primary wrapper-finalization failure.\n\n## 0.2.78-SNAPSHOT
 
 - Implement I014-F standard buffered byte I/O: frozen `BufferedReader`/`BufferedWriter` factories with borrowing/owning forms, ordered bounded buffering, transparent/resumable EOF, recursive flush propagation, deterministic wrapper close ownership/failure handling, permanent output-side failure after ambiguous propagation, fresh standard Futures, and focal conformance tests.
 

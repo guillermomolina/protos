@@ -7,67 +7,702 @@ import java.util.*;
 
 /** Ordered bounded state machine for the standard Core byte buffering wrappers. */
 public final class ProtosBufferedByteIo {
-    private static final int READ_AHEAD=8192, MAX_OUTPUT=1024*1024;
+    private static final int READ_AHEAD = 8192;
+    private static final int MAX_OUTPUT = 1024 * 1024;
+
     private enum Mode { READER, WRITER }
-    private final Mode mode; private final ProtosObjectValue receiver,target,bytesPrototype; private final ProtosActorExecutionDomain domain;
-    private final boolean owning; private final ArrayDeque<Byte> input=new ArrayDeque<>(); private final ArrayDeque<Req> q=new ArrayDeque<>();
-    private final ArrayList<ProtosFutureValue> closeFollowers=new ArrayList<>(); private byte[] output=new byte[0];
-    private boolean active,closing,closed; private ProtosObjectValue closeError,outputError;
+    private enum Kind { READ, WRITE, FLUSH }
 
-    private ProtosBufferedByteIo(Mode m,ProtosObjectValue r,ProtosObjectValue t,ProtosObjectValue bp,ProtosActivation a,boolean own){mode=m;receiver=r;target=t;bytesPrototype=bp;domain=a.executionDomain();owning=own;}
-    public static ProtosBufferedByteIo reader(ProtosObjectValue r,ProtosObjectValue t,ProtosObjectValue bp,ProtosActivation a,boolean own){return new ProtosBufferedByteIo(Mode.READER,r,t,bp,a,own);}
-    public static ProtosBufferedByteIo writer(ProtosObjectValue r,ProtosObjectValue t,ProtosObjectValue bp,ProtosActivation a,boolean own){return new ProtosBufferedByteIo(Mode.WRITER,r,t,bp,a,own);}
+    private final Mode mode;
+    private final ProtosObjectValue receiver;
+    private final ProtosObjectValue target;
+    private final ProtosObjectValue bytesPrototype;
+    private final ProtosActorExecutionDomain domain;
+    private final boolean owning;
+    private final ArrayDeque<Byte> input = new ArrayDeque<>();
+    private final ArrayDeque<Req> q = new ArrayDeque<>();
+    private final ArrayList<ProtosFutureValue> closeFollowers = new ArrayList<>();
 
-    public ProtosFutureValue read(ProtosActivation a,Object n0){check(a); BigInteger n=integer(n0); if(n==null||n.signum()<=0||n.compareTo(BigInteger.valueOf(Integer.MAX_VALUE))>0)return failed(a,ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
-        synchronized(this){if(closing||closed)return lifecycle(a);}
-        return enqueue(new Req(a,newFuture(a),Kind.READ,n.intValue(),null)); }
-    public ProtosFutureValue write(ProtosActivation a,Object v){check(a); if(!(v instanceof ProtosBytesValue b))return failed(a,ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
-        byte[] x=snapshot(b); synchronized(this){if(closing||closed)return lifecycle(a);if(outputError!=null)return failedSame(a,outputError);if(x.length>MAX_OUTPUT-output.length)return failed(a,ProtosCoreErrors.StandardError.I_O_CAPACITY_EXHAUSTED);}
-        return enqueue(new Req(a,newFuture(a),Kind.WRITE,0,x)); }
-    public ProtosFutureValue flush(ProtosActivation a){check(a); synchronized(this){if(closing||closed)return lifecycle(a);if(outputError!=null)return failedSame(a,outputError);} return enqueue(new Req(a,newFuture(a),Kind.FLUSH,0,null));}
-    public ProtosFutureValue close(ProtosActivation a){check(a); ProtosFutureValue f=newFuture(a);f.attachCancellationProducer(()->{}); boolean start=false;
-        synchronized(this){if(closed){if(closeError==null)f.resolve(receiver,a);else f.fail(closeError);return f;}closeFollowers.add(f);if(closing)return f;closing=true;start=!active&&q.isEmpty();}
-        if(start)finalizeClose(a); return f; }
+    private byte[] output = new byte[0];
+    private Req activeReq;
+    private boolean closing;
+    private boolean closed;
+    private ProtosActivation closeActivation;
+    private ProtosObjectValue closeError;
+    private ProtosObjectValue outputError;
 
-    private enum Kind { READ,WRITE,FLUSH }
-    private static final class Req { final ProtosActivation a;final ProtosFutureValue f;final Kind k;final int n;final byte[]x;boolean committed;
-        Req(ProtosActivation a,ProtosFutureValue f,Kind k,int n,byte[]x){this.a=a;this.f=f;this.k=k;this.n=n;this.x=x;} }
-    private ProtosFutureValue enqueue(Req r){r.f.attachCancellationProducer(()->cancel(r)); synchronized(this){q.addLast(r);}pump();return r.f;}
-    private void cancel(Req r){synchronized(this){if(r.committed||!q.remove(r))return;}r.f.cancelTerminal();pump();}
-    private void pump(){Req r; synchronized(this){if(active)return;if(q.isEmpty()){if(closing)finalizeClose(null);return;}active=true;r=q.peekFirst();}
-        switch(r.k){case READ->doRead(r);case WRITE->doWrite(r);case FLUSH->doFlush(r,false);} }
-    private void done(Req r){boolean closeNow; synchronized(this){q.remove(r);active=false;closeNow=closing&&q.isEmpty();}if(closeNow)finalizeClose(r.a);else pump();}
-
-    private void doRead(Req r){byte[] x; synchronized(this){x=takeInput(r.n);} if(x.length>0){r.committed=true;r.f.resolve(bytes(x),r.a);done(r);return;}
-        ProtosFutureValue lower=invokeFuture(target,"read",List.of(new ProtosIntegerValue(BigInteger.valueOf(Math.max(r.n,READ_AHEAD)))),r.a,r.f); if(lower==null){done(r);return;}
-        lower.observe(z->{switch(z.state()){case RESOLVED->{Object v=z.resolvedValue().orElseThrow();if(v==ProtosNullValue.INSTANCE){r.committed=true;r.f.resolve(v,r.a);done(r);}else if(v instanceof ProtosBytesValue b){byte[] got=snapshot(b);if(got.length==0){r.f.fail(ioError(r.a));done(r);return;}byte[] first; synchronized(this){for(byte c:got)input.addLast(c);first=takeInput(r.n);}r.committed=true;r.f.resolve(bytes(first),r.a);done(r);}else{r.f.fail(ioError(r.a));done(r);}}case FAILED-> {r.f.fail(z.failedError().orElseThrow());done(r);}case CANCELLED->{r.f.cancelTerminal();done(r);}case PENDING->{}}});
+    private ProtosBufferedByteIo(
+            Mode mode,
+            ProtosObjectValue receiver,
+            ProtosObjectValue target,
+            ProtosObjectValue bytesPrototype,
+            ProtosActivation activation,
+            boolean owning) {
+        this.mode = mode;
+        this.receiver = receiver;
+        this.target = target;
+        this.bytesPrototype = bytesPrototype;
+        this.domain = activation.executionDomain();
+        this.owning = owning;
     }
-    private void doWrite(Req r){synchronized(this){byte[] n=Arrays.copyOf(output,output.length+r.x.length);System.arraycopy(r.x,0,n,output.length,r.x.length);output=n;r.committed=true;}r.f.resolve(receiver,r.a);done(r);}
-    private void doFlush(Req r,boolean closePath){byte[] x; synchronized(this){x=output.clone();}
-        if(x.length==0){flushTarget(r,closePath);return;}
-        ProtosFutureValue lower=invokeFuture(target,"write",List.of(bytes(x)),r.a,r.f);if(lower==null){poison(r,closePath);return;}
-        lower.observe(z->{if(z.state()==ProtosFutureValue.State.RESOLVED){synchronized(this){if(output.length>=x.length)output=Arrays.copyOfRange(output,x.length,output.length);}r.committed=true;flushTarget(r,closePath);}else if(z.state()!=ProtosFutureValue.State.PENDING)poisonFrom(r,z,closePath);});
+
+    public static ProtosBufferedByteIo reader(
+            ProtosObjectValue receiver,
+            ProtosObjectValue target,
+            ProtosObjectValue bytesPrototype,
+            ProtosActivation activation,
+            boolean owning) {
+        return new ProtosBufferedByteIo(
+                Mode.READER, receiver, target, bytesPrototype, activation, owning);
     }
-    private void flushTarget(Req r,boolean closePath){if(target.lookupSlot("flush").isEmpty()){r.committed=true;if(closePath)finishFinalization(r.a,null);else{r.f.resolve(receiver,r.a);done(r);}return;}
-        ProtosFutureValue lower=invokeFuture(target,"flush",List.of(),r.a,r.f);if(lower==null){poison(r,closePath);return;}lower.observe(z->{if(z.state()==ProtosFutureValue.State.RESOLVED){r.committed=true;if(closePath)finishFinalization(r.a,null);else{r.f.resolve(receiver,r.a);done(r);}}else if(z.state()!=ProtosFutureValue.State.PENDING)poisonFrom(r,z,closePath);});}
-    private void poisonFrom(Req r,ProtosFutureValue z,boolean closePath){ProtosObjectValue e=z.state()==ProtosFutureValue.State.FAILED?z.failedError().orElseGet(()->ioError(r.a)):ioError(r.a);synchronized(this){if(outputError==null)outputError=e;}r.f.fail(e);if(closePath)finishFinalization(r.a,e);else done(r);}
-    private void poison(Req r,boolean closePath){ProtosObjectValue e=ioError(r.a);synchronized(this){if(outputError==null)outputError=e;}r.f.fail(e);if(closePath)finishFinalization(r.a,e);else done(r);}
 
-    private void finalizeClose(ProtosActivation maybe){ProtosActivation a=maybe; synchronized(this){if(closed)return;if(a==null){if(closeFollowers.isEmpty())return; /* followers always originate in this domain */}}
-        if(a==null){finishCloseWithoutActivation();return;} if(mode==Mode.WRITER&&outputError==null&&output.length>0){Req r=new Req(a,newFuture(a),Kind.FLUSH,0,null);doFlush(r,true);}else finishFinalization(a,outputError);}
-    private void finishCloseWithoutActivation(){/* only reachable after synchronous queue completion; next close caller will drive finalization */}
-    private void finishFinalization(ProtosActivation a,ProtosObjectValue primary){if(owning){ProtosFutureValue cf=invokeFuture(target,"close",List.of(),a,null);if(cf==null){finishClose(a,primary!=null?primary:ioError(a));return;}if(primary!=null){finishClose(a,primary);return;}cf.observe(z->{if(z.state()==ProtosFutureValue.State.RESOLVED)finishClose(a,null);else if(z.state()!=ProtosFutureValue.State.PENDING)finishClose(a,z.state()==ProtosFutureValue.State.FAILED?z.failedError().orElseGet(()->ioError(a)):ioError(a));});}else finishClose(a,primary);}
-    private void finishClose(ProtosActivation a,ProtosObjectValue e){List<ProtosFutureValue> fs;synchronized(this){if(closed)return;closed=true;closeError=e;fs=List.copyOf(closeFollowers);closeFollowers.clear();}for(var f:fs)if(e==null)f.resolve(receiver,a);else f.fail(e);}
+    public static ProtosBufferedByteIo writer(
+            ProtosObjectValue receiver,
+            ProtosObjectValue target,
+            ProtosObjectValue bytesPrototype,
+            ProtosActivation activation,
+            boolean owning) {
+        return new ProtosBufferedByteIo(
+                Mode.WRITER, receiver, target, bytesPrototype, activation, owning);
+    }
 
-    private ProtosFutureValue invokeFuture(ProtosObjectValue obj,String msg,List<?> args,ProtosActivation a,ProtosFutureValue outer){try{Object v=ProtosInvocation.invokeMessage(obj,msg,args,a);if(v instanceof ProtosFutureValue f)return f;if(outer!=null)outer.fail(ioError(a));return null;}catch(RuntimeException ex){if(outer!=null)outer.fail(ioError(a));return null;}}
-    private ProtosFutureValue newFuture(ProtosActivation a){return new ProtosFutureValue(a.prelude().orElseThrow().futurePrototype(),domain);}
-    private ProtosFutureValue failed(ProtosActivation a,ProtosCoreErrors.StandardError e){ProtosFutureValue f=newFuture(a);f.fail(ProtosCoreErrors.newOccurrence(a,e));return f;}
-    private ProtosFutureValue failedSame(ProtosActivation a,ProtosObjectValue e){ProtosFutureValue f=newFuture(a);f.fail(e);return f;}
-    private ProtosFutureValue lifecycle(ProtosActivation a){return failed(a,ProtosCoreErrors.StandardError.I_O_LIFECYCLE_ERROR);}
-    private ProtosObjectValue ioError(ProtosActivation a){return ProtosCoreErrors.newOccurrence(a,ProtosCoreErrors.StandardError.I_O_ERROR);}
-    private void check(ProtosActivation a){Objects.requireNonNull(a);if(a.executionDomain()!=domain)throw new IllegalArgumentException("buffered I/O belongs to another Actor domain");}
-    private byte[] takeInput(int n){int k=Math.min(n,input.size());byte[]x=new byte[k];for(int i=0;i<k;i++)x[i]=input.removeFirst();return x;}
-    private ProtosBytesValue bytes(byte[]x){ProtosBytesValue b=new ProtosBytesValue(bytesPrototype);for(byte c:x)b.indexedAdd(new ProtosIntegerValue(BigInteger.valueOf(c&255)));return b;}
-    private static BigInteger integer(Object v){return v instanceof ProtosIntegerValue i?i.value():null;}
-    private static byte[] snapshot(ProtosBytesValue b){int size=b.indexedSize().intValueExact();byte[]x=new byte[size];for(int j=0;j<x.length;j++){Object v=b.indexedAt(BigInteger.valueOf(j));if(!(v instanceof ProtosIntegerValue i))throw new IllegalStateException("invalid Bytes");int n=i.value().intValueExact();if(n<0||n>255)throw new IllegalStateException("invalid Bytes octet");x[j]=(byte)n;}return x;}
+    public ProtosFutureValue read(ProtosActivation activation, Object maximum) {
+        check(activation);
+        BigInteger n = integer(maximum);
+        if (n == null
+                || n.signum() <= 0
+                || n.compareTo(BigInteger.valueOf(Integer.MAX_VALUE)) > 0) {
+            return failed(
+                    activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
+        }
+        synchronized (this) {
+            if (closing || closed) return lifecycle(activation);
+        }
+        return enqueue(
+                new Req(activation, newFuture(activation), Kind.READ, n.intValue(), null));
+    }
+
+    public ProtosFutureValue write(ProtosActivation activation, Object value) {
+        check(activation);
+        if (!(value instanceof ProtosBytesValue bytes)) {
+            return failed(
+                    activation, ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
+        }
+        byte[] snapshot = snapshot(bytes);
+        synchronized (this) {
+            if (closing || closed) return lifecycle(activation);
+            if (outputError != null) return failedSame(activation, outputError);
+            if (snapshot.length > MAX_OUTPUT - output.length) {
+                return failed(
+                        activation,
+                        ProtosCoreErrors.StandardError.I_O_CAPACITY_EXHAUSTED);
+            }
+        }
+        return enqueue(
+                new Req(activation, newFuture(activation), Kind.WRITE, 0, snapshot));
+    }
+
+    public ProtosFutureValue flush(ProtosActivation activation) {
+        check(activation);
+        synchronized (this) {
+            if (closing || closed) return lifecycle(activation);
+            if (outputError != null) return failedSame(activation, outputError);
+        }
+        return enqueue(
+                new Req(activation, newFuture(activation), Kind.FLUSH, 0, null));
+    }
+
+    public ProtosFutureValue close(ProtosActivation activation) {
+        check(activation);
+        ProtosFutureValue follower = newFuture(activation);
+        // close cutover is irreversible; cancellation of the observing activation
+        // cannot turn the lifecycle Future into cancelled.
+        follower.attachCancellationProducer(() -> {});
+
+        Req active;
+        List<Req> queuedToTerminate = new ArrayList<>();
+        synchronized (this) {
+            if (closed) {
+                if (closeError == null) follower.resolve(receiver, activation);
+                else follower.fail(closeError);
+                return follower;
+            }
+
+            closeFollowers.add(follower);
+            if (closing) return follower;
+
+            closing = true;
+            closeActivation = activation;
+            active = activeReq;
+
+            Iterator<Req> iterator = q.iterator();
+            while (iterator.hasNext()) {
+                Req req = iterator.next();
+                if (req != active && !req.committed) {
+                    req.closeCutover = true;
+                    queuedToTerminate.add(req);
+                    iterator.remove();
+                }
+            }
+            if (active != null && !active.committed) {
+                active.closeCutover = true;
+            }
+        }
+
+        for (Req req : queuedToTerminate) {
+            req.f.fail(lifecycleError(req.a));
+        }
+
+        if (active != null && active.closeCutover) {
+            active.f.fail(lifecycleError(active.a));
+            ProtosFutureValue lower;
+            synchronized (this) {
+                lower = active.lower;
+            }
+            if (lower != null) lower.cancelRequest();
+        } else if (active == null) {
+            finalizeClose(activation);
+        }
+
+        return follower;
+    }
+
+    private static final class Req {
+        final ProtosActivation a;
+        final ProtosFutureValue f;
+        final Kind kind;
+        final int maximum;
+        final byte[] bytes;
+        boolean committed;
+        boolean cancelRequested;
+        boolean closeCutover;
+        ProtosFutureValue lower;
+
+        Req(
+                ProtosActivation activation,
+                ProtosFutureValue future,
+                Kind kind,
+                int maximum,
+                byte[] bytes) {
+            this.a = activation;
+            this.f = future;
+            this.kind = kind;
+            this.maximum = maximum;
+            this.bytes = bytes;
+        }
+    }
+
+    private ProtosFutureValue enqueue(Req req) {
+        req.f.attachCancellationProducer(() -> cancel(req));
+        synchronized (this) {
+            q.addLast(req);
+        }
+        pump();
+        return req.f;
+    }
+
+    private void cancel(Req req) {
+        ProtosFutureValue lower = null;
+        boolean queuedCancellation = false;
+        synchronized (this) {
+            if (req.committed || !req.f.isPending()) return;
+            if (activeReq != req) {
+                if (q.remove(req)) queuedCancellation = true;
+                else return;
+            } else {
+                req.cancelRequested = true;
+                lower = req.lower;
+            }
+        }
+        if (queuedCancellation) {
+            req.f.cancelTerminal();
+            pump();
+        } else if (lower != null) {
+            lower.cancelRequest();
+        }
+    }
+
+    private void pump() {
+        Req req = null;
+        ProtosActivation closeNow = null;
+        synchronized (this) {
+            if (activeReq != null) return;
+            if (q.isEmpty()) {
+                if (closing && !closed) closeNow = closeActivation;
+            } else {
+                req = q.peekFirst();
+                activeReq = req;
+            }
+        }
+
+        if (closeNow != null) {
+            finalizeClose(closeNow);
+            return;
+        }
+        if (req == null) return;
+
+        switch (req.kind) {
+            case READ -> doRead(req);
+            case WRITE -> doWrite(req);
+            case FLUSH -> doFlush(req, false);
+        }
+    }
+
+    private void done(Req req) {
+        ProtosActivation closeNow = null;
+        synchronized (this) {
+            q.remove(req);
+            if (activeReq == req) activeReq = null;
+            if (closing && q.isEmpty() && !closed) closeNow = closeActivation;
+        }
+        if (closeNow != null) finalizeClose(closeNow);
+        else pump();
+    }
+
+    private boolean stopBeforeLowerWork(Req req) {
+        boolean cancelled;
+        boolean cutover;
+        synchronized (this) {
+            cancelled = req.cancelRequested;
+            cutover = req.closeCutover;
+        }
+        if (cutover) {
+            done(req);
+            return true;
+        }
+        if (cancelled) {
+            req.f.cancelTerminal();
+            done(req);
+            return true;
+        }
+        return false;
+    }
+
+    private void installLower(Req req, ProtosFutureValue lower) {
+        boolean requestCancellation;
+        synchronized (this) {
+            req.lower = lower;
+            requestCancellation = req.cancelRequested || req.closeCutover;
+        }
+        if (requestCancellation) lower.cancelRequest();
+    }
+
+    private void clearLower(Req req, ProtosFutureValue lower) {
+        synchronized (this) {
+            if (req.lower == lower) req.lower = null;
+        }
+    }
+
+    private void doRead(Req req) {
+        if (stopBeforeLowerWork(req)) return;
+
+        byte[] buffered;
+        synchronized (this) {
+            if (req.closeCutover) {
+                done(req);
+                return;
+            }
+            buffered = takeInput(req.maximum);
+        }
+        if (buffered.length > 0) {
+            req.committed = true;
+            req.f.resolve(bytes(buffered), req.a);
+            done(req);
+            return;
+        }
+
+        ProtosFutureValue lower =
+                invokeFuture(
+                        target,
+                        "read",
+                        List.of(
+                                new ProtosIntegerValue(
+                                        BigInteger.valueOf(
+                                                Math.max(req.maximum, READ_AHEAD)))),
+                        req.a,
+                        req.f);
+        if (lower == null) {
+            done(req);
+            return;
+        }
+
+        installLower(req, lower);
+        lower.observe(
+                terminal -> {
+                    clearLower(req, lower);
+                    boolean cutover;
+                    synchronized (this) {
+                        cutover = req.closeCutover;
+                    }
+                    if (cutover) {
+                        // Reader close may discard any uncommitted read-ahead.
+                        done(req);
+                        return;
+                    }
+
+                    switch (terminal.state()) {
+                        case RESOLVED -> {
+                            Object value = terminal.resolvedValue().orElseThrow();
+                            if (value == ProtosNullValue.INSTANCE) {
+                                req.committed = true;
+                                req.f.resolve(value, req.a);
+                                done(req);
+                            } else if (value instanceof ProtosBytesValue bytes) {
+                                byte[] obtained = snapshot(bytes);
+                                if (obtained.length == 0) {
+                                    req.f.fail(ioError(req.a));
+                                    done(req);
+                                    return;
+                                }
+                                byte[] first;
+                                synchronized (this) {
+                                    for (byte b : obtained) input.addLast(b);
+                                    first = takeInput(req.maximum);
+                                }
+                                req.committed = true;
+                                req.f.resolve(this.bytes(first), req.a);
+                                done(req);
+                            } else {
+                                req.f.fail(ioError(req.a));
+                                done(req);
+                            }
+                        }
+                        case FAILED -> {
+                            req.f.fail(terminal.failedError().orElseThrow());
+                            done(req);
+                        }
+                        case CANCELLED -> {
+                            req.f.cancelTerminal();
+                            done(req);
+                        }
+                        case PENDING -> { }
+                    }
+                });
+    }
+
+    private void doWrite(Req req) {
+        synchronized (this) {
+            if (req.closeCutover) {
+                // close won before this accepted write committed to the adapter.
+            } else if (req.cancelRequested) {
+                // cancellation won before adapter admission.
+            } else {
+                byte[] next = Arrays.copyOf(output, output.length + req.bytes.length);
+                System.arraycopy(req.bytes, 0, next, output.length, req.bytes.length);
+                output = next;
+                req.committed = true;
+            }
+        }
+
+        if (req.committed) req.f.resolve(receiver, req.a);
+        else if (req.closeCutover) req.f.fail(lifecycleError(req.a));
+        else req.f.cancelTerminal();
+        done(req);
+    }
+
+    private void doFlush(Req req, boolean closePath) {
+        if (!closePath && stopBeforeLowerWork(req)) return;
+
+        byte[] pending;
+        synchronized (this) {
+            pending = output.clone();
+        }
+        if (pending.length == 0) {
+            flushTarget(req, closePath);
+            return;
+        }
+
+        ProtosFutureValue lower =
+                invokeFuture(
+                        target,
+                        "write",
+                        List.of(bytes(pending)),
+                        req.a,
+                        closePath ? null : req.f);
+        if (lower == null) {
+            poison(req, closePath);
+            return;
+        }
+
+        installLower(req, lower);
+        lower.observe(
+                terminal -> {
+                    clearLower(req, lower);
+                    if (terminal.state() == ProtosFutureValue.State.RESOLVED) {
+                        synchronized (this) {
+                            if (output.length >= pending.length) {
+                                output =
+                                        Arrays.copyOfRange(
+                                                output, pending.length, output.length);
+                            }
+                        }
+                        req.committed = true;
+                        flushTarget(req, closePath);
+                    } else if (terminal.state()
+                            == ProtosFutureValue.State.CANCELLED) {
+                        if (closePath) {
+                            poison(req, true);
+                        } else {
+                            req.f.cancelTerminal();
+                            done(req);
+                        }
+                    } else if (terminal.state()
+                            != ProtosFutureValue.State.PENDING) {
+                        poisonFrom(req, terminal, closePath);
+                    }
+                });
+    }
+
+    private void flushTarget(Req req, boolean closePath) {
+        if (target.lookupSlot("flush").isEmpty()) {
+            req.committed = true;
+            if (closePath) finishFinalization(req.a, null);
+            else {
+                if (!req.closeCutover) req.f.resolve(receiver, req.a);
+                done(req);
+            }
+            return;
+        }
+
+        ProtosFutureValue lower =
+                invokeFuture(
+                        target,
+                        "flush",
+                        List.of(),
+                        req.a,
+                        closePath ? null : req.f);
+        if (lower == null) {
+            poison(req, closePath);
+            return;
+        }
+
+        installLower(req, lower);
+        lower.observe(
+                terminal -> {
+                    clearLower(req, lower);
+                    if (terminal.state() == ProtosFutureValue.State.RESOLVED) {
+                        req.committed = true;
+                        if (closePath) finishFinalization(req.a, null);
+                        else {
+                            if (!req.closeCutover) req.f.resolve(receiver, req.a);
+                            done(req);
+                        }
+                    } else if (terminal.state()
+                            == ProtosFutureValue.State.CANCELLED) {
+                        if (closePath) poison(req, true);
+                        else {
+                            req.f.cancelTerminal();
+                            done(req);
+                        }
+                    } else if (terminal.state()
+                            != ProtosFutureValue.State.PENDING) {
+                        poisonFrom(req, terminal, closePath);
+                    }
+                });
+    }
+
+    private void poisonFrom(
+            Req req, ProtosFutureValue terminal, boolean closePath) {
+        ProtosObjectValue error =
+                terminal.state() == ProtosFutureValue.State.FAILED
+                        ? terminal.failedError().orElseGet(() -> ioError(req.a))
+                        : ioError(req.a);
+        synchronized (this) {
+            if (outputError == null) outputError = error;
+        }
+        if (!req.closeCutover) req.f.fail(error);
+        if (closePath) finishFinalization(req.a, error);
+        else done(req);
+    }
+
+    private void poison(Req req, boolean closePath) {
+        ProtosObjectValue error = ioError(req.a);
+        synchronized (this) {
+            if (outputError == null) outputError = error;
+        }
+        if (!req.closeCutover) req.f.fail(error);
+        if (closePath) finishFinalization(req.a, error);
+        else done(req);
+    }
+
+    private void finalizeClose(ProtosActivation activation) {
+        if (activation == null) return;
+        synchronized (this) {
+            if (closed) return;
+        }
+
+        if (mode == Mode.WRITER) {
+            ProtosObjectValue primary;
+            boolean hasOutput;
+            synchronized (this) {
+                primary = outputError;
+                hasOutput = output.length > 0;
+            }
+            if (primary == null && hasOutput) {
+                Req finalFlush =
+                        new Req(
+                                activation,
+                                newFuture(activation),
+                                Kind.FLUSH,
+                                0,
+                                null);
+                doFlush(finalFlush, true);
+                return;
+            }
+            finishFinalization(activation, primary);
+            return;
+        }
+
+        finishFinalization(activation, null);
+    }
+
+    private void finishFinalization(
+            ProtosActivation activation, ProtosObjectValue primary) {
+        if (!owning) {
+            finishClose(activation, primary);
+            return;
+        }
+
+        ProtosFutureValue targetClose =
+                invokeFuture(target, "close", List.of(), activation, null);
+        if (targetClose == null) {
+            finishClose(
+                    activation, primary != null ? primary : ioError(activation));
+            return;
+        }
+
+        targetClose.observe(
+                terminal -> {
+                    if (terminal.state() == ProtosFutureValue.State.RESOLVED) {
+                        finishClose(activation, primary);
+                    } else if (terminal.state()
+                            != ProtosFutureValue.State.PENDING) {
+                        ProtosObjectValue targetFailure =
+                                terminal.state() == ProtosFutureValue.State.FAILED
+                                        ? terminal.failedError()
+                                                .orElseGet(() -> ioError(activation))
+                                        : ioError(activation);
+                        finishClose(
+                                activation,
+                                primary != null ? primary : targetFailure);
+                    }
+                });
+    }
+
+    private void finishClose(
+            ProtosActivation activation, ProtosObjectValue error) {
+        List<ProtosFutureValue> followers;
+        synchronized (this) {
+            if (closed) return;
+            closed = true;
+            closeError = error;
+            followers = List.copyOf(closeFollowers);
+            closeFollowers.clear();
+        }
+
+        for (ProtosFutureValue follower : followers) {
+            if (error == null) follower.resolve(receiver, activation);
+            else follower.fail(error);
+        }
+    }
+
+    private ProtosFutureValue invokeFuture(
+            ProtosObjectValue object,
+            String message,
+            List<?> arguments,
+            ProtosActivation activation,
+            ProtosFutureValue outer) {
+        try {
+            Object value =
+                    ProtosInvocation.invokeMessage(
+                            object, message, arguments, activation);
+            if (value instanceof ProtosFutureValue future) return future;
+            if (outer != null) outer.fail(ioError(activation));
+            return null;
+        } catch (RuntimeException exception) {
+            if (outer != null) outer.fail(ioError(activation));
+            return null;
+        }
+    }
+
+    private ProtosFutureValue newFuture(ProtosActivation activation) {
+        return new ProtosFutureValue(
+                activation.prelude().orElseThrow().futurePrototype(), domain);
+    }
+
+    private ProtosFutureValue failed(
+            ProtosActivation activation, ProtosCoreErrors.StandardError error) {
+        ProtosFutureValue future = newFuture(activation);
+        future.fail(ProtosCoreErrors.newOccurrence(activation, error));
+        return future;
+    }
+
+    private ProtosFutureValue failedSame(
+            ProtosActivation activation, ProtosObjectValue error) {
+        ProtosFutureValue future = newFuture(activation);
+        future.fail(error);
+        return future;
+    }
+
+    private ProtosFutureValue lifecycle(ProtosActivation activation) {
+        return failed(
+                activation, ProtosCoreErrors.StandardError.I_O_LIFECYCLE_ERROR);
+    }
+
+    private ProtosObjectValue lifecycleError(ProtosActivation activation) {
+        return ProtosCoreErrors.newOccurrence(
+                activation, ProtosCoreErrors.StandardError.I_O_LIFECYCLE_ERROR);
+    }
+
+    private ProtosObjectValue ioError(ProtosActivation activation) {
+        return ProtosCoreErrors.newOccurrence(
+                activation, ProtosCoreErrors.StandardError.I_O_ERROR);
+    }
+
+    private void check(ProtosActivation activation) {
+        Objects.requireNonNull(activation);
+        if (activation.executionDomain() != domain) {
+            throw new IllegalArgumentException(
+                    "buffered I/O belongs to another Actor domain");
+        }
+    }
+
+    private byte[] takeInput(int maximum) {
+        int count = Math.min(maximum, input.size());
+        byte[] result = new byte[count];
+        for (int i = 0; i < count; i++) result[i] = input.removeFirst();
+        return result;
+    }
+
+    private ProtosBytesValue bytes(byte[] values) {
+        ProtosBytesValue bytes = new ProtosBytesValue(bytesPrototype);
+        for (byte value : values) {
+            bytes.indexedAdd(
+                    new ProtosIntegerValue(BigInteger.valueOf(value & 255)));
+        }
+        return bytes;
+    }
+
+    private static BigInteger integer(Object value) {
+        return value instanceof ProtosIntegerValue integer
+                ? integer.value()
+                : null;
+    }
+
+    private static byte[] snapshot(ProtosBytesValue bytes) {
+        int size = bytes.indexedSize().intValueExact();
+        byte[] result = new byte[size];
+        for (int index = 0; index < result.length; index++) {
+            Object value = bytes.indexedAt(BigInteger.valueOf(index));
+            if (!(value instanceof ProtosIntegerValue integer)) {
+                throw new IllegalStateException("invalid Bytes");
+            }
+            int octet = integer.value().intValueExact();
+            if (octet < 0 || octet > 255) {
+                throw new IllegalStateException("invalid Bytes octet");
+            }
+            result[index] = (byte) octet;
+        }
+        return result;
+    }
 }
