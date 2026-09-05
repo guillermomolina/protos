@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.141-SNAPSHOT
+
+- Close the fresh LIB001-D Array API audit and publish `std:collections/Array` with eager sequential `map(array, transform)`, `filter(array, predicate)`, and `findIndex(array, predicate)` as ordinary Protos library behavior over the existing Core Array surface.
+- Capture one shallow ascending-index Array snapshot before any user callback; `map` returns a fresh open same-length Array, `filter` returns a fresh open stable-order selected Array with exact source element identities, and `findIndex` stops at the first matching snapshot index or returns `null`.
+- Require canonical Boolean predicate results for `filter`/`findIndex`, signal fresh `InvalidPredicateResult` occurrences otherwise, and explicitly keep empty-input callbacks uninspected because Standard Library source has no hidden non-invoking callability preflight primitive.
+- Implement variable-length filtering in Protos source with balanced range composition and ordinary multi-spread Array construction, avoiding a new runtime builder/native boundary and avoiding quadratic one-element-at-a-time result rebuilding; leave `reduce`/`sort` to LIB001-E's required fresh audit.
+
 ## 0.2.140-SNAPSHOT
 
 - Implement I015-B standard `TextReader` borrowing/owning construction and progress-oriented `readText()`. `TextReader(source, encoding)` and `TextReader.owning(source, encoding)` are source-backed frozen-prelude factory operations; constructors validate ByteReadable capability, exact Encoding-family membership and owning Closable authority synchronously before wrapper creation or I/O. Each success creates a fresh wrapper with exactly `readText` and `close`.

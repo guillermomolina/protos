@@ -1,6 +1,6 @@
 # LIB001 Collections Design Record
 
-Status: Set/IdentitySet implementation complete through LIB001-C; LIB001-D remains pending its fresh Array API audit
+Status: Set/IdentitySet complete through LIB001-C; LIB001-D Array map/filter/findIndex contract and implementation closed; LIB001-E reduce/sort audit pending
 Work item: `LIB001`
 Nature: Project design record; **non-normative**
 
@@ -415,6 +415,93 @@ findIndex
 reduce
 sort
 ```
+
+### Focused LIB001-D Array API audit
+
+The fresh current-main audit closes the initial eager sequential Array contracts
+without changing Core Array semantics.
+
+The portable module is:
+
+```text
+std:collections/Array
+```
+
+It is an Actor-local behavior module for the existing Core `Array` concept; it
+does not replace, wrap, subclass, or alter the Core prelude `Array` factory.
+Programs normally bind the module under a non-conflicting local name such as
+`Arrays`:
+
+```protos
+Arrays: import("std:collections/Array")
+```
+
+LIB001-D publishes exactly:
+
+```text
+map(array, transform)       -> fresh Array
+filter(array, predicate)    -> fresh Array
+findIndex(array, predicate) -> Integer | null
+```
+
+No explicit `arguments...` tail is added to these sequential operations. Local
+Closures already capture ordinary state, and ordinary invokable objects may own
+their own state; the parallel surface's explicit extra arguments primarily serve
+its P-boundary projection/transfer contract and are not a capability prerequisite
+for sequential library use.
+
+All three operations first capture a fresh shallow standard-Array copy through
+ordinary call-spread extraction. That copy fixes the complete ascending-index
+source sequence before any user callback is invoked. Later `atPut` replacement
+of the original Array therefore does not change which object is observed for any
+snapshot position. Element objects themselves are not cloned or frozen.
+
+Callbacks receive exactly one argument:
+
+```text
+transform(element)
+predicate(element)
+```
+
+The module deliberately does not add a hidden callback preflight primitive.
+User callback validation therefore occurs only through actual ordinary
+invocation. For an empty input, `map` and `filter` return fresh empty Arrays and
+`findIndex` returns `null` without inspecting the user callback. For non-empty
+input, lookup/arity/invocation failure occurs at the first attempted callback and
+stops the operation; already-completed external callback effects are not rolled
+back.
+
+`map` invokes `transform` once per snapshotted element in ascending index order.
+Every normal result becomes the corresponding element of one fresh open standard
+Array of the same length.
+
+`filter` invokes `predicate` once per snapshotted element in ascending index
+order. A normal predicate result must be exactly canonical `true` or canonical
+`false`; any other normal result signals a fresh `InvalidPredicateResult`
+occurrence. Selected source objects retain their snapshot order and exact object
+identity in one fresh open standard Array. Because Core Array has fixed-size
+indexed state and no append/truncate primitive, the source implementation uses a
+balanced range decomposition and ordinary multi-spread Array construction rather
+than quadratic one-element-at-a-time reconstruction. This is library machinery,
+not a new observable collection category.
+
+`findIndex` applies the same strict Boolean predicate contract and examines the
+snapshot in ascending index order. It returns the first matching index as the
+ordinary unbounded standard Integer result produced by the existing index
+counter, immediately stops further predicate calls after that match, and returns
+canonical `null` when no index matches. Returning an index keeps `null`
+unambiguous even when an Array element is itself `null`, matching the established
+parallel vocabulary's absence shape without importing any P isolation semantics.
+
+These sequential operations do **not** inherit `parallelMap` /
+`parallelFilter` / `parallelFindIndex` P transfer, isolation, Future,
+deterministic cross-worker failure-selection, or cancellation semantics. They
+reuse only compatible vocabulary and result laws. Execution is ordinary local
+sequential Protos behavior.
+
+`reduce` and `sort` remain outside LIB001-D. Their accumulator/empty-input and
+ordering/comparator contracts still require the separate fresh audit assigned to
+LIB001-E.
 
 Initial direction:
 
