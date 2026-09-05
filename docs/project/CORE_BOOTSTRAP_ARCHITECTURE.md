@@ -108,3 +108,16 @@ If moving behavior between Java and Protos would change any observable result,
 identity, lookup path, failure, evaluation order, concurrency property, or other
 specified behavior, that is no longer a mere architecture move and must be
 checked against the normative owner before implementation.
+
+## Native-boundary closure record
+
+I018's final audited Java-backed standard boundary is recorded in
+`docs/project/CORE_NATIVE_BOUNDARY.md` and enforced by
+`ProtosCoreNativeBoundaryArchitectureTest`.
+
+That inventory is an implementation-maintenance constraint, not a new source of
+language semantics. A future change that adds or reclassifies Java-native
+standard behavior must first re-check the applicable normative owner and then
+update the inventory and executable guard in the same change. If the behavior
+can be expressed faithfully through ordinary Protos mechanisms, it belongs in
+`protos/lib/core/` instead.

@@ -49,7 +49,7 @@ an item.
 | I015 | Encoding / Text I/O | READY | — | I014 closed |
 | I016 | Filesystem / File | IN_PROGRESS | — | I013 + I014 closed |
 | I017 | Process I/O / bootstrap | BLOCKED_BY_DEPENDENCIES | — | requires I016; re-audit exact current dependencies before starting |
-| I018 | Core self-hosting / bootstrap minimization | IN_PROGRESS | — | independent implementation-placement initiative; I016-C was already published concurrently and I018 freezes further I016 progress |
+| I018 | Core self-hosting / bootstrap minimization | CLOSED | `SAME_COMMIT` | I018-L exhaustive native-boundary inventory and architectural guard complete; I016-D pause lifted |
 
 ### I011 — Actors
 
@@ -89,7 +89,7 @@ Remaining implemented-surface gaps before top-level closure:
 
 Status: IN_PROGRESS
 
-Coordination note: the requested pause after I016-B was overtaken by the already-published I016-C slice before I018-A could run. I018 does not revert that published history and freezes further I016 progress at I016-C; the remaining I016 gaps below are not started by I018.
+Coordination note: the requested pause after I016-B was overtaken by the already-published I016-C slice before I018-A could run. I018 preserved that history and temporarily froze further I016 progress at I016-C. I018 is now closed; that coordination pause is lifted and I016 may resume from I016-D after the ordinary current-main audit.
 
 Description: Core Filesystem/File semantics implemented incrementally on I013 Path and I014 byte-I/O commitment/lifecycle infrastructure.
 
@@ -115,7 +115,7 @@ Remaining implemented-surface gaps before top-level closure:
 
 ### I018 — Core self-hosting / bootstrap minimization
 
-Status: IN_PROGRESS
+Status: CLOSED
 
 Description: Reduce Java-side Core bootstrap to irreducible host/runtime machinery and narrow representation/selector bridges, moving faithfully expressible distributable Core behavior to `protos/lib/core/` without changing observable Protos semantics.
 
@@ -142,11 +142,12 @@ Published slices:
 | I018-I | CLOSED | `0.2.102-SNAPSHOT` | `SAME_COMMIT` | Source-backed standard frozen-prelude bindings object constructed in `protos/lib/core/prelude.protos` with direct `Context` parent and the exact existing Core binding surface; Java no longer allocates or populates the prelude object slot-by-slot, and Error-taxonomy export is source-owned while Java retains taxonomy validation and the final freeze/ProtosPrelude boundary. |
 | I018-J | CLOSED | `0.2.103-SNAPSHOT` | `SAME_COMMIT` | Source-backed default `Object.==` body defined in `protos/lib/core/object.protos` as primitive semantic identity (`this === other`) and promoted through the existing narrow symbolic-selector installation path; Java no longer duplicates default equality logic, while primitive `===`, `identityHash`, generic call/object construction, and other host/runtime boundaries remain native. |
 | I018-K | CLOSED | `0.2.104-SNAPSHOT` | `SAME_COMMIT` | Source-backed internal standard `ActorRef` and `SendOperation` delegation prototypes are constructed in `protos/lib/core/actor.protos` and supplied to the Actor runtime installer; Java no longer allocates those standard prototype identities and retains only the Actor/runtime communication bridges (`send`/`request`, `cancel`/`retry`) plus representation, scheduling, transfer, and lifecycle machinery. The construction-only helper bindings are removed before prelude construction and remain absent from the public prelude. |
-
-Remaining implementation work before top-level closure:
-- complete the exhaustive inventory of every remaining Java-installed standard slot and classify it as host-irreducible or a narrow representation/selector bridge, explicitly proving that no source-expressible slot remains;
-- add architectural regression coverage that prevents new source-expressible standard behavior from being introduced only in Java;
-- close I018 and lift the I016-D pause only if that inventory/guard passes on the definitive `origin/main`.
+| I018-L | CLOSED | `0.2.106-SNAPSHOT` | `SAME_COMMIT` | Final I018 closure: exhaustive inventory of all remaining Java native-Closure providers classifies every retained boundary as host-irreducible, representation-backed, concurrency/runtime-backed, or resource/capability-backed; no source-expressible standard slot remains. A regression guard fixes the exact 22-provider/90-construction-site native boundary, verifies helper-backed runtime selector surfaces and migrated source provenance, and prevents silent Java-only Core growth. I018 is CLOSED and the I016-D coordination pause is lifted. |\n
+Closure result:
+- exhaustive audit found no remaining source-expressible standard slot implemented only in Java;
+- every retained Java-native standard Closure is recorded in `docs/project/CORE_NATIVE_BOUNDARY.md` as an irreducible host, representation, concurrency/runtime, or resource/capability bridge;
+- `ProtosCoreNativeBoundaryArchitectureTest` guards the exact provider/construction-site boundary, helper-backed standard selector surfaces, source-backed provenance, and Core-bootstrap allocation boundary;
+- I018 is complete. The temporary coordination pause after published I016-C is lifted; I016 may resume from I016-D after re-auditing the then-current `origin/main`.
 
 
 ## CLI implementation

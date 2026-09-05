@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.106-SNAPSHOT
+
+- Close I018 Core self-hosting/bootstrap minimization after an exhaustive current-main inventory of every production `ProtosClosureValue.nativeClosure(...)` provider. The final boundary contains 90 native-Closure construction sites across exactly 22 Java providers, all classified as irreducible host execution/control, semantic-value representation, concurrency/runtime, or resource/capability bridges; no remaining standard slot is classified as faithfully source-expressible.
+- Add `docs/project/CORE_NATIVE_BOUNDARY.md` as the non-normative maintenance inventory and `ProtosCoreNativeBoundaryArchitectureTest` as an executable guard over the exact provider set/counts, helper-backed runtime selector surfaces, migrated Object/Integer/Float source provenance, internal Bytes/ActorRef/SendOperation surfaces, and the Core-bootstrap direct-allocation boundary.
+- Mark I018 CLOSED and lift the temporary coordination pause that held I016 at the already-published I016-C state. I016 may resume from I016-D after re-auditing the then-current `origin/main`. No normative specification changes are made.
+
 ## 0.2.105-SNAPSHOT
 
 - Implement I011-10 graceful Actor lifecycle: add public `ActorRef.stop()` and `ActorRef.termination()`, establish the irreversible stop cutover without a stop Future, and provide fresh caller-local termination observation Futures tied to one concrete incarnation.
