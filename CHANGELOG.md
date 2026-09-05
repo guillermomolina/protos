@@ -4,6 +4,12 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## 0.2.70-SNAPSHOT
+
+- Implement I009A internal Task/Actor execution infrastructure: Actor-local cooperative FIFO runnable queues, race-safe Task state transitions, suspension/resume, cooperative cancellation wake-up, and structured parent/child ownership.
+- Keep cancellation of a suspended Task independent from its observed wait dependency so Future.value() can later wake for cancellation without cancelling or completing the observed Future.
+- Add deterministic focal runtime tests for Actor isolation, dispatch ordering, duplicate resume exclusion, cancellation boundaries/races, structured ownership, and terminal transition safety.
+
 ## 0.2.69-SNAPSHOT
 
 - Implement I008 standard module runtime semantics: exact semantic-String `import(specifier)`, host-produced canonical `ModuleKey`, Actor-local module caches, cache-before-execute cycles, single evaluation, failure eviction, and retry.
