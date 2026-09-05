@@ -55,6 +55,30 @@ public final class ProtosActorRefValue implements ProtosRepresentedValue {
         return target.localActor;
     }
 
+    /** Optional non-local communication route; lifecycle authority remains the same Actor target. */
+    java.util.Optional<ProtosActorTransportRoute> communicationRouteForRuntime() {
+        return java.util.Optional.ofNullable(target.communicationRoute);
+    }
+
+    /**
+     * Runtime materialization of this same semantic ActorRef over a non-direct communication route.
+     *
+     * <p>The route must target the exact same incarnation; changing physical route never changes or
+     * retargets ActorRef identity. This is runtime machinery, not a public ActorRef constructor.
+     */
+    ProtosActorRefValue withCommunicationRouteForRuntime(ProtosActorTransportRoute route) {
+        Objects.requireNonNull(route, "route");
+        if (route.targetIncarnationIdentityForRuntime() != incarnationIdentityForRuntime()) {
+            throw new IllegalArgumentException("ActorRef transport route targets another incarnation");
+        }
+        return new ProtosActorRefValue(
+                prototype,
+                new Target(
+                        target.incarnationIdentity,
+                        target.localActor,
+                        route));
+    }
+
     /** Runtime bridge for the public idempotent ActorRef.stop() operation. */
     public void requestStopForRuntime() {
         target.localActor.requestTerminationForRuntime();
@@ -86,13 +110,22 @@ public final class ProtosActorRefValue implements ProtosRepresentedValue {
     private static final class Target {
         private final long incarnationIdentity;
         private final ProtosActor localActor;
+        private final ProtosActorTransportRoute communicationRoute;
 
         private Target(long incarnationIdentity, ProtosActor localActor) {
+            this(incarnationIdentity, localActor, null);
+        }
+
+        private Target(
+                long incarnationIdentity,
+                ProtosActor localActor,
+                ProtosActorTransportRoute communicationRoute) {
             if (incarnationIdentity <= 0) {
                 throw new IllegalArgumentException("ActorRef incarnation identity must be positive");
             }
             this.incarnationIdentity = incarnationIdentity;
             this.localActor = Objects.requireNonNull(localActor, "localActor");
+            this.communicationRoute = communicationRoute;
         }
     }
 }

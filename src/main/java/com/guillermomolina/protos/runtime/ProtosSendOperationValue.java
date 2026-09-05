@@ -26,7 +26,7 @@ import java.util.Objects;
  * <p>The logical destination, selector, and already-formed Actor snapshot are immutable operation
  * state. Retry creates a fresh operation identity over that same snapshot and never re-evaluates or
  * re-reads the source argument graph. Direct concrete-Actor accepted-work loss is recorded as a
- * post-acceptance delivery failure; distributed transport uncertainty remains a later integration.
+ * post-acceptance delivery failure; a runtime transport route may additionally report acceptance uncertainty without authorizing transparent replay.
  */
 public final class ProtosSendOperationValue extends ProtosObjectValue
         implements ProtosSendOperationControl {
@@ -36,6 +36,7 @@ public final class ProtosSendOperationValue extends ProtosObjectValue
     private final String selector;
     private final List<Object> snapshot;
     private ProtosActorDeliveryAttempt attempt;
+    private ProtosActorTransportRoute.Delivery transportAttempt;
 
     private ProtosSendOperationValue(
             ProtosObjectValue sendOperationPrototype,
@@ -67,8 +68,13 @@ public final class ProtosSendOperationValue extends ProtosObjectValue
     /** True only when this call establishes known cancellation before concrete-Actor acceptance. */
     public boolean cancelBeforeAcceptance() {
         ProtosActorDeliveryAttempt current;
+        ProtosActorTransportRoute.Delivery remote;
         synchronized (this) {
             current = attempt;
+            remote = transportAttempt;
+        }
+        if (remote != null) {
+            return remote.cancelBeforeAcceptance();
         }
         return current != null && current.cancelBeforeAcceptance();
     }
@@ -79,8 +85,19 @@ public final class ProtosSendOperationValue extends ProtosObjectValue
      */
     public ProtosSendOperationValue retryAfterFailure() {
         ProtosActorDeliveryAttempt current;
+        ProtosActorTransportRoute.Delivery remote;
         synchronized (this) {
             current = attempt;
+            remote = transportAttempt;
+        }
+        if (remote != null) {
+            ProtosActorTransportRoute.DeliveryState state = remote.stateForRuntime();
+            if (state != ProtosActorTransportRoute.DeliveryState.FAILED_BEFORE_ACCEPTANCE
+                    && state != ProtosActorTransportRoute.DeliveryState.FAILED_AFTER_ACCEPTANCE
+                    && state != ProtosActorTransportRoute.DeliveryState.ACCEPTANCE_UNCERTAIN) {
+                return null;
+            }
+            return begin(sendOperationPrototype, destination, sender, selector, snapshot);
         }
         if (current == null || !current.retryableForRuntime()) {
             return null;
@@ -90,7 +107,13 @@ public final class ProtosSendOperationValue extends ProtosObjectValue
 
     ProtosActorDeliveryAttempt.State deliveryStateForTesting() {
         synchronized (this) {
-            return attempt.state();
+            return attempt == null ? null : attempt.state();
+        }
+    }
+
+    ProtosActorTransportRoute.DeliveryState transportStateForTesting() {
+        synchronized (this) {
+            return transportAttempt == null ? null : transportAttempt.stateForRuntime();
         }
     }
 
@@ -99,6 +122,22 @@ public final class ProtosSendOperationValue extends ProtosObjectValue
     }
 
     private void beginAttempt() {
+        ProtosActorTransportRoute route =
+                destination.communicationRouteForRuntime().orElse(null);
+        if (route != null) {
+            ProtosActorTransportRoute.Delivery created =
+                    Objects.requireNonNull(
+                            route.beginSend(sender, selector, snapshot),
+                            "transport route returned no send delivery");
+            synchronized (this) {
+                transportAttempt = created;
+            }
+            return;
+        }
+        beginLocalAttempt();
+    }
+
+    private void beginLocalAttempt() {
         ProtosActor target = destination.localActorForRuntime();
         ProtosActorDeliveryAdmission admission = target.deliveryAdmissionForRuntime();
         final ProtosActorDeliveryAttempt[] holder = new ProtosActorDeliveryAttempt[1];

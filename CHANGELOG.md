@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.129-SNAPSHOT
+
+- Implement I011-19 host-neutral remote ActorRef communication transport state: one internal route SPI carries the existing logical message snapshot while preserving ActorRef identity and exposes only delivery knowledge needed by Core (pending, accepted, known pre/post-acceptance failure, cancellation, completion, or acceptance uncertainty).
+- Route ActorRef send/request through that SPI when present: SendOperation cancel remains true only for known pre-acceptance cancellation and retry is valid after terminal failure or delivery uncertainty; request transport uncertainty, including cancellation when non-acceptance can no longer be proved, fails with RequestOutcomeUncertain.
+- Re-snapshot normal remote request replies at the caller Actor boundary so a transport adapter cannot introduce cross-Process mutable references. No wire format, endpoint syntax, discovery API, timeout/failure detector, transport selector, or new native Closure boundary is introduced; B004 remains limited to public Group/GroupRef acquisition/discovery.
+
 ## 0.2.128-SNAPSHOT
 
 - Implement I017-E2 RootActor bootstrap-local authority provisioning. The unique RootActor's canonical initial module receives exactly one local `process` slot before its first source expression; the value is a fresh Actor-local Process capability proxy delegating to the source-backed `Process` prototype. The initial module still enters the Actor-local cache before source execution, so recursive imports observe the same partially initialized module and its already-provisioned bootstrap locals.

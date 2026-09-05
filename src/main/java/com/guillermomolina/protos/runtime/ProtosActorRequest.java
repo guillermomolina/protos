@@ -24,7 +24,7 @@ import java.util.Objects;
  * Runtime-owned request/reply operation behind ActorRef.request(...).
  *
  * <p>The public operation is the caller-domain Future. Delivery reuses the ordinary concrete-Actor
- * admission boundary and the original message snapshot. The destination's normal handler result is
+ * admission/transport boundary and the original message snapshot. The destination's normal handler result is
  * transferred back across the Actor boundary before resolving the caller Future; destination-local
  * failures never cross as Error objects.
  */
@@ -36,6 +36,7 @@ public final class ProtosActorRequest {
     private final ProtosActivation callerActivation;
     private final ProtosFutureValue future;
     private ProtosActorDeliveryAttempt attempt;
+    private ProtosActorTransportRoute.Delivery transportAttempt;
 
     private ProtosActorRequest(
             ProtosActorRefValue destination,
@@ -80,6 +81,41 @@ public final class ProtosActorRequest {
     }
 
     private void beginAttempt() {
+        ProtosActorTransportRoute route =
+                destination.communicationRouteForRuntime().orElse(null);
+        if (route != null) {
+            ProtosActorTransportRoute.Delivery created =
+                    Objects.requireNonNull(
+                            route.beginRequest(
+                                    sender,
+                                    selector,
+                                    snapshot,
+                                    new ProtosActorTransportRoute.RequestObserver() {
+                                        @Override
+                                        public void reply(Object result) {
+                                            remoteReply(result);
+                                        }
+
+                                        @Override
+                                        public void failedBeforeAcceptance() {
+                                            failKnownBeforeAcceptance();
+                                        }
+
+                                        @Override
+                                        public void outcomeUncertain() {
+                                            failOutcomeUncertain();
+                                        }
+                                    }),
+                            "transport route returned no request delivery");
+            synchronized (this) {
+                transportAttempt = created;
+            }
+            return;
+        }
+        beginLocalAttempt();
+    }
+
+    private void beginLocalAttempt() {
         ProtosActor target = destination.localActorForRuntime();
         ProtosActorDeliveryAdmission admission = target.deliveryAdmissionForRuntime();
         final ProtosActorDeliveryAttempt[] holder = new ProtosActorDeliveryAttempt[1];
@@ -98,8 +134,29 @@ public final class ProtosActorRequest {
 
     private void cancellationRequested() {
         ProtosActorDeliveryAttempt current;
+        ProtosActorTransportRoute.Delivery remote;
         synchronized (this) {
             current = attempt;
+            remote = transportAttempt;
+        }
+        if (remote != null) {
+            if (remote.cancelBeforeAcceptance()) {
+                future.cancelTerminal();
+                return;
+            }
+            switch (remote.stateForRuntime()) {
+                case CANCELLED_BEFORE_ACCEPTANCE -> future.cancelTerminal();
+                case FAILED_BEFORE_ACCEPTANCE -> failKnownBeforeAcceptance();
+                case ACCEPTED -> future.cancelTerminal();
+                case FAILED_AFTER_ACCEPTANCE, ACCEPTANCE_UNCERTAIN -> failOutcomeUncertain();
+                case COMPLETED -> {
+                    // Reply/terminal outcome already won, or is completing concurrently.
+                }
+                case PENDING -> {
+                    // The route still cannot establish a terminal cancellation outcome.
+                }
+            }
+            return;
         }
         if (current == null) {
             future.cancelTerminal();
@@ -134,6 +191,19 @@ public final class ProtosActorRequest {
             default ->
                     throw new IllegalArgumentException(
                             "delivery failure callback received non-failure state " + state);
+        }
+    }
+
+    private void remoteReply(Object result) {
+        Objects.requireNonNull(result, "result");
+        try {
+            Object transferred = ProtosActorValueTransfer.snapshotValue(result, callerActivation);
+            future.resolve(transferred, callerActivation);
+        } catch (ProtosSignalException nonTransferableReply) {
+            future.fail(
+                    ProtosCoreErrors.newOccurrence(
+                            callerActivation,
+                            ProtosCoreErrors.StandardError.NON_TRANSFERABLE_VALUE));
         }
     }
 
