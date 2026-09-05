@@ -93,6 +93,14 @@ public final class ProtosStandardActorProtocol {
                 "request",
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) -> request(activation, supplied)));
+        prototype.createLocalSlot(
+                "stop",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> stop(activation, supplied)));
+        prototype.createLocalSlot(
+                "termination",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> termination(activation, supplied)));
         return prototype.freeze();
     }
 
@@ -261,6 +269,29 @@ public final class ProtosStandardActorProtocol {
                 destination, sender, selector.value(), snapshot, activation);
     }
 
+    private static Object stop(ProtosActivation activation, List<?> supplied) {
+        if (!(activation.receiver() instanceof ProtosActorRefValue reference)
+                || !supplied.isEmpty()) {
+            throw error(activation);
+        }
+        reference.requestStopForRuntime();
+        return com.guillermomolina.protos.runtime.ProtosNullValue.INSTANCE;
+    }
+
+    private static Object termination(ProtosActivation activation, List<?> supplied) {
+        if (!(activation.receiver() instanceof ProtosActorRefValue reference)
+                || !supplied.isEmpty()) {
+            throw error(activation);
+        }
+        ProtosObjectValue futurePrototype =
+                activation.prelude().orElseThrow(
+                        () -> new IllegalStateException(
+                                "ActorRef.termination requires an owning Core prelude"))
+                        .futurePrototype();
+        return reference.observeTerminationForRuntime(
+                futurePrototype, activation.executionDomain());
+    }
+
     private static Object cancelSendOperation(
             ProtosActivation activation, List<?> supplied) {
         if (!(activation.receiver() instanceof ProtosSendOperationValue operation)
@@ -300,21 +331,7 @@ public final class ProtosStandardActorProtocol {
     }
 
     private static void terminateAfterCutover(ProtosActor actor) {
-        while (true) {
-            ProtosActor.LifecycleState state = actor.lifecycleState();
-            switch (state) {
-                case INITIALIZING, READY -> actor.beginTermination();
-                case TERMINATING -> {
-                    if (actor.markTerminated()) {
-                        actor.executionDomain().actorTerminated();
-                    }
-                    return;
-                }
-                case TERMINATED -> {
-                    return;
-                }
-            }
-        }
+        actor.requestTerminationForRuntime();
     }
 
     private static ProtosSignalException error(ProtosActivation activation) {

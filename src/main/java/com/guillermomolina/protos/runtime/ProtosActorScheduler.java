@@ -185,16 +185,22 @@ public final class ProtosActorScheduler {
     }
 
     private void runOneSegment(State state) {
-        Runnable control;
+        ProtosActor actor = state.actor;
+        Runnable control = null;
         synchronized (lock) {
-            control = state.controlTurns.pollFirst();
+            if (actor.lifecycleState() == ProtosActor.LifecycleState.INITIALIZING) {
+                control = state.controlTurns.pollFirst();
+            } else {
+                // Graceful stop/failure before bootstrap selection makes queued initialization
+                // control stale. It must never begin after the termination cutover.
+                state.controlTurns.clear();
+            }
         }
         if (control != null) {
             control.run();
             return;
         }
 
-        ProtosActor actor = state.actor;
         ProtosActorExecutionDomain domain = actor.executionDomain();
         boolean taskReady = domain.hasRunnableForRuntime();
         boolean messageReady =
@@ -232,30 +238,17 @@ public final class ProtosActorScheduler {
     }
 
     private static void terminateAfterUnhandledTurn(ProtosActor actor) {
-        while (true) {
-            ProtosActor.LifecycleState state = actor.lifecycleState();
-            switch (state) {
-                case INITIALIZING, READY -> actor.beginTermination();
-                case TERMINATING -> {
-                    if (actor.markTerminated()) {
-                        actor.executionDomain().actorTerminated();
-                    }
-                    return;
-                }
-                case TERMINATED -> {
-                    return;
-                }
-            }
-        }
+        actor.requestTerminationForRuntime();
     }
 
     private boolean hasSchedulableWork(State state) {
-        if (!state.controlTurns.isEmpty()) {
-            return true;
-        }
         ProtosActor actor = state.actor;
         if (actor.lifecycleState() == ProtosActor.LifecycleState.TERMINATED) {
             return false;
+        }
+        if (actor.lifecycleState() == ProtosActor.LifecycleState.INITIALIZING
+                && !state.controlTurns.isEmpty()) {
+            return true;
         }
         if (actor.executionDomain().hasRunnableForRuntime()) {
             return true;

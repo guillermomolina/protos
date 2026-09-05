@@ -98,8 +98,17 @@ final class ProtosActorDeliveryAdmission {
     boolean beginDispatchForRuntime(ProtosActorDeliveryAttempt attempt) {
         Objects.requireNonNull(attempt, "attempt");
         synchronized (actor) {
+            ProtosActorDeliveryAttempt.State deliveryState = attempt.state();
+            if (deliveryState == ProtosActorDeliveryAttempt.State.RUNNING) {
+                // A suspended handler is still the same already-started ordinary turn.
+                // TERMINATING forbids a new turn, but must allow this task to resume solely
+                // far enough to observe cooperative cancellation and run ensure cleanup.
+                return true;
+            }
             if (actor.lifecycleState() != ProtosActor.LifecycleState.READY) {
-                attempt.markFailedAfterAcceptanceForRuntime();
+                if (deliveryState == ProtosActorDeliveryAttempt.State.ACCEPTED) {
+                    attempt.markFailedAfterAcceptanceForRuntime();
+                }
                 return false;
             }
             return attempt.markRunningIfAcceptedForRuntime();

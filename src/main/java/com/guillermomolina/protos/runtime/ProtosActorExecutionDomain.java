@@ -1,6 +1,18 @@
 /*
  * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
- * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. See LICENSE.TXT.
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
  */
 package com.guillermomolina.protos.runtime;
 
@@ -23,6 +35,7 @@ public final class ProtosActorExecutionDomain {
     private final ArrayDeque<ProtosTask> runnable = new ArrayDeque<>();
     private final Set<ProtosTask> liveTasks = new LinkedHashSet<>();
     private final Set<ProtosIoOperation> actorIoOperations = new LinkedHashSet<>();
+    private final Set<ProtosFutureValue> actorNonTaskFutures = new LinkedHashSet<>();
     private ProtosActor ownerActor;
     private Runnable schedulerWakeup = NOOP_WAKEUP;
 
@@ -30,16 +43,26 @@ public final class ProtosActorExecutionDomain {
             ProtosTask parent, Object associatedFuture, ProtosTask.Continuation continuation) {
         Objects.requireNonNull(continuation, "continuation");
         ProtosTask task = new ProtosTask(this, parent, associatedFuture, continuation);
+        boolean cancelOnStart;
         synchronized (this) {
             if (parent != null && parent.owner() != this) {
                 throw new IllegalArgumentException("structured parent belongs to another Actor domain");
+            }
+            if (ownerActor != null
+                    && ownerActor.lifecycleState() == ProtosActor.LifecycleState.TERMINATED) {
+                throw new IllegalStateException("terminated Actor cannot create Actor-local tasks");
             }
             if (parent != null) {
                 parent.addChild(task);
             }
             liveTasks.add(task);
+            cancelOnStart = ownerActor != null
+                    && ownerActor.lifecycleState() == ProtosActor.LifecycleState.TERMINATING;
         }
         enqueue(task);
+        if (cancelOnStart) {
+            task.requestCancellation();
+        }
         return task;
     }
 
@@ -120,11 +143,16 @@ public final class ProtosActorExecutionDomain {
     }
 
     void terminal(ProtosTask task) {
+        ProtosActor actor;
         synchronized (this) {
             requireOwned(task);
             liveTasks.remove(task);
             notifyAll();
             task.parent().ifPresent(parent -> parent.removeChild(task));
+            actor = ownerActor;
+        }
+        if (actor != null) {
+            actor.tryCompleteTerminationForRuntime();
         }
     }
 
@@ -136,13 +164,46 @@ public final class ProtosActorExecutionDomain {
         synchronized (this) { actorIoOperations.remove(operation); }
     }
 
-    /** Runtime Actor-incarnation termination hook; pending I/O receives ordinary cancellation requests. */
-    public void actorTerminated() {
-        Set<ProtosIoOperation> pending;
-        synchronized (this) { pending = Set.copyOf(actorIoOperations); }
-        for (ProtosIoOperation operation : pending) operation.requestCancellation();
+    /** TERMINATING cutover hook: request cooperative cancellation without undoing commitments. */
+    public void actorTerminationBegun() {
+        Set<ProtosTask> tasks;
+        Set<ProtosIoOperation> io;
+        Set<ProtosFutureValue> nonTask;
+        synchronized (this) {
+            tasks = Set.copyOf(liveTasks);
+            io = Set.copyOf(actorIoOperations);
+            nonTask = Set.copyOf(actorNonTaskFutures);
+        }
+        for (ProtosTask task : tasks) task.requestCancellation();
+        for (ProtosIoOperation operation : io) operation.requestCancellation();
+        for (ProtosFutureValue future : nonTask) future.cancelRequest();
     }
 
+    /** Historical/internal compatibility hook; termination cancellation now starts at TERMINATING. */
+    public void actorTerminated() {
+        actorTerminationBegun();
+    }
+
+    void registerActorNonTaskFuture(ProtosFutureValue future) {
+        Objects.requireNonNull(future, "future");
+        boolean cancelNow;
+        synchronized (this) {
+            if (!future.isPending()) return;
+            actorNonTaskFutures.add(future);
+            cancelNow = ownerActor != null
+                    && (ownerActor.lifecycleState() == ProtosActor.LifecycleState.TERMINATING
+                            || ownerActor.lifecycleState() == ProtosActor.LifecycleState.TERMINATED);
+        }
+        future.observe(ignored -> terminalActorNonTaskFuture(future));
+        if (cancelNow) future.cancelRequest();
+    }
+
+    void terminalActorNonTaskFuture(ProtosFutureValue future) {
+        synchronized (this) { actorNonTaskFutures.remove(future); }
+    }
+
+    synchronized boolean hasLiveTasksForRuntime() { return !liveTasks.isEmpty(); }
+    synchronized int actorNonTaskFutureCountForTesting() { return actorNonTaskFutures.size(); }
     synchronized int actorIoOperationCountForTesting() { return actorIoOperations.size(); }
 
     void bindActor(ProtosActor actor) {

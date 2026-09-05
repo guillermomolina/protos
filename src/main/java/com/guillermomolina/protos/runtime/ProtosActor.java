@@ -1,10 +1,26 @@
 /*
  * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
- * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. See LICENSE.TXT.
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
  */
 package com.guillermomolina.protos.runtime;
 
+import java.util.ArrayList;
+import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -37,6 +53,9 @@ public final class ProtosActor {
             new AtomicReference<>(LifecycleState.INITIALIZING);
     private final AtomicReference<ProtosObjectValue> currentBehavior =
             new AtomicReference<>();
+    private final Set<ProtosActorTerminationObservation> terminationObservers =
+            new LinkedHashSet<>();
+    private boolean terminationCutoverCleanupComplete;
 
     public ProtosActor(ProtosObjectValue actorRefPrototype) {
         this(
@@ -210,21 +229,66 @@ public final class ProtosActor {
      *
      * @return true only for the call that performs the cutover
      */
-    public synchronized boolean beginTermination() {
-        while (true) {
-            LifecycleState current = lifecycle.get();
-            switch (current) {
-                case INITIALIZING, READY -> {
-                    if (lifecycle.compareAndSet(current, LifecycleState.TERMINATING)) {
-                        deliveryAdmission.lifecycleChanged();
-                        mailbox.signalRuntime();
-                        return true;
+    public boolean beginTermination() {
+        boolean transitioned = false;
+        synchronized (this) {
+            while (true) {
+                LifecycleState current = lifecycle.get();
+                switch (current) {
+                    case INITIALIZING, READY -> {
+                        if (lifecycle.compareAndSet(current, LifecycleState.TERMINATING)) {
+                            transitioned = true;
+                            break;
+                        }
+                    }
+                    case TERMINATING, TERMINATED -> {
+                        return false;
                     }
                 }
-                case TERMINATING, TERMINATED -> {
-                    return false;
-                }
+                if (transitioned) break;
             }
+        }
+
+        // The cutover owns cancellation, but producer callbacks may acquire another Actor's
+        // admission lock. Never hold this Actor monitor while requesting those cancellations.
+        deliveryAdmission.lifecycleChanged();
+        executionDomain.actorTerminationBegun();
+        mailbox.signalRuntime();
+        synchronized (this) {
+            terminationCutoverCleanupComplete = true;
+        }
+        return true;
+    }
+
+    /** Establishes graceful/fatal termination and completes it once task cleanup permits. */
+    public void requestTerminationForRuntime() {
+        beginTermination();
+        tryCompleteTerminationForRuntime();
+    }
+
+    void tryCompleteTerminationForRuntime() {
+        if (lifecycle.get() == LifecycleState.TERMINATING
+                && !executionDomain.hasLiveTasksForRuntime()) {
+            markTerminated();
+        }
+    }
+
+    boolean registerTerminationObservationForRuntime(
+            ProtosActorTerminationObservation observation) {
+        Objects.requireNonNull(observation, "observation");
+        synchronized (this) {
+            if (lifecycle.get() == LifecycleState.TERMINATED) {
+                return false;
+            }
+            terminationObservers.add(observation);
+            return true;
+        }
+    }
+
+    void unregisterTerminationObservationForRuntime(
+            ProtosActorTerminationObservation observation) {
+        synchronized (this) {
+            terminationObservers.remove(observation);
         }
     }
 
@@ -233,25 +297,30 @@ public final class ProtosActor {
      *
      * @return true only for the call that performs TERMINATING -> TERMINATED
      */
-    public synchronized boolean markTerminated() {
-        while (true) {
+    public boolean markTerminated() {
+        List<ProtosActorTerminationObservation> notify;
+        synchronized (this) {
             LifecycleState current = lifecycle.get();
-            switch (current) {
-                case TERMINATING -> {
-                    if (lifecycle.compareAndSet(
-                            LifecycleState.TERMINATING, LifecycleState.TERMINATED)) {
-                        deliveryAdmission.lifecycleChanged();
-                        mailbox.signalRuntime();
-                        return true;
-                    }
-                }
-                case TERMINATED -> {
-                    return false;
-                }
-                case INITIALIZING, READY ->
-                        throw new IllegalStateException(
-                                "Actor termination must begin before completion");
+            if (current == LifecycleState.TERMINATED) {
+                return false;
             }
+            if (current != LifecycleState.TERMINATING) {
+                throw new IllegalStateException(
+                        "Actor termination must begin before completion");
+            }
+            if (!terminationCutoverCleanupComplete
+                    || executionDomain.hasLiveTasksForRuntime()) {
+                return false;
+            }
+            lifecycle.set(LifecycleState.TERMINATED);
+            notify = new ArrayList<>(terminationObservers);
+            terminationObservers.clear();
         }
+        deliveryAdmission.lifecycleChanged();
+        mailbox.signalRuntime();
+        for (ProtosActorTerminationObservation observation : notify) {
+            observation.targetTerminated();
+        }
+        return true;
     }
 }

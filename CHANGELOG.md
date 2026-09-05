@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.105-SNAPSHOT
+
+- Implement I011-10 graceful Actor lifecycle: add public `ActorRef.stop()` and `ActorRef.termination()`, establish the irreversible stop cutover without a stop Future, and provide fresh caller-local termination observation Futures tied to one concrete incarnation.
+- Move Actor termination cancellation to the TERMINATING cutover: cancel all live Actor-local tasks (including detached work), pending Actor-originated non-task Futures and I/O operations, suppress accepted-but-undispatched work/bootstrap after the cutover, and reach TERMINATED only after required task cancellation unwind completes.
+- Preserve producer commitment/acceptance boundaries, exact request uncertainty, non-preemption of already-running non-suspending turns, and independent/cancellable termination observations. I011 remains IN_PROGRESS; distributed/Group routing, specialized capability transfer, failure authority and RootActor/Process integration remain for later slices.
+
 ## 0.2.104-SNAPSHOT
 
 - Continue I018 Core self-hosting/bootstrap minimization by constructing the internal standard `ActorRef` and `SendOperation` delegation prototypes in distributable `protos/lib/core/actor.protos` rather than allocating those prototype identities inside `ProtosStandardActorProtocol`.

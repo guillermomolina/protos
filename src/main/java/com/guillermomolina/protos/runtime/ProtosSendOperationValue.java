@@ -163,20 +163,6 @@ public final class ProtosSendOperationValue extends ProtosObjectValue {
     }
 
     private static void terminateAfterUnhandledOrCancelledTurn(ProtosActor actor) {
-        while (true) {
-            ProtosActor.LifecycleState state = actor.lifecycleState();
-            switch (state) {
-                case INITIALIZING, READY -> actor.beginTermination();
-                case TERMINATING -> {
-                    if (actor.markTerminated()) {
-                        actor.executionDomain().actorTerminated();
-                    }
-                    return;
-                }
-                case TERMINATED -> {
-                    return;
-                }
-            }
-        }
+        actor.requestTerminationForRuntime();
     }
 }

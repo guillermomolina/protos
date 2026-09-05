@@ -46,7 +46,7 @@ final class ProtosActorSendOperationTest {
                 assertInstanceOf(
                         ProtosObjectValue.class,
                         target.reference().representedDelegationParent(fixture.prelude));
-        assertEquals(Set.of("send", "request"), actorRefPrototype.localSlotsSnapshot().keySet());
+        assertEquals(Set.of("send", "request", "stop", "termination"), actorRefPrototype.localSlotsSnapshot().keySet());
         assertTrue(actorRefPrototype.isFrozen());
         assertTrue(ProtosValueLookup.lookup(target.reference(), "request", fixture.prelude).isPresent());
 

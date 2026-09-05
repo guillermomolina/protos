@@ -76,7 +76,7 @@ final class ProtosActorPublicApiTest {
         assertEquals(Set.of("spawn", "current"), installed.localSlotsSnapshot().keySet());
         assertTrue(actorRefPrototype.isFrozen());
         assertEquals(
-                Set.of("send", "request"),
+                Set.of("send", "request", "stop", "termination"),
                 actorRefPrototype.localSlotsSnapshot().keySet());
         assertTrue(sendOperationPrototype.isFrozen());
         assertEquals(

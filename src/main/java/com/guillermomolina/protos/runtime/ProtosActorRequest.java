@@ -75,6 +75,7 @@ public final class ProtosActorRequest {
                         destination, sender, selector, snapshot, callerActivation, future);
         future.attachCancellationProducer(request::cancellationRequested);
         request.beginAttempt();
+        callerActivation.executionDomain().registerActorNonTaskFuture(future);
         return future;
     }
 
@@ -212,20 +213,6 @@ public final class ProtosActorRequest {
     }
 
     private static void terminateAfterUnhandledOrCancelledTurn(ProtosActor actor) {
-        while (true) {
-            ProtosActor.LifecycleState state = actor.lifecycleState();
-            switch (state) {
-                case INITIALIZING, READY -> actor.beginTermination();
-                case TERMINATING -> {
-                    if (actor.markTerminated()) {
-                        actor.executionDomain().actorTerminated();
-                    }
-                    return;
-                }
-                case TERMINATED -> {
-                    return;
-                }
-            }
-        }
+        actor.requestTerminationForRuntime();
     }
 }
