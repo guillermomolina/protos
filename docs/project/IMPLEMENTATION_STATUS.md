@@ -131,6 +131,7 @@ Published slices:
 | Slice | Status | Version | Closure evidence | Implemented surface |
 |---|---|---|---|---|
 | I018-A | CLOSED | `0.2.92-SNAPSHOT` | `SAME_COMMIT` | Source-backed standard `Object.init` and `Object.!=` bodies loaded from `protos/lib/core/object.protos`; isolated frozen capture context prevents the process-global `Object` from retaining the main Core-construction bindings; Java retains only the current installation bridge and host-backed primitives needed by this slice. |
+| I018-B | CLOSED | `0.2.94-SNAPSHOT` | `SAME_COMMIT` | Source-backed standard `Actor` prelude object loaded from `protos/lib/core/actor.protos`; Java no longer allocates the public Actor entry object and now only installs the host-backed `spawn`/`current` bridges into that exact source-created object before freezing it. |
 
 Remaining implementation work before top-level closure:
 - inventory every Java-installed standard slot and classify it as host-irreducible, representation/selector bridge, or source-expressible;

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.94-SNAPSHOT
+
+- Continue I018 Core self-hosting/bootstrap minimization by constructing the standard `Actor` prelude entry object from distributable `protos/lib/core/actor.protos` instead of allocating that public standard object in Java.
+- Keep `Actor.spawn` and `Actor.current` as host-backed primitive bridges, install them into the exact source-created Actor object, validate its direct-`Object` parent and empty/open source shape, and freeze that same object without changing Actor semantics.
+- Add focused regression coverage that the Actor protocol installer preserves the supplied source object identity and contributes only native `spawn`/`current` behavior. I016 remains frozen at the already-published I016-C state.
+
 ## 0.2.93-SNAPSHOT
 
 - Implement I011-8 public concrete-Actor `ActorRef.send(selector, arguments...)`: require an exact semantic String selector, form the complete Actor-boundary snapshot synchronously before admission, and dispatch accepted work against the destination Actor's stable behavior/message environment while ignoring the handler's normal result.

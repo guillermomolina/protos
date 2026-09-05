@@ -56,6 +56,34 @@ final class ProtosActorPublicApiTest {
     }
 
     @Test
+    void actorProtocolInstallsIntoTheExactProvidedObjectWithoutAllocatingAReplacement() {
+        ProtosObjectValue sourceObject =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue installed =
+                new ProtosStandardActorProtocol(
+                                new ProtosModuleRuntime(ProtosModuleResolver.rejecting()),
+                                new ManualExecutor())
+                        .installActorObject(sourceObject);
+
+        assertSame(sourceObject, installed);
+        assertTrue(installed.isFrozen());
+        assertEquals(Set.of("spawn", "current"), installed.localSlotsSnapshot().keySet());
+
+        ProtosClosureValue spawn =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        installed.readLocalSlot("spawn").orElseThrow());
+        ProtosClosureValue current =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        installed.readLocalSlot("current").orElseThrow());
+        assertTrue(spawn.nativeBody().isPresent());
+        assertTrue(current.nativeBody().isPresent());
+        assertNull(spawn.definition());
+        assertNull(current.definition());
+    }
+
+    @Test
     void currentUsesActorExecutionDomainAndKeepsSemanticIdentityAfterTermination()
             throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
@@ -274,7 +302,10 @@ final class ProtosActorPublicApiTest {
 
     private static ProtosObjectValue actorObject(
             ProtosModuleRuntime runtime, Executor executor) {
-        return new ProtosStandardActorProtocol(runtime, executor).createActorObject();
+        ProtosObjectValue actorObject =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        return new ProtosStandardActorProtocol(runtime, executor)
+                .installActorObject(actorObject);
     }
 
     private static ProtosActivation actorActivation(

@@ -265,7 +265,9 @@ final class ProtosActorSendOperationTest {
         ProtosStandardActorProtocol protocol =
                 new ProtosStandardActorProtocol(
                         new ProtosModuleRuntime(resolver), bootstrapExecutor);
-        ProtosObjectValue actorObject = protocol.createActorObject();
+        ProtosObjectValue actorObject =
+                protocol.installActorObject(
+                        new ProtosObjectValue(ProtosObjectValue.rootObject()));
         ProtosActor creator =
                 new ProtosActor(new ProtosObjectValue(ProtosObjectValue.rootObject()).freeze());
         ProtosActivation creatorActivation =

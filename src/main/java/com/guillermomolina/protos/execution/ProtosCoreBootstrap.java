@@ -120,6 +120,9 @@ public final class ProtosCoreBootstrap {
         sourceLoader
                 .load(coreDirectory.resolve("future.protos"))
                 .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("actor.protos"))
+                .call(bootstrapActivation);
 
         Object contextBinding =
                 bootstrapContext
@@ -238,10 +241,12 @@ public final class ProtosCoreBootstrap {
         ProtosStandardPathProtocol.install(pathPrototype);
         ProtosObjectValue futurePrototype = requirePrototype(bootstrapContext, "Future", ProtosObjectValue.rootObject());
         ProtosStandardFutureProtocol.install(futurePrototype);
+        ProtosObjectValue actorObject =
+                requirePrototype(
+                        bootstrapContext, "Actor", ProtosObjectValue.rootObject());
         ProtosParallelRuntime.installObjectParallel();
         ProtosModuleRuntime moduleRuntime = new ProtosModuleRuntime(moduleResolver);
-        ProtosObjectValue actorObject =
-                new ProtosStandardActorProtocol(moduleRuntime).createActorObject();
+        new ProtosStandardActorProtocol(moduleRuntime).installActorObject(actorObject);
 
         // Buffered byte wrappers need an internal standard Bytes prototype; Bytes is not a required prelude binding.
         ProtosObjectValue bufferedBytesPrototype = new ProtosObjectValue(ProtosObjectValue.rootObject());

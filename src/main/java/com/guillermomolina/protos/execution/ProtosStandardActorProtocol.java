@@ -86,9 +86,18 @@ public final class ProtosStandardActorProtocol {
         return prototype.freeze();
     }
 
-    /** Creates the ordinary frozen Core prelude object whose local surface is spawn/current. */
-    public ProtosObjectValue createActorObject() {
-        ProtosObjectValue actorObject = new ProtosObjectValue(ProtosObjectValue.rootObject());
+    /** Installs host-backed Actor entry operations on the exact source-created Core object. */
+    public ProtosObjectValue installActorObject(ProtosObjectValue actorObject) {
+        Objects.requireNonNull(actorObject, "actorObject");
+        if (actorObject.parent().orElse(null) != ProtosObjectValue.rootObject()) {
+            throw new IllegalArgumentException(
+                    "Core Actor object must delegate directly to Object");
+        }
+        if (!actorObject.isOpen() || !actorObject.localSlotsSnapshot().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "source-created Core Actor object must begin open and without local slots");
+        }
+
         actorObject.createLocalSlot(
                 "spawn",
                 ProtosClosureValue.nativeClosure(
