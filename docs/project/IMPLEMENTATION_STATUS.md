@@ -257,15 +257,27 @@ Description: General-purpose collection data structures and algorithms built as
 ordinary Protos library modules on top of the existing Core collection and
 module facilities.
 
+Design record:
+- `docs/project/LIB001_COLLECTIONS_DESIGN.md` records the completed initial
+  standard-library design audit, prior-art comparison, attempted falsification,
+  rejected architecture alternatives, current recommendation, and unresolved
+  questions;
+- the record is non-normative: it constrains implementation planning but does
+  not redefine Core semantics or freeze unresolved import spellings and API
+  details as language rules.
+
 Implementation boundary:
 - distributable library source belongs under `protos/lib/collections/`;
 - existing Core `Array`, `Map`, and `IdentityMap` semantics and prototypes remain
   Core and are not reclassified as library work;
 - library API design must use ordinary Protos mechanisms and must not silently
   introduce new normative Core semantics;
-- no implementation slices or concrete collection API are assigned by this
-  governance change; define them from the current repository when LIB001 work
-  actually begins.
+- the current design recommendation is module-centric behavior over existing
+  Core collection state, with Set/IdentitySet explored first as roles over
+  `Map`/`IdentityMap` rather than new runtime collection families;
+- implementation slices and exact public API/import spellings remain unassigned
+  until the current host standard-library resolution path and the remaining API
+  questions in the design record are closed.
 
 Dependencies:
 - I004 Array completion — CLOSED;
