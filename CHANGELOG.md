@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.109-SNAPSHOT
+
+- Implement I016-D1 Filesystem open integration: host-provisioned open-only Filesystem capability, exact one/two-argument `open` bridge over the I016-A preflight/acquisition flow, and standard positioned/append File materialization through the I016-B/C File protocol with exact requested read/write/append authority.
+- Tighten open options to the normative ordinary-object domain and document the backend authority contract for confinement, race-free selection, create/truncate commitment, stable selected-resource custody, and synchronous pre-commit cancellation cleanup. Register the single new resource/capability native bridge in the post-I018 boundary guard/inventory so the full suite remains architectural evidence. I016 remains IN_PROGRESS under the recorded D1-D4 completion plan.
+
 ## 0.2.108-SNAPSHOT
 
 - Implement I011-12 GroupRef capability-identity foundation: add an opaque represented `GroupRef` value whose semantic reference identity is independent of Group identity, physical wrapper identity, and acquisition path.

@@ -91,7 +91,7 @@ Remaining implemented-surface gaps before top-level closure:
 
 Status: IN_PROGRESS
 
-Coordination note: the requested pause after I016-B was overtaken by the already-published I016-C slice before I018-A could run. I018 preserved that history and temporarily froze further I016 progress at I016-C. I018 is now closed; that coordination pause is lifted and I016 may resume from I016-D after the ordinary current-main audit.
+Coordination result: I016-D resumed only after a post-I018 current-main audit. Because I018-L guards every Java native-Closure provider, each I016-D substep that changes that boundary must update the inventory and executable guard in the same published change.
 
 Description: Core Filesystem/File semantics implemented incrementally on I013 Path and I014 byte-I/O commitment/lifecycle infrastructure.
 
@@ -108,11 +108,23 @@ Published slices:
 | I016-A | CLOSED | `0.2.87-SNAPSHOT` | `SAME_COMMIT` | Host-neutral Filesystem open preflight/acquisition substrate: exact local-option snapshot/defaults, invalid-combination precedence before backend authority, independent asynchronous opens, cancellation/portable-effect commitment handshake, backend result-custody cleanup, and Actor-termination cancellation integration. No public Filesystem/File capability surface is installed yet. |
 | I016-B | CLOSED | `0.2.89-SNAPSHOT` | `SAME_COMMIT` | Positioned File capability core: stable zero-based logical cursor independent of native cursors; ordered read/write/position/seek/seekToEnd/size/truncate/sync; exact access/optional capability shape; bounded write admission; Closable lifecycle; Actor-termination/pre-commit cancellation integration. No public Filesystem.open surface and no append mode yet. |
 | I016-C | CLOSED | `0.2.90-SNAPSHOT` | `SAME_COMMIT` | Append-mode File semantics: each non-empty write selects then-current EOF at contribution time; empty append preserves the cursor; failed-prefix aftermath is exact; same-resource File aliases use a backend-wide atomic append-placement boundary with nondeterministic relative order and no overlap/interleaving; pre-commit cancellation/Actor termination contribute nothing. |
+| I016-D1 | CLOSED | `0.2.109-SNAPSHOT` | `SAME_COMMIT` | Host-provisioned open-only Filesystem capability; `open` integration with I016-A and standard File materialization from B/C; exact ordinary options domain; authority/confinement/stable-resource backend contract; minimal mandatory I018 native-boundary registration. |
+| I016-D2 | READY | — | — | Make File/Filesystem authority explicit at runtime and close direct Actor/P transfer behavior, including authority-bearing descendants, without changing the language-visible File/Filesystem protocol. |
+| I016-D3 | BLOCKED_BY_DEPENDENCIES | — | — | After D2, run deterministic confinement/stable-binding/open-cancellation/capability-shape conformance and re-audit/reconcile the complete then-current I018 native boundary. |
+| I016-D4 | BLOCKED_BY_DEPENDENCIES | — | — | Final cross-slice conformance, project-status/dependency closure, mark I016 CLOSED and release I017 to READY after a fresh current-main audit. |
+
+Current I016-D completion plan:
+- **D1 — Filesystem open integration (CLOSED by this slice):** expose only a host-provisioned `open` capability, connect A to B/C, enforce exact ordinary options, and register the unavoidable resource bridge with the I018 guard.
+- **D2 — authority/transfer boundaries (READY):** add explicit File/Filesystem runtime authority markers and close Actor/P transfer rules without broadening the standard message surface.
+- **D3 — deterministic authority/race conformance + I018 re-audit (blocked by D2):** exercise confinement/stable selected-resource/open-cancellation/capability-shape invariants and reconcile the complete then-current native boundary.
+- **D4 — final I016 closure (blocked by D3):** run final cross-slice conformance, close I016 in the ledger, and move I017 to READY after re-auditing its current dependencies.
+
+Dependency chain: `I016-D1 -> I016-D2 -> I016-D3 -> I016-D4`.
 
 Remaining implemented-surface gaps before top-level closure:
-- language-visible Filesystem capability open surface once returned File capabilities are complete;
-- confinement/stable-resource-binding backend integration and deterministic race/conformance coverage;
-- capability transfer/provisioning boundaries plus final ledger/dependency closure.
+- explicit File/Filesystem authority-transfer boundaries;
+- deterministic confinement/stable-resource/open-race conformance on the integrated capability path;
+- final post-D2 I018 native-boundary re-audit and ledger/dependency closure.
 
 
 ### I018 — Core self-hosting / bootstrap minimization

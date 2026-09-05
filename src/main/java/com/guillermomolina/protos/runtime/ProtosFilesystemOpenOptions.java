@@ -73,9 +73,11 @@ public final class ProtosFilesystemOpenOptions {
      * @throws IllegalArgumentException when the supplied semantic options value is invalid
      */
     public static ProtosFilesystemOpenOptions capture(Object optionsValue) {
-        if (!(optionsValue instanceof ProtosObjectValue options)) {
-            throw new IllegalArgumentException("filesystem open options must be an object");
+        if (optionsValue == null || optionsValue.getClass() != ProtosObjectValue.class) {
+            throw new IllegalArgumentException(
+                    "filesystem open options must be an ordinary object");
         }
+        ProtosObjectValue options = (ProtosObjectValue) optionsValue;
 
         Map<String, Object> slots = options.localSlotsSnapshot();
         for (String name : slots.keySet()) {
