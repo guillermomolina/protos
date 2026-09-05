@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.95-SNAPSHOT
+
+- Continue I018 Core self-hosting/bootstrap minimization by constructing the standard `BufferedReader` and `BufferedWriter` frozen-prelude factory/prototype objects from distributable Core source instead of allocating those public standard identities in Java.
+- Keep buffered byte construction, capability validation, borrowing/ownership, Future, buffering, and lifecycle behavior host-backed; Java now installs only the existing `call`/`owning` primitive bridges into the exact source-created factory objects and freezes those same objects.
+- Add focused regression coverage for direct-`Object` parentage, exact `call`/`owning` surface, preserved supplied factory identity, and native bridge provenance. Restore the required full APL Part 5 notice on the touched buffered protocol/test sources. I016 remains frozen at I016-C.
+
 ## 0.2.94-SNAPSHOT
 
 - Continue I018 Core self-hosting/bootstrap minimization by constructing the standard `Actor` prelude entry object from distributable `protos/lib/core/actor.protos` instead of allocating that public standard object in Java.

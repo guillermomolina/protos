@@ -123,6 +123,12 @@ public final class ProtosCoreBootstrap {
         sourceLoader
                 .load(coreDirectory.resolve("actor.protos"))
                 .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("buffered_reader.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("buffered_writer.protos"))
+                .call(bootstrapActivation);
 
         Object contextBinding =
                 bootstrapContext
@@ -244,6 +250,12 @@ public final class ProtosCoreBootstrap {
         ProtosObjectValue actorObject =
                 requirePrototype(
                         bootstrapContext, "Actor", ProtosObjectValue.rootObject());
+        ProtosObjectValue bufferedReaderFactory =
+                requirePrototype(
+                        bootstrapContext, "BufferedReader", ProtosObjectValue.rootObject());
+        ProtosObjectValue bufferedWriterFactory =
+                requirePrototype(
+                        bootstrapContext, "BufferedWriter", ProtosObjectValue.rootObject());
         ProtosParallelRuntime.installObjectParallel();
         ProtosModuleRuntime moduleRuntime = new ProtosModuleRuntime(moduleResolver);
         new ProtosStandardActorProtocol(moduleRuntime).installActorObject(actorObject);
@@ -251,6 +263,10 @@ public final class ProtosCoreBootstrap {
         // Buffered byte wrappers need an internal standard Bytes prototype; Bytes is not a required prelude binding.
         ProtosObjectValue bufferedBytesPrototype = new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosStandardBytesProtocol.install(bufferedBytesPrototype);
+        ProtosStandardBufferedByteIoProtocol.installReaderFactory(
+                bufferedReaderFactory, bufferedBytesPrototype, bootstrapActivation);
+        ProtosStandardBufferedByteIoProtocol.installWriterFactory(
+                bufferedWriterFactory, bufferedBytesPrototype, bootstrapActivation);
 
         ProtosObjectValue preludeBindings =
                 new ProtosObjectValue(contextPrototype);
@@ -277,10 +293,8 @@ public final class ProtosCoreBootstrap {
         preludeBindings.createLocalSlot("Path", pathPrototype);
         preludeBindings.createLocalSlot("Future", futurePrototype);
         preludeBindings.createLocalSlot("Actor", actorObject);
-        preludeBindings.createLocalSlot("BufferedReader",
-                ProtosStandardBufferedByteIoProtocol.readerFactory(bufferedBytesPrototype, bootstrapActivation));
-        preludeBindings.createLocalSlot("BufferedWriter",
-                ProtosStandardBufferedByteIoProtocol.writerFactory(bufferedBytesPrototype, bootstrapActivation));
+        preludeBindings.createLocalSlot("BufferedReader", bufferedReaderFactory);
+        preludeBindings.createLocalSlot("BufferedWriter", bufferedWriterFactory);
         preludeBindings.createLocalSlot(
                 "import",
                 ProtosStandardImportProtocol.createImportFacility(moduleRuntime));

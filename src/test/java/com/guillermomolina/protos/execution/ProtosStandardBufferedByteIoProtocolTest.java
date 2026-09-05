@@ -1,4 +1,20 @@
-/* APL-1.0 licensed work; see LICENSE.TXT. */
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -33,6 +49,46 @@ class ProtosStandardBufferedByteIoProtocolTest {
     }
 
     @Test
+    void factoryProtocolInstallsIntoExactProvidedObjectsWithoutAllocatingReplacements()
+            throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosObjectValue bytesPrototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue readerSource =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue writerSource =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+
+        ProtosObjectValue reader =
+                ProtosStandardBufferedByteIoProtocol.installReaderFactory(
+                        readerSource, bytesPrototype, activation);
+        ProtosObjectValue writer =
+                ProtosStandardBufferedByteIoProtocol.installWriterFactory(
+                        writerSource, bytesPrototype, activation);
+
+        assertSame(readerSource, reader);
+        assertSame(writerSource, writer);
+        for (ProtosObjectValue factory : List.of(reader, writer)) {
+            assertSame(ProtosObjectValue.rootObject(), factory.parent().orElseThrow());
+            assertTrue(factory.isFrozen());
+            assertEquals(Set.of("call", "owning"), factory.localSlotsSnapshot().keySet());
+            ProtosClosureValue call =
+                    assertInstanceOf(
+                            ProtosClosureValue.class,
+                            factory.readLocalSlot("call").orElseThrow());
+            ProtosClosureValue owning =
+                    assertInstanceOf(
+                            ProtosClosureValue.class,
+                            factory.readLocalSlot("owning").orElseThrow());
+            assertTrue(call.nativeBody().isPresent());
+            assertTrue(owning.nativeBody().isPresent());
+            assertNull(call.definition());
+            assertNull(owning.definition());
+        }
+    }
+
+    @Test
     void factoriesAreFrozenAndCreateFreshBorrowingWrappers() throws Exception {
         ProtosPrelude prelude = core();
         ProtosActivation activation = prelude.newModuleActivation();
@@ -41,7 +97,9 @@ class ProtosStandardBufferedByteIoProtocolTest {
                         prelude.bindings()
                                 .readLocalSlot("BufferedReader")
                                 .orElseThrow();
+        assertSame(ProtosObjectValue.rootObject(), factory.parent().orElseThrow());
         assertTrue(factory.isFrozen());
+        assertEquals(Set.of("call", "owning"), factory.localSlotsSnapshot().keySet());
 
         ProtosObjectValue source = source(activation);
         ProtosObjectValue first =
