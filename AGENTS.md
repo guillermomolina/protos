@@ -390,6 +390,21 @@ can still be recovered through another available read-capable path.
 Do not declare an implementation item blocked merely because the patch-authoring
 environment lacks a local checkout or build toolchain.
 
+### Remote branches
+
+Agents MUST NOT create or push temporary, staging, validation, audit, or
+agent-specific remote branches unless the task explicitly requires a remote
+branch or pull request.
+
+Temporary branches used for patch construction, rebasing, or validation SHOULD
+remain local.
+
+For the standard patch-publication workflow, publish the validated commit
+directly to `main` only after synchronizing with the current `origin/main` and
+rerunning the required tests.
+
+Do not leave temporary remote branches behind after successful publication.
+
 ## Unresolved language-design questions
 
 When a request raises an unresolved question about what Protos should mean,
