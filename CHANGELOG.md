@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.122-SNAPSHOT
+
+- Implement I015-A standard Encoding semantic family with a source-backed frozen `Encoding` prelude factory/prototype and exactly the four mandatory portable descriptors: `Encoding.UTF8`, `Encoding.UTF16LE`, `Encoding.UTF16BE`, and `Encoding.Latin1`; no String-name constructor, alias registry, or implicit codec discovery is introduced.
+- Implement strict synchronous one-shot `encoding.encode(String) -> Bytes` and `encoding.decode(Bytes) -> String` with exact semantic argument/receiver domains, fresh open Bytes identity on every successful encode including empty output, UTF-8/UTF-16 validity checks, default consumption of one initial matching BOM without encoding switching, no default BOM emission, and exact ISO-8859-1 Latin1 behavior. Malformed/unrepresentable conversion signals `EncodingError`.
+- Add the explicit host-provisioning boundary for additional immutable Encoding descriptors and ordinary Actor/P transfer for Encoding as an authority-free immutable semantic value. Register the two-site Encoding representation bridge in I018, moving the audited boundary from 26 providers / 99 sites to 27 providers / 101 sites.
+- Start the phased I015 implementation ledger. I015 remains IN_PROGRESS for streaming TextReader/readLine/TextWriter work, but the actual dependency needed by I017-D2 is now satisfied by I015-A Encoding; I017-D2 becomes READY.
+
 ## 0.2.121-SNAPSHOT
 
 - Implement I011-16 local ActorGroup communication-operation foundation over I011-15 membership: GroupRef runtime send/request keep the original Actor-transfer snapshot while a live Group has zero eligible members, select one READY member when routing can progress, and wake pending routing when an INITIALIZING member becomes READY.

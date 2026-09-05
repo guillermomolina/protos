@@ -46,9 +46,9 @@ an item.
 | I012 | Standard Bytes | CLOSED | historical; see git history / CHANGELOG | — |
 | I013 | Standard Path | CLOSED | historical; see git history / CHANGELOG | — |
 | I014 | Standard Byte I/O | CLOSED | `2462ba74298e94181489e13de4e25dbbb82b21f9` | I009 + I012 |
-| I015 | Encoding / Text I/O | READY | — | I014 closed |
+| I015 | Encoding / Text I/O | IN_PROGRESS | — | I014 closed; I015-A Encoding closed; streaming TextReader/TextWriter slices remain |
 | I016 | Filesystem / File | CLOSED | `SAME_COMMIT` | I013 + I014; I016-A/B/C/D1/D2/D3/D4 complete |
-| I017 | Process I/O / bootstrap | IN_PROGRESS | — | I017-A/B/C/D1 closed; I017-D2 waits for I015 Encoding/Text I/O CLOSED |
+| I017 | Process I/O / bootstrap | IN_PROGRESS | — | I017-A/B/C/D1 closed; I017-D2 READY after I015-A Encoding; remaining I015 text wrappers are not a D2 dependency |
 | I018 | Core self-hosting / bootstrap minimization | CLOSED | `SAME_COMMIT` | I018-L exhaustive native-boundary inventory and architectural guard complete; I016-D pause lifted |
 
 ### I011 — Actors
@@ -90,6 +90,40 @@ Remaining implemented-surface gaps before top-level closure:
 - RootActor launcher/bootstrap provisioning and standard Process authority exposure remain to I017; the internal Process failure domain plus runtime Process-capability materialization/Actor delegation are wired, and Process remains excluded from P transfer;
 - final deterministic cross-domain Process/Actor/Group/communication race and conformance coverage before top-level I011 closure.
 
+
+### I015 — Encoding / Text I/O
+
+Status: IN_PROGRESS
+
+Normative owners:
+- `spec/io/TEXT_IO.md`
+- `spec/io/IO_CORE.md`
+- `spec/io/BYTE_IO.md` for underlying byte capability/Future/lifecycle semantics
+- `spec/semantics/OBJECT_MODEL.md` for Encoding semantic-family receiver domains
+
+Implementation plan:
+
+| Slice | Status | Version | Closure evidence | Implemented surface |
+|---|---|---|---|---|
+| I015-A | CLOSED | `0.2.122-SNAPSHOT` | `SAME_COMMIT` | Source-backed standard Encoding factory/prototype identity; four mandatory portable immutable descriptors; exact semantic-family receiver checks; strict synchronous one-shot encode/decode; fresh Bytes results; UTF validity and initial matching-BOM consumption; ISO-8859-1 Latin1; explicit host Encoding-provisioning boundary; authority-free Actor/P transfer; reviewed two-site I018 representation bridge. |
+| I015-B | READY | — | — | TextReader factory/prototype and borrowing/owning construction validation; per-flow incremental decoder/input state; ordered progress-oriented `readText`; EOF/error deferral, cancellation zero-consumption, ownership/lifecycle integration. |
+| I015-C | BLOCKED_BY_DEPENDENCIES | — | — | `readLine()` / `readLine(maxBytes)` framing over the same decoder domain: LF/CR/CRLF, EOF-final line, exact encoded-octet budget, LineTooLong lifecycle, decoding/replacement accounting and deterministic ordering. |
+| I015-D | BLOCKED_BY_DEPENDENCIES | — | — | TextWriter factory/prototype and borrowing/owning construction; per-flow encoder state; ordered `writeText`, empty-write zero-transition behavior, failure aftermath, flush/close ownership/lifecycle rules and capability honesty. |
+| I015-E | BLOCKED_BY_DEPENDENCIES | — | — | Final cross-slice Text I/O conformance, portable/host Encoding integration, post-I015 I018 boundary re-audit and canonical I015 closure. |
+
+Dependency chain: `I015-A -> I015-B -> I015-C -> I015-D -> I015-E`.
+
+Coordination with I017:
+- I017-D2 requires the standardized Encoding semantic family/descriptors and host-provisioning boundary, all closed by I015-A.
+- TextReader/TextWriter are ordinary explicit layering facilities and are not prerequisites for Process standard-stream Encoding association.
+- Therefore I017-D2 is READY after I015-A even while top-level I015 remains IN_PROGRESS.
+
+Current implementation boundary after I015-A:
+- `Encoding` is a required frozen prelude factory/prototype, source-created in `protos/lib/core/encoding.protos`;
+- the only mandatory descriptors are `UTF8`, `UTF16LE`, `UTF16BE`, and `Latin1`; no public name constructor/registry/aliases exist;
+- one-shot encode/decode are synchronous strict operations with exact String/Bytes domains and Encoding-family receiver validation;
+- descriptors are immutable and reusable with no shared mutable per-flow codec state or I/O authority;
+- TextReader, readLine and TextWriter remain unimplemented and begin at I015-B.
 
 ### I016 — Filesystem / File
 
@@ -162,7 +196,7 @@ Published / planned slices:
 | I017-B | CLOSED | `0.2.117-SNAPSHOT` | `SAME_COMMIT` | Canonical immutable Process-argument snapshot: one-time complete host capture with stable representability outcome; exact `size`/zero-based `at`/polymorphic ordered `each`; same canonical identity on repeated Process acquisition; fresh destination identity with alias preservation for ordinary Actor/P transfer; reviewed I018 representation bridge at 3 native sites. |
 | I017-C | CLOSED | `0.2.118-SNAPSHOT` | `SAME_COMMIT` | Canonical read-only Environment snapshot with stable Process acquisition outcome/identity; duplicate-native-name rejection; exact query representability and native identity; selective value decoding for get/contains; polymorphic each with whole-snapshot String prevalidation and canonical Unicode-scalar ordering; ordinary Actor/P value-copy identity; reviewed 3-site I018 representation bridge. |
 | I017-D1 | CLOSED | `0.2.119-SNAPSHOT` | `SAME_COMMIT` | Stable independently optional stdin/stdout/stderr bindings; repeated/Actor-delegated views share one logical per-binding queue; exact read-only/write-only surface with no implicit lifecycle/File/text authority; Actor-local Futures use I014 cancellation/commitment machinery; termination blocks new work; P rejects live stream authority; reviewed 2-site I018 resource bridge. |
-| I017-D2 | BLOCKED_BY_DEPENDENCIES | — | — | `stdinEncoding`/`stdoutEncoding`/`stderrEncoding` bootstrap associations and availability coupling. Requires I017-D1 and I015 CLOSED. |
+| I017-D2 | READY | — | — | `stdinEncoding`/`stdoutEncoding`/`stderrEncoding` bootstrap associations and availability coupling. Requires I017-D1 and the Encoding semantic family/descriptors closed by I015-A; remaining TextReader/TextWriter work is independent. |
 | I017-E | BLOCKED_BY_DEPENDENCIES | — | — | Complete standard Process prototype/accessor bridge plus RootActor initial-module bootstrap provisioning of `process` and optional `filesystem`; host/CLI bootstrap capture of application args, environment and available standard bindings; imported modules receive no ambient capability; all accessors reject use after Process termination cutover. Requires B/C/D1/D2. |
 | I017-F | BLOCKED_BY_DEPENDENCIES | — | — | Final Process/Actor/termination authority conformance, post-I017 I018 native-boundary re-audit, CLI/runtime integration regression suite and canonical I017 closure. |
 
@@ -176,7 +210,7 @@ Current implementation boundary after I017-D1:
 - the deliberately Actor-safe standard-stream view rematerializes as a fresh proxy to the same binding on Actor transfer, while P rejects the live authority;
 - no public `Process` prelude binding/source prototype is added yet, so args/environment/standard streams are not yet acquired through application-visible Process accessors;
 - no bootstrap-local `process` or `filesystem` slot is injected yet;
-- Encoding association remains I017-D2 and requires I015 CLOSED;
+- Encoding association remains I017-D2; its actual Encoding-family dependency is satisfied by I015-A, so D2 is READY while TextReader/TextWriter continue independently;
 - Process capability transfer is explicit across Actor boundaries and absent from P; Process termination rejects new standard-stream work and Actor termination cancellation covers already-admitted uncommitted operations.
 
 ### I018 — Core self-hosting / bootstrap minimization

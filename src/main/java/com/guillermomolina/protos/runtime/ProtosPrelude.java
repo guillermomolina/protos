@@ -137,6 +137,10 @@ public final class ProtosPrelude {
         return requiredOrdinaryBinding("String");
     }
 
+    public ProtosObjectValue encodingPrototype() {
+        return requiredOrdinaryBinding("Encoding");
+    }
+
     public ProtosObjectValue identityMapPrototype() {
         return requiredOrdinaryBinding("IdentityMap");
     }

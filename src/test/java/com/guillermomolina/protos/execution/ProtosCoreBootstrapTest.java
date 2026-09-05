@@ -132,6 +132,7 @@ class ProtosCoreBootstrapTest {
                         "LineTooLong",
                         "Array",
                         "String",
+                        "Encoding",
                         "Map",
                         "IdentityMap",
                         "Path",

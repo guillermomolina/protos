@@ -52,6 +52,7 @@ the standard native boundary.
 | `ProtosStandardArrayProtocol.java` | 5 | representation bridge | Array factory/index mutation/size own indexed representation state; `each` also requires eager callability validation and a start-of-operation snapshot. |
 | `ProtosStandardProcessArgumentsProtocol.java` | 3 | representation bridge | Immutable Process-argument snapshots own an opaque captured indexed representation; `size`/`at` expose that representation and `each` requires eager polymorphic-callability validation before ordered callback invocation. The helper prototype is construction-only and not a Core-prelude authority or named standard prototype. |
 | `ProtosStandardEnvironmentProtocol.java` | 3 | representation bridge | Standardized Environment snapshots retain opaque native-name identity/representability state. `get`/`contains` preserve native query semantics and selective value decoding; `each` performs eager callability plus whole-snapshot portable String validation before canonical Unicode-scalar-order callbacks. Environment remains outside the required Core prelude and is not a Map subtype. |
+| `ProtosStandardEncodingProtocol.java` | 2 | representation bridge | Encoding semantic-family receiver validation and exact one-shot String/Bytes conversion cross immutable descriptor and codec representations. The source-backed Encoding factory exposes only the four required portable descriptors plus native `encode`/`decode`; default UTF decoding is strict, matching initial BOMs are consumed, Latin1 is ISO-8859-1, and each encode produces fresh standard Bytes. |
 | `ProtosStandardProcessStreamProtocol.java` | 2 | resource/capability bridge | Process standard-stream views expose exactly one byte direction (`read` for stdin or `write` for stdout/stderr) over Process-local shared ordering/backpressure bindings. Actor transfer rematerializes an Actor-local proxy to the same binding; P rejects the live authority; no Closable/File/text/seek/flush surface is inferred. |
 | `ProtosStandardMapProtocol.java` | 7 | representation bridge | Map storage, recorded hashes, reentrancy restrictions, mutation state, lookup equality callbacks, and iteration snapshots are receiver-owned keyed representation semantics. |
 | `ProtosStandardIdentityMapProtocol.java` | 7 | representation bridge | IdentityMap storage and lookup require primitive semantic identity/identityHash plus keyed representation state and iteration snapshots. |
@@ -67,7 +68,7 @@ the standard native boundary.
 | `ProtosStandardFileProtocol.java` | 10 | resource/capability bridge | File objects are acquired resource capabilities whose exact local surface depends on backend-provided authority and whose operations own cursor/append/sync/close/commitment state. |
 | `ProtosStandardFilesystemProtocol.java` | 1 | resource/capability bridge | Host-provisioned Filesystem authority exposes the standard `open` bridge; its backend owns confined/race-free namespace selection, create/truncate commitment, stable-resource acquisition, cancellation cleanup, and standard File materialization. |
 
-Total audited production construction sites: **99 across 26 providers**.
+Total audited production construction sites: **101 across 27 providers**.
 
 I018-L closed with the 90-site/22-provider baseline. I016-D1 was an explicitly
 reviewed post-I018 resource/capability extension adding exactly one
@@ -101,6 +102,13 @@ to **99 sites across 26 providers**. The Process-local binding owns cross-view a
 cross-Actor ordering/backpressure state; Actor-local views expose no implicit
 Closable/File/text/seek/flush authority and the live stream capability has no P
 transfer contract.
+
+I015-A is a reviewed post-I018 representation-boundary extension. The standard
+Encoding factory/prototype identity is source-backed in `protos/lib/core/encoding.protos`;
+Java adds exactly two native-Closure construction sites for represented one-shot
+`encode`/`decode`, bringing the current boundary to **101 sites across 27 providers**.
+The immutable descriptors carry no I/O authority; there is no String-name registry,
+alias lookup, host codec discovery, or public constructor.
 
 ## Source-backed I018 invariants
 

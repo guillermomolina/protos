@@ -48,6 +48,7 @@ _corePreludeBindings: Context {
     LineTooLong: LineTooLong
     Array: Array
     String: String
+    Encoding: Encoding
     Map: Map
     IdentityMap: IdentityMap
     Path: Path

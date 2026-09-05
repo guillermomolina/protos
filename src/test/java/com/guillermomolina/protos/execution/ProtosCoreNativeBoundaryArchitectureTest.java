@@ -58,6 +58,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardArrayProtocol.java", 5),
                     Map.entry("execution/ProtosStandardProcessArgumentsProtocol.java", 3),
                     Map.entry("execution/ProtosStandardEnvironmentProtocol.java", 3),
+                    Map.entry("execution/ProtosStandardEncodingProtocol.java", 2),
                     Map.entry("execution/ProtosStandardProcessStreamProtocol.java", 2),
                     Map.entry("execution/ProtosStandardBytesProtocol.java", 7),
                     Map.entry("execution/ProtosStandardByteIoProtocol.java", 12),
@@ -97,8 +98,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         }
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actual);
-        assertEquals(26, actual.size());
-        assertEquals(99, actual.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(27, actual.size());
+        assertEquals(101, actual.values().stream().mapToInt(Integer::intValue).sum());
 
         String inventory =
                 Files.readString(Path.of("docs", "project", "CORE_NATIVE_BOUNDARY.md"));
@@ -183,6 +184,10 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 "String",
                 prelude.stringPrototype(),
                 Set.of("size", "at", "+", "hash"));
+        assertNativeSelectors(
+                "Encoding",
+                prelude.encodingPrototype(),
+                Set.of("encode", "decode"));
         assertNativeSelectors(
                 "Map",
                 prelude.mapPrototype(),

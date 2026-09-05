@@ -122,6 +122,9 @@ public final class ProtosActorValueTransfer {
                         new ProtosPathValue(
                                 prelude.pathPrototype(), path.rooted(), path.components()));
             }
+            if (value instanceof ProtosEncodingValue encoding) {
+                return remember(value, encoding.transferForActorRuntime());
+            }
             if (value instanceof ProtosActorRefValue actorRef) {
                 return remember(value, actorRef.rematerializeForActorTransfer());
             }

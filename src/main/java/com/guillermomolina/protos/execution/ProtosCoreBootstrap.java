@@ -109,6 +109,9 @@ public final class ProtosCoreBootstrap {
                 .load(coreDirectory.resolve("string.protos"))
                 .call(bootstrapActivation);
         sourceLoader
+                .load(coreDirectory.resolve("encoding.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
                 .load(coreDirectory.resolve("map.protos"))
                 .call(bootstrapActivation);
         sourceLoader
@@ -290,6 +293,13 @@ public final class ProtosCoreBootstrap {
                         bootstrapContext, "Bytes", ProtosObjectValue.rootObject());
         bootstrapContext.removeLocalSlot("Bytes");
         ProtosStandardBytesProtocol.install(bufferedBytesPrototype);
+
+        ProtosObjectValue encodingPrototype =
+                requirePrototype(
+                        bootstrapContext, "Encoding", ProtosObjectValue.rootObject());
+        ProtosStandardEncodingProtocol.install(
+                encodingPrototype, bufferedBytesPrototype);
+
         ProtosStandardBufferedByteIoProtocol.installReaderFactory(
                 bufferedReaderFactory, bufferedBytesPrototype, bootstrapActivation);
         ProtosStandardBufferedByteIoProtocol.installWriterFactory(
