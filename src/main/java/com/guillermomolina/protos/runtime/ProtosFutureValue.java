@@ -19,12 +19,17 @@ public final class ProtosFutureValue extends ProtosObjectValue {
     @FunctionalInterface
     public interface Observer { void terminal(ProtosFutureValue future); }
 
+    /** Producer-side cancellation bridge for pending work that is not backed by a Task. */
+    @FunctionalInterface
+    public interface CancellationProducer { void cancellationRequested(); }
+
     private final ProtosActorExecutionDomain domain;
     private State state = State.PENDING;
     private Object value;
     private ProtosObjectValue error;
     private ProtosTask producerTask;
     private ProtosActivation producerActivation;
+    private CancellationProducer cancellationProducer;
     private boolean detached;
     private ProtosFutureValue adoptedSource;
     private Observer adoptedObserver;
@@ -50,6 +55,14 @@ public final class ProtosFutureValue extends ProtosObjectValue {
         if (producerTask != null && producerTask != task) throw new IllegalStateException("Future already has a producer task");
         producerTask = task;
         producerActivation = Objects.requireNonNull(activation, "activation");
+    }
+
+    public synchronized void attachCancellationProducer(CancellationProducer producer) {
+        Objects.requireNonNull(producer, "producer");
+        if (producerTask != null) throw new IllegalStateException("Task-backed Future already owns cancellation");
+        if (cancellationProducer != null && cancellationProducer != producer)
+            throw new IllegalStateException("Future already has a cancellation producer");
+        cancellationProducer = producer;
     }
 
     public synchronized ProtosActivation producerActivation() {
@@ -78,12 +91,18 @@ public final class ProtosFutureValue extends ProtosObjectValue {
 
     public boolean cancelRequest() {
         ProtosTask producer;
+        CancellationProducer cancellation;
         synchronized (this) {
             if (state != State.PENDING) return false;
             producer = producerTask;
+            cancellation = cancellationProducer;
         }
         if (producer != null) {
             producer.requestCancellation();
+            return true;
+        }
+        if (cancellation != null) {
+            cancellation.cancellationRequested();
             return true;
         }
         return transition(State.CANCELLED, null, null);

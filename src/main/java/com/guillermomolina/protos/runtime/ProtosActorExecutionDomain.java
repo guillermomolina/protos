@@ -20,6 +20,7 @@ import java.util.Set;
 public final class ProtosActorExecutionDomain {
     private final ArrayDeque<ProtosTask> runnable = new ArrayDeque<>();
     private final Set<ProtosTask> liveTasks = new LinkedHashSet<>();
+    private final Set<ProtosIoOperation> actorIoOperations = new LinkedHashSet<>();
 
     public ProtosTask createTask(
             ProtosTask parent, Object associatedFuture, ProtosTask.Continuation continuation) {
@@ -99,6 +100,23 @@ public final class ProtosActorExecutionDomain {
             task.parent().ifPresent(parent -> parent.removeChild(task));
         }
     }
+
+    void registerActorIoOperation(ProtosIoOperation operation) {
+        synchronized (this) { actorIoOperations.add(Objects.requireNonNull(operation, "operation")); }
+    }
+
+    void terminalActorIoOperation(ProtosIoOperation operation) {
+        synchronized (this) { actorIoOperations.remove(operation); }
+    }
+
+    /** Runtime Actor-incarnation termination hook; pending I/O receives ordinary cancellation requests. */
+    public void actorTerminated() {
+        Set<ProtosIoOperation> pending;
+        synchronized (this) { pending = Set.copyOf(actorIoOperations); }
+        for (ProtosIoOperation operation : pending) operation.requestCancellation();
+    }
+
+    synchronized int actorIoOperationCountForTesting() { return actorIoOperations.size(); }
 
     private void requireOwned(ProtosTask task) {
         if (task.owner() != this) {
