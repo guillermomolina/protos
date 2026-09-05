@@ -282,7 +282,7 @@ work may proceed without waiting for an earlier-numbered roadmap item.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| LIB001 | Collections library | READY | — | I004 + I005 + I006 + I008 + CLI004 closed; Set/IdentitySet contract is closed and LIB001-A is READY; implement as ordinary distributable modules under `protos/lib/collections/` using `std:collections/...` imports without redefining Core collection semantics. |
+| LIB001 | Collections library | IN_PROGRESS | — | I004 + I005 + I006 + I008 + CLI004 closed; LIB001-A is CLOSED at `0.2.125-SNAPSHOT`, LIB001-B is READY, and later slices remain dependency/audit gated. |
 | LIB002 | Text / encoding conveniences | BLOCKED_BY_DEPENDENCIES | — | I015 is not closed; ordinary library conveniences may build on Encoding/Text I/O but must not redefine their Core semantics. |
 | LIB003 | JSON / serialization | BLOCKED_BY_DEPENDENCIES | — | LIB001 is not closed; design exact text/encoding and stream-adapter dependencies from the then-current repository rather than assuming roadmap order is dependency order. |
 | LIB004 | Filesystem / process conveniences | BLOCKED_BY_DEPENDENCIES | — | I016 and I017 are not closed; convenience APIs must preserve Filesystem/Process authority boundaries and may not manufacture ambient host authority. |
@@ -290,7 +290,7 @@ work may proceed without waiting for an earlier-numbered roadmap item.
 
 ### LIB001 — Collections
 
-Status: READY
+Status: IN_PROGRESS
 
 Description: General-purpose collection data structures and algorithms built as
 ordinary Protos library modules on top of the existing Core collection and
@@ -331,13 +331,13 @@ Implementation boundary:
 
 Planned slices:
 
-| Slice | Status | Scope / unblock condition |
-|---|---|---|
-| LIB001-A | READY | Set/IdentitySet ordinary modules: `key -> true` representation, variadic module-call construction, `contains`, `size`, focal conformance. |
-| LIB001-B | BLOCKED_BY_DEPENDENCIES | Add `add`, `remove`, one-argument `each`, state/order/snapshot/failure conformance; depends on LIB001-A CLOSED. |
-| LIB001-C | BLOCKED_BY_DEPENDENCIES | Fresh Set algebra + predicates + Set-area Actor/identity/order/final conformance; depends on LIB001-B CLOSED. |
-| LIB001-D | OPEN | Eager Array `map`/`filter`/`findIndex`; becomes READY only after a fresh current-main audit closes callback, snapshot/mutation, and `findIndex` absence contracts. |
-| LIB001-E | BLOCKED_BY_DEPENDENCIES | Eager Array `reduce`/`sort` plus final cross-slice LIB001 validation/closure; requires LIB001-D CLOSED and the reduce/sort contracts audited before implementation. |
+| Slice | Status | Version | Closure evidence | Scope / unblock condition |
+|---|---|---|---|---|
+| LIB001-A | CLOSED | `0.2.125-SNAPSHOT` | `SAME_COMMIT` | Set/IdentitySet ordinary modules: `key -> true` representation, variadic module-call construction, `contains`, `size`, focal real-`std:` conformance. |
+| LIB001-B | READY | — | — | Add `add`, `remove`, one-argument `each`, state/order/snapshot/failure conformance; LIB001-A is CLOSED. |
+| LIB001-C | BLOCKED_BY_DEPENDENCIES | — | — | Fresh Set algebra + predicates + Set-area Actor/identity/order/final conformance; depends on LIB001-B CLOSED. |
+| LIB001-D | OPEN | — | — | Eager Array `map`/`filter`/`findIndex`; becomes READY only after a fresh current-main audit closes callback, snapshot/mutation, and `findIndex` absence contracts. |
+| LIB001-E | BLOCKED_BY_DEPENDENCIES | — | — | Eager Array `reduce`/`sort` plus final cross-slice LIB001 validation/closure; requires LIB001-D CLOSED and the reduce/sort contracts audited before implementation. |
 
 Dependencies:
 - I004 Array completion — CLOSED;

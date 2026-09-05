@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.125-SNAPSHOT
+
+- Implement LIB001-A as ordinary distributable Protos modules `std:collections/set` and `std:collections/identity_set`, with variadic module-call construction over fresh open Map/IdentityMap state and canonical `key -> true` representation.
+- Add initial `contains` and `size` library observations, preserve normal Map equality versus IdentityMap semantic-identity membership and first-representative insertion order through the existing keyed protocols, and add focal real-`std:` module conformance without introducing a runtime Set family, wrapper, prototype, or native boundary.
+
 ## 0.2.124-SNAPSHOT
 
 - Implement I011-17 language-visible GroupRef communication surface: create the hidden source-backed GroupRef delegation prototype in Core bootstrap and install exactly `send` / `request`, with no `stop`, `termination`, controller, Authority, broadcast, or acquisition selector.
