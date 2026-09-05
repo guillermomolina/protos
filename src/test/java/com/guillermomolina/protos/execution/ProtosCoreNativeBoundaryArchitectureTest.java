@@ -56,6 +56,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardFilesystemProtocol.java", 1),
                     Map.entry("execution/ProtosStandardPathProtocol.java", 6),
                     Map.entry("execution/ProtosStandardArrayProtocol.java", 5),
+                    Map.entry("execution/ProtosStandardProcessArgumentsProtocol.java", 3),
                     Map.entry("execution/ProtosStandardBytesProtocol.java", 7),
                     Map.entry("execution/ProtosStandardByteIoProtocol.java", 12),
                     Map.entry("execution/ProtosStandardObjectProtocol.java", 2),
@@ -94,8 +95,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         }
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actual);
-        assertEquals(23, actual.size());
-        assertEquals(91, actual.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(24, actual.size());
+        assertEquals(94, actual.values().stream().mapToInt(Integer::intValue).sum());
 
         String inventory =
                 Files.readString(Path.of("docs", "project", "CORE_NATIVE_BOUNDARY.md"));
@@ -213,6 +214,13 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
     @Test
     void internalAndHelperBackedStandardSurfacesStayExplicit() throws Exception {
+        ProtosObjectValue processArgumentsPrototype =
+                ProtosStandardProcessArgumentsProtocol.createPrototype();
+        assertNativeSelectors(
+                "ProcessArguments",
+                processArgumentsPrototype,
+                Set.of("size", "at", "each"));
+
         ProtosObjectValue bytesPrototype =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosStandardBytesProtocol.install(bytesPrototype);

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.117-SNAPSHOT
+
+- Implement I017-B canonical Process-argument bootstrap snapshots: one stable immutable snapshot per Process after complete one-time host capture, stable UNREPRESENTABLE outcome for invalid Unicode bootstrap data, exact `size`/zero-based `at`/polymorphic ordered `each`, no Array mutability, and no host argv re-read after establishment.
+- Distinguish canonical acquisition from isolation transfer: repeated acquisition from the same Process returns the same semantic snapshot identity, distinct Processes remain distinct, while ordinary Actor and P transfer rematerialize immutable destination snapshots with fresh semantic identity and preserve aliases within one transfer graph.
+- Register the three-site Process-argument representation bridge in the reviewed I018 boundary, moving the audited total from 23 providers / 91 sites to 24 providers / 94 sites. I017-B is CLOSED and I017-C becomes READY; the external I015 dependency remains only for I017-D2 Encoding accessors.
+
 ## 0.2.116-SNAPSHOT
 
 - Implement I011-15 internal ActorGroup routing foundation: add one stable local ActorGroup runtime identity with explicit membership, live/terminated lifecycle, and routing eligibility that selects only READY concrete Actor members while allowing a live Group to have zero eligible members.

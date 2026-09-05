@@ -48,7 +48,7 @@ an item.
 | I014 | Standard Byte I/O | CLOSED | `2462ba74298e94181489e13de4e25dbbb82b21f9` | I009 + I012 |
 | I015 | Encoding / Text I/O | READY | — | I014 closed |
 | I016 | Filesystem / File | CLOSED | `SAME_COMMIT` | I013 + I014; I016-A/B/C/D1/D2/D3/D4 complete |
-| I017 | Process I/O / bootstrap | IN_PROGRESS | — | I016 closed; I017-A reconciled with published I011-14; I017-B READY; Encoding accessor integration additionally requires I015 CLOSED |
+| I017 | Process I/O / bootstrap | IN_PROGRESS | — | I017-A/B closed; I017-C READY; Encoding accessor integration additionally requires I015 CLOSED |
 | I018 | Core self-hosting / bootstrap minimization | CLOSED | `SAME_COMMIT` | I018-L exhaustive native-boundary inventory and architectural guard complete; I016-D pause lifted |
 
 ### I011 — Actors
@@ -158,8 +158,8 @@ Published / planned slices:
 | Slice | Status | Version | Closure evidence | Implemented surface |
 |---|---|---|---|---|
 | I017-A | CLOSED | `0.2.115-SNAPSHOT` | `SAME_COMMIT + I011-14_REUSED` | Reconciled/validated Process capability foundation already published by I011-14: runtime-provisioned Actor-local proxies; explicit fresh Actor rematerialization to the same logical Process authority; graph alias preservation; authority-bearing descendants rebuilt over the destination proxy; Process excluded from P; provisioning rejected after Process termination begins. No duplicate Process representation or public accessor surface introduced. |
-| I017-B | READY | — | — | Canonical immutable Process-argument snapshot: complete bootstrap capture/representability outcome, stable semantic identity per Process, exact `size`/`at`/polymorphic `each`, and ordinary Actor value transfer distinct from canonical re-acquisition. |
-| I017-C | BLOCKED_BY_DEPENDENCIES | — | — | Standard read-only Environment snapshot: native-name identity/representability boundary, stable acquisition outcome and semantic identity, `get`/`contains`, deterministic scalar-order `each` with whole-snapshot representability prevalidation. Sequenced after B for implementation safety. |
+| I017-B | CLOSED | `0.2.117-SNAPSHOT` | `SAME_COMMIT` | Canonical immutable Process-argument snapshot: one-time complete host capture with stable representability outcome; exact `size`/zero-based `at`/polymorphic ordered `each`; same canonical identity on repeated Process acquisition; fresh destination identity with alias preservation for ordinary Actor/P transfer; reviewed I018 representation bridge at 3 native sites. |
+| I017-C | READY | — | — | Standard read-only Environment snapshot: native-name identity/representability boundary, stable acquisition outcome and semantic identity, `get`/`contains`, deterministic scalar-order `each` with whole-snapshot representability prevalidation. |
 | I017-D1 | BLOCKED_BY_DEPENDENCIES | — | — | Process-local standard byte-stream binding substrate: independently optional stdin/stdout/stderr, synchronous non-waiting acquisition, exact ByteReadable/ByteWritable-only capability shape, shared logical ordering domains across repeated Actor-local views, no implicit Closable/File/text surface. |
 | I017-D2 | BLOCKED_BY_DEPENDENCIES | — | — | `stdinEncoding`/`stdoutEncoding`/`stderrEncoding` bootstrap associations and availability coupling. Requires I017-D1 and I015 CLOSED. |
 | I017-E | BLOCKED_BY_DEPENDENCIES | — | — | Complete standard Process prototype/accessor bridge plus RootActor initial-module bootstrap provisioning of `process` and optional `filesystem`; host/CLI bootstrap capture of application args, environment and available standard bindings; imported modules receive no ambient capability; all accessors reject use after Process termination cutover. Requires B/C/D1/D2. |
@@ -167,11 +167,12 @@ Published / planned slices:
 
 Dependency chain: `I017-A -> I017-B -> I017-C -> I017-D1 -> I017-D2 -> I017-E -> I017-F`, with the additional external dependency `I015 CLOSED -> I017-D2`.
 
-Current implementation boundary after I017-A:
+Current implementation boundary after I017-B:
 - I017 deliberately reuses `ProtosProcessCapabilityValue` from I011-14; there is one Process-capability representation, not parallel I011/I017 variants;
-- no public `Process` prelude binding/source prototype is added yet;
+- Process argument bootstrap data now has one stable canonical immutable snapshot or one stable UNREPRESENTABLE outcome per Process; successful snapshots implement only `size`/`at`/`each` and may cross Actor/P as ordinary immutable value copies with destination identity;
+- no public `Process` prelude binding/source prototype is added yet, so the snapshot is not yet acquired through `process.args()` by application code;
 - no bootstrap-local `process` or `filesystem` slot is injected yet;
-- no host arguments, environment or standard-stream data are acquired yet;
+- no Environment or standard-stream data are acquired yet;
 - Process capability transfer is explicit across Actor boundaries and absent from P;
 - new Process-capability provisioning is rejected once Process termination begins; the future observable Process accessor bridge must also reject every existing proxy after the termination cutover.
 

@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.runtime;
 
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
@@ -37,10 +38,19 @@ public final class ProtosProcessRuntime {
         TERMINATED
     }
 
+    public enum ArgumentsSnapshotState {
+        UNESTABLISHED,
+        AVAILABLE,
+        UNREPRESENTABLE
+    }
+
     private final ProtosActor rootActor;
     private final Set<ProtosActor> liveActors = new LinkedHashSet<>();
     private LifecycleState lifecycle = LifecycleState.RUNNING;
     private Object rootFailureCause;
+    private ArgumentsSnapshotState argumentsSnapshotState =
+            ArgumentsSnapshotState.UNESTABLISHED;
+    private ProtosProcessArgumentsValue argumentsSnapshot;
 
     /** Creates one Process incarnation together with its unique RootActor. */
     public ProtosProcessRuntime(ProtosObjectValue actorRefPrototype) {
@@ -58,6 +68,58 @@ public final class ProtosProcessRuntime {
 
     public ProtosActor rootActorForRuntime() {
         return rootActor;
+    }
+
+    /**
+     * Captures the complete application-argument bootstrap snapshot exactly once.
+     *
+     * <p>The host supplies application arguments only; executable/argv[0] identity is outside this
+     * sequence. The complete detached host list is validated before any portable snapshot becomes
+     * available. An unrepresentable element records one stable UNREPRESENTABLE bootstrap outcome;
+     * later host mutation or a second establishment attempt cannot change that result.
+     */
+    public synchronized ArgumentsSnapshotState establishArgumentsForRuntime(
+            ProtosObjectValue argumentsPrototype, List<String> hostArguments) {
+        Objects.requireNonNull(argumentsPrototype, "argumentsPrototype");
+        Objects.requireNonNull(hostArguments, "hostArguments");
+        if (lifecycle != LifecycleState.RUNNING) {
+            throw new IllegalStateException(
+                    "Process arguments cannot be established after termination begins");
+        }
+        if (argumentsSnapshotState != ArgumentsSnapshotState.UNESTABLISHED) {
+            throw new IllegalStateException(
+                    "Process arguments bootstrap snapshot is already established");
+        }
+
+        try {
+            argumentsSnapshot =
+                    ProtosProcessArgumentsValue.captureForRuntime(
+                            argumentsPrototype, hostArguments);
+            argumentsSnapshotState = ArgumentsSnapshotState.AVAILABLE;
+        } catch (IllegalArgumentException | NullPointerException unrepresentable) {
+            argumentsSnapshot = null;
+            argumentsSnapshotState = ArgumentsSnapshotState.UNREPRESENTABLE;
+        }
+        return argumentsSnapshotState;
+    }
+
+    public synchronized ArgumentsSnapshotState argumentsSnapshotStateForRuntime() {
+        return argumentsSnapshotState;
+    }
+
+    /**
+     * Returns the canonical Process argument snapshot when bootstrap conversion succeeded.
+     *
+     * <p>UNESTABLISHED is a launcher/integration error. UNREPRESENTABLE intentionally returns empty
+     * so the later Process accessor can create a fresh ordinary Error occurrence per failed call.
+     */
+    public synchronized Optional<ProtosProcessArgumentsValue>
+            argumentsSnapshotForRuntime() {
+        if (argumentsSnapshotState == ArgumentsSnapshotState.UNESTABLISHED) {
+            throw new IllegalStateException(
+                    "Process arguments bootstrap snapshot is not established");
+        }
+        return Optional.ofNullable(argumentsSnapshot);
     }
 
     /**
