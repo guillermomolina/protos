@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.138-SNAPSHOT
+
+- Close LIB001-B for `std:collections/Set` and `std:collections/IdentitySet` with ordinary Protos `add`, `remove`, and member-only `each`: `add` performs exactly one underlying `atPut(element, true)`, `remove` exactly one keyed removal, and both return the exact Set object after normal completion.
+- Preserve the underlying Map/IdentityMap open/closed/frozen mutation laws, existing representative/insertion position on duplicate add, absent-remove Error behavior, and insertion-order shallow-snapshot traversal; Set `each` adapts the keyed `(element, marker)` callback to exactly `block(element)` without adding a callability primitive or runtime Set family.
+- Add focal conformance for both modules covering receiver identity, canonical `true` markers, closed/frozen state, duplicate representatives, snapshot mutation, deterministic visit order, empty/non-empty callback validation, arity/invocation failure propagation, and transition LIB001-C to READY.
+
 ## 0.2.137-SNAPSHOT
 
 - Implement I011-21 / D039 public ActorGroup acquisition with the exact frozen-Core selector `Actor.group(firstMember, additionalMembers...) -> GroupRef`: validate the complete evaluated argument vector as ActorRefs before cutover, create one fresh Group identity plus one fresh GroupRef acquisition, and collapse duplicate Actor incarnations into set membership.

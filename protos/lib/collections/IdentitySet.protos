@@ -28,3 +28,20 @@ contains: (set, element) => {
 size: (set) => {
     set.size()
 }
+
+add: (set, element) => {
+    set.atPut(element, true)
+    set
+}
+
+remove: (set, element) => {
+    set.remove(element)
+    set
+}
+
+each: (set, block) => {
+    set.each((element, marker) => {
+        block(element)
+    })
+    set
+}

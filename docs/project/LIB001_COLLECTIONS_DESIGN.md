@@ -1,6 +1,6 @@
 # LIB001 Collections Design Record
 
-Status: Set/IdentitySet contract closed; implementation slices assigned; implementation not started
+Status: Set/IdentitySet contract closed; LIB001-A and LIB001-B closed; LIB001-C ready
 Work item: `LIB001`
 Nature: Project design record; **non-normative**
 
