@@ -44,6 +44,12 @@ public final class ProtosProcessRuntime {
         UNREPRESENTABLE
     }
 
+    public enum EnvironmentSnapshotState {
+        UNESTABLISHED,
+        AVAILABLE,
+        INVALID
+    }
+
     private final ProtosActor rootActor;
     private final Set<ProtosActor> liveActors = new LinkedHashSet<>();
     private LifecycleState lifecycle = LifecycleState.RUNNING;
@@ -51,6 +57,9 @@ public final class ProtosProcessRuntime {
     private ArgumentsSnapshotState argumentsSnapshotState =
             ArgumentsSnapshotState.UNESTABLISHED;
     private ProtosProcessArgumentsValue argumentsSnapshot;
+    private EnvironmentSnapshotState environmentSnapshotState =
+            EnvironmentSnapshotState.UNESTABLISHED;
+    private ProtosEnvironmentValue environmentSnapshot;
 
     /** Creates one Process incarnation together with its unique RootActor. */
     public ProtosProcessRuntime(ProtosObjectValue actorRefPrototype) {
@@ -120,6 +129,46 @@ public final class ProtosProcessRuntime {
                     "Process arguments bootstrap snapshot is not established");
         }
         return Optional.ofNullable(argumentsSnapshot);
+    }
+
+    public synchronized EnvironmentSnapshotState establishEnvironmentForRuntime(
+            ProtosObjectValue environmentPrototype,
+            ProtosEnvironmentValue.NativeNameDomain nameDomain,
+            List<ProtosEnvironmentValue.NativeEntry> hostEntries) {
+        Objects.requireNonNull(environmentPrototype, "environmentPrototype");
+        Objects.requireNonNull(nameDomain, "nameDomain");
+        Objects.requireNonNull(hostEntries, "hostEntries");
+        if (lifecycle != LifecycleState.RUNNING) {
+            throw new IllegalStateException(
+                    "Process environment cannot be established after termination begins");
+        }
+        if (environmentSnapshotState != EnvironmentSnapshotState.UNESTABLISHED) {
+            throw new IllegalStateException(
+                    "Process Environment bootstrap snapshot is already established");
+        }
+
+        try {
+            environmentSnapshot =
+                    ProtosEnvironmentValue.captureForRuntime(
+                            environmentPrototype, nameDomain, hostEntries);
+            environmentSnapshotState = EnvironmentSnapshotState.AVAILABLE;
+        } catch (IllegalArgumentException | NullPointerException invalidMapping) {
+            environmentSnapshot = null;
+            environmentSnapshotState = EnvironmentSnapshotState.INVALID;
+        }
+        return environmentSnapshotState;
+    }
+
+    public synchronized EnvironmentSnapshotState environmentSnapshotStateForRuntime() {
+        return environmentSnapshotState;
+    }
+
+    public synchronized Optional<ProtosEnvironmentValue> environmentSnapshotForRuntime() {
+        if (environmentSnapshotState == EnvironmentSnapshotState.UNESTABLISHED) {
+            throw new IllegalStateException(
+                    "Process Environment bootstrap snapshot is not established");
+        }
+        return Optional.ofNullable(environmentSnapshot);
     }
 
     /**

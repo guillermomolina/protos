@@ -344,6 +344,10 @@ public final class ProtosParallelRuntime {
                 if(memo.containsKey(v))return memo.get(v);
                 ProtosProcessArgumentsValue y=x.rematerializeForParallelTransfer();memo.put(v,y);return y;
             }
+            if(v instanceof ProtosEnvironmentValue x){
+                if(memo.containsKey(v))return memo.get(v);
+                ProtosEnvironmentValue y=x.rematerializeForParallelTransfer();memo.put(v,y);return y;
+            }
             if(v instanceof ProtosFutureValue||v instanceof ProtosByteRegionValue||v instanceof ProtosTask||v instanceof ProtosFileValue||v instanceof ProtosFilesystemValue||v==null)throw new NonParallel();
             if(memo.containsKey(v))return memo.get(v);
             ProtosPrelude p=a.prelude().orElseThrow();

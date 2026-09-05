@@ -51,6 +51,7 @@ the standard native boundary.
 | `ProtosStandardStringProtocol.java` | 3 | representation bridge | String size/indexing use required Unicode grapheme segmentation and `+` constructs semantic String representation values. |
 | `ProtosStandardArrayProtocol.java` | 5 | representation bridge | Array factory/index mutation/size own indexed representation state; `each` also requires eager callability validation and a start-of-operation snapshot. |
 | `ProtosStandardProcessArgumentsProtocol.java` | 3 | representation bridge | Immutable Process-argument snapshots own an opaque captured indexed representation; `size`/`at` expose that representation and `each` requires eager polymorphic-callability validation before ordered callback invocation. The helper prototype is construction-only and not a Core-prelude authority or named standard prototype. |
+| `ProtosStandardEnvironmentProtocol.java` | 3 | representation bridge | Standardized Environment snapshots retain opaque native-name identity/representability state. `get`/`contains` preserve native query semantics and selective value decoding; `each` performs eager callability plus whole-snapshot portable String validation before canonical Unicode-scalar-order callbacks. Environment remains outside the required Core prelude and is not a Map subtype. |
 | `ProtosStandardMapProtocol.java` | 7 | representation bridge | Map storage, recorded hashes, reentrancy restrictions, mutation state, lookup equality callbacks, and iteration snapshots are receiver-owned keyed representation semantics. |
 | `ProtosStandardIdentityMapProtocol.java` | 7 | representation bridge | IdentityMap storage and lookup require primitive semantic identity/identityHash plus keyed representation state and iteration snapshots. |
 | `ProtosStandardBytesProtocol.java` | 7 | representation bridge | Bytes owns octet-indexed mutable state, reservation state, exact octet validation, snapshot iteration, and P-region interaction. Its standard prototype identity is already source-backed and construction-only. |
@@ -65,7 +66,7 @@ the standard native boundary.
 | `ProtosStandardFileProtocol.java` | 10 | resource/capability bridge | File objects are acquired resource capabilities whose exact local surface depends on backend-provided authority and whose operations own cursor/append/sync/close/commitment state. |
 | `ProtosStandardFilesystemProtocol.java` | 1 | resource/capability bridge | Host-provisioned Filesystem authority exposes the standard `open` bridge; its backend owns confined/race-free namespace selection, create/truncate commitment, stable-resource acquisition, cancellation cleanup, and standard File materialization. |
 
-Total audited production construction sites: **94 across 24 providers**.
+Total audited production construction sites: **97 across 25 providers**.
 
 I018-L closed with the 90-site/22-provider baseline. I016-D1 was an explicitly
 reviewed post-I018 resource/capability extension adding exactly one
@@ -83,6 +84,14 @@ snapshot protocol (`size`, `at`, and `each`), bringing the current boundary to
 **94 sites across 24 providers**. The snapshot's canonical per-Process identity
 and immutable backing are runtime representation state; no `Process` or argument-
 snapshot authority is added to the Core prelude.
+
+I017-C is a reviewed post-I018 representation-boundary extension. It adds exactly
+three native-Closure construction sites for the construction-only standardized
+Environment protocol (`get`, `contains`, and `each`), bringing the current boundary
+to **97 sites across 25 providers**. Native-name identity and representability,
+selective value decoding, whole-snapshot enumeration prevalidation and canonical
+Unicode-scalar ordering are representation-boundary semantics; Environment remains
+outside the required Core prelude and carries no live Process authority.
 
 ## Source-backed I018 invariants
 

@@ -134,6 +134,9 @@ public final class ProtosActorValueTransfer {
             if (value instanceof ProtosProcessArgumentsValue arguments) {
                 return remember(value, arguments.rematerializeForActorTransfer());
             }
+            if (value instanceof ProtosEnvironmentValue environment) {
+                return remember(value, environment.rematerializeForActorTransfer());
+            }
 
             // These are explicitly non-transferable Actor-domain/execution/resource values.
             if (value instanceof ProtosClosureValue

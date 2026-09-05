@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.118-SNAPSHOT
+
+- Implement I017-C standardized read-only Environment bootstrap snapshots: one stable acquisition outcome and canonical semantic snapshot per Process; duplicate-equivalent native names are rejected at establishment under the represented host name-identity rules; later host mutation cannot alter the captured mapping.
+- Implement exact `get`/`contains` query semantics with lossless native-name representability checked before lookup, native name identity preserved, absent valid names distinguished from invalid queries, and value decoding deferred so `contains` can report an existing entry whose value is not portable Unicode while `get` fails only when that value is selected.
+- Implement polymorphic `Environment.each` with callback callability validation before whole-snapshot `(String,String)` representability validation, zero callbacks on representation failure, canonical lexicographic Unicode-scalar name ordering, and receiver result on success; Environment is immutable, outside the required Core prelude and not a Map subtype.
+- Allow ordinary Actor/P transfer of the immutable Environment snapshot with fresh destination semantic identity and per-transfer alias preservation, distinct from canonical re-acquisition through Process. Register the three-site Environment representation bridge in I018, moving the audited boundary from 24 providers / 94 sites to 25 providers / 97 sites. I017-C is CLOSED and I017-D1 becomes READY.
+
 ## 0.2.117-SNAPSHOT
 
 - Implement I017-B canonical Process-argument bootstrap snapshots: one stable immutable snapshot per Process after complete one-time host capture, stable UNREPRESENTABLE outcome for invalid Unicode bootstrap data, exact `size`/zero-based `at`/polymorphic ordered `each`, no Array mutability, and no host argv re-read after establishment.
