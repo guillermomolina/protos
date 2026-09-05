@@ -139,11 +139,12 @@ Published slices:
 | I018-G | CLOSED | `0.2.100-SNAPSHOT` | `SAME_COMMIT` | Source-backed standard ordinary `Integer.%` body defined in `protos/lib/core/integer.protos` through a temporary named Closure and installed under the symbolic `%` selector by a narrow Java selector bridge; the source body validates the original receiver through standard native Integer `+` before dispatching native `mod`, preserving Integer receiver-domain rejection while removing the duplicated native remainder body for `%`. |
 | I018-H | CLOSED | `0.2.101-SNAPSHOT` | `SAME_COMMIT` | Source-backed standard `Float.negated()` body defined in `protos/lib/core/float.protos` as `(0.0 - 1.0) * this`; Java no longer performs Float unary sign inversion directly and now only verifies source provenance, while native binary64 subtraction/multiplication preserve strict Float receiver-domain validation, signed-zero inversion, infinities, subnormals, and Core NaN semantics. |
 | I018-I | CLOSED | `0.2.102-SNAPSHOT` | `SAME_COMMIT` | Source-backed standard frozen-prelude bindings object constructed in `protos/lib/core/prelude.protos` with direct `Context` parent and the exact existing Core binding surface; Java no longer allocates or populates the prelude object slot-by-slot, and Error-taxonomy export is source-owned while Java retains taxonomy validation and the final freeze/ProtosPrelude boundary. |
+| I018-J | CLOSED | `0.2.103-SNAPSHOT` | `SAME_COMMIT` | Source-backed default `Object.==` body defined in `protos/lib/core/object.protos` as primitive semantic identity (`this === other`) and promoted through the existing narrow symbolic-selector installation path; Java no longer duplicates default equality logic, while primitive `===`, `identityHash`, generic call/object construction, and other host/runtime boundaries remain native. |
 
 Remaining implementation work before top-level closure:
-- inventory every Java-installed standard slot and classify it as host-irreducible, representation/selector bridge, or source-expressible;
-- migrate source-expressible named and derived standard behavior in bounded semantic-family slices while preserving exact receiver domains, errors, identity, ordering, mutation, snapshot, lifecycle, and concurrency semantics;
-- add architectural regression coverage that prevents new source-expressible standard behavior from being introduced only in Java.
+- complete the exhaustive inventory of every remaining Java-installed standard slot and classify it as host-irreducible or a narrow representation/selector bridge, explicitly proving that no source-expressible slot remains;
+- add architectural regression coverage that prevents new source-expressible standard behavior from being introduced only in Java;
+- close I018 and lift the I016-D pause only if that inventory/guard passes on the definitive `origin/main`.
 
 
 ## CLI implementation

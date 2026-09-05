@@ -307,11 +307,14 @@ public final class ProtosCoreBootstrap {
 
         ProtosClosureValue init =
                 requireSourceBackedClosure(sourceContext, "_coreObjectInit");
+        ProtosClosureValue equals =
+                requireSourceBackedClosure(sourceContext, "_coreObjectEquals");
         ProtosClosureValue notEquals =
                 requireSourceBackedClosure(
                         sourceContext, "_coreObjectNotEquals");
 
         sourceContext.removeLocalSlot("_coreObjectInit");
+        sourceContext.removeLocalSlot("_coreObjectEquals");
         sourceContext.removeLocalSlot("_coreObjectNotEquals");
         if (!sourceContext.localSlotsSnapshot().isEmpty()) {
             throw new IllegalStateException(
@@ -322,9 +325,13 @@ public final class ProtosCoreBootstrap {
         ProtosObjectValue object = ProtosObjectValue.rootObject();
         synchronized (object) {
             validateExistingSourceBackedClosure(object, "init");
+            validateExistingSourceBackedClosure(object, "==");
             validateExistingSourceBackedClosure(object, "!=");
             if (!object.hasLocalSlot("init")) {
                 object.createLocalSlot("init", init);
+            }
+            if (!object.hasLocalSlot("==")) {
+                object.createLocalSlot("==", equals);
             }
             if (!object.hasLocalSlot("!=")) {
                 object.createLocalSlot("!=", notEquals);

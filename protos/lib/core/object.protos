@@ -17,6 +17,10 @@ _coreObjectInit: () => {
     this
 }
 
+_coreObjectEquals: (other) => {
+    this === other
+}
+
 _coreObjectNotEquals: (other) => {
     result: true
 

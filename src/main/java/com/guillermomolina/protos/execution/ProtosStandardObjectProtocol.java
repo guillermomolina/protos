@@ -45,21 +45,6 @@ public final class ProtosStandardObjectProtocol {
                                 return instance;
                             }));
         }
-        if (!object.hasLocalSlot("==")) {
-            object.createLocalSlot(
-                    "==",
-                    ProtosClosureValue.nativeClosure(
-                            (activation, supplied) -> {
-                                if (supplied.size() != 1) {
-                                    throw new ProtosSignalException(
-                                            ProtosCoreErrors.newError(activation));
-                                }
-                                return com.guillermomolina.protos.runtime.ProtosIdentity.identical(
-                                                activation.receiver(), supplied.get(0))
-                                        ? com.guillermomolina.protos.runtime.ProtosBooleanValue.TRUE
-                                        : com.guillermomolina.protos.runtime.ProtosBooleanValue.FALSE;
-                            }));
-        }
         if (!object.hasLocalSlot("identityHash")) {
             object.createLocalSlot("identityHash", ProtosClosureValue.nativeClosure((activation, supplied) -> {
                 if (!supplied.isEmpty()) throw new ProtosSignalException(ProtosCoreErrors.newError(activation));

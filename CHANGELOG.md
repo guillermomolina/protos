@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.103-SNAPSHOT
+
+- Continue I018 Core self-hosting/bootstrap minimization by moving the standard default `Object.==` body from Java into distributable `protos/lib/core/object.protos`.
+- Define the source-backed body as `this === other`, delegating exactly to Protos primitive semantic identity rather than host object identity; reuse the existing isolated frozen Object-source capture context and narrow symbolic-selector installation bridge, and remove the duplicated native equality closure from `ProtosStandardObjectProtocol`.
+- Extend bootstrap provenance coverage so `Object.init`, `Object.==`, and `Object.!=` are all source-backed and share the isolated frozen source context. Existing default-equality/non-identity conformance remains focal. No normative specification changes are made, I018 remains open for the final native-bridge inventory/guard, and I016 remains frozen at I016-C.
+
 ## 0.2.102-SNAPSHOT
 
 - Continue I018 Core self-hosting/bootstrap minimization by constructing the standard frozen-prelude bindings object in distributable `protos/lib/core/prelude.protos` instead of allocating and populating that object slot-by-slot in `ProtosCoreBootstrap`.
