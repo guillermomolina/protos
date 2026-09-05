@@ -50,6 +50,19 @@ public final class ProtosProcessRuntime {
         INVALID
     }
 
+    /**
+     * Stable bootstrap state of one standard-stream Encoding association.
+     *
+     * <p>INVALID is distinct from UNAVAILABLE: it records a host configuration whose stream
+     * availability and Encoding association disagree.
+     */
+    public enum StandardStreamEncodingState {
+        UNESTABLISHED,
+        AVAILABLE,
+        UNAVAILABLE,
+        INVALID
+    }
+
     private final ProtosActor rootActor;
     private final Set<ProtosActor> liveActors = new LinkedHashSet<>();
     private LifecycleState lifecycle = LifecycleState.RUNNING;
@@ -64,6 +77,15 @@ public final class ProtosProcessRuntime {
     private ProtosProcessStandardStreamBinding stdinBinding;
     private ProtosProcessStandardStreamBinding stdoutBinding;
     private ProtosProcessStandardStreamBinding stderrBinding;
+    private StandardStreamEncodingState stdinEncodingState =
+            StandardStreamEncodingState.UNESTABLISHED;
+    private StandardStreamEncodingState stdoutEncodingState =
+            StandardStreamEncodingState.UNESTABLISHED;
+    private StandardStreamEncodingState stderrEncodingState =
+            StandardStreamEncodingState.UNESTABLISHED;
+    private ProtosEncodingValue stdinEncoding;
+    private ProtosEncodingValue stdoutEncoding;
+    private ProtosEncodingValue stderrEncoding;
 
     /** Creates one Process incarnation together with its unique RootActor. */
     public ProtosProcessRuntime(ProtosObjectValue actorRefPrototype) {
@@ -246,6 +268,94 @@ public final class ProtosProcessRuntime {
         return stderrBinding == null
                 ? Optional.empty()
                 : Optional.of(stderrBinding.newViewForRuntime());
+    }
+
+    /**
+     * Establishes all three host-selected standard-stream Encoding associations exactly once.
+     *
+     * <p>An Encoding must exist exactly when its corresponding byte stream exists. Any mismatch is
+     * stable INVALID bootstrap configuration; it is never repaired by a later host lookup,
+     * inferred default, alias lookup, or codec discovery.
+     */
+    public synchronized void establishStandardStreamEncodingsForRuntime(
+            ProtosEncodingValue stdinEncoding,
+            ProtosEncodingValue stdoutEncoding,
+            ProtosEncodingValue stderrEncoding) {
+        if (lifecycle != LifecycleState.RUNNING) {
+            throw new IllegalStateException(
+                    "Process standard-stream Encodings cannot be established after termination begins");
+        }
+        requireStandardStreamsEstablished();
+        if (stdinEncodingState != StandardStreamEncodingState.UNESTABLISHED
+                || stdoutEncodingState != StandardStreamEncodingState.UNESTABLISHED
+                || stderrEncodingState != StandardStreamEncodingState.UNESTABLISHED) {
+            throw new IllegalStateException(
+                    "Process standard-stream Encoding bootstrap state is already established");
+        }
+
+        this.stdinEncodingState = encodingState(stdinBinding != null, stdinEncoding);
+        this.stdoutEncodingState = encodingState(stdoutBinding != null, stdoutEncoding);
+        this.stderrEncodingState = encodingState(stderrBinding != null, stderrEncoding);
+
+        this.stdinEncoding =
+                this.stdinEncodingState == StandardStreamEncodingState.AVAILABLE
+                        ? stdinEncoding
+                        : null;
+        this.stdoutEncoding =
+                this.stdoutEncodingState == StandardStreamEncodingState.AVAILABLE
+                        ? stdoutEncoding
+                        : null;
+        this.stderrEncoding =
+                this.stderrEncodingState == StandardStreamEncodingState.AVAILABLE
+                        ? stderrEncoding
+                        : null;
+    }
+
+    public synchronized StandardStreamEncodingState stdinEncodingStateForRuntime() {
+        return stdinEncodingState;
+    }
+
+    public synchronized StandardStreamEncodingState stdoutEncodingStateForRuntime() {
+        return stdoutEncodingState;
+    }
+
+    public synchronized StandardStreamEncodingState stderrEncodingStateForRuntime() {
+        return stderrEncodingState;
+    }
+
+    public synchronized Optional<ProtosEncodingValue> stdinEncodingForRuntime() {
+        requireEncodingAssociationsEstablished();
+        return Optional.ofNullable(stdinEncoding);
+    }
+
+    public synchronized Optional<ProtosEncodingValue> stdoutEncodingForRuntime() {
+        requireEncodingAssociationsEstablished();
+        return Optional.ofNullable(stdoutEncoding);
+    }
+
+    public synchronized Optional<ProtosEncodingValue> stderrEncodingForRuntime() {
+        requireEncodingAssociationsEstablished();
+        return Optional.ofNullable(stderrEncoding);
+    }
+
+    private static StandardStreamEncodingState encodingState(
+            boolean streamAvailable, ProtosEncodingValue encoding) {
+        if (streamAvailable && encoding != null) {
+            return StandardStreamEncodingState.AVAILABLE;
+        }
+        if (!streamAvailable && encoding == null) {
+            return StandardStreamEncodingState.UNAVAILABLE;
+        }
+        return StandardStreamEncodingState.INVALID;
+    }
+
+    private void requireEncodingAssociationsEstablished() {
+        if (stdinEncodingState == StandardStreamEncodingState.UNESTABLISHED
+                || stdoutEncodingState == StandardStreamEncodingState.UNESTABLISHED
+                || stderrEncodingState == StandardStreamEncodingState.UNESTABLISHED) {
+            throw new IllegalStateException(
+                    "Process standard-stream Encoding bootstrap state is not established");
+        }
     }
 
     private void requireStandardStreamsEstablished() {

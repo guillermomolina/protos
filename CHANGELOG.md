@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.123-SNAPSHOT
+
+- Implement I017-D2 stable Process-bootstrap associations between each independently optional stdin/stdout/stderr byte binding and its host-selected immutable Encoding descriptor. Portable and explicitly host-provided Encoding descriptors from I015-A are both valid association values.
+- Record each association exactly once as AVAILABLE, UNAVAILABLE, or INVALID: an available byte stream requires one Encoding; an unavailable stream requires no Encoding; any availability/Encoding mismatch becomes stable invalid bootstrap configuration rather than triggering a later host lookup, inferred default, alias lookup, or codec discovery.
+- Keep D2 internal and synchronous: it adds no public Process selector yet, no Future/suspension, no text wrapper, no stream capability enlargement, and no Java native-Closure construction site. The audited I018 boundary remains exactly 27 providers / 101 sites. I017-D2 is CLOSED and I017-E becomes READY.
+
 ## 0.2.122-SNAPSHOT
 
 - Implement I015-A standard Encoding semantic family with a source-backed frozen `Encoding` prelude factory/prototype and exactly the four mandatory portable descriptors: `Encoding.UTF8`, `Encoding.UTF16LE`, `Encoding.UTF16BE`, and `Encoding.Latin1`; no String-name constructor, alias registry, or implicit codec discovery is introduced.
