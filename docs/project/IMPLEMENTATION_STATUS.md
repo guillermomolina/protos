@@ -109,11 +109,11 @@ Remaining implemented-surface gaps before top-level closure:
 
 ## CLI implementation
 
-| Item | Description | Status | Closure evidence | Notes |
-|---|---|---|---|---|
-| CLI001 | Basic CLI + persistent REPL | CLOSED | historical; not backfilled | — |
-| CLI002 | Interactive terminal UX | CLOSED | historical; not backfilled | — |
-| CLI003 | Multiline REPL input | OPEN | — | known REPL multiline/paste defect; mark CLOSED only after tests + publication |
+| Item | Description | Status | Version | Closure evidence | Notes |
+|---|---|---|---|---|---|
+| CLI001 | Basic CLI + persistent REPL | CLOSED | — | historical; not backfilled | — |
+| CLI002 | Interactive terminal UX | CLOSED | — | historical; not backfilled | — |
+| CLI003 | Multiline REPL input | CLOSED | `0.2.80-SNAPSHOT` | `254c80c0fb9e70f1dd07ef711f06ce71faa93829` | published multiline REPL input; parser-EOF accumulation, one-unit bracketed paste, persistent top-level context, recovery/history/stream coverage; recursive factorial regression is covered after standard numeric ordering completion |
 
 
 ## Language Maturity
