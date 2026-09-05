@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.87-SNAPSHOT
+
+- Implement I016-A Filesystem open preflight/acquisition substrate: exact invocation-time capture of local standard open options, deterministic invalid-combination rejection before backend authority, host-neutral asynchronous acquisition, and independent open dispatch without an implicit Filesystem/Path FIFO.
+- Reuse the established I/O commitment and Actor-termination cancellation machinery so pre-commit cancellation contributes no portable filesystem effect, committed create/truncate effects cannot be rewritten as cancelled, and a result-only open that loses cancellation releases untransferred backend custody. No public Filesystem/File surface is installed by this foundational slice; I016 remains IN_PROGRESS.
+
+
 ## 0.2.86-SNAPSHOT
 
 - Implement I011-5 public Actor prelude surface with exactly `spawn` and `current`; perform exact semantic-String validation, one creator-side canonical module resolution, and the I011-4 atomic initialization-vector transfer before the creation cutover.

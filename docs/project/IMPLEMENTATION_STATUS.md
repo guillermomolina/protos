@@ -47,7 +47,7 @@ an item.
 | I013 | Standard Path | CLOSED | historical; see git history / CHANGELOG | — |
 | I014 | Standard Byte I/O | CLOSED | `2462ba74298e94181489e13de4e25dbbb82b21f9` | I009 + I012 |
 | I015 | Encoding / Text I/O | READY | — | I014 closed |
-| I016 | Filesystem / File | READY | — | I013 + I014 closed |
+| I016 | Filesystem / File | IN_PROGRESS | — | I013 + I014 closed |
 | I017 | Process I/O / bootstrap | BLOCKED_BY_DEPENDENCIES | — | requires I016; re-audit exact current dependencies before starting |
 
 ### I011 — Actors
@@ -78,6 +78,32 @@ Remaining implemented-surface gaps before top-level closure:
 - `send()` / `request()` / `SendOperation`, backpressure, acceptance, cancellation, reply, retry, and uncertainty behavior wired to the snapshot boundary;
 - remaining specialized transfer integrations whose state/authority has its own contract (including keyed collections and future GroupRef/Process capability materialization), plus reply-transfer wiring;
 - stop/termination observation, failure authority, Actor-owned task cleanup, RootActor/process integration, and final deterministic race/conformance coverage.
+
+
+### I016 — Filesystem / File
+
+Status: IN_PROGRESS
+
+Description: Core Filesystem/File semantics implemented incrementally on I013 Path and I014 byte-I/O commitment/lifecycle infrastructure.
+
+Normative owners:
+- `spec/io/FILESYSTEM.md`
+- `spec/io/IO_CORE.md`
+- `spec/io/BYTE_IO.md`
+- `spec/io/PROCESS_IO.md` for Root bootstrap provisioning and authority-transfer boundaries
+
+Published slices:
+
+| Slice | Status | Version | Closure evidence | Implemented surface |
+|---|---|---|---|---|
+| I016-A | CLOSED | `0.2.87-SNAPSHOT` | `SAME_COMMIT` | Host-neutral Filesystem open preflight/acquisition substrate: exact local-option snapshot/defaults, invalid-combination precedence before backend authority, independent asynchronous opens, cancellation/portable-effect commitment handshake, backend result-custody cleanup, and Actor-termination cancellation integration. No public Filesystem/File capability surface is installed yet. |
+
+Remaining implemented-surface gaps before top-level closure:
+- standard File capability implementation with positioned read/write, independent logical cursor, size/seek/truncate/sync capability honesty, and Closable lifecycle;
+- language-visible Filesystem capability open surface once returned File capabilities are complete;
+- append-mode placement and same-resource cross-File non-interleaving;
+- confinement/stable-resource-binding backend integration and deterministic race/conformance coverage;
+- capability transfer/provisioning boundaries plus final ledger/dependency closure.
 
 
 ## CLI implementation
