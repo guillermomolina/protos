@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.77-SNAPSHOT
+
+- Implement I014-E standard byte I/O directional shutdown: capability-honest `ReadShutdown`/`WriteShutdown`, irreversible directional cutovers, idempotent fresh-Future lifecycle observation, pending-read cutover, output-frontier ordering, cancellation/commitment behavior, and focal tests.
+
 ## 0.2.76-SNAPSHOT
 
 - Implement I014-D standard byte I/O durability: explicit `Syncable.sync()` capability, ordered durability frontiers integrated with I014-C sequence-state ordering, and cancellation/commitment semantics that prevent post-commit sync from becoming cancelled.

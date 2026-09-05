@@ -16,6 +16,7 @@ public final class ProtosStandardByteIoProtocol {
         ensureAbsent(receiver,"read","write");
         ProtosByteIoFlow flow=new ProtosByteIoFlow(receiver,bytesPrototype,activation,backend);
         installTransfer(receiver,flow);
+        installDirectionalShutdown(receiver,flow,backend);
         return flow;
     }
 
@@ -31,6 +32,7 @@ public final class ProtosStandardByteIoProtocol {
         if(backend instanceof ProtosByteIoFlow.SyncBackend)ensureAbsent(receiver,"sync");
         ProtosByteIoFlow flow=new ProtosByteIoFlow(receiver,bytesPrototype,activation,backend);
         installTransfer(receiver,flow);
+        installDirectionalShutdown(receiver,flow,backend);
         receiver.createLocalSlot("flush",ProtosClosureValue.nativeClosure((a,args)->args.isEmpty()&&a.receiver()==receiver?flow.flush(a):invalid(a)));
         receiver.createLocalSlot("position",ProtosClosureValue.nativeClosure((a,args)->args.isEmpty()&&a.receiver()==receiver?flow.position(a):invalid(a)));
         receiver.createLocalSlot("seek",ProtosClosureValue.nativeClosure((a,args)->args.size()==1&&a.receiver()==receiver?flow.seek(a,args.get(0)):invalid(a)));
@@ -41,6 +43,17 @@ public final class ProtosStandardByteIoProtocol {
         if(backend instanceof ProtosByteIoFlow.SyncBackend)
             receiver.createLocalSlot("sync",ProtosClosureValue.nativeClosure((a,args)->args.isEmpty()&&a.receiver()==receiver?flow.sync(a):invalid(a)));
         return flow;
+    }
+
+    private static void installDirectionalShutdown(ProtosObjectValue receiver,ProtosByteIoFlow flow,ProtosByteIoFlow.Backend backend){
+        if(backend instanceof ProtosByteIoFlow.ReadShutdownBackend){
+            ensureAbsent(receiver,"shutdownRead");
+            receiver.createLocalSlot("shutdownRead",ProtosClosureValue.nativeClosure((a,args)->args.isEmpty()&&a.receiver()==receiver?flow.shutdownRead(a):invalid(a)));
+        }
+        if(backend instanceof ProtosByteIoFlow.WriteShutdownBackend){
+            ensureAbsent(receiver,"shutdownWrite");
+            receiver.createLocalSlot("shutdownWrite",ProtosClosureValue.nativeClosure((a,args)->args.isEmpty()&&a.receiver()==receiver?flow.shutdownWrite(a):invalid(a)));
+        }
     }
 
     private static void installTransfer(ProtosObjectValue receiver,ProtosByteIoFlow flow){

@@ -75,6 +75,18 @@ public final class ProtosIoOperation {
         return won;
     }
 
+    /** Directional lifecycle cutover may commit a terminal result for an otherwise uncommitted operation. */
+    public boolean resolveAtLifecycleCutover(Object value) {
+        Objects.requireNonNull(value,"value");
+        synchronized(lifecycle) {
+            if (phase != Phase.UNCOMMITTED) return false;
+            phase=Phase.TERMINAL;
+        }
+        boolean won=future.resolve(value,origin);
+        finishTerminal();
+        return won;
+    }
+
     public boolean fail(ProtosObjectValue error) {
         Objects.requireNonNull(error,"error");
         synchronized(lifecycle) {

@@ -26,6 +26,10 @@ public final class ProtosByteIoFlow {
         void succeeded();
         void failed();
     }
+    public interface ShutdownCompletion {
+        void succeeded();
+        void failed();
+    }
     /**
      * Sync completion handshake. The backend must call commit() immediately
      * before beginning the first irreversible durability action and proceed
@@ -58,8 +62,16 @@ public final class ProtosByteIoFlow {
     public interface SyncBackend extends ExtendedBackend {
         Cancellation sync(SyncCompletion completion);
     }
+    /** Optional half-close capabilities; neither direction is implied by transfer support. */
+    public interface ReadShutdownBackend extends Backend {
+        Cancellation shutdownRead(ShutdownCompletion completion);
+    }
+    public interface WriteShutdownBackend extends Backend {
+        Cancellation shutdownWrite(ShutdownCompletion completion);
+    }
 
     private enum Kind { READ, WRITE, FLUSH, POSITION, SEEK, SEEK_BY, SEEK_END, SIZE, TRUNCATE, SYNC }
+    private enum DirectionState { OPEN, SHUTTING, SUCCEEDED, FAILED }
     private static final int DEFAULT_MAX_RETAINED_WRITE_BYTES = 1024 * 1024;
 
     private final ProtosObjectValue receiver;
@@ -71,6 +83,14 @@ public final class ProtosByteIoFlow {
     private final ArrayDeque<Request> operations = new ArrayDeque<>();
     private final ArrayDeque<Byte> unread = new ArrayDeque<>();
     private int retainedWriteBytes;
+    private DirectionState readState=DirectionState.OPEN;
+    private DirectionState writeState=DirectionState.OPEN;
+    private ProtosObjectValue readShutdownError;
+    private ProtosObjectValue writeShutdownError;
+    private final java.util.ArrayList<ProtosFutureValue> readShutdownFollowers=new java.util.ArrayList<>();
+    private final java.util.ArrayList<ProtosFutureValue> writeShutdownFollowers=new java.util.ArrayList<>();
+    private boolean precedingWriteFailed;
+    private boolean precedingFlushFailed;
 
     public ProtosByteIoFlow(ProtosObjectValue receiver, ProtosObjectValue bytesPrototype,
             ProtosActivation activation, Backend backend) {
@@ -91,6 +111,7 @@ public final class ProtosByteIoFlow {
 
     public ProtosFutureValue read(ProtosActivation activation,Object maxBytesValue){
         Objects.requireNonNull(activation);requireDomain(activation);
+        synchronized(this){if(readState!=DirectionState.OPEN)return resolvedNullFuture(activation);}
         BigInteger n=integer(maxBytesValue);
         if(n==null||n.signum()<=0||n.compareTo(BigInteger.valueOf(Integer.MAX_VALUE))>0)
             return failedFuture(activation,ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
@@ -99,6 +120,7 @@ public final class ProtosByteIoFlow {
 
     public ProtosFutureValue write(ProtosActivation activation,Object value){
         Objects.requireNonNull(activation);requireDomain(activation);
+        synchronized(this){if(writeState!=DirectionState.OPEN)return lifecycleFailedFuture(activation);}
         if(!(value instanceof ProtosBytesValue bytes))
             return failedFuture(activation,ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
         byte[] snapshot=snapshot(bytes);
@@ -112,7 +134,11 @@ public final class ProtosByteIoFlow {
         return enqueue(new Request(Kind.WRITE,op,null,snapshot,null));
     }
 
-    public ProtosFutureValue flush(ProtosActivation a){return enqueueSimple(a,Kind.FLUSH,null);}
+    public ProtosFutureValue flush(ProtosActivation a){
+        Objects.requireNonNull(a);requireDomain(a);
+        synchronized(this){if(writeState!=DirectionState.OPEN)return lifecycleFailedFuture(a);}
+        return enqueueSimple(a,Kind.FLUSH,null);
+    }
     public ProtosFutureValue position(ProtosActivation a){return enqueueSimple(a,Kind.POSITION,null);}
     public ProtosFutureValue seek(ProtosActivation a,Object v){
         BigInteger n=validatedNonNegative(a,v);if(n==null)return invalidFuture(a);
@@ -134,6 +160,82 @@ public final class ProtosByteIoFlow {
             return failedFuture(a,ProtosCoreErrors.StandardError.I_O_ERROR);
         return enqueue(new Request(Kind.SYNC,begin(a),null,null,null));
     }
+
+    /** Commits the permanent input cutover at invocation; every invocation gets a fresh Future. */
+    public ProtosFutureValue shutdownRead(ProtosActivation a){
+        Objects.requireNonNull(a);requireDomain(a);
+        if(!(backend instanceof ReadShutdownBackend rb))return failedFuture(a,ProtosCoreErrors.StandardError.I_O_ERROR);
+        ProtosFutureValue follower=lifecycleFollower(a);
+        java.util.ArrayList<Request> cutover=new java.util.ArrayList<>();
+        synchronized(this){
+            if(lifecycle.state()!=ProtosIoLifecycle.State.OPEN)return lifecycleFailedFuture(a);
+            if(readState==DirectionState.SUCCEEDED){follower.resolve(receiver,a);return follower;}
+            if(readState==DirectionState.FAILED){follower.fail(readShutdownError);return follower;}
+            if(readState==DirectionState.SHUTTING){readShutdownFollowers.add(follower);return follower;}
+            readState=DirectionState.SHUTTING;readShutdownFollowers.add(follower);
+            for(Request r:java.util.List.copyOf(operations))if(r.kind==Kind.READ&&!r.op.committed()&&!r.op.terminal()){
+                r.shutdownDiscard=true;cutover.add(r);
+            }
+        }
+        for(Request r:cutover){
+            Cancellation c; synchronized(this){c=r.cancellation;}
+            if(r.op.resolveAtLifecycleCutover(ProtosNullValue.INSTANCE)){synchronized(this){operations.remove(r);}}
+            if(c!=null)c.cancel();
+        }
+        pump();
+        try{rb.shutdownRead(new ShutdownCompletion(){public void succeeded(){finishReadShutdown(a,null);}public void failed(){finishReadShutdown(a,ioError(a));}});}
+        catch(RuntimeException ex){finishReadShutdown(a,ioError(a));}
+        return follower;
+    }
+
+    /** Commits the output cutover at invocation and establishes one idempotent shutdown lifecycle. */
+    public ProtosFutureValue shutdownWrite(ProtosActivation a){
+        Objects.requireNonNull(a);requireDomain(a);
+        if(!(backend instanceof WriteShutdownBackend))return failedFuture(a,ProtosCoreErrors.StandardError.I_O_ERROR);
+        ProtosFutureValue follower=lifecycleFollower(a);
+        synchronized(this){
+            if(lifecycle.state()!=ProtosIoLifecycle.State.OPEN)return lifecycleFailedFuture(a);
+            if(writeState==DirectionState.SUCCEEDED){follower.resolve(receiver,a);return follower;}
+            if(writeState==DirectionState.FAILED){follower.fail(writeShutdownError);return follower;}
+            if(writeState==DirectionState.SHUTTING){writeShutdownFollowers.add(follower);return follower;}
+            writeState=DirectionState.SHUTTING;writeShutdownFollowers.add(follower);
+        }
+        maybeStartWriteShutdown(a);
+        return follower;
+    }
+
+    private void maybeStartWriteShutdown(ProtosActivation a){
+        synchronized(this){
+            if(writeState!=DirectionState.SHUTTING)return;
+            for(Request r:operations)if(r.kind==Kind.WRITE||r.kind==Kind.FLUSH)return;
+            if(precedingWriteFailed||precedingFlushFailed){finishWriteShutdown(a,ioError(a));return;}
+        }
+        try{((WriteShutdownBackend)backend).shutdownWrite(new ShutdownCompletion(){
+            public void succeeded(){finishWriteShutdown(a,null);}
+            public void failed(){finishWriteShutdown(a,ioError(a));}
+        });}catch(RuntimeException ex){finishWriteShutdown(a,ioError(a));}
+    }
+
+    private void finishReadShutdown(ProtosActivation a,ProtosObjectValue error){
+        java.util.List<ProtosFutureValue> fs; synchronized(this){
+            if(readState!=DirectionState.SHUTTING)return; readShutdownError=error;
+            readState=error==null?DirectionState.SUCCEEDED:DirectionState.FAILED;fs=java.util.List.copyOf(readShutdownFollowers);readShutdownFollowers.clear();
+        }
+        for(ProtosFutureValue f:fs)if(error==null)f.resolve(receiver,a);else f.fail(error);
+    }
+    private void finishWriteShutdown(ProtosActivation a,ProtosObjectValue error){
+        java.util.List<ProtosFutureValue> fs; synchronized(this){
+            if(writeState!=DirectionState.SHUTTING)return; writeShutdownError=error;
+            writeState=error==null?DirectionState.SUCCEEDED:DirectionState.FAILED;fs=java.util.List.copyOf(writeShutdownFollowers);writeShutdownFollowers.clear();
+        }
+        for(ProtosFutureValue f:fs)if(error==null)f.resolve(receiver,a);else f.fail(error);
+    }
+    private ProtosFutureValue lifecycleFollower(ProtosActivation a){
+        ProtosFutureValue f=new ProtosFutureValue(a.prelude().orElseThrow().futurePrototype(),domain);f.attachCancellationProducer(()->{});return f;
+    }
+    private ProtosObjectValue ioError(ProtosActivation a){return ProtosCoreErrors.newOccurrence(a,ProtosCoreErrors.StandardError.I_O_ERROR);}
+    private ProtosFutureValue lifecycleFailedFuture(ProtosActivation a){return failedFuture(a,ProtosCoreErrors.StandardError.I_O_LIFECYCLE_ERROR);}
+    private ProtosFutureValue resolvedNullFuture(ProtosActivation a){ProtosFutureValue f=new ProtosFutureValue(a.prelude().orElseThrow().futurePrototype(),domain);f.resolve(ProtosNullValue.INSTANCE,a);return f;}
 
     private ProtosFutureValue enqueueSimple(ProtosActivation a,Kind k,BigInteger n){
         Objects.requireNonNull(a);requireDomain(a);
@@ -198,7 +300,7 @@ public final class ProtosByteIoFlow {
         Objects.requireNonNull(bytes);
         if(bytes.length==0||bytes.length>r.number.intValueExact()){failIo(r);finish(r);return;}
         if(!r.op.commit()){
-            synchronized(this){for(int i=bytes.length-1;i>=0;i--)unread.addFirst(bytes[i]);}
+            synchronized(this){if(!r.shutdownDiscard)for(int i=bytes.length-1;i>=0;i--)unread.addFirst(bytes[i]);}
             finish(r);return;
         }
         ProtosBytesValue result=new ProtosBytesValue(bytesPrototype);
@@ -214,6 +316,7 @@ public final class ProtosByteIoFlow {
                 public void failed(int k){
                     if(k<0||k>r.bytes.length)throw new IllegalArgumentException("invalid contributed prefix");
                     if(k>0)r.op.commit();
+                    synchronized(ProtosByteIoFlow.this){precedingWriteFailed=true;}
                     failIo(r);finish(r);
                 }
             }));
@@ -224,8 +327,15 @@ public final class ProtosByteIoFlow {
     private void startReceiver(Request r,ReceiverStarter starter){
         try{
             setCancellation(r,starter.start(new ReceiverCompletion(){
-                public void succeeded(){if(r.op.commit())r.op.resolve(receiver);finish(r);}
-                public void failed(){failIo(r);finish(r);}
+                public void succeeded(){
+                    if(r.op.commit())r.op.resolve(receiver);
+                    if(r.kind==Kind.FLUSH)synchronized(ProtosByteIoFlow.this){precedingFlushFailed=false;}
+                    finish(r);
+                }
+                public void failed(){
+                    if(r.kind==Kind.FLUSH)synchronized(ProtosByteIoFlow.this){precedingFlushFailed=true;}
+                    failIo(r);finish(r);
+                }
             }));
         }catch(RuntimeException ex){failIo(r);finish(r);}
     }
@@ -277,6 +387,7 @@ public final class ProtosByteIoFlow {
             if(operations.remove(r)&&r.kind==Kind.WRITE)retainedWriteBytes-=r.bytes.length;
         }
         pump();
+        if(writeState==DirectionState.SHUTTING)maybeStartWriteShutdown(r.op.origin());
     }
     private void failIo(Request r){
         r.op.fail(ProtosCoreErrors.newOccurrence(r.op.origin(),ProtosCoreErrors.StandardError.I_O_ERROR));
@@ -306,7 +417,7 @@ public final class ProtosByteIoFlow {
     }
     private static final class Request{
         final Kind kind;final ProtosIoOperation op;final BigInteger number;final byte[]bytes;
-        boolean started;Cancellation cancellation;
+        boolean started;boolean shutdownDiscard;Cancellation cancellation;
         Request(Kind kind,ProtosIoOperation op,BigInteger number,byte[]bytes,Cancellation cancellation){
             this.kind=kind;this.op=op;this.number=number;this.bytes=bytes;this.cancellation=cancellation;
         }
