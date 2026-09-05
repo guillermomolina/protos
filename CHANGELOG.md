@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.85-SNAPSHOT
+
+- Implement I011-4 Actor graph snapshot/value-transfer foundation: add one Actor-specific atomic graph-copy boundary with shared-operation memoization, preserving aliases and cycles across roots while copying transferable scalar values, ordinary object state, Arrays, Bytes state, and Paths.
+- Rematerialize ActorRef capability wrappers without retargeting or copying Actor state; preserve ordinary delegation/local-slot/mutation state for copied objects; reject Closure, Future, execution-context, ByteRegion, unknown host/runtime values, and not-yet-integrated keyed collections with the standard NonTransferableValue occurrence before any snapshot is exposed. I011 remains IN_PROGRESS and no Actor public API is installed by this slice.
+
 ## 0.2.84-SNAPSHOT
 
 - Implement I011-3 Actor bootstrap and behavior cutover: bind each concrete Actor to its existing execution domain, expose only a runtime-local current-ActorRef substrate, load bootstrap code by an already-canonical ModuleKey in the destination Actor-local module cache, require an exact local bootstrap binding, invoke it with already-transferred arguments, and install the exact ordinary-object result before the READY cutover.

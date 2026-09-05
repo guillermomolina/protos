@@ -70,12 +70,13 @@ Published slices:
 | I011-1 | CLOSED | `0.2.81-SNAPSHOT` | `518aac11e2d3815a6bc790b66d93f214250cfd1d` | Actor incarnation identity; centralized lifecycle state machine; ActorRef permanently bound to one incarnation; deterministic lifecycle/concurrency coverage. |
 | I011-2 | CLOSED | `0.2.82-SNAPSHOT` | `0c65053e4f6fbc1c090087c2bde6cd5ccd4322bd` | ActorRef as opaque communication capability; Actor-boundary rematerialization preserving semantic identity, identityHash, delegation parent, and target; no retargeting after termination. |
 | I011-3 | CLOSED | `0.2.84-SNAPSHOT` | `SAME_COMMIT` | Destination-local bootstrap by canonical ModuleKey; exact local bootstrap-binding selection; invocation with already-transferred arguments; exact behavior installation and READY cutover; Actor execution-domain ownership/current-ActorRef substrate; initialization-failure termination. |
+| I011-4 | CLOSED | `0.2.85-SNAPSHOT` | `SAME_COMMIT` | Actor-boundary graph snapshot/value-transfer foundation: atomic copy/validation for currently integrated transferable value families; alias/cycle preservation across roots; ActorRef capability rematerialization; NonTransferableValue rejection for non-transferable execution/resource values. |
 
 Remaining implemented-surface gaps before top-level closure:
-- public `Actor.spawn(...)` / `Actor.current()` with synchronous pre-creation validation and transfer prerequisites;
-- bounded mailbox/admission, ordering/fairness, implicit event-loop dispatch, and real cross-Actor scheduling;
-- `send()` / `request()` / `SendOperation`, backpressure, acceptance, cancellation, reply, and uncertainty behavior;
-- complete Actor pass-by-value graph transfer, alias/cycle preservation, capability exceptions, and reply transfer;
+- public `Actor.spawn(...)` / `Actor.current()` using synchronous semantic-String validation, canonical module resolution, the Actor-transfer boundary, and I011-3 bootstrap;
+- bounded mailbox/admission, same-sender FIFO, weak admission/runnable fairness, implicit event-loop dispatch, and real cross-Actor scheduling;
+- `send()` / `request()` / `SendOperation`, backpressure, acceptance, cancellation, reply, retry, and uncertainty behavior wired to the snapshot boundary;
+- remaining specialized transfer integrations whose state/authority has its own contract (including keyed collections and future GroupRef/Process capability materialization), plus reply-transfer wiring;
 - stop/termination observation, failure authority, Actor-owned task cleanup, RootActor/process integration, and final deterministic race/conformance coverage.
 
 
