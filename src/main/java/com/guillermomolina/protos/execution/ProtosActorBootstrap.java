@@ -24,8 +24,11 @@ import com.guillermomolina.protos.runtime.ProtosIdentity;
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -82,7 +85,13 @@ public final class ProtosActorBootstrap {
 
         try {
             ProtosObjectValue module =
-                    moduleRuntime.loadCanonicalModule(canonicalModuleKey, activation);
+                    actor.isRootActorForRuntime()
+                            ? moduleRuntime.loadCanonicalInitialModule(
+                                    canonicalModuleKey,
+                                    activation,
+                                    rootBootstrapLocals(actor, prelude))
+                            : moduleRuntime.loadCanonicalModule(
+                                    canonicalModuleKey, activation);
             Object bootstrapBinding =
                     module.readLocalSlot(bindingName)
                             .orElseThrow(() -> bootstrapError(activation));
@@ -100,6 +109,25 @@ public final class ProtosActorBootstrap {
             terminateFailedInitialization(actor, failure.error());
             throw failure;
         }
+    }
+
+    private static Map<String, Object> rootBootstrapLocals(
+            ProtosActor actor, ProtosPrelude prelude) {
+        ProtosProcessRuntime process =
+                actor.processForRuntime()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "RootActor lost its owning Process runtime"));
+
+        LinkedHashMap<String, Object> locals = new LinkedHashMap<>();
+        locals.put(
+                "process",
+                process.provisionCapabilityForRuntime(
+                        prelude.processPrototype()));
+        process.rootFilesystemForRuntime()
+                .ifPresent(filesystem -> locals.put("filesystem", filesystem));
+        return Map.copyOf(locals);
     }
 
     private static ProtosSignalException bootstrapError(ProtosActivation activation) {

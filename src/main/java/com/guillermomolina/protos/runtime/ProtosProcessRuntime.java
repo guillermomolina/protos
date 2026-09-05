@@ -26,10 +26,10 @@ import java.util.Set;
  * Internal local Protos Process failure-domain and RootActor failure-authority substrate.
  *
  * <p>A Process is semantic runtime capacity, not an operating-system process. This class performs
- * no OS termination and exposes no language-level Process capability. It only owns the current
- * local Process incarnation, its unique RootActor, and the Actor incarnations currently hosted by
- * that Process so the already-closed Process/Actor failure consequences have one authoritative
- * implementation boundary.
+ * no OS termination. It owns the current local Process incarnation, its unique RootActor, hosted
+ * Actor incarnations, stable bootstrap state, and the runtime authority behind represented Process
+ * capability proxies. The optional default Filesystem grant remains separate authority and is
+ * exposed only to RootActor bootstrap machinery.
  */
 public final class ProtosProcessRuntime {
     public enum LifecycleState {
@@ -64,6 +64,7 @@ public final class ProtosProcessRuntime {
     }
 
     private final ProtosActor rootActor;
+    private final ProtosFilesystemValue rootFilesystem;
     private final Set<ProtosActor> liveActors = new LinkedHashSet<>();
     private LifecycleState lifecycle = LifecycleState.RUNNING;
     private Object rootFailureCause;
@@ -87,8 +88,25 @@ public final class ProtosProcessRuntime {
     private ProtosEncodingValue stdoutEncoding;
     private ProtosEncodingValue stderrEncoding;
 
-    /** Creates one Process incarnation together with its unique RootActor. */
+    /**
+     * Creates one Process incarnation together with its unique RootActor and no default
+     * Filesystem grant.
+     */
     public ProtosProcessRuntime(ProtosObjectValue actorRefPrototype) {
+        this(actorRefPrototype, null);
+    }
+
+    /**
+     * Creates one Process incarnation with its bootstrap-stable optional default Filesystem grant.
+     *
+     * <p>The Filesystem capability is separate from Process authority. A null host argument means
+     * the RootActor initial module receives no local {@code filesystem} slot; the choice is fixed
+     * for this Process incarnation and is never recoverable through Process.
+     */
+    public ProtosProcessRuntime(
+            ProtosObjectValue actorRefPrototype,
+            ProtosFilesystemValue rootFilesystem) {
+        this.rootFilesystem = rootFilesystem;
         rootActor =
                 new ProtosActor(
                         Objects.requireNonNull(actorRefPrototype, "actorRefPrototype"),
@@ -103,6 +121,11 @@ public final class ProtosProcessRuntime {
 
     public ProtosActor rootActorForRuntime() {
         return rootActor;
+    }
+
+    /** Optional default Filesystem authority granted only to the RootActor initial module. */
+    public Optional<ProtosFilesystemValue> rootFilesystemForRuntime() {
+        return Optional.ofNullable(rootFilesystem);
     }
 
     /**

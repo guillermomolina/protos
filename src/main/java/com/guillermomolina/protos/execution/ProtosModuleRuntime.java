@@ -12,6 +12,7 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
+import java.util.Map;
 import java.util.Objects;
 
 /** Core module semantics layered over the host-defined resolver boundary. */
@@ -56,19 +57,70 @@ public final class ProtosModuleRuntime {
      * <p>This deliberately bypasses specifier resolution. Actor bootstrap resolves in the creator
      * before the creation cutover and the destination consumes only the resulting ModuleKey.
      */
-    public ProtosObjectValue loadCanonicalModule(ProtosModuleKey key, ProtosActivation caller) {
+    public ProtosObjectValue loadCanonicalModule(
+            ProtosModuleKey key, ProtosActivation caller) {
+        return loadCanonicalModuleInternal(key, caller, Map.of(), false);
+    }
+
+    /**
+     * Loads the RootActor initial module after installing bootstrap-local slots and before the
+     * first source expression executes.
+     *
+     * <p>This package-private entry is used only by Actor bootstrap. Ordinary imports always use
+     * {@link #loadCanonicalModule} and therefore receive no ambient bootstrap locals. The initial
+     * record is still inserted before source execution, preserving cache-before-execute and cycles.
+     */
+    ProtosObjectValue loadCanonicalInitialModule(
+            ProtosModuleKey key,
+            ProtosActivation caller,
+            Map<String, ?> bootstrapLocals) {
+        Objects.requireNonNull(bootstrapLocals, "bootstrapLocals");
+        if (bootstrapLocals.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "RootActor initial module requires bootstrap-local authority");
+        }
+        return loadCanonicalModuleInternal(key, caller, bootstrapLocals, true);
+    }
+
+    private ProtosObjectValue loadCanonicalModuleInternal(
+            ProtosModuleKey key,
+            ProtosActivation caller,
+            Map<String, ?> bootstrapLocals,
+            boolean initialBootstrap) {
         Objects.requireNonNull(key, "key");
         Objects.requireNonNull(caller, "caller");
+        Objects.requireNonNull(bootstrapLocals, "bootstrapLocals");
 
         ProtosActorModuleState actorState = caller.actorModuleState();
         ProtosActorModuleState.ModuleRecord existing = actorState.lookup(key).orElse(null);
         if (existing != null) {
+            if (initialBootstrap) {
+                throw new IllegalStateException(
+                        "RootActor initial module was cached before bootstrap-local provisioning");
+            }
             return existing.instance();
         }
 
-        ProtosPrelude prelude = caller.prelude().orElseThrow(
-                () -> new IllegalStateException("module import requires an owning Core prelude"));
+        ProtosPrelude prelude =
+                caller.prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "module import requires an owning Core prelude"));
         ProtosObjectValue moduleInstance = prelude.newExecutionContext();
+
+        if (initialBootstrap) {
+            for (Map.Entry<String, ?> entry : bootstrapLocals.entrySet()) {
+                String name = Objects.requireNonNull(entry.getKey(), "bootstrap local name");
+                Object value = Objects.requireNonNull(entry.getValue(), "bootstrap local value");
+                if (moduleInstance.hasLocalSlot(name)) {
+                    throw new IllegalStateException(
+                            "duplicate RootActor bootstrap local: " + name);
+                }
+                moduleInstance.createLocalSlot(name, value);
+            }
+        }
+
         ProtosActorModuleState.ModuleRecord record =
                 new ProtosActorModuleState.ModuleRecord(moduleInstance);
         actorState.put(key, record); // normative cache-before-execute point

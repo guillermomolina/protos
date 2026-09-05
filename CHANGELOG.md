@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.128-SNAPSHOT
+
+- Implement I017-E2 RootActor bootstrap-local authority provisioning. The unique RootActor's canonical initial module receives exactly one local `process` slot before its first source expression; the value is a fresh Actor-local Process capability proxy delegating to the source-backed `Process` prototype. The initial module still enters the Actor-local cache before source execution, so recursive imports observe the same partially initialized module and its already-provisioned bootstrap locals.
+- Add a bootstrap-stable optional default Filesystem grant to `ProtosProcessRuntime`: the host either constructs the Process with one `ProtosFilesystemValue` or with no grant. When granted, the RootActor initial module receives the exact capability in a local `filesystem` slot; when absent, no such slot exists. Process authority remains unable to recover Filesystem authority.
+- Keep ordinary module import and non-root Actor bootstrap on the existing ambient-authority-free path. Imported modules receive no local `process`/`filesystem` slots, hosted Actors do not inherit them merely because they belong to the same Process, and explicit Process Actor-transfer/delegation remains the only Core path for giving another Actor Process authority. E2 adds no native Closure site, so I018 remains 28 providers / 102 sites. I017-E2 is CLOSED and I017-E3 becomes READY for standalone host/CLI capture and wiring.
+
 ## 0.2.127-SNAPSHOT
 
 - Start the safe subdivision of I017-E with I017-E1. Add a source-backed, frozen, authority-free standard `Process` prototype to the Core prelude and install exactly the eight standardized synchronous accessors: `args`, `environment`, `stdin`, `stdinEncoding`, `stdout`, `stdoutEncoding`, `stderr`, and `stderrEncoding`. The prototype has no constructor/call surface and cannot recover a Process capability.
