@@ -256,6 +256,18 @@ public final class ProtosCoreBootstrap {
         ProtosObjectValue actorObject =
                 requirePrototype(
                         bootstrapContext, "Actor", ProtosObjectValue.rootObject());
+        ProtosObjectValue actorRefPrototype =
+                requirePrototype(
+                        bootstrapContext,
+                        "_coreActorRefPrototype",
+                        ProtosObjectValue.rootObject());
+        ProtosObjectValue sendOperationPrototype =
+                requirePrototype(
+                        bootstrapContext,
+                        "_coreSendOperationPrototype",
+                        ProtosObjectValue.rootObject());
+        bootstrapContext.removeLocalSlot("_coreActorRefPrototype");
+        bootstrapContext.removeLocalSlot("_coreSendOperationPrototype");
         ProtosObjectValue bufferedReaderFactory =
                 requirePrototype(
                         bootstrapContext, "BufferedReader", ProtosObjectValue.rootObject());
@@ -267,7 +279,9 @@ public final class ProtosCoreBootstrap {
                         bootstrapContext, "import", ProtosObjectValue.rootObject());
         ProtosParallelRuntime.installObjectParallel();
         ProtosModuleRuntime moduleRuntime = new ProtosModuleRuntime(moduleResolver);
-        new ProtosStandardActorProtocol(moduleRuntime).installActorObject(actorObject);
+        new ProtosStandardActorProtocol(
+                        moduleRuntime, actorRefPrototype, sendOperationPrototype)
+                .installActorObject(actorObject);
         ProtosStandardImportProtocol.installImportFacility(importFacility, moduleRuntime);
 
         // Bytes is standardized but intentionally not a required Core-prelude binding.

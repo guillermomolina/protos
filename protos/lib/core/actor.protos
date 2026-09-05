@@ -14,3 +14,7 @@
 // the specific language governing rights and limitations under the License.
 
 Actor: {}
+
+_coreActorRefPrototype: {}
+
+_coreSendOperationPrototype: {}

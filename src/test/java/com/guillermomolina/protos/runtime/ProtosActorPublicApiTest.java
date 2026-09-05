@@ -59,15 +59,29 @@ final class ProtosActorPublicApiTest {
     void actorProtocolInstallsIntoTheExactProvidedObjectWithoutAllocatingAReplacement() {
         ProtosObjectValue sourceObject =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue actorRefPrototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue sendOperationPrototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosObjectValue installed =
                 new ProtosStandardActorProtocol(
                                 new ProtosModuleRuntime(ProtosModuleResolver.rejecting()),
-                                new ManualExecutor())
+                                new ManualExecutor(),
+                                actorRefPrototype,
+                                sendOperationPrototype)
                         .installActorObject(sourceObject);
 
         assertSame(sourceObject, installed);
         assertTrue(installed.isFrozen());
         assertEquals(Set.of("spawn", "current"), installed.localSlotsSnapshot().keySet());
+        assertTrue(actorRefPrototype.isFrozen());
+        assertEquals(
+                Set.of("send", "request"),
+                actorRefPrototype.localSlotsSnapshot().keySet());
+        assertTrue(sendOperationPrototype.isFrozen());
+        assertEquals(
+                Set.of("cancel", "retry"),
+                sendOperationPrototype.localSlotsSnapshot().keySet());
 
         ProtosClosureValue spawn =
                 assertInstanceOf(
@@ -304,7 +318,12 @@ final class ProtosActorPublicApiTest {
             ProtosModuleRuntime runtime, Executor executor) {
         ProtosObjectValue actorObject =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
-        return new ProtosStandardActorProtocol(runtime, executor)
+        ProtosObjectValue actorRefPrototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue sendOperationPrototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        return new ProtosStandardActorProtocol(
+                        runtime, executor, actorRefPrototype, sendOperationPrototype)
                 .installActorObject(actorObject);
     }
 

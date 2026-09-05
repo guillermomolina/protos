@@ -43,8 +43,15 @@ public final class ProtosStandardActorProtocol {
     private final ProtosObjectValue sendOperationPrototype;
     private final ProtosObjectValue actorRefPrototype;
 
-    public ProtosStandardActorProtocol(ProtosModuleRuntime moduleRuntime) {
-        this(moduleRuntime, new ProtosActorScheduler());
+    public ProtosStandardActorProtocol(
+            ProtosModuleRuntime moduleRuntime,
+            ProtosObjectValue actorRefPrototype,
+            ProtosObjectValue sendOperationPrototype) {
+        this(
+                moduleRuntime,
+                new ProtosActorScheduler(),
+                actorRefPrototype,
+                sendOperationPrototype);
     }
 
     /**
@@ -52,21 +59,32 @@ public final class ProtosStandardActorProtocol {
      * Protos. The injected form intentionally uses one scheduler worker for deterministic tests.
      */
     public ProtosStandardActorProtocol(
-            ProtosModuleRuntime moduleRuntime, Executor bootstrapExecutor) {
-        this(moduleRuntime, new ProtosActorScheduler(bootstrapExecutor, 1));
+            ProtosModuleRuntime moduleRuntime,
+            Executor bootstrapExecutor,
+            ProtosObjectValue actorRefPrototype,
+            ProtosObjectValue sendOperationPrototype) {
+        this(
+                moduleRuntime,
+                new ProtosActorScheduler(bootstrapExecutor, 1),
+                actorRefPrototype,
+                sendOperationPrototype);
     }
 
     private ProtosStandardActorProtocol(
-            ProtosModuleRuntime moduleRuntime, ProtosActorScheduler actorScheduler) {
+            ProtosModuleRuntime moduleRuntime,
+            ProtosActorScheduler actorScheduler,
+            ProtosObjectValue actorRefPrototype,
+            ProtosObjectValue sendOperationPrototype) {
         this.moduleRuntime = Objects.requireNonNull(moduleRuntime, "moduleRuntime");
         this.actorBootstrap = new ProtosActorBootstrap(moduleRuntime);
         this.actorScheduler = Objects.requireNonNull(actorScheduler, "actorScheduler");
-        this.sendOperationPrototype = createSendOperationPrototype();
-        this.actorRefPrototype = createActorRefPrototype();
+        validateSourcePrototype(actorRefPrototype, "ActorRef");
+        validateSourcePrototype(sendOperationPrototype, "SendOperation");
+        this.actorRefPrototype = installActorRefPrototype(actorRefPrototype);
+        this.sendOperationPrototype = installSendOperationPrototype(sendOperationPrototype);
     }
 
-    private ProtosObjectValue createActorRefPrototype() {
-        ProtosObjectValue prototype = new ProtosObjectValue(ProtosObjectValue.rootObject());
+    private ProtosObjectValue installActorRefPrototype(ProtosObjectValue prototype) {
         prototype.createLocalSlot(
                 "send",
                 ProtosClosureValue.nativeClosure(
@@ -78,8 +96,8 @@ public final class ProtosStandardActorProtocol {
         return prototype.freeze();
     }
 
-    private ProtosObjectValue createSendOperationPrototype() {
-        ProtosObjectValue prototype = new ProtosObjectValue(ProtosObjectValue.rootObject());
+    private static ProtosObjectValue installSendOperationPrototype(
+            ProtosObjectValue prototype) {
         prototype.createLocalSlot(
                 "cancel",
                 ProtosClosureValue.nativeClosure(
@@ -89,6 +107,20 @@ public final class ProtosStandardActorProtocol {
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) -> retrySendOperation(activation, supplied)));
         return prototype.freeze();
+    }
+
+    private static void validateSourcePrototype(
+            ProtosObjectValue prototype, String standardName) {
+        Objects.requireNonNull(prototype, standardName + " prototype");
+        if (prototype.parent().orElse(null) != ProtosObjectValue.rootObject()) {
+            throw new IllegalArgumentException(
+                    "Core " + standardName + " prototype must delegate directly to Object");
+        }
+        if (!prototype.isOpen() || !prototype.localSlotsSnapshot().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "source-created Core " + standardName
+                            + " prototype must begin open and without local slots");
+        }
     }
 
     /** Installs host-backed Actor entry operations on the exact source-created Core object. */

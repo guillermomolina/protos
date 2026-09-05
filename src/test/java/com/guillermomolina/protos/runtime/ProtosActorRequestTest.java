@@ -279,7 +279,10 @@ final class ProtosActorRequestTest {
         ManualExecutor bootstrapExecutor = new ManualExecutor();
         ProtosStandardActorProtocol protocol =
                 new ProtosStandardActorProtocol(
-                        new ProtosModuleRuntime(resolver), bootstrapExecutor);
+                        new ProtosModuleRuntime(resolver),
+                        bootstrapExecutor,
+                        new ProtosObjectValue(ProtosObjectValue.rootObject()),
+                        new ProtosObjectValue(ProtosObjectValue.rootObject()));
         ProtosObjectValue actorObject =
                 protocol.installActorObject(
                         new ProtosObjectValue(ProtosObjectValue.rootObject()));

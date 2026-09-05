@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.104-SNAPSHOT
+
+- Continue I018 Core self-hosting/bootstrap minimization by constructing the internal standard `ActorRef` and `SendOperation` delegation prototypes in distributable `protos/lib/core/actor.protos` rather than allocating those prototype identities inside `ProtosStandardActorProtocol`.
+- Supply the exact source-created prototypes to the Actor runtime installer, validate direct-`Object` parentage plus open/empty source shape before mutation, install only the existing native communication/lifecycle bridges (`send`, `request`, `cancel`, `retry`), freeze the exact supplied objects, and remove the construction-only helper bindings before prelude construction.
+- Extend Actor API regression coverage for the exact supplied prototype identities/surfaces and update deterministic send/request fixtures to inject their prototype identities explicitly. `ActorRef` and `SendOperation` remain absent as public prelude bindings. No normative specification changes are made; I018 remains open only for the final exhaustive native-boundary inventory/architectural guard, and I016 remains frozen at I016-C.
+
 ## 0.2.103-SNAPSHOT
 
 - Continue I018 Core self-hosting/bootstrap minimization by moving the standard default `Object.==` body from Java into distributable `protos/lib/core/object.protos`.
