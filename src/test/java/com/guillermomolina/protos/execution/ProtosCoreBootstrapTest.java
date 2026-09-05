@@ -138,6 +138,7 @@ class ProtosCoreBootstrapTest {
                         "Path",
                         "Future",
                         "Actor",
+                        "Process",
                         "BufferedReader",
                         "BufferedWriter",
                         "import"),

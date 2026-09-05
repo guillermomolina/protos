@@ -48,7 +48,7 @@ an item.
 | I014 | Standard Byte I/O | CLOSED | `2462ba74298e94181489e13de4e25dbbb82b21f9` | I009 + I012 |
 | I015 | Encoding / Text I/O | IN_PROGRESS | — | I014 closed; I015-A Encoding closed; streaming TextReader/TextWriter slices remain |
 | I016 | Filesystem / File | CLOSED | `SAME_COMMIT` | I013 + I014; I016-A/B/C/D1/D2/D3/D4 complete |
-| I017 | Process I/O / bootstrap | IN_PROGRESS | — | I017-A/B/C/D1/D2 closed; I017-E READY for public Process/bootstrap integration |
+| I017 | Process I/O / bootstrap | IN_PROGRESS | — | I017-A/B/C/D1/D2/E1 closed; I017-E2 READY; E split keeps Root bootstrap and host/CLI capture separate |
 | I018 | Core self-hosting / bootstrap minimization | CLOSED | `SAME_COMMIT` | I018-L exhaustive native-boundary inventory and architectural guard complete; I016-D pause lifted |
 
 ### I011 — Actors
@@ -199,21 +199,23 @@ Published / planned slices:
 | I017-C | CLOSED | `0.2.118-SNAPSHOT` | `SAME_COMMIT` | Canonical read-only Environment snapshot with stable Process acquisition outcome/identity; duplicate-native-name rejection; exact query representability and native identity; selective value decoding for get/contains; polymorphic each with whole-snapshot String prevalidation and canonical Unicode-scalar ordering; ordinary Actor/P value-copy identity; reviewed 3-site I018 representation bridge. |
 | I017-D1 | CLOSED | `0.2.119-SNAPSHOT` | `SAME_COMMIT` | Stable independently optional stdin/stdout/stderr bindings; repeated/Actor-delegated views share one logical per-binding queue; exact read-only/write-only surface with no implicit lifecycle/File/text authority; Actor-local Futures use I014 cancellation/commitment machinery; termination blocks new work; P rejects live stream authority; reviewed 2-site I018 resource bridge. |
 | I017-D2 | CLOSED | `0.2.123-SNAPSHOT` | `SAME_COMMIT` | Stable exactly-once stdin/stdout/stderr Encoding association states coupled to D1 stream availability; portable or host-provided immutable Encoding accepted; unavailable is distinct from invalid availability/Encoding mismatch; no hidden host lookup/default and no native-boundary expansion. |
-| I017-E | READY | — | — | Complete standard Process prototype/accessor bridge plus RootActor initial-module bootstrap provisioning of `process` and optional `filesystem`; host/CLI bootstrap capture of application args, environment and available standard bindings; imported modules receive no ambient capability; all accessors reject use after Process termination cutover. Requires B/C/D1/D2. |
+| I017-E | IN_PROGRESS | — | — | Subdivided after D2 audit into E1 public Process accessors, E2 RootActor bootstrap-local authority provisioning/import confinement, and E3 host/CLI bootstrap capture and wiring. |
+| I017-E1 | CLOSED | `0.2.127-SNAPSHOT` | `SAME_COMMIT` | Source-backed frozen authority-free `Process` prototype; exactly eight synchronous Process accessors over A/B/C/D1/D2 state; exact represented-capability receiver domain; canonical snapshot acquisition; stable stream/Encoding lookup failure; all proxies rejected after Process termination; one audited native Closure construction helper. |
+| I017-E2 | READY | — | — | RootActor initial-module/bootstrap-entry `moduleContext` gets exactly one local `process` capability and optional local `filesystem`; imports and newly created Actors receive no ambient Process/Filesystem authority; explicit Actor transfer remains the only delegation path. |
+| I017-E3 | BLOCKED_BY_DEPENDENCIES | — | — | Standalone host/CLI captures application args, native Environment snapshot/domain, independently available standard byte streams and host-selected Encodings before first source expression, then provisions E2 bootstrap state without hidden waiting or imported-module leakage. |
 | I017-F | BLOCKED_BY_DEPENDENCIES | — | — | Final Process/Actor/termination authority conformance, post-I017 I018 native-boundary re-audit, CLI/runtime integration regression suite and canonical I017 closure. |
 
-Dependency chain: `I017-A -> I017-B -> I017-C -> I017-D1 -> I017-D2 -> I017-E -> I017-F`. The Encoding-family dependency of D2 was satisfied by published I015-A; remaining I015 TextReader/TextWriter work is independent.
+Dependency chain: `I017-A -> I017-B -> I017-C -> I017-D1 -> I017-D2 -> I017-E1 -> I017-E2 -> I017-E3 -> I017-F`. I017-E is the coordinating parent for E1/E2/E3. The Encoding-family dependency of D2 was satisfied by published I015-A; remaining I015 TextReader/TextWriter work is independent.
 
-Current implementation boundary after I017-D2:
+Current implementation boundary after I017-E1:
 - I017 deliberately reuses `ProtosProcessCapabilityValue` from I011-14; there is one Process-capability representation, not parallel I011/I017 variants;
-- Process argument and Environment bootstrap snapshots retain the stable canonical acquisition/transfer behavior closed by B/C;
-- stdin/stdout/stderr retain D1's one Process-local logical byte binding each, with exact directional capability shape and shared ordering/backpressure across repeated/Actor-delegated views;
-- each standard-stream binding now also owns one exactly-once host-selected Encoding bootstrap association state: AVAILABLE only for stream+Encoding, UNAVAILABLE only for no-stream+no-Encoding, and INVALID for either mismatch; no later host query or inferred default can change that state;
-- portable I015-A descriptors and explicit host-provided Encoding descriptors are both valid immutable authority-free association values; no TextReader/TextWriter wrapper is implicit;
-- no public `Process` prelude binding/source prototype is added yet, so args/environment/streams/encodings are not yet acquired through application-visible Process accessors;
-- no bootstrap-local `process` or `filesystem` slot is injected yet;
-- Process capability transfer is explicit across Actor boundaries and absent from P; Process termination rejects new standard-stream work, and I017-E will apply the required termination cutover to every public Process accessor.
-
+- `Process` is now a required frozen source-backed prelude prototype with no instance authority and no public constructor/factory surface;
+- all eight standardized Process accessors are synchronous runtime/capability bridges over the already-established B/C/D1/D2 bootstrap state; they accept only an actual represented Process capability, never recover authority from the prototype, and perform no host discovery or waiting;
+- args/environment successful acquisitions return the Process's canonical semantic snapshots; unavailable/invalid stream or Encoding bootstrap state fails instead of returning null or inferring defaults;
+- every existing Process proxy becomes unusable for all eight accessors as soon as Process lifecycle leaves RUNNING;
+- stdin/stdout/stderr retain D1's exact directional byte capability shape and shared Process-local ordering domains; Encoding associations remain immutable D2 state and do not imply TextReader/TextWriter construction;
+- bootstrap-local `process` and optional `filesystem` injection, imported-module confinement and initial-entry handling remain E2;
+- standalone host/CLI capture of args/environment/streams/Encodings remains E3.
 ### I018 — Core self-hosting / bootstrap minimization
 
 Status: CLOSED

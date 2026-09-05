@@ -54,6 +54,7 @@ _corePreludeBindings: Context {
     Path: Path
     Future: Future
     Actor: Actor
+    Process: Process
     BufferedReader: BufferedReader
     BufferedWriter: BufferedWriter
     import: import

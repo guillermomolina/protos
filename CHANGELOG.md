@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.127-SNAPSHOT
+
+- Start the safe subdivision of I017-E with I017-E1. Add a source-backed, frozen, authority-free standard `Process` prototype to the Core prelude and install exactly the eight standardized synchronous accessors: `args`, `environment`, `stdin`, `stdinEncoding`, `stdout`, `stdoutEncoding`, `stderr`, and `stderrEncoding`. The prototype has no constructor/call surface and cannot recover a Process capability.
+- Implement all eight accessors as one audited runtime/capability Closure-construction helper over the already-published I017-A/B/C/D1/D2 substrate. Accessors require an actual represented Process capability rather than duck typing or delegation masquerading, perform no host discovery or waiting, return canonical args/environment snapshots and already-established stream/Encoding bindings, fail on unavailable/invalid bootstrap state, and reject every existing proxy after the Process termination cutover.
+- Keep RootActor moduleContext provisioning and host/CLI capture out of E1. I017-E is subdivided into E1 public Process accessors, E2 RootActor bootstrap-local `process`/optional `filesystem` provisioning and imported-module confinement, and E3 host/CLI bootstrap capture/wiring. Register the single new Process Closure construction site in I018, moving the audited boundary from 27 providers / 101 sites to 28 providers / 102 sites. I017-E1 is CLOSED and I017-E2 becomes READY.
+
 ## 0.2.126-SNAPSHOT
 
 - Implement I011-18 final local/cross-Process ActorGroup conformance: prove GroupRef continuity across member replacement, pre-acceptance rerouting when a selected member's Process terminates, and no rerouting after concrete acceptance.

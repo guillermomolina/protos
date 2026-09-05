@@ -54,6 +54,7 @@ the standard native boundary.
 | `ProtosStandardEnvironmentProtocol.java` | 3 | representation bridge | Standardized Environment snapshots retain opaque native-name identity/representability state. `get`/`contains` preserve native query semantics and selective value decoding; `each` performs eager callability plus whole-snapshot portable String validation before canonical Unicode-scalar-order callbacks. Environment remains outside the required Core prelude and is not a Map subtype. |
 | `ProtosStandardEncodingProtocol.java` | 2 | representation bridge | Encoding semantic-family receiver validation and exact one-shot String/Bytes conversion cross immutable descriptor and codec representations. The source-backed Encoding factory exposes only the four required portable descriptors plus native `encode`/`decode`; default UTF decoding is strict, matching initial BOMs are consumed, Latin1 is ISO-8859-1, and each encode produces fresh standard Bytes. |
 | `ProtosStandardProcessStreamProtocol.java` | 2 | resource/capability bridge | Process standard-stream views expose exactly one byte direction (`read` for stdin or `write` for stdout/stderr) over Process-local shared ordering/backpressure bindings. Actor transfer rematerializes an Actor-local proxy to the same binding; P rejects the live authority; no Closable/File/text/seek/flush surface is inferred. |
+| `ProtosStandardProcessProtocol.java` | 1 | resource/capability bridge | The source-backed authority-free `Process` prototype receives eight synchronous accessors from one audited Closure-construction helper. Each selector requires an actual represented Process capability, reads only already-established Process bootstrap state, rejects unavailable/invalid state, and rejects every proxy after the Process termination cutover; no accessor performs host discovery, waiting, filesystem recovery, or capability construction. |
 | `ProtosStandardMapProtocol.java` | 7 | representation bridge | Map storage, recorded hashes, reentrancy restrictions, mutation state, lookup equality callbacks, and iteration snapshots are receiver-owned keyed representation semantics. |
 | `ProtosStandardIdentityMapProtocol.java` | 7 | representation bridge | IdentityMap storage and lookup require primitive semantic identity/identityHash plus keyed representation state and iteration snapshots. |
 | `ProtosStandardBytesProtocol.java` | 7 | representation bridge | Bytes owns octet-indexed mutable state, reservation state, exact octet validation, snapshot iteration, and P-region interaction. Its standard prototype identity is already source-backed and construction-only. |
@@ -68,7 +69,7 @@ the standard native boundary.
 | `ProtosStandardFileProtocol.java` | 10 | resource/capability bridge | File objects are acquired resource capabilities whose exact local surface depends on backend-provided authority and whose operations own cursor/append/sync/close/commitment state. |
 | `ProtosStandardFilesystemProtocol.java` | 1 | resource/capability bridge | Host-provisioned Filesystem authority exposes the standard `open` bridge; its backend owns confined/race-free namespace selection, create/truncate commitment, stable-resource acquisition, cancellation cleanup, and standard File materialization. |
 
-Total audited production construction sites: **101 across 27 providers**.
+Total audited production construction sites: **102 across 28 providers**.
 
 I018-L closed with the 90-site/22-provider baseline. I016-D1 was an explicitly
 reviewed post-I018 resource/capability extension adding exactly one
@@ -117,6 +118,15 @@ construction helpers in `ProtosStandardActorProtocol`; the provider remains at e
 and the repository-wide provider/site totals therefore remain whatever the definitive
 baseline records. The new internal `GroupRef` prototype identity is source-backed.
 
+I017-E1 is a reviewed post-I018 resource/capability-boundary extension. The public
+authority-free `Process` prototype identity is source-backed in
+`protos/lib/core/process.protos`; Java adds one native-Closure construction helper
+that materializes the eight runtime-backed synchronous Process accessors. The
+executable selector-surface guard fixes all eight names explicitly, while the
+construction-site inventory grows only once, to **102 sites across 28 providers**.
+No Process capability is created by the prototype and no root/module/host bootstrap
+authority is introduced by E1.
+
 ## Source-backed I018 invariants
 
 I018 specifically prevents the following ordinary derived behavior from
@@ -128,7 +138,7 @@ regressing to Java-only implementation:
 
 It also moved Java-allocated standard identities into Core source for:
 
-- the public `Actor`, `BufferedReader`, `BufferedWriter`, and `import` objects;
+- the public `Actor`, `Process`, `BufferedReader`, `BufferedWriter`, and `import` objects;
 - the construction-only standard `Bytes`, `ActorRef`, `GroupRef`, and `SendOperation`
   prototypes;
 - the final frozen prelude bindings object itself.

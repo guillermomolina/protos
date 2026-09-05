@@ -127,6 +127,9 @@ public final class ProtosCoreBootstrap {
                 .load(coreDirectory.resolve("actor.protos"))
                 .call(bootstrapActivation);
         sourceLoader
+                .load(coreDirectory.resolve("process.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
                 .load(coreDirectory.resolve("buffered_reader.protos"))
                 .call(bootstrapActivation);
         sourceLoader
@@ -256,6 +259,10 @@ public final class ProtosCoreBootstrap {
         ProtosStandardPathProtocol.install(pathPrototype);
         ProtosObjectValue futurePrototype = requirePrototype(bootstrapContext, "Future", ProtosObjectValue.rootObject());
         ProtosStandardFutureProtocol.install(futurePrototype);
+        ProtosObjectValue processObject =
+                requirePrototype(
+                        bootstrapContext, "Process", ProtosObjectValue.rootObject());
+        ProtosStandardProcessProtocol.install(processObject);
         ProtosObjectValue actorObject =
                 requirePrototype(
                         bootstrapContext, "Actor", ProtosObjectValue.rootObject());

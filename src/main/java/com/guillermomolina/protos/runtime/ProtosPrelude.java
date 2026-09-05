@@ -149,6 +149,8 @@ public final class ProtosPrelude {
 
     public ProtosObjectValue futurePrototype() { return requiredOrdinaryBinding("Future"); }
 
+    public ProtosObjectValue processPrototype() { return requiredOrdinaryBinding("Process"); }
+
     public ProtosObjectValue arrayPrototype() {
         Object binding = bindings.readLocalSlot("Array").orElseThrow();
         if (!(binding instanceof ProtosObjectValue arrayPrototype)) {
