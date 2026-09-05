@@ -28,6 +28,7 @@ public final class ProtosStandardByteIoProtocol {
             ProtosActivation activation,ProtosByteIoFlow.ExtendedBackend backend){
         Objects.requireNonNull(receiver);Objects.requireNonNull(bytesPrototype);Objects.requireNonNull(activation);Objects.requireNonNull(backend);
         ensureAbsent(receiver,"read","write","flush","position","seek","seekBy","seekToEnd","size","truncate");
+        if(backend instanceof ProtosByteIoFlow.SyncBackend)ensureAbsent(receiver,"sync");
         ProtosByteIoFlow flow=new ProtosByteIoFlow(receiver,bytesPrototype,activation,backend);
         installTransfer(receiver,flow);
         receiver.createLocalSlot("flush",ProtosClosureValue.nativeClosure((a,args)->args.isEmpty()&&a.receiver()==receiver?flow.flush(a):invalid(a)));
@@ -37,6 +38,8 @@ public final class ProtosStandardByteIoProtocol {
         receiver.createLocalSlot("seekToEnd",ProtosClosureValue.nativeClosure((a,args)->args.isEmpty()&&a.receiver()==receiver?flow.seekToEnd(a):invalid(a)));
         receiver.createLocalSlot("size",ProtosClosureValue.nativeClosure((a,args)->args.isEmpty()&&a.receiver()==receiver?flow.size(a):invalid(a)));
         receiver.createLocalSlot("truncate",ProtosClosureValue.nativeClosure((a,args)->args.size()==1&&a.receiver()==receiver?flow.truncate(a,args.get(0)):invalid(a)));
+        if(backend instanceof ProtosByteIoFlow.SyncBackend)
+            receiver.createLocalSlot("sync",ProtosClosureValue.nativeClosure((a,args)->args.isEmpty()&&a.receiver()==receiver?flow.sync(a):invalid(a)));
         return flow;
     }
 

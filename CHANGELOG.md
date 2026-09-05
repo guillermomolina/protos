@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.76-SNAPSHOT
+
+- Implement I014-D standard byte I/O durability: explicit `Syncable.sync()` capability, ordered durability frontiers integrated with I014-C sequence-state ordering, and cancellation/commitment semantics that prevent post-commit sync from becoming cancelled.
+
 ## 0.2.75-SNAPSHOT
 
 - Implement I014-C standard byte I/O positioning: `Flushable.flush`, `ByteSeekable` position/seek operations, `ByteSized.size`, and failure-atomic non-extending `Truncatable.truncate`, integrated with I014-B transfer ordering and Future cancellation/commitment semantics.

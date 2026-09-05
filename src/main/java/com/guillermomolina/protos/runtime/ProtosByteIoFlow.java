@@ -7,9 +7,8 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Ordered standard byte-I/O flow. I014-C extends the I014-B transfer flow with
- * flush and the optional positioned/size/truncate capability set while keeping
- * one sequence-state ordering domain.
+ * Ordered standard byte-I/O flow. I014-D extends the I014-C sequence-state
+ * ordering domain with an explicit durability frontier for Syncable.sync().
  */
 public final class ProtosByteIoFlow {
     public interface Cancellation { void cancel(); }
@@ -24,6 +23,16 @@ public final class ProtosByteIoFlow {
         void failed(int contributedPrefix);
     }
     public interface ReceiverCompletion {
+        void succeeded();
+        void failed();
+    }
+    /**
+     * Sync completion handshake. The backend must call commit() immediately
+     * before beginning the first irreversible durability action and proceed
+     * only when it returns true.
+     */
+    public interface SyncCompletion {
+        boolean commit();
         void succeeded();
         void failed();
     }
@@ -45,8 +54,12 @@ public final class ProtosByteIoFlow {
         Cancellation size(IntegerCompletion completion);
         Cancellation truncate(BigInteger size, ReceiverCompletion completion);
     }
+    /** Optional durability capability; ByteWritable does not imply Syncable. */
+    public interface SyncBackend extends ExtendedBackend {
+        Cancellation sync(SyncCompletion completion);
+    }
 
-    private enum Kind { READ, WRITE, FLUSH, POSITION, SEEK, SEEK_BY, SEEK_END, SIZE, TRUNCATE }
+    private enum Kind { READ, WRITE, FLUSH, POSITION, SEEK, SEEK_BY, SEEK_END, SIZE, TRUNCATE, SYNC }
     private static final int DEFAULT_MAX_RETAINED_WRITE_BYTES = 1024 * 1024;
 
     private final ProtosObjectValue receiver;
@@ -115,6 +128,12 @@ public final class ProtosByteIoFlow {
         BigInteger n=validatedNonNegative(a,v);if(n==null)return invalidFuture(a);
         return enqueueSimple(a,Kind.TRUNCATE,n);
     }
+    public ProtosFutureValue sync(ProtosActivation a){
+        Objects.requireNonNull(a);requireDomain(a);
+        if(!(backend instanceof SyncBackend))
+            return failedFuture(a,ProtosCoreErrors.StandardError.I_O_ERROR);
+        return enqueue(new Request(Kind.SYNC,begin(a),null,null,null));
+    }
 
     private ProtosFutureValue enqueueSimple(ProtosActivation a,Kind k,BigInteger n){
         Objects.requireNonNull(a);requireDomain(a);
@@ -152,6 +171,7 @@ public final class ProtosByteIoFlow {
             case SEEK_END -> startInteger(r,c->extended().seekToEnd(c),true);
             case SIZE -> startInteger(r,c->extended().size(c),false);
             case TRUNCATE -> startReceiver(r,c->extended().truncate(r.number,c));
+            case SYNC -> startSync(r);
         }
     }
 
@@ -210,6 +230,19 @@ public final class ProtosByteIoFlow {
         }catch(RuntimeException ex){failIo(r);finish(r);}
     }
 
+    private void startSync(Request r){
+        try{
+            setCancellation(r,syncBackend().sync(new SyncCompletion(){
+                public boolean commit(){boolean won=r.op.commit();if(!won&&r.op.terminal())finish(r);return won;}
+                public void succeeded(){
+                    if(!r.op.committed()){failIo(r);finish(r);return;}
+                    r.op.resolve(receiver);finish(r);
+                }
+                public void failed(){failIo(r);finish(r);}
+            }));
+        }catch(RuntimeException ex){failIo(r);finish(r);}
+    }
+
     @FunctionalInterface private interface IntegerStarter{Cancellation start(IntegerCompletion c);}
     private void startInteger(Request r,IntegerStarter starter,boolean changesPosition){
         try{
@@ -225,6 +258,7 @@ public final class ProtosByteIoFlow {
     }
 
     private ExtendedBackend extended(){return (ExtendedBackend)backend;}
+    private SyncBackend syncBackend(){return (SyncBackend)backend;}
     private void setCancellation(Request r,Cancellation c){
         synchronized(this){r.cancellation=c;}
         if(r.op.terminal()&&c!=null)c.cancel();
