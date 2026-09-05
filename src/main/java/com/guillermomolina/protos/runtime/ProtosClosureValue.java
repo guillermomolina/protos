@@ -145,6 +145,10 @@ public final class ProtosClosureValue extends ProtosObjectValue {
         return java.util.Optional.ofNullable(nativeBody);
     }
 
+    public ProtosClosureValue parallelProjection(java.util.List<ProtosObjectValue> roots,Object receiver,ProtosPrelude prelude,ProtosClosureExecutionPlan plan) {
+        return new ProtosClosureValue(definition,roots,java.util.Objects.requireNonNull(receiver),null,null,java.util.Objects.requireNonNull(prelude),plan,nativeBody);
+    }
+
     public ProtosClosureValue bindMethod(
             Object receiver,
             ProtosObjectValue home) {

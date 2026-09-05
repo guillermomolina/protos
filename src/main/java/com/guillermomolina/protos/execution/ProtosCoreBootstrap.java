@@ -220,6 +220,7 @@ public final class ProtosCoreBootstrap {
                     "Core Array prototype must delegate directly to Object");
         }
         ProtosStandardArrayProtocol.install(arrayPrototype);
+        ProtosParallelRuntime.installArrayParallel(arrayPrototype);
 
         ProtosObjectValue stringPrototype =
                 requirePrototype(
@@ -234,6 +235,7 @@ public final class ProtosCoreBootstrap {
         ProtosStandardPathProtocol.install(pathPrototype);
         ProtosObjectValue futurePrototype = requirePrototype(bootstrapContext, "Future", ProtosObjectValue.rootObject());
         ProtosStandardFutureProtocol.install(futurePrototype);
+        ProtosParallelRuntime.installObjectParallel();
 
         ProtosObjectValue preludeBindings =
                 new ProtosObjectValue(contextPrototype);

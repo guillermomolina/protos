@@ -4,6 +4,12 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## 0.2.73-SNAPSHOT
+
+- Implement I010 isolated parallel execution: Closure.parallel, deterministic Array parallelMap/parallelFilter/parallelFindIndex/canonical parallelReduce/stable parallelSort, and exclusive Bytes/ByteRegion parallelRange.
+- Add bounded lazy process-local P carriers, graph isolation and per-P Closure relowering, nested-P helping, Future structured ownership/cancellation, deterministic failure precedence, and atomic ByteRegion publication.
+- Preserve caller standard-prototype mutability while restricting direct P physical sharing to already-frozen standard identities. No public P/Task/scheduler value, parallelEach, I011, or I014 surface is introduced.
+
 ## 0.2.72-SNAPSHOT
 
 - Implement I009 — Future/Task: standard Future prototype/value state machine, `closure.future()`, suspendable `value()`, cancellation, `then()`, deterministic `Future.all(...)`, adoption/flattening, and `detach()`.

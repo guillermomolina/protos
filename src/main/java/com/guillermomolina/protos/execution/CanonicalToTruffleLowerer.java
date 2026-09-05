@@ -49,7 +49,7 @@ public final class CanonicalToTruffleLowerer {
             return lowerLiteral(literal);
         }
         if (expression instanceof CanonicalClosure closure) {
-            return new ProtosClosureLiteralNode(closure.span(), closure, lowerCallablePlan(closure));
+            return new ProtosClosureLiteralNode(closure.span(), closure, lowerClosurePlan(closure));
         }
         if (expression instanceof CanonicalCall call) {
             return lowerCall(call, false);
@@ -135,7 +135,7 @@ public final class CanonicalToTruffleLowerer {
                         + expression.getClass().getSimpleName());
     }
 
-    private ProtosClosureExecutionPlan lowerCallablePlan(CanonicalClosure closure) {
+    public ProtosClosureExecutionPlan lowerClosurePlan(CanonicalClosure closure) {
         ProtosExpressionNode[] defaultNodes =
                 closure.parameters().stream()
                         .map(
@@ -187,7 +187,7 @@ public final class CanonicalToTruffleLowerer {
             return new ProtosClosureLiteralNode(
                     closure.span(),
                     closure,
-                    lowerCallablePlan(closure));
+                    lowerClosurePlan(closure));
         }
         return lower(expression);
     }

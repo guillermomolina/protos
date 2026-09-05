@@ -48,6 +48,7 @@ public final class ProtosActorExecutionDomain {
             requireOwned(task);
             if (task.markQueued()) {
                 runnable.addLast(task);
+                notifyAll();
             }
         }
     }
@@ -73,6 +74,11 @@ public final class ProtosActorExecutionDomain {
         }
     }
 
+    public void dispatchUntilTerminal(ProtosTask root,java.util.function.BooleanSupplier helper) {
+        Objects.requireNonNull(root);Objects.requireNonNull(helper);
+        while(true){ProtosTask.State s=root.state();if(s==ProtosTask.State.COMPLETED||s==ProtosTask.State.FAILED||s==ProtosTask.State.CANCELLED)return;if(dispatchOne()||helper.getAsBoolean())continue;synchronized(this){s=root.state();if(s==ProtosTask.State.COMPLETED||s==ProtosTask.State.FAILED||s==ProtosTask.State.CANCELLED)return;if(!runnable.isEmpty())continue;try{wait();}catch(InterruptedException e){Thread.currentThread().interrupt();root.requestCancellation();}}}
+    }
+
     public synchronized int runnableCount() {
         return runnable.size();
     }
@@ -89,6 +95,7 @@ public final class ProtosActorExecutionDomain {
         synchronized (this) {
             requireOwned(task);
             liveTasks.remove(task);
+            notifyAll();
             task.parent().ifPresent(parent -> parent.removeChild(task));
         }
     }

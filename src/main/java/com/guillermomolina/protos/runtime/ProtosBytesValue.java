@@ -1,77 +1,21 @@
-/*
- * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
- * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
- * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
- * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
- * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
- * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
- * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
- * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
- * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
- * https://github.com/guillermomolina/protos
- *
- * Software distributed under the License is distributed on an "AS IS" basis,
- * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
- * the specific language governing rights and limitations under the License.
- */
-
+/* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.runtime;
-
-import java.math.BigInteger;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Objects;
-
-public final class ProtosBytesValue extends ProtosObjectValue {
-    private final List<Object> octets = new ArrayList<>();
-
-    public ProtosBytesValue(Object parent) {
-        super(parent);
-    }
-
-    public BigInteger indexedSize() {
-        return BigInteger.valueOf(octets.size());
-    }
-
-    public Object indexedAt(BigInteger index) {
-        return octets.get(requireExistingIndex(index));
-    }
-
-    public Object indexedPut(BigInteger index, Object value) {
-        Objects.requireNonNull(value, "value");
-        if (isFrozen()) {
-            throw new IllegalStateException("bytes is frozen");
-        }
-        octets.set(requireExistingIndex(index), value);
-        return value;
-    }
-
-    public Object indexedAdd(Object value) {
-        Objects.requireNonNull(value, "value");
-        if (!isOpen()) {
-            throw new IllegalStateException("bytes is not open");
-        }
-        octets.add(value);
-        return value;
-    }
-
-    public Object indexedRemoveAt(BigInteger index) {
-        if (!isOpen()) {
-            throw new IllegalStateException("bytes is not open");
-        }
-        return octets.remove(requireExistingIndex(index));
-    }
-
-    public List<Object> indexedSnapshot() {
-        return List.copyOf(octets);
-    }
-
-    private int requireExistingIndex(BigInteger index) {
-        Objects.requireNonNull(index, "index");
-        if (index.signum() < 0
-                || index.compareTo(BigInteger.valueOf(octets.size())) >= 0) {
-            throw new IndexOutOfBoundsException("bytes index out of bounds: " + index);
-        }
-        return index.intValueExact();
-    }
+import java.math.BigInteger;import java.util.*;
+public final class ProtosBytesValue extends ProtosObjectValue{
+ private final List<Object> octets=new ArrayList<>();private final List<R> reservations=new ArrayList<>();
+ private record R(BigInteger s,BigInteger e,Object token){}
+ public ProtosBytesValue(Object parent){super(parent);}
+ public synchronized BigInteger indexedSize(){return BigInteger.valueOf(octets.size());}
+ public synchronized Object indexedAt(BigInteger i){return octets.get(index(i));}
+ public synchronized Object indexedPut(BigInteger i,Object v){if(isFrozen())throw new IllegalStateException("bytes is frozen");octets.set(index(i),Objects.requireNonNull(v));return v;}
+ public synchronized Object indexedAdd(Object v){if(!isOpen())throw new IllegalStateException("bytes is not open");octets.add(Objects.requireNonNull(v));return v;}
+ public synchronized Object indexedRemoveAt(BigInteger i){if(!isOpen())throw new IllegalStateException("bytes is not open");return octets.remove(index(i));}
+ public synchronized List<Object> indexedSnapshot(){return List.copyOf(octets);}
+ public synchronized List<Object> rangeSnapshot(BigInteger s,BigInteger l){return List.copyOf(octets.subList(s.intValueExact(),s.add(l).intValueExact()));}
+ public synchronized boolean tryReserve(BigInteger s,BigInteger l,Object t){if(l.signum()==0)return true;BigInteger e=s.add(l);for(R r:reservations)if(s.compareTo(r.e)<0&&r.s.compareTo(e)<0)return false;reservations.add(new R(s,e,t));return true;}
+ public synchronized void releaseReservation(Object t){reservations.removeIf(r->r.token==t);}
+ public synchronized boolean hasReservation(){return !reservations.isEmpty();}
+ public synchronized boolean isIndexReserved(BigInteger i){for(R r:reservations)if(i.compareTo(r.s)>=0&&i.compareTo(r.e)<0)return true;return false;}
+ public synchronized void commitReserved(BigInteger s,List<?> v,Object t){for(int i=0;i<v.size();i++)octets.set(s.intValueExact()+i,v.get(i));releaseReservation(t);}
+ private int index(BigInteger i){Objects.requireNonNull(i);if(i.signum()<0||i.compareTo(BigInteger.valueOf(octets.size()))>=0)throw new IndexOutOfBoundsException("bytes index out of bounds: "+i);return i.intValueExact();}
 }
