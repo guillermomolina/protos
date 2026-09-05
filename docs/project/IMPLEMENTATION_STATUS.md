@@ -88,6 +88,44 @@ Remaining implemented-surface gaps before top-level closure:
 | CLI003 | Multiline REPL input | OPEN | — | known REPL multiline/paste defect; mark CLOSED only after tests + publication |
 
 
+## Language Maturity
+
+The `LMxxx` family records bounded language-maturity / dogfooding work:
+language-level conformance programs, executable examples, tutorials, and
+interaction/regression coverage that exercise already-implemented semantics
+without itself defining new normative language behavior.
+
+The first four LM identifiers were assigned retrospectively by the v6 historical
+reconciliation because the work was published on `main` before the repository
+persisted its operational LM identifiers. Their closure evidence is therefore
+the already-published implementation commit.
+
+| Item | Description | Status | Closure evidence | Notes |
+|---|---|---|---|---|
+| LM001 | Language-level coverage and examples | CLOSED | `99845b791a8e27798bc2c9cc8e47dc917d739a70` | Retrospective canonical ID; Map, IdentityMap, Path and regression conformance/examples. |
+| LM002 | Language-level conformance and tutorials | CLOSED | `c0ba8b3f5bf3dc0a0997ca5fbfae6035db04d1d9` | Retrospective canonical ID; call-argument, Array and tutorial/example coverage. |
+| LM003 | Language interaction conformance | CLOSED | `dbc086ed294ead0b4219952c02b00ec28a492472` | Retrospective canonical ID; delegation, dynamic receiver, captured-state and inherited-call interaction coverage. |
+| LM004 | Extended language interaction conformance | CLOSED | `d390c0c642c5d2d907fcf9e384d1cbc080dd4783` | Retrospective canonical ID; deeper delegation/call-argument interactions plus Map/IdentityMap Path-key behavior. |
+
+New Language Maturity work MUST allocate and persist its `LMxxx` identifier in
+the repository at publication time rather than relying on chat/prompt history.
+
+## P-label classification
+
+`P57` and similar `Pnn` references found in historical conformance/changelog
+text are specification/requirement paragraph labels, not a repository
+project-work family analogous to `Ixxx`, `Bxxx`, `Dxxx`, `CLIxxx`, or `LMxxx`.
+
+For example, the changelog records “P57 Integer conformance programs” as tests
+covering the P57 Integer requirement. That evidence MUST NOT be auto-promoted
+to a project-status item named `P057` or `P57`.
+
+If a future project-work family named `Pxxx` is introduced, it must be declared
+explicitly by a canonical project ledger; identifier resemblance alone is not
+sufficient.
+
+<!-- PROJECT-STATUS-HISTORICAL-RECONCILIATION: v6 -->
+
 <!-- BEGIN AUTO-DISCOVERED WORK REGISTRY -->
 
 ## Formally tracked project work
@@ -154,6 +192,10 @@ When publishing an implementation item:
    the tracked-work registry in the same change whenever practical;
 9. keep item explanations concise and point to the owning source rather than
    duplicating normative/design text.
+
+For Language Maturity work, allocate the next unused `LMxxx` identifier before
+publication and include it in the same repository change. Do not create LM IDs
+only in prompts or chat history.
 
 If an item is implemented through slices, the top-level item remains
 `IN_PROGRESS` until every requirement assigned to that item is integrated,

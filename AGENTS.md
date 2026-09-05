@@ -471,8 +471,12 @@ The curated implementation tables and per-item slice ledgers in
 implementation families already represented there. The auto-discovered registry
 must not create a competing interpretation of those rows.
 
-When a new formally tracked family or item is introduced, update the canonical
-project-status ledger in the same change whenever practical.
+When a new formally tracked family or item is introduced, allocate and persist
+its identifier in a canonical repository source in the same change whenever
+practical. Operational identifiers MUST NOT exist only in prompts or chat
+history. In particular, new Language Maturity work uses the next unused `LMxxx`
+identifier and records it in `docs/project/IMPLEMENTATION_STATUS.md` when
+published.
 
 
 ## Implementation blockers
