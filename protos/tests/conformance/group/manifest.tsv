@@ -1,0 +1,11 @@
+# source	expectation	expected
+acquisition-requires-member.protos	error	-
+acquisition-rejects-non-actorref.protos	error	-
+same-ref-alias-stable.protos	boolean	true
+separate-acquisitions-distinct.protos	boolean	false
+request-before-members-ready.protos	future-integer	7
+request-selects-one-eligible-member.protos	future-integer-one-of	1,2
+request-snapshots-argument.protos	future-integer	1
+groupref-transfer-preserves-identity.protos	future-boolean	true
+stopped-member-not-routed.protos	future-integer	2
+groupref-has-no-stop.protos	error	-

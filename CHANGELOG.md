@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.148-SNAPSHOT
+
+- Close `LM005 — Concurrent Language Maturity` with `LM005-C`: add a Group-aware conformance harness over ordinary `.protos` programs and the already-closed I011 ActorGroup surface. The harness drives a real Process RootActor, deterministic test-host Actor bootstrap and scheduler work, while assertions remain host-side. No test-only Protos syntax, production runtime behavior, native boundary, or normative specification change is introduced.
+- Add language-level coverage for complete-vector `Actor.group` validation, stable GroupRef aliases versus fresh separate acquisitions, requests issued before members become READY, routing whose assertion permits any eligible member, synchronous argument snapshotting, GroupRef Actor transfer preserving semantic identity, terminated-member exclusion, and the communication-only GroupRef surface. Add an executable ActorGroup example and tutorial `11-actor-groups`; LM005-A/B/C and top-level LM005 are CLOSED.
+
 ## 0.2.147-SNAPSHOT
 
 - Close I015 with I015-E final Encoding/Text I/O integration. Replace the provisional one-shot-only host codec boundary with explicit transactional per-flow streaming decoder/encoder factories carried by immutable Encoding descriptors. Mandatory `Encoding.UTF8`/`UTF16LE`/`UTF16BE`/`Latin1` remain the same strict, matching-BOM-consuming public descriptors; trusted hosts may explicitly provision configured portable or additional host Encoding values with strict/replacement and initial-BOM policy without adding a name registry, public constructor, ambient discovery or I/O authority.

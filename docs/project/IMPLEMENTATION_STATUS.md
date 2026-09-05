@@ -471,11 +471,11 @@ the already-published implementation commit.
 | LM002 | Language-level conformance and tutorials | CLOSED | `c0ba8b3f5bf3dc0a0997ca5fbfae6035db04d1d9` | Retrospective canonical ID; call-argument, Array and tutorial/example coverage. |
 | LM003 | Language interaction conformance | CLOSED | `dbc086ed294ead0b4219952c02b00ec28a492472` | Retrospective canonical ID; delegation, dynamic receiver, captured-state and inherited-call interaction coverage. |
 | LM004 | Extended language interaction conformance | CLOSED | `d390c0c642c5d2d907fcf9e384d1cbc080dd4783` | Retrospective canonical ID; deeper delegation/call-argument interactions plus Map/IdentityMap Path-key behavior. |
-| LM005 | Concurrent Language Maturity | IN_PROGRESS | — | LM005-A Future and LM005-B Actor conformance/examples/tutorials closed; LM005-C Group/interactions READY. |
+| LM005 | Concurrent Language Maturity | CLOSED | `SAME_COMMIT` | LM005-A Future, LM005-B Actor, and LM005-C Group/GroupRef conformance/examples/tutorials complete; no runtime or normative feature added. |
 
 ### LM005 — Concurrent Language Maturity
 
-Status: IN_PROGRESS
+Status: CLOSED
 
 Scope: dogfood already-implemented Core concurrency semantics through portable
 Protos conformance programs, executable examples and tutorials. LM005 does not
@@ -486,9 +486,14 @@ closed semantics is a bug to report rather than a license to add a feature.
 |---|---|---|---|
 | LM005-A | CLOSED | `SAME_COMMIT` | Future conformance runner support for terminal Future expectations; closure `future()`, fresh Future identity, `then` transformation/flattening, `Future.all`, pre-start cancellation; executable Future example and tutorial progression. |
 | LM005-B | CLOSED | `SAME_COMMIT` | Actor-aware language conformance plus Actor.current identity, module bootstrap/spawn, request/reply transfer, synchronous snapshotting, Actor-local state, same-sender send/request FIFO, graceful stop/termination, negative validation cases, examples and tutorial progression. No runtime or normative behavior added. |
-| LM005-C | READY | — | Group/GroupRef interaction conformance/examples/tutorials, including stable capability identity and routing tests that do not assume scheduler-selected recipients. LM005-B is CLOSED. |
+| LM005-C | CLOSED | `SAME_COMMIT` | Group/GroupRef acquisition, stable/fresh capability identity, readiness-gated and member-agnostic routing, argument snapshotting, GroupRef Actor transfer, terminated-member exclusion, communication-only surface, examples and tutorial progression. No runtime or normative behavior added. |
 
 Dependency chain: `LM005-A -> LM005-B -> LM005-C`.
+
+Closure reconciliation:
+- LM005-A, LM005-B and LM005-C are all published and closed.
+- The corpus dogfoods Future, Actor/ActorRef and Group/GroupRef semantics already owned by closed Core implementation items; LM005 added no production runtime or normative behavior.
+- Group routing conformance asserts only outcomes permitted by eligible-member selection and deliberately does not pin a scheduler-selected member.
 
 New Language Maturity work MUST allocate and persist its `LMxxx` identifier in
 the repository at publication time rather than relying on chat/prompt history.

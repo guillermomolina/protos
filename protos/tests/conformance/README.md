@@ -44,6 +44,11 @@ they require a real RootActor/Process plus deterministic test-host module and
 scheduler boundaries. The tested entry programs and Actor bootstrap modules are
 still ordinary `.protos` sources; only orchestration and assertions are host-side.
 
+LM005 Group cases similarly live under `group/` with `group/manifest.tsv` and
+ordinary `.protos` bootstrap modules. Their local `future-integer-one-of`
+expectation asserts that a reply came from one of the explicitly permitted
+eligible members without turning scheduler/member selection into a test assumption.
+
 The harness deliberately keeps assertions outside the Protos language. Adding
 test-only assertion syntax or a privileged testing object would be a language or
 library design decision and is not required for conformance testing.

@@ -29,3 +29,4 @@ All Protos source files use the canonical `.protos` extension. Examples are non-
 | Observe the current Actor identity | `concurrency/actor-current.protos` |
 | Spawn an Actor and request a reply | `concurrency/actor-request-reply.protos` |
 | Observe same-sender FIFO with send then request | `concurrency/actor-send-fifo.protos` |
+| Route a request through an ActorGroup | `concurrency/actor-group-request.protos` |
