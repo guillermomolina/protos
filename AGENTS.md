@@ -342,6 +342,51 @@ Such an environment limitation also does not by itself prevent patch authoring
 when the required repository contents can be inspected and the generated patch
 is intended to be executed and validated later in the user's real checkout.
 
+### Truncated repository reads
+
+Truncation of a single repository read does not by itself make a source
+inaccessible and does not justify declaring an environment limitation.
+
+When a required repository file is too large to retrieve in one response,
+agents MUST attempt to inspect it exhaustively through segmented retrieval
+before concluding that the source cannot be read.
+
+Depending on the repository access mechanism, this may include:
+
+- reading successive ranges or chunks of the same file;
+- locating the complete heading or section structure and retrieving sections
+  individually;
+- using exact heading, section identifier, clause identifier, or distinctive
+  text searches to recover bounded portions of the file;
+- following pagination, continuation, cursor, or range mechanisms provided by
+  the repository tool;
+- combining multiple partial reads while keeping track of which portions have
+  and have not been inspected.
+
+Concept searches alone are not sufficient for an exhaustive audit of a
+normative document, because an agent cannot assume in advance that it knows
+every relevant concept. When the whole normative document is required, first
+establish its complete structure as far as the available repository interface
+permits, then inspect every section that may contain normative material.
+
+Agents SHOULD maintain an internal coverage checklist for large normative
+documents so that omitted or unread sections are detectable before design
+begins.
+
+An environment limitation based on repository-read restrictions may be
+declared only after reasonable segmented-retrieval attempts have failed to
+recover required content. The report MUST then identify:
+
+- the exact file involved;
+- the sections or ranges successfully inspected;
+- the sections or ranges that remain inaccessible;
+- the retrieval methods attempted;
+- the concrete limitation that prevents further retrieval.
+
+A response-size limit, truncation of one tool result, lack of a local checkout,
+or lack of network access is not by itself sufficient if the required content
+can still be recovered through another available read-capable path.
+
 Do not declare an implementation item blocked merely because the patch-authoring
 environment lacks a local checkout or build toolchain.
 
