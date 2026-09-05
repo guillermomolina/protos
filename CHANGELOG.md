@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.89-SNAPSHOT
+
+- Implement I016-B positioned standard File capability: stable per-File logical cursor beginning at zero, explicit positional read/write backend boundary, ordered read/write/position/seek/seekToEnd/size/truncate/sync operations, exact failed-write prefix position aftermath, bounded write snapshot admission, and capability-honest stable protocol shape.
+- Integrate File Closable lifecycle with I014 commitment and Actor-termination cancellation machinery; close-cutover now invokes the cancellation hook of accepted uncommitted I/O before resource release begins, while committed operations keep their normal aftermath. Raw File does not invent Flushable, Filesystem.open is still not publicly installed, and append/confinement host integration remain for later I016 slices.
+
 ## 0.2.88-SNAPSHOT
 
 - Implement I011-6 internal bounded Actor mailbox ownership and READY-gated implicit event-loop dispatch; accepted message turns remain finite, FIFO in accepted order, and undispatched while the destination is INITIALIZING.

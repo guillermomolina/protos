@@ -104,6 +104,10 @@ public final class ProtosIoOperation {
         return ProtosCoreErrors.newOccurrence(origin,ProtosCoreErrors.StandardError.I_O_LIFECYCLE_ERROR);
     }
 
+    Runnable closeCutoverCancellationHandlerLocked() {
+        return cancellationHandler;
+    }
+
     void failAtCloseCutover(ProtosObjectValue error) {
         future.fail(error);
         finishTerminal();

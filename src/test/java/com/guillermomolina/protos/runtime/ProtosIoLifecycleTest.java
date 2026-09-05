@@ -51,6 +51,31 @@ class ProtosIoLifecycleTest {
         assertEquals(2,x.domain.actorIoOperationCountForTesting()); x.domain.actorTerminated(); assertEquals(ProtosFutureValue.State.CANCELLED,pre.future().state());
         assertEquals(ProtosFutureValue.State.PENDING,committed.future().state()); assertTrue(committed.resolve(ProtosNullValue.INSTANCE)); assertEquals(0,x.domain.actorIoOperationCountForTesting());
     }
+
+    @Test
+    void closeCutoverInvokesUncommittedCancellationHookBeforeRelease() throws Exception {
+        var p=core();
+        var d=new ProtosActorExecutionDomain();
+        var a=p.newModuleActivation(new ProtosActorModuleState(),null,p.newExecutionContext(),d);
+        var receiver=new ProtosObjectValue(ProtosObjectValue.rootObject());
+        var cancelled=new java.util.concurrent.atomic.AtomicBoolean();
+        var releases=new AtomicInteger();
+        var lifecycle=new ProtosIoLifecycle(receiver,p.futurePrototype(),d,c->{
+            assertTrue(cancelled.get());
+            releases.incrementAndGet();
+            c.succeeded();
+        });
+        var operation=lifecycle.beginOperation(a);
+        operation.onCancellation(()->cancelled.set(true));
+
+        var close=lifecycle.close(a);
+
+        assertTrue(cancelled.get());
+        assertEquals(ProtosFutureValue.State.FAILED,operation.future().state());
+        assertEquals(1,releases.get());
+        assertEquals(ProtosFutureValue.State.RESOLVED,close.state());
+    }
+
     private record Fixture(ProtosPrelude prelude, ProtosActorExecutionDomain domain, ProtosActivation activation, ProtosObjectValue receiver,
             ProtosIoLifecycle lifecycle, AtomicInteger releaseStarts, AtomicReference<ProtosIoLifecycle.ReleaseCompletion> completion) {}
 }

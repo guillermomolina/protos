@@ -98,9 +98,9 @@ Published slices:
 | Slice | Status | Version | Closure evidence | Implemented surface |
 |---|---|---|---|---|
 | I016-A | CLOSED | `0.2.87-SNAPSHOT` | `SAME_COMMIT` | Host-neutral Filesystem open preflight/acquisition substrate: exact local-option snapshot/defaults, invalid-combination precedence before backend authority, independent asynchronous opens, cancellation/portable-effect commitment handshake, backend result-custody cleanup, and Actor-termination cancellation integration. No public Filesystem/File capability surface is installed yet. |
+| I016-B | CLOSED | `0.2.89-SNAPSHOT` | `SAME_COMMIT` | Positioned File capability core: stable zero-based logical cursor independent of native cursors; ordered read/write/position/seek/seekToEnd/size/truncate/sync; exact access/optional capability shape; bounded write admission; Closable lifecycle; Actor-termination/pre-commit cancellation integration. No public Filesystem.open surface and no append mode yet. |
 
 Remaining implemented-surface gaps before top-level closure:
-- standard File capability implementation with positioned read/write, independent logical cursor, size/seek/truncate/sync capability honesty, and Closable lifecycle;
 - language-visible Filesystem capability open surface once returned File capabilities are complete;
 - append-mode placement and same-resource cross-File non-interleaving;
 - confinement/stable-resource-binding backend integration and deterministic race/conformance coverage;

@@ -80,13 +80,29 @@ public final class ProtosIoLifecycle {
                     closeFollowers.add(follower);
                     for (ProtosIoOperation operation : List.copyOf(operations)) {
                         ProtosObjectValue error=operation.closeCutoverLocked();
-                        if (error != null) cutover.add(new CloseFailure(operation,error));
+                        if (error != null) {
+                            cutover.add(
+                                    new CloseFailure(
+                                            operation,
+                                            error,
+                                            operation.closeCutoverCancellationHandlerLocked()));
+                        }
                     }
                     start=readyToReleaseLocked();
                 }
             }
         }
-        for (CloseFailure failure : cutover) failure.operation.failAtCloseCutover(failure.error);
+        for (CloseFailure failure : cutover) {
+            if (failure.cancellationHandler != null) {
+                try {
+                    failure.cancellationHandler.run();
+                } catch (RuntimeException ignored) {
+                    // Backend cancellation is best-effort machinery after the semantic cutover.
+                    // It cannot rewrite the required IOLifecycleError terminal outcome.
+                }
+            }
+            failure.operation.failAtCloseCutover(failure.error);
+        }
         if (start) startRelease();
         else maybeStartRelease();
         return follower;
@@ -137,5 +153,8 @@ public final class ProtosIoLifecycle {
         }
     }
 
-    private record CloseFailure(ProtosIoOperation operation, ProtosObjectValue error) {}
+    private record CloseFailure(
+            ProtosIoOperation operation,
+            ProtosObjectValue error,
+            Runnable cancellationHandler) {}
 }
