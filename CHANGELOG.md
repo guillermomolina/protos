@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.84-SNAPSHOT
+
+- Implement I011-3 Actor bootstrap and behavior cutover: bind each concrete Actor to its existing execution domain, expose only a runtime-local current-ActorRef substrate, load bootstrap code by an already-canonical ModuleKey in the destination Actor-local module cache, require an exact local bootstrap binding, invoke it with already-transferred arguments, and install the exact ordinary-object result before the READY cutover.
+- Preserve canonical module identity without destination re-resolution, Actor-local module instances, stable behavior identity after READY, and initialization-failure termination. Public Actor.spawn/current remain deliberately uninstalled until synchronous graph transfer and the remaining runtime prerequisites are implemented; mailbox/admission, send/request, stop/termination monitoring, GroupRef, and distributed routing remain outside this slice.
+
 ## 0.2.83-SNAPSHOT
 
 ### Fixed

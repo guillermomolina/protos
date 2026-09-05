@@ -30,6 +30,8 @@ public final class ProtosActor {
     private final ProtosActorRefValue reference;
     private final AtomicReference<LifecycleState> lifecycle =
             new AtomicReference<>(LifecycleState.INITIALIZING);
+    private final AtomicReference<ProtosObjectValue> currentBehavior =
+            new AtomicReference<>();
 
     public ProtosActor(ProtosObjectValue actorRefPrototype) {
         this(
@@ -53,6 +55,7 @@ public final class ProtosActor {
         this.reference =
                 new ProtosActorRefValue(
                         Objects.requireNonNull(actorRefPrototype, "actorRefPrototype"), this);
+        this.executionDomain.bindActor(this);
     }
 
     public LifecycleState lifecycleState() {
@@ -71,6 +74,36 @@ public final class ProtosActor {
         return reference;
     }
 
+    /** Destination-local behavior installed by successful bootstrap. */
+    public java.util.Optional<ProtosObjectValue> currentBehavior() {
+        return java.util.Optional.ofNullable(currentBehavior.get());
+    }
+
+    /**
+     * Installs the exact bootstrap result and attempts the unique READY cutover.
+     *
+     * <p>If termination wins the lifecycle race first, this returns false and never reopens
+     * the Actor. The installed behavior reference is never replaced.
+     */
+    public synchronized boolean completeInitialization(ProtosObjectValue behavior) {
+        Objects.requireNonNull(behavior, "behavior");
+        while (true) {
+            if (lifecycle.get() != LifecycleState.INITIALIZING) {
+                return false;
+            }
+            ProtosObjectValue existing = currentBehavior.get();
+            if (existing != null) {
+                if (existing != behavior) {
+                    throw new IllegalStateException("Actor initial behavior is already fixed");
+                }
+                return markReady();
+            }
+            if (currentBehavior.compareAndSet(null, behavior)) {
+                return markReady();
+            }
+        }
+    }
+
     long incarnationIdentityForRuntime() {
         return incarnationIdentity;
     }
@@ -80,7 +113,7 @@ public final class ProtosActor {
      *
      * @return true only for the call that performs the transition
      */
-    public boolean markReady() {
+    public synchronized boolean markReady() {
         while (true) {
             LifecycleState current = lifecycle.get();
             switch (current) {
@@ -105,7 +138,7 @@ public final class ProtosActor {
      *
      * @return true only for the call that performs the cutover
      */
-    public boolean beginTermination() {
+    public synchronized boolean beginTermination() {
         while (true) {
             LifecycleState current = lifecycle.get();
             switch (current) {
@@ -126,7 +159,7 @@ public final class ProtosActor {
      *
      * @return true only for the call that performs TERMINATING -> TERMINATED
      */
-    public boolean markTerminated() {
+    public synchronized boolean markTerminated() {
         while (true) {
             LifecycleState current = lifecycle.get();
             switch (current) {

@@ -29,14 +29,18 @@ public final class ProtosModuleRuntime {
     }
 
     public Object importModule(Object specifier, ProtosActivation caller) {
+        return loadCanonicalModule(resolveModuleKey(specifier, caller), caller);
+    }
+
+    /** Resolves one exact semantic String in the caller's module-resolution environment. */
+    public ProtosModuleKey resolveModuleKey(Object specifier, ProtosActivation caller) {
         Objects.requireNonNull(caller, "caller");
         if (!(specifier instanceof ProtosStringValue semanticString)) {
             throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
         }
 
-        final ProtosModuleKey key;
         try {
-            key = Objects.requireNonNull(
+            return Objects.requireNonNull(
                     resolver.resolve(semanticString.value(), caller.currentModuleKey()),
                     "module resolver returned null ModuleKey");
         } catch (ProtosSignalException signal) {
@@ -44,6 +48,17 @@ public final class ProtosModuleRuntime {
         } catch (Exception hostFailure) {
             throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
         }
+    }
+
+    /**
+     * Loads one already-canonical module identity in the caller's Actor-local module state.
+     *
+     * <p>This deliberately bypasses specifier resolution. Actor bootstrap resolves in the creator
+     * before the creation cutover and the destination consumes only the resulting ModuleKey.
+     */
+    public ProtosObjectValue loadCanonicalModule(ProtosModuleKey key, ProtosActivation caller) {
+        Objects.requireNonNull(key, "key");
+        Objects.requireNonNull(caller, "caller");
 
         ProtosActorModuleState actorState = caller.actorModuleState();
         ProtosActorModuleState.ModuleRecord existing = actorState.lookup(key).orElse(null);
@@ -54,12 +69,18 @@ public final class ProtosModuleRuntime {
         ProtosPrelude prelude = caller.prelude().orElseThrow(
                 () -> new IllegalStateException("module import requires an owning Core prelude"));
         ProtosObjectValue moduleInstance = prelude.newExecutionContext();
-        ProtosActorModuleState.ModuleRecord record = new ProtosActorModuleState.ModuleRecord(moduleInstance);
+        ProtosActorModuleState.ModuleRecord record =
+                new ProtosActorModuleState.ModuleRecord(moduleInstance);
         actorState.put(key, record); // normative cache-before-execute point
 
         try {
             String source = Objects.requireNonNull(resolver.loadSource(key), "module source");
-            ProtosActivation moduleActivation = prelude.newModuleActivation(actorState, key, moduleInstance);
+            ProtosActivation moduleActivation =
+                    prelude.newModuleActivation(
+                            actorState,
+                            key,
+                            moduleInstance,
+                            caller.executionDomain());
             compiler.compile(source).call(moduleActivation);
             record.markReady();
             return moduleInstance;

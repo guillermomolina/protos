@@ -21,6 +21,7 @@ public final class ProtosActorExecutionDomain {
     private final ArrayDeque<ProtosTask> runnable = new ArrayDeque<>();
     private final Set<ProtosTask> liveTasks = new LinkedHashSet<>();
     private final Set<ProtosIoOperation> actorIoOperations = new LinkedHashSet<>();
+    private ProtosActor ownerActor;
 
     public ProtosTask createTask(
             ProtosTask parent, Object associatedFuture, ProtosTask.Continuation continuation) {
@@ -117,6 +118,21 @@ public final class ProtosActorExecutionDomain {
     }
 
     synchronized int actorIoOperationCountForTesting() { return actorIoOperations.size(); }
+
+    void bindActor(ProtosActor actor) {
+        Objects.requireNonNull(actor, "actor");
+        synchronized (this) {
+            if (ownerActor != null && ownerActor != actor) {
+                throw new IllegalStateException("execution domain already belongs to another Actor");
+            }
+            ownerActor = actor;
+        }
+    }
+
+    /** Runtime substrate for the future Actor.current() primitive; no global current Actor. */
+    public synchronized Optional<ProtosActorRefValue> currentActorReference() {
+        return ownerActor == null ? Optional.empty() : Optional.of(ownerActor.reference());
+    }
 
     private void requireOwned(ProtosTask task) {
         if (task.owner() != this) {
