@@ -20,15 +20,17 @@ import com.guillermomolina.protos.execution.ProtosInvocation;
 import java.util.List;
 import java.util.Objects;
 
-/** One local Group-routed one-way operation preserving one logical message snapshot. */
+/** One Group-routed one-way operation preserving one logical message snapshot. */
 public final class ProtosGroupSendOperationValue extends ProtosObjectValue
         implements ProtosSendOperationControl, ProtosActorGroupRuntime.RoutingOperation {
     enum State {
         ROUTING,
+        ACCEPTED,
         COMPLETED,
         CANCELLED_BEFORE_ACCEPTANCE,
         FAILED_BEFORE_ACCEPTANCE,
-        FAILED_AFTER_ACCEPTANCE
+        FAILED_AFTER_ACCEPTANCE,
+        ACCEPTANCE_UNCERTAIN
     }
 
     private final ProtosObjectValue sendOperationPrototype;
@@ -37,8 +39,9 @@ public final class ProtosGroupSendOperationValue extends ProtosObjectValue
     private final ProtosActorRefValue sender;
     private final String selector;
     private final List<Object> snapshot;
-    private ProtosActor selectedActor;
+    private ProtosActorRefValue selectedMember;
     private ProtosActorDeliveryAttempt attempt;
+    private ProtosActorTransportRoute.Delivery transportAttempt;
     private State state = State.ROUTING;
 
     private ProtosGroupSendOperationValue(
@@ -73,29 +76,53 @@ public final class ProtosGroupSendOperationValue extends ProtosObjectValue
 
     @Override
     public boolean cancelBeforeAcceptance() {
-        boolean finished = false;
+        ProtosActorDeliveryAttempt local;
+        ProtosActorTransportRoute.Delivery remote;
         synchronized (this) {
             if (state != State.ROUTING) {
                 return false;
             }
-            if (attempt == null) {
+            local = attempt;
+            remote = transportAttempt;
+            if (local == null && remote == null) {
                 if (!group.cancelRoutingBeforeAcceptanceForRuntime(this)) {
                     return false;
                 }
+                selectedMember = null;
                 state = State.CANCELLED_BEFORE_ACCEPTANCE;
-                finished = true;
-            } else if (attempt.cancelBeforeAcceptance()) {
-                attempt = null;
-                selectedActor = null;
-                state = State.CANCELLED_BEFORE_ACCEPTANCE;
-                finished = true;
-            } else {
-                return false;
             }
         }
-        if (finished) {
+        if (local == null && remote == null) {
             group.operationFinishedForRuntime(this);
+            return true;
         }
+        if (local != null) {
+            if (!local.cancelBeforeAcceptance()) {
+                return false;
+            }
+            synchronized (this) {
+                if (state != State.ROUTING || attempt != local) {
+                    return false;
+                }
+                attempt = null;
+                selectedMember = null;
+                state = State.CANCELLED_BEFORE_ACCEPTANCE;
+            }
+            group.operationFinishedForRuntime(this);
+            return true;
+        }
+        if (!remote.cancelBeforeAcceptance()) {
+            return false;
+        }
+        synchronized (this) {
+            if (state != State.ROUTING || transportAttempt != remote) {
+                return false;
+            }
+            transportAttempt = null;
+            selectedMember = null;
+            state = State.CANCELLED_BEFORE_ACCEPTANCE;
+        }
+        group.operationFinishedForRuntime(this);
         return true;
     }
 
@@ -103,7 +130,8 @@ public final class ProtosGroupSendOperationValue extends ProtosObjectValue
     public ProtosGroupSendOperationValue retryAfterFailure() {
         synchronized (this) {
             if (state != State.FAILED_BEFORE_ACCEPTANCE
-                    && state != State.FAILED_AFTER_ACCEPTANCE) {
+                    && state != State.FAILED_AFTER_ACCEPTANCE
+                    && state != State.ACCEPTANCE_UNCERTAIN) {
                 return null;
             }
         }
@@ -111,13 +139,26 @@ public final class ProtosGroupSendOperationValue extends ProtosObjectValue
     }
 
     @Override
-    public void routeToForRuntime(ProtosActor actor) {
-        Objects.requireNonNull(actor, "actor");
+    public void routeToForRuntime(ProtosActorRefValue member) {
+        Objects.requireNonNull(member, "member");
         synchronized (this) {
-            if (state != State.ROUTING || attempt != null) {
+            if (state != State.ROUTING || attempt != null || transportAttempt != null) {
                 return;
             }
-            selectedActor = actor;
+            selectedMember = member;
+            ProtosActorTransportRoute route = member.communicationRouteForRuntime().orElse(null);
+            if (route != null) {
+                ProtosActorTransportRoute.Delivery created =
+                        Objects.requireNonNull(
+                                route.beginSend(sender, selector, snapshot),
+                                "transport route returned no Group send delivery");
+                transportAttempt = created;
+                created.observeForRuntime(
+                        transportState -> remoteStateChangedForRuntime(member, created, transportState));
+                return;
+            }
+
+            ProtosActor actor = member.localActorForRuntime();
             ProtosActorDeliveryAdmission admission = actor.deliveryAdmissionForRuntime();
             final ProtosActorDeliveryAttempt[] holder = new ProtosActorDeliveryAttempt[1];
             ProtosActorDeliveryAttempt created =
@@ -133,67 +174,175 @@ public final class ProtosGroupSendOperationValue extends ProtosObjectValue
     }
 
     @Override
-    public void memberBecameIneligibleForRuntime(ProtosActor actor) {
-        boolean reroute = false;
-        boolean fail = false;
+    public void memberBecameIneligibleForRuntime(ProtosActorRefValue member) {
+        ProtosActorDeliveryAttempt local;
+        ProtosActorTransportRoute.Delivery remote;
         synchronized (this) {
-            if (state != State.ROUTING || selectedActor != actor || attempt == null) {
+            if (state != State.ROUTING
+                    || !sameMember(selectedMember, member)) {
                 return;
             }
-            if (!attempt.cancelBeforeAcceptance()) {
-                return;
-            }
-            attempt = null;
-            selectedActor = null;
-            reroute = group.requeueAfterPreacceptFailureForRuntime(this);
-            if (!reroute) {
-                state = State.FAILED_BEFORE_ACCEPTANCE;
-                fail = true;
-            }
+            local = attempt;
+            remote = transportAttempt;
         }
-        if (fail) {
-            group.operationFinishedForRuntime(this);
+        if (local != null) {
+            if (!local.cancelBeforeAcceptance()) {
+                return;
+            }
+            rerouteKnownPreaccept(local, null);
+            return;
+        }
+        if (remote != null) {
+            if (remote.cancelBeforeAcceptance()) {
+                rerouteKnownPreaccept(null, remote);
+                return;
+            }
+            ProtosActorTransportRoute.DeliveryState transportState = remote.stateForRuntime();
+            if (transportState == ProtosActorTransportRoute.DeliveryState.FAILED_BEFORE_ACCEPTANCE
+                    || transportState == ProtosActorTransportRoute.DeliveryState.CANCELLED_BEFORE_ACCEPTANCE) {
+                rerouteKnownPreaccept(null, remote);
+            } else if (transportState == ProtosActorTransportRoute.DeliveryState.PENDING
+                    || transportState == ProtosActorTransportRoute.DeliveryState.ACCEPTANCE_UNCERTAIN) {
+                finishRemote(State.ACCEPTANCE_UNCERTAIN, remote);
+            }
         }
     }
 
     @Override
     public void groupTerminatedBeforeAcceptanceForRuntime() {
-        boolean fail = false;
+        ProtosActorDeliveryAttempt local;
+        ProtosActorTransportRoute.Delivery remote;
         synchronized (this) {
             if (state != State.ROUTING) {
                 return;
             }
-            if (attempt != null && !attempt.cancelBeforeAcceptance()) {
-                // Concrete acceptance already won; Group termination cannot revoke ownership.
+            local = attempt;
+            remote = transportAttempt;
+            if (local == null && remote == null) {
+                selectedMember = null;
+                state = State.FAILED_BEFORE_ACCEPTANCE;
+            }
+        }
+        if (local == null && remote == null) {
+            group.operationFinishedForRuntime(this);
+            return;
+        }
+        if (local != null) {
+            if (!local.cancelBeforeAcceptance()) {
+                return;
+            }
+            finishKnownPreaccept(local, null);
+            return;
+        }
+        if (remote.cancelBeforeAcceptance()) {
+            finishKnownPreaccept(null, remote);
+            return;
+        }
+        ProtosActorTransportRoute.DeliveryState transportState = remote.stateForRuntime();
+        switch (transportState) {
+            case FAILED_BEFORE_ACCEPTANCE, CANCELLED_BEFORE_ACCEPTANCE ->
+                    finishKnownPreaccept(null, remote);
+            case PENDING, ACCEPTANCE_UNCERTAIN ->
+                    finishRemote(State.ACCEPTANCE_UNCERTAIN, remote);
+            case ACCEPTED, COMPLETED, FAILED_AFTER_ACCEPTANCE -> {
+                // Group termination cannot revoke ownership that the concrete destination may have.
+            }
+        }
+    }
+
+    private void remoteStateChangedForRuntime(
+            ProtosActorRefValue member,
+            ProtosActorTransportRoute.Delivery delivery,
+            ProtosActorTransportRoute.DeliveryState transportState) {
+        Objects.requireNonNull(transportState, "transportState");
+        switch (transportState) {
+            case PENDING, CANCELLED_BEFORE_ACCEPTANCE -> {
+                // Pending is non-terminal. Cancellation transitions are classified by the caller
+                // that initiated cancellation/rerouting/group termination.
+            }
+            case FAILED_BEFORE_ACCEPTANCE -> rerouteKnownPreaccept(null, delivery);
+            case ACCEPTED -> finishRemote(State.ACCEPTED, delivery);
+            case COMPLETED -> finishRemote(State.COMPLETED, delivery);
+            case FAILED_AFTER_ACCEPTANCE -> finishRemote(State.FAILED_AFTER_ACCEPTANCE, delivery);
+            case ACCEPTANCE_UNCERTAIN -> finishRemote(State.ACCEPTANCE_UNCERTAIN, delivery);
+        }
+    }
+
+    private void rerouteKnownPreaccept(
+            ProtosActorDeliveryAttempt local,
+            ProtosActorTransportRoute.Delivery remote) {
+        boolean shouldRequeue;
+        synchronized (this) {
+            if (state != State.ROUTING) {
+                return;
+            }
+            if (local != null && attempt != local) {
+                return;
+            }
+            if (remote != null && transportAttempt != remote) {
                 return;
             }
             attempt = null;
-            selectedActor = null;
-            state = State.FAILED_BEFORE_ACCEPTANCE;
-            fail = true;
+            transportAttempt = null;
+            selectedMember = null;
+            shouldRequeue = true;
         }
-        if (fail) {
+        if (shouldRequeue && !group.requeueAfterPreacceptFailureForRuntime(this)) {
+            synchronized (this) {
+                if (state == State.ROUTING && attempt == null && transportAttempt == null) {
+                    state = State.FAILED_BEFORE_ACCEPTANCE;
+                }
+            }
             group.operationFinishedForRuntime(this);
         }
     }
 
+    private void finishKnownPreaccept(
+            ProtosActorDeliveryAttempt local,
+            ProtosActorTransportRoute.Delivery remote) {
+        synchronized (this) {
+            if (state != State.ROUTING) {
+                return;
+            }
+            if (local != null && attempt != local) {
+                return;
+            }
+            if (remote != null && transportAttempt != remote) {
+                return;
+            }
+            attempt = null;
+            transportAttempt = null;
+            selectedMember = null;
+            state = State.FAILED_BEFORE_ACCEPTANCE;
+        }
+        group.operationFinishedForRuntime(this);
+    }
+
+    private void finishRemote(State terminalState, ProtosActorTransportRoute.Delivery remote) {
+        synchronized (this) {
+            if (transportAttempt != remote) {
+                return;
+            }
+            if (state != State.ROUTING && state != State.ACCEPTED) {
+                return;
+            }
+            state = terminalState;
+            if (terminalState != State.ACCEPTED) {
+                transportAttempt = remote;
+            }
+        }
+        // ACCEPTED is already beyond Group routing ownership; later transport transitions remain
+        // observable by this operation's transport observer without returning ownership to Group.
+        group.operationFinishedForRuntime(this);
+    }
+
     private void deliveryFailedForRuntime(ProtosActorDeliveryAttempt.State deliveryState) {
         if (deliveryState == ProtosActorDeliveryAttempt.State.FAILED_BEFORE_ACCEPTANCE) {
-            boolean requeued;
+            ProtosActorDeliveryAttempt local;
             synchronized (this) {
-                if (state != State.ROUTING) {
-                    return;
-                }
-                attempt = null;
-                selectedActor = null;
-                requeued = group.requeueAfterPreacceptFailureForRuntime(this);
-                if (!requeued) {
-                    state = State.FAILED_BEFORE_ACCEPTANCE;
-                }
+                local = attempt;
             }
-            if (!requeued) {
-                group.operationFinishedForRuntime(this);
-            }
+            rerouteKnownPreaccept(local, null);
             return;
         }
         if (deliveryState == ProtosActorDeliveryAttempt.State.FAILED_AFTER_ACCEPTANCE) {
@@ -260,6 +409,10 @@ public final class ProtosGroupSendOperationValue extends ProtosObjectValue
         }
     }
 
+    private static boolean sameMember(ProtosActorRefValue left, ProtosActorRefValue right) {
+        return left != null && right != null && left.denotesSameIncarnation(right);
+    }
+
     synchronized State stateForTesting() {
         return state;
     }
@@ -268,8 +421,18 @@ public final class ProtosGroupSendOperationValue extends ProtosObjectValue
         return attempt == null ? null : attempt.state();
     }
 
+    synchronized ProtosActorTransportRoute.DeliveryState transportStateForTesting() {
+        return transportAttempt == null ? null : transportAttempt.stateForRuntime();
+    }
+
     synchronized ProtosActor selectedActorForTesting() {
-        return selectedActor;
+        return selectedMember == null || selectedMember.communicationRouteForRuntime().isPresent()
+                ? null
+                : selectedMember.localActorForRuntime();
+    }
+
+    synchronized ProtosActorRefValue selectedMemberForTesting() {
+        return selectedMember;
     }
 
     List<Object> snapshotForTesting() {

@@ -1,5 +1,12 @@
 # Changelog
 
+
+## 0.2.133-SNAPSHOT
+
+- Implement I011-20 remote ActorGroup routing by allowing the internal Group membership view to contain either local READY Actors or already-materialized remote ActorRefs carrying the I011-19 host-neutral transport route; no public membership, discovery, endpoint, or transport-selection API is added.
+- Extend the internal transport delivery SPI with state observation so Group routing can react without polling: known pre-acceptance transport failure may requeue/select another eligible member, while accepted or acceptance-uncertain work immediately leaves Group routing ownership and is never transparently replayed.
+- Preserve the original logical send/request snapshot across remote-member selection and pre-acceptance rerouting; Group SendOperation retry is explicit after remote uncertainty, and Group request acceptance uncertainty fails with RequestOutcomeUncertain. B004 remains limited to the still-undefined public Group/GroupRef acquisition/discovery surface.
+
 ## 0.2.132-SNAPSHOT
 
 - Close I017 with the I017-F integrated Process conformance pass. Exercise the published A/B/C/D1/D2/E1/E2/E3 surfaces together: one logical standalone Process/RootActor authority, canonical args/environment reacquisition through independently rematerialized Actor-local Process proxies, fresh ordinary Actor-copy identity for already-acquired snapshots, exact bootstrap-local optional Filesystem separation, independent byte-stream capability shape with stable Encoding associations, and Process/stream/Filesystem exclusion from P where specified.

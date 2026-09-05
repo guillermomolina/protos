@@ -238,6 +238,7 @@ final class ProtosActorRemoteTransportTest {
     }
 
     private static final class DeliveryImpl implements ProtosActorTransportRoute.Delivery {
+        private final List<ProtosActorTransportRoute.DeliveryObserver> observers = new ArrayList<>();
         private ProtosActorTransportRoute.DeliveryState state =
                 ProtosActorTransportRoute.DeliveryState.PENDING;
 
@@ -247,16 +248,40 @@ final class ProtosActorRemoteTransportTest {
         }
 
         @Override
-        public synchronized boolean cancelBeforeAcceptance() {
-            if (state != ProtosActorTransportRoute.DeliveryState.PENDING) {
-                return false;
+        public boolean cancelBeforeAcceptance() {
+            List<ProtosActorTransportRoute.DeliveryObserver> notify;
+            synchronized (this) {
+                if (state != ProtosActorTransportRoute.DeliveryState.PENDING) {
+                    return false;
+                }
+                state = ProtosActorTransportRoute.DeliveryState.CANCELLED_BEFORE_ACCEPTANCE;
+                notify = List.copyOf(observers);
             }
-            state = ProtosActorTransportRoute.DeliveryState.CANCELLED_BEFORE_ACCEPTANCE;
+            for (ProtosActorTransportRoute.DeliveryObserver observer : notify) {
+                observer.stateChanged(ProtosActorTransportRoute.DeliveryState.CANCELLED_BEFORE_ACCEPTANCE);
+            }
             return true;
         }
 
-        private synchronized void setState(ProtosActorTransportRoute.DeliveryState state) {
-            this.state = state;
+        @Override
+        public void observeForRuntime(ProtosActorTransportRoute.DeliveryObserver observer) {
+            ProtosActorTransportRoute.DeliveryState current;
+            synchronized (this) {
+                observers.add(java.util.Objects.requireNonNull(observer, "observer"));
+                current = state;
+            }
+            observer.stateChanged(current);
+        }
+
+        private void setState(ProtosActorTransportRoute.DeliveryState next) {
+            List<ProtosActorTransportRoute.DeliveryObserver> notify;
+            synchronized (this) {
+                state = java.util.Objects.requireNonNull(next, "next");
+                notify = List.copyOf(observers);
+            }
+            for (ProtosActorTransportRoute.DeliveryObserver observer : notify) {
+                observer.stateChanged(next);
+            }
         }
     }
 }

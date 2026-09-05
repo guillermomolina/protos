@@ -43,11 +43,26 @@ public interface ProtosActorTransportRoute {
         ACCEPTANCE_UNCERTAIN
     }
 
+    @FunctionalInterface
+    interface DeliveryObserver {
+        /** Reports the current state at registration and every later transport-owned state change. */
+        void stateChanged(DeliveryState state);
+    }
+
     interface Delivery {
         DeliveryState stateForRuntime();
 
         /** True only when this call establishes known cancellation before Actor acceptance. */
         boolean cancelBeforeAcceptance();
+
+        /**
+         * Registers internal routing observation for this transport attempt.
+         *
+         * <p>The observer receives the current state once during registration and every subsequent
+         * transport-owned state transition. Implementations must invoke callbacks outside any
+         * transport lock whose re-entry could deadlock Group routing/cancellation machinery.
+         */
+        void observeForRuntime(DeliveryObserver observer);
     }
 
     interface RequestObserver {
