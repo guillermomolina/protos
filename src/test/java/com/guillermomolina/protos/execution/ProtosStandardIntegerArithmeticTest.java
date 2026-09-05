@@ -199,6 +199,44 @@ class ProtosStandardIntegerArithmeticTest {
     }
 
     @Test
+    void percentIsSourceBackedAndPreservesIntegerReceiverDomainBeforeModDispatch()
+            throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        ProtosClosureValue percent =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        prelude.integerPrototype().readLocalSlot("%").orElseThrow());
+        assertNotNull(percent.definition());
+        assertTrue(percent.executionPlan().isPresent());
+        assertTrue(percent.nativeBody().isEmpty());
+        assertTrue(!prelude.integerPrototype().hasLocalSlot("_coreIntegerPercent"));
+
+        ProtosClosureValue mod =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        prelude.integerPrototype().readLocalSlot("mod").orElseThrow());
+        assertTrue(mod.nativeBody().isPresent());
+
+        var activation = prelude.newModuleActivation();
+        var incompatible =
+                new com.guillermomolina.protos.runtime.ProtosObjectValue(
+                        prelude.integerPrototype());
+        incompatible.createLocalSlot(
+                "mod",
+                ProtosClosureValue.nativeClosure(
+                        (ignoredActivation, ignoredArguments) ->
+                                new ProtosIntegerValue(BigInteger.valueOf(99))));
+        activation.context().createLocalSlot("incompatiblePercentChild", incompatible);
+
+        assertThrows(
+                ProtosSignalException.class,
+                () ->
+                        new ProtosSourceCompiler()
+                                .compile("incompatiblePercentChild % 3")
+                                .call(activation));
+    }
+
+    @Test
     void ordinaryIntegerArithmeticRejectsDifferentNumericFamily() throws IOException {
         ProtosPrelude prelude = corePrelude();
 

@@ -70,10 +70,7 @@ public final class ProtosStandardIntegerProtocol {
                 integerPrototype,
                 "mod",
                 (left, right) -> left.remainder(right));
-        installExactIntegerBinary(
-                integerPrototype,
-                "%",
-                (left, right) -> left.remainder(right));
+        installSourceBackedSelector(integerPrototype, "_coreIntegerPercent", "%");
     }
 
     private static void installExactIntegerBinary(
@@ -123,7 +120,18 @@ public final class ProtosStandardIntegerProtocol {
                         }));
     }
 
-    private static void requireSourceBackedClosure(
+    private static void installSourceBackedSelector(
+            ProtosObjectValue prototype, String sourceName, String selector) {
+        if (prototype.hasLocalSlot(selector)) {
+            throw new IllegalStateException(
+                    "Core Integer already defines a local " + selector + " slot");
+        }
+        ProtosClosureValue closure = requireSourceBackedClosure(prototype, sourceName);
+        prototype.removeLocalSlot(sourceName);
+        prototype.createLocalSlot(selector, closure);
+    }
+
+    private static ProtosClosureValue requireSourceBackedClosure(
             ProtosObjectValue prototype, String selector) {
         Object value =
                 prototype
@@ -139,6 +147,7 @@ public final class ProtosStandardIntegerProtocol {
             throw new IllegalStateException(
                     "Core Integer." + selector + " must be installed from distributable Core source");
         }
+        return closure;
     }
 
     private static ProtosIntegerValue requireIntegerReceiver(

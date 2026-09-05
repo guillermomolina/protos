@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.100-SNAPSHOT
+
+- Continue I018 Core self-hosting/bootstrap minimization by moving the standard ordinary `Integer.%` derived body from Java into distributable `protos/lib/core/integer.protos`.
+- Express `%` as `(0 + this).mod(argument)`: the native standard Integer `+` on semantic zero validates the original receiver before any `mod` dispatch, then the existing native `mod` primitive supplies the normative truncation-toward-zero remainder semantics. Java retains only the narrow symbolic-selector installation bridge from the temporary source name to `%`.
+- Add provenance and adversarial receiver-domain regression coverage proving `%` is source-backed, `mod` remains native-backed, the temporary source slot is removed, and an incompatible Integer-delegating object cannot bypass standard receiver validation by overriding `mod`. No normative specification changes are made, and I016 remains frozen at I016-C.
+
 ## 0.2.99-SNAPSHOT
 
 - Implement I011-9 concrete-Actor `ActorRef.request(selector, arguments...)`: reuse the I011-7/I011-8 delivery boundary, return a fresh caller-domain Future, transfer the normal handler result back across the Actor boundary, and never flatten or adopt a destination-local Future.

@@ -17,4 +17,8 @@ Integer: Number {
     negated: () => {
         0 - this
     }
+
+    _coreIntegerPercent: argument => {
+        (0 + this).mod(argument)
+    }
 }
