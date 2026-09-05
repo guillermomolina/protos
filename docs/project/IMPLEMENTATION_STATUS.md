@@ -13,6 +13,8 @@ owners remain the evidence used to verify a row.
 Initialized: 2026-09-05
 Repository implementation version at initialization: `0.2.83-SNAPSHOT`
 
+
+<!-- PROJECT-STATUS-FAMILY-DISCOVERY: v5 -->
 ## Status vocabulary
 
 - `OPEN` — known implementation item not yet ready or not yet started.
@@ -90,11 +92,19 @@ Remaining implemented-surface gaps before top-level closure:
 
 ## Formally tracked project work
 
-This registry is reconstructed from the current repository. Formal blocker/implementation headings are indexed directly; specification decisions are also indexed from decision identifiers embedded in specification-changelog headings such as `(D037)`.
+This auto-generated registry complements, but does not duplicate, the curated implementation and CLI tables above. It indexes formal non-I/CLI work families from authoritative project records and published specification decisions.
 
-`RECORDED` means an owning project document records the item without an explicit lifecycle state. Specification decisions recorded in `spec/PROTOS_SPEC_CHANGELOG.md` are `CLOSED` because they are already published specification-change entries.
+Identifier shape alone is insufficient: incidental IDs from design ideas, tests, benchmarks, examples, and arbitrary prose are intentionally excluded.
 
-The existing curated implementation tables and per-item slice ledgers remain the primary implementation-progress view; this section is a global index.
+`RECORDED` means the owning project record contains the item without an explicit lifecycle state. Published decisions in `spec/PROTOS_SPEC_CHANGELOG.md` are `CLOSED`.
+
+### B family
+
+| Item | Title | Status | What it records / establishes | Owning source(s) |
+|---|---|---|---|---|
+| B001 | Empty Sequence execution | CLOSED | Implementation area: Truffle lowering / execution of a `CanonicalSequence` containing zero expressions. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
+| B002 | Delegation parent of `without` / `alias` result objects | CLOSED | Implementation area: Standard `Object.without(name)` and `Object.alias(sourceName, aliasName)` message behavior and any runtime helper that constructs their result objects. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
+| B003 | Delegation parent / lookup chain of canonical Boolean values | CLOSED | Implementation area: Standard prototype/delegation bridge for the canonical `true` and `false` runtime representations, including ordinary member lookup and polymorphic invocation through their delegation chains. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
 
 ### D family
 
@@ -123,20 +133,6 @@ The existing curated implementation tables and per-item slice ledgers remain the
 | D037 | Path equality versus semantic identity | CLOSED | Clarifies that portable Path equality is structural and filesystem-independent, using rootedness plus the ordered component sequence, while Path semantic identity remains ordinary individual object identity. | `spec/PROTOS_SPEC_CHANGELOG.md` |
 | D038 | Encoding semantic-family membership and receiver domain | CLOSED | Defines Encoding descriptors positively as Encoding semantic values produced or provisioned by normative Encoding-producing operations or explicit permitted host Encoding-provisioning boundaries. | `spec/PROTOS_SPEC_CHANGELOG.md` |
 
-### B family
-
-| Item | Title | Status | What it records / establishes | Owning source(s) |
-|---|---|---|---|---|
-| B001 | Empty Sequence execution | CLOSED | Implementation area: Truffle lowering / execution of a `CanonicalSequence` containing zero expressions. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
-| B002 | Delegation parent of `without` / `alias` result objects | CLOSED | Implementation area: Standard `Object.without(name)` and `Object.alias(sourceName, aliasName)` message behavior and any runtime helper that constructs their result objects. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
-| B003 | Delegation parent / lookup chain of canonical Boolean values | CLOSED | Implementation area: Standard prototype/delegation bridge for the canonical `true` and `false` runtime representations, including ordinary member lookup and polymorphic invocation through their delegation chains. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
-
-### I family
-
-| Item | Title | Status | What it records / establishes | Owning source(s) |
-|---|---|---|---|---|
-| I001 | Concurrency Model Advisor (C/P/A) | IDEA | ### Motivation | `docs/design/IDEAS.md` |
-
 <!-- END AUTO-DISCOVERED WORK REGISTRY -->
 
 ## Update protocol
@@ -153,9 +149,9 @@ When publishing an implementation item:
 5. update dependency transitions made possible by the closure;
 6. keep unrelated rows unchanged;
 7. do not use this ledger as a substitute for normative audit;
-8. when a formal `Dxxx`, `Bxxx`, `Pxxx`, `Ixxx`, `CLIxxx`, or future tracked
-   item/family is added or materially changes lifecycle state, update or
-   regenerate the tracked-work registry in the same change whenever practical;
+8. when any formal tracked work item or family is added or materially changes
+   lifecycle state, update the appropriate curated table/ledger or regenerate
+   the tracked-work registry in the same change whenever practical;
 9. keep item explanations concise and point to the owning source rather than
    duplicating normative/design text.
 

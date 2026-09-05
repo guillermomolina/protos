@@ -449,22 +449,27 @@ shared files.
 
 The canonical project-status ledger MUST cover every formally tracked project
 work-item family present in the repository when that family has project
-lifecycle significance. This includes implementation items and also design,
-decision, proposal/specification, blocker, CLI, or future formally introduced
-families (for example `Dxxx`, `Bxxx`, `Pxxx`, `Ixxx`, and `CLIxxx` where those
-identifiers actually exist in the current repository).
+lifecycle significance. Family syntax is generic: a formal identifier is an
+uppercase family name followed by three digits (for example `D037`, `B003`,
+`I011`, `CLI003`, `LM001`), optionally followed by a slice suffix such as
+`I011-3`.
+
+Identifier syntax alone does NOT make an occurrence a project work item.
+Discovery must also respect source authority. Canonical project ledgers,
+published specification changelog entries, and formal project/change records may
+own tracked identifiers; incidental examples, benchmarks, test method names,
+design brainstorming, prose mentions, or similarly-shaped identifiers do not.
 
 Do not invent identifiers, meanings, lifecycle states, or family semantics from
-chat history. Discover them from the current repository and cite their owning
-project/specification ledger or document. If a source records an item but does
-not explicitly declare a lifecycle state, preserve that uncertainty rather than
-guessing `OPEN` or `CLOSED`.
+chat history. Discover them from the current repository and point to the owning
+source. If an owning source records an item but does not explicitly declare a
+lifecycle state, preserve that uncertainty rather than guessing `OPEN` or
+`CLOSED`.
 
-For each tracked item, the project-status ledger SHOULD retain enough concise
-information for a new agent to determine what the item established or
-implemented, its current lifecycle state when explicitly known, and the source
-that owns the detailed record. The ledger is an index/status view, not a second
-copy of the normative specification or design rationale.
+The curated implementation tables and per-item slice ledgers in
+`docs/project/IMPLEMENTATION_STATUS.md` remain the primary status record for
+implementation families already represented there. The auto-discovered registry
+must not create a competing interpretation of those rows.
 
 When a new formally tracked family or item is introduced, update the canonical
 project-status ledger in the same change whenever practical.
