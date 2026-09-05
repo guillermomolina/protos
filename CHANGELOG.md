@@ -1,5 +1,10 @@
 # Changelog
 
+
+## 0.2.74-SNAPSHOT
+
+- Implement I014-B standard sequential byte transfer: ordered asynchronous `ByteReadable.read(maxBytes)` and `ByteWritable.write(bytes)`, Future-based validation/errors, EOF/partial-read behavior, write snapshotting, bounded admission, cancellation/commitment integration, and focal tests.
+
 All notable changes to the Protos implementation project will be documented in this file.
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).

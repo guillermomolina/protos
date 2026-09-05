@@ -23,6 +23,7 @@ public final class ProtosIoOperation {
     }
 
     public ProtosFutureValue future() { return future; }
+    public ProtosActivation origin() { return origin; }
     public boolean committed() { synchronized(lifecycle) { return phase == Phase.COMMITTED; } }
     public boolean terminal() { synchronized(lifecycle) { return phase == Phase.TERMINAL; } }
 
