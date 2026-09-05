@@ -21,15 +21,18 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
+import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTextReader;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
+import java.math.BigInteger;
 import java.util.List;
 import java.util.Objects;
 
-/** Standard frozen TextReader factory plus per-wrapper readText/close capability surface. */
+/** Standard frozen TextReader factory plus per-wrapper readText/readLine/close capability surface. */
 public final class ProtosStandardTextReaderProtocol {
     private ProtosStandardTextReaderProtocol() {}
 
@@ -80,27 +83,65 @@ public final class ProtosStandardTextReaderProtocol {
 
         wrapper.createLocalSlot(
                 "readText",
-                operationClosure(reader, wrapper, false));
+                operationClosure(reader, wrapper, Operation.READ_TEXT));
+        wrapper.createLocalSlot(
+                "readLine",
+                operationClosure(reader, wrapper, Operation.READ_LINE));
         wrapper.createLocalSlot(
                 "close",
-                operationClosure(reader, wrapper, true));
+                operationClosure(reader, wrapper, Operation.CLOSE));
         return wrapper;
+    }
+
+    private enum Operation {
+        READ_TEXT,
+        READ_LINE,
+        CLOSE
     }
 
     private static ProtosClosureValue operationClosure(
             ProtosTextReader reader,
             ProtosObjectValue wrapper,
-            boolean close) {
+            Operation operation) {
         return ProtosClosureValue.nativeClosure(
                 (activation, supplied) -> {
-                    if (activation.receiver() != wrapper
-                            || !supplied.isEmpty()) {
+                    if (activation.receiver() != wrapper) {
                         return invalidFuture(activation);
                     }
-                    return close
-                            ? reader.close(activation)
-                            : reader.readText(activation);
+
+                    return switch (operation) {
+                        case READ_TEXT ->
+                                supplied.isEmpty()
+                                        ? reader.readText(activation)
+                                        : invalidFuture(activation);
+                        case CLOSE ->
+                                supplied.isEmpty()
+                                        ? reader.close(activation)
+                                        : invalidFuture(activation);
+                        case READ_LINE -> {
+                            if (supplied.isEmpty()) {
+                                yield reader.readLine(activation, null);
+                            }
+                            if (supplied.size() == 1) {
+                                BigInteger maxBytes = integer(supplied.get(0));
+                                if (maxBytes != null && maxBytes.signum() > 0) {
+                                    yield reader.readLine(activation, maxBytes);
+                                }
+                            }
+                            yield invalidFuture(activation);
+                        }
+                    };
                 });
+    }
+
+    private static BigInteger integer(Object value) {
+        if (value instanceof ProtosIntegerValue integer) {
+            return integer.value();
+        }
+        if (value instanceof ProtosFixedIntegerValue integer) {
+            return integer.value();
+        }
+        return null;
     }
 
     private static boolean hasCallableCapability(

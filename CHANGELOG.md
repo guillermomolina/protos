@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.142-SNAPSHOT
+
+- Implement I015-C `TextReader.readLine()` / `readLine(maxBytes)` inside the same ordered decoder/input domain introduced by I015-B. Line framing recognizes LF, CR and CRLF; terminators are consumed and omitted, empty lines are preserved, EOF-final unterminated text is returned once, and EOF with no remaining text returns null. A terminating CR completes immediately without waiting for more backend input; a possible later LF is folded as the already-completed CRLF terminator before the next logical text operation can observe it.
+- Enforce exact encoded-source-octet line budgeting for `readLine(maxBytes)`: positive Integer-family validation happens as a failed Future before I/O; initial matching BOM bytes and the encoded line terminator are excluded; valid pre-terminator scalar extents count exactly; LineTooLong is established as soon as valid content exceeds the bound and permanently fails text reading without scanning/discarding to a later terminator. Strict malformed-input vs size-failure precedence follows source order.
+- Preserve I015-B cancellation/error/ownership semantics across mixed `readText` and line requests: one queue determines invocation order, successful cancellation consumes no logical text, partial lines are never returned on pre-terminator I/O/decoding failure, completed CR lines are not retroactively failed by later input, and permanent line/decoding/I/O failure prevents later source consumption. I015-C adds no native Closure construction site; the TextReader provider remains a two-site resource bridge and the definitive I018 provider/site totals are unchanged. I015-C is CLOSED and I015-D becomes READY.
+
 ## 0.2.141-SNAPSHOT
 
 - Close the fresh LIB001-D Array API audit and publish `std:collections/Array` with eager sequential `map(array, transform)`, `filter(array, predicate)`, and `findIndex(array, predicate)` as ordinary Protos library behavior over the existing Core Array surface.

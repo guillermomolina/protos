@@ -60,6 +60,7 @@ public final class ProtosTextReader {
     private byte[] retained = new byte[0];
     private boolean sourceEof;
     private boolean initialEncodingSetupCommitted;
+    private boolean pendingLfAfterCr;
     private ProtosObjectValue deferredError;
     private ProtosObjectValue failedError;
     private ProtosActivation closeActivation;
@@ -86,14 +87,33 @@ public final class ProtosTextReader {
     }
 
     public ProtosFutureValue readText(ProtosActivation activation) {
+        return enqueueTextRead(
+                Objects.requireNonNull(activation, "activation"),
+                RequestKind.READ_TEXT,
+                null);
+    }
+
+    public ProtosFutureValue readLine(
+            ProtosActivation activation, BigInteger maxBytes) {
         Objects.requireNonNull(activation, "activation");
+        if (maxBytes != null && maxBytes.signum() <= 0) {
+            throw new IllegalArgumentException("readLine maxBytes must be positive");
+        }
+        return enqueueTextRead(activation, RequestKind.READ_LINE, maxBytes);
+    }
+
+    private ProtosFutureValue enqueueTextRead(
+            ProtosActivation activation,
+            RequestKind kind,
+            BigInteger maxBytes) {
         ProtosIoOperation operation = lifecycle.beginOperation(activation);
         ProtosFutureValue future = operation.future();
         if (operation.terminal()) {
             return future;
         }
 
-        Request request = new Request(activation, operation);
+        Request request =
+                new Request(activation, operation, kind, maxBytes);
         operation.onCancellation(() -> cancel(request));
 
         synchronized (this) {
@@ -125,17 +145,30 @@ public final class ProtosTextReader {
         return owning;
     }
 
+    private enum RequestKind {
+        READ_TEXT,
+        READ_LINE
+    }
+
     private static final class Request {
         final ProtosActivation activation;
         final ProtosIoOperation operation;
+        final RequestKind kind;
+        final BigInteger maxBytes;
         ProtosFutureValue lower;
         ProtosObjectValue lowerFailure;
         boolean driving;
         boolean driveRequested;
 
-        Request(ProtosActivation activation, ProtosIoOperation operation) {
+        Request(
+                ProtosActivation activation,
+                ProtosIoOperation operation,
+                RequestKind kind,
+                BigInteger maxBytes) {
             this.activation = activation;
             this.operation = operation;
+            this.kind = Objects.requireNonNull(kind, "kind");
+            this.maxBytes = maxBytes;
         }
     }
 
@@ -152,6 +185,36 @@ public final class ProtosTextReader {
             int consumed,
             boolean commitsInitialSetup,
             boolean deferEncodingError) {}
+
+    private enum LineKind {
+        LINE,
+        NEED_INPUT,
+        EOF,
+        ERROR,
+        TOO_LONG
+    }
+
+    private record LineResult(
+            LineKind kind,
+            String text,
+            int consumed,
+            boolean commitsInitialSetup,
+            boolean pendingLfAfterCr) {}
+
+    private enum ScalarKind {
+        SCALAR,
+        NEED_INPUT,
+        ERROR
+    }
+
+    private record ScalarResult(
+            ScalarKind kind, String text, int consumed) {}
+
+    private enum FoldKind {
+        READY,
+        NEED_INPUT,
+        ERROR
+    }
 
     private void pump() {
         Request next = null;
@@ -231,6 +294,7 @@ public final class ProtosTextReader {
         byte[] snapshot;
         boolean eof;
         boolean initialSetup;
+        boolean foldLf;
         synchronized (this) {
             permanent = failedError;
             deferred = deferredError;
@@ -238,11 +302,47 @@ public final class ProtosTextReader {
             snapshot = retained.clone();
             eof = sourceEof;
             initialSetup = initialEncodingSetupCommitted;
+            foldLf = pendingLfAfterCr;
         }
 
         if (permanent != null) {
             failAndFinish(request, permanent, false, false);
             return;
+        }
+
+        /*
+         * CR completes a line immediately. If its possible following LF was not yet available
+         * when that line committed, resolve the CRLF fold before exposing the next logical text
+         * to any later readText/readLine request. Consuming that LF belongs to the already-
+         * committed previous terminator, not to this operation.
+         */
+        if (foldLf) {
+            if (deferred != null || sourceFailure != null) {
+                synchronized (this) {
+                    pendingLfAfterCr = false;
+                }
+            } else {
+                FoldKind folded = resolvePendingLfAfterCr(snapshot, eof);
+                if (folded == FoldKind.NEED_INPUT) {
+                    startLowerRead(request);
+                    return;
+                }
+                if (folded == FoldKind.ERROR) {
+                    failAndFinish(
+                            request,
+                            ProtosCoreErrors.newOccurrence(
+                                    request.activation,
+                                    ProtosCoreErrors.StandardError.ENCODING_ERROR),
+                            false,
+                            true);
+                    return;
+                }
+                synchronized (this) {
+                    snapshot = retained.clone();
+                    eof = sourceEof;
+                    initialSetup = initialEncodingSetupCommitted;
+                }
+            }
         }
 
         if (deferred != null) {
@@ -255,10 +355,29 @@ public final class ProtosTextReader {
             return;
         }
 
-        DecodeResult decoded = decode(snapshot, eof, initialSetup);
-        switch (decoded.kind()) {
-            case TEXT -> completeText(request, decoded);
-            case EOF -> completeEof(request, decoded);
+        if (request.kind == RequestKind.READ_TEXT) {
+            DecodeResult decoded = decode(snapshot, eof, initialSetup);
+            switch (decoded.kind()) {
+                case TEXT -> completeText(request, decoded);
+                case EOF -> completeEof(request, decoded);
+                case ERROR ->
+                        failAndFinish(
+                                request,
+                                ProtosCoreErrors.newOccurrence(
+                                        request.activation,
+                                        ProtosCoreErrors.StandardError.ENCODING_ERROR),
+                                false,
+                                true);
+                case NEED_INPUT -> startLowerRead(request);
+            }
+            return;
+        }
+
+        LineResult line =
+                scanLine(snapshot, eof, initialSetup, request.maxBytes);
+        switch (line.kind()) {
+            case LINE, EOF -> completeLine(request, line);
+            case NEED_INPUT -> startLowerRead(request);
             case ERROR ->
                     failAndFinish(
                             request,
@@ -267,8 +386,176 @@ public final class ProtosTextReader {
                                     ProtosCoreErrors.StandardError.ENCODING_ERROR),
                             false,
                             true);
-            case NEED_INPUT -> startLowerRead(request);
+            case TOO_LONG ->
+                    failAndFinish(
+                            request,
+                            ProtosCoreErrors.newOccurrence(
+                                    request.activation,
+                                    ProtosCoreErrors.StandardError.LINE_TOO_LONG),
+                            false,
+                            true);
         }
+    }
+
+    private FoldKind resolvePendingLfAfterCr(byte[] bytes, boolean eof) {
+        if (bytes.length == 0) {
+            if (!eof) {
+                return FoldKind.NEED_INPUT;
+            }
+            synchronized (this) {
+                pendingLfAfterCr = false;
+            }
+            return FoldKind.READY;
+        }
+
+        ScalarResult next = decodeScalar(bytes, 0, eof);
+        if (next.kind() == ScalarKind.NEED_INPUT) {
+            return FoldKind.NEED_INPUT;
+        }
+        if (next.kind() == ScalarKind.ERROR) {
+            synchronized (this) {
+                pendingLfAfterCr = false;
+            }
+            return FoldKind.ERROR;
+        }
+
+        synchronized (this) {
+            pendingLfAfterCr = false;
+            if ("\n".equals(next.text())) {
+                consumeRetained(next.consumed());
+            }
+        }
+        return FoldKind.READY;
+    }
+
+    private LineResult scanLine(
+            byte[] bytes,
+            boolean eof,
+            boolean initialSetupCommitted,
+            BigInteger maxBytes) {
+        int offset = 0;
+        boolean setupCommit = false;
+
+        if (!initialSetupCommitted
+                && portableKind != ProtosEncodingValue.PortableKind.LATIN1) {
+            byte[] bom = matchingBom();
+            int common = commonPrefix(bytes, bom);
+            if (common == bytes.length
+                    && bytes.length < bom.length
+                    && !eof) {
+                return new LineResult(
+                        LineKind.NEED_INPUT, null, 0, false, false);
+            }
+            if (bytes.length >= bom.length && common == bom.length) {
+                offset = bom.length;
+            }
+            setupCommit = true;
+        } else if (!initialSetupCommitted) {
+            setupCommit = true;
+        }
+
+        StringBuilder line = new StringBuilder();
+        BigInteger contentBytes = BigInteger.ZERO;
+
+        while (true) {
+            if (offset == bytes.length) {
+                if (!eof) {
+                    return new LineResult(
+                            LineKind.NEED_INPUT, null, 0, false, false);
+                }
+                if (line.length() == 0) {
+                    return new LineResult(
+                            LineKind.EOF,
+                            null,
+                            offset,
+                            setupCommit,
+                            false);
+                }
+                return new LineResult(
+                        LineKind.LINE,
+                        line.toString(),
+                        offset,
+                        setupCommit,
+                        false);
+            }
+
+            ScalarResult scalar = decodeScalar(bytes, offset, eof);
+            if (scalar.kind() == ScalarKind.NEED_INPUT) {
+                return new LineResult(
+                        LineKind.NEED_INPUT, null, 0, false, false);
+            }
+            if (scalar.kind() == ScalarKind.ERROR) {
+                return new LineResult(
+                        LineKind.ERROR, null, 0, false, false);
+            }
+
+            if ("\n".equals(scalar.text())) {
+                return new LineResult(
+                        LineKind.LINE,
+                        line.toString(),
+                        offset + scalar.consumed(),
+                        setupCommit,
+                        false);
+            }
+
+            if ("\r".equals(scalar.text())) {
+                int afterCr = offset + scalar.consumed();
+                int consumed = afterCr;
+                boolean pendingFold = false;
+
+                if (afterCr < bytes.length) {
+                    ScalarResult next = decodeScalar(bytes, afterCr, eof);
+                    if (next.kind() == ScalarKind.SCALAR
+                            && "\n".equals(next.text())) {
+                        consumed += next.consumed();
+                    } else if (next.kind() != ScalarKind.SCALAR) {
+                        pendingFold = true;
+                    }
+                } else if (!eof) {
+                    pendingFold = true;
+                }
+
+                return new LineResult(
+                        LineKind.LINE,
+                        line.toString(),
+                        consumed,
+                        setupCommit,
+                        pendingFold);
+            }
+
+            contentBytes =
+                    contentBytes.add(BigInteger.valueOf(scalar.consumed()));
+            if (maxBytes != null
+                    && contentBytes.compareTo(maxBytes) > 0) {
+                return new LineResult(
+                        LineKind.TOO_LONG, null, 0, false, false);
+            }
+
+            line.append(scalar.text());
+            offset += scalar.consumed();
+        }
+    }
+
+    private void completeLine(Request request, LineResult line) {
+        if (!request.operation.commit()) {
+            finishCancelledIfNoLower(request);
+            return;
+        }
+
+        synchronized (this) {
+            consumeRetained(line.consumed());
+            if (line.commitsInitialSetup()) {
+                initialEncodingSetupCommitted = true;
+            }
+            pendingLfAfterCr = line.pendingLfAfterCr();
+        }
+
+        if (line.kind() == LineKind.EOF) {
+            request.operation.resolve(ProtosNullValue.INSTANCE);
+        } else {
+            request.operation.resolve(new ProtosStringValue(line.text()));
+        }
+        finishQueueRequest(request);
     }
 
     private DecodeResult decode(
@@ -728,6 +1015,170 @@ public final class ProtosTextReader {
             result[index] = (byte) value.intValue();
         }
         return result;
+    }
+
+    private ScalarResult decodeScalar(
+            byte[] bytes, int offset, boolean eof) {
+        int remaining = bytes.length - offset;
+        if (remaining <= 0) {
+            return eof
+                    ? new ScalarResult(ScalarKind.ERROR, null, 0)
+                    : new ScalarResult(ScalarKind.NEED_INPUT, null, 0);
+        }
+
+        return switch (portableKind) {
+            case LATIN1 ->
+                    scalar(Character.toString((char) unsigned(bytes[offset])), 1);
+            case UTF16LE -> decodeUtf16Scalar(bytes, offset, eof, true);
+            case UTF16BE -> decodeUtf16Scalar(bytes, offset, eof, false);
+            case UTF8 -> decodeUtf8Scalar(bytes, offset, eof);
+        };
+    }
+
+    private ScalarResult decodeUtf16Scalar(
+            byte[] bytes, int offset, boolean eof, boolean littleEndian) {
+        int remaining = bytes.length - offset;
+        if (remaining < 2) {
+            return needInputOrError(eof);
+        }
+
+        int first =
+                littleEndian
+                        ? unsigned(bytes[offset])
+                                | (unsigned(bytes[offset + 1]) << 8)
+                        : (unsigned(bytes[offset]) << 8)
+                                | unsigned(bytes[offset + 1]);
+
+        if (first >= 0xd800 && first <= 0xdbff) {
+            if (remaining < 4) {
+                return needInputOrError(eof);
+            }
+            int second =
+                    littleEndian
+                            ? unsigned(bytes[offset + 2])
+                                    | (unsigned(bytes[offset + 3]) << 8)
+                            : (unsigned(bytes[offset + 2]) << 8)
+                                    | unsigned(bytes[offset + 3]);
+            if (second < 0xdc00 || second > 0xdfff) {
+                return new ScalarResult(ScalarKind.ERROR, null, 0);
+            }
+            int codePoint =
+                    0x10000
+                            + ((first - 0xd800) << 10)
+                            + (second - 0xdc00);
+            return scalar(new String(Character.toChars(codePoint)), 4);
+        }
+
+        if (first >= 0xdc00 && first <= 0xdfff) {
+            return new ScalarResult(ScalarKind.ERROR, null, 0);
+        }
+        return scalar(Character.toString((char) first), 2);
+    }
+
+    private ScalarResult decodeUtf8Scalar(
+            byte[] bytes, int offset, boolean eof) {
+        int remaining = bytes.length - offset;
+        int b0 = unsigned(bytes[offset]);
+
+        if (b0 <= 0x7f) {
+            return scalar(Character.toString((char) b0), 1);
+        }
+
+        if (b0 >= 0xc2 && b0 <= 0xdf) {
+            if (remaining < 2) {
+                return needInputOrError(eof);
+            }
+            int b1 = unsigned(bytes[offset + 1]);
+            if (!continuation(b1)) {
+                return new ScalarResult(ScalarKind.ERROR, null, 0);
+            }
+            int cp = ((b0 & 0x1f) << 6) | (b1 & 0x3f);
+            return scalar(new String(Character.toChars(cp)), 2);
+        }
+
+        if (b0 >= 0xe0 && b0 <= 0xef) {
+            if (remaining < 2) {
+                return needInputOrError(eof);
+            }
+            int b1 = unsigned(bytes[offset + 1]);
+            boolean secondValid =
+                    b0 == 0xe0
+                            ? b1 >= 0xa0 && b1 <= 0xbf
+                            : b0 == 0xed
+                                    ? b1 >= 0x80 && b1 <= 0x9f
+                                    : continuation(b1);
+            if (!secondValid) {
+                return new ScalarResult(ScalarKind.ERROR, null, 0);
+            }
+            if (remaining < 3) {
+                return needInputOrError(eof);
+            }
+            int b2 = unsigned(bytes[offset + 2]);
+            if (!continuation(b2)) {
+                return new ScalarResult(ScalarKind.ERROR, null, 0);
+            }
+            int cp =
+                    ((b0 & 0x0f) << 12)
+                            | ((b1 & 0x3f) << 6)
+                            | (b2 & 0x3f);
+            return scalar(new String(Character.toChars(cp)), 3);
+        }
+
+        if (b0 >= 0xf0 && b0 <= 0xf4) {
+            if (remaining < 2) {
+                return needInputOrError(eof);
+            }
+            int b1 = unsigned(bytes[offset + 1]);
+            boolean secondValid =
+                    b0 == 0xf0
+                            ? b1 >= 0x90 && b1 <= 0xbf
+                            : b0 == 0xf4
+                                    ? b1 >= 0x80 && b1 <= 0x8f
+                                    : continuation(b1);
+            if (!secondValid) {
+                return new ScalarResult(ScalarKind.ERROR, null, 0);
+            }
+            if (remaining < 3) {
+                return needInputOrError(eof);
+            }
+            int b2 = unsigned(bytes[offset + 2]);
+            if (!continuation(b2)) {
+                return new ScalarResult(ScalarKind.ERROR, null, 0);
+            }
+            if (remaining < 4) {
+                return needInputOrError(eof);
+            }
+            int b3 = unsigned(bytes[offset + 3]);
+            if (!continuation(b3)) {
+                return new ScalarResult(ScalarKind.ERROR, null, 0);
+            }
+            int cp =
+                    ((b0 & 0x07) << 18)
+                            | ((b1 & 0x3f) << 12)
+                            | ((b2 & 0x3f) << 6)
+                            | (b3 & 0x3f);
+            return scalar(new String(Character.toChars(cp)), 4);
+        }
+
+        return new ScalarResult(ScalarKind.ERROR, null, 0);
+    }
+
+    private static ScalarResult scalar(String text, int consumed) {
+        return new ScalarResult(ScalarKind.SCALAR, text, consumed);
+    }
+
+    private static ScalarResult needInputOrError(boolean eof) {
+        return eof
+                ? new ScalarResult(ScalarKind.ERROR, null, 0)
+                : new ScalarResult(ScalarKind.NEED_INPUT, null, 0);
+    }
+
+    private static int unsigned(byte value) {
+        return value & 0xff;
+    }
+
+    private static boolean continuation(int value) {
+        return value >= 0x80 && value <= 0xbf;
     }
 
     private Charset charset() {

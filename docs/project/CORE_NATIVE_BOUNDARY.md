@@ -53,7 +53,7 @@ the standard native boundary.
 | `ProtosStandardProcessArgumentsProtocol.java` | 3 | representation bridge | Immutable Process-argument snapshots own an opaque captured indexed representation; `size`/`at` expose that representation and `each` requires eager polymorphic-callability validation before ordered callback invocation. The helper prototype is construction-only and not a Core-prelude authority or named standard prototype. |
 | `ProtosStandardEnvironmentProtocol.java` | 3 | representation bridge | Standardized Environment snapshots retain opaque native-name identity/representability state. `get`/`contains` preserve native query semantics and selective value decoding; `each` performs eager callability plus whole-snapshot portable String validation before canonical Unicode-scalar-order callbacks. Environment remains outside the required Core prelude and is not a Map subtype. |
 | `ProtosStandardEncodingProtocol.java` | 2 | representation bridge | Encoding semantic-family receiver validation and exact one-shot String/Bytes conversion cross immutable descriptor and codec representations. The source-backed Encoding factory exposes only the four required portable descriptors plus native `encode`/`decode`; default UTF decoding is strict, matching initial BOMs are consumed, Latin1 is ISO-8859-1, and each encode produces fresh standard Bytes. |
-| `ProtosStandardTextReaderProtocol.java` | 2 | resource/capability bridge | Source-backed `TextReader` construction validates ByteReadable/optional owning-Closable authority plus exact Encoding-family membership; one helper constructs borrowing/owning forms and one helper installs per-wrapper `readText`/`close`. The runtime owns ordered Future/cancellation/close state and transactional portable UTF/Latin1 incremental decoding so cancelled reads consume no logical text and progress/error ordering is independent of native read chunking. |
+| `ProtosStandardTextReaderProtocol.java` | 2 | resource/capability bridge | Source-backed `TextReader` construction validates ByteReadable/optional owning-Closable authority plus exact Encoding-family membership; one helper constructs borrowing/owning forms and one shared wrapper helper dispatches `readText`/`readLine`/`close`. The runtime owns the single ordered Future/cancellation/close decoder domain, transactional portable UTF/Latin1 readText decoding, deterministic LF/CR/CRLF line framing and encoded-octet line-budget accounting. I015-C widens selectors without adding a native Closure construction site. |
 | `ProtosStandardProcessStreamProtocol.java` | 2 | resource/capability bridge | Process standard-stream views expose exactly one byte direction (`read` for stdin or `write` for stdout/stderr) over Process-local shared ordering/backpressure bindings. Actor transfer rematerializes an Actor-local proxy to the same binding; P rejects the live authority; no Closable/File/text/seek/flush surface is inferred. |
 | `ProtosStandardProcessProtocol.java` | 1 | resource/capability bridge | The source-backed authority-free `Process` prototype receives eight synchronous accessors from one audited Closure-construction helper. Each selector requires an actual represented Process capability, reads only already-established Process bootstrap state, rejects unavailable/invalid state, and rejects every proxy after the Process termination cutover; no accessor performs host discovery, waiting, filesystem recovery, or capability construction. |
 | `ProtosStandardMapProtocol.java` | 7 | representation bridge | Map storage, recorded hashes, reentrancy restrictions, mutation state, lookup equality callbacks, and iteration snapshots are receiver-owned keyed representation semantics. |
@@ -146,6 +146,14 @@ representation/resource boundaries. The audited boundary therefore becomes
 descriptors; streaming integration for explicitly host-provided Encoding
 descriptors remains an I015-E closure item because I015-A's host boundary exposes
 only one-shot codec operations.
+
+I015-C widens the already-audited TextReader wrapper selector surface with
+`readLine()` / `readLine(maxBytes)` through the same existing operation-Closure
+construction helper. No Java `nativeClosure` construction site is added:
+deterministic line framing, CRLF fold state, strict portable scalar decoding,
+encoded-octet accounting, cancellation and permanent LineTooLong/failure state
+live inside the existing runtime resource bridge. The audited provider/site
+totals therefore remain unchanged from the definitive I015-B baseline.
 
 
 I011-21 is a reviewed concurrency/runtime-boundary extension implementing D039's

@@ -46,7 +46,7 @@ an item.
 | I012 | Standard Bytes | CLOSED | historical; see git history / CHANGELOG | — |
 | I013 | Standard Path | CLOSED | historical; see git history / CHANGELOG | — |
 | I014 | Standard Byte I/O | CLOSED | `2462ba74298e94181489e13de4e25dbbb82b21f9` | I009 + I012 |
-| I015 | Encoding / Text I/O | IN_PROGRESS | — | I015-A Encoding and I015-B portable streaming TextReader/readText closed; I015-C readLine READY; TextWriter/final host-Encoding integration remain |
+| I015 | Encoding / Text I/O | IN_PROGRESS | — | I015-A/B/C closed; I015-D TextWriter READY; I015-E final host-Encoding/conformance remains |
 | I016 | Filesystem / File | CLOSED | `SAME_COMMIT` | I013 + I014; I016-A/B/C/D1/D2/D3/D4 complete |
 | I017 | Process I/O / bootstrap | CLOSED | `SAME_COMMIT` | I017-A/B/C/D1/D2/E1/E2/E3/F complete; final authority/termination/CLI/native-boundary conformance published |
 | I018 | Core self-hosting / bootstrap minimization | CLOSED | `SAME_COMMIT` | I018-L exhaustive native-boundary inventory and architectural guard complete; I016-D pause lifted |
@@ -114,23 +114,23 @@ Implementation plan:
 |---|---|---|---|---|
 | I015-A | CLOSED | `0.2.122-SNAPSHOT` | `SAME_COMMIT` | Source-backed standard Encoding factory/prototype identity; four mandatory portable immutable descriptors; exact semantic-family receiver checks; strict synchronous one-shot encode/decode; fresh Bytes results; UTF validity and initial matching-BOM consumption; ISO-8859-1 Latin1; explicit host Encoding-provisioning boundary; authority-free Actor/P transfer; reviewed two-site I018 representation bridge. |
 | I015-B | CLOSED | `0.2.140-SNAPSHOT` | `SAME_COMMIT` | Source-backed frozen `TextReader` factory; borrowing/owning validation; fresh wrappers with exactly `readText`/`close`; transactional strict incremental UTF8/UTF16LE/UTF16BE/Latin1 decoding; initial matching BOM; progress before extra read-ahead; valid-prefix/deferred-error ordering; permanent failure lifecycle; cancellation zero logical consumption; borrowing/owning close integration; two-site I018 resource/capability bridge. Host-provided incremental Encoding integration remains I015-E. |
-| I015-C | READY | — | — | `readLine()` / `readLine(maxBytes)` framing over the same decoder domain: LF/CR/CRLF, EOF-final line, exact encoded-octet budget, LineTooLong lifecycle, decoding/replacement accounting and deterministic ordering. I015-B is CLOSED. |
-| I015-D | BLOCKED_BY_DEPENDENCIES | — | — | TextWriter factory/prototype and borrowing/owning construction; per-flow encoder state; ordered `writeText`, empty-write zero-transition behavior, failure aftermath, flush/close ownership/lifecycle rules and capability honesty. |
+| I015-C | CLOSED | `0.2.142-SNAPSHOT` | `SAME_COMMIT` | `readLine()` / `readLine(maxBytes)` share I015-B's single ordered decoder/input domain; deterministic LF/CR/CRLF framing; CR immediate completion with deferred LF folding; EOF-final line/null semantics; exact pre-terminator encoded-octet budget excluding initial BOM/terminator; source-order EncodingError vs LineTooLong precedence; permanent failure and zero-consumption cancellation; no I018 construction-site expansion. |
+| I015-D | READY | — | — | TextWriter factory/prototype and borrowing/owning construction; per-flow encoder state; ordered `writeText`, empty-write zero-transition behavior, failure aftermath, flush/close ownership/lifecycle rules and capability honesty. I015-C is CLOSED. |
 | I015-E | BLOCKED_BY_DEPENDENCIES | — | — | Final cross-slice Text I/O conformance, portable/host Encoding integration, post-I015 I018 boundary re-audit and canonical I015 closure. |
 
 Dependency chain: `I015-A -> I015-B -> I015-C -> I015-D -> I015-E`.
 
 Coordination with I017:
 - I017 is CLOSED. Its D2 standard-stream Encoding dependency was satisfied by I015-A and does not constrain the remaining I015 text-wrapper slices.
-- TextReader/TextWriter remain explicit layering facilities; Process standard byte streams are not implicitly wrapped or converted by I015-B.
-Current implementation boundary after I015-B:
-- `Encoding` remains the source-backed frozen factory/prototype with exactly the four mandatory portable descriptors plus the explicit host-provisioning boundary from I015-A;
-- `TextReader` is now a required source-backed frozen prelude factory/prototype with borrowing `call` and explicit `owning` construction; each wrapper has fresh identity/state and exposes exactly `readText` and `close`;
-- construction accepts actual ByteReadable capability through ordinary represented/ordinary lookup rather than requiring a Java object representation; owning additionally requires Closable, and all invalid construction is synchronous/pre-I/O;
-- portable UTF8/UTF16LE/UTF16BE/Latin1 readText decoding is strict and incremental over one ordered retained-byte domain: initial matching BOM is consumed, incomplete characters wait for more source bytes, already-returnable valid text completes promptly, and a later malformed error is deferred behind preceding valid text;
-- successful cancellation commits no logical text consumption; late lower read-ahead is retained for the next ordered operation, while close may discard uncommitted adapter read-ahead and follows ordinary irreversible Closable semantics;
-- a committed decoding or underlying I/O failure permanently fails text reading and later reads re-observe the recorded failure without new source consumption; reader failure itself does not close the source, while owning close still performs its explicit release obligation;
-- I015-C adds readLine/readLine(maxBytes) to this same ordering/decoder domain; I015-D adds TextWriter; I015-E remains responsible for final cross-slice conformance and incremental integration of explicitly host-provided Encoding descriptors because I015-A's current HostCodec boundary is one-shot only.
+- TextReader/TextWriter remain explicit layering facilities; Process standard byte streams are not implicitly wrapped or converted by I015-B/C.
+Current implementation boundary after I015-C:
+- `Encoding` remains the source-backed frozen factory/prototype with the four mandatory portable descriptors plus the explicit host-provisioning boundary from I015-A;
+- `TextReader` remains one source-backed frozen factory/prototype; each fresh borrowing/owning wrapper now exposes exactly `readText`, `readLine`, and `close`, with all text reads sharing one ordered runtime decoder/input/lifecycle domain;
+- `readText()` retains I015-B progress-oriented strict portable UTF8/UTF16LE/UTF16BE/Latin1 decoding, initial matching-BOM handling, valid-prefix/deferred-error ordering and successful-cancellation zero logical consumption;
+- `readLine()` deterministically consumes LF, CR or CRLF and omits the terminator; CR completes the line immediately, with any not-yet-available following LF folded before the next logical text operation; EOF returns a final non-empty unterminated line once or null when no decoded text remains;
+- `readLine(maxBytes)` accepts a positive Integer-family bound and counts exactly valid encoded source octets before the terminator, excluding initial consumed BOM/setup and the complete terminator; valid content establishes LineTooLong as soon as the count exceeds the bound, while a strict decoding/I/O failure encountered first remains the current line failure;
+- line-too-long, committed decoding failure and committed underlying I/O failure permanently fail the text-reading side and later reads consume no more source input; partial lines are never returned as success, successful cancellation does not poison the reader, and owning/borrowing close semantics remain I015-B's lifecycle;
+- I015-C reuses the existing two-site TextReader resource bridge, so I018 provider/site totals are unchanged; I015-D adds TextWriter and I015-E remains responsible for final cross-slice conformance plus incremental host-provided Encoding integration/replacement-policy closure.
 ### I016 — Filesystem / File
 
 Status: CLOSED

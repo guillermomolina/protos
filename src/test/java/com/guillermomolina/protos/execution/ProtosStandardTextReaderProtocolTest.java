@@ -61,7 +61,7 @@ final class ProtosStandardTextReaderProtocolTest {
                                 List.of(ordinary.source, utf8),
                                 activation));
         assertNotSame(first, second);
-        assertEquals(Set.of("readText", "close"), first.localSlotsSnapshot().keySet());
+        assertEquals(Set.of("readText", "readLine", "close"), first.localSlotsSnapshot().keySet());
 
         ProtosProcessRuntime process =
                 new ProtosProcessRuntime(prelude.actorRefPrototypeForRuntime());
@@ -84,7 +84,7 @@ final class ProtosStandardTextReaderProtocolTest {
                                 List.of(representedStdin, utf8),
                                 activation));
         assertEquals(
-                Set.of("readText", "close"),
+                Set.of("readText", "readLine", "close"),
                 representedWrapper.localSlotsSnapshot().keySet());
 
         ProtosSignalException owningWithoutClose =

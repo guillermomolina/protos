@@ -290,7 +290,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertNativeSelectors(
                 "TextReaderWrapper",
                 textReader,
-                Set.of("readText", "close"));
+                Set.of("readText", "readLine", "close"));
 
         ProtosObjectValue bytesPrototype =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
