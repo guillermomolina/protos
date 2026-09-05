@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.108-SNAPSHOT
+
+- Implement I011-12 GroupRef capability-identity foundation: add an opaque represented `GroupRef` value whose semantic reference identity is independent of Group identity, physical wrapper identity, and acquisition path.
+- Integrate GroupRef with primitive semantic identity/identityHash and Actor-boundary transfer so repeated rematerializations preserve one capability identity and effective restriction descriptor, while independent acquisitions to the same Group remain distinct.
+- Verify transferred GroupRef values remain valid `Map` and `IdentityMap` keys without exposing or copying mutable Group/controller/routing state. This slice intentionally adds no public Group acquisition, membership, routing, send/request, broadcast, Authority, or controller API; I011 remains IN_PROGRESS.
+
 ## 0.2.107-SNAPSHOT
 
 - Implement I011-11 Actor-boundary keyed-collection transfer for `Map` and `IdentityMap`, preserving keyed insertion order, graph aliasing/cycles, local slots, and open/closed/frozen state while keeping the complete transfer atomic.

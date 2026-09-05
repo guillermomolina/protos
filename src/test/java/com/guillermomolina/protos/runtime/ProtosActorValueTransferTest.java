@@ -23,6 +23,7 @@ import com.guillermomolina.protos.execution.ProtosInvocation;
 import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 final class ProtosActorValueTransferTest {
@@ -340,6 +341,117 @@ final class ProtosActorValueTransferTest {
         assertEquals(1, identityMap.keyedSize());
         assertSame(closure, map.keyedSnapshot().get(0).value());
         assertSame(closure, identityMap.keyedSnapshot().get(0).key());
+    }
+
+    @Test
+    void groupRefRematerializationPreservesSemanticIdentityWithoutCollapsingAcquisitions()
+            throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation source = prelude.newModuleActivation();
+        ProtosObjectValue prototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject()).freeze();
+        UUID groupIdentity = UUID.fromString("11111111-1111-1111-1111-111111111111");
+        UUID restrictionIdentity = UUID.fromString("22222222-2222-2222-2222-222222222222");
+        ProtosGroupRefValue original =
+                ProtosGroupRefValue.acquireForRuntime(
+                        prototype, groupIdentity, restrictionIdentity);
+        ProtosGroupRefValue independent =
+                ProtosGroupRefValue.acquireForRuntime(
+                        prototype, groupIdentity, restrictionIdentity);
+
+        ProtosGroupRefValue first =
+                assertInstanceOf(
+                        ProtosGroupRefValue.class,
+                        ProtosActorValueTransfer.snapshotValue(original, source));
+        ProtosGroupRefValue second =
+                assertInstanceOf(
+                        ProtosGroupRefValue.class,
+                        ProtosActorValueTransfer.snapshotValue(first, source));
+
+        assertNotSame(original, first);
+        assertNotSame(first, second);
+        assertTrue(ProtosIdentity.identical(original, first));
+        assertTrue(ProtosIdentity.identical(first, second));
+        assertFalse(ProtosIdentity.identical(original, independent));
+        assertEquals(ProtosIdentity.identityHash(original), ProtosIdentity.identityHash(first));
+        assertEquals(ProtosIdentity.identityHash(first), ProtosIdentity.identityHash(second));
+        assertEquals(groupIdentity, first.groupIdentityForRuntime());
+        assertEquals(restrictionIdentity, first.restrictionIdentityForRuntime());
+        assertSame(prototype, first.representedDelegationParent(prelude));
+    }
+
+    @Test
+    void transferredGroupRefRemainsAValidMapAndIdentityMapKey() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation source = prelude.newModuleActivation();
+        ProtosObjectValue prototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject()).freeze();
+        ProtosGroupRefValue reference =
+                ProtosGroupRefValue.acquireForRuntime(
+                        prototype,
+                        UUID.fromString("33333333-3333-3333-3333-333333333333"),
+                        UUID.fromString("44444444-4444-4444-4444-444444444444"));
+        ProtosMapValue map = prelude.newMap();
+        ProtosIdentityMapValue identityMap =
+                new ProtosIdentityMapValue(prelude.identityMapPrototype());
+        ProtosStringValue value = new ProtosStringValue("group-capability");
+
+        ProtosInvocation.invokeMessage(map, "atPut", List.of(reference, value), source);
+        ProtosInvocation.invokeMessage(identityMap, "atPut", List.of(reference, value), source);
+
+        ProtosMapValue copiedMap =
+                assertInstanceOf(
+                        ProtosMapValue.class,
+                        ProtosActorValueTransfer.snapshotValue(map, source));
+        ProtosIdentityMapValue copiedIdentityMap =
+                assertInstanceOf(
+                        ProtosIdentityMapValue.class,
+                        ProtosActorValueTransfer.snapshotValue(identityMap, source));
+        ProtosGroupRefValue query =
+                assertInstanceOf(
+                        ProtosGroupRefValue.class,
+                        ProtosActorValueTransfer.snapshotValue(reference, source));
+
+        assertTrue(ProtosIdentity.identical(copiedMap.keyedSnapshot().get(0).key(), query));
+        assertEquals(
+                "group-capability",
+                ((ProtosStringValue)
+                                ProtosInvocation.invokeMessage(
+                                        copiedMap, "at", List.of(query), source))
+                        .value());
+        assertEquals(
+                "group-capability",
+                ((ProtosStringValue)
+                                ProtosInvocation.invokeMessage(
+                                        copiedIdentityMap, "at", List.of(query), source))
+                        .value());
+    }
+
+    @Test
+    void distinctPhysicalGroupRefWrappersWithOneSemanticIdentityRemainIdenticalAcrossOneSnapshot()
+            throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation source = prelude.newModuleActivation();
+        ProtosObjectValue prototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject()).freeze();
+        ProtosGroupRefValue original =
+                ProtosGroupRefValue.acquireForRuntime(
+                        prototype,
+                        UUID.fromString("55555555-5555-5555-5555-555555555555"),
+                        UUID.fromString("66666666-6666-6666-6666-666666666666"));
+        ProtosGroupRefValue otherWrapper = original.rematerializeForActorTransfer();
+
+        List<Object> copied =
+                ProtosActorValueTransfer.snapshotArguments(
+                        List.of(original, otherWrapper), source);
+        ProtosGroupRefValue first = assertInstanceOf(ProtosGroupRefValue.class, copied.get(0));
+        ProtosGroupRefValue second = assertInstanceOf(ProtosGroupRefValue.class, copied.get(1));
+
+        assertNotSame(first, second);
+        assertTrue(ProtosIdentity.identical(first, second));
+        assertEquals(ProtosIdentity.identityHash(first), ProtosIdentity.identityHash(second));
+        assertEquals(first.groupIdentityForRuntime(), second.groupIdentityForRuntime());
+        assertEquals(first.restrictionIdentityForRuntime(), second.restrictionIdentityForRuntime());
     }
 
     @Test

@@ -26,6 +26,7 @@ public final class ProtosIdentity {
         if(left instanceof ProtosFloatValue a && right instanceof ProtosFloatValue b){double av=a.value(),bv=b.value();if(Double.isNaN(av)&&Double.isNaN(bv))return true;return Double.doubleToRawLongBits(av)==Double.doubleToRawLongBits(bv);}
         if(left instanceof ProtosStringValue a && right instanceof ProtosStringValue b)return a.value().equals(b.value());
         if(left instanceof ProtosActorRefValue a && right instanceof ProtosActorRefValue b)return a.denotesSameIncarnation(b);
+        if(left instanceof ProtosGroupRefValue a && right instanceof ProtosGroupRefValue b)return a.denotesSameReference(b);
         return false;
     }
     public static java.math.BigInteger identityHash(Object value){
@@ -35,6 +36,7 @@ public final class ProtosIdentity {
         if(value instanceof ProtosFloatValue f){double d=f.value();long bits=Double.isNaN(d)?0x7ff8000000000000L:Double.doubleToRawLongBits(d);return tagged(30,Long.hashCode(bits));}
         if(value instanceof ProtosStringValue st)return tagged(31,st.value().hashCode());
         if(value instanceof ProtosActorRefValue ref)return tagged(34,Long.hashCode(ref.incarnationIdentityForRuntime()));
+        if(value instanceof ProtosGroupRefValue ref)return tagged(35,ref.semanticIdentityForRuntime().hashCode());
         if(value==ProtosBooleanValue.TRUE)return tagged(32,1); if(value==ProtosBooleanValue.FALSE)return tagged(32,0); if(value==ProtosNullValue.INSTANCE)return tagged(33,0);
         return java.math.BigInteger.valueOf(Integer.toUnsignedLong(System.identityHashCode(value)));
     }

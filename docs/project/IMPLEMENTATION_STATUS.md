@@ -79,10 +79,11 @@ Published slices:
 | I011-9 | CLOSED | `0.2.99-SNAPSHOT` | `SAME_COMMIT` | Public `ActorRef.request(selector, arguments...)` over the shared delivery path: fresh caller-domain Future, reply-value Actor transfer without Future adoption/flattening, deterministic pre/post-acceptance cancellation mapping, `NonTransferableValue` reply failure, and `RequestOutcomeUncertain` for known accepted work lost before a normal reply. |
 | I011-10 | CLOSED | `0.2.105-SNAPSHOT` | `SAME_COMMIT` | Graceful Actor lifecycle: public idempotent `ActorRef.stop()` and fresh independent `ActorRef.termination()` observation Futures; TERMINATING-cutover cancellation of Actor-local tasks, Actor-originated pending non-task Futures and I/O; accepted-undispatched loss preservation; TERMINATED only after required task cancellation unwind. |
 | I011-11 | CLOSED | `0.2.107-SNAPSHOT` | `SAME_COMMIT` | Actor-boundary `Map`/`IdentityMap` keyed-state transfer with alias/cycle and mutation-state preservation; destination hash/identity-hash bookkeeping rebuilt without executing user comparison/hash code; default Object hash uses semantic identity so rematerialized ActorRef capabilities remain valid keyed identities. |
+| I011-12 | CLOSED | `0.2.108-SNAPSHOT` | `SAME_COMMIT` | GroupRef capability-identity and Actor-transfer foundation: semantic GroupRef identity is distinct from Group identity and physical wrappers; repeated transfer/rematerialization preserves identityHash, target Group identity, and effective restriction descriptor; independent GroupRef acquisitions remain distinct. No public Group routing/acquisition surface is introduced. |
 
 Remaining implemented-surface gaps before top-level closure:
-- distributed/Group routing and delivery uncertainty beyond the direct concrete-Actor path, including remaining SendOperation uncertainty finalization;
-- remaining capability-transfer integrations whose state/authority has its own contract (future GroupRef/Process capability materialization); keyed Map/IdentityMap state and reply transfer for currently supported value families are wired;
+- distributed/Group acquisition, membership/routing, send/request delivery and delivery uncertainty beyond the direct concrete-Actor path, including remaining SendOperation uncertainty finalization; GroupRef semantic identity and Actor-transfer rematerialization are wired;
+- remaining capability-transfer integration whose state/authority has its own contract: Process capability materialization/delegation;
 - failure authority, RootActor/process integration, and final deterministic cross-domain race/conformance coverage.
 
 
