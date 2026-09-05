@@ -478,6 +478,20 @@ history. In particular, new Language Maturity work uses the next unused `LMxxx`
 identifier and records it in `docs/project/IMPLEMENTATION_STATUS.md` when
 published.
 
+Standard Library work uses the `LIBxxx` family. It tracks distributable library
+functionality implemented primarily as ordinary Protos modules outside
+`protos/lib/core/`. `LIBxxx` items build on existing language/Core semantics and
+MUST NOT be used to introduce or redefine normative language behavior. If a
+library item exposes a missing Core/runtime semantic prerequisite, resolve and
+track that prerequisite through the applicable specification/design and
+implementation work before the library relies on it.
+
+New Standard Library work uses the next unused `LIBxxx` identifier and records
+it in `docs/project/IMPLEMENTATION_STATUS.md` when the work is formally
+introduced. Core bootstrap/source-placement work under `protos/lib/core/`
+remains tracked by the applicable Core implementation item rather than becoming
+`LIBxxx` work merely because the implementation is written in Protos.
+
 
 ## Implementation blockers
 

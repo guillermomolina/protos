@@ -159,6 +159,49 @@ Closure result:
 | CLI003 | Multiline REPL input | CLOSED | `0.2.80-SNAPSHOT` | `254c80c0fb9e70f1dd07ef711f06ce71faa93829` | published multiline REPL input; parser-EOF accumulation, one-unit bracketed paste, persistent top-level context, recovery/history/stream coverage; recursive factorial regression is covered after standard numeric ordering completion |
 
 
+## Standard Library
+
+The `LIBxxx` family records distributable standard-library functionality
+implemented primarily as ordinary Protos modules outside `protos/lib/core/`.
+Library work builds on existing language/Core semantics; it does not define new
+normative language behavior. If a library requires a missing Core/runtime
+semantic prerequisite, that prerequisite must be resolved and tracked through
+the applicable specification/design and implementation work before the library
+relies on it.
+
+Core implementation source under `protos/lib/core/` remains owned by the
+applicable `Ixxx` work. Its location in `protos/lib/` does not by itself make it
+Standard Library work.
+
+| Item | Description | Status | Closure evidence | Dependencies / notes |
+|---|---|---|---|---|
+| LIB001 | Collections library | READY | — | I004 + I005 + I006 + I008 closed; implement as ordinary distributable modules under `protos/lib/collections/` without duplicating or redefining Core Array, Map, or IdentityMap semantics. |
+
+### LIB001 — Collections
+
+Status: READY
+
+Description: General-purpose collection data structures and algorithms built as
+ordinary Protos library modules on top of the existing Core collection and
+module facilities.
+
+Implementation boundary:
+- distributable library source belongs under `protos/lib/collections/`;
+- existing Core `Array`, `Map`, and `IdentityMap` semantics and prototypes remain
+  Core and are not reclassified as library work;
+- library API design must use ordinary Protos mechanisms and must not silently
+  introduce new normative Core semantics;
+- no implementation slices or concrete collection API are assigned by this
+  governance change; define them from the current repository when LIB001 work
+  actually begins.
+
+Dependencies:
+- I004 Array completion — CLOSED;
+- I005 Standard Map — CLOSED;
+- I006 IdentityMap / identity hashing — CLOSED;
+- I008 Modules — CLOSED.
+
+
 ## Language Maturity
 
 The `LMxxx` family records bounded language-maturity / dogfooding work:
@@ -185,7 +228,7 @@ the repository at publication time rather than relying on chat/prompt history.
 
 `P57` and similar `Pnn` references found in historical conformance/changelog
 text are specification/requirement paragraph labels, not a repository
-project-work family analogous to `Ixxx`, `Bxxx`, `Dxxx`, `CLIxxx`, or `LMxxx`.
+project-work family analogous to `Ixxx`, `Bxxx`, `Dxxx`, `CLIxxx`, `LIBxxx`, or `LMxxx`.
 
 For example, the changelog records “P57 Integer conformance programs” as tests
 covering the P57 Integer requirement. That evidence MUST NOT be auto-promoted
@@ -201,7 +244,7 @@ sufficient.
 
 ## Formally tracked project work
 
-This auto-generated registry complements, but does not duplicate, the curated implementation and CLI tables above. It indexes formal non-I/CLI work families from authoritative project records and published specification decisions.
+This auto-generated registry complements, but does not duplicate, the curated implementation, CLI, Standard Library, and Language Maturity tables above. It indexes other formal work families from authoritative project records and published specification decisions.
 
 Identifier shape alone is insufficient: incidental IDs from design ideas, tests, benchmarks, examples, and arbitrary prose are intentionally excluded.
 
@@ -267,6 +310,11 @@ When publishing an implementation item:
 For Language Maturity work, allocate the next unused `LMxxx` identifier before
 publication and include it in the same repository change. Do not create LM IDs
 only in prompts or chat history.
+
+For Standard Library work, allocate the next unused `LIBxxx` identifier when the
+work is formally introduced and record it in the curated Standard Library
+section. Keep Core/runtime prerequisites under their applicable implementation
+families rather than hiding them inside a library item.
 
 If an item is implemented through slices, the top-level item remains
 `IN_PROGRESS` until every requirement assigned to that item is integrated,
