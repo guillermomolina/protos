@@ -18,3 +18,6 @@ All Protos source files use the canonical `.protos` extension. Examples are non-
 | Express conditional control flow | `control-flow/conditional.protos` |
 | Compute Fibonacci recursively | `algorithms/fibonacci-recursive.protos` |
 | Compute factorial recursively | `algorithms/factorial-recursive.protos` |
+| Use value-keyed maps | `collections/maps.protos` |
+| Use identity-keyed maps | `collections/identity-map.protos` |
+| Build and compare portable paths | `paths/portable-paths.protos` |

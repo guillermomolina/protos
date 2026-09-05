@@ -124,3 +124,11 @@ equality/fixed-inequality-false.protos	boolean	false
 equality/nonidentity-same-number.protos	boolean	false
 equality/nonidentity-cross-family.protos	boolean	true
 equality/nonidentity-distinct-objects.protos	boolean	true
+collections/map-replacement-keeps-size.protos	integer	2
+collections/map-remove-and-reinsert.protos	integer	3
+collections/identity-map-distinct-objects.protos	integer	2
+collections/identity-map-equal-strings-collapse.protos	integer	1
+path/structural-equality-vs-identity.protos	boolean	true
+path/rootedness-affects-equality.protos	boolean	true
+regression/closure-captured-mutable-binding.protos	integer	2
+regression/delegated-shadowing.protos	integer	2
