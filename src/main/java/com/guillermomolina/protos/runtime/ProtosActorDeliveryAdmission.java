@@ -41,17 +41,25 @@ final class ProtosActorDeliveryAdmission {
             ProtosActorRefValue sender, ProtosTask.Continuation turn) {
         ProtosActorDeliveryAttempt attempt =
                 new ProtosActorDeliveryAttempt(this, sender, turn);
+        submit(attempt);
+        return attempt;
+    }
+
+    void submit(ProtosActorDeliveryAttempt attempt) {
+        Objects.requireNonNull(attempt, "attempt");
+        if (!attempt.belongsToForRuntime(this)) {
+            throw new IllegalArgumentException("delivery attempt belongs to another admission queue");
+        }
         synchronized (actor) {
             synchronized (this) {
                 if (isTerminating()) {
                     attempt.markFailedBeforeAcceptanceForRuntime();
-                    return attempt;
+                    return;
                 }
                 pending.addLast(attempt);
                 drainLocked();
             }
         }
-        return attempt;
     }
 
     boolean cancel(ProtosActorDeliveryAttempt attempt) {

@@ -82,6 +82,7 @@ public final class ProtosActorBootstrap {
             if (!(result instanceof ProtosObjectValue behavior)) {
                 throw bootstrapError(activation);
             }
+            actor.bindMessageEnvironmentForRuntime(prelude, canonicalModuleKey);
             return actor.completeInitialization(behavior);
         } catch (ProtosSignalException failure) {
             terminateFailedInitialization(actor);

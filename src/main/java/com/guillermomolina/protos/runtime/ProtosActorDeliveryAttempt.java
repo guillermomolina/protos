@@ -29,8 +29,11 @@ public final class ProtosActorDeliveryAttempt {
     public enum State {
         PENDING,
         ACCEPTED,
+        RUNNING,
+        COMPLETED,
         CANCELLED_BEFORE_ACCEPTANCE,
-        FAILED_BEFORE_ACCEPTANCE
+        FAILED_BEFORE_ACCEPTANCE,
+        FAILED_AFTER_ACCEPTANCE
     }
 
     private final ProtosActorDeliveryAdmission owner;
@@ -60,12 +63,47 @@ public final class ProtosActorDeliveryAttempt {
         return owner.cancel(this);
     }
 
+    boolean belongsToForRuntime(ProtosActorDeliveryAdmission admission) {
+        return owner == admission;
+    }
+
     ProtosActorRefValue senderForRuntime() {
         return sender;
     }
 
     ProtosTask.Continuation turnForRuntime() {
         return turn;
+    }
+
+    synchronized boolean beginDispatchForRuntime() {
+        if (state == State.ACCEPTED) {
+            state = State.RUNNING;
+            return true;
+        }
+        return state == State.RUNNING;
+    }
+
+    synchronized void markCompletedForRuntime() {
+        if (state != State.RUNNING) {
+            throw new IllegalStateException("complete requires running delivery attempt, was " + state);
+        }
+        state = State.COMPLETED;
+    }
+
+    synchronized void markFailedAfterAcceptanceForRuntime() {
+        if (state == State.FAILED_AFTER_ACCEPTANCE) {
+            return;
+        }
+        if (state != State.ACCEPTED && state != State.RUNNING) {
+            throw new IllegalStateException(
+                    "post-acceptance failure requires accepted/running delivery attempt, was " + state);
+        }
+        state = State.FAILED_AFTER_ACCEPTANCE;
+    }
+
+    synchronized boolean retryableForRuntime() {
+        return state == State.FAILED_BEFORE_ACCEPTANCE
+                || state == State.FAILED_AFTER_ACCEPTANCE;
     }
 
     synchronized boolean isPendingForRuntime() {

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.93-SNAPSHOT
+
+- Implement I011-8 public concrete-Actor `ActorRef.send(selector, arguments...)`: require an exact semantic String selector, form the complete Actor-boundary snapshot synchronously before admission, and dispatch accepted work against the destination Actor's stable behavior/message environment while ignoring the handler's normal result.
+- Add the local identity-bearing SendOperation with exactly `cancel()` / `retry()`: cancellation succeeds only when known pre-acceptance cancellation wins; retry is explicit after known terminal delivery failure, creates a fresh operation identity, and reuses the original logical snapshot without source re-evaluation. SendOperation is local/non-transferable. Request/reply and distributed/accepted-work-loss uncertainty remain for later I011 slices.
+
 ## 0.2.92-SNAPSHOT
 
 - Start I018 Core self-hosting/bootstrap minimization by moving standard `Object.init` and the body of standard `Object.!=` out of Java and into distributable `protos/lib/core/object.protos`.

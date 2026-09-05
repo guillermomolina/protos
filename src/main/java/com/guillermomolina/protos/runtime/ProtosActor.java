@@ -31,6 +31,8 @@ public final class ProtosActor {
     private final ProtosActorRefValue reference;
     private final ProtosActorMailbox mailbox;
     private final ProtosActorDeliveryAdmission deliveryAdmission;
+    private ProtosPrelude messagePrelude;
+    private ProtosModuleKey messageModuleKey;
     private final AtomicReference<LifecycleState> lifecycle =
             new AtomicReference<>(LifecycleState.INITIALIZING);
     private final AtomicReference<ProtosObjectValue> currentBehavior =
@@ -108,6 +110,39 @@ public final class ProtosActor {
 
     ProtosActorDeliveryAdmission deliveryAdmissionForRuntime() {
         return deliveryAdmission;
+    }
+
+    /**
+     * Fixes the destination execution environment used by ordinary external message turns.
+     * Bootstrap owns this binding; message delivery never imports the sender's module environment.
+     */
+    public synchronized void bindMessageEnvironmentForRuntime(
+            ProtosPrelude prelude, ProtosModuleKey canonicalModuleKey) {
+        Objects.requireNonNull(prelude, "prelude");
+        Objects.requireNonNull(canonicalModuleKey, "canonicalModuleKey");
+        if (messagePrelude != null
+                && (messagePrelude != prelude || !messageModuleKey.equals(canonicalModuleKey))) {
+            throw new IllegalStateException("Actor message environment is already fixed");
+        }
+        messagePrelude = prelude;
+        messageModuleKey = canonicalModuleKey;
+    }
+
+    ProtosActivation newMessageActivationForRuntime() {
+        ProtosPrelude prelude;
+        ProtosModuleKey moduleKey;
+        synchronized (this) {
+            prelude = messagePrelude;
+            moduleKey = messageModuleKey;
+        }
+        if (prelude == null || moduleKey == null) {
+            throw new IllegalStateException("Actor has no completed bootstrap message environment");
+        }
+        return prelude.newModuleActivation(
+                moduleState,
+                moduleKey,
+                prelude.newExecutionContext(),
+                executionDomain);
     }
 
     /** Destination-local behavior installed by successful bootstrap. */

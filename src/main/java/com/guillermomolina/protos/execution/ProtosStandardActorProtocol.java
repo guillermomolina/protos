@@ -20,6 +20,8 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosActorRefValue;
 import com.guillermomolina.protos.runtime.ProtosActorScheduler;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
+import com.guillermomolina.protos.runtime.ProtosSendOperationValue;
 import com.guillermomolina.protos.runtime.ProtosActorValueTransfer;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
@@ -37,6 +39,7 @@ public final class ProtosStandardActorProtocol {
     private final ProtosModuleRuntime moduleRuntime;
     private final ProtosActorBootstrap actorBootstrap;
     private final ProtosActorScheduler actorScheduler;
+    private final ProtosObjectValue sendOperationPrototype;
     private final ProtosObjectValue actorRefPrototype;
 
     public ProtosStandardActorProtocol(ProtosModuleRuntime moduleRuntime) {
@@ -57,8 +60,30 @@ public final class ProtosStandardActorProtocol {
         this.moduleRuntime = Objects.requireNonNull(moduleRuntime, "moduleRuntime");
         this.actorBootstrap = new ProtosActorBootstrap(moduleRuntime);
         this.actorScheduler = Objects.requireNonNull(actorScheduler, "actorScheduler");
-        this.actorRefPrototype =
-                new ProtosObjectValue(ProtosObjectValue.rootObject()).freeze();
+        this.sendOperationPrototype = createSendOperationPrototype();
+        this.actorRefPrototype = createActorRefPrototype();
+    }
+
+    private ProtosObjectValue createActorRefPrototype() {
+        ProtosObjectValue prototype = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        prototype.createLocalSlot(
+                "send",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> send(activation, supplied)));
+        return prototype.freeze();
+    }
+
+    private ProtosObjectValue createSendOperationPrototype() {
+        ProtosObjectValue prototype = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        prototype.createLocalSlot(
+                "cancel",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> cancelSendOperation(activation, supplied)));
+        prototype.createLocalSlot(
+                "retry",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> retrySendOperation(activation, supplied)));
+        return prototype.freeze();
     }
 
     /** Creates the ordinary frozen Core prelude object whose local surface is spawn/current. */
@@ -130,6 +155,61 @@ public final class ProtosStandardActorProtocol {
             terminateAfterCutover(actor);
         }
         return reference;
+    }
+
+    private Object send(ProtosActivation activation, List<?> supplied) {
+        Objects.requireNonNull(activation, "activation");
+        Objects.requireNonNull(supplied, "supplied");
+        if (!(activation.receiver() instanceof ProtosActorRefValue destination)
+                || supplied.isEmpty()) {
+            throw error(activation);
+        }
+        Object selectorValue = supplied.get(0);
+        if (!(selectorValue instanceof ProtosStringValue selector)) {
+            throw error(activation);
+        }
+
+        // Snapshot formation is synchronous and atomic before any admission attempt exists.
+        List<Object> snapshot =
+                ProtosActorValueTransfer.snapshotArguments(
+                        supplied.subList(1, supplied.size()), activation);
+        ProtosActorRefValue sender =
+                activation.executionDomain()
+                        .currentActorReference()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "ActorRef.send requires execution inside an Actor incarnation"));
+        return ProtosSendOperationValue.begin(
+                sendOperationPrototype,
+                destination,
+                sender,
+                selector.value(),
+                snapshot);
+    }
+
+    private static Object cancelSendOperation(
+            ProtosActivation activation, List<?> supplied) {
+        if (!(activation.receiver() instanceof ProtosSendOperationValue operation)
+                || !supplied.isEmpty()) {
+            throw error(activation);
+        }
+        return operation.cancelBeforeAcceptance()
+                ? ProtosBooleanValue.TRUE
+                : ProtosBooleanValue.FALSE;
+    }
+
+    private static Object retrySendOperation(
+            ProtosActivation activation, List<?> supplied) {
+        if (!(activation.receiver() instanceof ProtosSendOperationValue operation)
+                || !supplied.isEmpty()) {
+            throw error(activation);
+        }
+        ProtosSendOperationValue retry = operation.retryAfterFailure();
+        if (retry == null) {
+            throw error(activation);
+        }
+        return retry;
     }
 
     private static Object current(ProtosActivation activation, List<?> supplied) {
