@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.86-SNAPSHOT
+
+- Implement I011-5 public Actor prelude surface with exactly `spawn` and `current`; perform exact semantic-String validation, one creator-side canonical module resolution, and the I011-4 atomic initialization-vector transfer before the creation cutover.
+- Kick off I011-3 destination-local bootstrap only after the cutover and return the stable ActorRef without waiting for READY; preserve current-ActorRef identity and same-incarnation termination on later bootstrap failure. I011 remains IN_PROGRESS; mailbox/send/request, stop/termination observation, RootActor integration, distributed routing, and remaining specialized transfers stay outside this slice.
+
 ## 0.2.85-SNAPSHOT
 
 - Implement I011-4 Actor graph snapshot/value-transfer foundation: add one Actor-specific atomic graph-copy boundary with shared-operation memoization, preserving aliases and cycles across roots while copying transferable scalar values, ordinary object state, Arrays, Bytes state, and Paths.
