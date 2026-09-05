@@ -174,9 +174,19 @@ Core implementation source under `protos/lib/core/` remains owned by the
 applicable `Ixxx` work. Its location in `protos/lib/` does not by itself make it
 Standard Library work.
 
+LIB identifiers are stable work-item identities, not a mandatory execution
+order. Later library work uses the next unused `LIBxxx` identifier; do not
+renumber existing items merely to express priority. Readiness and actual
+implementation order follow real dependencies, so independently ready library
+work may proceed without waiting for an earlier-numbered roadmap item.
+
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
 | LIB001 | Collections library | READY | — | I004 + I005 + I006 + I008 closed; implement as ordinary distributable modules under `protos/lib/collections/` without duplicating or redefining Core Array, Map, or IdentityMap semantics. |
+| LIB002 | Text / encoding conveniences | BLOCKED_BY_DEPENDENCIES | — | I015 is not closed; ordinary library conveniences may build on Encoding/Text I/O but must not redefine their Core semantics. |
+| LIB003 | JSON / serialization | BLOCKED_BY_DEPENDENCIES | — | LIB001 is not closed; design exact text/encoding and stream-adapter dependencies from the then-current repository rather than assuming roadmap order is dependency order. |
+| LIB004 | Filesystem / process conveniences | BLOCKED_BY_DEPENDENCIES | — | I016 and I017 are not closed; convenience APIs must preserve Filesystem/Process authority boundaries and may not manufacture ambient host authority. |
+| LIB005 | Networking | OPEN | — | Roadmap item only; `spec/io/IO_CORE.md` currently leaves network authority acquisition, socket APIs, DNS/name resolution, and transport configuration outside its standardized scope. Re-audit and establish prerequisites before implementation. |
 
 ### LIB001 — Collections
 
@@ -201,6 +211,101 @@ Dependencies:
 - I005 Standard Map — CLOSED;
 - I006 IdentityMap / identity hashing — CLOSED;
 - I008 Modules — CLOSED.
+
+
+### LIB002 — Text / encoding conveniences
+
+Status: BLOCKED_BY_DEPENDENCIES
+
+Description: Ergonomic text and encoding helpers implemented as ordinary Protos
+library functionality on top of finalized Core Encoding/Text I/O semantics.
+
+Planning boundary:
+- Core Encoding, TextReader, and TextWriter semantics remain owned by I015 and
+  the normative I/O specification;
+- reciprocal or convenience operations may be library functionality only when
+  they preserve the canonical Core operations and argument/result semantics;
+- no concrete API, import spelling, module layout, or implementation slices are
+  assigned by this roadmap entry; derive them from the current repository when
+  LIB002 work begins.
+
+Dependencies:
+- I003 Standard String — CLOSED;
+- I012 Standard Bytes — CLOSED;
+- I015 Encoding / Text I/O — not CLOSED.
+
+
+### LIB003 — JSON / serialization
+
+Status: BLOCKED_BY_DEPENDENCIES
+
+Description: Structured-data encoding, decoding, and serialization facilities
+implemented through ordinary Protos values, collections, modules, and explicit
+text/byte adaptation where required.
+
+Planning boundary:
+- no special JSON syntax, implicit conversion, hidden object serialization, or
+  new Core semantic category is implied by this roadmap item;
+- roadmap numbering does not create a dependency on LIB002 by itself;
+- when LIB003 design begins, re-audit whether particular textual, encoded-byte,
+  streaming, or file adapters depend on LIB002, I015, or later I/O work;
+- no concrete data model, API, import spelling, module layout, or slices are
+  assigned yet.
+
+Dependencies:
+- existing Core Array, Map, String, Bytes, and Modules foundations are available;
+- LIB001 Collections — not CLOSED;
+- exact optional adapter dependencies must be established by the future LIB003
+  audit rather than guessed here.
+
+
+### LIB004 — Filesystem / process conveniences
+
+Status: BLOCKED_BY_DEPENDENCIES
+
+Description: Higher-level filesystem and Process conveniences layered over the
+standard capability-based File/Filesystem and Process I/O surfaces.
+
+Planning boundary:
+- convenience code must preserve capability confinement, lifecycle, commitment,
+  and authority-transfer semantics;
+- library code must not obtain ambient filesystem, process, subprocess, or other
+  host authority merely because a host API exists;
+- no shell API, path utility surface, stream helper API, import spelling, module
+  layout, or implementation slices are assigned yet.
+
+Dependencies:
+- I013 Standard Path — CLOSED;
+- I014 Standard Byte I/O — CLOSED;
+- I016 Filesystem / File — not CLOSED;
+- I017 Process I/O / bootstrap — not CLOSED;
+- re-audit I015/LIB002 dependencies for text-oriented conveniences when LIB004
+  work begins.
+
+
+### LIB005 — Networking
+
+Status: OPEN
+
+Description: Future standard-library networking facilities, to be designed only
+after Protos has an explicit portable authority and transport substrate suitable
+for library code to consume.
+
+Planning boundary:
+- the current Core I/O model does not standardize network authority acquisition,
+  socket creation/connect/bind/listen/accept, DNS/name resolution, datagram
+  addressing, or transport-configuration APIs;
+- LIB005 must not smuggle those missing host/runtime capabilities into ordinary
+  library code;
+- if portable networking requires new normative Core/runtime semantics, establish
+  and track that prerequisite outside LIB005 before the library relies on it;
+- no protocol stack, socket API, HTTP API, import spelling, module layout, or
+  implementation slices are assigned by this roadmap entry.
+
+Dependencies:
+- exact Core/runtime networking prerequisites are not yet established;
+- re-audit the then-current specification and implementation before changing
+  LIB005 from OPEN to a ready/blocked implementation state.
 
 
 ## Language Maturity
