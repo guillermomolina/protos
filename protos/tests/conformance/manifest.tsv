@@ -136,3 +136,11 @@ collections/array-construction-and-indexing.protos	boolean	true
 collections/array-replacement-keeps-size.protos	boolean	true
 regression/rest-arguments-preserve-supplied-vector.protos	integer	360
 regression/default-reads-earlier-parameter.protos	integer	42
+regression/delegated-method-uses-dynamic-receiver.protos	integer	7
+regression/extracted-inherited-method-keeps-receiver.protos	integer	9
+regression/two-closures-share-captured-binding.protos	integer	2
+regression/captured-lexical-assignment-beats-receiver-slot.protos	integer	2100
+regression/nested-closure-retains-method-receiver-state.protos	integer	9
+regression/inherited-call-slot-keeps-receiver.protos	integer	9
+regression/local-nonclosure-call-shadows-inherited-call.protos	error	-
+regression/inherited-member-assignment-signals-error.protos	error	-
