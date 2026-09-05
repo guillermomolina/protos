@@ -71,9 +71,4 @@ final class ProtosCoreErrorTaxonomy {
         }
     }
 
-    static void exportBindings(ProtosObjectValue context, ProtosObjectValue prelude) {
-        for (String name : PARENTS.keySet()) {
-            prelude.createLocalSlot(name, context.readLocalSlot(name).orElseThrow());
-        }
-    }
 }

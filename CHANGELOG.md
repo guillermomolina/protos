@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.102-SNAPSHOT
+
+- Continue I018 Core self-hosting/bootstrap minimization by constructing the standard frozen-prelude bindings object in distributable `protos/lib/core/prelude.protos` instead of allocating and populating that object slot-by-slot in `ProtosCoreBootstrap`.
+- Preserve the exact existing prelude surface and identities, including the complete validated Error taxonomy, direct `Context` parentage, absence of the construction-only `Bytes` binding, and shallow final freeze. Remove the Java-side Error-taxonomy export helper while retaining host-side topology validation.
+- Add focused regression coverage for the exact prelude binding set and an architectural guard preventing `ProtosCoreBootstrap` from reintroducing direct `preludeBindings.createLocalSlot(...)` construction. No normative specification changes are made, and I016 remains frozen at I016-C.
+
 ## 0.2.101-SNAPSHOT
 
 - Continue I018 Core self-hosting/bootstrap minimization by moving the standard `Float.negated()` body from Java into distributable `protos/lib/core/float.protos`.

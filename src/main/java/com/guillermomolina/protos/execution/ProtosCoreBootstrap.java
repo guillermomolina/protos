@@ -281,34 +281,13 @@ public final class ProtosCoreBootstrap {
         ProtosStandardBufferedByteIoProtocol.installWriterFactory(
                 bufferedWriterFactory, bufferedBytesPrototype, bootstrapActivation);
 
+        sourceLoader
+                .load(coreDirectory.resolve("prelude.protos"))
+                .call(bootstrapActivation);
         ProtosObjectValue preludeBindings =
-                new ProtosObjectValue(contextPrototype);
-        preludeBindings.createLocalSlot("Context", contextPrototype);
-        preludeBindings.createLocalSlot("Number", numberPrototype);
-        preludeBindings.createLocalSlot("Integer", integerPrototype);
-        preludeBindings.createLocalSlot("Float", floatPrototype);
-        preludeBindings.createLocalSlot("UInt8", uInt8Prototype);
-        preludeBindings.createLocalSlot("Int8", int8Prototype);
-        preludeBindings.createLocalSlot("UInt16", uInt16Prototype);
-        preludeBindings.createLocalSlot("Int16", int16Prototype);
-        preludeBindings.createLocalSlot("UInt32", uInt32Prototype);
-        preludeBindings.createLocalSlot("Int32", int32Prototype);
-        preludeBindings.createLocalSlot("UInt64", uInt64Prototype);
-        preludeBindings.createLocalSlot("Int64", int64Prototype);
-        preludeBindings.createLocalSlot("Error", errorPrototype);
-        preludeBindings.createLocalSlot(
-                "InvalidReturn", invalidReturnPrototype);
-        ProtosCoreErrorTaxonomy.exportBindings(bootstrapContext, preludeBindings);
-        preludeBindings.createLocalSlot("Array", arrayPrototype);
-        preludeBindings.createLocalSlot("String", stringPrototype);
-        preludeBindings.createLocalSlot("Map", mapPrototype);
-        preludeBindings.createLocalSlot("IdentityMap", identityMapPrototype);
-        preludeBindings.createLocalSlot("Path", pathPrototype);
-        preludeBindings.createLocalSlot("Future", futurePrototype);
-        preludeBindings.createLocalSlot("Actor", actorObject);
-        preludeBindings.createLocalSlot("BufferedReader", bufferedReaderFactory);
-        preludeBindings.createLocalSlot("BufferedWriter", bufferedWriterFactory);
-        preludeBindings.createLocalSlot("import", importFacility);
+                requirePrototype(
+                        bootstrapContext, "_corePreludeBindings", contextPrototype);
+        bootstrapContext.removeLocalSlot("_corePreludeBindings");
         preludeBindings.freeze();
 
         return new ProtosPrelude(preludeBindings, contextPrototype);

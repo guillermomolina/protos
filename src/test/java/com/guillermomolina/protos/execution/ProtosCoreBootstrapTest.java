@@ -29,6 +29,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
@@ -95,6 +96,66 @@ class ProtosCoreBootstrapTest {
                 ProtosObjectValue.MutationState.FROZEN,
                 bindings.mutationState());
         assertFalse(bindings.hasLocalSlot("Bytes"));
+        assertEquals(
+                java.util.Set.of(
+                        "Context",
+                        "Number",
+                        "Integer",
+                        "Float",
+                        "UInt8",
+                        "Int8",
+                        "UInt16",
+                        "Int16",
+                        "UInt32",
+                        "Int32",
+                        "UInt64",
+                        "Int64",
+                        "Error",
+                        "InvalidReturn",
+                        "SlotNotFound",
+                        "Cancelled",
+                        "FutureResolutionCycle",
+                        "RequestOutcomeUncertain",
+                        "NonTransferableValue",
+                        "NonParallelValue",
+                        "InvalidPredicateResult",
+                        "InvalidComparatorResult",
+                        "InvalidComparatorOrder",
+                        "ParallelRegionOverlap",
+                        "ParallelRegionInUse",
+                        "ParallelRegionOutsideP",
+                        "IOError",
+                        "InvalidIOArgument",
+                        "IOLifecycleError",
+                        "IOCapacityExhausted",
+                        "EncodingError",
+                        "LineTooLong",
+                        "Array",
+                        "String",
+                        "Map",
+                        "IdentityMap",
+                        "Path",
+                        "Future",
+                        "Actor",
+                        "BufferedReader",
+                        "BufferedWriter",
+                        "import"),
+                bindings.localSlotsSnapshot().keySet());
+        String bootstrapSource =
+                Files.readString(
+                        Path.of(
+                                "src",
+                                "main",
+                                "java",
+                                "com",
+                                "guillermomolina",
+                                "protos",
+                                "execution",
+                                "ProtosCoreBootstrap.java"));
+        assertFalse(bootstrapSource.contains("preludeBindings.createLocalSlot("));
+        assertTrue(
+                Files.readString(Path.of("protos", "lib", "core", "prelude.protos"))
+                        .contains("_corePreludeBindings: Context {"));
         assertNotSame(first, second);
         assertSame(contextPrototype, first.parent().orElseThrow());
         assertSame(contextPrototype, second.parent().orElseThrow());
