@@ -493,6 +493,31 @@ remains tracked by the applicable Core implementation item rather than becoming
 `LIBxxx` work merely because the implementation is written in Protos.
 
 
+
+### Performance work
+
+Performance work uses the `PERFxxx` family. It records non-normative benchmark
+suites, profiling and performance investigations, optimization work, and
+performance-regression protection over behavior that is already defined by the
+applicable specification and implementation owners.
+
+`PERFxxx` work MUST NOT be used to redefine, relax, or bypass observable Protos
+semantics, correctness requirements, conformance requirements, capability
+boundaries, or lifecycle guarantees for the sake of a benchmark result. If a
+performance improvement requires an observable semantic change, route that
+change through the applicable specification/design process and implementation
+family before treating the resulting implementation as performance work.
+
+New Performance work uses the next unused `PERFxxx` identifier and records it
+in `docs/project/IMPLEMENTATION_STATUS.md` when formally introduced. Benchmark
+workloads, result files, test names, commit messages, or incidental prose do not
+become tracked work items merely because they contain a PERF-shaped token; the
+canonical project ledger owns lifecycle state.
+
+Performance changes that modify executable implementation source under `src/`
+or distributable Protos library source under `protos/lib/` remain subject to the
+normal implementation versioning, changelog, validation, and publication rules.
+
 ## Implementation blockers
 
 `docs/project/IMPLEMENTATION_BLOCKERS.md` is the repository-wide ledger for

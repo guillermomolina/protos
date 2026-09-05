@@ -493,11 +493,42 @@ Dependency chain: `LM005-A -> LM005-B -> LM005-C`.
 New Language Maturity work MUST allocate and persist its `LMxxx` identifier in
 the repository at publication time rather than relying on chat/prompt history.
 
+
+## Performance
+
+The `PERFxxx` family records non-normative performance engineering over
+already-defined Protos behavior: reproducible benchmark suites, profiling and
+performance investigations, optimization work, and performance-regression
+protection. It does not define language semantics.
+
+Performance work follows these project rules:
+
+- correctness and conformance validation precede performance conclusions;
+- cold/startup measurements are reported separately from warmed steady-state
+  measurements when a JIT/runtime warmup distinction exists;
+- benchmark evidence records the materially relevant Protos revision,
+  implementation/runtime/JDK/GraalVM versions, host/hardware, workload,
+  warmup policy, measurement policy, and aggregation method;
+- cross-language comparisons use materially equivalent algorithms and inputs,
+  identify materially different runtime modes, and do not generalize one
+  microbenchmark into a claim about whole-language performance;
+- benchmark-specific hidden semantics, privileged language objects, or
+  correctness shortcuts are not permitted;
+- a finding that requires an observable semantic change leaves PERF work and
+  follows the applicable specification/design and implementation process first.
+
+| Item | Description | Status | Closure evidence | Dependencies / notes |
+|---|---|---|---|---|
+| PERF001 | Core v0.1 baseline benchmark suite | READY | — | Establish a reproducible baseline covering startup, warmup, steady-state execution, calls/object-model behavior, collections, and concurrency, plus interpreter-vs-Graal compilation and comparable external-language runs where practical. Work may begin immediately on already-closed semantics; any result labelled as the complete Core v0.1 baseline requires I015 to be CLOSED. PERF001 observes the unoptimized baseline; optimization follow-ups receive separate PERF identifiers. |
+
+New Performance work MUST allocate and persist its `PERFxxx` identifier in the
+repository when formally introduced rather than relying on chat/prompt history.
+
 ## P-label classification
 
 `P57` and similar `Pnn` references found in historical conformance/changelog
 text are specification/requirement paragraph labels, not a repository
-project-work family analogous to `Ixxx`, `Bxxx`, `Dxxx`, `CLIxxx`, `LIBxxx`, or `LMxxx`.
+project-work family analogous to `Ixxx`, `Bxxx`, `Dxxx`, `CLIxxx`, `LIBxxx`, `LMxxx`, or `PERFxxx`.
 
 For example, the changelog records “P57 Integer conformance programs” as tests
 covering the P57 Integer requirement. That evidence MUST NOT be auto-promoted
@@ -513,7 +544,7 @@ sufficient.
 
 ## Formally tracked project work
 
-This auto-generated registry complements, but does not duplicate, the curated implementation, CLI, Standard Library, and Language Maturity tables above. It indexes other formal work families from authoritative project records and published specification decisions.
+This auto-generated registry complements, but does not duplicate, the curated implementation, CLI, Standard Library, Language Maturity, and Performance tables above. It indexes other formal work families from authoritative project records and published specification decisions.
 
 Identifier shape alone is insufficient: incidental IDs from design ideas, tests, benchmarks, examples, and arbitrary prose are intentionally excluded.
 
@@ -585,6 +616,11 @@ For Standard Library work, allocate the next unused `LIBxxx` identifier when the
 work is formally introduced and record it in the curated Standard Library
 section. Keep Core/runtime prerequisites under their applicable implementation
 families rather than hiding them inside a library item.
+
+For Performance work, allocate the next unused `PERFxxx` identifier when the
+work is formally introduced and record it in the curated Performance section.
+Keep performance work non-normative; semantic changes must be resolved through
+their applicable specification/design and implementation owners first.
 
 If an item is implemented through slices, the top-level item remains
 `IN_PROGRESS` until every requirement assigned to that item is integrated,
