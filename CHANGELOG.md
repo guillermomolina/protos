@@ -1,4 +1,23 @@
-# Changelog\n\n## 0.2.79-SNAPSHOT\n\n- Complete I014-G buffered byte-I/O lifecycle/cancellation conformance: close cutover now terminates accepted-but-uncommitted adapter operations with fresh lifecycle failures, active cancellation is propagated to lower Futures without rolling back committed effects, close retains its activation across asynchronous completion, in-flight buffered flushes are reconciled without duplicate propagation, and owning close waits for the owned target close while preserving a primary wrapper-finalization failure.\n\n## 0.2.78-SNAPSHOT
+# Changelog
+
+## 0.2.80-SNAPSHOT
+
+### Fixed
+- Implement CLI003 multiline REPL input so a complete JLine bracketed-paste payload is compiled and evaluated once instead of being split into per-line evaluations.
+- Accumulate interactive and stream REPL source while the parser reports an unexpected end of source, preserving nested closures, object/block source, blank lines, and persistent top-level context until the syntactic unit is complete.
+- Keep invalid non-EOF syntax recoverable without poisoning the next REPL input, and make Ctrl-C discard the entire pending interactive unit.
+
+### Notes
+- Parser completeness uses the actual EOF token carried by `ParseError`; CLI003 does not count delimiters or introduce a separate syntax heuristic.
+- JLine history continues to store non-blank physical lines independently, while evaluation now operates on the complete source unit.
+- File execution and `-e` continue to use the existing source compiler path unchanged, and the Truffle `sun.misc.Unsafe` warning remains outside CLI003.
+- No normative specification revision is changed.
+
+## 0.2.79-SNAPSHOT
+
+- Complete I014-G buffered byte-I/O lifecycle/cancellation conformance: close cutover now terminates accepted-but-uncommitted adapter operations with fresh lifecycle failures, active cancellation is propagated to lower Futures without rolling back committed effects, close retains its activation across asynchronous completion, in-flight buffered flushes are reconciled without duplicate propagation, and owning close waits for the owned target close while preserving a primary wrapper-finalization failure.
+
+## 0.2.78-SNAPSHOT
 
 - Implement I014-F standard buffered byte I/O: frozen `BufferedReader`/`BufferedWriter` factories with borrowing/owning forms, ordered bounded buffering, transparent/resumable EOF, recursive flush propagation, deterministic wrapper close ownership/failure handling, permanent output-side failure after ambiguous propagation, fresh standard Futures, and focal conformance tests.
 

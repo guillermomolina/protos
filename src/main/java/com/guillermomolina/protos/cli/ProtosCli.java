@@ -1,4 +1,19 @@
-/* APL-1.0 licensed work; see LICENSE.TXT. */
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
 package com.guillermomolina.protos.cli;
 
 import com.guillermomolina.protos.execution.*;
@@ -54,12 +69,15 @@ public final class ProtosCli {
             LineReader reader = LineReaderBuilder.builder().terminal(terminal)
                     .history(new ReplHistory())
                     .option(LineReader.Option.BRACKETED_PASTE, true).build();
+            StringBuilder pending = new StringBuilder();
             for (;;) {
                 try {
-                    String input = reader.readLine("protos> ");
-                    if (processReturnedInput(input, s, out, err)) return 0;
+                    String input = reader.readLine(pending.isEmpty() ? "protos> " : "...> ");
+                    ReplInputResult result = processInputChunk(input, pending, s, out, err);
+                    if (result == ReplInputResult.EXIT) return 0;
                 } catch (UserInterruptException e) {
-                    // Ctrl-C cancels the current line and returns to a clean prompt.
+                    // Ctrl-C abandons the whole incomplete syntactic unit.
+                    pending.setLength(0);
                 } catch (EndOfFileException e) {
                     out.println(); return 0;
                 }
@@ -69,34 +87,62 @@ public final class ProtosCli {
 
     private int streamRepl(InputStream in, Session s, PrintStream out, PrintStream err) throws IOException {
         var reader = new BufferedReader(new InputStreamReader(in, StandardCharsets.UTF_8));
+        StringBuilder pending = new StringBuilder();
         for (;;) {
-            out.print("protos> "); out.flush();
+            out.print(pending.isEmpty() ? "protos> " : "...> "); out.flush();
             String line = reader.readLine();
             if (line == null) { out.println(); return 0; }
-            processLine(line, s, out, err);
-            if (isExit(line)) return 0;
+            ReplInputResult result = processInputChunk(line, pending, s, out, err);
+            if (result == ReplInputResult.EXIT) return 0;
         }
     }
 
-    private boolean processReturnedInput(String input, Session s, PrintStream out, PrintStream err) {
-        String[] lines = input.split("\\R", -1);
-        for (String line : lines) {
-            processLine(line, s, out, err);
-            if (isExit(line)) return true;
+    private ReplInputResult processInputChunk(
+            String input,
+            StringBuilder pending,
+            Session s,
+            PrintStream out,
+            PrintStream err) {
+        if (isExit(input)) {
+            pending.setLength(0);
+            return ReplInputResult.EXIT;
         }
-        return false;
+        if (input.equals(":help")) {
+            processReturnedInput(input, s, out, err);
+            return pending.isEmpty() ? ReplInputResult.COMPLETE : ReplInputResult.INCOMPLETE;
+        }
+
+        String source = pending.isEmpty() ? input : pending + "\n" + input;
+        ReplInputResult result = processReturnedInput(source, s, out, err);
+        pending.setLength(0);
+        if (result == ReplInputResult.INCOMPLETE) pending.append(source);
+        return result;
     }
 
-    private void processLine(String line, Session s, PrintStream out, PrintStream err) {
-        if (line.isBlank() || isExit(line)) return;
-        if (line.equals(":help")) {
+    private ReplInputResult processReturnedInput(String input, Session s, PrintStream out, PrintStream err) {
+        if (input.isBlank()) return ReplInputResult.COMPLETE;
+        if (isExit(input)) return ReplInputResult.EXIT;
+        if (input.equals(":help")) {
             out.println(":help  show help\n:quit  exit\n:exit  exit\n"
                     + "Arrow keys edit lines and navigate session history.\n"
                     + "Ctrl-A/Ctrl-E move to start/end; Ctrl-C cancels; Ctrl-D exits.\n"
                     + "Top-level context persists between evaluations.");
-            return;
+            return ReplInputResult.COMPLETE;
         }
-        eval(line, s, out, err);
+        try {
+            out.println(renderer.render(s.compiler.compile(input).call(s.activation)));
+            return ReplInputResult.COMPLETE;
+        } catch (ParseError e) {
+            if (e.isUnexpectedEndOfSource()) return ReplInputResult.INCOMPLETE;
+            err.println("Syntax error: " + e.getMessage());
+            return ReplInputResult.COMPLETE;
+        } catch (ProtosSignalException e) {
+            err.println("Error: " + renderer.render(e.error()));
+            return ReplInputResult.COMPLETE;
+        } catch (RuntimeException e) {
+            err.println("Runtime error: " + e.getMessage());
+            return ReplInputResult.COMPLETE;
+        }
     }
 
     private static boolean isExit(String line) { return line.equals(":quit") || line.equals(":exit"); }
@@ -138,6 +184,8 @@ public final class ProtosCli {
             }
         }
     }
+
+    private enum ReplInputResult { COMPLETE, INCOMPLETE, EXIT }
 
     private record Session(ProtosSourceCompiler compiler, ProtosActivation activation) {}
 }

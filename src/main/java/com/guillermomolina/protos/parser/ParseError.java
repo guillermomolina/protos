@@ -18,24 +18,36 @@
 package com.guillermomolina.protos.parser;
 
 import com.guillermomolina.protos.lexer.TokenOccurrence;
+import com.guillermomolina.protos.lexer.TokenType;
 import com.guillermomolina.protos.source.SourceSpan;
 import java.util.Objects;
 
 public final class ParseError extends RuntimeException {
     private final SourceSpan span;
+    private final boolean unexpectedEndOfSource;
 
     public ParseError(String message, SourceSpan span) {
+        this(message, span, false);
+    }
+
+    private ParseError(String message, SourceSpan span, boolean unexpectedEndOfSource) {
         super(Objects.requireNonNull(message, "message"));
         this.span = Objects.requireNonNull(span, "span");
+        this.unexpectedEndOfSource = unexpectedEndOfSource;
     }
 
     public SourceSpan span() {
         return span;
     }
 
+    public boolean isUnexpectedEndOfSource() {
+        return unexpectedEndOfSource;
+    }
+
     static ParseError expected(String expectation, TokenOccurrence actual) {
         return new ParseError(
                 "Expected " + expectation + " but found " + actual.token().type(),
-                actual.span());
+                actual.span(),
+                actual.token().type() == TokenType.EOF);
     }
 }
