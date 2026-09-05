@@ -14,6 +14,10 @@ Non-normative language and architecture design material.
   design choices.
 - `CONCURRENCY_DESIGN.md` records unresolved and directional concurrency design
   work that has not been promoted into normative specification.
+- `STRUCTURED_DATA_AND_SERIALIZATION.md` records cross-format architectural
+  investigation for structured data, document models, application-data mapping,
+  and object persistence without making any one format a universal serialization
+  model.
 - `IDEAS.md` records exploratory possibilities that are not yet design
   commitments or concrete implementation work.
 
@@ -23,7 +27,8 @@ owner under `spec/`.
 
 ## `project/`
 
-Operational project state.
+Operational project state and non-normative design records tied to formally
+tracked project work items.
 
 - `OPEN_TASKS.md` is the canonical ledger of concrete non-normative work that
   can proceed without an unresolved semantic decision.
@@ -31,6 +36,10 @@ Operational project state.
   normative semantics.
 - `CORE_BOOTSTRAP_ARCHITECTURE.md` defines the non-normative boundary between
   irreducible host bootstrap machinery and Core behavior implemented in Protos.
+- Work-item-specific `*_DESIGN.md` records capture investigated alternatives,
+  adopted implementation contracts, dependencies, and rejected approaches for a
+  formally tracked item without becoming normative language semantics. Existing
+  `LIB001_COLLECTIONS_DESIGN.md` is the precedent for Standard Library work.
 
 The repository intentionally has no parallel root `TODO.md`; project work should
 be classified in these ledgers instead of accumulating in an unstructured
@@ -41,3 +50,10 @@ catch-all list.
 Before adding a new top-level category, prefer placing the document in an
 existing category whose purpose matches it. If no category fits, define the
 new category's responsibility here rather than creating an ad-hoc directory.
+
+Use `docs/design/` for cross-cutting or still-exploratory architecture that may
+inform more than one tracked work item. Once a bounded `Ixxx`, `CLIxxx`,
+`LIBxxx`, `LMxxx`, or other formally tracked item adopts concrete implementation
+choices, keep that work-item-specific design record under `docs/project/` and
+link back to the broader design material when useful. Neither location can
+override `spec/`.
