@@ -419,6 +419,32 @@ Do not bypass this process merely because the original request was phrased as
 "implement X".
 
 
+### Implementation status
+
+`docs/project/IMPLEMENTATION_STATUS.md` is the canonical repository-level record
+of implementation progress. It records implementation state only; it is not
+part of the Protos language specification.
+
+Before starting implementation work, agents MUST inspect that file and verify
+its claims against the current `origin/main`. Historical chat context, prompts,
+previous agent reports, and remembered SHAs are context only and MUST NOT
+override the current repository state.
+
+When an implementation item is successfully validated and published, agents
+MUST update its status, implementation version when applicable, closure
+evidence, and dependency transitions in the same change whenever practical.
+Do not mark an item `CLOSED` merely because a patch was generated or statically
+validated.
+
+When the implementation commit itself also updates the status ledger, use the
+literal closure-evidence marker `SAME_COMMIT`; a commit cannot contain its own
+Git SHA without creating a circular hash dependency. A later maintenance change
+may backfill the concrete SHA.
+
+`IN_PROGRESS` is advisory coordination state, not a repository lock. Agents
+must still inspect current `origin/main` and concurrent changes before modifying
+shared files.
+
 ## Implementation blockers
 
 `docs/project/IMPLEMENTATION_BLOCKERS.md` is the repository-wide ledger for
