@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.135-SNAPSHOT
+
+- Implement I019 Core source naming reconciliation without changing normative semantics: rename the 26 distributable one-owner Core sources so each filename preserves the exact canonical Protos object/prototype name and case.
+- Rewrite every live physical-source reference under `src/` and `protos/`, including source-loading tests, and require a zero-result post-change scan for all superseded names; historical CHANGELOG evidence remains untouched.
+- Keep `actor.protos`, `error_taxonomy.protos`, `prelude.protos`, and `import.protos` as reviewed responsibility/aggregation or exact-lowercase facility sources; normalize exact APL Part 5 notices on every renamed source and add an executable naming guard. I018 remains closed and the audited native boundary is unchanged.
+
 ## 0.2.134-SNAPSHOT
 
 - Resolve B004 normatively with D039: Core v0.1 adds exactly one direct ActorGroup acquisition surface, `Actor.group(firstMember, additionalMembers...) -> GroupRef`, using explicitly held ActorRef capabilities and creating no public Group handle, registry, discovery namespace, endpoint, placement, or transport API.

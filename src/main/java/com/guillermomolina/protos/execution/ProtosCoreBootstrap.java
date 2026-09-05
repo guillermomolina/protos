@@ -58,88 +58,88 @@ public final class ProtosCoreBootstrap {
                         bootstrapContext);
 
         sourceLoader
-                .load(coreDirectory.resolve("context.protos"))
+                .load(coreDirectory.resolve("Context.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("number.protos"))
+                .load(coreDirectory.resolve("Number.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("integer.protos"))
+                .load(coreDirectory.resolve("Integer.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("float.protos"))
+                .load(coreDirectory.resolve("Float.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("uint8.protos"))
+                .load(coreDirectory.resolve("UInt8.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("int8.protos"))
+                .load(coreDirectory.resolve("Int8.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("uint16.protos"))
+                .load(coreDirectory.resolve("UInt16.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("int16.protos"))
+                .load(coreDirectory.resolve("Int16.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("uint32.protos"))
+                .load(coreDirectory.resolve("UInt32.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("int32.protos"))
+                .load(coreDirectory.resolve("Int32.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("uint64.protos"))
+                .load(coreDirectory.resolve("UInt64.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("int64.protos"))
+                .load(coreDirectory.resolve("Int64.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("error.protos"))
+                .load(coreDirectory.resolve("Error.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("invalid_return.protos"))
+                .load(coreDirectory.resolve("InvalidReturn.protos"))
                 .call(bootstrapActivation);
         sourceLoader
                 .load(coreDirectory.resolve("error_taxonomy.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("array.protos"))
+                .load(coreDirectory.resolve("Array.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("string.protos"))
+                .load(coreDirectory.resolve("String.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("encoding.protos"))
+                .load(coreDirectory.resolve("Encoding.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("map.protos"))
+                .load(coreDirectory.resolve("Map.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("identity_map.protos"))
+                .load(coreDirectory.resolve("IdentityMap.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("path.protos"))
+                .load(coreDirectory.resolve("Path.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("future.protos"))
+                .load(coreDirectory.resolve("Future.protos"))
                 .call(bootstrapActivation);
         sourceLoader
                 .load(coreDirectory.resolve("actor.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("process.protos"))
+                .load(coreDirectory.resolve("Process.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("buffered_reader.protos"))
+                .load(coreDirectory.resolve("BufferedReader.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("buffered_writer.protos"))
+                .load(coreDirectory.resolve("BufferedWriter.protos"))
                 .call(bootstrapActivation);
         sourceLoader
                 .load(coreDirectory.resolve("import.protos"))
                 .call(bootstrapActivation);
         sourceLoader
-                .load(coreDirectory.resolve("bytes.protos"))
+                .load(coreDirectory.resolve("Bytes.protos"))
                 .call(bootstrapActivation);
 
         Object contextBinding =
@@ -345,7 +345,7 @@ public final class ProtosCoreBootstrap {
                 new ProtosActivation(sourceContext, List.of(), sourceContext);
 
         sourceLoader
-                .load(coreDirectory.resolve("object.protos"))
+                .load(coreDirectory.resolve("Object.protos"))
                 .call(sourceActivation);
 
         ProtosClosureValue init =

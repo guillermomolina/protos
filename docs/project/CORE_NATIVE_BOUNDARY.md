@@ -105,7 +105,7 @@ Closable/File/text/seek/flush authority and the live stream capability has no P
 transfer contract.
 
 I015-A is a reviewed post-I018 representation-boundary extension. The standard
-Encoding factory/prototype identity is source-backed in `protos/lib/core/encoding.protos`;
+Encoding factory/prototype identity is source-backed in `protos/lib/core/Encoding.protos`;
 Java adds exactly two native-Closure construction sites for represented one-shot
 `encode`/`decode`, bringing the current boundary to **101 sites across 27 providers**.
 The immutable descriptors carry no I/O authority; there is no String-name registry,
@@ -120,7 +120,7 @@ baseline records. The new internal `GroupRef` prototype identity is source-backe
 
 I017-E1 is a reviewed post-I018 resource/capability-boundary extension. The public
 authority-free `Process` prototype identity is source-backed in
-`protos/lib/core/process.protos`; Java adds one native-Closure construction helper
+`protos/lib/core/Process.protos`; Java adds one native-Closure construction helper
 that materializes the eight runtime-backed synchronous Process accessors. The
 executable selector-surface guard fixes all eight names explicitly, while the
 construction-site inventory grows only once, to **102 sites across 28 providers**.

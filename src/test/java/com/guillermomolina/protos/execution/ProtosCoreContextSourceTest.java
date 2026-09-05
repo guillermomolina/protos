@@ -39,7 +39,7 @@ class ProtosCoreContextSourceTest {
                         bootstrapContext);
 
         new ProtosSourceFileLoader()
-                .load(Path.of("protos", "lib", "core", "context.protos"))
+                .load(Path.of("protos", "lib", "core", "Context.protos"))
                 .call(activation);
 
         ProtosObjectValue contextPrototype =

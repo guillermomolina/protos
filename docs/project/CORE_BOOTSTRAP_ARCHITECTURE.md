@@ -57,6 +57,14 @@ Where a standard slot requires host support, bootstrap should bind an ordinary
 slot to a native primitive implementation rather than hide the selector in a
 parallel Java-only dispatch table when the ordinary model can represent it.
 
+## Core source naming
+
+Physical Core source names preserve conceptual identity when that identity is unambiguous. When one distributable `.protos` source has one canonical named standard object or prototype as its clear owner, the filename is that exact Protos name, including case (`IdentityMap.protos`, `BufferedReader.protos`, `UInt32.protos`). `Object.protos` follows the same owner rule even though the unique root Object identity itself remains irreducible bootstrap machinery and that source supplies Object-owned ordinary behavior.
+
+This rule does not impose PascalCase on every Core file. Sources that aggregate several bootstrap identities or represent a responsibility rather than one named object keep descriptive names. The reviewed current exceptions are `actor.protos`, `error_taxonomy.protos`, and `prelude.protos`; `import.protos` already exactly matches the lowercase public facility name. Adding a new Core source requires the executable naming guard to classify it explicitly.
+
+The spelling rule is implementation architecture only. It does not change Core object identity, lookup, delegation, module semantics, or any normative behavior. Historical CHANGELOG and slice-evidence paths may retain the filenames that were true when those entries were published.
+
 ## Bootstrap phases
 
 The intended dependency direction is:
@@ -87,7 +95,7 @@ not silently become the permanent semantic definition.
 
 The earlier Java-side `Context` construction in `ProtosCorePrelude` was such
 temporary scaffolding. It has been removed now that the Core bootstrap path can
-construct `Context` faithfully from `protos/lib/core/context.protos`. Runtime
+construct `Context` faithfully from `protos/lib/core/Context.protos`. Runtime
 code should consume explicit `ProtosPrelude` state rather than reintroduce a
 process-global standard `Context` object.
 
