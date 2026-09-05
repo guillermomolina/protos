@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.116-SNAPSHOT
+
+- Implement I011-15 internal ActorGroup routing foundation: add one stable local ActorGroup runtime identity with explicit membership, live/terminated lifecycle, and routing eligibility that selects only READY concrete Actor members while allowing a live Group to have zero eligible members.
+- Bind runtime-acquired GroupRef values to that concrete Group target without exposing mutable membership/controller state; independent acquisitions remain distinct GroupRef identities, while Actor-transfer rematerialization retains the same GroupRef identity and exact Group target.
+- Keep member selection policy internal and make no Group-wide FIFO, broadcast, public acquisition, send/request, automatic reconciliation, Authority, controller, or transport promise in this slice. I011 remains IN_PROGRESS; Group communication operations and uncertainty are layered next.
+
 ## 0.2.115-SNAPSHOT
 
 - Close I017-A by reconciling I017 with the concurrently published I011-14 Process-capability delegation substrate instead of duplicating it: runtime-provisioned Actor-local Process proxies, fresh explicit Actor rematerialization to the same logical Process authority, whole-graph alias preservation, authority-bearing descendant rebuilding, no authority amplification, and no Core P-transfer contract are already implemented and validated on current main.

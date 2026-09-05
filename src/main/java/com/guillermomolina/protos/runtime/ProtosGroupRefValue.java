@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.runtime;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -26,7 +27,8 @@ import java.util.UUID;
  * physical wrapper. Actor-boundary rematerialization therefore creates a fresh wrapper while
  * preserving the exact same semantic GroupRef identity, Group target identity, and effective
  * restriction descriptor. No mutable Group membership, controller, routing-cache, or Authority
- * state is represented by this value.
+ * state is exposed as Protos-visible state; a runtime-bound descriptor may retain only an opaque
+ * handle to the same target Group so later routing can consult its current state.
  *
  * <p>I011-12 deliberately provides only the identity/transfer substrate. Group acquisition,
  * membership, routing, send/request delivery, uncertainty, and distributed transport are layered
@@ -57,6 +59,21 @@ public final class ProtosGroupRefValue implements ProtosRepresentedValue {
                         Objects.requireNonNull(restrictionIdentity, "restrictionIdentity")));
     }
 
+    /** Runtime acquisition bound to one concrete local ActorGroup target. */
+    static ProtosGroupRefValue acquireForRuntime(
+            ProtosObjectValue prototype,
+            ProtosActorGroupRuntime group,
+            UUID restrictionIdentity) {
+        Objects.requireNonNull(group, "group");
+        return new ProtosGroupRefValue(
+                prototype,
+                new Descriptor(
+                        UUID.randomUUID(),
+                        group.groupIdentityForRuntime(),
+                        Objects.requireNonNull(restrictionIdentity, "restrictionIdentity"),
+                        group));
+    }
+
     boolean denotesSameReference(ProtosGroupRefValue other) {
         return other != null && descriptor.semanticIdentity.equals(other.descriptor.semanticIdentity);
     }
@@ -67,6 +84,10 @@ public final class ProtosGroupRefValue implements ProtosRepresentedValue {
 
     UUID groupIdentityForRuntime() {
         return descriptor.groupIdentity;
+    }
+
+    Optional<ProtosActorGroupRuntime> localGroupForRuntime() {
+        return Optional.ofNullable(descriptor.localGroup);
     }
 
     UUID restrictionIdentityForRuntime() {
@@ -83,18 +104,33 @@ public final class ProtosGroupRefValue implements ProtosRepresentedValue {
         return prototype;
     }
 
-    /** Immutable runtime descriptor; it contains identities only, never mutable Group state. */
+    /** Immutable capability descriptor; the optional Group handle is opaque runtime routing state. */
     private static final class Descriptor {
         private final UUID semanticIdentity;
         private final UUID groupIdentity;
         private final UUID restrictionIdentity;
 
+        private final ProtosActorGroupRuntime localGroup;
+
         private Descriptor(
                 UUID semanticIdentity, UUID groupIdentity, UUID restrictionIdentity) {
+            this(semanticIdentity, groupIdentity, restrictionIdentity, null);
+        }
+
+        private Descriptor(
+                UUID semanticIdentity,
+                UUID groupIdentity,
+                UUID restrictionIdentity,
+                ProtosActorGroupRuntime localGroup) {
             this.semanticIdentity = Objects.requireNonNull(semanticIdentity, "semanticIdentity");
             this.groupIdentity = Objects.requireNonNull(groupIdentity, "groupIdentity");
             this.restrictionIdentity =
                     Objects.requireNonNull(restrictionIdentity, "restrictionIdentity");
+            if (localGroup != null
+                    && !this.groupIdentity.equals(localGroup.groupIdentityForRuntime())) {
+                throw new IllegalArgumentException("GroupRef target identity mismatch");
+            }
+            this.localGroup = localGroup;
         }
     }
 }
