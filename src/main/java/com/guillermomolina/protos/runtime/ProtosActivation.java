@@ -33,13 +33,15 @@ public final class ProtosActivation {
     private final boolean construction;
     private final ProtosActorModuleState actorModuleState;
     private final ProtosModuleKey currentModuleKey;
+    private final ProtosActorExecutionDomain executionDomain;
     private ProtosTask task;
 
     public ProtosActivation(
             ProtosObjectValue context,
             List<ProtosObjectValue> capturedLexicalContexts,
             Object receiver) {
-        this(context, capturedLexicalContexts, receiver, null, null, null, null, false, false, new ProtosActorModuleState(), null);
+        this(context, capturedLexicalContexts, receiver, null, null, null, null, false, false,
+                new ProtosActorModuleState(), null, new ProtosActorExecutionDomain());
     }
 
     static ProtosActivation withPrelude(
@@ -58,7 +60,8 @@ public final class ProtosActivation {
                 false,
                 false,
                 new ProtosActorModuleState(),
-                null);
+                null,
+                new ProtosActorExecutionDomain());
     }
 
     static ProtosActivation withPreludeAndModuleState(
@@ -67,11 +70,13 @@ public final class ProtosActivation {
             Object receiver,
             ProtosPrelude prelude,
             ProtosActorModuleState actorModuleState,
-            ProtosModuleKey currentModuleKey) {
+            ProtosModuleKey currentModuleKey,
+            ProtosActorExecutionDomain executionDomain) {
         return new ProtosActivation(
                 context, capturedLexicalContexts, receiver,
                 Objects.requireNonNull(prelude, "prelude"), null, null, null, false, false,
-                Objects.requireNonNull(actorModuleState, "actorModuleState"), currentModuleKey);
+                Objects.requireNonNull(actorModuleState, "actorModuleState"), currentModuleKey,
+                Objects.requireNonNull(executionDomain, "executionDomain"));
     }
 
     public static ProtosActivation withReturnHome(
@@ -90,7 +95,8 @@ public final class ProtosActivation {
                 false,
                 false,
                 new ProtosActorModuleState(),
-                null);
+                null,
+                new ProtosActorExecutionDomain());
     }
 
     public static ProtosActivation withMethodHome(
@@ -109,7 +115,8 @@ public final class ProtosActivation {
                 false,
                 false,
                 new ProtosActorModuleState(),
-                null);
+                null,
+                new ProtosActorExecutionDomain());
     }
 
     public static ProtosActivation forClosureInvocation(
@@ -122,7 +129,8 @@ public final class ProtosActivation {
             ProtosClosureValue closure,
             java.util.List<?> supplied,
             ProtosPrelude fallbackPrelude) {
-        return forClosureInvocation(closure, supplied, fallbackPrelude, new ProtosActorModuleState(), null);
+        return forClosureInvocation(closure, supplied, fallbackPrelude, new ProtosActorModuleState(), null,
+                new ProtosActorExecutionDomain());
     }
 
     public static ProtosActivation forClosureInvocation(
@@ -131,6 +139,17 @@ public final class ProtosActivation {
             ProtosPrelude fallbackPrelude,
             ProtosActorModuleState actorModuleState,
             ProtosModuleKey currentModuleKey) {
+        return forClosureInvocation(closure, supplied, fallbackPrelude, actorModuleState, currentModuleKey,
+                new ProtosActorExecutionDomain());
+    }
+
+    public static ProtosActivation forClosureInvocation(
+            ProtosClosureValue closure,
+            java.util.List<?> supplied,
+            ProtosPrelude fallbackPrelude,
+            ProtosActorModuleState actorModuleState,
+            ProtosModuleKey currentModuleKey,
+            ProtosActorExecutionDomain executionDomain) {
         Objects.requireNonNull(closure, "closure");
         Objects.requireNonNull(supplied, "supplied");
         Objects.requireNonNull(actorModuleState, "actorModuleState");
@@ -155,7 +174,8 @@ public final class ProtosActivation {
                 ownsReturnHome,
                 false,
                 actorModuleState,
-                currentModuleKey);
+                currentModuleKey,
+                Objects.requireNonNull(executionDomain, "executionDomain"));
     }
 
     private ProtosActivation(
@@ -169,7 +189,8 @@ public final class ProtosActivation {
             boolean ownsReturnHome,
             boolean construction,
             ProtosActorModuleState actorModuleState,
-            ProtosModuleKey currentModuleKey) {
+            ProtosModuleKey currentModuleKey,
+            ProtosActorExecutionDomain executionDomain) {
         this.context = Objects.requireNonNull(context, "context");
         this.capturedLexicalContexts =
                 List.copyOf(Objects.requireNonNull(
@@ -183,6 +204,7 @@ public final class ProtosActivation {
         this.construction = construction;
         this.actorModuleState = Objects.requireNonNull(actorModuleState, "actorModuleState");
         this.currentModuleKey = currentModuleKey;
+        this.executionDomain = Objects.requireNonNull(executionDomain, "executionDomain");
     }
 
     public static ProtosActivation forObjectConstruction(
@@ -201,7 +223,8 @@ public final class ProtosActivation {
                 false,
                 true,
                 enclosing.actorModuleState,
-                enclosing.currentModuleKey);
+                enclosing.currentModuleKey,
+                enclosing.executionDomain);
         enclosing.task().ifPresent(construction::attachTask);
         return construction;
     }
@@ -225,6 +248,8 @@ public final class ProtosActivation {
     public ProtosActorModuleState actorModuleState() { return actorModuleState; }
 
     public Optional<ProtosModuleKey> currentModuleKey() { return Optional.ofNullable(currentModuleKey); }
+
+    public ProtosActorExecutionDomain executionDomain() { return executionDomain; }
 
     /** Internal execution context used only by cooperative Actor-local task evaluation. */
     public Optional<ProtosTask> task() {

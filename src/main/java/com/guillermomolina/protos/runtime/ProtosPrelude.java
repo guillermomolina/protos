@@ -143,6 +143,8 @@ public final class ProtosPrelude {
 
     public ProtosObjectValue pathPrototype() { return requiredOrdinaryBinding("Path"); }
 
+    public ProtosObjectValue futurePrototype() { return requiredOrdinaryBinding("Future"); }
+
     public ProtosObjectValue arrayPrototype() {
         Object binding = bindings.readLocalSlot("Array").orElseThrow();
         if (!(binding instanceof ProtosObjectValue arrayPrototype)) {
@@ -171,19 +173,28 @@ public final class ProtosPrelude {
 
     public ProtosActivation newModuleActivation() {
         ProtosObjectValue moduleContext = newExecutionContext();
-        return newModuleActivation(new ProtosActorModuleState(), null, moduleContext);
+        return newModuleActivation(new ProtosActorModuleState(), null, moduleContext, new ProtosActorExecutionDomain());
     }
 
     public ProtosActivation newModuleActivation(
             ProtosActorModuleState actorModuleState,
             ProtosModuleKey moduleKey,
             ProtosObjectValue moduleContext) {
+        return newModuleActivation(actorModuleState, moduleKey, moduleContext, new ProtosActorExecutionDomain());
+    }
+
+    public ProtosActivation newModuleActivation(
+            ProtosActorModuleState actorModuleState,
+            ProtosModuleKey moduleKey,
+            ProtosObjectValue moduleContext,
+            ProtosActorExecutionDomain executionDomain) {
         return ProtosActivation.withPreludeAndModuleState(
                 Objects.requireNonNull(moduleContext, "moduleContext"),
                 java.util.List.of(bindings),
                 moduleContext,
                 this,
                 Objects.requireNonNull(actorModuleState, "actorModuleState"),
-                moduleKey);
+                moduleKey,
+                Objects.requireNonNull(executionDomain, "executionDomain"));
     }
 }

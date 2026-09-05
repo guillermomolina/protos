@@ -31,6 +31,8 @@ public final class ProtosTask {
     public interface WaitDependency {
         /** Removes only this task's waiting relationship; it must not cancel the dependency itself. */
         default void waitingTaskCancelled(ProtosTask task) {}
+        /** True once the prerequisite is already ready; used to close the register/suspend race. */
+        default boolean isReady() { return false; }
     }
 
     @FunctionalInterface
@@ -39,7 +41,7 @@ public final class ProtosTask {
     }
 
     private final ProtosActorExecutionDomain owner;
-    private final ProtosTask parent;
+    private ProtosTask parent;
     private final Set<ProtosTask> children = new LinkedHashSet<>();
     private final Object associatedFuture;
     private final Continuation continuation;
@@ -52,6 +54,8 @@ public final class ProtosTask {
     private Object failure;
     private final ProtosEvaluatorContinuation evaluatorContinuation = new ProtosEvaluatorContinuation();
     private WaitDependency resumedDependency;
+    private final WaitDependency childDrain = new WaitDependency() {};
+    private Object pendingCompletion;
 
     ProtosTask(
             ProtosActorExecutionDomain owner,
@@ -139,8 +143,13 @@ public final class ProtosTask {
         children.add(Objects.requireNonNull(child, "child"));
     }
 
-    synchronized void removeChild(ProtosTask child) {
-        children.remove(child);
+    void removeChild(ProtosTask child) {
+        boolean wake;
+        synchronized (this) {
+            children.remove(child);
+            wake = children.isEmpty() && state == State.SUSPENDED && waitDependency == childDrain;
+        }
+        if (wake) resume(childDrain);
     }
 
     synchronized boolean markQueued() {
@@ -161,10 +170,37 @@ public final class ProtosTask {
     }
 
     void runContinuation() {
+        Object deferredFailure;
+        Object deferredCompletion;
+        synchronized (this) { deferredFailure = failure; deferredCompletion = pendingCompletion; }
+        if (deferredFailure != null) { finalizeFailure(deferredFailure); return; }
+        if (deferredCompletion != null) { complete(deferredCompletion); return; }
         continuation.resume(this);
     }
 
-    public void suspend(WaitDependency dependency) {
+    public void executeAction(java.util.function.Supplier<Object> action) {
+        Objects.requireNonNull(action, "action");
+        evaluatorContinuation.beginSegment();
+        try {
+            complete(action.get());
+        } catch (ProtosEvaluatorSuspension suspended) {
+            // suspension already changed task state
+        } catch (ProtosTaskCancellationException cancelled) {
+            // cancellation already terminalized task
+        } catch (ProtosSignalException signalled) {
+            fail(signalled.error());
+        } finally {
+            evaluatorContinuation.endSegment();
+        }
+    }
+
+    public void detachFromParent() {
+        ProtosTask previous;
+        synchronized (this) { previous = parent; parent = null; }
+        if (previous != null) previous.removeChild(this);
+    }
+
+    public boolean suspend(WaitDependency dependency) {
         Objects.requireNonNull(dependency, "dependency");
         boolean cancellationWake;
         synchronized (this) {
@@ -173,6 +209,8 @@ public final class ProtosTask {
                 state = State.RUNNABLE;
                 waitDependency = null;
                 cancellationWake = true;
+            } else if (dependency.isReady()) {
+                return false;
             } else {
                 state = State.SUSPENDED;
                 waitDependency = dependency;
@@ -182,6 +220,7 @@ public final class ProtosTask {
         if (cancellationWake) {
             owner.enqueue(this);
         }
+        return !cancellationWake;
     }
 
     public boolean resume(WaitDependency dependency) {
@@ -235,35 +274,81 @@ public final class ProtosTask {
      * Mandatory cooperative cancellation observation boundary used by future suspension/resume.
      */
     public boolean observeCancellation() {
+        java.util.Set<ProtosTask> cancelChildren;
         synchronized (this) {
-            if (!cancellationRequested || isTerminal()) {
-                return false;
+            if (!cancellationRequested || isTerminal()) return false;
+            if (state != State.RUNNING) throw new IllegalStateException("cancellation can be observed only by running task");
+            cancelChildren = Set.copyOf(children);
+            if (!cancelChildren.isEmpty()) {
+                state = State.SUSPENDED;
+                waitDependency = childDrain;
+            } else {
+                state = State.CANCELLED;
             }
-            if (state != State.RUNNING) {
-                throw new IllegalStateException("cancellation can be observed only by running task");
-            }
-            state = State.CANCELLED;
         }
+        for (ProtosTask child : cancelChildren) child.requestCancellation();
+        if (!cancelChildren.isEmpty()) return true;
         owner.terminal(this);
+        terminalizeAssociatedFuture(State.CANCELLED, null);
         return true;
     }
 
     public void complete(Object value) {
+        Object completed;
         synchronized (this) {
             requireState(State.RUNNING, "complete");
+            if (!children.isEmpty()) {
+                pendingCompletion = value;
+                state = State.SUSPENDED;
+                waitDependency = childDrain;
+                return;
+            }
             state = State.COMPLETED;
-            result = value;
+            completed = pendingCompletion != null ? pendingCompletion : value;
+            pendingCompletion = null;
+            result = completed;
         }
         owner.terminal(this);
+        terminalizeAssociatedFuture(State.COMPLETED, completed);
     }
 
     public void fail(Object error) {
+        Object checked = Objects.requireNonNull(error, "error");
+        java.util.Set<ProtosTask> cancelChildren;
         synchronized (this) {
             requireState(State.RUNNING, "fail");
-            state = State.FAILED;
-            failure = Objects.requireNonNull(error, "error");
+            cancelChildren = Set.copyOf(children);
+            if (!cancelChildren.isEmpty()) {
+                failure = checked;
+                state = State.SUSPENDED;
+                waitDependency = childDrain;
+            } else {
+                state = State.FAILED;
+                failure = checked;
+            }
+        }
+        for (ProtosTask child : cancelChildren) child.requestCancellation();
+        if (!cancelChildren.isEmpty()) return;
+        finalizeFailure(checked);
+    }
+
+    private void finalizeFailure(Object error) {
+        synchronized (this) {
+            if (state == State.RUNNING) state = State.FAILED;
+            failure = error;
         }
         owner.terminal(this);
+        terminalizeAssociatedFuture(State.FAILED, error);
+    }
+
+    private void terminalizeAssociatedFuture(State terminal, Object outcome) {
+        if (!(associatedFuture instanceof ProtosFutureValue future)) return;
+        switch (terminal) {
+            case COMPLETED -> future.resolve(outcome, future.producerActivation());
+            case FAILED -> future.fail((ProtosObjectValue) outcome);
+            case CANCELLED -> future.cancelTerminal();
+            default -> { }
+        }
     }
 
     private boolean isTerminal() {

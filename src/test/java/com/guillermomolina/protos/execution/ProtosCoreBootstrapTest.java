@@ -68,6 +68,10 @@ class ProtosCoreBootstrapTest {
                 invalidReturnPrototype,
                 prelude.newInvalidReturn().parent().orElseThrow());
 
+        ProtosObjectValue futurePrototype = prelude.futurePrototype();
+        assertSame(futurePrototype, bindings.readLocalSlot("Future").orElseThrow());
+        assertSame(ProtosObjectValue.rootObject(), futurePrototype.parent().orElseThrow());
+
         ProtosObjectValue arrayPrototype = prelude.arrayPrototype();
         assertSame(
                 arrayPrototype,

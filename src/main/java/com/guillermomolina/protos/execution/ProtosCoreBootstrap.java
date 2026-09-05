@@ -115,6 +115,9 @@ public final class ProtosCoreBootstrap {
         sourceLoader
                 .load(coreDirectory.resolve("path.protos"))
                 .call(bootstrapActivation);
+        sourceLoader
+                .load(coreDirectory.resolve("future.protos"))
+                .call(bootstrapActivation);
 
         Object contextBinding =
                 bootstrapContext
@@ -229,6 +232,8 @@ public final class ProtosCoreBootstrap {
         ProtosStandardIdentityMapProtocol.install(identityMapPrototype);
         ProtosObjectValue pathPrototype = requirePrototype(bootstrapContext, "Path", ProtosObjectValue.rootObject());
         ProtosStandardPathProtocol.install(pathPrototype);
+        ProtosObjectValue futurePrototype = requirePrototype(bootstrapContext, "Future", ProtosObjectValue.rootObject());
+        ProtosStandardFutureProtocol.install(futurePrototype);
 
         ProtosObjectValue preludeBindings =
                 new ProtosObjectValue(contextPrototype);
@@ -253,6 +258,7 @@ public final class ProtosCoreBootstrap {
         preludeBindings.createLocalSlot("Map", mapPrototype);
         preludeBindings.createLocalSlot("IdentityMap", identityMapPrototype);
         preludeBindings.createLocalSlot("Path", pathPrototype);
+        preludeBindings.createLocalSlot("Future", futurePrototype);
         preludeBindings.createLocalSlot(
                 "import",
                 ProtosStandardImportProtocol.createImportFacility(

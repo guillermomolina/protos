@@ -60,7 +60,7 @@ public final class ProtosEvaluatorBridge {
         }
         if (task.consumeResume(dependency)) return;
 
-        task.suspend(dependency);
+        if (!task.suspend(dependency)) return;
         task.evaluatorContinuation().markControlUnwind();
         throw new ProtosEvaluatorSuspension();
     }

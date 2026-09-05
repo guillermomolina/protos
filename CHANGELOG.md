@@ -4,6 +4,13 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## 0.2.72-SNAPSHOT
+
+- Implement I009 — Future/Task: standard Future prototype/value state machine, `closure.future()`, suspendable `value()`, cancellation, `then()`, deterministic `Future.all(...)`, adoption/flattening, and `detach()`.
+- Integrate pending Future waiters with the I009B evaluator bridge and I009A Actor-local Task scheduler, including race-safe register/suspend handoff, multiple waiters, cancellation cleanup, exact resume, and first-terminal-wins.
+- Preserve Future/result/Error identity, semantic null, fresh Cancelled observations, Actor-domain isolation, continuation non-reentrancy, and deterministic aggregate ordering.
+- Add focal end-to-end tests across real Truffle suspension/resumption plus protocol/state-machine coverage. No normative specification revision is changed.
+
 ## 0.2.71-SNAPSHOT
 
 - Implement I009B evaluator suspension/resumption bridge for ordinary Truffle-backed Protos execution using Actor-local per-task continuation state.

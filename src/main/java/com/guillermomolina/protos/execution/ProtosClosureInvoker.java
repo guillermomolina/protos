@@ -33,6 +33,19 @@ public final class ProtosClosureInvoker {
         return invoke(closure, supplied, null);
     }
 
+    public static Object invokeInTask(
+            ProtosClosureValue closure, List<?> supplied, ProtosActivation creator,
+            com.guillermomolina.protos.runtime.ProtosTask task) {
+        Objects.requireNonNull(creator, "creator");
+        Objects.requireNonNull(task, "task");
+        ProtosActivation activation = task.evaluatorContinuation().invocationActivation(() ->
+                ProtosActivation.forClosureInvocation(
+                        closure, supplied, creator.prelude().orElse(null), creator.actorModuleState(),
+                        creator.currentModuleKey().orElse(null), creator.executionDomain()));
+        activation.attachTask(task);
+        return invokePrepared(closure, supplied, activation);
+    }
+
     public static Object invoke(
             ProtosClosureValue closure,
             List<?> supplied,
@@ -46,7 +59,7 @@ public final class ProtosClosureInvoker {
                         ? ProtosActivation.forClosureInvocation(closure, supplied, fallbackPrelude)
                         : ProtosActivation.forClosureInvocation(
                                 closure, supplied, fallbackPrelude, caller.actorModuleState(),
-                                caller.currentModuleKey().orElse(null));
+                                caller.currentModuleKey().orElse(null), caller.executionDomain());
         ProtosActivation activation;
         if (caller != null && caller.task().isPresent()) {
             com.guillermomolina.protos.runtime.ProtosTask task = caller.task().orElseThrow();
@@ -55,6 +68,10 @@ public final class ProtosClosureInvoker {
         } else {
             activation = activationFactory.get();
         }
+        return invokePrepared(closure, supplied, activation);
+    }
+
+    private static Object invokePrepared(ProtosClosureValue closure, List<?> supplied, ProtosActivation activation) {
         ProtosReturnHome returnHome =
                 activation.returnHome()
                         .orElseThrow(
