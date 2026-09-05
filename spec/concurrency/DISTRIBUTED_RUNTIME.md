@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-04
+Last updated: 2026-09-05
 
 This document is the primary normative owner of the migrated Core distributed
 runtime semantics: Process/Node/Cluster identity and lifecycle, distributed
@@ -932,6 +932,104 @@ Sending to a Group does not itself provision infrastructure. Group
 reconciliation may create Actors when policy requires them, and external
 Infrastructure Controllers may separately provision Process/Node
 capacity in response to semantic capacity demand.
+## 50A. Core ActorGroup Acquisition
+
+**CLOSED**
+
+Core v0.1 exposes exactly one portable operation that creates a new ActorGroup
+and directly acquires its first communication capability:
+
+```text
+Actor.group(firstMember, additionalMembers...) -> GroupRef
+```
+
+This is an ordinary selector on the standard frozen-prelude `Actor` facility
+whose public surface is listed in `ACTORS.md` §8. It introduces no standard
+`Group` object or prototype, no public mutable Group handle, and no second Group
+constructor syntax.
+
+At least one membership argument is required. After ordinary left-to-right
+argument evaluation, every supplied member must be an `ActorRef` communication
+capability. No coercion, Actor discovery, String/name interpretation, endpoint
+interpretation, or implicit Actor creation occurs. The complete argument vector
+is validated before the creation cutover. If arity or any member argument is
+invalid, the call signals the ordinary `Error` path and creates neither a Group
+identity nor a GroupRef.
+
+The initial membership is the set of concrete Actor incarnations denoted by the
+supplied ActorRefs. Repeated references denoting the same Actor incarnation do
+not create weighted or duplicate membership. The caller need not own, host, or
+have lifecycle Authority over those Actors: possession of their ActorRef
+communication capabilities is sufficient to construct this new routing target,
+because Group membership here grants no access to Actor mutable state and no
+Authority beyond communication the caller could already attempt through those
+ActorRefs.
+
+After successful whole-vector validation, one synchronous semantic cutover:
+
+1. creates exactly one fresh ActorGroup identity;
+2. establishes the current caller Actor's Process as that Group's owning
+   lifecycle/control scope for Core v0.1;
+3. establishes the validated initial membership; and
+4. creates exactly one fresh GroupRef acquisition identity denoting that Group.
+
+`Actor.group(...)` then returns that GroupRef. It creates no Future,
+`GroupOperation`, controller handle, membership token, placement handle, or
+other public coordination result. Return does not wait for any member to become
+`READY`, reachable, local, or immediately routable. Therefore a successfully
+created Group can have non-empty membership while having zero currently eligible
+members; normal Group send/request backpressure and routing rules apply until an
+eligible member exists or an independently defined terminal outcome occurs.
+
+Creation does not create, move, restart, rehost, or otherwise mutate any member
+Actor. Initial members may be local or remote wherever the held ActorRefs are
+valid; transport selection, endpoint representation, physical locality, Process
+placement, Node placement, and Cluster topology remain runtime machinery and do
+not change this operation's result or identity rules.
+
+For a Group created by this Core operation, the caller Actor's Process is the
+owning lifetime scope. Termination of the creator Actor alone does not terminate
+the Group unless that termination also terminates its Process. Authoritative
+termination of the owning Process terminates the Group. Group termination does
+not stop or terminate member Actors, and loss/removal of every member does not by
+itself terminate the Group. Existing GroupRefs remain permanently bound to that
+terminated Group identity and never retarget; their later communication follows
+the existing terminated-Group routing/failure rules. GroupRef reachability,
+including remote copies, never extends Group lifetime.
+
+The GroupRef returned by `Actor.group(...)` carries the ordinary Core GroupRef
+communication surface (`send` and `request`) and no public Group-control
+Authority. Core v0.1 exposes no operation on that GroupRef, on `Actor`, or on a
+separate object for post-creation membership addition/removal, desired
+cardinality, controller replacement, explicit Group termination, Group
+persistence/durability, or placement policy. Runtime/host extensions may provide
+such facilities only as extensions and must preserve the closed Group identity,
+routing, acceptance, uncertainty, Authority, and lifetime rules.
+
+Core v0.1 also exposes no portable operation that takes a Group identity, name,
+String, endpoint, ActorRef, Process, Node, or Cluster and reacquires a fresh
+GroupRef to an already-existing Group. The direct creation call above is one
+acquisition event and produces one fresh GroupRef identity. Ordinary aliases and
+Actor-boundary transfer follow the already-defined GroupRef identity/transfer
+rules; transfer does not become fresh reacquisition. Independent GroupRefs to
+the same Group may exist when separately provisioned by a conforming host or
+future extension, but Core v0.1 provides no application-level selector that
+manufactures them from a discoverable identifier.
+
+This closes portable Group acquisition without introducing service discovery.
+In particular, Core v0.1 defines no `Group.lookup`, `GroupRef.lookup`, global or
+Process-local registry, discovery name, namespace, rebinding operation,
+consistency level, TTL, watch, federation, persistence, schema/versioning, or
+security/authorization contract for discovery. Section 72B remains the normative
+boundary for such facilities. A future discovery layer may map a name to a
+GroupRef capability, but any already-acquired GroupRef remains bound to its
+original Group identity even if that name later maps elsewhere.
+
+A program that never invokes `Actor.group(...)` requires no Group registry,
+discovery worker, Cluster membership, distributed coordinator, network
+transport, or other Group-acquisition machinery. This operation therefore
+preserves the Core pay-only-for-what-you-use boundary.
+
 ## 51. Capacity Demand and Infrastructure Integration
 
 **CLOSED --- REVISED**
@@ -1766,6 +1864,14 @@ consistency level, TTL contract, watch/notification semantics, federation model,
 persistence guarantee, security model, or schema/versioning rule. Any such
 portable facility remains subject to its own normative design.
 
+Core v0.1's `Actor.group(...)` operation in §50A is direct creation from
+explicitly held ActorRef capabilities, not discovery. It therefore does not
+weaken this boundary: Core still defines no portable name-to-GroupRef or
+identity-to-GroupRef lookup/reacquisition operation. A future discovery facility
+may return GroupRefs under its own separately specified authority and consistency
+rules, but it cannot retarget an already-existing GroupRef when a discovery name
+changes meaning.
+
 This closes the former open ledger item `Service discovery implementation`.
 
 ## 72C. ActorRef Routing Implementation Is Runtime Machinery
@@ -1890,8 +1996,7 @@ mechanism, or implementation detail that still requires design.
 
 -   Failure-domain discovery and configuration
 -   Exact HA policy API and syntax
--   Exact Group/GroupRef API and syntax
--   Group creation/termination/durability API and ownership mechanics
+-   Optional post-creation Group membership/control, explicit termination, durability, controller/Authority, and placement-policy APIs beyond Core v0.1 §50A
 -   Group controller API and controller-election mechanics
 -   Group routing policy API
 -   Advanced Group routing policies

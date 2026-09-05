@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.134-SNAPSHOT
+
+- Resolve B004 normatively with D039: Core v0.1 adds exactly one direct ActorGroup acquisition surface, `Actor.group(firstMember, additionalMembers...) -> GroupRef`, using explicitly held ActorRef capabilities and creating no public Group handle, registry, discovery namespace, endpoint, placement, or transport API.
+- Define synchronous creation cutover, initial membership, caller-Process ownership/lifetime, fresh GroupRef acquisition identity, zero-eligible-member behavior, and explicit absence of Core post-creation membership/control or Group termination selectors; GroupRef remains communication-only authority.
+- Keep service discovery explicitly outside Core v0.1: no name/identity lookup, rebinding contract, TTL/watch/federation, or ambient reacquisition API is introduced. B004 moves `BLOCKED -> READY`; I011 remains IN_PROGRESS until the newly specified acquisition surface is implemented and validated.
+
 
 ## 0.2.133-SNAPSHOT
 

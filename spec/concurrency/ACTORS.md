@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-04
+Last updated: 2026-09-05
 
 This document is the primary normative owner of the Core Actor-domain semantics
 migrated from `docs/design/CONCURRENCY_DESIGN.md`.
@@ -237,7 +237,13 @@ portable entry operations:
 ```text
 Actor.spawn(moduleSpecifier, bindingName, arguments...) -> ActorRef
 Actor.current() -> ActorRef
+Actor.group(firstMember, additionalMembers...) -> GroupRef
 ```
+
+`Actor.group(...)` is the Core ActorGroup acquisition entry point. Its Group identity,
+initial-membership, ownership/lifetime, GroupRef result, routing, and discovery-boundary
+semantics are owned by `DISTRIBUTED_RUNTIME.md` §50A. Adding this selector does not
+make `Actor` a Group controller or grant it Group membership-management Authority.
 
 `Actor` is not syntax, an Actor instance, a scheduler handle, or host authority.
 `moduleSpecifier` and `bindingName` must be semantic `String` values after ordinary

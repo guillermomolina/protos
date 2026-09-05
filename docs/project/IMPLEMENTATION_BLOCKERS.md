@@ -129,40 +129,42 @@ continue independently.
 
 ## B004 — Public Group/GroupRef acquisition and discovery API
 
-Status: BLOCKED
+Status: READY
 
 Implementation area:
-I011 public/distributed Group acquisition/discovery and any language-visible operation that
-creates, resolves, or reacquires a Group or GroupRef by a portable discovery facility.
+I011 public ActorGroup acquisition through the exact Core v0.1 surface closed by D039.
+Portable service discovery remains explicitly outside Core v0.1 and is not an I011 closure
+requirement.
 
 Normative dependency:
-The distributed-runtime specification closes Group identity, GroupRef semantic identity,
-transfer, routing, acceptance, rerouting, and communication semantics. However, its Open Design
-Topics explicitly leave the exact Group/GroupRef API and syntax unresolved, and §72B explicitly
-states that Core v0.1 does not define a new public discovery API, namespace model, consistency
-level, TTL contract, watch semantics, federation model, persistence guarantee, security model, or
-schema/versioning rule. Choosing selectors, constructors, names, registry behavior, or authority
-for acquisition in implementation would therefore invent observable language semantics.
+Specification revision `0.1.376` / D039 defines exactly
+`Actor.group(firstMember, additionalMembers...) -> GroupRef`: one or more explicit ActorRefs,
+synchronous fresh Group/GroupRef creation, caller-Process ownership, initial membership only,
+communication-only GroupRef authority, and no Core name/identity lookup or discovery registry.
+Section 72B explicitly keeps service discovery outside Core v0.1.
 
 Specification authority:
 - `spec/concurrency/DISTRIBUTED_RUNTIME.md` §50 Runtime Groups
+- `spec/concurrency/DISTRIBUTED_RUNTIME.md` §50A Core ActorGroup Acquisition
 - `spec/concurrency/DISTRIBUTED_RUNTIME.md` §72B Service Discovery Implementation Is Not Core Semantics
-- `spec/concurrency/DISTRIBUTED_RUNTIME.md` Open Design Topics
+- `spec/concurrency/ACTORS.md` §8 Core public Actor surface
 
 Unblock condition:
-The current normative specification defines an exact portable Group/GroupRef acquisition and/or
-discovery surface sufficiently to implement it without choosing new selector names, syntax,
-namespace semantics, authority, rebinding behavior, consistency, or failure outcomes in the
-implementation.
+Satisfied by specification revision `0.1.376` / D039. Two independent implementations
+can now implement the same portable acquisition selector, argument domain, creation cutover,
+ownership/lifetime, result identity, authority boundary, and explicit absence of Core discovery
+without choosing new observable semantics.
 
 Current consequence:
-Do not add a public `Group`, `GroupRef` constructor/acquire/lookup selector, magic discovery name,
-ambient registry, or implementation-selected discovery namespace. Existing internal runtime
-GroupRef acquisition and the already-published language-visible GroupRef `send`/`request` surface
-remain valid because their observable semantics are independently closed.
+I011 may implement exactly `Actor.group(firstMember, additionalMembers...) -> GroupRef` and the
+required Process-owned Group lifetime integration. Do not add a public `Group` object,
+Group/GroupRef lookup/reacquisition selector, post-creation membership/controller API, registry,
+discovery namespace, endpoint syntax, placement policy, or transport-selection surface as part
+of B004 implementation. B004 remains READY until the specified acquisition surface is implemented,
+validated, and published; only then should it become CLOSED.
 
 Independent work:
-Genuinely remote transport/routing machinery that preserves already-closed acceptance and
-uncertainty semantics may continue behind internal runtime boundaries without exposing a new
-discovery API. I017 Process/bootstrap integration and unrelated Actor/Group conformance work may
-also continue independently.
+Optional service discovery, post-creation Group control/membership, desired-cardinality/controller
+APIs, durability, explicit Group termination, placement policy, and richer distributed Authority
+remain future extension/design work and do not block completion of the now-closed Core v0.1
+ActorGroup acquisition requirement.

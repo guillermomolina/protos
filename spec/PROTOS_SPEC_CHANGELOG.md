@@ -9,6 +9,19 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.376] - 2026-09-05
+
+### Public ActorGroup acquisition (D039)
+- Defines the only Core v0.1 portable ActorGroup creation/acquisition operation as `Actor.group(firstMember, additionalMembers...) -> GroupRef`, requiring one or more explicit ActorRef communication capabilities and creating one fresh Group identity plus one fresh GroupRef acquisition identity synchronously after whole-argument validation.
+- Makes the caller Actor's Process the owning lifecycle/control scope for a Core-created Group; Process termination terminates the Group without stopping its members, while empty or temporarily unroutable membership does not terminate the Group and GroupRefs never keep it alive by reachability alone.
+- Keeps GroupRef communication authority separate from Group control authority: creation establishes only the initial routing membership, Core v0.1 exposes no public post-creation membership mutation, Group controller/desired-cardinality surface, explicit Group termination selector, placement selector, or Group identity handle.
+- Closes public acquisition without creating service discovery: Core v0.1 has no `Group`, `GroupRef` constructor/lookup object, name-to-GroupRef or identity-to-GroupRef reacquisition, registry, namespace, TTL/watch/federation/rebinding contract, endpoint syntax, or ambient discovery authority.
+- Preserves existing ActorRef/GroupRef transfer, routing, acceptance, uncertainty, replacement, and identity rules; explicit ActorRefs may denote local or remote members without making transport or topology part of the acquisition API.
+
+### Compatibility
+- Adds one new portable selector, `Actor.group`, to the standard frozen `Actor` facility. Existing programs that do not use ActorGroup acquisition retain their behavior and pay no registry, Cluster, discovery, or transport-coordination cost.
+- This specification revision resolves the language-design dependency only; implementation and publication of the new selector remains I011 work, so B004 becomes READY rather than CLOSED.
+
 ## [0.1.375] - 2026-09-04
 
 ### Path equality versus semantic identity (D037)
