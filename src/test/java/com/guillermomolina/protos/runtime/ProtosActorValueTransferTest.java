@@ -1,12 +1,25 @@
 /*
  * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
- * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. See LICENSE.TXT.
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
  */
 package com.guillermomolina.protos.runtime;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
+import com.guillermomolina.protos.execution.ProtosInvocation;
 import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
@@ -187,15 +200,146 @@ final class ProtosActorValueTransferTest {
     }
 
     @Test
-    void specializedKeyedCollectionsFailInsteadOfSilentlyDroppingTheirState() throws Exception {
+    void mapTransferPreservesKeyedStateCyclesAliasesAndDefaultHashBookkeeping() throws Exception {
         ProtosPrelude prelude = core();
         ProtosActivation source = prelude.newModuleActivation();
         ProtosMapValue map = prelude.newMap();
-        ProtosIdentityMapValue identityMap = new ProtosIdentityMapValue(prelude.identityMapPrototype());
+        ProtosObjectValue key = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue shared = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        shared.createLocalSlot("owner", map);
+        map.createLocalSlot("alias", shared);
+
+        ProtosInvocation.invokeMessage(map, "atPut", List.of(key, shared), source);
+        ProtosInvocation.invokeMessage(
+                map, "atPut", List.of(new ProtosStringValue("self"), map), source);
+        map.close();
+
+        ProtosMapValue copied =
+                assertInstanceOf(
+                        ProtosMapValue.class,
+                        ProtosActorValueTransfer.snapshotValue(map, source));
+        List<ProtosMapValue.Entry> entries = copied.keyedSnapshot();
+        ProtosObjectValue copiedKey =
+                assertInstanceOf(ProtosObjectValue.class, entries.get(0).key());
+        ProtosObjectValue copiedShared =
+                assertInstanceOf(ProtosObjectValue.class, entries.get(0).value());
+
+        assertNotSame(map, copied);
+        assertEquals(2, copied.keyedSize());
+        assertTrue(copied.isClosed());
+        assertSame(copiedShared, copied.readLocalSlot("alias").orElseThrow());
+        assertSame(copied, copiedShared.readLocalSlot("owner").orElseThrow());
+        assertSame(copied, entries.get(1).value());
+        assertEquals(ProtosIdentity.identityHash(copiedKey), entries.get(0).recordedHash());
+        assertSame(
+                copiedShared,
+                ProtosInvocation.invokeMessage(copied, "at", List.of(copiedKey), source));
+    }
+
+    @Test
+    void identityMapTransferRebuildsCopiedIdentityHashesAndPreservesCycles() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation source = prelude.newModuleActivation();
+        ProtosIdentityMapValue map = new ProtosIdentityMapValue(prelude.identityMapPrototype());
+        ProtosObjectValue first = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue second = new ProtosObjectValue(ProtosObjectValue.rootObject());
+
+        ProtosInvocation.invokeMessage(map, "atPut", List.of(first, map), source);
+        ProtosInvocation.invokeMessage(map, "atPut", List.of(second, first), source);
+
+        ProtosIdentityMapValue copied =
+                assertInstanceOf(
+                        ProtosIdentityMapValue.class,
+                        ProtosActorValueTransfer.snapshotValue(map, source));
+        List<ProtosIdentityMapValue.Entry> entries = copied.keyedSnapshot();
+        Object copiedFirst = entries.get(0).key();
+        Object copiedSecond = entries.get(1).key();
+
+        assertNotSame(first, copiedFirst);
+        assertNotSame(second, copiedSecond);
+        assertFalse(ProtosIdentity.identical(copiedFirst, copiedSecond));
+        assertEquals(
+                ProtosIdentity.identityHash(copiedFirst),
+                entries.get(0).recordedIdentityHash());
+        assertEquals(
+                ProtosIdentity.identityHash(copiedSecond),
+                entries.get(1).recordedIdentityHash());
+        assertSame(copied, entries.get(0).value());
+        assertSame(copiedFirst, entries.get(1).value());
+        assertSame(
+                copied,
+                ProtosInvocation.invokeMessage(copied, "at", List.of(copiedFirst), source));
+    }
+
+    @Test
+    void transferredActorRefRemainsAValidMapAndIdentityMapKey() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation source = prelude.newModuleActivation();
+        ProtosObjectValue actorRefPrototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject()).freeze();
+        ProtosActor actor = new ProtosActor(actorRefPrototype);
+        ProtosActorRefValue reference = actor.reference();
+        ProtosMapValue map = prelude.newMap();
+        ProtosIdentityMapValue identityMap =
+                new ProtosIdentityMapValue(prelude.identityMapPrototype());
+        ProtosStringValue value = new ProtosStringValue("capability");
+
+        ProtosInvocation.invokeMessage(map, "atPut", List.of(reference, value), source);
+        ProtosInvocation.invokeMessage(identityMap, "atPut", List.of(reference, value), source);
+
+        ProtosMapValue copiedMap =
+                assertInstanceOf(
+                        ProtosMapValue.class,
+                        ProtosActorValueTransfer.snapshotValue(map, source));
+        ProtosIdentityMapValue copiedIdentityMap =
+                assertInstanceOf(
+                        ProtosIdentityMapValue.class,
+                        ProtosActorValueTransfer.snapshotValue(identityMap, source));
+        ProtosActorRefValue query =
+                assertInstanceOf(
+                        ProtosActorRefValue.class,
+                        ProtosActorValueTransfer.snapshotValue(reference, source));
+
+        assertTrue(
+                ProtosIdentity.identical(
+                        copiedMap.keyedSnapshot().get(0).key(), query));
+        assertEquals(
+                "capability",
+                ((ProtosStringValue)
+                                ProtosInvocation.invokeMessage(
+                                        copiedMap, "at", List.of(query), source))
+                        .value());
+        assertEquals(
+                "capability",
+                ((ProtosStringValue)
+                                ProtosInvocation.invokeMessage(
+                                        copiedIdentityMap, "at", List.of(query), source))
+                        .value());
+    }
+
+    @Test
+    void keyedCollectionNestedNonTransferableStateStillFailsAtomically() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation source = prelude.newModuleActivation();
+        ProtosMapValue map = prelude.newMap();
+        ProtosIdentityMapValue identityMap =
+                new ProtosIdentityMapValue(prelude.identityMapPrototype());
+        ProtosClosureValue closure =
+                ProtosClosureValue.nativeClosure(
+                        (activation, arguments) -> ProtosNullValue.INSTANCE);
+
+        ProtosInvocation.invokeMessage(
+                map, "atPut", List.of(new ProtosStringValue("bad"), closure), source);
+        ProtosInvocation.invokeMessage(
+                identityMap, "atPut", List.of(closure, new ProtosStringValue("bad")), source);
 
         assertNonTransferable(source, () -> ProtosActorValueTransfer.snapshotValue(map, source));
         assertNonTransferable(
                 source, () -> ProtosActorValueTransfer.snapshotValue(identityMap, source));
+        assertEquals(1, map.keyedSize());
+        assertEquals(1, identityMap.keyedSize());
+        assertSame(closure, map.keyedSnapshot().get(0).value());
+        assertSame(closure, identityMap.keyedSnapshot().get(0).key());
     }
 
     @Test

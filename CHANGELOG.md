@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.107-SNAPSHOT
+
+- Implement I011-11 Actor-boundary keyed-collection transfer for `Map` and `IdentityMap`, preserving keyed insertion order, graph aliasing/cycles, local slots, and open/closed/frozen state while keeping the complete transfer atomic.
+- Rebuild destination hash bookkeeping without invoking ordinary `hash`/`==` during snapshot formation: default identity-based Map keys receive the copied identity's hash, specialized recorded Map hashes are preserved, and IdentityMap entries receive the copied key's semantic `identityHash`.
+- Align default `Object.hash` with the existing semantic `ProtosIdentity.identityHash` primitive so rematerialized identity-bearing capabilities such as `ActorRef` remain valid equal/hash keys. I011 remains IN_PROGRESS; Group/distributed routing, GroupRef/Process capability transfer, failure authority and RootActor/Process integration remain.
+
 ## 0.2.106-SNAPSHOT
 
 - Close I018 Core self-hosting/bootstrap minimization after an exhaustive current-main inventory of every production `ProtosClosureValue.nativeClosure(...)` provider. The final boundary contains 90 native-Closure construction sites across exactly 22 Java providers, all classified as irreducible host execution/control, semantic-value representation, concurrency/runtime, or resource/capability bridges; no remaining standard slot is classified as faithfully source-expressible.

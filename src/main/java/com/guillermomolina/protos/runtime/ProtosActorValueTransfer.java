@@ -1,6 +1,18 @@
 /*
  * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
- * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. See LICENSE.TXT.
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
  */
 package com.guillermomolina.protos.runtime;
 
@@ -123,13 +135,6 @@ public final class ProtosActorValueTransfer {
                 throw nonTransferable();
             }
 
-            // Keyed collections have semantic state outside ordinary local slots.  They need their
-            // own transfer integration (including destination hash/identity-hash bookkeeping) and
-            // must never silently degrade into a plain-object copy.
-            if (value instanceof ProtosMapValue || value instanceof ProtosIdentityMapValue) {
-                throw nonTransferable();
-            }
-
             if (!(value instanceof ProtosObjectValue object)) {
                 // Unknown Java/native/runtime values are non-transferable by default.
                 throw nonTransferable();
@@ -153,7 +158,11 @@ public final class ProtosActorValueTransfer {
                                                     "non-root Protos object lost delegation parent"));
             Object destinationParent = allocate(sourceParent);
             Object shell;
-            if (object instanceof ProtosArrayValue array) {
+            if (object instanceof ProtosMapValue) {
+                shell = new ProtosMapValue(destinationParent);
+            } else if (object instanceof ProtosIdentityMapValue) {
+                shell = new ProtosIdentityMapValue(destinationParent);
+            } else if (object instanceof ProtosArrayValue array) {
                 int size = array.indexedSize().intValueExact();
                 ArrayList<Object> placeholders = new ArrayList<>(size);
                 for (int index = 0; index < size; index++) {
@@ -190,7 +199,27 @@ public final class ProtosActorValueTransfer {
                 }
 
                 ProtosObjectValue destination = (ProtosObjectValue) memo.get(value);
-                if (sourceObject instanceof ProtosArrayValue sourceArray) {
+                if (sourceObject instanceof ProtosMapValue sourceMap) {
+                    ProtosMapValue destinationMap = (ProtosMapValue) destination;
+                    for (ProtosMapValue.Entry entry : sourceMap.keyedSnapshot()) {
+                        Object copiedKey = copy(entry.key());
+                        Object copiedValue = copy(entry.value());
+                        BigInteger recordedHash =
+                                usesDefaultObjectHash(entry.key())
+                                        ? ProtosIdentity.identityHash(copiedKey)
+                                        : entry.recordedHash();
+                        destinationMap.append(copiedKey, recordedHash, copiedValue);
+                    }
+                } else if (sourceObject instanceof ProtosIdentityMapValue sourceIdentityMap) {
+                    ProtosIdentityMapValue destinationIdentityMap =
+                            (ProtosIdentityMapValue) destination;
+                    for (ProtosIdentityMapValue.Entry entry : sourceIdentityMap.keyedSnapshot()) {
+                        Object copiedKey = copy(entry.key());
+                        Object copiedValue = copy(entry.value());
+                        destinationIdentityMap.append(
+                                copiedKey, ProtosIdentity.identityHash(copiedKey), copiedValue);
+                    }
+                } else if (sourceObject instanceof ProtosArrayValue sourceArray) {
                     ProtosArrayValue destinationArray = (ProtosArrayValue) destination;
                     List<Object> elements = sourceArray.indexedSnapshot();
                     for (int index = 0; index < elements.size(); index++) {
@@ -216,9 +245,27 @@ public final class ProtosActorValueTransfer {
             return value instanceof ProtosObjectValue
                     && !isSharedStandardObject((ProtosObjectValue) value)
                     && !(value instanceof ProtosClosureValue)
-                    && !(value instanceof ProtosFutureValue)
-                    && !(value instanceof ProtosMapValue)
-                    && !(value instanceof ProtosIdentityMapValue);
+                    && !(value instanceof ProtosFutureValue);
+        }
+
+        /**
+         * True only when ordinary Map lookup of this object reaches Object.hash without an
+         * intervening override. Rebuilding that recorded hash is required because an ordinary
+         * Actor copy has a fresh semantic identity. This inspection is read-only and invokes no
+         * Protos hash/equality code during snapshot formation.
+         */
+        private static boolean usesDefaultObjectHash(Object key) {
+            if (!(key instanceof ProtosObjectValue object)) {
+                return false;
+            }
+            Object current = object;
+            while (current instanceof ProtosObjectValue candidate) {
+                if (candidate.hasLocalSlot("hash")) {
+                    return candidate == ProtosObjectValue.rootObject();
+                }
+                current = candidate.parent().orElse(null);
+            }
+            return false;
         }
 
         private void copyLocalSlots(ProtosObjectValue sourceObject, ProtosObjectValue destination) {
