@@ -58,6 +58,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardArrayProtocol.java", 5),
                     Map.entry("execution/ProtosStandardProcessArgumentsProtocol.java", 3),
                     Map.entry("execution/ProtosStandardEnvironmentProtocol.java", 3),
+                    Map.entry("execution/ProtosStandardProcessStreamProtocol.java", 2),
                     Map.entry("execution/ProtosStandardBytesProtocol.java", 7),
                     Map.entry("execution/ProtosStandardByteIoProtocol.java", 12),
                     Map.entry("execution/ProtosStandardObjectProtocol.java", 2),
@@ -96,8 +97,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         }
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actual);
-        assertEquals(25, actual.size());
-        assertEquals(97, actual.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(26, actual.size());
+        assertEquals(99, actual.values().stream().mapToInt(Integer::intValue).sum());
 
         String inventory =
                 Files.readString(Path.of("docs", "project", "CORE_NATIVE_BOUNDARY.md"));
@@ -231,6 +232,19 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 "Environment",
                 environmentPrototype,
                 Set.of("get", "contains", "each"));
+
+        ProtosObjectValue standardInputPrototype =
+                ProtosStandardProcessStreamProtocol.createReadablePrototype();
+        ProtosObjectValue standardOutputPrototype =
+                ProtosStandardProcessStreamProtocol.createWritablePrototype();
+        assertNativeSelectors(
+                "ProcessStandardInput",
+                standardInputPrototype,
+                Set.of("read"));
+        assertNativeSelectors(
+                "ProcessStandardOutput",
+                standardOutputPrototype,
+                Set.of("write"));
 
         ProtosObjectValue bytesPrototype =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());

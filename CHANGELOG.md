@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.119-SNAPSHOT
+
+- Implement I017-D1 Process-local standard byte-stream bindings with independently optional stdin/stdout/stderr bootstrap availability, non-waiting repeated view materialization, one shared input-consumption or output-ordering/backpressure domain per binding, and distinct stdout/stderr domains even when a host reuses one backend object.
+- Expose exact byte-direction capability shape through construction-only helpers: stdin views have only `read`; stdout/stderr views have only `write`; no backend property implicitly adds Closable, Flushable, File, seek, text, Encoding, shutdown, or other authority. Actor transfer of the deliberately Actor-safe standard-stream proxy rematerializes a fresh wrapper to the same logical binding; P rejects the live I/O authority.
+- Integrate standard-stream operations with ordinary I014 Future/commitment and Actor I/O cancellation machinery, including a two-sided Process-termination admission check and zero-consumption restoration when a cancelled stdin read races a late backend data completion. Register the two-site Process-stream resource bridge in I018, moving the audited boundary from 25 providers / 97 sites to 26 providers / 99 sites. I015 is not yet CLOSED on this definitive baseline, so I017-D2 remains dependency-blocked.
+
 ## 0.2.118-SNAPSHOT
 
 - Implement I017-C standardized read-only Environment bootstrap snapshots: one stable acquisition outcome and canonical semantic snapshot per Process; duplicate-equivalent native names are rejected at establishment under the represented host name-identity rules; later host mutation cannot alter the captured mapping.

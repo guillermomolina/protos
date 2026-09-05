@@ -60,6 +60,10 @@ public final class ProtosProcessRuntime {
     private EnvironmentSnapshotState environmentSnapshotState =
             EnvironmentSnapshotState.UNESTABLISHED;
     private ProtosEnvironmentValue environmentSnapshot;
+    private boolean standardStreamsEstablished;
+    private ProtosProcessStandardStreamBinding stdinBinding;
+    private ProtosProcessStandardStreamBinding stdoutBinding;
+    private ProtosProcessStandardStreamBinding stderrBinding;
 
     /** Creates one Process incarnation together with its unique RootActor. */
     public ProtosProcessRuntime(ProtosObjectValue actorRefPrototype) {
@@ -169,6 +173,86 @@ public final class ProtosProcessRuntime {
                     "Process Environment bootstrap snapshot is not established");
         }
         return Optional.ofNullable(environmentSnapshot);
+    }
+
+    /**
+     * Establishes the three independently optional standard byte-stream bindings exactly once.
+     *
+     * <p>Null backend means that binding is unavailable. Every available binding is already usable
+     * synchronously after this call; this method performs no deferred/waiting acquisition.
+     */
+    public synchronized void establishStandardStreamsForRuntime(
+            ProtosObjectValue readablePrototype,
+            ProtosObjectValue writablePrototype,
+            ProtosObjectValue bytesPrototype,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend) {
+        Objects.requireNonNull(readablePrototype, "readablePrototype");
+        Objects.requireNonNull(writablePrototype, "writablePrototype");
+        Objects.requireNonNull(bytesPrototype, "bytesPrototype");
+        if (lifecycle != LifecycleState.RUNNING) {
+            throw new IllegalStateException(
+                    "Process standard streams cannot be established after termination begins");
+        }
+        if (standardStreamsEstablished) {
+            throw new IllegalStateException(
+                    "Process standard streams are already established");
+        }
+
+        stdinBinding =
+                stdinBackend == null
+                        ? null
+                        : ProtosProcessStandardStreamBinding.readableForRuntime(
+                                this,
+                                readablePrototype,
+                                bytesPrototype,
+                                stdinBackend);
+        stdoutBinding =
+                stdoutBackend == null
+                        ? null
+                        : ProtosProcessStandardStreamBinding.writableForRuntime(
+                                this,
+                                writablePrototype,
+                                bytesPrototype,
+                                stdoutBackend);
+        stderrBinding =
+                stderrBackend == null
+                        ? null
+                        : ProtosProcessStandardStreamBinding.writableForRuntime(
+                                this,
+                                writablePrototype,
+                                bytesPrototype,
+                                stderrBackend);
+        standardStreamsEstablished = true;
+    }
+
+    public synchronized Optional<ProtosProcessStandardStreamValue> stdinForRuntime() {
+        requireStandardStreamsEstablished();
+        return stdinBinding == null
+                ? Optional.empty()
+                : Optional.of(stdinBinding.newViewForRuntime());
+    }
+
+    public synchronized Optional<ProtosProcessStandardStreamValue> stdoutForRuntime() {
+        requireStandardStreamsEstablished();
+        return stdoutBinding == null
+                ? Optional.empty()
+                : Optional.of(stdoutBinding.newViewForRuntime());
+    }
+
+    public synchronized Optional<ProtosProcessStandardStreamValue> stderrForRuntime() {
+        requireStandardStreamsEstablished();
+        return stderrBinding == null
+                ? Optional.empty()
+                : Optional.of(stderrBinding.newViewForRuntime());
+    }
+
+    private void requireStandardStreamsEstablished() {
+        if (!standardStreamsEstablished) {
+            throw new IllegalStateException(
+                    "Process standard streams bootstrap state is not established");
+        }
     }
 
     /**

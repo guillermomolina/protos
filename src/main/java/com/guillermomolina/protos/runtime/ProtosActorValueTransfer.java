@@ -137,6 +137,9 @@ public final class ProtosActorValueTransfer {
             if (value instanceof ProtosEnvironmentValue environment) {
                 return remember(value, environment.rematerializeForActorTransfer());
             }
+            if (value instanceof ProtosProcessStandardStreamValue stream) {
+                return remember(value, stream.rematerializeForActorTransfer());
+            }
 
             // These are explicitly non-transferable Actor-domain/execution/resource values.
             if (value instanceof ProtosClosureValue
