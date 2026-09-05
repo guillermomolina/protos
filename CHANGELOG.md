@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.115-SNAPSHOT
+
+- Close I017-A by reconciling I017 with the concurrently published I011-14 Process-capability delegation substrate instead of duplicating it: runtime-provisioned Actor-local Process proxies, fresh explicit Actor rematerialization to the same logical Process authority, whole-graph alias preservation, authority-bearing descendant rebuilding, no authority amplification, and no Core P-transfer contract are already implemented and validated on current main.
+- Record the phased I017 implementation plan. No public Process prototype, RootActor `process` bootstrap slot, Process accessor, host argument/environment/stream acquisition, or new native-Closure provider is added by I017-A itself. Process-termination rejection of actual accessor use will be enforced when the standard Process protocol becomes observable.
+- Keep independent I017-B/C/D1 work unblocked while recording the external dependency I015 CLOSED -> I017-D2 for the standardized `stdinEncoding`/`stdoutEncoding`/`stderrEncoding` accessors.
+
 ## 0.2.114-SNAPSHOT
 
 - Implement I011-14 runtime Process-capability Actor delegation: a host/runtime-provisioned represented Process proxy delegates to the future standard Process prototype, carries only authority into one existing logical Protos Process, and rematerializes as a fresh wrapper when explicitly transferred across an Actor boundary.

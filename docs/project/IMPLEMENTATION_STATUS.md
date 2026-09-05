@@ -48,7 +48,7 @@ an item.
 | I014 | Standard Byte I/O | CLOSED | `2462ba74298e94181489e13de4e25dbbb82b21f9` | I009 + I012 |
 | I015 | Encoding / Text I/O | READY | — | I014 closed |
 | I016 | Filesystem / File | CLOSED | `SAME_COMMIT` | I013 + I014; I016-A/B/C/D1/D2/D3/D4 complete |
-| I017 | Process I/O / bootstrap | READY | — | I016 closed; no relevant unresolved implementation blocker found; perform mandatory current-main audit before implementation |
+| I017 | Process I/O / bootstrap | IN_PROGRESS | — | I016 closed; I017-A reconciled with published I011-14; I017-B READY; Encoding accessor integration additionally requires I015 CLOSED |
 | I018 | Core self-hosting / bootstrap minimization | CLOSED | `SAME_COMMIT` | I018-L exhaustive native-boundary inventory and architectural guard complete; I016-D pause lifted |
 
 ### I011 — Actors
@@ -132,6 +132,47 @@ Closure result:
 - I016-D3 provides deterministic integrated authority/open conformance and re-audits I018 at exactly 23 native providers / 91 construction sites;
 - I016-D4 validates all I016 slices together plus the full suite on the definitive baseline, closes I016, and releases I017 to READY. The current baseline already includes I011-13's internal Process failure-domain / RootActor substrate; I017 still requires its own mandatory current-main audit before implementation and coordination with whatever additional I011 work is then current.
 
+
+### I017 — Process I/O / bootstrap
+
+Status: IN_PROGRESS
+
+Audit/reconciliation result:
+- I016 is CLOSED and no relevant implementation blocker is currently BLOCKED;
+- I011-13 already owns the internal Process failure domain, unique RootActor and hosted-Actor termination authority;
+- I011-14 landed concurrently before I017-A and already implements the exact Process capability Actor-delegation/P-exclusion foundation originally planned for I017-A, so I017 reuses that published substrate instead of creating a competing representation;
+- I015 Encoding / Text I/O is not yet guaranteed CLOSED on every I017 baseline, so the standard `stdinEncoding()`, `stdoutEncoding()`, and `stderrEncoding()` integration has an explicit external dependency on I015.
+
+Normative owners:
+- `spec/io/PROCESS_IO.md`
+- `spec/io/IO_CORE.md`
+- `spec/io/BYTE_IO.md` for standard-stream byte protocols
+- `spec/io/TEXT_IO.md` for Encoding values returned by the `*Encoding()` accessors
+- `spec/concurrency/ACTORS.md` for explicit Process delegation during Actor transfer/spawn
+- `spec/concurrency/PARALLEL_EXECUTION.md` for the absence of a Process P-transfer contract
+- `spec/semantics/MODULES.md` for RootActor initial-module `moduleContext` provisioning
+
+Published / planned slices:
+
+| Slice | Status | Version | Closure evidence | Implemented surface |
+|---|---|---|---|---|
+| I017-A | CLOSED | `0.2.115-SNAPSHOT` | `SAME_COMMIT + I011-14_REUSED` | Reconciled/validated Process capability foundation already published by I011-14: runtime-provisioned Actor-local proxies; explicit fresh Actor rematerialization to the same logical Process authority; graph alias preservation; authority-bearing descendants rebuilt over the destination proxy; Process excluded from P; provisioning rejected after Process termination begins. No duplicate Process representation or public accessor surface introduced. |
+| I017-B | READY | — | — | Canonical immutable Process-argument snapshot: complete bootstrap capture/representability outcome, stable semantic identity per Process, exact `size`/`at`/polymorphic `each`, and ordinary Actor value transfer distinct from canonical re-acquisition. |
+| I017-C | BLOCKED_BY_DEPENDENCIES | — | — | Standard read-only Environment snapshot: native-name identity/representability boundary, stable acquisition outcome and semantic identity, `get`/`contains`, deterministic scalar-order `each` with whole-snapshot representability prevalidation. Sequenced after B for implementation safety. |
+| I017-D1 | BLOCKED_BY_DEPENDENCIES | — | — | Process-local standard byte-stream binding substrate: independently optional stdin/stdout/stderr, synchronous non-waiting acquisition, exact ByteReadable/ByteWritable-only capability shape, shared logical ordering domains across repeated Actor-local views, no implicit Closable/File/text surface. |
+| I017-D2 | BLOCKED_BY_DEPENDENCIES | — | — | `stdinEncoding`/`stdoutEncoding`/`stderrEncoding` bootstrap associations and availability coupling. Requires I017-D1 and I015 CLOSED. |
+| I017-E | BLOCKED_BY_DEPENDENCIES | — | — | Complete standard Process prototype/accessor bridge plus RootActor initial-module bootstrap provisioning of `process` and optional `filesystem`; host/CLI bootstrap capture of application args, environment and available standard bindings; imported modules receive no ambient capability; all accessors reject use after Process termination cutover. Requires B/C/D1/D2. |
+| I017-F | BLOCKED_BY_DEPENDENCIES | — | — | Final Process/Actor/termination authority conformance, post-I017 I018 native-boundary re-audit, CLI/runtime integration regression suite and canonical I017 closure. |
+
+Dependency chain: `I017-A -> I017-B -> I017-C -> I017-D1 -> I017-D2 -> I017-E -> I017-F`, with the additional external dependency `I015 CLOSED -> I017-D2`.
+
+Current implementation boundary after I017-A:
+- I017 deliberately reuses `ProtosProcessCapabilityValue` from I011-14; there is one Process-capability representation, not parallel I011/I017 variants;
+- no public `Process` prelude binding/source prototype is added yet;
+- no bootstrap-local `process` or `filesystem` slot is injected yet;
+- no host arguments, environment or standard-stream data are acquired yet;
+- Process capability transfer is explicit across Actor boundaries and absent from P;
+- new Process-capability provisioning is rejected once Process termination begins; the future observable Process accessor bridge must also reject every existing proxy after the termination cutover.
 
 ### I018 — Core self-hosting / bootstrap minimization
 
