@@ -47,8 +47,8 @@ an item.
 | I013 | Standard Path | CLOSED | historical; see git history / CHANGELOG | — |
 | I014 | Standard Byte I/O | CLOSED | `2462ba74298e94181489e13de4e25dbbb82b21f9` | I009 + I012 |
 | I015 | Encoding / Text I/O | READY | — | I014 closed |
-| I016 | Filesystem / File | IN_PROGRESS | — | I013 + I014 closed |
-| I017 | Process I/O / bootstrap | BLOCKED_BY_DEPENDENCIES | — | requires I016; re-audit exact current dependencies before starting |
+| I016 | Filesystem / File | CLOSED | `SAME_COMMIT` | I013 + I014; I016-A/B/C/D1/D2/D3/D4 complete |
+| I017 | Process I/O / bootstrap | READY | — | I016 closed; no relevant unresolved implementation blocker found; perform mandatory current-main audit before implementation |
 | I018 | Core self-hosting / bootstrap minimization | CLOSED | `SAME_COMMIT` | I018-L exhaustive native-boundary inventory and architectural guard complete; I016-D pause lifted |
 
 ### I011 — Actors
@@ -90,7 +90,7 @@ Remaining implemented-surface gaps before top-level closure:
 
 ### I016 — Filesystem / File
 
-Status: IN_PROGRESS
+Status: CLOSED
 
 Coordination result: I016-D resumed only after a post-I018 current-main audit. Because I018-L guards every Java native-Closure provider, each I016-D substep that changes that boundary must update the inventory and executable guard in the same published change.
 
@@ -112,18 +112,24 @@ Published slices:
 | I016-D1 | CLOSED | `0.2.109-SNAPSHOT` | `SAME_COMMIT` | Host-provisioned open-only Filesystem capability; `open` integration with I016-A and standard File materialization from B/C; exact ordinary options domain; authority/confinement/stable-resource backend contract; minimal mandatory I018 native-boundary registration. |
 | I016-D2 | CLOSED | `0.2.110-SNAPSHOT` | `SAME_COMMIT` | Explicit runtime File/Filesystem authority markers; actual standard protocol materialization uses those markers; direct live authority and authority-bearing ordinary descendants fail Actor transfer with `NonTransferableValue` and P transfer with `NonParallelValue`; no native-Closure boundary expansion. |
 | I016-D3 | CLOSED | `0.2.111-SNAPSHOT` | `SAME_COMMIT` | Integrated authority/open conformance covers pre/post-commit cancellation, late custody cleanup, stable selected-resource binding, independent out-of-order opens, backend confinement-policy rejection, and descriptor-owned optional capability shape; post-D2 I018 boundary re-audit confirms 23 providers / 91 sites and no Filesystem prelude binding. |
-| I016-D4 | READY | — | — | Final cross-slice conformance, project-status/dependency closure, mark I016 CLOSED and release I017 to READY after a fresh current-main audit. |
+| I016-D4 | CLOSED | `0.2.113-SNAPSHOT` | `SAME_COMMIT` | Final cross-slice focal validation plus full-suite publication; canonical I016 closure; post-D3 I018 boundary remains 23 providers / 91 sites; fresh I017 dependency audit found no relevant unresolved implementation blocker and released I017 to READY. |
 
 Current I016-D completion plan:
 - **D1 — Filesystem open integration (CLOSED by this slice):** expose only a host-provisioned `open` capability, connect A to B/C, enforce exact ordinary options, and register the unavoidable resource bridge with the I018 guard.
 - **D2 — authority/transfer boundaries (CLOSED):** explicit File/Filesystem runtime authority markers now back the real standard capabilities; Actor/P reject direct and delegation-carried live authority without broadening the standard message surface.
 - **D3 — deterministic authority/race conformance + I018 re-audit (CLOSED):** integrated tests now cover cancellation commitment, stable selected-resource custody, independent opens, backend authority rejection, and descriptor-owned capability shape; the post-D2 native boundary remains exactly 23 providers / 91 sites.
-- **D4 — final I016 closure (READY):** run final cross-slice conformance, close I016 in the ledger, and move I017 to READY after re-auditing its current dependencies.
+- **D4 — final I016 closure (CLOSED):** final cross-slice focal validation and the complete Maven suite passed on the definitive publication baseline; I016 is CLOSED and I017 is READY after a fresh dependency audit.
 
 Dependency chain: `I016-D1 -> I016-D2 -> I016-D3 -> I016-D4`.
 
-Remaining implemented-surface gap before top-level closure:
-- final D4 cross-slice validation and ledger/dependency closure, including a fresh current-main dependency audit before releasing I017.
+Closure result:
+- I016-A closes exact `Filesystem.open` option capture, validation precedence, independent acquisition, cancellation, commitment and result-custody semantics;
+- I016-B closes positioned File cursor, read/write, seek/size/truncate/sync capability shape, lifecycle, close cutover and Actor-originated cancellation;
+- I016-C closes append placement at then-current EOF, alias-wide no-overlap/no-interleaving, empty-append and failed-prefix aftermath;
+- I016-D1 exposes only host-provisioned `Filesystem.open`, binds successful opens to stable selected standard File resources, and records the authority/confinement backend contract without creating a Core-global Filesystem;
+- I016-D2 makes File/Filesystem live authority explicit and rejects direct or delegation-carried authority at Actor/P copy boundaries without implicit proxy/reopen behavior;
+- I016-D3 provides deterministic integrated authority/open conformance and re-audits I018 at exactly 23 native providers / 91 construction sites;
+- I016-D4 validates all I016 slices together plus the full suite on the definitive baseline, closes I016, and releases I017 to READY. The current baseline already includes I011-13's internal Process failure-domain / RootActor substrate; I017 still requires its own mandatory current-main audit before implementation and coordination with whatever additional I011 work is then current.
 
 
 ### I018 — Core self-hosting / bootstrap minimization
@@ -289,7 +295,6 @@ Planning boundary:
 Dependencies:
 - I013 Standard Path — CLOSED;
 - I014 Standard Byte I/O — CLOSED;
-- I016 Filesystem / File — not CLOSED;
 - I017 Process I/O / bootstrap — not CLOSED;
 - re-audit I015/LIB002 dependencies for text-oriented conveniences when LIB004
   work begins.

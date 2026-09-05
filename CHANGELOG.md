@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.113-SNAPSHOT
+
+- Close I016 Filesystem / File after final cross-slice validation of I016-A preflight/acquisition, I016-B positioned File semantics and lifecycle, I016-C append/aliasing, I016-D1 host-provisioned Filesystem.open integration, I016-D2 Actor/P authority-transfer boundaries, and I016-D3 deterministic integrated authority/race conformance.
+- Preserve the post-D2/D3 I018 native boundary at the re-audited 23 providers / 91 native-Closure construction sites. A fresh current-main dependency audit, including the published I011-13 Process failure-domain / RootActor substrate, finds no unresolved Process-I/O implementation blocker; I016 is CLOSED and I017 Process I/O / bootstrap becomes READY for its own mandatory current-main normative/implementation audit before implementation.
+
 ## 0.2.112-SNAPSHOT
 
 - Implement I011-13 internal Process failure-domain and RootActor failure-authority substrate: one Process owns exactly one RootActor plus its currently hosted Actors, Process termination requests termination of every hosted incarnation, and Process TERMINATED is reached only after Actor-required cancellation/cleanup has completed.
