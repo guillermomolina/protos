@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.81-SNAPSHOT
+
+- Implement I011-1 Actor incarnation identity/lifecycle foundation: add an explicit runtime-local immutable incarnation identity, centralized race-safe `INITIALIZING`/`READY`/`TERMINATING`/`TERMINATED` state machine, and a semantic `ActorRef` value permanently bound to one incarnation.
+- Reuse the existing Actor execution domain and Actor-local module state, preserve `ActorRef` semantic identity and `identityHash` across rematerialized wrappers, and add deterministic lifecycle/concurrency focal tests. I011 remains open; this slice does not add spawn/current, mailbox, send/request, backpressure, transfer, monitoring, graceful-stop policy, GroupRef, or distributed routing.
+
 ## 0.2.80-SNAPSHOT
 
 ### Fixed
