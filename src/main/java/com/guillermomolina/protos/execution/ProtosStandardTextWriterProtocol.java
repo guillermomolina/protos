@@ -69,7 +69,6 @@ public final class ProtosStandardTextWriterProtocol {
         Object target = supplied.get(0);
         Object encodingValue = supplied.get(1);
         if (!(encodingValue instanceof ProtosEncodingValue encoding)
-                || !encoding.isPortableForRuntime()
                 || !hasCallableCapability(target, "write", activation)
                 || (owning
                         && !hasCallableCapability(target, "close", activation))) {

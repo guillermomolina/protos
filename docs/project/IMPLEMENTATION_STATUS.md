@@ -46,7 +46,7 @@ an item.
 | I012 | Standard Bytes | CLOSED | historical; see git history / CHANGELOG | — |
 | I013 | Standard Path | CLOSED | historical; see git history / CHANGELOG | — |
 | I014 | Standard Byte I/O | CLOSED | `2462ba74298e94181489e13de4e25dbbb82b21f9` | I009 + I012 |
-| I015 | Encoding / Text I/O | IN_PROGRESS | — | I015-A/B/C/D closed; I015-E READY for host-Encoding integration, final conformance and canonical closure |
+| I015 | Encoding / Text I/O | CLOSED | `SAME_COMMIT` | I015-A/B/C/D/E complete; portable and explicit host Encoding descriptors share final one-shot/streaming TextReader/TextWriter semantics; post-I015 I018 audit unchanged |
 | I016 | Filesystem / File | CLOSED | `SAME_COMMIT` | I013 + I014; I016-A/B/C/D1/D2/D3/D4 complete |
 | I017 | Process I/O / bootstrap | CLOSED | `SAME_COMMIT` | I017-A/B/C/D1/D2/E1/E2/E3/F complete; final authority/termination/CLI/native-boundary conformance published |
 | I018 | Core self-hosting / bootstrap minimization | CLOSED | `SAME_COMMIT` | I018-L exhaustive native-boundary inventory and architectural guard complete; I016-D pause lifted |
@@ -100,7 +100,7 @@ Top-level closure reconciliation:
 
 ### I015 — Encoding / Text I/O
 
-Status: IN_PROGRESS
+Status: CLOSED
 
 Normative owners:
 - `spec/io/TEXT_IO.md`
@@ -116,22 +116,22 @@ Implementation plan:
 | I015-B | CLOSED | `0.2.140-SNAPSHOT` | `SAME_COMMIT` | Source-backed frozen `TextReader` factory; borrowing/owning validation; fresh wrappers with exactly `readText`/`close`; transactional strict incremental UTF8/UTF16LE/UTF16BE/Latin1 decoding; initial matching BOM; progress before extra read-ahead; valid-prefix/deferred-error ordering; permanent failure lifecycle; cancellation zero logical consumption; borrowing/owning close integration; two-site I018 resource/capability bridge. Host-provided incremental Encoding integration remains I015-E. |
 | I015-C | CLOSED | `0.2.142-SNAPSHOT` | `SAME_COMMIT` | `readLine()` / `readLine(maxBytes)` share I015-B's single ordered decoder/input domain; deterministic LF/CR/CRLF framing; CR immediate completion with deferred LF folding; EOF-final line/null semantics; exact pre-terminator encoded-octet budget excluding initial BOM/terminator; source-order EncodingError vs LineTooLong precedence; permanent failure and zero-consumption cancellation; no I018 construction-site expansion. |
 | I015-D | CLOSED | `0.2.144-SNAPSHOT` | `SAME_COMMIT` | Source-backed frozen `TextWriter` factory; borrowing/owning capability validation; fresh wrappers with exactly `writeText`/`writeLine`/`flush`/`close`; complete portable encoding validation before output; canonical LF line output; empty-write zero-transition/no-target-I/O semantics; ordered commitment and permanent downstream-failure frontier; compositional flush; close cutover and explicit ownership/primary-failure precedence; two-site I018 bridge. |
-| I015-E | READY | — | — | Final cross-slice Text I/O conformance, portable/host Encoding integration, replacement-policy closure, post-I015 I018 boundary re-audit and canonical I015 closure. I015-D is CLOSED. |
+| I015-E | CLOSED | `0.2.147-SNAPSHOT` | `SAME_COMMIT` | Final cross-slice closure: explicit host Encoding boundary upgraded to fresh transactional streaming decoder/encoder state; all Encoding descriptors accepted by TextReader/TextWriter; strict default plus explicit deterministic replacement and initial-BOM policy; Unicode maximal-subpart portable replacement; stateful host writer close finalization; A/B/C/D regression and Actor/P descriptor invariants; post-I015 I018 boundary unchanged. |
 
 Dependency chain: `I015-A -> I015-B -> I015-C -> I015-D -> I015-E`.
 
 Coordination with I017:
 - I017 is CLOSED. Its D2 standard-stream Encoding dependency was satisfied by I015-A and does not constrain the remaining I015 text-wrapper slices.
 - TextReader/TextWriter remain explicit layering facilities; Process standard byte streams are not implicitly wrapped or converted by I015-B/C/D.
-Current implementation boundary after I015-D:
-- `Encoding` remains the source-backed frozen factory/prototype with four mandatory portable descriptors plus the explicit host-provisioning boundary from I015-A;
-- `TextReader` remains the I015-B/C source-backed factory/wrapper with one ordered `readText`/`readLine` decoder/input domain, strict portable decoding, deterministic line framing/bounds, cancellation and permanent failure lifecycle;
-- `TextWriter` is now a source-backed frozen factory/prototype with borrowing `call` and explicit `owning`; each fresh wrapper exposes exactly `writeText`, `writeLine`, `flush`, and `close`;
-- TextWriter construction accepts actual ByteWritable capability through ordinary represented/ordinary lookup, requires exact portable Encoding-family membership, and for owning additionally requires Closable; invalid construction is synchronous and performs no target I/O;
-- `writeText` and `writeLine` share one ordered output domain; complete portable encoding validation precedes target contribution, `writeLine` appends LF inside the same logical operation, `writeText("")` performs no encoder transition/BOM/target I/O, and an encoding failure contributes zero bytes without poisoning later output;
-- target write/flush delegation is the wrapper's conservative commitment frontier; downstream failure after that point permanently fails TextWriter output and later writes/flushes re-observe the recorded failure without guessed replay or extra target contribution;
-- wrapper `flush` composes through an immediate Flushable target and otherwise ends at the target's ByteWritable boundary; close itself does not imply flush, cuts over accepted uncommitted operations, waits for committed aftermath, and closes the target only for the explicit owning form with wrapper-finalization/output failure taking primary precedence;
-- I015-D adds a source-backed TextWriter identity plus exactly two native-Closure construction helpers; I015-E remains responsible for host-provided incremental Encoding integration/replacement-policy completion, final cross-slice conformance, post-I015 I018 re-audit and canonical closure.
+Final implementation boundary after I015-E / I015 closure:
+- `Encoding` is a source-backed frozen authority-free factory/prototype with exactly four mandatory public portable descriptors; descriptors are immutable semantic-family values and may also be explicitly host-provisioned without registry/discovery authority;
+- each descriptor supplies fresh per-flow transactional decoder/encoder state, so descriptor reuse shares configuration only and never mutable codec state; the trusted host boundary must expose deterministic semantic decoded units/source-byte extents and reversible next-state checkpoints rather than leaking converter-call chunking;
+- strict/fatal decoding remains the default. Explicit replacement configuration consumes malformed input and emits U+FFFD; portable UTF replacement uses Unicode maximal subparts independent of source chunking, Latin1 has no malformed octets, and host replacement grouping is part of the host descriptor contract;
+- matching initial portable UTF BOM is consumed by default; an explicitly BOM-preserving configured descriptor exposes U+FEFF as ordinary text. Preserved BOM source bytes participate in bounded-line accounting, while consumed initial setup remains excluded;
+- `TextReader` accepts every semantic Encoding descriptor and has one ordered transactional readText/readLine decoder/input domain with progress, exact encoded-octet line limits, deterministic LF/CR/CRLF, zero-consumption cancellation, permanent text EOF and permanent committed decoding/I/O/LineTooLong failure;
+- `TextWriter` accepts every semantic Encoding descriptor and has one ordered transactional encoder/output domain; complete encoding validation precedes target contribution, empty text performs no encoder state transition, writeLine appends LF atomically, downstream uncertainty/failure permanently blocks later output, flush composes through Flushable, and close finalizes committed encoder state before optional owned-target release;
+- one-shot Encoding encode/decode uses a fresh codec flow and therefore shares the same configured strict/replacement/BOM semantics without sharing mutable state; Actor/P transfer continues to share immutable descriptors only;
+- I015-E adds no Protos selector and no Java `nativeClosure` construction site. The post-I015 I018 executable inventory remains the definitive baseline recorded in `CORE_NATIVE_BOUNDARY.md`.
 ### I016 — Filesystem / File
 
 Status: CLOSED
@@ -292,7 +292,7 @@ work may proceed without waiting for an earlier-numbered roadmap item.
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
 | LIB001 | Collections library | CLOSED | `SAME_COMMIT` | LIB001-A/B/C/D/E closed; initial Set/IdentitySet and eager sequential Array algorithm surfaces are fully published with no new runtime collection family, generic hierarchy, or production Java boundary. |
-| LIB002 | Text / encoding conveniences | BLOCKED_BY_DEPENDENCIES | — | I015 is not closed; ordinary library conveniences may build on Encoding/Text I/O but must not redefine their Core semantics. |
+| LIB002 | Text / encoding conveniences | READY | — | I015 is CLOSED; begin with a fresh ordinary-library design/API audit over finalized Encoding/TextReader/TextWriter semantics without redefining Core conversion or I/O behavior. |
 | LIB003 | JSON / serialization | OPEN | — | LIB001 is CLOSED; begin a fresh JSON/serialization design and dependency audit against the then-current I015/LIB002 text/encoding and stream-adapter surfaces before declaring implementation readiness. |
 | LIB004 | Filesystem / process conveniences | READY | — | I016 + I017 closed; begin with a fresh focused convenience-layer design/audit. Any text-oriented convenience that needs I015/LIB002 remains individually dependency-gated and must preserve explicit authority boundaries. |
 | LIB005 | Networking | OPEN | — | Roadmap item only; `spec/io/IO_CORE.md` currently leaves network authority acquisition, socket APIs, DNS/name resolution, and transport configuration outside its standardized scope. Re-audit and establish prerequisites before implementation. |
@@ -361,7 +361,7 @@ Dependencies:
 
 ### LIB002 — Text / encoding conveniences
 
-Status: BLOCKED_BY_DEPENDENCIES
+Status: READY
 
 Description: Ergonomic text and encoding helpers implemented as ordinary Protos
 library functionality on top of finalized Core Encoding/Text I/O semantics.
@@ -378,7 +378,7 @@ Planning boundary:
 Dependencies:
 - I003 Standard String — CLOSED;
 - I012 Standard Bytes — CLOSED;
-- I015 Encoding / Text I/O — not CLOSED.
+- I015 Encoding / Text I/O — CLOSED.
 
 
 ### LIB003 — JSON / serialization

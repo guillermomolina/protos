@@ -52,9 +52,9 @@ the standard native boundary.
 | `ProtosStandardArrayProtocol.java` | 5 | representation bridge | Array factory/index mutation/size own indexed representation state; `each` also requires eager callability validation and a start-of-operation snapshot. |
 | `ProtosStandardProcessArgumentsProtocol.java` | 3 | representation bridge | Immutable Process-argument snapshots own an opaque captured indexed representation; `size`/`at` expose that representation and `each` requires eager polymorphic-callability validation before ordered callback invocation. The helper prototype is construction-only and not a Core-prelude authority or named standard prototype. |
 | `ProtosStandardEnvironmentProtocol.java` | 3 | representation bridge | Standardized Environment snapshots retain opaque native-name identity/representability state. `get`/`contains` preserve native query semantics and selective value decoding; `each` performs eager callability plus whole-snapshot portable String validation before canonical Unicode-scalar-order callbacks. Environment remains outside the required Core prelude and is not a Map subtype. |
-| `ProtosStandardEncodingProtocol.java` | 2 | representation bridge | Encoding semantic-family receiver validation and exact one-shot String/Bytes conversion cross immutable descriptor and codec representations. The source-backed Encoding factory exposes only the four required portable descriptors plus native `encode`/`decode`; default UTF decoding is strict, matching initial BOMs are consumed, Latin1 is ISO-8859-1, and each encode produces fresh standard Bytes. |
-| `ProtosStandardTextReaderProtocol.java` | 2 | resource/capability bridge | Source-backed `TextReader` construction validates ByteReadable/optional owning-Closable authority plus exact Encoding-family membership; one helper constructs borrowing/owning forms and one shared wrapper helper dispatches `readText`/`readLine`/`close`. The runtime owns the single ordered Future/cancellation/close decoder domain, transactional portable UTF/Latin1 readText decoding, deterministic LF/CR/CRLF line framing and encoded-octet line-budget accounting. I015-C widens selectors without adding a native Closure construction site. |
-| `ProtosStandardTextWriterProtocol.java` | 2 | resource/capability bridge | Source-backed `TextWriter` construction validates ByteWritable/optional owning-Closable authority plus exact portable Encoding-family membership; one helper constructs borrowing/owning forms and one shared wrapper helper dispatches `writeText`/`writeLine`/`flush`/`close`. The runtime owns ordered complete-payload encoding validation, target-write commitment and failure frontier, compositional flush propagation, close cutover and ownership release. |
+| `ProtosStandardEncodingProtocol.java` | 2 | representation bridge | Encoding semantic-family receiver validation and exact one-shot String/Bytes conversion cross immutable descriptor and codec representations. I015-E completes the descriptor boundary with fresh per-flow transactional streaming decoder/encoder factories, explicit strict/replacement and initial-BOM policy state, deterministic portable Unicode maximal-subpart replacement, and explicit host-provided semantic codec contracts; the source-backed Encoding factory still exposes only the four mandatory portable strict descriptors plus native `encode`/`decode`. |
+| `ProtosStandardTextReaderProtocol.java` | 2 | resource/capability bridge | Source-backed `TextReader` construction validates ByteReadable/optional owning-Closable authority plus exact Encoding-family membership, including explicitly provisioned host descriptors. One factory helper and one wrapper-operation helper remain the only native Closure sites. The runtime owns one ordered transactional decoder/input domain, strict or deterministic replacement decoding, exact source-octet line accounting, CR/LF framing, zero-consumption cancellation, permanent failure and ownership lifecycle across portable and host codecs. |
+| `ProtosStandardTextWriterProtocol.java` | 2 | resource/capability bridge | Source-backed `TextWriter` construction validates ByteWritable/optional owning-Closable authority plus exact Encoding-family membership, including explicitly provisioned host descriptors. One factory helper and one wrapper-operation helper remain the only native Closure sites. The runtime owns transactional per-flow encoder state, complete pre-output validation, ordered target commitment/failure, empty-write zero-transition behavior, compositional flush, explicit encoder finalization during close and ownership release. |
 | `ProtosStandardProcessStreamProtocol.java` | 2 | resource/capability bridge | Process standard-stream views expose exactly one byte direction (`read` for stdin or `write` for stdout/stderr) over Process-local shared ordering/backpressure bindings. Actor transfer rematerializes an Actor-local proxy to the same binding; P rejects the live authority; no Closable/File/text/seek/flush surface is inferred. |
 | `ProtosStandardProcessProtocol.java` | 1 | resource/capability bridge | The source-backed authority-free `Process` prototype receives eight synchronous accessors from one audited Closure-construction helper. Each selector requires an actual represented Process capability, reads only already-established Process bootstrap state, rejects unavailable/invalid state, and rejects every proxy after the Process termination cutover; no accessor performs host discovery, waiting, filesystem recovery, or capability construction. |
 | `ProtosStandardMapProtocol.java` | 7 | representation bridge | Map storage, recorded hashes, reentrancy restrictions, mutation state, lookup equality callbacks, and iteration snapshots are receiver-owned keyed representation semantics. |
@@ -143,10 +143,9 @@ construction helpers: one shared by borrowing/owning construction and one shared
 by wrapper `readText`/`close`. Transactional incremental decoding, ordered
 Future/cancellation state, wrapper close and ownership necessarily cross
 representation/resource boundaries. The audited boundary therefore becomes
-**105 sites across 29 providers**. I015-B covers the four portable Encoding
-descriptors; streaming integration for explicitly host-provided Encoding
-descriptors remains an I015-E closure item because I015-A's host boundary exposes
-only one-shot codec operations.
+**105 sites across 29 providers**. I015-B initially covered the four portable Encoding descriptors. I015-E later
+completes the same two-site bridge for explicitly host-provided transactional
+streaming codecs without changing the TextReader native-Closure count.
 
 I015-C widens the already-audited TextReader wrapper selector surface with
 `readLine()` / `readLine(maxBytes)` through the same existing operation-Closure
@@ -164,8 +163,19 @@ shared by wrapper `writeText`/`writeLine`/`flush`/`close`. Complete portable
 encoding validation, ordered output commitment/failure, Flushable propagation,
 close cutover and explicit ownership cross representation/resource boundaries.
 The audited boundary therefore grows by exactly **2 sites / 1 provider** from the
-definitive I015-C baseline. Streaming support for host-provided Encoding state
-remains I015-E because I015-A's HostCodec contract is one-shot.
+definitive I015-C baseline. I015-E later completes host-provided transactional
+encoder state and close finalization without adding another construction site.
+
+I015-E completes I015 without widening the Java-native selector/construction
+boundary. `ProtosEncodingValue` now makes the explicit host Encoding-provisioning
+boundary semantically complete through fresh transactional per-flow streaming
+codec states and descriptor-carried decode/BOM policy. Portable replacement uses
+the required Unicode maximal-subpart rule independent of source chunking;
+TextReader and TextWriter accept the same semantic Encoding family for portable
+and host descriptors; state speculation remains reversible until the surrounding
+I/O operation commits; and TextWriter close propagates required encoder-final
+bytes before owned-target release. The post-I015 exhaustive guard remains exactly
+**107 sites across 30 providers**.
 
 
 I011-21 is a reviewed concurrency/runtime-boundary extension implementing D039's

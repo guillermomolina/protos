@@ -69,7 +69,6 @@ public final class ProtosStandardTextReaderProtocol {
         Object source = supplied.get(0);
         Object encodingValue = supplied.get(1);
         if (!(encodingValue instanceof ProtosEncodingValue encoding)
-                || !encoding.isPortableForRuntime()
                 || !hasCallableCapability(source, "read", activation)
                 || (owning && !hasCallableCapability(source, "close", activation))) {
             throw invalidConstruction(activation);

@@ -64,17 +64,7 @@ final class ProtosEncodingTransferTest {
         ProtosEncodingValue host =
                 ProtosEncodingValue.hostProvidedForRuntime(
                         prelude.encodingPrototype(),
-                        new ProtosEncodingValue.HostCodec() {
-                            @Override
-                            public byte[] encode(String text) {
-                                return new byte[] {(byte) text.length()};
-                            }
-
-                            @Override
-                            public String decode(byte[] bytes) {
-                                return "host:" + bytes.length;
-                            }
-                        });
+                        new ProtosHostEncodingTestCodec());
 
         assertFalse(host.isPortableForRuntime());
         assertSame(prelude.encodingPrototype(), host.representedDelegationParent(prelude));
