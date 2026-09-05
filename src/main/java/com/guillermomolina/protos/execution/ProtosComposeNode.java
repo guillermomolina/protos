@@ -42,7 +42,7 @@ public final class ProtosComposeNode extends ProtosExpressionNode {
     }
 
     @Override
-    public Object execute(VirtualFrame frame) {
+    protected Object executeDirect(VirtualFrame frame) {
         Object sourceValue = sourceNode.execute(frame);
         if (!(sourceValue instanceof ProtosObjectValue source)) {
             throw new ProtosSignalException(ProtosCoreErrors.newError(ProtosFrameArguments.activation(frame)));

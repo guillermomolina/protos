@@ -71,7 +71,7 @@ class ProtosSequenceNodeTest {
         }
 
         @Override
-        public Object execute(VirtualFrame frame) {
+        protected Object executeDirect(VirtualFrame frame) {
             order.add(label);
             return result;
         }

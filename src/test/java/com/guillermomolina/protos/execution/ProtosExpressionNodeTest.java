@@ -41,7 +41,7 @@ class ProtosExpressionNodeTest {
         }
 
         @Override
-        public Object execute(VirtualFrame frame) {
+        protected Object executeDirect(VirtualFrame frame) {
             return null;
         }
     }

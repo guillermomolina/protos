@@ -8,6 +8,9 @@ import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import com.oracle.truffle.api.CallTarget;
+import com.guillermomolina.protos.execution.ProtosEvaluatorSuspension;
+import com.guillermomolina.protos.execution.ProtosTaskCancellationException;
 
 /**
  * Internal Actor-local unit of cooperatively scheduled Protos execution.
@@ -25,7 +28,10 @@ public final class ProtosTask {
     }
 
     /** Opaque semantic prerequisite. I009 can use a Future waiter as one implementation. */
-    public interface WaitDependency {}
+    public interface WaitDependency {
+        /** Removes only this task's waiting relationship; it must not cancel the dependency itself. */
+        default void waitingTaskCancelled(ProtosTask task) {}
+    }
 
     @FunctionalInterface
     public interface Continuation {
@@ -44,6 +50,8 @@ public final class ProtosTask {
     private WaitDependency waitDependency;
     private Object result;
     private Object failure;
+    private final ProtosEvaluatorContinuation evaluatorContinuation = new ProtosEvaluatorContinuation();
+    private WaitDependency resumedDependency;
 
     ProtosTask(
             ProtosActorExecutionDomain owner,
@@ -90,6 +98,38 @@ public final class ProtosTask {
 
     public synchronized Optional<Object> failure() {
         return Optional.ofNullable(failure);
+    }
+
+    public ProtosEvaluatorContinuation evaluatorContinuation() {
+        return evaluatorContinuation;
+    }
+
+    /** Executes one real Truffle evaluation segment for this cooperative task. */
+    public void executeProtos(CallTarget target, ProtosActivation activation) {
+        Objects.requireNonNull(target, "target");
+        Objects.requireNonNull(activation, "activation");
+        activation.attachTask(this);
+        evaluatorContinuation.beginSegment();
+        try {
+            Object value = target.call(activation);
+            complete(value);
+        } catch (ProtosEvaluatorSuspension suspended) {
+            // suspend() already changed the task state; returning yields the host thread to the domain.
+        } catch (ProtosTaskCancellationException cancelled) {
+            // observeCancellation() already terminalized the task.
+        } catch (ProtosSignalException signalled) {
+            fail(signalled.error());
+        } finally {
+            evaluatorContinuation.endSegment();
+        }
+    }
+
+    public synchronized boolean consumeResume(WaitDependency dependency) {
+        if (state != State.RUNNING || resumedDependency != dependency) {
+            return false;
+        }
+        resumedDependency = null;
+        return true;
     }
 
     synchronized void addChild(ProtosTask child) {
@@ -151,6 +191,7 @@ public final class ProtosTask {
                 return false;
             }
             waitDependency = null;
+            resumedDependency = dependency;
             state = State.RUNNABLE;
         }
         owner.enqueue(this);
@@ -164,6 +205,7 @@ public final class ProtosTask {
      */
     public boolean requestCancellation() {
         boolean enqueue = false;
+        WaitDependency cancelledWait = null;
         synchronized (this) {
             if (isTerminal()) {
                 return false;
@@ -172,11 +214,16 @@ public final class ProtosTask {
                 return false;
             }
             cancellationRequested = true;
+            resumedDependency = null;
             if (state == State.SUSPENDED) {
+                cancelledWait = waitDependency;
                 waitDependency = null;
                 state = State.RUNNABLE;
                 enqueue = true;
             }
+        }
+        if (cancelledWait != null) {
+            cancelledWait.waitingTaskCancelled(this);
         }
         if (enqueue) {
             owner.enqueue(this);

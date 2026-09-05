@@ -40,7 +40,7 @@ public final class ProtosClosureLiteralNode extends ProtosExpressionNode {
     }
 
     @Override
-    public Object execute(VirtualFrame frame) {
+    protected Object executeDirect(VirtualFrame frame) {
         ProtosActivation activation =
                 ProtosFrameArguments.activation(frame);
 

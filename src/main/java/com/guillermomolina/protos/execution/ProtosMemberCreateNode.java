@@ -42,7 +42,7 @@ public final class ProtosMemberCreateNode extends ProtosExpressionNode {
     }
 
     @Override
-    public Object execute(VirtualFrame frame) {
+    protected Object executeDirect(VirtualFrame frame) {
         Object targetValue = targetNode.execute(frame);
         if (!(targetValue instanceof ProtosObjectValue target)) {
             throw new ProtosSignalException(ProtosCoreErrors.newError(ProtosFrameArguments.activation(frame)));

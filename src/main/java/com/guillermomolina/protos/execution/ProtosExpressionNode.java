@@ -33,5 +33,9 @@ public abstract class ProtosExpressionNode extends Node {
         return span;
     }
 
-    public abstract Object execute(VirtualFrame frame);
+    public final Object execute(VirtualFrame frame) {
+        return ProtosEvaluatorBridge.execute(this, frame);
+    }
+
+    protected abstract Object executeDirect(VirtualFrame frame);
 }

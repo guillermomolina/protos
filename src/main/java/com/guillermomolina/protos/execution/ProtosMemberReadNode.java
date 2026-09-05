@@ -42,7 +42,7 @@ public final class ProtosMemberReadNode extends ProtosExpressionNode {
     }
 
     @Override
-    public Object execute(VirtualFrame frame) {
+    protected Object executeDirect(VirtualFrame frame) {
         Object receiverValue = receiverNode.execute(frame);
         com.guillermomolina.protos.runtime.ProtosActivation activation =
                 ProtosFrameArguments.activation(frame);

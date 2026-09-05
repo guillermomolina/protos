@@ -38,7 +38,7 @@ public final class ProtosIdentityNode extends ProtosExpressionNode {
     }
 
     @Override
-    public Object execute(VirtualFrame frame) {
+    protected Object executeDirect(VirtualFrame frame) {
         Object leftValue = left.execute(frame);
         Object rightValue = right.execute(frame);
         return ProtosIdentity.identical(leftValue, rightValue)

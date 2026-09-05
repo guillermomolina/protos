@@ -41,12 +41,20 @@ public final class ProtosClosureInvoker {
         Objects.requireNonNull(supplied, "supplied");
         com.guillermomolina.protos.runtime.ProtosPrelude fallbackPrelude =
                 caller == null ? null : caller.prelude().orElse(null);
-        ProtosActivation activation =
-                caller == null
+        java.util.function.Supplier<ProtosActivation> activationFactory =
+                () -> caller == null
                         ? ProtosActivation.forClosureInvocation(closure, supplied, fallbackPrelude)
                         : ProtosActivation.forClosureInvocation(
                                 closure, supplied, fallbackPrelude, caller.actorModuleState(),
                                 caller.currentModuleKey().orElse(null));
+        ProtosActivation activation;
+        if (caller != null && caller.task().isPresent()) {
+            com.guillermomolina.protos.runtime.ProtosTask task = caller.task().orElseThrow();
+            activation = task.evaluatorContinuation().invocationActivation(activationFactory);
+            activation.attachTask(task);
+        } else {
+            activation = activationFactory.get();
+        }
         ProtosReturnHome returnHome =
                 activation.returnHome()
                         .orElseThrow(
@@ -68,8 +76,14 @@ public final class ProtosClosureInvoker {
                 return transfer.value();
             }
             throw transfer;
+        } catch (ProtosEvaluatorSuspension transfer) {
+            throw transfer;
+        } catch (ProtosTaskCancellationException transfer) {
+            throw transfer;
         } finally {
-            if (activation.ownsReturnHome() && returnHome.isActive()) {
+            if (activation.ownsReturnHome()
+                    && returnHome.isActive()
+                    && !ProtosEvaluatorBridge.isControlUnwindInProgress(activation)) {
                 returnHome.complete();
             }
         }

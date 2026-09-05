@@ -33,6 +33,7 @@ public final class ProtosActivation {
     private final boolean construction;
     private final ProtosActorModuleState actorModuleState;
     private final ProtosModuleKey currentModuleKey;
+    private ProtosTask task;
 
     public ProtosActivation(
             ProtosObjectValue context,
@@ -189,7 +190,7 @@ public final class ProtosActivation {
             ProtosActivation enclosing) {
         Objects.requireNonNull(object, "object");
         Objects.requireNonNull(enclosing, "enclosing");
-        return new ProtosActivation(
+        ProtosActivation construction = new ProtosActivation(
                 object,
                 enclosing.lexicalContextsForClosureCapture(),
                 object,
@@ -201,6 +202,8 @@ public final class ProtosActivation {
                 true,
                 enclosing.actorModuleState,
                 enclosing.currentModuleKey);
+        enclosing.task().ifPresent(construction::attachTask);
+        return construction;
     }
 
     public ProtosObjectValue context() {
@@ -222,6 +225,20 @@ public final class ProtosActivation {
     public ProtosActorModuleState actorModuleState() { return actorModuleState; }
 
     public Optional<ProtosModuleKey> currentModuleKey() { return Optional.ofNullable(currentModuleKey); }
+
+    /** Internal execution context used only by cooperative Actor-local task evaluation. */
+    public Optional<ProtosTask> task() {
+        return Optional.ofNullable(task);
+    }
+
+    /** Attaches this activation to exactly one Actor-local task. */
+    public void attachTask(ProtosTask task) {
+        Objects.requireNonNull(task, "task");
+        if (this.task != null && this.task != task) {
+            throw new IllegalStateException("activation already belongs to another task");
+        }
+        this.task = task;
+    }
 
     public Optional<ProtosArrayValue> arguments() {
         return Optional.ofNullable(arguments);

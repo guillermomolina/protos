@@ -40,7 +40,7 @@ public final class ProtosIndexedAssignNode extends ProtosExpressionNode {
     }
 
     @Override
-    public Object execute(VirtualFrame frame) {
+    protected Object executeDirect(VirtualFrame frame) {
         Object receiver = receiverNode.execute(frame);
         Object index = indexNode.execute(frame);
         Object value = valueNode.execute(frame);

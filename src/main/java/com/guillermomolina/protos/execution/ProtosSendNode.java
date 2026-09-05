@@ -40,7 +40,7 @@ public final class ProtosSendNode extends ProtosExpressionNode {
     }
 
     @Override
-    public Object execute(VirtualFrame frame) {
+    protected Object executeDirect(VirtualFrame frame) {
         Object receiver = receiverNode.execute(frame);
         @SuppressWarnings("unchecked")
         List<?> supplied = (List<?>) argumentsNode.execute(frame);

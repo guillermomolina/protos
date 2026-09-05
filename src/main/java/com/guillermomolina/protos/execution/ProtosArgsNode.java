@@ -27,7 +27,7 @@ public final class ProtosArgsNode extends ProtosExpressionNode {
     }
 
     @Override
-    public Object execute(VirtualFrame frame) {
+    protected Object executeDirect(VirtualFrame frame) {
         ProtosActivation activation = ProtosFrameArguments.activation(frame);
         return activation.arguments()
                 .orElseThrow(

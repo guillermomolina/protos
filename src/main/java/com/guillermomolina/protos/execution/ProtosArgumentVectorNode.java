@@ -47,7 +47,7 @@ public final class ProtosArgumentVectorNode extends ProtosExpressionNode {
     }
 
     @Override
-    public Object execute(VirtualFrame frame) {
+    protected Object executeDirect(VirtualFrame frame) {
         ArrayList<Object> supplied = new ArrayList<>();
         for (int i = 0; i < expressions.length; i++) {
             Object value = expressions[i].execute(frame);

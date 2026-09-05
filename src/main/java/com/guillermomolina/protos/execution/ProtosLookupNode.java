@@ -33,7 +33,7 @@ public final class ProtosLookupNode extends ProtosExpressionNode {
     }
 
     @Override
-    public Object execute(VirtualFrame frame) {
+    protected Object executeDirect(VirtualFrame frame) {
         ProtosActivation context = ProtosFrameArguments.activation(frame);
         return context.lookup(name)
                 .orElseThrow(

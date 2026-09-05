@@ -89,8 +89,7 @@ class ProtosArgumentVectorNodeTest {
                                         new ProtosExpressionNode(
                                                 new SourceSpan(0, 0)) {
                                             @Override
-                                            public Object execute(
-                                                    VirtualFrame frame) {
+                                            protected Object executeDirect(VirtualFrame frame) {
                                                 array.indexedPut(
                                                         java.math.BigInteger.ZERO,
                                                         after);
@@ -167,7 +166,7 @@ class ProtosArgumentVectorNodeTest {
             Object result) {
         return new ProtosExpressionNode(new SourceSpan(0, 0)) {
             @Override
-            public Object execute(VirtualFrame frame) {
+            protected Object executeDirect(VirtualFrame frame) {
                 order.add(label);
                 return result;
             }

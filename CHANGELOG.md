@@ -4,6 +4,13 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## 0.2.71-SNAPSHOT
+
+- Implement I009B evaluator suspension/resumption bridge for ordinary Truffle-backed Protos execution using Actor-local per-task continuation state.
+- Preserve completed expression effects across cooperative suspension while rebuilding only the host Java/Truffle call stack, including nested Closure invocation activation and return-home state.
+- Add explicit cancellation-aware wait cleanup and deterministic end-to-end coverage for peer-task progress, exact resume values, side-effect non-repetition, nested evaluation/non-local return, cancellation wake-up, and no double resume.
+- No normative specification revision is changed.
+
 ## 0.2.70-SNAPSHOT
 
 - Implement I009A internal Task/Actor execution infrastructure: Actor-local cooperative FIFO runnable queues, race-safe Task state transitions, suspension/resume, cooperative cancellation wake-up, and structured parent/child ownership.

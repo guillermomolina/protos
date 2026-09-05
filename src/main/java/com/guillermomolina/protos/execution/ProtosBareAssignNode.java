@@ -40,7 +40,7 @@ public final class ProtosBareAssignNode extends ProtosExpressionNode {
     }
 
     @Override
-    public Object execute(VirtualFrame frame) {
+    protected Object executeDirect(VirtualFrame frame) {
         ProtosActivation executionContext =
                 ProtosFrameArguments.activation(frame);
 

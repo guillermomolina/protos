@@ -37,7 +37,7 @@ public final class ProtosReturnNode extends ProtosExpressionNode {
     }
 
     @Override
-    public Object execute(VirtualFrame frame) {
+    protected Object executeDirect(VirtualFrame frame) {
         Object value = valueNode.execute(frame);
         ProtosActivation activation = ProtosFrameArguments.activation(frame);
         ProtosReturnHome target = activation.returnHome().orElse(null);

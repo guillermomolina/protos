@@ -30,7 +30,7 @@ public final class ProtosConstantNode extends ProtosExpressionNode {
     }
 
     @Override
-    public Object execute(VirtualFrame frame) {
+    protected Object executeDirect(VirtualFrame frame) {
         return value;
     }
 }
