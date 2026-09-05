@@ -18,8 +18,12 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -162,6 +166,36 @@ class ProtosStandardIntegerArithmeticTest {
 
         assertInteger(prelude, "-123", BigInteger.valueOf(-123));
         assertInteger(prelude, "-(-123)", BigInteger.valueOf(123));
+    }
+
+    @Test
+    void negatedIsSourceBackedAndPreservesIntegerReceiverDomain() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        ProtosClosureValue negated =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        prelude.integerPrototype().readLocalSlot("negated").orElseThrow());
+        assertNotNull(negated.definition());
+        assertTrue(negated.executionPlan().isPresent());
+        assertTrue(negated.nativeBody().isEmpty());
+
+        ProtosClosureValue subtraction =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        prelude.integerPrototype().readLocalSlot("-").orElseThrow());
+        assertTrue(subtraction.nativeBody().isPresent());
+
+        var activation = prelude.newModuleActivation();
+        var incompatible =
+                new com.guillermomolina.protos.runtime.ProtosObjectValue(
+                        prelude.integerPrototype());
+        activation.context().createLocalSlot("incompatibleIntegerChild", incompatible);
+        assertThrows(
+                ProtosSignalException.class,
+                () ->
+                        new ProtosSourceCompiler()
+                                .compile("incompatibleIntegerChild.negated()")
+                                .call(activation));
     }
 
     @Test

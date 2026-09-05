@@ -31,27 +31,13 @@ public final class ProtosStandardIntegerProtocol {
 
     public static void install(ProtosObjectValue integerPrototype) {
         Objects.requireNonNull(integerPrototype, "integerPrototype");
+        requireSourceBackedClosure(integerPrototype, "negated");
 
         installBinary(integerPrototype, "+", java.math.BigInteger::add);
         installBinary(integerPrototype, "-", java.math.BigInteger::subtract);
         installBinary(integerPrototype, "*", java.math.BigInteger::multiply);
         installDivision(integerPrototype);
         installQuotientRemainder(integerPrototype);
-
-        if (integerPrototype.hasLocalSlot("negated")) {
-            throw new IllegalStateException("Core Integer already defines a local negated slot");
-        }
-        integerPrototype.createLocalSlot(
-                "negated",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            ProtosIntegerValue receiver = requireIntegerReceiver(activation);
-                            if (!supplied.isEmpty()) {
-                                throw new ProtosSignalException(
-                                        ProtosCoreErrors.newError(activation));
-                            }
-                            return new ProtosIntegerValue(receiver.value().negate());
-                        }));
     }
 
     private static void installDivision(ProtosObjectValue integerPrototype) {
@@ -135,6 +121,24 @@ public final class ProtosStandardIntegerProtocol {
                             return new ProtosIntegerValue(
                                     operation.apply(receiver.value(), argument.value()));
                         }));
+    }
+
+    private static void requireSourceBackedClosure(
+            ProtosObjectValue prototype, String selector) {
+        Object value =
+                prototype
+                        .readLocalSlot(selector)
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "Core Integer source did not define " + selector));
+        if (!(value instanceof ProtosClosureValue closure)
+                || closure.definition() == null
+                || closure.executionPlan().isEmpty()
+                || closure.nativeBody().isPresent()) {
+            throw new IllegalStateException(
+                    "Core Integer." + selector + " must be installed from distributable Core source");
+        }
     }
 
     private static ProtosIntegerValue requireIntegerReceiver(

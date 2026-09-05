@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.98-SNAPSHOT
+
+- Continue I018 Core self-hosting/bootstrap minimization by moving the standard ordinary `Integer.negated()` body from Java into distributable `protos/lib/core/integer.protos` as ordinary Protos behavior (`0 - this`).
+- Keep exact unbounded Integer subtraction host-backed as the representation primitive; using semantic Integer zero as the subtraction receiver preserves the existing Integer receiver-domain rejection even when an incompatible ordinary object merely delegates to `Integer`.
+- Add focused provenance and receiver-domain regression coverage proving `negated` is source-backed while `Integer.-` remains native-backed. No normative specification changes are made, and I016 remains frozen at I016-C.
+
 ## 0.2.97-SNAPSHOT
 
 - Continue I018 Core self-hosting/bootstrap minimization by constructing the internal standard `Bytes` factory/prototype used by buffered byte wrappers from distributable `protos/lib/core/bytes.protos` instead of allocating that standard identity in Java.
