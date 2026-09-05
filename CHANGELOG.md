@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.132-SNAPSHOT
+
+- Close I017 with the I017-F integrated Process conformance pass. Exercise the published A/B/C/D1/D2/E1/E2/E3 surfaces together: one logical standalone Process/RootActor authority, canonical args/environment reacquisition through independently rematerialized Actor-local Process proxies, fresh ordinary Actor-copy identity for already-acquired snapshots, exact bootstrap-local optional Filesystem separation, independent byte-stream capability shape with stable Encoding associations, and Process/stream/Filesystem exclusion from P where specified.
+- Revalidate the Process termination cutover across the public eight-accessor surface and retain the focused D1 stream-lifecycle termination test in the closure suite. No I017 production behavior, selector, capability, host authority, or native Closure construction site is added by F.
+- Complete the post-I017 I018 re-audit at exactly 28 Java native-Closure providers / 102 construction sites. Reconcile project state: I017 is CLOSED; I011 no longer lists Process/bootstrap integration as an outstanding dependency; LIB004 Filesystem/process conveniences becomes READY for its own focused design/audit now that I016 and I017 are both closed.
+
 ## 0.2.131-SNAPSHOT
 
 - Implement CLI005 portable Standard Library naming: `std:` logical names preserve ASCII letter case as part of canonical `ModuleKey` identity and every physical path component must match the distributed spelling exactly even on case-insensitive filesystems.

@@ -127,6 +127,13 @@ construction-site inventory grows only once, to **102 sites across 28 providers*
 No Process capability is created by the prototype and no root/module/host bootstrap
 authority is introduced by E1.
 
+I017-F completes the post-I017 native-boundary re-audit after D2/E2/E3. Those
+slices and F add bootstrap state, host-neutral assembly, CLI wiring, authority
+confinement and conformance but no Java `nativeClosure` construction site.
+The final I017 boundary therefore remains exactly **102 sites across 28 providers**.
+The executable architecture guard still fixes both the provider/site inventory
+and the eight-selector native surface of the source-backed `Process` prototype.
+
 ## Source-backed I018 invariants
 
 I018 specifically prevents the following ordinary derived behavior from

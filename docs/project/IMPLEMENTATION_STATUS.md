@@ -48,7 +48,7 @@ an item.
 | I014 | Standard Byte I/O | CLOSED | `2462ba74298e94181489e13de4e25dbbb82b21f9` | I009 + I012 |
 | I015 | Encoding / Text I/O | IN_PROGRESS | — | I014 closed; I015-A Encoding closed; streaming TextReader/TextWriter slices remain |
 | I016 | Filesystem / File | CLOSED | `SAME_COMMIT` | I013 + I014; I016-A/B/C/D1/D2/D3/D4 complete |
-| I017 | Process I/O / bootstrap | IN_PROGRESS | — | I017-A/B/C/D1/D2/E1/E2/E3 closed; coordinating I017-E CLOSED; I017-F READY for final authority/termination/native-boundary conformance |
+| I017 | Process I/O / bootstrap | CLOSED | `SAME_COMMIT` | I017-A/B/C/D1/D2/E1/E2/E3/F complete; final authority/termination/CLI/native-boundary conformance published |
 | I018 | Core self-hosting / bootstrap minimization | CLOSED | `SAME_COMMIT` | I018-L exhaustive native-boundary inventory and architectural guard complete; I016-D pause lifted |
 
 ### I011 — Actors
@@ -90,8 +90,8 @@ Published slices:
 
 Remaining implemented-surface gaps before top-level closure:
 - B004 blocks only public/distributed Group acquisition/discovery because exact Group/GroupRef API/syntax and any new public discovery API remain normatively undefined; I011-19 now wires the host-neutral remote ActorRef transport/acceptance-uncertainty boundary, while GroupRef remote routing over that boundary remains independent implementation work;
-- RootActor launcher/bootstrap provisioning and standard Process authority exposure remain to I017; the internal Process failure domain plus runtime Process-capability materialization/Actor delegation are wired, and Process remains excluded from P transfer;
-- I011-18 closed the final deterministic local/cross-Process race/conformance pass; top-level closure now depends only on remaining remote Group routing, I017 reconciliation, and B004's deliberately unresolved public acquisition/discovery surface.
+- I017 Process/bootstrap integration is now CLOSED: RootActor launcher/bootstrap provisioning, standard Process authority exposure, Process-local snapshots/streams/Encodings, explicit Actor delegation and P exclusion are reconciled; I011 has no remaining dependency on I017.
+- I011-18 closed the final deterministic local/cross-Process race/conformance pass; with I017 now CLOSED, top-level I011 closure depends only on remaining remote Group routing and B004's deliberately unresolved public acquisition/discovery surface.
 
 
 ### I015 — Encoding / Text I/O
@@ -174,7 +174,7 @@ Closure result:
 
 ### I017 — Process I/O / bootstrap
 
-Status: IN_PROGRESS
+Status: CLOSED
 
 Audit/reconciliation result:
 - I016 is CLOSED and no relevant implementation blocker is currently BLOCKED;
@@ -204,20 +204,19 @@ Published / planned slices:
 | I017-E1 | CLOSED | `0.2.127-SNAPSHOT` | `SAME_COMMIT` | Source-backed frozen authority-free `Process` prototype; exactly eight synchronous Process accessors over A/B/C/D1/D2 state; exact represented-capability receiver domain; canonical snapshot acquisition; stable stream/Encoding lookup failure; all proxies rejected after Process termination; one audited native Closure construction helper. |
 | I017-E2 | CLOSED | `0.2.128-SNAPSHOT` | `SAME_COMMIT` | RootActor canonical initial-module context receives bootstrap-local `process` before first source expression and optional exact host-granted `filesystem`; cache-before-execute/cycles preserved; ordinary imports and non-root Actor bootstrap receive no ambient Process/Filesystem authority; explicit Process Actor delegation remains the only transfer path; no I018 boundary expansion. |
 | I017-E3 | CLOSED | `0.2.130-SNAPSHOT` | `SAME_COMMIT` | Standalone host/CLI captures trailing application args excluding launcher identity, one native Environment snapshot/domain, stdin/stdout/stderr byte bindings and explicit UTF-8 host associations before first source expression; non-importable entries use the E2 RootActor authority model; optional Filesystem grants are accepted explicitly but the standard CLI grants none rather than converting launcher source-read authority into ambient application authority; exact hidden ActorRef/Bytes Core identities retained; no I018 expansion. |
-| I017-F | READY | — | — | Final Process/Actor/termination authority conformance, post-I017 I018 native-boundary re-audit, CLI/runtime integration regression suite and canonical I017 closure. |
+| I017-F | CLOSED | `0.2.132-SNAPSHOT` | `SAME_COMMIT` | Final cross-slice Process authority/identity/Actor/P/termination conformance; E1/E2/E3 and CLI regression suite revalidated; post-I017 I018 guard/inventory re-audited unchanged at 28 providers / 102 sites; canonical I017 closure published. |
 
 Dependency chain: `I017-A -> I017-B -> I017-C -> I017-D1 -> I017-D2 -> I017-E1 -> I017-E2 -> I017-E3 -> I017-F`. I017-E is the coordinating parent for E1/E2/E3. The Encoding-family dependency of D2 was satisfied by published I015-A; remaining I015 TextReader/TextWriter work is independent.
 
-Current implementation boundary after I017-E3:
-- I017 uses one source-backed authority-free public `Process` prototype and one runtime `ProtosProcessCapabilityValue` representation; the standalone CLI creates exactly one logical Process/RootActor pair per one-shot execution or REPL session;
-- file and `-e` launcher/source identities are excluded from `process.args()` while all trailing arguments are captured atomically before the first source expression; REPL args are the stable empty snapshot;
-- Environment is captured once from the launcher host; native name validity/identity is delegated to an isolated JDK ProcessBuilder environment-map probe, while portable String conversion and duplicate-equivalent validation remain the I017-C snapshot rules;
-- stdin/stdout/stderr are established from the CLI-supplied byte streams and remain independent Process bindings; the CLI host explicitly selects UTF-8 for all three text Encoding associations without changing the byte-oriented stream API;
-- the exact hidden source-backed Core Bytes and ActorRef prototypes are retained as runtime-only Prelude metadata, not public bindings, so standalone Process bootstrap does not fabricate parallel standard identities;
-- both importable RootActor initial modules (E2) and non-importable standalone entry contexts (E3) receive bootstrap-local `process` and only an explicitly supplied optional `filesystem` before first source execution; imports and non-root Actors remain ambient-authority-free;
-- the standard CLI intentionally supplies no default Filesystem capability because its launcher authority to locate/read program source is not application Filesystem authority; embedding hosts may pass an already-provisioned restricted/default Filesystem explicitly;
-- one-shot CLI execution terminates its Process after evaluation and the REPL terminates its Process on session exit; E3 adds no native Closure construction site, so I018 remains 28 providers / 102 sites;
-- final cross-slice authority, lifecycle/termination, Actor delegation, P exclusion, CLI regression and post-I017 native-boundary conformance remains I017-F.
+Final implementation boundary after I017-F / I017 closure:
+- `Process` is a frozen source-backed authority-free Core prototype with exactly eight synchronous runtime-backed accessors and no constructor, Filesystem recovery path, or ambient authority;
+- every logical Process has one RootActor and stable bootstrap args/environment/standard-stream/Encoding state; canonical args/environment acquisition is shared across Actor-local Process proxy wrappers while ordinary transfer of an already-acquired immutable snapshot is an independent destination value;
+- RootActor initial entry contexts receive local `process` before first source execution and local `filesystem` only when the embedding host explicitly grants one; imported modules and non-root Actors receive neither ambient capability;
+- Process capability Actor transfer rematerializes a fresh proxy to the same logical Process without amplification; Process and live Process standard-stream authority have no P-transfer contract, and Filesystem transfer remains governed independently by I016;
+- stdin/stdout/stderr remain independently optional byte capabilities with one Process-local ordering domain per binding and bootstrap-stable host-selected Encoding associations; no Closable/File/text/seek/flush authority is inferred;
+- the standard CLI captures trailing application args, one host Environment snapshot, supplied stdin/stdout/stderr byte streams and explicit UTF-8 associations before first source expression; launcher source-read authority is not converted into application Filesystem authority;
+- once Process termination commits, no existing Process proxy may acquire any bootstrap capability/value and no new Process proxy may be provisioned; I014/I017 stream lifecycle rules govern pending/new byte operations without synthesizing close/flush/sync semantics;
+- I017-F adds conformance and project-state reconciliation only. The post-I017 I018 boundary remains exactly 28 providers / 102 native-Closure construction sites.
 ### I018 — Core self-hosting / bootstrap minimization
 
 Status: CLOSED
@@ -291,7 +290,7 @@ work may proceed without waiting for an earlier-numbered roadmap item.
 | LIB001 | Collections library | IN_PROGRESS | — | I004 + I005 + I006 + I008 + CLI004 + CLI005 closed; LIB001-A is CLOSED at `0.2.125-SNAPSHOT`, LIB001-B is READY, and later slices remain dependency/audit gated. |
 | LIB002 | Text / encoding conveniences | BLOCKED_BY_DEPENDENCIES | — | I015 is not closed; ordinary library conveniences may build on Encoding/Text I/O but must not redefine their Core semantics. |
 | LIB003 | JSON / serialization | BLOCKED_BY_DEPENDENCIES | — | LIB001 is not closed; design exact text/encoding and stream-adapter dependencies from the then-current repository rather than assuming roadmap order is dependency order. |
-| LIB004 | Filesystem / process conveniences | BLOCKED_BY_DEPENDENCIES | — | I016 and I017 are not closed; convenience APIs must preserve Filesystem/Process authority boundaries and may not manufacture ambient host authority. |
+| LIB004 | Filesystem / process conveniences | READY | — | I016 + I017 closed; begin with a fresh focused convenience-layer design/audit. Any text-oriented convenience that needs I015/LIB002 remains individually dependency-gated and must preserve explicit authority boundaries. |
 | LIB005 | Networking | OPEN | — | Roadmap item only; `spec/io/IO_CORE.md` currently leaves network authority acquisition, socket APIs, DNS/name resolution, and transport configuration outside its standardized scope. Re-audit and establish prerequisites before implementation. |
 
 ### LIB001 — Collections
@@ -402,7 +401,7 @@ Dependencies:
 
 ### LIB004 — Filesystem / process conveniences
 
-Status: BLOCKED_BY_DEPENDENCIES
+Status: READY
 
 Description: Higher-level filesystem and Process conveniences layered over the
 standard capability-based File/Filesystem and Process I/O surfaces.
@@ -418,7 +417,7 @@ Planning boundary:
 Dependencies:
 - I013 Standard Path — CLOSED;
 - I014 Standard Byte I/O — CLOSED;
-- I017 Process I/O / bootstrap — not CLOSED;
+- I017 Process I/O / bootstrap — CLOSED;
 - re-audit I015/LIB002 dependencies for text-oriented conveniences when LIB004
   work begins.
 
