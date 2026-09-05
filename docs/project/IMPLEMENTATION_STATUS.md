@@ -73,9 +73,9 @@ Published slices:
 | I011-4 | CLOSED | `0.2.85-SNAPSHOT` | `SAME_COMMIT` | Actor-boundary graph snapshot/value-transfer foundation: atomic copy/validation for currently integrated transferable value families; alias/cycle preservation across roots; ActorRef capability rematerialization; NonTransferableValue rejection for non-transferable execution/resource values. |
 | I011-5 | CLOSED | `0.2.86-SNAPSHOT` | `SAME_COMMIT` | Public frozen Actor prelude surface with spawn/current; creator-side canonical module resolution and synchronous pre-creation validation; Actor-transfer-backed initialization vector; creation cutover with post-cutover destination-local bootstrap kickoff. |
 | I011-6 | CLOSED | `0.2.88-SNAPSHOT` | `SAME_COMMIT` | Bounded accepted-message mailbox ownership; READY-gated implicit event-loop dispatch; automatic Actor-local scheduler wakeups; weak-fair cross-Actor scheduling with one non-preemptive segment per selection and no same-incarnation parallel execution. |
+| I011-7 | CLOSED | `0.2.91-SNAPSHOT` | `SAME_COMMIT` | Concrete-Actor pre-acceptance delivery admission/backpressure foundation: pending operation ownership outside the bounded accepted mailbox; deterministic capacity wakeups; known pre-acceptance cancellation; same-sender FIFO preservation and weak admission fairness. |
 
 Remaining implemented-surface gaps before top-level closure:
-- pre-acceptance delivery admission/backpressure, same-sender FIFO across backpressure, and weak admission fairness;
 - `send()` / `request()` / `SendOperation`, acceptance, cancellation, reply, retry, and uncertainty behavior wired to the snapshot and mailbox boundaries;
 - remaining specialized transfer integrations whose state/authority has its own contract (including keyed collections and future GroupRef/Process capability materialization), plus reply-transfer wiring;
 - stop/termination observation, failure authority, Actor-owned task cleanup, RootActor/process integration, and final deterministic race/conformance coverage.

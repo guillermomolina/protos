@@ -30,6 +30,7 @@ public final class ProtosActor {
     private final ProtosActorModuleState moduleState;
     private final ProtosActorRefValue reference;
     private final ProtosActorMailbox mailbox;
+    private final ProtosActorDeliveryAdmission deliveryAdmission;
     private final AtomicReference<LifecycleState> lifecycle =
             new AtomicReference<>(LifecycleState.INITIALIZING);
     private final AtomicReference<ProtosObjectValue> currentBehavior =
@@ -59,6 +60,8 @@ public final class ProtosActor {
                 Objects.requireNonNull(executionDomain, "executionDomain");
         this.moduleState = Objects.requireNonNull(moduleState, "moduleState");
         this.mailbox = new ProtosActorMailbox(mailboxCapacity);
+        this.deliveryAdmission = new ProtosActorDeliveryAdmission(this);
+        this.mailbox.bindAdmissionWakeup(deliveryAdmission::capacityAvailable);
         long nextIdentity = NEXT_INCARNATION_ID.incrementAndGet();
         if (nextIdentity <= 0) {
             throw new IllegalStateException("Actor incarnation identity space exhausted");
@@ -96,6 +99,15 @@ public final class ProtosActor {
 
     ProtosActorMailbox mailboxForRuntime() {
         return mailbox;
+    }
+
+    ProtosActorDeliveryAttempt beginDeliveryForRuntime(
+            ProtosActorRefValue sender, ProtosTask.Continuation turn) {
+        return deliveryAdmission.submit(sender, turn);
+    }
+
+    ProtosActorDeliveryAdmission deliveryAdmissionForRuntime() {
+        return deliveryAdmission;
     }
 
     /** Destination-local behavior installed by successful bootstrap. */
@@ -169,6 +181,7 @@ public final class ProtosActor {
             switch (current) {
                 case INITIALIZING, READY -> {
                     if (lifecycle.compareAndSet(current, LifecycleState.TERMINATING)) {
+                        deliveryAdmission.lifecycleChanged();
                         mailbox.signalRuntime();
                         return true;
                     }
@@ -192,6 +205,7 @@ public final class ProtosActor {
                 case TERMINATING -> {
                     if (lifecycle.compareAndSet(
                             LifecycleState.TERMINATING, LifecycleState.TERMINATED)) {
+                        deliveryAdmission.lifecycleChanged();
                         mailbox.signalRuntime();
                         return true;
                     }

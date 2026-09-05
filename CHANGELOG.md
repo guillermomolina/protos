@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.91-SNAPSHOT
+
+- Implement I011-7 concrete-Actor pre-acceptance delivery admission/backpressure substrate: keep pending logical operations outside the bounded accepted mailbox, wake admission deterministically as capacity is released, and preserve known acceptance/cancellation boundaries.
+- Use a FIFO pending discipline to satisfy same-sender FIFO across backpressure and Core weak admission fairness without exposing a new public queue or total-order contract. Public ActorRef send/request, SendOperation retry/reply/uncertainty, specialized transfers, and lifecycle observation remain for later I011 slices.
+
 ## 0.2.90-SNAPSHOT
 
 - Implement I016-C append-mode File placement and aliasing semantics: every non-empty append write selects the then-current EOF at the operation's contribution boundary, successful empty append leaves the logical cursor unchanged, failed writes preserve the exact contributed-prefix aftermath, and an earlier seek never turns append into positioned output.

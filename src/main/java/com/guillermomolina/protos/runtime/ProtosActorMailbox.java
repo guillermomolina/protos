@@ -33,6 +33,7 @@ final class ProtosActorMailbox {
     private final int capacity;
     private final ArrayDeque<ProtosTask.Continuation> accepted = new ArrayDeque<>();
     private Runnable schedulerWakeup = NOOP_WAKEUP;
+    private Runnable admissionWakeup = NOOP_WAKEUP;
 
     ProtosActorMailbox(int capacity) {
         if (capacity <= 0) {
@@ -56,9 +57,18 @@ final class ProtosActorMailbox {
     }
 
     ProtosTask.Continuation pollForDispatch() {
+        ProtosTask.Continuation turn;
+        Runnable capacityWakeup = null;
         synchronized (this) {
-            return accepted.pollFirst();
+            turn = accepted.pollFirst();
+            if (turn != null) {
+                capacityWakeup = admissionWakeup;
+            }
         }
+        if (capacityWakeup != null) {
+            capacityWakeup.run();
+        }
+        return turn;
     }
 
     synchronized boolean hasAccepted() {
@@ -80,6 +90,17 @@ final class ProtosActorMailbox {
                 throw new IllegalStateException("Actor mailbox is already attached to a scheduler");
             }
             schedulerWakeup = wakeup;
+        }
+    }
+
+    void bindAdmissionWakeup(Runnable wakeup) {
+        Objects.requireNonNull(wakeup, "wakeup");
+        synchronized (this) {
+            if (admissionWakeup != NOOP_WAKEUP) {
+                throw new IllegalStateException(
+                        "Actor mailbox already has an admission wakeup");
+            }
+            admissionWakeup = wakeup;
         }
     }
 
