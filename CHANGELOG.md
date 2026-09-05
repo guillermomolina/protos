@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.82-SNAPSHOT
+
+- Implement I011-2 ActorRef capability semantics: represent ActorRef as an opaque communication capability permanently bound to one Actor incarnation and add explicit Actor-boundary rematerialization that creates fresh wrappers while preserving semantic identity, `identityHash`, delegation parent, and the original target.
+- Keep the mutable Actor target outside Protos-visible state and preserve references after termination without retargeting replacements. This slice intentionally does not add Actor.spawn/current, bootstrap/READY behavior installation, mailbox/admission, graph snapshot traversal, send/request, stop/termination monitoring, GroupRef, or distributed routing.
+
 ## 0.2.81-SNAPSHOT
 
 - Implement I011-1 Actor incarnation identity/lifecycle foundation: add an explicit runtime-local immutable incarnation identity, centralized race-safe `INITIALIZING`/`READY`/`TERMINATING`/`TERMINATED` state machine, and a semantic `ActorRef` value permanently bound to one incarnation.
