@@ -5,6 +5,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFileFlow;
+import com.guillermomolina.protos.runtime.ProtosFileValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.util.Objects;
@@ -52,7 +53,7 @@ public final class ProtosStandardFileProtocol {
         Objects.requireNonNull(resource, "resource");
         Objects.requireNonNull(capabilities, "capabilities");
 
-        ProtosObjectValue file = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosFileValue file = new ProtosFileValue();
         ProtosFileFlow flow =
                 new ProtosFileFlow(
                         file, bytesPrototype, constructionActivation, resource, capabilities);

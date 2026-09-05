@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
+import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
@@ -78,8 +79,7 @@ public final class ProtosStandardFilesystemProtocol {
         Objects.requireNonNull(constructionActivation, "constructionActivation");
         Objects.requireNonNull(backend, "backend");
 
-        ProtosObjectValue filesystem =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosFilesystemValue filesystem = new ProtosFilesystemValue();
 
         ProtosFilesystemOpenFlow flow =
                 new ProtosFilesystemOpenFlow(

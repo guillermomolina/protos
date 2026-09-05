@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.110-SNAPSHOT
+
+- Implement I016-D2 authority/transfer boundaries with explicit runtime markers for live File and host-provisioned Filesystem capabilities while keeping their language-visible ordinary-object protocols unchanged.
+- Reject direct File/Filesystem authority and ordinary descendants carrying that authority at Actor transfer with `NonTransferableValue`, and at isolated P transfer with `NonParallelValue`; no proxy, reopen, handle duplication, ambient inheritance, or new native Closure provider is introduced. I016-D3 becomes READY for deterministic authority/race conformance and the final post-D2 I018 boundary re-audit.
+
 ## 0.2.109-SNAPSHOT
 
 - Implement I016-D1 Filesystem open integration: host-provisioned open-only Filesystem capability, exact one/two-argument `open` bridge over the I016-A preflight/acquisition flow, and standard positioned/append File materialization through the I016-B/C File protocol with exact requested read/write/append authority.

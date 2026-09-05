@@ -33,6 +33,7 @@ class ProtosStandardFilesystemProtocolTest {
     void capabilityIsHostProvisionedOpenOnlyAndAbsentFromCorePrelude() throws Exception {
         Fixture x = fixture();
         assertTrue(x.prelude.bindings().readLocalSlot("Filesystem").isEmpty());
+        assertTrue(x.filesystem instanceof ProtosFilesystemValue);
         assertEquals(1, x.filesystem.localSlotsSnapshot().size());
         assertTrue(x.filesystem.hasLocalSlot("open"));
         assertSame(ProtosObjectValue.rootObject(), x.filesystem.parent().orElseThrow());
@@ -69,6 +70,7 @@ class ProtosStandardFilesystemProtocolTest {
         assertEquals(ProtosFutureValue.State.RESOLVED, future.state());
         ProtosObjectValue file =
                 (ProtosObjectValue) future.resolvedValue().orElseThrow();
+        assertTrue(file instanceof ProtosFileValue);
         assertTrue(file.hasLocalSlot("read"));
         assertTrue(file.hasLocalSlot("close"));
         assertFalse(file.hasLocalSlot("write"));
