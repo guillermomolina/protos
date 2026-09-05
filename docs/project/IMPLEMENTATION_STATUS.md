@@ -519,7 +519,30 @@ Performance work follows these project rules:
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| PERF001 | Core v0.1 baseline benchmark suite | READY | — | Establish a reproducible baseline covering startup, warmup, steady-state execution, calls/object-model behavior, collections, and concurrency, plus interpreter-vs-Graal compilation and comparable external-language runs where practical. Work may begin immediately on already-closed semantics; any result labelled as the complete Core v0.1 baseline requires I015 to be CLOSED. PERF001 observes the unoptimized baseline; optimization follow-ups receive separate PERF identifiers. |
+| PERF001 | Core v0.1 baseline benchmark suite | IN_PROGRESS | — | PERF001-A project-side methodology/ownership contract CLOSED; PERF001-B companion Docker harness READY. Work may use already-closed semantics immediately; a report labelled the complete Core v0.1 baseline requires I015 to be CLOSED. PERF001 observes the baseline; optimization follow-ups receive separate PERF identifiers. |
+
+
+### PERF001 — Core v0.1 baseline benchmark suite
+
+Status: IN_PROGRESS
+
+Project-side benchmark methodology and repository ownership are recorded in
+`docs/project/PERF001_BENCHMARKING.md`. The canonical Protos workload corpus
+remains under `protos/benchmarks/`; the future companion benchmark repository
+owns execution infrastructure and cross-language evidence rather than PERF
+lifecycle state.
+
+| Slice | Status | Closure evidence | Scope / unblock condition |
+|---|---|---|---|
+| PERF001-A | CLOSED | `SAME_COMMIT` | Publish the Protos-side benchmark contract: ownership split, correctness gate, cross-language equivalence, startup/warmup/steady-state measurement classes, Docker timing boundary, reproducibility metadata, baseline-vs-optimization rule, and canonical corpus handoff. |
+| PERF001-B | READY | — | Create and validate the companion Docker harness against a pinned Protos commit; pin runtimes/images, capture host/runtime metadata, define CPU affinity/resource policy and raw-result schema, and execute a correctness-gated smoke workload. |
+| PERF001-C | BLOCKED_BY_DEPENDENCIES | — | After B, implement materially equivalent cross-language versions and runner integration for the existing Protos micro/runtime/algorithm corpus. |
+| PERF001-D | BLOCKED_BY_DEPENDENCIES | — | After C, publish startup, warmup and steady-state Protos measurements plus interpreter-vs-Truffle compilation comparison and separate compilation diagnostics. |
+| PERF001-E | BLOCKED_BY_DEPENDENCIES | — | After C, extend comparable sequential coverage to closed collection/Core workloads selected by a fresh audit. |
+| PERF001-F | BLOCKED_BY_DEPENDENCIES | — | After B and a focused concurrency audit, add Future/P/Actor measurements with explicit CPU-set and scheduling methodology. |
+| PERF001-G | BLOCKED_BY_DEPENDENCIES | — | Final reproducibility run and baseline report; complete-Core-v0.1 labelling additionally requires I015 CLOSED. |
+
+Dependency outline: `PERF001-A -> PERF001-B -> PERF001-C -> PERF001-D/E`; PERF001-F depends on PERF001-B plus its focused concurrency audit; PERF001-G requires all required preceding PERF001 slices.
 
 New Performance work MUST allocate and persist its `PERFxxx` identifier in the
 repository when formally introduced rather than relying on chat/prompt history.

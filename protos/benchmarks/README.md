@@ -13,3 +13,26 @@ Initial families:
 - `runtime/` — workloads especially relevant to delegation and dispatch.
 - `concurrency/` — reserved for concurrency workloads grounded in the normative concurrency model.
 - `io/` — reserved for workloads grounded in the normative I/O model.
+
+## PERF001 corpus ownership and external-runner boundary
+
+This directory is the canonical Protos-language workload corpus for PERF work.
+A benchmark run must pin the exact Protos Git commit from which these sources are
+consumed.
+
+External benchmark infrastructure may live in a companion repository. That
+infrastructure owns containers, runners, comparison-language implementations,
+raw measurements and reports; it does not replace these Protos workload sources
+or own PERF lifecycle state.
+
+For algorithm-equivalent comparisons, the companion implementation must preserve
+the same logical input, work shape and observable result. Benchmark execution
+must validate correctness before accepting timing data.
+
+These `.protos` programs do not self-time. Startup, warmup and steady-state timing
+boundaries are owned by the external runner. When Docker is used, container
+creation/start latency is outside the Protos language-startup measurement unless
+a separately labelled container-start metric is intentionally being measured.
+
+The complete PERF001 methodology and cross-repository publication contract are
+recorded in `docs/project/PERF001_BENCHMARKING.md`.
