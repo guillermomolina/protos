@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.2.75-SNAPSHOT
+
+- Implement I014-C standard byte I/O positioning: `Flushable.flush`, `ByteSeekable` position/seek operations, `ByteSized.size`, and failure-atomic non-extending `Truncatable.truncate`, integrated with I014-B transfer ordering and Future cancellation/commitment semantics.
+
 
 ## 0.2.74-SNAPSHOT
 
