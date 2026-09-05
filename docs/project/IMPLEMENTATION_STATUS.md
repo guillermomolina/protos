@@ -290,15 +290,15 @@ work may proceed without waiting for an earlier-numbered roadmap item.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| LIB001 | Collections library | IN_PROGRESS | — | I004 + I005 + I006 + I008 + CLI004 + CLI005 closed; LIB001-A/B/C/D are CLOSED; LIB001-E is OPEN pending its fresh reduce/sort API audit. |
+| LIB001 | Collections library | CLOSED | `SAME_COMMIT` | LIB001-A/B/C/D/E closed; initial Set/IdentitySet and eager sequential Array algorithm surfaces are fully published with no new runtime collection family, generic hierarchy, or production Java boundary. |
 | LIB002 | Text / encoding conveniences | BLOCKED_BY_DEPENDENCIES | — | I015 is not closed; ordinary library conveniences may build on Encoding/Text I/O but must not redefine their Core semantics. |
-| LIB003 | JSON / serialization | BLOCKED_BY_DEPENDENCIES | — | LIB001 is not closed; design exact text/encoding and stream-adapter dependencies from the then-current repository rather than assuming roadmap order is dependency order. |
+| LIB003 | JSON / serialization | OPEN | — | LIB001 is CLOSED; begin a fresh JSON/serialization design and dependency audit against the then-current I015/LIB002 text/encoding and stream-adapter surfaces before declaring implementation readiness. |
 | LIB004 | Filesystem / process conveniences | READY | — | I016 + I017 closed; begin with a fresh focused convenience-layer design/audit. Any text-oriented convenience that needs I015/LIB002 remains individually dependency-gated and must preserve explicit authority boundaries. |
 | LIB005 | Networking | OPEN | — | Roadmap item only; `spec/io/IO_CORE.md` currently leaves network authority acquisition, socket APIs, DNS/name resolution, and transport configuration outside its standardized scope. Re-audit and establish prerequisites before implementation. |
 
 ### LIB001 — Collections
 
-Status: IN_PROGRESS
+Status: CLOSED
 
 Description: General-purpose collection data structures and algorithms built as
 ordinary Protos library modules on top of the existing Core collection and
@@ -334,11 +334,11 @@ Implementation boundary:
   member and uses the underlying keyed snapshot/order;
 - Set algebra returns fresh open Sets with deterministic left-derived order as
   recorded in the design document; ordinary Map `==`/`hash` remain unchanged;
-- `std:collections/Array` now supplies eager sequential `map`, `filter`, and
-  `findIndex` over pre-callback shallow snapshots with one-argument callbacks;
-  `filter`/`findIndex` require canonical Boolean predicate results and
-  `findIndex` uses `null` for absence; `reduce`/`sort` remain audit-gated for
-  LIB001-E.
+- `std:collections/Array` supplies the complete initial eager sequential
+  `map`, `filter`, `findIndex`, `reduce`, and stable `sort` surface over
+  pre-callback shallow snapshots; callbacks remain ordinary module behavior,
+  strict predicate/comparator result laws are explicit, and no parallel/P
+  machinery is inherited by sequential operations.
 
 Planned slices:
 
@@ -348,7 +348,7 @@ Planned slices:
 | LIB001-B | CLOSED | `0.2.138-SNAPSHOT` | `SAME_COMMIT` | `Set`/`IdentitySet` `add` and `remove` delegate exactly once to the underlying keyed mutation and return the exact receiver; one-argument `each` adapts the existing insertion-order shallow Map/IdentityMap snapshot; open/closed/frozen, absent-remove, callback-arity/invocation, order and mutation-during-iteration conformance published. |
 | LIB001-C | CLOSED | `0.2.139-SNAPSHOT` | `SAME_COMMIT` | Fresh `union`/`intersection`/`difference` and explicit membership predicates published for Set/IdentitySet with deterministic left-derived order, short-circuit traversal, Map-vs-membership equality boundary, fresh/open result conformance, and Actor-local behavior versus transferable Map-backed data conformance. |
 | LIB001-D | CLOSED | `0.2.141-SNAPSHOT` | `SAME_COMMIT` | `std:collections/Array` publishes eager sequential `map`, `filter`, and `findIndex` over a pre-callback shallow Array snapshot; one-argument ordinary callbacks, strict canonical-Boolean predicates, fresh open Array results, `findIndex` first-match/`null` absence, empty-input callback non-inspection, mutation snapshot and failure conformance published. |
-| LIB001-E | OPEN | — | — | Eager Array `reduce`/`sort` plus final cross-slice LIB001 validation/closure; LIB001-D is CLOSED, but reduce empty-input/accumulator/arity/order and sort comparator/stability/failure contracts require a fresh focused API audit before implementation. |
+| LIB001-E | CLOSED | `0.2.143-SNAPSHOT` | `SAME_COMMIT` | `std:collections/Array` adds strict left-fold `reduce` with zero-or-one optional initial value and stable fresh-result `sort` with the canonical sequential merge tree, strict Boolean two-direction comparator law, `InvalidComparatorResult`/`InvalidComparatorOrder`, snapshot/effect/failure conformance, and final cross-slice LIB001 validation. |
 
 Dependencies:
 - I004 Array completion — CLOSED;

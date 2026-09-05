@@ -84,3 +84,134 @@ findIndex: (array, predicate) => {
 
     null
 }
+
+reduce: (array, reducer, ...initial) => {
+    snapshot: Array(...array)
+
+    (initial.size() > 1).ifTrue(() => {
+        Error().signal()
+    })
+
+    hasInitial: initial.size() == 1
+    accumulator: null
+    startIndex: 0
+
+    hasInitial.ifTrue(() => {
+        accumulator = initial.at(0)
+    })
+
+    hasInitial.ifFalse(() => {
+        (snapshot.size() == 0).ifTrue(() => {
+            ^null
+        })
+        accumulator = snapshot.at(0)
+        startIndex = 1
+    })
+
+    index: 0
+    snapshot.each((element) => {
+        (index < startIndex).ifFalse(() => {
+            accumulator = reducer(accumulator, element)
+        })
+        index = index + 1
+    })
+
+    accumulator
+}
+
+sort: (array, less) => {
+    snapshot: Array(...array)
+
+    merge: (left, right) => {
+        result: Array(...left, ...right)
+        leftSize: left.size()
+        rightSize: right.size()
+        leftIndex: 0
+        rightIndex: 0
+        outputIndex: 0
+
+        result.each((ignored) => {
+            leftDone: leftIndex == leftSize
+            rightDone: rightIndex == rightSize
+
+            leftDone.ifTrue(() => {
+                result.atPut(outputIndex, right.at(rightIndex))
+                rightIndex = rightIndex + 1
+            })
+
+            leftDone.ifFalse(() => {
+                rightDone.ifTrue(() => {
+                    result.atPut(outputIndex, left.at(leftIndex))
+                    leftIndex = leftIndex + 1
+                })
+
+                rightDone.ifFalse(() => {
+                    leftValue: left.at(leftIndex)
+                    rightValue: right.at(rightIndex)
+                    lr: less(leftValue, rightValue)
+
+                    (lr === true).ifFalse(() => {
+                        (lr === false).ifFalse(() => {
+                            InvalidComparatorResult().signal()
+                        })
+                    })
+
+                    rl: less(rightValue, leftValue)
+
+                    (rl === true).ifFalse(() => {
+                        (rl === false).ifFalse(() => {
+                            InvalidComparatorResult().signal()
+                        })
+                    })
+
+                    (lr === true).ifTrue(() => {
+                        (rl === true).ifTrue(() => {
+                            InvalidComparatorOrder().signal()
+                        })
+                        result.atPut(outputIndex, leftValue)
+                        leftIndex = leftIndex + 1
+                    })
+
+                    (lr === false).ifTrue(() => {
+                        (rl === true).ifTrue(() => {
+                            result.atPut(outputIndex, rightValue)
+                            rightIndex = rightIndex + 1
+                        })
+                        (rl === false).ifTrue(() => {
+                            result.atPut(outputIndex, leftValue)
+                            leftIndex = leftIndex + 1
+                        })
+                    })
+                })
+            })
+
+            outputIndex = outputIndex + 1
+        })
+
+        result
+    }
+
+    sortRange: (start, end) => {
+        length: end - start
+        result: null
+
+        (length == 0).ifTrue(() => {
+            result = Array()
+        })
+
+        (length == 1).ifTrue(() => {
+            result = Array(snapshot.at(start))
+        })
+
+        (length > 1).ifTrue(() => {
+            middle: start + length.div(2)
+            left: sortRange(start, middle)
+            right: sortRange(middle, end)
+            result = merge(left, right)
+        })
+
+        result
+    }
+
+    sortRange(0, snapshot.size())
+}

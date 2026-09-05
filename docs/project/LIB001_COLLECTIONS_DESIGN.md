@@ -1,6 +1,6 @@
 # LIB001 Collections Design Record
 
-Status: Set/IdentitySet complete through LIB001-C; LIB001-D Array map/filter/findIndex contract and implementation closed; LIB001-E reduce/sort audit pending
+Status: LIB001 implementation complete; Set/IdentitySet and eager Array map/filter/findIndex/reduce/sort slices A-E closed
 Work item: `LIB001`
 Nature: Project design record; **non-normative**
 
@@ -502,6 +502,129 @@ sequential Protos behavior.
 `reduce` and `sort` remain outside LIB001-D. Their accumulator/empty-input and
 ordering/comparator contracts still require the separate fresh audit assigned to
 LIB001-E.
+
+### Focused LIB001-E reduce/sort API audit
+
+The fresh current-main audit closes the remaining eager sequential Array surface
+and therefore the initial LIB001 work item.
+
+Focused prior-art checks reinforced two distinct decisions rather than one broad
+"collection convention":
+
+- Python `functools.reduce` demonstrates a strict left-to-right accumulator fold
+  with an optional initializer, while Rust deliberately separates `fold(init, f)`
+  from `reduce(f)` and makes the no-initial empty case explicit. Protos keeps one
+  small `reduce` name but uses its existing rest-parameter mechanism to represent
+  initializer presence without a sentinel or overloaded runtime category.
+- Python's sorting contract makes stability explicit, while Rust exposes stable
+  versus unstable sorting as meaningfully different APIs. In Protos comparator
+  effects are ordinary observable effects, so LIB001-E additionally fixes one
+  logical stable merge-sort tree rather than allowing the host sorting algorithm
+  to choose callback order.
+
+Primary focused references:
+
+- https://docs.python.org/3/library/functools.html#functools.reduce
+- https://doc.rust-lang.org/std/iter/trait.Iterator.html#method.reduce
+- https://docs.python.org/3/howto/sorting.html#sort-stability-and-complex-sorts
+- https://doc.rust-lang.org/std/primitive.slice.html
+
+The public additions to `std:collections/Array` are exactly:
+
+```text
+reduce(array, reducer, ...initial) -> object | null
+sort(array, less)                  -> fresh Array
+```
+
+`reduce` accepts zero or one `initial` value. More than one initial value signals
+an ordinary `Error`. With no initial value, an empty snapshot returns canonical
+`null`, a one-element snapshot returns that exact element without invoking the
+reducer, and a longer snapshot uses element zero as the accumulator before
+folding elements one onward. With one initial value, that exact value is the
+starting accumulator and every snapshotted element participates in the fold,
+including for a one-element source; an empty source returns the exact initial
+value. The reducer receives exactly:
+
+```text
+reducer(accumulator, element)
+```
+
+and is invoked strictly left to right. For example, without an initial value:
+
+```text
+reduce([a, b, c, d], f)
+    -> f(f(f(a, b), c), d)
+```
+
+This is intentionally **not** the canonical balanced tree used by
+`parallelReduce`; sequential callback order and effects remain simple left-fold
+semantics. Every reducer result becomes the next accumulator exactly, with no
+type restriction or conversion. A reducer failure/control transfer stops the
+fold immediately; completed earlier effects are not rolled back.
+
+`reduce` captures the complete shallow ascending-index source snapshot before
+the first possible reducer invocation. As in LIB001-D, there is no hidden
+non-invoking callability preflight. Consequently empty reductions, and
+one-element reductions without an initial value, do not inspect an otherwise
+unused reducer. A reducer is validated through its first actual invocation.
+
+`sort` likewise captures the complete shallow source snapshot before any
+comparator invocation and never mutates the source merely to sort it. It returns
+one fresh open standard Array, including for zero- and one-element inputs. Those
+two trivial inputs perform no comparison and therefore do not inspect an unused
+`less` value.
+
+For two or more elements, `sort` uses the same **logical** stable merge-sort tree
+shape already established by Core `parallelSort`, but executes it as ordinary
+local sequential Protos behavior: split each range at
+`start + length.div(2)`, completely sort the left half, completely sort the right
+half, then merge them from left to right. This fixes comparator effect/failure
+order independently of host sort implementations and keeps recursion depth
+logarithmic.
+
+At each merge decision with `leftValue` and `rightValue`, `sort` invokes:
+
+```text
+lr: less(leftValue, rightValue)
+rl: less(rightValue, leftValue)
+```
+
+in that exact order. Each normal result must be exactly canonical `true` or
+canonical `false`; otherwise a fresh `InvalidComparatorResult` occurrence is
+signaled. The decision table is:
+
+```text
+lr == true  && rl == false -> take left
+lr == false && rl == true  -> take right
+lr == false && rl == false -> equivalent; take left (stability)
+lr == true  && rl == true  -> InvalidComparatorOrder
+```
+
+This local antisymmetry/equivalence validation deliberately matches the useful
+comparator law already exposed by `parallelSort`. LIB001-E does not attempt a
+global transitivity proof, does not cache comparator results, and does not add a
+purity requirement. Comparator-signaled errors or other control transfers
+propagate immediately and no later logical comparison occurs.
+
+`sort` does not inherit P transfer, Future, cancellation, isolation, worker
+failure selection, or scheduler semantics from `parallelSort`. Reusing its
+logical merge/comparator law prevents two contradictory sorting concepts without
+making sequential callers pay for concurrency machinery.
+
+Together with LIB001-D, `std:collections/Array` now contains the complete initial
+eager sequential surface:
+
+```text
+map
+filter
+findIndex
+reduce
+sort
+```
+
+The implementation remains module-only ordinary Protos source. No generic
+`Collection`, iterator/stream hierarchy, Array growth primitive, builder native,
+runtime value family, or production Java behavior is introduced.
 
 Initial direction:
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.143-SNAPSHOT
+
+- Close the focused LIB001-E audit and complete `std:collections/Array` with eager sequential `reduce(array, reducer, ...initial)` and stable `sort(array, less)` as ordinary Protos library behavior; close top-level LIB001 after final cross-slice validation.
+- Define `reduce` as a strict left fold over a pre-callback shallow snapshot: zero or one initial value, `null` for empty/no-initial, exact singleton pass-through without reducer invocation, exact initial pass-through for empty/seeded reduction, and `(accumulator, element)` callback order with ordinary failure/control propagation.
+- Define `sort` as a fresh open stable Array result using one canonical sequential merge-sort tree; each merge decision calls `less(left,right)` then `less(right,left)`, accepts only canonical Booleans, preserves left order for comparator-equivalent elements, and signals fresh `InvalidComparatorResult` or `InvalidComparatorOrder` occurrences for the existing invalid-result/antisymmetry failures.
+- Keep sequential reduce/sort free of P/Future/transfer/cancellation semantics, add no production Java or generic collection hierarchy, and transition LIB003 from its LIB001 dependency block to OPEN pending its own fresh serialization/text dependency audit.
+
 ## 0.2.142-SNAPSHOT
 
 - Implement I015-C `TextReader.readLine()` / `readLine(maxBytes)` inside the same ordered decoder/input domain introduced by I015-B. Line framing recognizes LF, CR and CRLF; terminators are consumed and omitted, empty lines are preserved, EOF-final unterminated text is returned once, and EOF with no remaining text returns null. A terminating CR completes immediately without waiting for more backend input; a possible later LF is folded as the already-completed CRLF terminator before the next logical text operation can observe it.
