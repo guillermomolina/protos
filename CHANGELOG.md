@@ -4,6 +4,17 @@ All notable changes to the Protos implementation project will be documented in t
 
 For specification changes, see [spec/PROTOS_SPEC_CHANGELOG.md](spec/PROTOS_SPEC_CHANGELOG.md).
 
+## 0.2.67-SNAPSHOT
+
+### Added
+- Implemented I013 Standard Path with portable represented values and the normative `relative`, `rooted`, `child`, and `parentComponent` construction protocol.
+- Added filesystem-independent structural equality/hash while preserving D037 ordinary individual identity and IdentityMap behavior.
+- Added focused conformance coverage for construction, lookup, receiver domains, frozen-prelude binding, D037, and absence of host path parsing.
+
+### Notes
+- No filesystem authority, host normalization, realpath, separator interpretation, or String-to-Path coercion is introduced.
+- No normative specification revision is changed.
+
 ## 0.2.66-SNAPSHOT
 
 ### Fixed

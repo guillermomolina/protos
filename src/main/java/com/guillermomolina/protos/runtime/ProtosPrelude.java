@@ -141,6 +141,8 @@ public final class ProtosPrelude {
         return requiredOrdinaryBinding("IdentityMap");
     }
 
+    public ProtosObjectValue pathPrototype() { return requiredOrdinaryBinding("Path"); }
+
     public ProtosObjectValue arrayPrototype() {
         Object binding = bindings.readLocalSlot("Array").orElseThrow();
         if (!(binding instanceof ProtosObjectValue arrayPrototype)) {
