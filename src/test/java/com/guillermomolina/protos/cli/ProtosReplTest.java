@@ -188,6 +188,24 @@ final class ProtosReplTest {
     }
 
     @Test
+    void multilineRecursiveFactorialUsesStandardNumberOrderingAcrossEvaluations() {
+        R r = repl("factorial: (n) => {\n"
+                + "    result: 1\n"
+                + "\n"
+                + "    (n > 1).ifTrue() {\n"
+                + "        result = n * factorial(n - 1)\n"
+                + "    }\n"
+                + "\n"
+                + "    result\n"
+                + "}\n"
+                + "factorial(10)\n"
+                + ":quit\n");
+        assertEquals(0, r.c);
+        assertTrue(r.o.contains("protos> 3628800\n"), r.o);
+        assertTrue(r.e.isBlank(), r.e);
+    }
+
+    @Test
     void historySplitsMultilineInputIntoIndependentEntries() {
         var history = new ProtosCli.ReplHistory();
         history.add(Instant.EPOCH, "m: Map()\nm.atPut(\"a\", 10)\nm.at(\"no-existe\")\n1 + 1");

@@ -160,6 +160,7 @@ public final class ProtosCoreBootstrap {
         ProtosObjectValue int64Prototype =
                 requirePrototype(bootstrapContext, "Int64", integerPrototype);
         ProtosStandardNumberEqualityProtocol.install(numberPrototype);
+        ProtosStandardNumberOrderingProtocol.install(numberPrototype);
         ProtosStandardHashSupport.installObjectHash();
         ProtosStandardHashSupport.installNumberHash(numberPrototype);
         ProtosStandardIntegerProtocol.install(integerPrototype);

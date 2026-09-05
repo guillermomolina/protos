@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.83-SNAPSHOT
+
+### Fixed
+- Implement the normative standard Number ordering selectors `<`, `<=`, `>`, and `>=` as ordinary Number-owned Closure-valued behavior inherited by Integer, fixed-width Integer, and Float values.
+- Compare numeric families without promotion or coercion, including exact arbitrary-precision Integer versus finite binary64 Float ordering, signed zero, infinities, and unordered NaN behavior.
+- Add regression coverage for the official recursive factorial form in a persistent multiline REPL session.
+
+### Notes
+- Standard ordering rejects non-Number arguments and incompatible original receivers with a Protos Error.
+- No parser, multiline-REPL, arithmetic compatibility, or normative specification behavior is changed.
+
 ## 0.2.82-SNAPSHOT
 
 - Implement I011-2 ActorRef capability semantics: represent ActorRef as an opaque communication capability permanently bound to one Actor incarnation and add explicit Actor-boundary rematerialization that creates fresh wrappers while preserving semantic identity, `identityHash`, delegation parent, and the original target.
