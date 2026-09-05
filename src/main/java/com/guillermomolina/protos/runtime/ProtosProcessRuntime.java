@@ -61,6 +61,23 @@ public final class ProtosProcessRuntime {
     }
 
     /**
+     * Provisions one runtime-backed Process capability proxy for ordinary Actor delegation.
+     *
+     * <p>The wrapper itself is Actor-local state. Its only authority is the already-existing
+     * logical Process represented by this runtime; provisioning does not create a Process and does
+     * not manufacture filesystem, Node, Cluster, subprocess, or arbitrary host authority.
+     */
+    public synchronized ProtosProcessCapabilityValue provisionCapabilityForRuntime(
+            ProtosObjectValue processPrototype) {
+        Objects.requireNonNull(processPrototype, "processPrototype");
+        if (lifecycle != LifecycleState.RUNNING) {
+            throw new IllegalStateException(
+                    "Process capability cannot be provisioned after termination begins");
+        }
+        return new ProtosProcessCapabilityValue(processPrototype, this);
+    }
+
+    /**
      * Creates one additional Actor hosted by this Process.
      *
      * <p>If Process termination already began while an existing non-preemptive Actor segment is

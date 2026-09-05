@@ -34,8 +34,9 @@ import java.util.Set;
  * validation boundary without mutating the source graph.
  *
  * <p>This class deliberately implements Actor transfer rules rather than reusing the P copier:
- * Closures and Actor-local execution state are non-transferable between Actors, while ActorRef and
- * GroupRef communication capabilities are rematerialized without copying target mutable state.
+ * Closures and Actor-local execution state are non-transferable between Actors, ActorRef/GroupRef
+ * communication capabilities are rematerialized without copying target mutable state, and an
+ * explicitly delegated Process capability becomes a fresh Actor-local proxy to the same authority.
  */
 public final class ProtosActorValueTransfer {
     private ProtosActorValueTransfer() {}
@@ -126,6 +127,9 @@ public final class ProtosActorValueTransfer {
             }
             if (value instanceof ProtosGroupRefValue groupRef) {
                 return remember(value, groupRef.rematerializeForActorTransfer());
+            }
+            if (value instanceof ProtosProcessCapabilityValue processCapability) {
+                return remember(value, processCapability.rematerializeForActorTransfer());
             }
 
             // These are explicitly non-transferable Actor-domain/execution/resource values.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.114-SNAPSHOT
+
+- Implement I011-14 runtime Process-capability Actor delegation: a host/runtime-provisioned represented Process proxy delegates to the future standard Process prototype, carries only authority into one existing logical Protos Process, and rematerializes as a fresh wrapper when explicitly transferred across an Actor boundary.
+- Preserve whole-graph transfer aliasing for repeated references to one Process proxy while preventing a mutable wrapper alias across Actors; descendants whose delegation chain carries Process authority are rebuilt over the destination proxy, without manufacturing Filesystem, Node, Cluster, subprocess, or other authority.
+- Keep Process outside isolated P transfer and leave the public Process prototype, RootActor bootstrap-local `process` slot, args/environment/standard-stream protocol, launcher provisioning, and Process I/O lifecycle to I017. No native-Closure provider or Core prelude surface is added; I011 remains IN_PROGRESS.
+
 ## 0.2.113-SNAPSHOT
 
 - Close I016 Filesystem / File after final cross-slice validation of I016-A preflight/acquisition, I016-B positioned File semantics and lifecycle, I016-C append/aliasing, I016-D1 host-provisioned Filesystem.open integration, I016-D2 Actor/P authority-transfer boundaries, and I016-D3 deterministic integrated authority/race conformance.
