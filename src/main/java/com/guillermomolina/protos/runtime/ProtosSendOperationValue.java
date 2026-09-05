@@ -25,8 +25,8 @@ import java.util.Objects;
  *
  * <p>The logical destination, selector, and already-formed Actor snapshot are immutable operation
  * state. Retry creates a fresh operation identity over that same snapshot and never re-evaluates or
- * re-reads the source argument graph. This local concrete-Actor slice has no transport uncertainty;
- * later distributed/request integration owns accepted-but-undispatched loss and uncertainty wiring.
+ * re-reads the source argument graph. Direct concrete-Actor accepted-work loss is recorded as a
+ * post-acceptance delivery failure; distributed transport uncertainty remains a later integration.
  */
 public final class ProtosSendOperationValue extends ProtosObjectValue {
     private final ProtosObjectValue sendOperationPrototype;
@@ -117,8 +117,14 @@ public final class ProtosSendOperationValue extends ProtosObjectValue {
             ProtosActor target,
             ProtosTask task,
             ProtosActorDeliveryAttempt delivery) {
-        if (delivery == null || !delivery.beginDispatchForRuntime()) {
-            throw new IllegalStateException("accepted delivery lost its dispatch state");
+        if (delivery == null) {
+            throw new IllegalStateException("accepted delivery lost its attempt identity");
+        }
+        if (!delivery.beginDispatchForRuntime()) {
+            // Termination won before this accepted turn began. The delivery attempt already records
+            // post-acceptance loss; terminalize only the fresh runtime task, never application code.
+            task.complete(ProtosNullValue.INSTANCE);
+            return;
         }
         try {
             task.executeAction(

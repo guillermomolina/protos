@@ -77,17 +77,22 @@ final class ProtosActorDeliveryAdmissionTest {
     }
 
     @Test
-    void terminatingActorFailsPendingAndFutureAttemptsButDoesNotRewriteAcceptedAttempt() {
+    void terminatingActorFailsPendingAndAcceptedUndispatchedAndFutureAttempts() {
         ProtosActor destination = actorWithMailboxCapacity(1);
         ProtosActorDeliveryAttempt accepted = delivery(destination, null);
         ProtosActorDeliveryAttempt pending = delivery(destination, null);
 
         assertTrue(destination.beginTermination());
 
-        assertEquals(ProtosActorDeliveryAttempt.State.ACCEPTED, accepted.state());
+        // I011-9 closes the accepted-work-loss boundary: work retained by the concrete Actor
+        // before the termination cutover was accepted, so losing it is post-acceptance failure.
+        assertEquals(
+                ProtosActorDeliveryAttempt.State.FAILED_AFTER_ACCEPTANCE,
+                accepted.state());
         assertEquals(
                 ProtosActorDeliveryAttempt.State.FAILED_BEFORE_ACCEPTANCE,
                 pending.state());
+        assertEquals(0, destination.mailboxForRuntime().size());
         assertEquals(0, destination.deliveryAdmissionForRuntime().pendingCountForTesting());
 
         ProtosActorDeliveryAttempt afterCutover = delivery(destination, null);

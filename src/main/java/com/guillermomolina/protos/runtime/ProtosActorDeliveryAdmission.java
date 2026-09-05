@@ -90,6 +90,20 @@ final class ProtosActorDeliveryAdmission {
                 drainLocked();
             }
         }
+        // Any retained mailbox work already crossed concrete-Actor acceptance. Termination
+        // therefore loses it as accepted work rather than reclassifying it as non-delivery.
+        actor.mailboxForRuntime().failAcceptedForTermination();
+    }
+
+    boolean beginDispatchForRuntime(ProtosActorDeliveryAttempt attempt) {
+        Objects.requireNonNull(attempt, "attempt");
+        synchronized (actor) {
+            if (actor.lifecycleState() != ProtosActor.LifecycleState.READY) {
+                attempt.markFailedAfterAcceptanceForRuntime();
+                return false;
+            }
+            return attempt.markRunningIfAcceptedForRuntime();
+        }
     }
 
     synchronized int pendingCountForTesting() {
@@ -112,7 +126,7 @@ final class ProtosActorDeliveryAdmission {
                 continue;
             }
 
-            if (!actor.tryAcceptMessageForRuntime(attempt.turnForRuntime())) {
+            if (!actor.mailboxForRuntime().tryAccept(attempt)) {
                 if (isTerminating()) {
                     failAllPendingLocked();
                 }
@@ -120,7 +134,6 @@ final class ProtosActorDeliveryAdmission {
             }
 
             pending.removeFirst();
-            attempt.markAcceptedForRuntime();
         }
     }
 

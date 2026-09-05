@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosActorRefValue;
+import com.guillermomolina.protos.runtime.ProtosActorRequest;
 import com.guillermomolina.protos.runtime.ProtosActorScheduler;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosSendOperationValue;
@@ -70,6 +71,10 @@ public final class ProtosStandardActorProtocol {
                 "send",
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) -> send(activation, supplied)));
+        prototype.createLocalSlot(
+                "request",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) -> request(activation, supplied)));
         return prototype.freeze();
     }
 
@@ -195,6 +200,33 @@ public final class ProtosStandardActorProtocol {
                 sender,
                 selector.value(),
                 snapshot);
+    }
+
+    private Object request(ProtosActivation activation, List<?> supplied) {
+        Objects.requireNonNull(activation, "activation");
+        Objects.requireNonNull(supplied, "supplied");
+        if (!(activation.receiver() instanceof ProtosActorRefValue destination)
+                || supplied.isEmpty()) {
+            throw error(activation);
+        }
+        Object selectorValue = supplied.get(0);
+        if (!(selectorValue instanceof ProtosStringValue selector)) {
+            throw error(activation);
+        }
+
+        // Request shares send's synchronous whole-graph snapshot and concrete-Actor admission.
+        List<Object> snapshot =
+                ProtosActorValueTransfer.snapshotArguments(
+                        supplied.subList(1, supplied.size()), activation);
+        ProtosActorRefValue sender =
+                activation.executionDomain()
+                        .currentActorReference()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "ActorRef.request requires execution inside an Actor incarnation"));
+        return ProtosActorRequest.begin(
+                destination, sender, selector.value(), snapshot, activation);
     }
 
     private static Object cancelSendOperation(

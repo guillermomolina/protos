@@ -17,6 +17,8 @@
 package com.guillermomolina.protos.runtime;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
@@ -30,8 +32,19 @@ import java.util.Objects;
 final class ProtosActorMailbox {
     private static final Runnable NOOP_WAKEUP = () -> {};
 
+    private static final class AcceptedTurn {
+        private final ProtosTask.Continuation turn;
+        private final ProtosActorDeliveryAttempt attempt;
+
+        private AcceptedTurn(
+                ProtosTask.Continuation turn, ProtosActorDeliveryAttempt attempt) {
+            this.turn = Objects.requireNonNull(turn, "turn");
+            this.attempt = attempt;
+        }
+    }
+
     private final int capacity;
-    private final ArrayDeque<ProtosTask.Continuation> accepted = new ArrayDeque<>();
+    private final ArrayDeque<AcceptedTurn> accepted = new ArrayDeque<>();
     private Runnable schedulerWakeup = NOOP_WAKEUP;
     private Runnable admissionWakeup = NOOP_WAKEUP;
 
@@ -43,13 +56,25 @@ final class ProtosActorMailbox {
     }
 
     boolean tryAccept(ProtosTask.Continuation turn) {
-        Objects.requireNonNull(turn, "turn");
+        return tryAcceptEntry(new AcceptedTurn(turn, null), false);
+    }
+
+    boolean tryAccept(ProtosActorDeliveryAttempt attempt) {
+        Objects.requireNonNull(attempt, "attempt");
+        return tryAcceptEntry(new AcceptedTurn(attempt.turnForRuntime(), attempt), true);
+    }
+
+    private boolean tryAcceptEntry(AcceptedTurn entry, boolean establishAcceptance) {
         Runnable wakeup;
         synchronized (this) {
             if (accepted.size() >= capacity) {
                 return false;
             }
-            accepted.addLast(turn);
+            // Publish ACCEPTED before the scheduler can observe the retained turn.
+            if (establishAcceptance) {
+                entry.attempt.markAcceptedForRuntime();
+            }
+            accepted.addLast(entry);
             wakeup = schedulerWakeup;
         }
         wakeup.run();
@@ -57,18 +82,33 @@ final class ProtosActorMailbox {
     }
 
     ProtosTask.Continuation pollForDispatch() {
-        ProtosTask.Continuation turn;
+        AcceptedTurn entry;
         Runnable capacityWakeup = null;
         synchronized (this) {
-            turn = accepted.pollFirst();
-            if (turn != null) {
+            entry = accepted.pollFirst();
+            if (entry != null) {
                 capacityWakeup = admissionWakeup;
             }
         }
         if (capacityWakeup != null) {
             capacityWakeup.run();
         }
-        return turn;
+        return entry == null ? null : entry.turn;
+    }
+
+    void failAcceptedForTermination() {
+        List<ProtosActorDeliveryAttempt> lost = new ArrayList<>();
+        synchronized (this) {
+            AcceptedTurn entry;
+            while ((entry = accepted.pollFirst()) != null) {
+                if (entry.attempt != null) {
+                    lost.add(entry.attempt);
+                }
+            }
+        }
+        for (ProtosActorDeliveryAttempt attempt : lost) {
+            attempt.markFailedAfterAcceptanceForRuntime();
+        }
     }
 
     synchronized boolean hasAccepted() {

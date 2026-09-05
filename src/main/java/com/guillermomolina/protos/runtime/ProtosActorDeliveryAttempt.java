@@ -19,13 +19,20 @@ package com.guillermomolina.protos.runtime;
 import java.util.Objects;
 
 /**
- * Internal state of one concrete-Actor delivery attempt before/at acceptance.
+ * Internal state of one concrete-Actor delivery attempt from admission through completion.
  *
- * <p>This is runtime machinery, not the public Core SendOperation. I011-7 uses it as the
- * acceptance/backpressure foundation that later send/request slices compose with snapshots,
- * retry, reply, and uncertainty.
+ * <p>This is runtime machinery, not a public status object. The same attempt state underlies
+ * one-way SendOperation delivery and request/reply delivery while preserving the single concrete-
+ * Actor acceptance boundary and explicit post-acceptance loss classification.
  */
 public final class ProtosActorDeliveryAttempt {
+    @FunctionalInterface
+    interface FailureObserver {
+        void failed(State state);
+    }
+
+    private static final FailureObserver NOOP_FAILURE_OBSERVER = ignored -> {};
+
     public enum State {
         PENDING,
         ACCEPTED,
@@ -39,15 +46,25 @@ public final class ProtosActorDeliveryAttempt {
     private final ProtosActorDeliveryAdmission owner;
     private final ProtosActorRefValue sender;
     private final ProtosTask.Continuation turn;
+    private final FailureObserver failureObserver;
     private State state = State.PENDING;
 
     ProtosActorDeliveryAttempt(
             ProtosActorDeliveryAdmission owner,
             ProtosActorRefValue sender,
             ProtosTask.Continuation turn) {
+        this(owner, sender, turn, NOOP_FAILURE_OBSERVER);
+    }
+
+    ProtosActorDeliveryAttempt(
+            ProtosActorDeliveryAdmission owner,
+            ProtosActorRefValue sender,
+            ProtosTask.Continuation turn,
+            FailureObserver failureObserver) {
         this.owner = Objects.requireNonNull(owner, "owner");
         this.sender = sender;
         this.turn = Objects.requireNonNull(turn, "turn");
+        this.failureObserver = Objects.requireNonNull(failureObserver, "failureObserver");
     }
 
     public synchronized State state() {
@@ -75,7 +92,11 @@ public final class ProtosActorDeliveryAttempt {
         return turn;
     }
 
-    synchronized boolean beginDispatchForRuntime() {
+    boolean beginDispatchForRuntime() {
+        return owner.beginDispatchForRuntime(this);
+    }
+
+    synchronized boolean markRunningIfAcceptedForRuntime() {
         if (state == State.ACCEPTED) {
             state = State.RUNNING;
             return true;
@@ -90,15 +111,20 @@ public final class ProtosActorDeliveryAttempt {
         state = State.COMPLETED;
     }
 
-    synchronized void markFailedAfterAcceptanceForRuntime() {
-        if (state == State.FAILED_AFTER_ACCEPTANCE) {
-            return;
+    void markFailedAfterAcceptanceForRuntime() {
+        FailureObserver notify;
+        synchronized (this) {
+            if (state == State.FAILED_AFTER_ACCEPTANCE) {
+                return;
+            }
+            if (state != State.ACCEPTED && state != State.RUNNING) {
+                throw new IllegalStateException(
+                        "post-acceptance failure requires accepted/running delivery attempt, was " + state);
+            }
+            state = State.FAILED_AFTER_ACCEPTANCE;
+            notify = failureObserver;
         }
-        if (state != State.ACCEPTED && state != State.RUNNING) {
-            throw new IllegalStateException(
-                    "post-acceptance failure requires accepted/running delivery attempt, was " + state);
-        }
-        state = State.FAILED_AFTER_ACCEPTANCE;
+        notify.failed(State.FAILED_AFTER_ACCEPTANCE);
     }
 
     synchronized boolean retryableForRuntime() {
@@ -120,9 +146,14 @@ public final class ProtosActorDeliveryAttempt {
         state = State.CANCELLED_BEFORE_ACCEPTANCE;
     }
 
-    synchronized void markFailedBeforeAcceptanceForRuntime() {
-        requirePending("fail before acceptance");
-        state = State.FAILED_BEFORE_ACCEPTANCE;
+    void markFailedBeforeAcceptanceForRuntime() {
+        FailureObserver notify;
+        synchronized (this) {
+            requirePending("fail before acceptance");
+            state = State.FAILED_BEFORE_ACCEPTANCE;
+            notify = failureObserver;
+        }
+        notify.failed(State.FAILED_BEFORE_ACCEPTANCE);
     }
 
     private void requirePending(String transition) {

@@ -76,12 +76,12 @@ Published slices:
 | I011-6 | CLOSED | `0.2.88-SNAPSHOT` | `SAME_COMMIT` | Bounded accepted-message mailbox ownership; READY-gated implicit event-loop dispatch; automatic Actor-local scheduler wakeups; weak-fair cross-Actor scheduling with one non-preemptive segment per selection and no same-incarnation parallel execution. |
 | I011-7 | CLOSED | `0.2.91-SNAPSHOT` | `SAME_COMMIT` | Concrete-Actor pre-acceptance delivery admission/backpressure foundation: pending operation ownership outside the bounded accepted mailbox; deterministic capacity wakeups; known pre-acceptance cancellation; same-sender FIFO preservation and weak admission fairness. |
 | I011-8 | CLOSED | `0.2.93-SNAPSHOT` | `SAME_COMMIT` | Public `ActorRef.send(selector, arguments...)` over I011-7 admission: exact semantic-String validation, synchronous whole-graph snapshot, local identity-bearing SendOperation with exactly cancel/retry, normal behavior dispatch with ignored send result, and fresh explicit retry over the original snapshot after known delivery failure. |
+| I011-9 | CLOSED | `0.2.99-SNAPSHOT` | `SAME_COMMIT` | Public `ActorRef.request(selector, arguments...)` over the shared delivery path: fresh caller-domain Future, reply-value Actor transfer without Future adoption/flattening, deterministic pre/post-acceptance cancellation mapping, `NonTransferableValue` reply failure, and `RequestOutcomeUncertain` for known accepted work lost before a normal reply. |
 
 Remaining implemented-surface gaps before top-level closure:
-- `request()` reply Future/reply-transfer integration plus accepted-but-undispatched loss, cancellation/acceptance races, and distributed delivery uncertainty (`RequestOutcomeUncertain`);
-- remaining SendOperation post-acceptance/distributed uncertainty finalization beyond the known local concrete-Actor failure path;
-- remaining specialized transfer integrations whose state/authority has its own contract (including keyed collections and future GroupRef/Process capability materialization), plus reply-transfer wiring;
-- stop/termination observation, failure authority, Actor-owned task cleanup, RootActor/process integration, and final deterministic race/conformance coverage.
+- distributed/Group routing and delivery uncertainty beyond the direct concrete-Actor path, including remaining SendOperation uncertainty finalization;
+- remaining specialized transfer integrations whose state/authority has its own contract (including keyed collections and future GroupRef/Process capability materialization); reply transfer is wired for the value families already supported by Actor transfer;
+- stop/termination observation, failure authority, Actor-owned task and outstanding non-task-backed operation cleanup, RootActor/process integration, and final deterministic race/conformance coverage.
 
 
 ### I016 — Filesystem / File

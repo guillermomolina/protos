@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.99-SNAPSHOT
+
+- Implement I011-9 concrete-Actor `ActorRef.request(selector, arguments...)`: reuse the I011-7/I011-8 delivery boundary, return a fresh caller-domain Future, transfer the normal handler result back across the Actor boundary, and never flatten or adopt a destination-local Future.
+- Complete direct concrete-Actor accepted-work loss notification: accepted-but-undispatched work lost at termination becomes post-acceptance failure; request loss/fatal handler failure maps to a fresh caller-domain `RequestOutcomeUncertain`, non-transferable replies fail with `NonTransferableValue`, and cancellation preserves the pre/post-acceptance distinction. Distributed/Group routing uncertainty, lifecycle observation/stop, specialized transfers, and final Actor cleanup remain for later I011 slices.
+
 ## 0.2.98-SNAPSHOT
 
 - Continue I018 Core self-hosting/bootstrap minimization by moving the standard ordinary `Integer.negated()` body from Java into distributable `protos/lib/core/integer.protos` as ordinary Protos behavior (`0 - this`).
