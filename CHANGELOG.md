@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.140-SNAPSHOT
+
+- Implement I015-B standard `TextReader` borrowing/owning construction and progress-oriented `readText()`. `TextReader(source, encoding)` and `TextReader.owning(source, encoding)` are source-backed frozen-prelude factory operations; constructors validate ByteReadable capability, exact Encoding-family membership and owning Closable authority synchronously before wrapper creation or I/O. Each success creates a fresh wrapper with exactly `readText` and `close`.
+- Add one ordered TextReader input/decoder domain with transactional strict portable UTF-8/UTF-16LE/UTF-16BE/Latin1 decoding, initial matching-BOM consumption, incomplete-sequence retention, progress as soon as valid text is returnable, valid-prefix delivery before a later malformed error, permanent text-side failure once decoding/underlying I/O failure becomes an operation outcome, and stable no-more-source-consumption behavior after failure.
+- Integrate readText cancellation and close with the I014 I/O lifecycle machinery: queued/active cancellation is zero logical consumption even when lower read-ahead completes late, close irreversibly cuts over uncommitted reads, borrowing close leaves the source open, owning close explicitly releases a Closable source, and reader failure does not itself close the source. I015-B intentionally covers portable Encoding streaming; I015-E retains host-provided streaming-Codec integration because the published I015-A host Encoding boundary is one-shot only. Register the two-site TextReader resource/capability bridge in I018, moving the audited boundary from 28 providers / 103 sites to 29 providers / 105 sites. I015-B is CLOSED and I015-C becomes READY.
+
 ## 0.2.139-SNAPSHOT
 
 - Close LIB001-C by completing the initial `std:collections/Set` and `std:collections/IdentitySet` surfaces with fresh `union`, `intersection`, and `difference` results plus `sameMembers`, `isSubset`, `isSuperset`, and `isDisjoint`; no runtime Set family, wrapper, tag, generic collection hierarchy, or production Java path is added.

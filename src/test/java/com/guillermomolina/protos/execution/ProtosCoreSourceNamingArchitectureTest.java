@@ -57,6 +57,7 @@ class ProtosCoreSourceNamingArchitectureTest {
                     "Future.protos",
                     "Actor.protos",
                     "Process.protos",
+                    "TextReader.protos",
                     "BufferedReader.protos",
                     "BufferedWriter.protos",
                     "Bytes.protos");

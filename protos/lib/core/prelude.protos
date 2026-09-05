@@ -55,6 +55,7 @@ _corePreludeBindings: Context {
     Future: Future
     Actor: Actor
     Process: Process
+    TextReader: TextReader
     BufferedReader: BufferedReader
     BufferedWriter: BufferedWriter
     import: import

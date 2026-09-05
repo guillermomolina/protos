@@ -22,6 +22,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -59,6 +60,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardProcessArgumentsProtocol.java", 3),
                     Map.entry("execution/ProtosStandardEnvironmentProtocol.java", 3),
                     Map.entry("execution/ProtosStandardEncodingProtocol.java", 2),
+                    Map.entry("execution/ProtosStandardTextReaderProtocol.java", 2),
                     Map.entry("execution/ProtosStandardProcessStreamProtocol.java", 2),
                     Map.entry("execution/ProtosStandardProcessProtocol.java", 1),
                     Map.entry("execution/ProtosStandardBytesProtocol.java", 7),
@@ -99,8 +101,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         }
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actual);
-        assertEquals(28, actual.size());
-        assertEquals(103, actual.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(29, actual.size());
+        assertEquals(105, actual.values().stream().mapToInt(Integer::intValue).sum());
 
         String inventory =
                 Files.readString(Path.of("docs", "project", "CORE_NATIVE_BOUNDARY.md"));
@@ -222,6 +224,10 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                         "stderr",
                         "stderrEncoding"));
         assertNativeSelectors(
+                "TextReader",
+                ordinaryBinding(prelude, "TextReader"),
+                Set.of("call", "owning"));
+        assertNativeSelectors(
                 "BufferedReader",
                 ordinaryBinding(prelude, "BufferedReader"),
                 Set.of("call", "owning"));
@@ -263,6 +269,28 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 "ProcessStandardOutput",
                 standardOutputPrototype,
                 Set.of("write"));
+
+        ProtosPrelude helperPrelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        ProtosActivation textActivation = helperPrelude.newModuleActivation();
+        ProtosObjectValue textSource =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        textSource.createLocalSlot(
+                "read",
+                ProtosClosureValue.nativeClosure(
+                        (activation, arguments) -> activation.receiver()));
+        Object utf8 =
+                helperPrelude.encodingPrototype().readLocalSlot("UTF8").orElseThrow();
+        ProtosObjectValue textReader =
+                (ProtosObjectValue)
+                        ProtosInvocation.invokeMessage(
+                                ordinaryBinding(helperPrelude, "TextReader"),
+                                "call",
+                                java.util.List.of(textSource, utf8),
+                                textActivation);
+        assertNativeSelectors(
+                "TextReaderWrapper",
+                textReader,
+                Set.of("readText", "close"));
 
         ProtosObjectValue bytesPrototype =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
