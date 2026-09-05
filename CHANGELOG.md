@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.120-SNAPSHOT
+
+- Implement CLI004 standard-library module resolution for the official CLI with a reserved `std:<logical-name>` distribution namespace, logical relocation-independent `ModuleKey` identity, hidden `.protos` file mapping under `protos/lib/`, and explicit exclusion of bootstrap `core/`.
+- Keep `std:` absolute and non-shadowable: invalid, missing, non-standard, extension-bearing, traversal-like, or otherwise non-portable spellings fail through the existing Core import Error path with no user search-path fallback.
+- Wire the resolver through the existing Core bootstrap host boundary without changing normative Module semantics, and close the LIB001 import/distribution prerequisite while leaving Collections implementation itself READY and not started.
+
 ## 0.2.119-SNAPSHOT
 
 - Implement I017-D1 Process-local standard byte-stream bindings with independently optional stdin/stdout/stderr bootstrap availability, non-waiting repeated view materialization, one shared input-consumption or output-ordering/backpressure domain per binding, and distinct stdout/stderr domains even when a host reuses one backend object.

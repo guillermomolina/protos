@@ -289,42 +289,62 @@ is intentionally fixed-size under ordinary indexed mutation, so a growable
 sequential storage requirement must be demonstrated and designed rather than
 silently added to Array.
 
-## Import and distribution gap
+## Import and distribution convention
 
-Core module semantics already accept exact String specifiers and delegate
-canonical resolution/source retrieval to a host module resolver. However, the
-ordinary CLI/bootstrap path observed during this audit still needs a fresh
-current-main check for how distributable standard-library modules under
-`protos/lib/collections/` become resolvable in normal execution.
+CLI004 closes the standard-library resolution prerequisite without changing Core
+module semantics. The official CLI host resolver uses the reserved distribution
+specifier namespace:
 
-Do not hard-code a collections-specific import exception. Before LIB001 source is
-published, design and implement the smallest general host/distribution resolver
-path that makes standard-library modules ordinary resolvable modules. If that
-requires Core/runtime implementation work rather than library code, track it
-under the appropriate non-LIB work owner.
+```text
+std:<logical-module-name>
+```
 
-No import spelling is fixed here. Candidates such as `collections/set`,
-`std/collections/set`, or another package convention must be evaluated together
-with collision rules, relative imports, installation layout, and future
-third-party package resolution.
+For LIB001, the portable form is therefore, for example:
+
+```protos
+sets: import("std:collections/set")
+```
+
+The resolver contract is intentionally narrow:
+
+- `std:` names are absolute distribution identifiers and never participate in
+  user/project search paths or relative resolution;
+- the canonical `ModuleKey` is the same logical `std:` identifier, independent
+  of the installation filesystem path and importing module;
+- the physical `.protos` extension is a distribution detail and is not part of
+  the specifier;
+- portable logical-name segments use lowercase ASCII letters, digits after the
+  first character, and `_`, with `/` only as the segment separator;
+- `core` and `core/...` are excluded because `protos/lib/core/` is bootstrap Core,
+  not importable Standard Library;
+- a missing or invalid `std:` name fails through the existing Core import Error
+  path with no fallback to a local file or package of the same name;
+- the official resolver introduced by CLI004 intentionally does not define
+  third-party package, relative-file, registry, versioning, or network lookup.
+
+The source file for `std:collections/set` is distributed at
+`protos/lib/collections/set.protos`. That physical mapping is host/distribution
+policy under the existing module-resolution boundary; it is not a new Core
+language rule.
 
 ## Open questions before implementation slices are frozen
 
 A fresh current-main audit must close at least these questions:
 
-1. What is the general standard-library module resolver/distribution convention?
-2. What exact module names and import spellings are portable?
-3. What are the exact normal results of Set/IdentitySet mutating operations?
-4. Which conventional value is stored for a newly introduced Set-role key, given
+CLI004 closes the resolver/distribution and portable import-spelling questions.
+The remaining API-design questions are:
+
+1. What are the exact normal results of Set/IdentitySet mutating operations?
+2. Which conventional value is stored for a newly introduced Set-role key, given
    that ordinary Map access can observe it?
-5. What are the exact constructor forms (`empty`, `of`, or alternatives),
+3. What are the exact constructor forms (`empty`, `of`, or alternatives),
    argument validation rules, duplicate handling, and evaluation order?
-6. Which Set algebra operations are mutating versus fresh-result operations?
-7. What exact deterministic traversal/result order should each operation expose?
-8. Should initial Array sequential algorithms be module functions only, or is
+4. Which Set algebra operations are mutating versus fresh-result operations?
+5. What exact deterministic traversal/result order should each operation expose?
+6. Should initial Array sequential algorithms be module functions only, or is
    there a separately justified ordinary behavior-composition mechanism that
    preserves Actor transfer and current Core boundaries?
-9. Which callback-domain, failure, suspension, and mutation-snapshot laws can be
+7. Which callback-domain, failure, suspension, and mutation-snapshot laws can be
    reused from existing Core sequential/parallel operations without silently
    changing their semantics?
 
@@ -333,8 +353,8 @@ A fresh current-main audit must close at least these questions:
 Do not implement LIB001 as one large patch. After re-auditing the then-current
 main branch:
 
-1. close the general standard-library resolution/import prerequisite if it is
-   still missing;
+1. verify the published CLI004 `std:` resolver/distribution contract still
+   satisfies the current host and module architecture;
 2. finalize the smallest Set/IdentitySet public contracts and implement them as
    ordinary distributable Protos modules;
 3. validate Set algebra, Map/IdentityMap law preservation, mutation state, Actor

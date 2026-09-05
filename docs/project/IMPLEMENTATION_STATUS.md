@@ -222,6 +222,7 @@ Closure result:
 | CLI001 | Basic CLI + persistent REPL | CLOSED | — | historical; not backfilled | — |
 | CLI002 | Interactive terminal UX | CLOSED | — | historical; not backfilled | — |
 | CLI003 | Multiline REPL input | CLOSED | `0.2.80-SNAPSHOT` | `254c80c0fb9e70f1dd07ef711f06ce71faa93829` | published multiline REPL input; parser-EOF accumulation, one-unit bracketed paste, persistent top-level context, recovery/history/stream coverage; recursive factorial regression is covered after standard numeric ordering completion |
+| CLI004 | Standard-library module resolution | CLOSED | `0.2.120-SNAPSHOT` | `SAME_COMMIT` | official CLI host resolver for reserved `std:<logical-name>` distribution modules; logical relocation-independent ModuleKey identity; no search-path shadowing/fallback; bootstrap `core/` excluded; no normative Core module change |
 
 
 ## Standard Library
@@ -246,7 +247,7 @@ work may proceed without waiting for an earlier-numbered roadmap item.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| LIB001 | Collections library | READY | — | I004 + I005 + I006 + I008 closed; implement as ordinary distributable modules under `protos/lib/collections/` without duplicating or redefining Core Array, Map, or IdentityMap semantics. |
+| LIB001 | Collections library | READY | — | I004 + I005 + I006 + I008 + CLI004 closed; implement as ordinary distributable modules under `protos/lib/collections/` using `std:collections/...` imports without duplicating or redefining Core Array, Map, or IdentityMap semantics. |
 | LIB002 | Text / encoding conveniences | BLOCKED_BY_DEPENDENCIES | — | I015 is not closed; ordinary library conveniences may build on Encoding/Text I/O but must not redefine their Core semantics. |
 | LIB003 | JSON / serialization | BLOCKED_BY_DEPENDENCIES | — | LIB001 is not closed; design exact text/encoding and stream-adapter dependencies from the then-current repository rather than assuming roadmap order is dependency order. |
 | LIB004 | Filesystem / process conveniences | BLOCKED_BY_DEPENDENCIES | — | I016 and I017 are not closed; convenience APIs must preserve Filesystem/Process authority boundaries and may not manufacture ambient host authority. |
@@ -263,11 +264,11 @@ module facilities.
 Design record:
 - `docs/project/LIB001_COLLECTIONS_DESIGN.md` records the completed initial
   standard-library design audit, prior-art comparison, attempted falsification,
-  rejected architecture alternatives, current recommendation, and unresolved
+  rejected architecture alternatives, current recommendation, and remaining API
   questions;
 - the record is non-normative: it constrains implementation planning but does
-  not redefine Core semantics or freeze unresolved import spellings and API
-  details as language rules.
+  not redefine Core semantics; CLI004's `std:` spelling is host/distribution
+  policy under the existing Core module-resolution boundary.
 
 Implementation boundary:
 - distributable library source belongs under `protos/lib/collections/`;
@@ -278,9 +279,9 @@ Implementation boundary:
 - the current design recommendation is module-centric behavior over existing
   Core collection state, with Set/IdentitySet explored first as roles over
   `Map`/`IdentityMap` rather than new runtime collection families;
-- implementation slices and exact public API/import spellings remain unassigned
-  until the current host standard-library resolution path and the remaining API
-  questions in the design record are closed.
+- CLI004 closes the host standard-library resolution prerequisite with portable
+  `std:<logical-name>` specifiers; implementation slices remain unassigned until
+  the remaining API questions in the design record are closed.
 
 Dependencies:
 - I004 Array completion — CLOSED;

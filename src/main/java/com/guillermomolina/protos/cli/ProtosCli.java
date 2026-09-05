@@ -149,7 +149,9 @@ public final class ProtosCli {
 
     private Session session() throws IOException {
         Path c = core();
-        ProtosPrelude p = new ProtosCoreBootstrap().bootstrap(c);
+        ProtosModuleResolver moduleResolver =
+                new ProtosStandardLibraryModuleResolver(c.getParent());
+        ProtosPrelude p = new ProtosCoreBootstrap().bootstrap(c, moduleResolver);
         return new Session(new ProtosSourceCompiler(), p.newModuleActivation());
     }
 
