@@ -281,7 +281,7 @@ work may proceed without waiting for an earlier-numbered roadmap item.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| LIB001 | Collections library | READY | — | I004 + I005 + I006 + I008 + CLI004 closed; implement as ordinary distributable modules under `protos/lib/collections/` using `std:collections/...` imports without duplicating or redefining Core Array, Map, or IdentityMap semantics. |
+| LIB001 | Collections library | READY | — | I004 + I005 + I006 + I008 + CLI004 closed; Set/IdentitySet contract is closed and LIB001-A is READY; implement as ordinary distributable modules under `protos/lib/collections/` using `std:collections/...` imports without redefining Core collection semantics. |
 | LIB002 | Text / encoding conveniences | BLOCKED_BY_DEPENDENCIES | — | I015 is not closed; ordinary library conveniences may build on Encoding/Text I/O but must not redefine their Core semantics. |
 | LIB003 | JSON / serialization | BLOCKED_BY_DEPENDENCIES | — | LIB001 is not closed; design exact text/encoding and stream-adapter dependencies from the then-current repository rather than assuming roadmap order is dependency order. |
 | LIB004 | Filesystem / process conveniences | BLOCKED_BY_DEPENDENCIES | — | I016 and I017 are not closed; convenience APIs must preserve Filesystem/Process authority boundaries and may not manufacture ambient host authority. |
@@ -296,33 +296,54 @@ ordinary Protos library modules on top of the existing Core collection and
 module facilities.
 
 Design record:
-- `docs/project/LIB001_COLLECTIONS_DESIGN.md` records the completed initial
-  standard-library design audit, prior-art comparison, attempted falsification,
-  rejected architecture alternatives, current recommendation, and remaining API
-  questions;
-- the record is non-normative: it constrains implementation planning but does
-  not redefine Core semantics; CLI004's `std:` spelling is host/distribution
-  policy under the existing Core module-resolution boundary.
+- `docs/project/LIB001_COLLECTIONS_DESIGN.md` records the completed comparative
+  architecture audit and the focused Set/IdentitySet API audit;
+- the record is non-normative: it constrains Standard Library implementation but
+  does not redefine Core semantics; CLI004's `std:` spelling remains host/
+  distribution policy under the existing Core module-resolution boundary;
+- the focused audit closes the initial Set/IdentitySet representation and public
+  contract, including the correction from "arbitrary Map role" to a well-formed
+  ordinary Map/IdentityMap `key -> true` library invariant.
 
 Implementation boundary:
 - distributable library source belongs under `protos/lib/collections/`;
 - existing Core `Array`, `Map`, and `IdentityMap` semantics and prototypes remain
   Core and are not reclassified as library work;
-- library API design must use ordinary Protos mechanisms and must not silently
-  introduce new normative Core semantics;
-- the current design recommendation is module-centric behavior over existing
-  Core collection state, with Set/IdentitySet explored first as roles over
-  `Map`/`IdentityMap` rather than new runtime collection families;
-- CLI004 closes the host standard-library resolution prerequisite with portable
-  `std:<logical-name>` specifiers; implementation slices remain unassigned until
-  the remaining API questions in the design record are closed.
+- Set/IdentitySet add no runtime value family, tag, wrapper, privileged transfer
+  identity, generic Collection hierarchy, or native boundary;
+- portable modules are `std:collections/set` and
+  `std:collections/identity_set`;
+- Set stores every introduced member as an ordinary Map key mapped to canonical
+  `true`; IdentitySet does the same over IdentityMap;
+- module invocation is the constructor (`sets(...)` / `identitySets(...)`), and
+  the initial closed Set surface is `contains`, `add`, `remove`, `size`, `each`,
+  `union`, `intersection`, `difference`, `sameMembers`, `isSubset`,
+  `isSuperset`, and `isDisjoint`;
+- `add`/`remove` return the exact Set argument after success; removal absence
+  follows the underlying Map Error; `each` invokes callbacks with exactly one
+  member and uses the underlying keyed snapshot/order;
+- Set algebra returns fresh open Sets with deterministic left-derived order as
+  recorded in the design document; ordinary Map `==`/`hash` remain unchanged;
+- initial Array algorithms remain eager/module-centric candidates and require the
+  focused API audit recorded below before their implementation slices become
+  ready.
+
+Planned slices:
+
+| Slice | Status | Scope / unblock condition |
+|---|---|---|
+| LIB001-A | READY | Set/IdentitySet ordinary modules: `key -> true` representation, variadic module-call construction, `contains`, `size`, focal conformance. |
+| LIB001-B | BLOCKED_BY_DEPENDENCIES | Add `add`, `remove`, one-argument `each`, state/order/snapshot/failure conformance; depends on LIB001-A CLOSED. |
+| LIB001-C | BLOCKED_BY_DEPENDENCIES | Fresh Set algebra + predicates + Set-area Actor/identity/order/final conformance; depends on LIB001-B CLOSED. |
+| LIB001-D | OPEN | Eager Array `map`/`filter`/`findIndex`; becomes READY only after a fresh current-main audit closes callback, snapshot/mutation, and `findIndex` absence contracts. |
+| LIB001-E | BLOCKED_BY_DEPENDENCIES | Eager Array `reduce`/`sort` plus final cross-slice LIB001 validation/closure; requires LIB001-D CLOSED and the reduce/sort contracts audited before implementation. |
 
 Dependencies:
 - I004 Array completion — CLOSED;
 - I005 Standard Map — CLOSED;
 - I006 IdentityMap / identity hashing — CLOSED;
-- I008 Modules — CLOSED.
-
+- I008 Modules — CLOSED;
+- CLI004 Standard-library module resolution — CLOSED.
 
 ### LIB002 — Text / encoding conveniences
 

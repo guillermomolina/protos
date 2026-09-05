@@ -1,6 +1,6 @@
 # LIB001 Collections Design Record
 
-Status: Initial design audit complete; implementation not started
+Status: Set/IdentitySet contract closed; implementation slices assigned; implementation not started
 Work item: `LIB001`
 Nature: Project design record; **non-normative**
 
@@ -164,79 +164,243 @@ Actor transfer, alias/cycle behavior, and open/closed/frozen semantics.
 existing semantic-identity membership law rather than pretending both keyed
 families have the same equality semantics.
 
-**Current recommendation: use C as the architecture to falsify during the first
-implementation design slice.**
+**Current disposition: adopted for initial LIB001, refined by the focused API
+audit below.**
 
 This is a design recommendation, not a normative statement that every future
 Set facility must forever use this representation.
 
 ## Recommended Set / IdentitySet laws
 
-The initial implementation should be designed around these laws unless a fresh
-current-main audit exposes a contradiction:
+The focused API audit closes the initial Set/IdentitySet contract. The earlier
+architecture C remains preferred, with one important refinement: the Standard
+Library does **not** promise that an arbitrary Map containing unrelated mapped
+values can simultaneously be mutated as a Set while preserving those values.
+Core has no atomic public `putIfAbsent`-style operation, and normal Map key
+search may execute user `hash` / `==` behavior with effects or suspension. A
+library implementation based on `containsKey` followed by `atPut` would perform
+two searches and could not faithfully provide that stronger promise.
 
-1. **No Set runtime family or tag.** Set membership is a library interpretation
-   of Map keys, not a new Core semantic category.
-2. **Any compatible Map may play the Set role.** Applying Set operations to an
-   existing Map observes/manipulates key membership on that same object; no
-   hidden conversion or wrapper identity is required.
-3. **Values do not define Set membership.** Membership depends only on key
-   presence. A Set `add` applied to an already-present key must not overwrite an
-   existing mapping value merely to normalize a hidden presence marker.
-4. **Fresh Set construction may use an ordinary conventional Map value.** The
-   exact value used for entries created by a Set constructor/add operation is
-   intentionally still an API-design question because the underlying Map makes
-   it observable through ordinary keyed access.
-5. **Set equality/hash semantics come from Map keys.** Normal Set uses Map's
-   existing `hash` + `==` key law. IdentitySet uses IdentityMap's existing
-   semantic-identity law. No equality-strategy object is introduced initially.
-6. **Set algebra ignores order; traversal does not need to.** Mathematical
-   membership laws are order-independent. When traversal or a result-building
-   operation exposes order, the design should preserve deterministic behavior
-   derived from the underlying Map's defined traversal order rather than invent
-   a contradictory "unordered" fiction.
-7. **No special Actor rule.** Set-role data crosses Actors only through the
-   already-applicable Map/IdentityMap transfer contracts; behavior is loaded
-   locally from the library module.
-8. **No special freeze/close rule.** Because the role is the same underlying
-   object, ordinary Map/IdentityMap mutation state remains authoritative.
-
-Candidate deterministic result-order rules to validate during API design:
-
-- union: left keys in left traversal order, then right keys not already present,
-  in right traversal order;
-- intersection: surviving left keys in left traversal order;
-- subtraction/difference: surviving left keys in left traversal order.
-
-## Candidate initial Set surface
-
-The exact spelling and return contracts are **not frozen** by this record. The
-small initial capability set to design first is:
+The initial Set representation is therefore a small **library invariant over an
+ordinary standard Map**, not a new runtime family:
 
 ```text
-empty
-of
-contains
-add
-remove
-size
-each
-union
-intersection
-subtract
-isSubset
-isSuperset
-isDisjoint
+Set         = standard Map       with every member stored as key -> true
+IdentitySet = standard IdentityMap with every member stored as key -> true
 ```
 
-An analogous identity-set module should expose the same concepts only where the
-semantics remain genuinely parallel. Do not introduce a common prototype merely
-to make the names line up.
+The canonical Boolean `true` is the exact marker used by constructors and
+`add`. It is immutable, Actor-transferable, has no auxiliary identity, and makes
+the otherwise observable Map representation explicit rather than pretending it
+is hidden. A value produced by the Set module remains an ordinary Map for all
+Core observations; a value produced by the IdentitySet module remains an
+ordinary IdentityMap.
 
-Questions such as whether mutators return the collection, affected member,
-previous mapping value, a Boolean changed flag, or another ordinary result must
-be resolved by comparing current Protos mutator conventions and composition
-needs, not by copying Java/C#/Smalltalk convention.
+A standard Map/IdentityMap that already satisfies the corresponding `key ->
+true` invariant may be used with the library contract. Directly changing one of
+its mapped values to another object, or otherwise replacing/overriding the
+ordinary keyed behavior on which the module relies, breaks the Set-library
+invariant; LIB001 does not add a runtime Set tag, validation bit, wrapper, or
+privileged recovery rule for such values.
+
+The closed initial laws are:
+
+1. **No Set runtime family, tag, wrapper, or Set prototype.** Set is ordinary
+   Map state plus Actor-local module behavior.
+2. **Canonical representation marker.** Every association introduced by the
+   Set/IdentitySet modules maps its representative member key to canonical
+   `true`.
+3. **Membership follows the underlying keyed law.** Set uses standard Map
+   `hash` + `==`; IdentitySet uses standard IdentityMap semantic identity
+   (`identityHashOf` + `===`). No equality-strategy object is introduced.
+4. **Representative and insertion order come from Core Map.** Re-adding an
+   already-matching member retains the existing representative key and insertion
+   position because standard `atPut` replaces only the mapped value.
+5. **Set algebra ignores traversal order mathematically, but observable
+   traversal/results are deterministic.** The exact rules are stated below.
+6. **No special Actor rule.** Set data crosses Actors only through the existing
+   Map/IdentityMap transfer contracts; the receiving Actor imports behavior
+   locally when needed.
+7. **No special open/closed/frozen rule.** The underlying Map state is
+   authoritative; the library neither deep-freezes nor maintains a second
+   mutation-state layer.
+8. **Ordinary Map equality/hash remain untouched.** Library membership
+   equivalence is explicit through `sameMembers`; LIB001 does not redefine `==`
+   or `hash` for mutable Map-backed Sets.
+
+## Closed initial Set / IdentitySet surface
+
+The portable modules are:
+
+```text
+std:collections/set
+std:collections/identity_set
+```
+
+Their imported module instances are ordinarily invokable. No separate `empty`,
+`of`, `new`, constructor object, or syntax is introduced:
+
+```protos
+sets: import("std:collections/set")
+identitySets: import("std:collections/identity_set")
+
+empty: sets()
+values: sets(a, b, c)
+identities: identitySets(a, b, c)
+```
+
+The module-local `call(...elements)` factory receives the normal already-
+evaluated positional vector under the ordinary Closure/rest rules, creates one
+fresh open standard Map/IdentityMap, and processes elements in supplied order by
+ordinary keyed insertion with marker `true`.
+
+Duplicate handling is therefore not a second Set-specific key algorithm. When a
+later supplied element matches an existing member under the underlying keyed
+law, standard `atPut` keeps the original representative key and insertion
+position while replacing its mapped value with the same canonical `true`.
+Constructor key `hash` / `==` effects and failures are ordinary Map effects and
+are not rolled back.
+
+The exact initial operations are:
+
+```text
+call(...elements)              -> fresh open Map-backed Set
+contains(set, element)         -> Boolean
+add(set, element)              -> set
+remove(set, element)           -> set
+size(set)                      -> Integer
+each(set, block)               -> set
+
+union(left, right)             -> fresh Set
+intersection(left, right)      -> fresh Set
+difference(left, right)        -> fresh Set
+
+sameMembers(left, right)       -> Boolean
+isSubset(left, right)          -> Boolean
+isSuperset(left, right)        -> Boolean
+isDisjoint(left, right)        -> Boolean
+```
+
+`identity_set` exposes the same operation names and result shapes where they are
+meaningful, with IdentityMap membership semantics throughout. The parallel
+surface is convenience, not a common prototype or hidden shared hierarchy.
+
+### Basic observation and mutation contracts
+
+`contains(set, element)` delegates membership to the underlying keyed
+`containsKey` law and returns its canonical Boolean result. `size(set)` returns
+the underlying Map/IdentityMap association count.
+
+`add(set, element)` performs one ordinary `atPut(element, true)` on the
+well-formed Set and, after successful completion, returns the exact Set object.
+It does not manufacture a Boolean "changed" result and does not perform a
+separate preflight lookup. On an already-present member, the well-formed
+representation already maps that representative key to `true`, so the ordinary
+replacement preserves membership, representative identity, and insertion
+position.
+
+`remove(set, element)` performs the ordinary keyed `remove(element)` operation,
+ignores the removed marker value, and after success returns the exact Set object.
+An absent member therefore follows Core Map removal and signals an Error rather
+than returning `false`, `null`, or another absence sentinel. The library does
+not promise to recover and return the stored representative key when the query
+is merely `==`-equivalent to a distinct stored object; the public Map removal
+protocol returns the mapped value, not that representative key.
+
+Open/closed/frozen behavior follows directly from Core Map rules. In particular:
+
+```text
+open Set:
+    add absent       allowed
+    add present      allowed
+    remove present   allowed
+
+closed Set:
+    add present      allowed (ordinary value replacement true -> true)
+    add absent       Error
+    remove           Error
+
+frozen Set:
+    add              Error
+    remove           Error
+```
+
+Read-only operations remain available whenever their underlying Map operations
+are available.
+
+### `each` callback and snapshot contract
+
+`each(set, block)` exposes members only, not representation markers. It visits
+one element argument per entry in the underlying Map's insertion-order shallow
+snapshot and returns the exact Set object after normal completion:
+
+```text
+block(element)
+```
+
+The implementation may derive this through ordinary Map/IdentityMap `each`, so
+its member sequence inherits the underlying association snapshot: later
+insertions, removals, or marker replacements do not alter the already-established
+visit sequence, and nested traversals establish independent snapshots.
+
+A Standard Library module cannot reproduce Core's internal non-invoking
+callability preflight without adding a new primitive. LIB001 does not add one.
+Callback validation therefore occurs through the actual ordinary invocation of
+`block(element)`. An empty Set neither invokes nor otherwise inspects `block` and
+returns normally. On a non-empty Set, the first attempted invocation may signal
+an ordinary lookup/arity/invocation Error; that failure stops traversal and
+completed effects are not rolled back. Callback arity is never prevalidated.
+
+### Fresh-result algebra and deterministic order
+
+Only `add` and `remove` mutate their Set argument in the initial surface. The
+algebraic combinators return fresh open Sets and do not mutate either input:
+
+- `union(left, right)`: insert left members in left traversal order, then right
+  members not already represented in the result in right traversal order;
+- `intersection(left, right)`: keep matching left representatives in left
+  traversal order;
+- `difference(left, right)`: keep non-matching left representatives in left
+  traversal order.
+
+No initial `formUnion`, `unionInto`, `intersectInPlace`, `subtract`, or other
+mutating algebra synonym is added merely for familiarity.
+
+The Boolean predicates are deterministic and short-circuit in the traversal
+order implied by their left/right roles:
+
+- `isSubset(left, right)` traverses `left` and stops at the first member absent
+  from `right`;
+- `isSuperset(left, right)` is the corresponding right-in-left membership test
+  and therefore traverses `right`;
+- `isDisjoint(left, right)` traverses `left` and stops at the first member found
+  in `right`;
+- `sameMembers(left, right)` first compares sizes; unequal sizes return `false`
+  without key search, while equal sizes perform the same deterministic subset
+  check from `left` into `right`.
+
+Normal Set algebra uses Map `hash` / `==` and therefore may execute user behavior
+in the exact ordinary keyed operations used to build/query results. IdentitySet
+uses the non-overridable IdentityMap key law. No LIB001 operation introduces a
+transaction or rolls back already-completed user effects after a later Error or
+control transfer.
+
+### Equality and hashing boundary
+
+A Set remains an identity-bearing mutable Map. Consequently:
+
+```text
+left == right
+```
+
+continues to mean the ordinary Map/Object equality contract and does **not**
+become mathematical Set equality merely because both values satisfy the
+library invariant. `sameMembers(left, right)` is the explicit membership-
+equivalence operation.
+
+LIB001 likewise adds no content-derived `hash` for mutable Sets. Code that needs
+structural/persistent hashing requires a separately designed policy rather than
+silently destabilizing the standard Map identity hash.
 
 ## Array algorithms direction
 
@@ -327,45 +491,68 @@ The source file for `std:collections/set` is distributed at
 policy under the existing module-resolution boundary; it is not a new Core
 language rule.
 
-## Open questions before implementation slices are frozen
+## Remaining questions before Array slices are implemented
 
-A fresh current-main audit must close at least these questions:
+The focused Set/IdentitySet audit closes the resolver, representation,
+constructor, mutator-result, marker-value, duplicate, algebra, order, callback,
+absence, and equality-boundary questions for the initial Set surface.
 
-CLI004 closes the resolver/distribution and portable import-spelling questions.
-The remaining API-design questions are:
+Array algorithms remain intentionally less frozen. Before `LIB001-D` begins, a
+fresh current-main audit must close the exact sequential contracts for:
 
-1. What are the exact normal results of Set/IdentitySet mutating operations?
-2. Which conventional value is stored for a newly introduced Set-role key, given
-   that ordinary Map access can observe it?
-3. What are the exact constructor forms (`empty`, `of`, or alternatives),
-   argument validation rules, duplicate handling, and evaluation order?
-4. Which Set algebra operations are mutating versus fresh-result operations?
-5. What exact deterministic traversal/result order should each operation expose?
-6. Should initial Array sequential algorithms be module functions only, or is
-   there a separately justified ordinary behavior-composition mechanism that
-   preserves Actor transfer and current Core boundaries?
-7. Which callback-domain, failure, suspension, and mutation-snapshot laws can be
-   reused from existing Core sequential/parallel operations without silently
-   changing their semantics?
+1. callback callability/failure timing and whether the library can or should
+   mirror any Core preflight behavior;
+2. shallow snapshot timing and mutation visibility for `map`, `filter`, and
+   `findIndex`;
+3. exact `findIndex` absence result without inventing truthiness or a hidden
+   sentinel;
+4. `reduce` empty-input behavior, accumulator forms, callback arity/order, and
+   result propagation;
+5. `sort` comparator contract, result freshness, stability/order guarantees,
+   callback effects/failures, and alignment with (without copying concurrency
+   rules from) `parallelSort`;
+6. whether the initial sequential Array API remains module-only after concrete
+   implementation ergonomics are tested.
+
+No unresolved Set question above is a blocker for `LIB001-A`.
 
 ## Implementation sequencing recommendation
 
-Do not implement LIB001 as one large patch. After re-auditing the then-current
-main branch:
+LIB001 is partitioned into bounded slices so source, conformance evidence, and
+publication remain reviewable. The canonical slice statuses live in
+`docs/project/IMPLEMENTATION_STATUS.md`.
 
-1. verify the published CLI004 `std:` resolver/distribution contract still
-   satisfies the current host and module architecture;
-2. finalize the smallest Set/IdentitySet public contracts and implement them as
-   ordinary distributable Protos modules;
-3. validate Set algebra, Map/IdentityMap law preservation, mutation state, Actor
-   transfer, aliasing/cycles, and no new native/runtime boundary;
-4. add eager Array algorithms in small independently testable slices;
-5. only then decide whether another concrete collection or a reusable traversal
-   abstraction has earned its complexity through demonstrated duplication or a
-   real workload.
+Recommended execution order is:
 
-Before assigning concrete `LIB001-A`, `LIB001-B`, ... slices, verify the current
-repository and persist the resulting slice plan in the canonical project ledger.
+1. **LIB001-A — Set/IdentitySet construction and observation:** add the two
+   ordinary stdlib modules with the `key -> true` representation, variadic
+   module invocation, `contains`, and `size`, plus focal language-level tests.
+2. **LIB001-B — Set/IdentitySet mutation and iteration:** add `add`, `remove`,
+   and one-argument `each`, covering open/closed/frozen behavior, duplicate
+   representatives, insertion order, snapshot mutation, failures, and the empty-
+   Set callback boundary.
+3. **LIB001-C — Set algebra and Set-area conformance:** add fresh-result
+   `union`, `intersection`, `difference`, `sameMembers`, `isSubset`,
+   `isSuperset`, and `isDisjoint`; validate deterministic order, normal versus
+   identity membership, Actor transfer of underlying data, aliasing/cycles where
+   applicable, and absence of any new native/runtime boundary.
+4. **LIB001-D — eager Array map/filter/findIndex:** only after the recorded
+   focused Array API audit closes that slice's remaining contracts.
+5. **LIB001-E — Array reduce/sort and final LIB001 closure:** close the remaining
+   eager Array surface, perform final cross-slice validation, and mark top-level
+   LIB001 CLOSED only after publication evidence is complete.
+
+The Set slices are intentionally sequential because B builds on the constructors
+and basic role established by A, and C builds on the mutation/iteration surface
+from B. The Array work is conceptually independent of Set algebra, but D remains
+OPEN rather than pretending its still-unresolved callback/absence contracts are
+ready. Its recommended placement after C is project sequencing, not a new Core
+semantic dependency.
+
+Do not add Bag, Queue/Deque/Stack, PriorityQueue, SortedSet, Iterator/Enumerable,
+lazy Streams, collection Views, or a universal Collection hierarchy merely to
+complete this work item. Any such facility must earn a later LIB item or an
+explicit extension of LIB001 through demonstrated need and a fresh design audit.
 
 ## Acceptance tests for future LIB001 design changes
 
