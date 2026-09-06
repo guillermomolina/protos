@@ -514,3 +514,10 @@ text-writer/owning-close-exactly-once-and-fresh-future.protos	future-boolean	tru
 text-writer/writetext-wrong-type-error.protos	future-error-parent	InvalidIOArgument
 text-writer/writeline-wrong-arity-error.protos	future-error-parent	InvalidIOArgument
 text-writer/invalid-argument-no-target-io-and-reusable.protos	future-boolean	true
+library/json/final-deep-parser-nesting.protos	boolean	true
+library/json/final-deep-truncated-error.protos	error	-
+library/json/final-deep-event-stack.protos	boolean	true
+library/json/final-large-array-materialization.protos	boolean	true
+library/json/final-large-exact-number-roundtrip.protos	boolean	true
+library/json/final-long-incremental-string.protos	boolean	true
+library/json/final-cross-slice-roundtrip.protos	boolean	true
