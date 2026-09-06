@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.181-SNAPSHOT
+
+- Start `TOOL001-C4 — canonical TOML table assembly` with the smaller publishable `TOOL001-C4A` tranche. Extend ordinary-Protos `self:TomlDocument` with `table(text)`, producing the existing `{ kind, value }` TOML node model over C3 statement scanning and C1/C2 key/value parsing. Ordinary headers, dotted keys and inline tables normalize into the same nested Map representation without acquiring manifest-schema or package-policy meaning.
+- Implement TOML 1.0 ordinary-table ownership rules with internal `IdentityMap` metadata only: implicit super-tables may later receive their own header; dotted-key-created tables cannot be redefined by that header; header-defined tables cannot be redefined through dotted-key traversal; headers may add new sub-tables below dotted-key-created tables; inline tables are closed against later extension; duplicate keys, scalar/table conflicts and repeated headers fail where the invariant is violated. Unsupported scalar nodes remain parser data for later schema validation.
+- Apply the repository cost-aware decomposition rule to keep array-of-tables ownership separate: `TOOL001-C4` remains IN_PROGRESS, `TOOL001-C4A` closes ordinary table/dotted/header assembly, and `TOOL001-C4B` becomes READY for `[[array-of-tables]]` plus final TOML table-model conformance. C5 schema-v1 validation, C6 confined `protos.toml` I/O/diagnostics and C7 closure remain dependency-blocked.
+
 ## 0.2.180-SNAPSHOT
 
 - Continue `PERF003-A — Collection algorithm Truffle compilability` after the exact external diagnostic against Protos `5404667964dec84b8b8de2ff8dbe7923a5d1dd2e` again preserved `array-reduce` correctness (`528`, `rc=0`) and reduced the remaining failing graph from 150069 to 150036 against the 150000 limit. The bailout count remains 2, so PERF003-A is not closed.

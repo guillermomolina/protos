@@ -33,3 +33,16 @@ document-statements-crlf.protos	true
 document-statements-unclosed-string-error.protos	error
 document-statements-unbalanced-array-error.protos	error
 document-statements-stray-close-error.protos	error
+document-table-basic.protos	true
+document-table-dotted-equivalence.protos	true
+document-table-inline-equivalence.protos	true
+document-table-super-after-subtable.protos	true
+document-table-subtable-under-dotted.protos	true
+document-table-quoted-equals.protos	true
+document-table-unsupported-value.protos	true
+document-table-duplicate-key-error.protos	error
+document-table-redefinition-error.protos	error
+document-table-dotted-header-redefinition-error.protos	error
+document-table-header-dotted-redefinition-error.protos	error
+document-table-inline-extension-error.protos	error
+document-table-scalar-to-table-error.protos	error

@@ -313,3 +313,325 @@ statements: (text) => {
     finish()
     result
 }
+
+table: (text) => {
+    Toml: import("self:TomlSyntax")
+    items: statements(text)
+
+    fail: () => {
+        Error().signal()
+    }
+
+    node: (kind, value) => {
+        result: {
+            kind: kind
+            value: value
+        }
+        result
+    }
+
+    root: node("table", Map())
+    states: IdentityMap()
+    states.atPut(root, "root")
+    current: root
+
+    isSpace: (octet) => {
+        result: octet == 32
+        (octet == 9).ifTrue(() => {
+            result = true
+        })
+        result
+    }
+
+    decodeRange: (source, start, end) => {
+        buffer: Encoding.UTF8.encode("")
+        position: start
+
+        copy: null
+        copy = () => {
+            (position < end).ifTrue(() => {
+                buffer.add(source.at(position))
+                position = position + 1
+                copy()
+            })
+        }
+
+        copy()
+        Encoding.UTF8.decode(buffer)
+    }
+
+    trimBounds: (source) => {
+        left: 0
+        right: source.size()
+
+        trimLeft: null
+        trimLeft = () => {
+            (left < right).ifTrue(() => {
+                isSpace(source.at(left)).ifTrue(() => {
+                    left = left + 1
+                    trimLeft()
+                })
+            })
+        }
+
+        trimRight: null
+        trimRight = () => {
+            (right > left).ifTrue(() => {
+                isSpace(source.at(right - 1)).ifTrue(() => {
+                    right = right - 1
+                    trimRight()
+                })
+            })
+        }
+
+        trimLeft()
+        trimRight()
+        {
+            left: left
+            right: right
+        }
+    }
+
+    markInlineTable: (valueNode) => {
+        (valueNode.kind == "table").ifTrue(() => {
+            states.atPut(valueNode, "inline")
+        })
+    }
+
+    putDotted: null
+    putDotted = (tableNode, parts, position, valueNode) => {
+        name: parts.at(position)
+        last: position == parts.size() - 1
+        entries: tableNode.value
+
+        last.ifTrue(() => {
+            entries.containsKey(name).ifTrue(() => {
+                fail()
+            })
+            entries.atPut(name, valueNode)
+            markInlineTable(valueNode)
+        })
+
+        last.ifFalse(() => {
+            child: null
+            entries.containsKey(name).ifTrue(() => {
+                child = entries.at(name)
+                (child.kind == "table").ifFalse(() => {
+                    fail()
+                })
+                states.containsKey(child).ifFalse(() => {
+                    fail()
+                })
+                state: states.at(child)
+                (state == "header").ifTrue(() => {
+                    fail()
+                })
+                (state == "inline").ifTrue(() => {
+                    fail()
+                })
+                (state == "implicit").ifTrue(() => {
+                    states.atPut(child, "dotted")
+                })
+            })
+
+            entries.containsKey(name).ifFalse(() => {
+                child = node("table", Map())
+                entries.atPut(name, child)
+                states.atPut(child, "dotted")
+            })
+
+            putDotted(child, parts, position + 1, valueNode)
+        })
+    }
+
+    selectHeader: (parts) => {
+        selected: root
+        position: 0
+
+        walk: null
+        walk = () => {
+            name: parts.at(position)
+            last: position == parts.size() - 1
+            entries: selected.value
+            child: null
+
+            entries.containsKey(name).ifTrue(() => {
+                child = entries.at(name)
+                (child.kind == "table").ifFalse(() => {
+                    fail()
+                })
+                states.containsKey(child).ifFalse(() => {
+                    fail()
+                })
+                state: states.at(child)
+                (state == "inline").ifTrue(() => {
+                    fail()
+                })
+
+                last.ifTrue(() => {
+                    (state == "implicit").ifTrue(() => {
+                        states.atPut(child, "header")
+                    })
+                    (state == "implicit").ifFalse(() => {
+                        fail()
+                    })
+                })
+            })
+
+            entries.containsKey(name).ifFalse(() => {
+                child = node("table", Map())
+                entries.atPut(name, child)
+                last.ifTrue(() => {
+                    states.atPut(child, "header")
+                })
+                last.ifFalse(() => {
+                    states.atPut(child, "implicit")
+                })
+            })
+
+            selected = child
+            last.ifFalse(() => {
+                position = position + 1
+                walk()
+            })
+        }
+
+        walk()
+        selected
+    }
+
+    parseHeader: (statement) => {
+        source: Encoding.UTF8.encode(statement)
+        bounds: trimBounds(source)
+        (bounds.left >= bounds.right).ifTrue(() => {
+            fail()
+        })
+        (source.at(bounds.left) == 91).ifFalse(() => {
+            fail()
+        })
+        (source.at(bounds.right - 1) == 93).ifFalse(() => {
+            fail()
+        })
+
+        // Arrays of tables are assigned to TOOL001-C4B.
+        (bounds.left + 1 < bounds.right).ifTrue(() => {
+            (source.at(bounds.left + 1) == 91).ifTrue(() => {
+                fail()
+            })
+        })
+
+        keyText: decodeRange(source, bounds.left + 1, bounds.right - 1)
+        Toml.keyPath(keyText)
+    }
+
+    parseAssignment: (statement) => {
+        source: Encoding.UTF8.encode(statement)
+        length: source.size()
+        position: 0
+        quote: -1
+        separator: -1
+
+        scan: null
+        scan = () => {
+            (position < length).ifTrue(() => {
+                (separator < 0).ifTrue(() => {
+                    octet: source.at(position)
+                    inQuote: quote >= 0
+
+                    inQuote.ifTrue(() => {
+                        escaped: quote == 34
+                        (octet == 92).ifFalse(() => {
+                            escaped = false
+                        })
+
+                        escaped.ifTrue(() => {
+                            position = position + 1
+                            (position >= length).ifTrue(() => {
+                                fail()
+                            })
+                            position = position + 1
+                        })
+
+                        escaped.ifFalse(() => {
+                            (octet == quote).ifTrue(() => {
+                                quote = -1
+                            })
+                            position = position + 1
+                        })
+                    })
+
+                    inQuote.ifFalse(() => {
+                        isQuote: octet == 34
+                        (octet == 39).ifTrue(() => {
+                            isQuote = true
+                        })
+
+                        isQuote.ifTrue(() => {
+                            quote = octet
+                            position = position + 1
+                        })
+
+                        isQuote.ifFalse(() => {
+                            isNewline: octet == 10
+                            (octet == 13).ifTrue(() => {
+                                isNewline = true
+                            })
+                            isNewline.ifTrue(() => {
+                                fail()
+                            })
+
+                            (octet == 61).ifTrue(() => {
+                                separator = position
+                            })
+                            position = position + 1
+                        })
+                    })
+
+                    scan()
+                })
+            })
+        }
+
+        scan()
+        (quote >= 0).ifTrue(() => {
+            fail()
+        })
+        (separator < 0).ifTrue(() => {
+            fail()
+        })
+
+        keyText: decodeRange(source, 0, separator)
+        valueText: decodeRange(source, separator + 1, length)
+        {
+            path: Toml.keyPath(keyText)
+            value: Toml.value(valueText)
+        }
+    }
+
+    processAt: null
+    processAt = (position) => {
+        (position < items.size()).ifTrue(() => {
+            statement: items.at(position)
+            source: Encoding.UTF8.encode(statement)
+            bounds: trimBounds(source)
+            (bounds.left >= bounds.right).ifTrue(() => {
+                fail()
+            })
+
+            header: source.at(bounds.left) == 91
+            header.ifTrue(() => {
+                current = selectHeader(parseHeader(statement))
+            })
+
+            header.ifFalse(() => {
+                assignment: parseAssignment(statement)
+                putDotted(current, assignment.path, 0, assignment.value)
+            })
+
+            processAt(position + 1)
+        })
+    }
+
+    processAt(0)
+    root
+}

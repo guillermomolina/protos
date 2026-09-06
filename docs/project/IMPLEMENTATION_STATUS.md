@@ -669,7 +669,7 @@ record distributable Standard Library functionality.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | Bootstrap, confined Filesystem, atomic metadata publication, manifest C1/C2 and C3 document scanning are published; C4 canonical TOML table assembly is READY and the bounded legacy manifest Slice 3 remains open. |
+| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | Bootstrap, confined Filesystem, metadata publication and manifest C1/C2/C3 are published; C4 is IN_PROGRESS with C4A ordinary table assembly CLOSED and C4B arrays-of-tables/table-model closure READY. |
 | TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C CLOSED; comparative + scale/distribution checkpoints CLOSED; TOOL002-D is IN_PROGRESS with D1 safe Protos-consumable execution/detached observation CLOSED at `0.2.174-SNAPSHOT` and D2 confined corpus/TestPlan work READY. |
 
 ### TOOL001 — Package Tool
@@ -689,11 +689,13 @@ forward.
 | TOOL001-C1 | package-tool manifest Slice 3A | CLOSED | `8150d8219664b50ec66748639a47a1629638a8ed` | Internal Protos `self:TomlSyntax` parser foundation; schema-v1 design prerequisite subsequently published at `85ac538d378eeb2153e318145cae69114563e858`. |
 | TOOL001-C2 | package-tool manifest Slice 3B1 | CLOSED | `dc82976cd95ad4f08d446fbb7aedb43adf818612` | Complete TOML 1.0 String surface required by manifest schema v1 while retaining package meaning/schema validation outside the syntax engine. |
 | TOOL001-C3 | package-tool manifest Slice 3B2-A | CLOSED | `SAME_COMMIT` | Ordinary-Protos document scanner segments logical TOML statements across comments/strings/nesting without acquiring table/schema meaning. |
-| TOOL001-C4 | package-tool manifest Slice 3B2-B | READY | — | Canonical TOML document/table assembly over C3 and the existing syntax engine. |
+| TOOL001-C4 | package-tool manifest Slice 3B2-B | IN_PROGRESS | TOOL001-C4A published | Canonical TOML table-model parent; ordinary tables are published and arrays-of-tables remain. |
+| TOOL001-C4A | package-tool manifest Slice 3B2-B1 | CLOSED | `SAME_COMMIT` | Ordinary-Protos canonical table assembly for headers, dotted keys and inline-table equivalence with TOML duplicate/redefinition ownership checks. |
+| TOOL001-C4B | package-tool manifest Slice 3B2-B2 | READY | — | TOML 1.0 arrays-of-tables plus final canonical table-model conformance. |
 | TOOL001-C5 | package-tool manifest Slice 3C | BLOCKED_BY_DEPENDENCIES | — | Manifest schema-v1 validation and ordinary-Protos model construction after C4. |
 | TOOL001-C6 | package-tool manifest Slice 3D | BLOCKED_BY_DEPENDENCIES | — | Confined `protos.toml` read, UTF-8 decode, parse/validation and diagnostics after C5. |
 | TOOL001-C7 | package-tool manifest Slice 3 closure | BLOCKED_BY_DEPENDENCIES | — | Final cross-slice conformance and project/architecture closure after C6. |
-| TOOL001-C | legacy package-tool manifest Slice 3 parent | IN_PROGRESS | TOOL001-C1/C2/C3 published | C4 table assembly is READY; schema-v1 validation, project metadata read/diagnostics and final closure remain dependency-ordered. |
+| TOOL001-C | legacy package-tool manifest Slice 3 parent | IN_PROGRESS | TOOL001-C1/C2/C3/C4A published | C4B table-model closure is READY; C5 schema-v1 validation, C6 project metadata read/diagnostics and C7 final closure remain dependency-ordered. |
 
 Detailed migration and continuation rules live in
 `docs/project/TOOL001_PACKAGE_TOOL.md`.
