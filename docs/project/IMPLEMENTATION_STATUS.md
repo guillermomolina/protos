@@ -53,19 +53,19 @@ an item.
 | I019 | Core source naming reconciliation | CLOSED | `SAME_COMMIT` | 29 dominant-owner distributable Core sources use exact canonical Protos names/case after I019-A; private subordinate bootstrap helpers do not defeat public conceptual ownership; all live explicit Core physical-path references reconciled; true aggregation/responsibility sources remain descriptive; no normative or native-boundary change |
 | I019-A | Actor source dominant-owner naming correction | CLOSED | `SAME_COMMIT` | `actor.protos` -> `Actor.protos`; public `Actor` is the dominant conceptual owner and private ActorRef/GroupRef/SendOperation prototype bindings are subordinate bootstrap helpers; naming guard and architecture classification reconciled |
 | I020 | Post-Ixxx implementation audit reconciliation | CLOSED | `SAME_COMMIT` | I020-A/B/C/D complete; D040 missing-`methodHome` `InvalidSuper` implemented; B005 closed |
-| I021 | Filesystem namespace replacement/removal | IN_PROGRESS | — | I021-A CLOSED; I021-B READY; D041 / spec `0.1.378`; production confined namespace backend still required before package-tool metadata mutation and B006 closure |
+| I021 | Filesystem namespace replacement/removal | IN_PROGRESS | — | I021-A CLOSED; I021-B READY; D042 / spec `0.1.379` corrects D041; production confined namespace backend still required before package-tool metadata mutation and B006 closure |
 
 ### I021 — Filesystem namespace replacement/removal
 
 Status: IN_PROGRESS
 
-Purpose: Implement D041's general Filesystem file-entry replacement/removal
-semantics before any package-tool repository-metadata mutation relies on them.
+Purpose: Implement D041's Filesystem replacement/removal semantics as corrected
+by D042 before any package-tool repository-metadata mutation relies on them.
 
 | Slice | Status | Version | Closure evidence | Implemented surface |
 |---|---|---|---|---|
 | I021-A | CLOSED | `0.2.159-SNAPSHOT` | `SAME_COMMIT` | Host-neutral asynchronous namespace-mutation substrate plus language-visible host-provisioned `Filesystem.replace`/`remove` dispatch. Valid Path arguments reach only the provisioned backend; unsupported backends fail `IOError`; pre-commit cancellation prevents the effect; one per-operation effect/commit cutover makes a successful atomic backend effect and Protos commitment indivisible. The existing Filesystem provider remains one native-Closure construction site through a shared operation helper. |
-| I021-B | READY | — | — | Implement a production confined file-entry backend for D041 replacement/removal, preserving final-entry no-follow/file-only scope, source/target authority, same-entry no-op, deterministic atomic visibility, and fail-closed behavior when the host cannot provide the required transition. |
+| I021-B | READY | — | — | Implement a production confined namespace-entry backend for D042 replacement/removal, preserving final-entry non-follow selection, source/target authority, same-entry no-op, deterministic atomic visibility, non-recursive removal, and fail-closed `IOError` when the host cannot provide the required atomic transition for an entry kind/combination. |
 | I021-C | BLOCKED_BY_DEPENDENCIES | — | — | Integrated production conformance and final I021 closure after I021-B, including ordinary Protos-visible replacement/removal behavior and architecture/status reconciliation. |
 
 I021-A deliberately does not make the package tool writable and does not close
@@ -660,7 +660,7 @@ Identifier shape alone is insufficient: incidental IDs from design ideas, tests,
 | B003 | Delegation parent / lookup chain of canonical Boolean values | CLOSED | Implementation area: Standard prototype/delegation bridge for the canonical `true` and `false` runtime representations, including ordinary member lookup and polymorphic invocation through their delegation chains. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
 | B004 | Public Group/GroupRef acquisition and discovery API | CLOSED | D039 defines and I011-21 implements the exact Core v0.1 `Actor.group(...) -> GroupRef` acquisition surface; portable service discovery remains outside Core v0.1. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
 | B005 | `super` without a physical methodHome | CLOSED | D040 defines missing-`methodHome` `InvalidSuper` semantics and I020-D implements them. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
-| B006 | Atomic package metadata replacement | READY | D041 closes the general Filesystem replace/remove semantics; I021 production implementation and package-tool integration remain before final blocker closure. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
+| B006 | Atomic package metadata replacement | READY | D042 corrects D041 with race-safe namespace-entry selection; I021 production implementation and package-tool integration remain before final blocker closure. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
 
 ### D family
 
@@ -691,6 +691,7 @@ Identifier shape alone is insufficient: incidental IDs from design ideas, tests,
 | D039 | Public ActorGroup acquisition | CLOSED | Defines `Actor.group(firstMember, additionalMembers...) -> GroupRef` as the only Core v0.1 direct Group acquisition surface, with explicit ActorRef initial membership, caller-Process ownership, communication-only GroupRef authority, and service discovery outside Core. | `spec/PROTOS_SPEC_CHANGELOG.md` |
 | D040 | Dynamic super-dispatch context | CLOSED | Defines no-`methodHome` super execution as fresh `InvalidSuper` after ordinary argument-vector evaluation while preserving valid super lookup and `SlotNotFound` behavior. | `spec/PROTOS_SPEC_CHANGELOG.md` |
 | D041 | Failure-atomic Filesystem namespace replacement/removal | CLOSED | Defines confined file-entry `Filesystem.replace`/`remove`, atomic visibility, commitment/cancellation/failure aftermath, stable open-File binding, and the explicit namespace-durability boundary. | `spec/PROTOS_SPEC_CHANGELOG.md` |
+| D042 | Race-safe Filesystem namespace-entry selection | CLOSED | Corrects D041's ordinary-file-only preclassification: final components are selected as namespace entries without following them; unsupported atomic entry-kind combinations fail `IOError`; removal is non-recursive while D041's atomicity/cancellation/durability rules remain. | `spec/PROTOS_SPEC_CHANGELOG.md` |
 
 <!-- END AUTO-DISCOVERED WORK REGISTRY -->
 

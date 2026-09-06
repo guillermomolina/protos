@@ -243,8 +243,9 @@ Package-tool Filesystem Slice 2B and every future `protos add`, `protos remove`,
 `protos.toml` or `protos.lock`.
 
 Normative dependency:
-Satisfied by specification revision `0.1.378` / D041. Core Filesystem now defines
-two general file-entry namespace operations:
+Satisfied by specification revision `0.1.379` / D042, which corrects D041's
+final-entry type restriction. Core Filesystem defines two general namespace-entry
+operations:
 
 ```text
 filesystem.replace(sourcePath, targetPath) -> Future<Filesystem>
@@ -252,25 +253,25 @@ filesystem.remove(path)                     -> Future<Filesystem>
 ```
 
 `replace` performs one confined failure-atomic source-to-target namespace
-transition, and `remove` performs one confined failure-atomic file-entry removal.
-The contract fixes Path validation, authority, file-entry scope,
-atomicity/visibility, commitment, cancellation, failure aftermath, stable open
-File binding, concurrency, and the explicit separation between live namespace
-atomicity and crash durability.
+transition, and `remove` performs one confined failure-atomic namespace-entry
+removal. The contract fixes Path validation, authority, final-entry non-follow
+selection, atomicity/visibility, commitment, cancellation, failure aftermath,
+stable open File binding, concurrency, non-recursive removal, and the explicit
+separation between live namespace atomicity and crash durability.
 
 Specification authority:
 - `spec/io/FILESYSTEM.md` §20 Filesystem Authority and Path, especially §20.1
-  confinement and §20.3 atomic file-entry replacement/removal
+  confinement and §20.3 atomic namespace-entry replacement/removal
 - `spec/io/BYTE_IO.md` for File/Syncable durability and its namespace-durability
   exclusion
 - `spec/io/IO_CORE.md` for I/O Future identity, commitment, cancellation,
   lifecycle, and failure rules
 
 Unblock condition:
-The normative portion is satisfied by revision `0.1.378` / D041: independent
-implementations can now agree on the general operation shape and every
-programmer-visible success/failure/cancellation outcome needed for safe metadata
-publication without choosing package-specific semantics.
+The normative portion is satisfied by revision `0.1.379` / D042: independent
+implementations can now agree on the general operation shape, final-entry
+selection rule, and every programmer-visible success/failure/cancellation outcome
+needed for safe metadata publication without choosing package-specific semantics.
 
 B006 closes only after a faithful production implementation of that general
 Filesystem surface is available to the bundled package tool and package metadata
@@ -278,8 +279,8 @@ mutation uses it without an ambient/native package-only escape hatch. That
 implementation work is tracked as I021.
 
 Current consequence:
-I021 is READY. Package-tool Filesystem Slice 2B may proceed only after the
-applicable I021 implementation slice publishes a confined production
+I021 is IN_PROGRESS: I021-A is CLOSED and I021-B is READY. Package-tool Filesystem
+Slice 2B may proceed only after I021-B publishes a confined production
 `Filesystem.replace`/`remove` backend. Until then the package tool remains
 read-only for repository metadata and must not fall back to in-place
 truncate/write, `PackageNative.rename(...)`, ambient host filesystem access, or
@@ -290,7 +291,7 @@ ordinary Protos code: create/write the staging file through the granted
 Filesystem/File capabilities, complete the required File sequencing, atomically
 replace the target through `filesystem.replace(...)`, and use
 `filesystem.remove(...)` to clean an uncommitted staging entry when required.
-D041 itself does not prescribe staging-name policy or package-command policy.
+D042 does not prescribe staging-name policy or package-command policy.
 
 Independent work:
 Read-only TOML parsing and manifest validation, lock parsing/canonical validation,
@@ -302,9 +303,11 @@ History:
 B006 was introduced as BLOCKED because Filesystem v0.1 exposed only `open` and
 File operations; truncate-and-write could expose partial package metadata and no
 general namespace replacement contract existed. D041 / revision `0.1.378`
-closes that semantic gap with general file-entry replace/remove operations, so
-B006 transitions `BLOCKED -> READY`. It remains READY, not CLOSED, until I021 and
-the package-tool integration satisfy the implementation side of the blocker.
+closed the operation shape and moved B006 `BLOCKED -> READY`; D042 / revision
+`0.1.379` then corrected the ordinary-file-only preclassification without changing
+the API, atomicity, or package composition. B006 remains READY, not CLOSED, until
+I021 and the package-tool integration satisfy the implementation side of the
+blocker.
 
 Library dependency:
 None. B006 is a general Filesystem semantic/capability boundary, not a missing

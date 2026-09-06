@@ -479,23 +479,38 @@ into Java.
 
 ### Filesystem v0.1 closes the metadata-publication minimum, not the full store API
 
-D041 extends the normative Filesystem surface beyond `filesystem.open(path,
-options)` with general confined file-entry `replace(sourcePath, targetPath)` and
-`remove(path)` operations. That is the minimum semantic namespace machinery
-needed for a Protos-written package tool to stage a complete `protos.toml` or
+D041 introduced the normative Filesystem surface beyond `filesystem.open(path,
+options)` with general confined `replace(sourcePath, targetPath)` and
+`remove(path)` operations. D042 corrects the initial ordinary-file-only
+precondition: the final Path component is selected as the namespace entry itself
+without following symbolic-link/reparse/other indirection entries, while a
+backend fails `IOError` when it cannot provide the required atomic transition for
+that entry kind or source/target-kind combination. `remove` remains non-recursive.
+
+The correction is required by the race-free capability boundary rather than by
+package policy. Common capability-relative rename/unlink APIs select the entry at
+the namespace mutation point but do not also provide an atomic
+"preclassify-this-mutable-name-as-a-regular-file, then mutate-that-same-entry"
+primitive. A separate type query would recreate the check-then-act race that the
+Filesystem confinement contract is designed to exclude.
+
+The resulting D042 contract is the minimum semantic namespace machinery needed
+for a Protos-written package tool to stage a complete `protos.toml` or
 `protos.lock`, publish it without a partial-target window, and clean abandoned
-staging entries.
+staging entries. Package policy still uses ordinary files; the broader
+namespace-entry selection rule exists so the general capability can be
+implemented faithfully under concurrent namespace change.
 
 The semantics are now closed, but production availability is still implementation
 work under I021. Package-tool metadata mutation must remain disabled until the
-bundled tool receives that faithful general capability; D041 is not permission
+bundled tool receives that faithful general capability; D042 is not permission
 for a package-specific Java/native rename escape hatch.
 
 A complete package store/archive implementation still needs additional namespace
 operations such as directory enumeration/materialization, safe directory
-creation, metadata/type inspection, symlink/reparse handling, broader move/rename
-policy, directory removal/garbage-collection behavior, and eventually other
-capabilities identified by the package architecture.
+creation, metadata/type inspection, symlink/reparse creation/inspection, broader
+move/rename policy, recursive directory removal/garbage-collection behavior, and
+eventually other capabilities identified by the package architecture.
 
 Those remaining operations must likewise be designed as general Filesystem
 capabilities rather than package-manager-only native escape hatches. Initial

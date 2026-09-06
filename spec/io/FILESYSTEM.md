@@ -383,7 +383,7 @@ When a Filesystem maps a normal component to a concrete backend, that component 
 
 Whether a concrete Filesystem treats two distinct normal names as referring to the same backend entry is a property of that Filesystem's namespace semantics. That lookup behavior does not change portable Path equality.
 
-### 20.3 Atomic file-entry replacement and removal
+### 20.3 Atomic namespace-entry replacement and removal
 
 Core v0.1 additionally closes the minimum namespace-mutation surface needed to
 publish a completely prepared file without exposing partial target content:
@@ -412,19 +412,29 @@ confinement. If a backend cannot prove confinement and the required atomic
 transition for the selected entries, it must fail without committing the
 operation.
 
-The initial standard surface is file-entry-only. A source selected by `replace`
-must be an existing ordinary file entry. Its target may be absent or an existing
-ordinary file entry. `remove` likewise applies only to an existing ordinary file
-entry. Directories and final-component symbolic-link/reparse/other indirection
-entries are outside these two initial operations; an implementation must not
-silently follow or reinterpret such a final entry in order to make the operation
-succeed. Intermediate resolution remains governed by the ordinary Filesystem
-confinement rules.
+The mutation surface selects final namespace entries directly rather than first
+classifying a mutable name as an ordinary file. A source selected by `replace`
+must be an existing namespace entry; its target may be absent or an existing
+namespace entry. `remove` likewise requires an existing namespace entry. The
+final component of every supplied Path is operated on as that entry itself:
+symbolic-link, reparse, mount/redirection, directory, regular-file, and other
+backend entry kinds are not followed or reinterpreted merely to make
+`replace`/`remove` succeed. Intermediate resolution remains governed by the
+ordinary Filesystem confinement rules.
+
+Portable success is therefore not conditioned on a separate pre-mutation
+file-kind query. A backend may fail with `IOError` when it cannot perform the
+required atomic transition for the selected entry kind or source/target-kind
+combination, including host restrictions on directory replacement or removal.
+It must not implement such a restriction as a check-then-act sequence whose
+checked final entry can be substituted before the namespace mutation. A
+successful standard operation acts on the entries selected by its atomic
+namespace transition; otherwise it fails without commitment.
 
 `replace(sourcePath, targetPath)` performs one indivisible namespace transition.
 At its commitment point the entry selected by `sourcePath` ceases to exist under
 that source name and `targetPath` names that exact selected source resource. If a
-target file entry existed immediately before commitment, that target entry is
+target entry existed immediately before commitment, that target entry is
 replaced in the same transition. An observer resolving the target across the
 transition therefore sees either the previously selected target resource or the
 source resource; it never observes an operation-created missing-target window or
@@ -445,11 +455,13 @@ authorized writes to the selected resource remain governed by their existing Fil
 and backend ordering semantics.
 
 `remove(path)` performs one indivisible namespace transition in which the
-selected file entry ceases to exist. It does not close, cancel, retarget, or
-otherwise revoke already-open `File` capabilities bound to that resource. The
-stable selected-resource rule remains in force: a File opened before a successful
-replace/remove continues to denote the resource it selected even if the namespace
-entry later names another resource or no longer exists.
+selected namespace entry ceases to exist. It never recursively removes
+descendants merely to make an entry removable. It does not close, cancel,
+retarget, or otherwise revoke already-open `File` capabilities bound to a
+resource represented by that entry. The stable selected-resource rule remains in
+force: a File opened before a successful replace/remove continues to denote the
+resource it selected even if the namespace entry later names another resource or
+no longer exists.
 
 For both operations, all validation and tentative backend work before commitment
 must remain non-observable as a namespace mutation attributable to the operation.
@@ -479,10 +491,10 @@ replace/remove Future previously resolved. A future namespace-sync capability ma
 add such a guarantee without weakening the live atomic-visibility contract here.
 
 The minimum Filesystem namespace surface closed by this revision is therefore
-`open`, file-entry `replace`, and file-entry `remove`. Existence queries,
-metadata/stat, mkdir, general rename/move beyond the replacement contract,
-symlink operations, directory iteration, directory removal, and richer namespace
-operations remain outside this I/O revision.
+`open`, namespace-entry `replace`, and namespace-entry `remove`. Existence
+queries, metadata/stat, mkdir, general rename/move beyond the replacement
+contract, symlink creation/target inspection, directory iteration, recursive
+tree removal, and richer namespace operations remain outside this I/O revision.
 
 ---
 ## 21. URL and Path

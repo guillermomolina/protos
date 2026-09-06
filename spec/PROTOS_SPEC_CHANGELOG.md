@@ -9,6 +9,20 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.379] - 2026-09-06
+
+### Race-safe Filesystem namespace-entry selection (D042)
+- Corrects D041's initial ordinary-file-only final-entry restriction after implementation audit showed that common capability-relative namespace primitives atomically rename/unlink the entry selected at mutation time but cannot also atomically preclassify that mutable final name as a regular file.
+- Keeps the exact public `Filesystem.replace(sourcePath, targetPath)` and `Filesystem.remove(path)` selectors, Future identities/results, authority confinement, atomic visibility, commitment/cancellation/failure aftermath, independent-operation ordering, stable already-open File binding, and namespace-durability boundary introduced by D041.
+- Defines the final Path component of `replace`/`remove` as the namespace entry itself. Final symbolic-link/reparse/other indirection entries are not followed; directories and other entry kinds may be selected when the backend can perform the required atomic transition without escaping authority.
+- Allows a backend to fail with `IOError` for entry kinds or source/target-kind combinations that its atomic namespace primitive cannot support, but forbids a separate check-then-act type preflight whose checked entry can be replaced before mutation.
+- Defines `remove` as non-recursive even when the selected entry is a directory; recursive tree deletion remains outside Core v0.1.
+
+### Compatibility
+- Ordinary prepared-file publication, which motivated B006, is unchanged: staging files are still prepared through File sequencing and published through the same atomic `replace` selector.
+- D042 broadens which final namespace entries may participate rather than changing the outcome of a successful ordinary-file replacement/removal. I021-A's host-neutral dispatch/commitment substrate remains valid because it did not encode D041's file-kind restriction.
+- I021-B remains READY and must implement the corrected namespace-entry contract. Package-tool metadata mutation and B006 closure remain implementation-gated; D042 authorizes no package-specific native escape.
+
 ## [0.1.378] - 2026-09-06
 
 ### Failure-atomic Filesystem namespace replacement/removal (D041)
