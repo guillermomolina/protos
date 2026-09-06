@@ -4,6 +4,7 @@ USER root
 
 RUN microdnf install -y \
         findutils \
+        diffutils \
         git \
         gzip \
         shadow-utils \
