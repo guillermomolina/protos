@@ -53,11 +53,11 @@ an item.
 | I019 | Core source naming reconciliation | CLOSED | `SAME_COMMIT` | 29 dominant-owner distributable Core sources use exact canonical Protos names/case after I019-A; private subordinate bootstrap helpers do not defeat public conceptual ownership; all live explicit Core physical-path references reconciled; true aggregation/responsibility sources remain descriptive; no normative or native-boundary change |
 | I019-A | Actor source dominant-owner naming correction | CLOSED | `SAME_COMMIT` | `actor.protos` -> `Actor.protos`; public `Actor` is the dominant conceptual owner and private ActorRef/GroupRef/SendOperation prototype bindings are subordinate bootstrap helpers; naming guard and architecture classification reconciled |
 | I020 | Post-Ixxx implementation audit reconciliation | CLOSED | `SAME_COMMIT` | I020-A/B/C/D complete; D040 missing-`methodHome` `InvalidSuper` implemented; B005 closed |
-| I021 | Filesystem namespace replacement/removal | IN_PROGRESS | — | I021-A/B CLOSED; I021-C READY; D042 / spec `0.1.379`; production confined namespace backend is published while final integrated conformance remains before I021 closure and package-tool metadata mutation |
+| I021 | Filesystem namespace replacement/removal | CLOSED | `SAME_COMMIT` | I021-A/B/C complete; D042 / spec `0.1.379`; production confined namespace backend and Protos-visible integrated conformance published; B006 remains READY for package-tool mutation integration |
 
 ### I021 — Filesystem namespace replacement/removal
 
-Status: IN_PROGRESS
+Status: CLOSED
 
 Purpose: Implement D041's Filesystem replacement/removal semantics as corrected
 by D042 before any package-tool repository-metadata mutation relies on them.
@@ -66,12 +66,12 @@ by D042 before any package-tool repository-metadata mutation relies on them.
 |---|---|---|---|---|
 | I021-A | CLOSED | `0.2.159-SNAPSHOT` | `SAME_COMMIT` | Host-neutral asynchronous namespace-mutation substrate plus language-visible host-provisioned `Filesystem.replace`/`remove` dispatch. Valid Path arguments reach only the provisioned backend; unsupported backends fail `IOError`; pre-commit cancellation prevents the effect; one per-operation effect/commit cutover makes a successful atomic backend effect and Protos commitment indivisible. The existing Filesystem provider remains one native-Closure construction site through a shared operation helper. |
 | I021-B | CLOSED | `0.2.160-SNAPSHOT` | `SAME_COMMIT` | Production `ProtosNioConfinedFilesystemBackend`: pinned `SecureDirectoryStream` namespace authority, independent readable/mutable direct-child allowlists, atomic relative move for replace, final-entry `deleteFile` for non-recursive remove, no final-entry preclassification/following, provider failure mapped through the I021-A `IOError` cutover, and host-boundary conformance including hard-link alias no-op and symlink non-follow behavior. Current package-tool provisioning remains read-only. |
-| I021-C | READY | — | — | Integrated production conformance and final I021 closure, including ordinary Protos-visible replacement/removal behavior and architecture/status reconciliation before package-tool mutation integration closes B006. |
+| I021-C | CLOSED | — | `SAME_COMMIT` | Protos-source integrated conformance executes ordinary `Filesystem.replace`/`remove` through the production confined NIO backend, covering exact receiver results, fresh Future identity, authority `IOError`, same-resource no-op, final-symlink non-follow behavior, and non-recursive removal; final architecture/status reconciliation closes I021 while B006 remains READY. |
 
-I021-A/B deliberately do not make the package tool writable and do not close B006.
+I021 is CLOSED after I021-A/B/C; those slices deliberately do not make the package tool writable or close B006.
 The current CLI still provisions the existing read-only project Filesystem. Package
-metadata mutation remains gated on I021-C final closure and subsequent explicit
-package-tool write/staging authority integration.
+metadata mutation remains a separate B006 integration that must explicitly grant
+the package tool the required write/staging and namespace-mutation authority.
 
 ### I020 — Post-Ixxx implementation audit reconciliation
 

@@ -276,15 +276,15 @@ needed for safe metadata publication without choosing package-specific semantics
 B006 closes only after a faithful production implementation of that general
 Filesystem surface is available to the bundled package tool and package metadata
 mutation uses it without an ambient/native package-only escape hatch. That
-implementation work is tracked as I021.
+implementation work was tracked as I021 and is now CLOSED.
 
 Current consequence:
-I021 is IN_PROGRESS: I021-A and I021-B are CLOSED and I021-C is READY. I021-B
-publishes a confined production NIO `Filesystem.replace`/`remove` backend with
-separate read and namespace-mutation allowlists, but deliberately does not change
-the package tool's current read-only CLI provisioning. Package metadata therefore
-remains read-only until final I021 conformance and a subsequent package-tool slice
-explicitly grants the staging/write and namespace authority it needs. No path may
+I021 is CLOSED: I021-A/B/C are published, including Protos-source integrated
+conformance over the confined production NIO `Filesystem.replace`/`remove` backend.
+The package tool still deliberately uses its read-only CLI provisioning, so B006
+remains READY until a subsequent package-tool slice explicitly grants staging/write
+and namespace-mutation authority and performs metadata publication through the
+standard Filesystem operations. No path may
 fall back to in-place truncate/write, `PackageNative.rename(...)`, ambient host
 filesystem access, or another package-only privileged path.
 
@@ -308,7 +308,7 @@ general namespace replacement contract existed. D041 / revision `0.1.378`
 closed the operation shape and moved B006 `BLOCKED -> READY`; D042 / revision
 `0.1.379` then corrected the ordinary-file-only preclassification without changing
 the API, atomicity, or package composition. B006 remains READY, not CLOSED, until
-I021 and the package-tool integration satisfy the implementation side of the
+the package-tool integration satisfies the remaining implementation side of the
 blocker.
 
 Library dependency:
