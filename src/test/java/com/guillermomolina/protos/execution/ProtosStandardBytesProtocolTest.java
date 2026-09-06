@@ -14,244 +14,149 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
-
 package com.guillermomolina.protos.execution;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.*;
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosBytesValue;
+import com.guillermomolina.protos.runtime.ProtosFloatValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Path;
-import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ProtosStandardBytesProtocolTest {
+    // Deliberately Java-side: the construction-only Bytes prototype is omitted
+    // from public prelude bindings. Its exact call/receiver contract remains a
+    // runtime/bootstrap boundary.
     @Test
-    void factoryCreatesFreshOpenEmptyBytesAndUsesActualInvocationReceiver()
+    void hiddenFactoryContractAndRepresentedConstructionRemainJavaSide()
             throws IOException {
-        Fixture f = fixture();
-        ProtosBytesValue a = f.create();
-        ProtosBytesValue b = f.create();
+        Fixture fixture = fixture();
 
+        ProtosBytesValue a = fixture.create();
+        ProtosBytesValue b = fixture.create();
         assertNotSame(a, b);
         assertTrue(a.isOpen());
-        assertSame(f.factory, a.parent().orElseThrow());
+        assertSame(fixture.factory, a.parent().orElseThrow());
         assertEquals(BigInteger.ZERO, a.indexedSize());
 
-        ProtosObjectValue derived = new ProtosObjectValue(f.factory);
+        ProtosObjectValue derived = new ProtosObjectValue(fixture.factory);
         ProtosBytesValue child =
-                (ProtosBytesValue) ProtosInvocation.invoke(derived, List.of(), f.activation);
+                assertInstanceOf(
+                        ProtosBytesValue.class,
+                        ProtosInvocation.invoke(derived, List.of(), fixture.activation));
+        assertTrue(child.isOpen());
         assertSame(derived, child.parent().orElseThrow());
 
-        assertError(f, () -> ProtosInvocation.invoke(f.factory, List.of(integer(1)), f.activation));
+        assertDirectError(
+                fixture,
+                () ->
+                        ProtosInvocation.invoke(
+                                fixture.factory, List.of(integer(1)), fixture.activation));
     }
 
+    // Source conformance owns the observable invalid-operation behavior. Java
+    // recovery is retained only to inspect the SAME represented Bytes afterward
+    // and prove that no partial mutation occurred.
     @Test
-    void sizeAtAndBracketReadAreDenseZeroBasedAndAcceptIntegerFamilies()
-            throws IOException {
-        Fixture f = fixture();
-        ProtosBytesValue bytes = f.create();
-        ProtosIntegerValue zero = integer(0);
-        ProtosFixedIntegerValue high =
-                new ProtosFixedIntegerValue(
-                        ProtosFixedIntegerValue.Family.UINT8, BigInteger.valueOf(255));
-        f.add(bytes, zero);
-        f.add(bytes, high);
+    void invalidOpenMutationFailuresLeaveSameBytesUntouched() throws IOException {
+        Fixture fixture = fixture();
+        ProtosBytesValue bytes = fixture.create();
+        ProtosIntegerValue ten = integer(10);
+        ProtosIntegerValue twenty = integer(20);
+        fixture.add(bytes, ten);
+        fixture.add(bytes, twenty);
 
-        assertEquals(BigInteger.valueOf(2), intValue(f.send(bytes, "size")));
-        assertSame(zero, f.send(bytes, "at", integer(0)));
-        assertSame(high, f.send(bytes, "at", integer(1)));
+        assertDirectError(fixture, () -> fixture.send(bytes, "atPut", integer(2), integer(9)));
+        assertDirectError(fixture, () -> fixture.send(bytes, "atPut", integer(0), integer(-1)));
+        assertDirectError(fixture, () -> fixture.send(bytes, "atPut", integer(0), integer(256)));
+        assertDirectError(
+                fixture,
+                () -> fixture.send(bytes, "atPut", integer(0), new ProtosFloatValue(7.0)));
+        assertDirectError(
+                fixture,
+                () -> fixture.send(bytes, "atPut", integer(0), new ProtosStringValue("7")));
+        assertDirectError(fixture, () -> fixture.send(bytes, "add", integer(-1)));
+        assertDirectError(fixture, () -> fixture.send(bytes, "add", integer(256)));
+        assertDirectError(
+                fixture, () -> fixture.send(bytes, "add", new ProtosFloatValue(1.0)));
+        assertDirectError(fixture, () -> fixture.send(bytes, "removeAt", integer(-1)));
+        assertDirectError(fixture, () -> fixture.send(bytes, "removeAt", integer(2)));
 
-        f.activation.context().createLocalSlot("bytesForBracket", bytes);
-        assertSame(
-                high,
-                new ProtosSourceCompiler()
-                        .compile("bytesForBracket[1]")
-                        .call(f.activation));
-
-        assertError(f, () -> f.send(bytes, "at", integer(-1)));
-        assertError(f, () -> f.send(bytes, "at", integer(2)));
-        assertError(f, () -> f.send(bytes, "at", new ProtosFloatValue(0.0)));
-        assertError(f, () -> f.send(bytes, "at", new ProtosStringValue("0")));
-        assertError(f, () -> f.send(f.create(), "at", integer(0)));
+        assertEquals(BigInteger.TWO, bytes.indexedSize());
+        assertSame(ten, fixture.send(bytes, "at", integer(0)));
+        assertSame(twenty, fixture.send(bytes, "at", integer(1)));
     }
 
+    // Preserve the already-closed I012 lifecycle contract without pretending
+    // that ordinary source-level close()/freeze() dispatch on represented Bytes
+    // currently reaches the same represented-value lifecycle path.
     @Test
-    void atPutReplacesOnlyExistingOctetAndReturnsExactSuppliedObject()
-            throws IOException {
-        Fixture f = fixture();
-        ProtosBytesValue bytes = f.create();
-        f.add(bytes, integer(1));
-        f.add(bytes, integer(2));
+    void representedLifecycleContractRemainsJavaSide() throws IOException {
+        Fixture fixture = fixture();
 
-        ProtosFixedIntegerValue replacement =
-                new ProtosFixedIntegerValue(
-                        ProtosFixedIntegerValue.Family.UINT16, BigInteger.valueOf(255));
-        assertSame(replacement, f.send(bytes, "atPut", integer(0), replacement));
-        assertSame(replacement, f.send(bytes, "at", integer(0)));
-        assertEquals(BigInteger.valueOf(2), bytes.indexedSize());
-
-        f.activation.context().createLocalSlot("bytesForPut", bytes);
-        Object assignment =
-                new ProtosSourceCompiler()
-                        .compile("bytesForPut[1] = 7")
-                        .call(f.activation);
-        assertEquals(BigInteger.valueOf(7), intValue(assignment));
-        assertEquals(BigInteger.valueOf(7), intValue(f.send(bytes, "at", integer(1))));
-
-        assertError(f, () -> f.send(bytes, "atPut", integer(2), integer(9)));
-        assertError(f, () -> f.send(bytes, "atPut", integer(0), integer(-1)));
-        assertError(f, () -> f.send(bytes, "atPut", integer(0), integer(256)));
-        assertError(f, () -> f.send(bytes, "atPut", integer(0), new ProtosFloatValue(7.0)));
-        assertError(f, () -> f.send(bytes, "atPut", integer(0), new ProtosStringValue("7")));
-        assertEquals(BigInteger.valueOf(2), bytes.indexedSize());
-    }
-
-    @Test
-    void addRemoveAtCoverOctetExtremesAndFailWithoutPartialMutation()
-            throws IOException {
-        Fixture f = fixture();
-        ProtosBytesValue bytes = f.create();
-        ProtosIntegerValue low = integer(0);
-        ProtosIntegerValue mid = integer(127);
-        ProtosFixedIntegerValue high =
-                new ProtosFixedIntegerValue(
-                        ProtosFixedIntegerValue.Family.UINT8, BigInteger.valueOf(255));
-
-        assertSame(low, f.add(bytes, low));
-        assertSame(mid, f.add(bytes, mid));
-        assertSame(high, f.add(bytes, high));
-        assertSame(mid, f.send(bytes, "removeAt", integer(1)));
-        assertEquals(BigInteger.valueOf(2), bytes.indexedSize());
-        assertSame(low, f.send(bytes, "at", integer(0)));
-        assertSame(high, f.send(bytes, "at", integer(1)));
-
-        BigInteger before = bytes.indexedSize();
-        assertError(f, () -> f.send(bytes, "add", integer(-1)));
-        assertError(f, () -> f.send(bytes, "add", integer(256)));
-        assertError(f, () -> f.send(bytes, "add", new ProtosFloatValue(1.0)));
-        assertError(f, () -> f.send(bytes, "removeAt", integer(-1)));
-        assertError(f, () -> f.send(bytes, "removeAt", integer(2)));
-        assertEquals(before, bytes.indexedSize());
-    }
-
-    @Test
-    void stateRulesAllowClosedReplacementButRequireOpenForResizeAndRejectFrozenMutation()
-            throws IOException {
-        Fixture f = fixture();
-        ProtosBytesValue closed = f.create();
-        f.add(closed, integer(1));
+        ProtosBytesValue closed = fixture.create();
+        fixture.add(closed, integer(1));
         closed.close();
         ProtosIntegerValue two = integer(2);
-        assertSame(two, f.send(closed, "atPut", integer(0), two));
-        assertError(f, () -> f.send(closed, "add", integer(3)));
-        assertError(f, () -> f.send(closed, "removeAt", integer(0)));
-        assertEquals(BigInteger.ONE, intValue(f.send(closed, "size")));
-        assertSame(two, f.send(closed, "at", integer(0)));
+        assertSame(two, fixture.send(closed, "atPut", integer(0), two));
+        assertDirectError(fixture, () -> fixture.send(closed, "add", integer(3)));
+        assertDirectError(fixture, () -> fixture.send(closed, "removeAt", integer(0)));
+        assertEquals(BigInteger.ONE, intValue(fixture.send(closed, "size")));
+        assertSame(two, fixture.send(closed, "at", integer(0)));
 
-        ProtosBytesValue frozen = f.create();
+        ProtosBytesValue frozen = fixture.create();
         ProtosIntegerValue four = integer(4);
-        f.add(frozen, four);
+        fixture.add(frozen, four);
         frozen.freeze();
-        assertError(f, () -> f.send(frozen, "atPut", integer(0), integer(5)));
-        assertError(f, () -> f.send(frozen, "add", integer(5)));
-        assertError(f, () -> f.send(frozen, "removeAt", integer(0)));
-        assertSame(four, f.send(frozen, "at", integer(0)));
-        assertEquals(BigInteger.ONE, intValue(f.send(frozen, "size")));
-    }
-
-    @Test
-    void eachUsesOrdinaryPolymorphicCallabilityAndAscendingSnapshot()
-            throws IOException {
-        Fixture f = fixture();
-        ProtosBytesValue bytes = f.create();
-        ProtosIntegerValue one = integer(1);
-        ProtosIntegerValue two = integer(2);
-        ProtosIntegerValue three = integer(3);
-        f.add(bytes, one);
-        f.add(bytes, two);
-        f.add(bytes, three);
-
-        List<Object> seen = new ArrayList<>();
-        ProtosObjectValue callable = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        callable.createLocalSlot(
-                "call",
-                ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> {
-                            seen.add(supplied.get(0));
-                            if (seen.size() == 1) {
-                                f.send(bytes, "atPut", integer(1), integer(99));
-                                f.send(bytes, "removeAt", integer(2));
-                                f.send(bytes, "add", integer(4));
-                            }
-                            return ProtosNullValue.INSTANCE;
-                        }));
-
-        assertSame(bytes, f.send(bytes, "each", callable));
-        assertEquals(List.of(one, two, three), seen);
-        assertEquals(BigInteger.valueOf(99), intValue(f.send(bytes, "at", integer(1))));
-        assertEquals(BigInteger.valueOf(4), intValue(f.send(bytes, "at", integer(2))));
-        assertError(f, () -> f.send(bytes, "each", integer(1)));
-    }
-
-    @Test
-    void delegationAndCopiedMethodsDoNotConferBytesMembership() throws IOException {
-        Fixture f = fixture();
-        ProtosBytesValue bytes = f.create();
-        f.add(bytes, integer(9));
-
-        ProtosObjectValue delegated = new ProtosObjectValue(bytes);
-        assertError(f, () -> f.send(delegated, "size"));
-        assertError(f, () -> f.send(delegated, "at", integer(0)));
-
-        ProtosObjectValue copied = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        copied.createLocalSlot("size", f.factory.readLocalSlot("size").orElseThrow());
-        copied.createLocalSlot("add", f.factory.readLocalSlot("add").orElseThrow());
-        assertError(f, () -> f.send(copied, "size"));
-        assertError(f, () -> f.send(copied, "add", integer(1)));
-    }
-
-    @Test
-    void equalContentsStillUseOrdinaryObjectEqualityIdentityAndHash() throws IOException {
-        Fixture f = fixture();
-        ProtosBytesValue a = f.create();
-        ProtosBytesValue b = f.create();
-        for (int v : new int[] {0, 127, 255}) {
-            f.add(a, integer(v));
-            f.add(b, integer(v));
-        }
-
-        assertSame(ProtosBooleanValue.TRUE, f.send(a, "==", a));
-        assertSame(ProtosBooleanValue.FALSE, f.send(a, "==", b));
-        assertTrue(ProtosIdentity.identical(a, a));
-        assertFalse(ProtosIdentity.identical(a, b));
-
-        BigInteger identityHash = ProtosIdentity.identityHash(a);
-        assertEquals(identityHash, ProtosIdentity.identityHash(a));
-        assertEquals(identityHash, intValue(f.send(a, "identityHash")));
-        assertEquals(intValue(f.send(a, "hash")), intValue(f.send(a, "hash")));
-    }
-
-    @Test
-    void frozenAtPutChecksStateBeforeBadIndexAndValueAndLeavesContentsUntouched()
-            throws IOException {
-        Fixture f = fixture();
-        ProtosBytesValue bytes = f.create();
-        ProtosIntegerValue original = integer(10);
-        f.add(bytes, original);
-        bytes.freeze();
-
-        assertError(
-                f,
+        assertDirectError(fixture, () -> fixture.send(frozen, "atPut", integer(0), integer(5)));
+        assertDirectError(
+                fixture,
                 () ->
-                        f.send(
-                                bytes,
+                        fixture.send(
+                                frozen,
                                 "atPut",
                                 new ProtosStringValue("bad-index"),
                                 new ProtosStringValue("bad-value")));
-        assertSame(original, f.send(bytes, "at", integer(0)));
+        assertDirectError(fixture, () -> fixture.send(frozen, "add", integer(5)));
+        assertDirectError(fixture, () -> fixture.send(frozen, "removeAt", integer(0)));
+        assertSame(four, fixture.send(frozen, "at", integer(0)));
+        assertEquals(BigInteger.ONE, intValue(fixture.send(frozen, "size")));
+    }
+
+    // Hidden-factory Closure provenance and the exact Error category for
+    // receiver-domain / callback failures remain Java-side supplements.
+    @Test
+    void hiddenMethodsAndReceiverErrorsRemainDirectStandardError() throws IOException {
+        Fixture fixture = fixture();
+
+        ProtosBytesValue bytes = fixture.create();
+        fixture.add(bytes, integer(9));
+
+        ProtosObjectValue delegated = new ProtosObjectValue(bytes);
+        assertDirectError(fixture, () -> fixture.send(delegated, "size"));
+        assertDirectError(fixture, () -> fixture.send(delegated, "at", integer(0)));
+
+        ProtosObjectValue copied = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        copied.createLocalSlot("size", fixture.factory.readLocalSlot("size").orElseThrow());
+        copied.createLocalSlot("add", fixture.factory.readLocalSlot("add").orElseThrow());
+        assertDirectError(fixture, () -> fixture.send(copied, "size"));
+        assertDirectError(fixture, () -> fixture.send(copied, "add", integer(1)));
+
+        assertDirectError(fixture, () -> fixture.send(bytes, "each", integer(1)));
     }
 
     private static ProtosIntegerValue integer(long value) {
@@ -266,21 +171,28 @@ class ProtosStandardBytesProtocolTest {
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
         ProtosActivation activation = prelude.newModuleActivation();
-        ProtosObjectValue factory = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue factory =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosStandardBytesProtocol.install(factory);
         return new Fixture(prelude, activation, factory);
     }
 
-    private static void assertError(
-            Fixture f, org.junit.jupiter.api.function.Executable executable) {
-        ProtosSignalException signal = assertThrows(ProtosSignalException.class, executable);
-        assertSame(f.prelude.errorPrototype(), signal.error().parent().orElseThrow());
+    private static void assertDirectError(
+            Fixture fixture, org.junit.jupiter.api.function.Executable executable) {
+        ProtosSignalException signal =
+                assertThrows(ProtosSignalException.class, executable);
+        assertSame(
+                fixture.prelude.errorPrototype(),
+                signal.error().parent().orElseThrow());
     }
 
     private record Fixture(
-            ProtosPrelude prelude, ProtosActivation activation, ProtosObjectValue factory) {
+            ProtosPrelude prelude,
+            ProtosActivation activation,
+            ProtosObjectValue factory) {
         ProtosBytesValue create() {
-            return (ProtosBytesValue) ProtosInvocation.invoke(factory, List.of(), activation);
+            return (ProtosBytesValue)
+                    ProtosInvocation.invoke(factory, List.of(), activation);
         }
 
         Object add(ProtosBytesValue bytes, Object value) {
