@@ -54,11 +54,11 @@ an item.
 | I019-A | Actor source dominant-owner naming correction | CLOSED | `SAME_COMMIT` | `actor.protos` -> `Actor.protos`; public `Actor` is the dominant conceptual owner and private ActorRef/GroupRef/SendOperation prototype bindings are subordinate bootstrap helpers; naming guard and architecture classification reconciled |
 | I020 | Post-Ixxx implementation audit reconciliation | CLOSED | `SAME_COMMIT` | I020-A/B/C/D complete; D040 missing-`methodHome` `InvalidSuper` implemented; B005 closed |
 | I021 | Filesystem namespace replacement/removal | CLOSED | `SAME_COMMIT` | I021-A/B/C complete; D042 / spec `0.1.379`; production confined namespace backend and Protos-visible integrated conformance published; B006 CLOSED by package-tool Filesystem Slice 2B metadata publication integration |
-| I022 | Dynamic Error handlers / unwind-safe cleanup | READY | — | D043 / spec `0.1.380`; I022-A..F planned; general replay-stable handler/ensure/cancellation-unwind prerequisite for resource-owning LIB004 work |
+| I022 | Dynamic Error handlers / unwind-safe cleanup | IN_PROGRESS | — | I022-A CLOSED; I022-B READY; D043 / spec `0.1.380`; general replay-stable handler/ensure/cancellation-unwind prerequisite for resource-owning LIB004 work |
 
 ### I022 — Dynamic Error handlers and unwind-safe cleanup
 
-Status: READY
+Status: IN_PROGRESS
 
 Purpose: Implement the already-normative dynamic `Error.handle(body, handler)`
 control substrate together with D043's standard Closure `ensure(cleanup)`
@@ -82,8 +82,8 @@ Planned slices:
 
 | Slice | Status | Version | Closure evidence | Scope / unblock condition |
 |---|---|---|---|---|
-| I022-A | READY | — | — | Internal replay-stable dynamic-control substrate: task-local Handler/Ensure frame identity, active-transfer/unwind phase and child-task non-inheritance, without publishing a partial language-visible handler/cleanup surface. |
-| I022-B | BLOCKED_BY_DEPENDENCIES | — | — | Publish already-normative `Error.handle(body, handler)` over I022-A with Protos conformance for exact Error identity, prototype matching, nesting, handler deactivation, validation timing and non-resumability. |
+| I022-A | CLOSED | `0.2.172-SNAPSHOT` | `SAME_COMMIT` | Internal lazy task-local `ProtosDynamicControlState`: replay-stable Handler/Ensure frame identity keyed by stable invocation identity, explicit semantic deactivation plus LIFO extent removal, one replaceable active unwind-transfer record, and child-task non-inheritance. No language-visible `handle`/`ensure` surface or native-Closure site is published. |
+| I022-B | READY | — | — | Publish already-normative `Error.handle(body, handler)` over I022-A with Protos conformance for exact Error identity, prototype matching, nesting, handler deactivation, validation timing and non-resumability. |
 | I022-C | BLOCKED_BY_DEPENDENCIES | — | — | Publish D043 standard Closure `ensure(cleanup)` for synchronous normal/return/Error exits, exact result preservation, LIFO cleanup and later-transfer precedence. |
 | I022-D | BLOCKED_BY_DEPENDENCIES | — | — | Suspension/replay conformance: protected body and cleanup survive `Future.value()` suspension without duplicated frame installation, body execution, handler state, or cleanup effects. |
 | I022-E | BLOCKED_BY_DEPENDENCIES | — | — | Cooperative cancellation unwind: distinguish request/observation/unwind/terminal cancellation, shield only the already-delivered request during cleanup, permit suspending cleanup, and map cleanup failure to failed rather than cancelled Future. |

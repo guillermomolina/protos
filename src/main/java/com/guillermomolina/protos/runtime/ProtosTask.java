@@ -69,6 +69,7 @@ public final class ProtosTask {
     private WaitDependency resumedDependency;
     private final WaitDependency childDrain = new WaitDependency() {};
     private Object pendingCompletion;
+    private ProtosDynamicControlState dynamicControlState;
 
     ProtosTask(
             ProtosActorExecutionDomain owner,
@@ -119,6 +120,14 @@ public final class ProtosTask {
 
     public ProtosEvaluatorContinuation evaluatorContinuation() {
         return evaluatorContinuation;
+    }
+
+    /** Internal lazy task-local handler/cleanup state; never inherited by child tasks. */
+    public synchronized ProtosDynamicControlState dynamicControlState() {
+        if (dynamicControlState == null) {
+            dynamicControlState = new ProtosDynamicControlState();
+        }
+        return dynamicControlState;
     }
 
     /** Executes one real Truffle evaluation segment for this cooperative task. */

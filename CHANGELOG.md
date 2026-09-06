@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.172-SNAPSHOT
+
+- Close I022-A with the internal replay-stable dynamic-control substrate required by D043/I022: add lazy per-task `ProtosDynamicControlState`, semantic Handler/Ensure frame identity keyed by stable invocation identity, pre-unwind frame deactivation distinct from LIFO extent removal, and a replaceable active transfer record for later return/Error/cancellation unwind integration. Structured child tasks receive independent state while synchronous activations continue sharing their existing task association.
+- Add Java runtime focal coverage for the machinery-only invariants. Publish no Protos-visible `Error.handle` or `ensure` behavior yet and add no native Closure construction site; I022 remains IN_PROGRESS and I022-B becomes READY.
+
 ## 0.2.171-SNAPSHOT
 
 - Close `TOOL002-C — single-case sequential captured execution`: add the test-neutral `ProtosCapturedProcessExecution` wrapper over TOOL002-B so one exact already-compiled Protos entry runs in a fresh semantic Process with private stdin, stdout, and stderr bindings and returns the inert semantic outcome plus detached captured output bytes. The initial capture is deliberately in-memory and sequential; it adds no parallel scheduler, manifest, expectation, retry, worker, remote, cache, reporter, or result-transfer policy.
