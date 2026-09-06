@@ -342,6 +342,79 @@ Such an environment limitation also does not by itself prevent patch authoring
 when the required repository contents can be inspected and the generated patch
 is intended to be executed and validated later in the user's real checkout.
 
+### Clean repository precondition for patch launchers
+
+Publication-capable patch launchers MUST treat pre-existing repository state as
+a precondition, not as state they are authorized to repair. Before the launcher
+modifies any repository file, index entry, commit, branch position, or other
+working state, it MUST verify the repository is suitable for automated work.
+
+For the standard direct-to-`main` publication workflow:
+
+- the launcher MUST verify it is operating at the intended repository root;
+- the current branch MUST be `main`;
+- no merge, rebase, cherry-pick, revert, bisect, or similar Git operation may be
+  in progress;
+- `git status --porcelain=v1 --untracked-files=all` MUST be empty before the
+  launcher makes repository changes; staged files, modified tracked files, and
+  untracked files all make the precondition fail;
+- after `git fetch origin main`, pre-existing local commits ahead of or divergent
+  from `origin/main` make the precondition fail. A clean `main` that is only
+  behind `origin/main` may be advanced with a fast-forward-only update before the
+  definitive baseline is recorded.
+
+If any precondition fails, print enough status to identify the condition and
+abort non-zero before applying the patch. Do not attempt to infer ownership of
+pre-existing changes and do not try to make the repository clean. In particular,
+a launcher MUST NOT use `git stash`, `git reset --hard`, `git restore`,
+`git checkout -- <path>`, `git clean`, an unrelated commit, or similar repair /
+cleanup operations to dispose of state that existed before the launcher began.
+The user owns that state and decides how to resolve it.
+
+After the precondition passes, a launcher may manage only state that it can prove
+it created itself during the current invocation. This includes staging only its
+explicit patch-owned paths and, when `origin/main` advances concurrently,
+rebasing or rematerializing only its own known patch commit/change after
+re-verifying that no foreign local state appeared. A conflict or unexpected
+local change is a reason to abort, not an invitation to repair the repository.
+
+### Environment and toolchain discipline for generated patches
+
+Generated patches and their launchers MUST run against the repository's declared
+development environment rather than assuming newer host tools happen to exist.
+Inspect the applicable environment and build declarations such as
+`.devcontainer/`, `pom.xml`, `Makefile`, and repository scripts before choosing
+helper-tool requirements.
+
+Patch application SHOULD minimize incidental tool dependencies. For ordinary
+textual patching, prefer a checked-in unified diff applied with `git apply` (or
+an equally baseline-compatible repository tool) over generating an ad-hoc
+Python program. Do not introduce a Python, Node, Ruby, Perl, or other scripting
+runtime dependency merely because that runtime happens to be present in the
+authoring environment.
+
+Never assume an unversioned command name implies a modern runtime. In particular,
+`python3` may denote an older system Python. If a helper language is genuinely
+required, the launcher MUST, before modifying repository state:
+
+1. locate the intended executable explicitly;
+2. inspect its actual version;
+3. verify that version satisfies the helper's declared minimum; and
+4. use only syntax and APIs compatible with that verified version.
+
+Apply the same principle to Java, Maven, Node, compilers, formatters, and other
+tools: use the repository-declared toolchain and validate required capabilities
+before relying on them. Do not install, upgrade, replace, relink, or reconfigure
+system tools, packages, `PATH`, shell profiles, the devcontainer, or the project
+toolchain merely to make a generated patch helper run unless changing that
+toolchain is itself the explicit task.
+
+If a genuinely required tool or compatible version is unavailable, abort before
+repository modification and report `ENVIRONMENT_LIMITATION` with the required
+and observed tool/version information. Prefer rewriting the patch launcher to
+use already-declared compatible tools when that can be done without changing the
+requested repository behavior.
+
 ### Truncated repository reads
 
 Truncation of a single repository read does not by itself make a source
