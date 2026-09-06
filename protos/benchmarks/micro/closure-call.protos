@@ -25,4 +25,4 @@ repeat: (count, operation) => {
 identity: (value) => { value }
 sink: 0
 repeat(10000, () => { sink = identity(42) })
-print(sink)
+sink

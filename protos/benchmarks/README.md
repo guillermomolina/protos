@@ -4,6 +4,16 @@ The benchmark corpus is non-normative. It provides deterministic workloads for c
 
 Benchmark source files use `.protos`. Portable workloads do not self-time: an external runner controls warm-up, repetitions, timing, profiling, and implementation-specific metrics. A measurement is valid only when the workload produces its documented result.
 
+Benchmark correctness is exposed as the program's final expression value. The
+external launcher/runner owns rendering and capture of that value; corpus
+workloads do not depend on an unqualified `print` binding.
+
+Runtime configuration must accommodate the canonical workload shape rather than
+rewrite it to avoid host defaults. In particular, the fixed-count micro/runtime
+drivers intentionally retain their recursive repetition structure. A benchmark
+runtime may provision a larger call stack when required, but that runtime option
+must be fixed and recorded as part of the retained run identity.
+
 The first corpus intentionally uses only mechanisms already defined clearly enough by the current normative specifications. Algorithm variants that require a standardized growable sequence or additional iteration protocols should be added only after those contracts are defined; benchmark code must not invent missing library semantics.
 
 Initial families:

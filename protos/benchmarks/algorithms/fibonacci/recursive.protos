@@ -26,4 +26,4 @@ fibonacci: (n) => {
 }
 
 // Expected result: 832040
-print(fibonacci(30))
+fibonacci(30)

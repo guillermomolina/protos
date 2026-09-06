@@ -24,4 +24,4 @@ repeat: (count, operation) => {
 
 sink: null
 repeat(10000, () => { sink = { value: 42 } })
-print(sink.value)
+sink.value

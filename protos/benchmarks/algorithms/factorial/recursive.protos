@@ -26,4 +26,4 @@ factorial: (n) => {
 }
 
 // Expected result: 2432902008176640000
-print(factorial(20))
+factorial(20)

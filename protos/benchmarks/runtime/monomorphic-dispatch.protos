@@ -25,4 +25,4 @@ repeat: (count, operation) => {
 receiver: { run: () => { 42 } }
 sink: 0
 repeat(10000, () => { sink = receiver.run() })
-print(sink)
+sink

@@ -24,4 +24,4 @@ repeat: (count, operation) => {
 
 holder: { value: 0 }
 repeat(10000, () => { holder.value = holder.value + 1 })
-print(holder.value)
+holder.value

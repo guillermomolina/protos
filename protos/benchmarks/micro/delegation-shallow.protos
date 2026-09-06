@@ -26,4 +26,4 @@ parent: { value: 42 }
 child: parent {}
 sink: 0
 repeat(10000, () => { sink = child.value })
-print(sink)
+sink

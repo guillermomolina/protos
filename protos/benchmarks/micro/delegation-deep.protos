@@ -33,4 +33,4 @@ p7: p6 {}
 p8: p7 {}
 sink: 0
 repeat(10000, () => { sink = p8.value })
-print(sink)
+sink
