@@ -200,3 +200,10 @@ library/collections/obsolete-lowercase-identity-set-import-error.protos	error	-
 library/collections/obsolete-lowercase-set-import-error.protos	error	-
 library/collections/set-each-noninvokable-error.protos	error	-
 library/collections/set-remove-absent-error.protos	error	-
+library/collections/array-results-are-open.protos	boolean	true
+library/collections/set-predicates-short-circuit-before-later-key-hash.protos	boolean	true
+library/collections/array-filter-bad-callback-arity-error.protos	error	-
+library/collections/array-find-index-bad-callback-arity-error.protos	error	-
+library/collections/array-map-bad-callback-arity-error.protos	error	-
+library/collections/identity-set-each-bad-arity-error.protos	error	-
+library/collections/set-each-bad-arity-error.protos	error	-

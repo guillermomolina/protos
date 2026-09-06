@@ -16,20 +16,13 @@
  */
 package com.guillermomolina.protos.execution;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
@@ -38,91 +31,33 @@ class ProtosCollectionsSetModuleTest {
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
 
     @Test
-    void setModuleConstructsFreshMapBackedSetsAndExposesCanonicalMarkers()
-            throws Exception {
-        ProtosArrayValue result =
-                runArray(
-                        """
-                        Set: import("std:collections/Set")
-                        emptyA: Set()
-                        emptyB: Set()
-                        values: Set("Ada", "Grace")
-                        Array(
-                            Set.size(emptyA),
-                            emptyA === emptyB,
-                            Set.size(values),
-                            Set.contains(values, "Ada"),
-                            Set.contains(values, "Linus"),
-                            values.at("Ada") === true,
-                            values
-                        )
-                        """);
+    void setModulesUseExistingMapRuntimeFamilies() throws Exception {
+        ProtosStandardLibraryModuleResolver resolver =
+                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosSourceCompiler compiler = new ProtosSourceCompiler();
 
-        assertInteger(BigInteger.ZERO, result.indexedAt(BigInteger.ZERO));
-        assertSame(ProtosBooleanValue.FALSE, result.indexedAt(BigInteger.ONE));
-        assertInteger(BigInteger.TWO, result.indexedAt(BigInteger.TWO));
-        assertSame(ProtosBooleanValue.TRUE, result.indexedAt(BigInteger.valueOf(3)));
-        assertSame(ProtosBooleanValue.FALSE, result.indexedAt(BigInteger.valueOf(4)));
-        assertSame(ProtosBooleanValue.TRUE, result.indexedAt(BigInteger.valueOf(5)));
-        assertInstanceOf(ProtosMapValue.class, result.indexedAt(BigInteger.valueOf(6)));
-    }
+        ProtosMapValue set =
+                assertInstanceOf(
+                        ProtosMapValue.class,
+                        compiler.compile(
+                                        """
+                                        Set: import("std:collections/Set")
+                                        Set()
+                                        """)
+                                .call(prelude.newModuleActivation()));
+        ProtosIdentityMapValue identitySet =
+                assertInstanceOf(
+                        ProtosIdentityMapValue.class,
+                        compiler.compile(
+                                        """
+                                        IdentitySet: import("std:collections/IdentitySet")
+                                        IdentitySet()
+                                        """)
+                                .call(prelude.newModuleActivation()));
 
-    @Test
-    void setConstructionUsesMapEqualityAndKeepsTheFirstRepresentative()
-            throws Exception {
-        ProtosArrayValue result =
-                runArray(
-                        """
-                        Set: import("std:collections/Set")
-                        values: Set(1, 1.0)
-                        representative: null
-                        marker: null
-                        values.each((key, value) => {
-                            representative = key
-                            marker = value
-                        })
-                        Array(
-                            Set.size(values),
-                            Set.contains(values, 1.0),
-                            representative === 1,
-                            representative === 1.0,
-                            marker === true
-                        )
-                        """);
-
-        assertInteger(BigInteger.ONE, result.indexedAt(BigInteger.ZERO));
-        assertSame(ProtosBooleanValue.TRUE, result.indexedAt(BigInteger.ONE));
-        assertSame(ProtosBooleanValue.TRUE, result.indexedAt(BigInteger.TWO));
-        assertSame(ProtosBooleanValue.FALSE, result.indexedAt(BigInteger.valueOf(3)));
-        assertSame(ProtosBooleanValue.TRUE, result.indexedAt(BigInteger.valueOf(4)));
-    }
-
-    @Test
-    void identitySetConstructionUsesSemanticIdentityRatherThanMapEquality()
-            throws Exception {
-        ProtosArrayValue result =
-                runArray(
-                        """
-                        IdentitySet: import("std:collections/IdentitySet")
-                        values: IdentitySet(1, 1.0, 1)
-                        Array(
-                            IdentitySet.size(values),
-                            IdentitySet.contains(values, 1),
-                            IdentitySet.contains(values, 1.0),
-                            values.at(1) === true,
-                            values.at(1.0) === true,
-                            values
-                        )
-                        """);
-
-        assertInteger(BigInteger.TWO, result.indexedAt(BigInteger.ZERO));
-        assertSame(ProtosBooleanValue.TRUE, result.indexedAt(BigInteger.ONE));
-        assertSame(ProtosBooleanValue.TRUE, result.indexedAt(BigInteger.TWO));
-        assertSame(ProtosBooleanValue.TRUE, result.indexedAt(BigInteger.valueOf(3)));
-        assertSame(ProtosBooleanValue.TRUE, result.indexedAt(BigInteger.valueOf(4)));
-        assertInstanceOf(
-                ProtosIdentityMapValue.class,
-                result.indexedAt(BigInteger.valueOf(5)));
+        assertSame(prelude.mapPrototype(), set.parent().orElseThrow());
+        assertSame(prelude.identityMapPrototype(), identitySet.parent().orElseThrow());
     }
 
     @Test
@@ -140,43 +75,5 @@ class ProtosCollectionsSetModuleTest {
 
         assertSame(first, repeated);
         assertNotSame(first, otherActor);
-    }
-
-    @Test
-    void obsoleteLowercaseCollectionModuleSpellingsDoNotRemainAsAliases()
-            throws Exception {
-        ProtosStandardLibraryModuleResolver resolver =
-                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-
-        for (String specifier :
-                new String[] {
-                    "std:collections/set", "std:collections/identity_set"
-                }) {
-            assertThrows(
-                    ProtosSignalException.class,
-                    () ->
-                            new ProtosSourceCompiler()
-                                    .compile("import(\"" + specifier + "\")")
-                                    .call(prelude.newModuleActivation()),
-                    specifier);
-        }
-    }
-
-    private static ProtosArrayValue runArray(String source) throws Exception {
-        ProtosStandardLibraryModuleResolver resolver =
-                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        Object result =
-                new ProtosSourceCompiler()
-                        .compile(source)
-                        .call(prelude.newModuleActivation());
-        return assertInstanceOf(ProtosArrayValue.class, result);
-    }
-
-    private static void assertInteger(BigInteger expected, Object value) {
-        assertEquals(
-                expected,
-                assertInstanceOf(ProtosIntegerValue.class, value).value());
     }
 }
