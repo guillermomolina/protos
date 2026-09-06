@@ -4,6 +4,7 @@ Status: exploratory architecture; non-normative
 
 Related architecture and project material:
 
+- `docs/design/TOOLCHAIN_TOOL_ARCHITECTURE.md`
 - `docs/design/PACKAGE_TOOL_ARCHITECTURE.md`
 - `docs/design/STANDARD_LIBRARY_IDEAS.md`
 - `protos/tests/conformance/README.md`

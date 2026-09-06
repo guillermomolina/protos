@@ -3,6 +3,7 @@
 Status: exploratory architecture; non-normative
 
 Related package-system design:
+- `docs/design/TOOLCHAIN_TOOL_ARCHITECTURE.md`
 - `docs/design/PACKAGE_DISTRIBUTION.md`
 - `docs/design/PACKAGE_MANIFEST_FORMAT.md`
 - `docs/design/PACKAGE_IDENTITY_VERSIONING.md`
