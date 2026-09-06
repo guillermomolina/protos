@@ -10,6 +10,7 @@ Related Protos architecture and project records:
 
 - `docs/design/TOOLCHAIN_TOOL_ARCHITECTURE.md`
 - `docs/design/TEST_TOOL_ARCHITECTURE.md`
+- `docs/design/TEST_TOOL_SCALE_AND_DISTRIBUTION_ARCHITECTURE.md`
 - `docs/project/TOOL002_TEST_TOOL.md`
 - `docs/project/IMPLEMENTATION_STATUS.md`
 - `spec/io/PROCESS_IO.md`
@@ -629,6 +630,32 @@ crash dump/diagnostic policy for future physical workers
 
 None of these open choices is required to implement TOOL002-B's mechanical
 fresh-Process boundary.
+
+## Follow-on massive-scale/distribution checkpoint
+
+A later scale-focused comparison extends this audit without invalidating its
+conclusions. The selected result is recorded separately in
+`docs/design/TEST_TOOL_SCALE_AND_DISTRIBUTION_ARCHITECTURE.md`.
+
+The follow-on closes additional architecture boundaries needed before local
+executor code hardens:
+
+- logical Run/Case/Variant/Attempt identity is distinct from worker identity;
+- semantic Protos outcomes are distinct from infrastructure outcomes;
+- remote execution must not assume exactly-once physical execution;
+- TestPlan/CaseSpec data is inert, serializable and may be streamed/paged at
+  large scale rather than rediscovered independently by every worker;
+- physical execution backends may evolve from local same-runtime to amortized
+  OS-worker and remote pools while each attempt still receives a fresh semantic
+  Protos Process;
+- scheduling resources require capacity plus locality/scope, and may later need
+  access modes, rather than a single global mutex interpretation;
+- affected analysis and safe caching reduce work before distributed execution;
+- private output capture must permit bounded/artifact-backed representation.
+
+These refinements do not add remote execution to the initial TOOL002 scope and do
+not block TOOL002-B. They constrain B only to remain local, test-neutral and
+backend-compatible.
 
 ## Official references reviewed
 

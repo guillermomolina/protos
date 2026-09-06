@@ -6,6 +6,8 @@ Related architecture and project material:
 
 - `docs/design/TOOLCHAIN_TOOL_ARCHITECTURE.md`
 - `docs/design/PACKAGE_TOOL_ARCHITECTURE.md`
+- `docs/design/TEST_TOOL_COMPARATIVE_AUDIT.md`
+- `docs/design/TEST_TOOL_SCALE_AND_DISTRIBUTION_ARCHITECTURE.md`
 - `docs/design/STANDARD_LIBRARY_IDEAS.md`
 - `protos/tests/conformance/README.md`
 - `spec/concurrency/ACTORS.md`
@@ -43,6 +45,44 @@ general executor, and future scheduler resource accounting based on capacities
 rather than Boolean groups alone. It also confirms that arbitrary hard timeout
 requires a separately owned physical worker boundary and is not part of
 TOOL002-B.
+
+## Scale and distribution architecture checkpoint
+
+The follow-on scale/distribution architecture is selected in
+`docs/design/TEST_TOOL_SCALE_AND_DISTRIBUTION_ARCHITECTURE.md`.
+
+That checkpoint keeps the ordinary fresh semantic Process/RootActor boundary but
+makes future physical scale explicit:
+
+```text
+logical TestPlan / CaseAttempt
+        |
+        v
+replaceable execution backend
+        |
+        +-- local same-runtime backend
+        +-- future amortized OS-worker backend
+        `-- future remote backend
+        |
+        v
+fresh semantic Protos Process
+```
+
+The Test Tool must distinguish logical run/case/variant/attempt identity from
+worker placement and must keep semantic Protos outcomes separate from
+infrastructure outcomes such as worker loss or unavailable capacity. Distributed
+execution does not assume exactly-once physical execution.
+
+Future resource scheduling is further refined from capacity alone to capacity
+plus access/locality scope so a host-local port does not serialize an entire
+cluster while a truly global external resource can. TestPlan data must remain
+inert and capable of serialization; implementations may stream/page it at very
+large scale.
+
+TOOL002-B remains local and mechanical. It does not implement the TestPlan,
+identity policy, scheduler, resources, OS workers or remote execution; it must
+only avoid baking physical placement or test-specific policy into the general
+fresh-Process executor.
 
 ## Current repository problem
 
@@ -570,8 +610,9 @@ each subsequent slice:
 1. **Test tool bootstrap** — CLOSED by TOOL002-A.
 2. **Post-A expanded comparative architecture checkpoint** — CLOSED by
    `docs/design/TEST_TOOL_COMPARATIVE_AUDIT.md`; TOOL002-B is READY.
-3. **Fresh-Process execution mechanism** — establish/reuse a general mechanical
-   execution boundary that is not test-specific and returns inert outcomes.
+3. **Fresh-Process execution mechanism** — establish/reuse a general local mechanical
+   execution boundary that is not test-specific, returns inert outcomes, avoids global
+   mutable executor state and keeps physical worker placement outside semantic identity.
 4. **Single-case sequential runner** — execute one exact `.protos` case in a
    fresh Process and capture outcome/streams.
 5. **Manifest/expectation migration** — move the existing general conformance

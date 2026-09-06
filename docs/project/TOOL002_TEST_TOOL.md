@@ -9,6 +9,7 @@ Architecture owners:
 - `docs/design/TOOLCHAIN_TOOL_ARCHITECTURE.md`
 - `docs/design/TEST_TOOL_ARCHITECTURE.md`
 - `docs/design/TEST_TOOL_COMPARATIVE_AUDIT.md`
+- `docs/design/TEST_TOOL_SCALE_AND_DISTRIBUTION_ARCHITECTURE.md`
 
 Normative dependencies inspected by the architecture include:
 
@@ -60,7 +61,7 @@ freeze those decisions unless their own audited scope requires and resolves them
 | Slice | Status | Outcome |
 |---|---|---|
 | TOOL002-A | CLOSED | Exact bundled `protos test` dispatch and tiny ordinary-Protos entry published in the same commit at implementation version `0.2.168-SNAPSHOT`; no corpus migration or test policy. |
-| TOOL002-B | READY | Post-A comparative checkpoint CLOSED by `docs/design/TEST_TOOL_COMPARATIVE_AUDIT.md`; establish/reuse the general fresh-Process exact-execution mechanism and inert outcome boundary, not a Java `TestExecutor` or other test-specific privileged runtime institution. |
+| TOOL002-B | READY | Comparative and scale/distribution checkpoints CLOSED; establish/reuse the local general fresh-Process exact-execution mechanism and inert outcome boundary, not a Java `TestExecutor` or other test-specific privileged runtime institution. Keep physical placement, TestPlan identity and scheduler/remote policy outside B. |
 | TOOL002-C | BLOCKED_BY_DEPENDENCIES | After B, execute one `.protos` case sequentially in a fresh Process and capture inert outcome plus private streams. |
 | TOOL002-D | BLOCKED_BY_DEPENDENCIES | After C, migrate existing general conformance manifest/expectation interpretation from Java to Protos while retaining the corpus. |
 | TOOL002-E | BLOCKED_BY_DEPENDENCIES | After D, migrate Package Tool/TOML fixtures away from Java-owned runner policy. |
@@ -119,6 +120,31 @@ arguments, explicit capabilities, private streams, fresh Process/RootActor,
 production execution and inert outcome. TestPlan parsing, assertions, manifests,
 fixtures, resources, retry, timeout, sharding, watch, cache and reporting remain
 outside B.
+
+## Scale/distribution architecture checkpoint — SELECTED
+
+`docs/design/TEST_TOOL_SCALE_AND_DISTRIBUTION_ARCHITECTURE.md` records the
+future-scale architecture after the expanded comparative checkpoint.
+
+The selected long-term boundary is:
+
+```text
+stable logical case attempt
+        -> replaceable physical execution backend
+        -> fresh semantic Protos Process / RootActor
+        -> structured semantic + infrastructure evidence
+```
+
+The initial implementation remains intentionally smaller. TOOL002-B implements
+only the local, test-neutral exact-entry fresh-Process mechanism. Later
+OS-worker/remote backends, Run/Case/Variant/Attempt policy, capacity/resource
+scheduling, sharding, affected analysis, caching and artifact infrastructure are
+not silently pulled into B.
+
+The checkpoint also records that remote/distributed execution cannot assume
+exactly-once physical execution and that resource constraints eventually need
+locality/scope as well as capacity. These are architecture constraints for future
+layers, not new Core semantics.
 
 ## Closure rule
 
