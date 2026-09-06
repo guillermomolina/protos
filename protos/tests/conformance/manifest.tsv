@@ -408,3 +408,11 @@ call/object-init-returns-receiver.protos	boolean	true
 call/object-init-wrong-arity-error.protos	error	-
 call/plain-closure-call.protos	integer	42
 regression/non-local-return-from-default.protos	integer	42
+call/args-frozen-error.protos	error	-
+call/args-preserve-element-identity.protos	boolean	true
+call/args-preserve-order-and-families.protos	boolean	true
+call/args-survives-object-construction.protos	boolean	true
+call/args-zero-fresh-empty.protos	boolean	true
+call/method-args-exclude-receiver.protos	boolean	true
+call/nested-closure-has-own-args.protos	boolean	true
+call/non-local-return-carries-nested-args.protos	boolean	true
