@@ -17,95 +17,28 @@
 
 package com.guillermomolina.protos.execution;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors.StandardError;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
-import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 class ProtosMessageSendExecutionTest {
+    /**
+     * Deliberately Java-side: executable source conformance covers ordinary and
+     * inherited method sends, dynamic receiver/method-home behavior, and
+     * argument/spread evaluation. The generic `error` expectation can only
+     * assert that a Protos signal occurred, so retain this exact standard-error
+     * category check until source-level handling or a category-aware harness
+     * makes the transported Error observable.
+     */
     @Test
-    void sourceMemberCallInvokesClosureWithOriginalReceiver() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-
-        Object result =
-                execute(
-                        prelude,
-                        """
-                        Point: {
-                            value: 41
-                            next: () => value
-                        }
-                        Point.next()
-                        """);
-
-        assertEquals(BigInteger.valueOf(41), ((ProtosIntegerValue) result).value());
-    }
-
-    @Test
-    void inheritedMethodUsesDynamicReceiverAndPhysicalMethodHome() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-
-        Object result =
-                execute(
-                        prelude,
-                        """
-                        Parent: {
-                            value: 1
-                            get: () => value
-                        }
-                        Child: Parent {
-                            value: 2
-                        }
-                        Child.get()
-                        """);
-
-        assertEquals(BigInteger.valueOf(2), ((ProtosIntegerValue) result).value());
-    }
-
-    @Test
-    void sendArgumentsEvaluateLeftToRightAndSpreadInPlace() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-
-        ProtosActivation activation = prelude.newModuleActivation();
-        activation.context().createLocalSlot(
-                "spread",
-                prelude.newArray(
-                        java.util.List.of(
-                                new ProtosIntegerValue(BigInteger.valueOf(2)))));
-
-        Object result =
-                new ProtosSourceCompiler()
-                        .compile(
-                                """
-                                Receiver: {
-                                    first: null
-                                    second: null
-                                    capture: (a, b) => {
-                                        first = a
-                                        second = b
-                                        b
-                                    }
-                                }
-                                Receiver.capture(1, ...spread)
-                                """)
-                        .call(activation);
-
-        assertEquals(BigInteger.valueOf(2), ((ProtosIntegerValue) result).value());
-    }
-
-    @Test
-    void missingMessageSignalsCoreError() throws IOException {
+    void missingMessageSignalsExactSlotNotFoundCategory() throws IOException {
         ProtosPrelude prelude = corePrelude();
         ProtosSignalException signal =
                 assertThrows(
