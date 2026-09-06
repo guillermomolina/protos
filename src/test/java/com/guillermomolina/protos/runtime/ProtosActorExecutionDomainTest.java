@@ -134,6 +134,95 @@ final class ProtosActorExecutionDomainTest {
     }
 
     @Test
+    void cancellationLifecycleSeparatesPendingRequestFromTerminalOutcome() {
+        ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+
+        ProtosTask task = domain.createTask(null, current -> {
+            assertEquals(ProtosTask.CancellationPhase.NONE, current.cancellationPhase());
+
+            assertTrue(current.requestCancellation());
+            assertTrue(current.cancellationRequested());
+            assertEquals(
+                    ProtosTask.CancellationPhase.REQUESTED,
+                    current.cancellationPhase());
+
+            assertFalse(current.requestCancellation(), "one task records one idempotent request");
+
+            assertTrue(current.observeCancellation());
+            assertFalse(
+                    current.cancellationRequested(),
+                    "an observed request is no longer pending for redelivery");
+            assertEquals(
+                    ProtosTask.CancellationPhase.TERMINAL,
+                    current.cancellationPhase());
+        });
+
+        assertTrue(domain.dispatchOne());
+        assertEquals(ProtosTask.State.CANCELLED, task.state());
+        assertEquals(ProtosTask.CancellationPhase.TERMINAL, task.cancellationPhase());
+    }
+
+    @Test
+    void cancellationUnwindDrainsStructuredChildWithoutReenteringParentContinuation() {
+        ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+        AtomicInteger parentSegments = new AtomicInteger();
+        AtomicInteger childSegments = new AtomicInteger();
+
+        ProtosTask parent = domain.createTask(null, current -> {
+            parentSegments.incrementAndGet();
+
+            assertTrue(current.requestCancellation());
+            assertEquals(
+                    ProtosTask.CancellationPhase.REQUESTED,
+                    current.cancellationPhase());
+
+            assertTrue(current.observeCancellation());
+            assertEquals(ProtosTask.State.SUSPENDED, current.state());
+            assertEquals(
+                    ProtosTask.CancellationPhase.UNWINDING,
+                    current.cancellationPhase());
+            assertFalse(
+                    current.cancellationRequested(),
+                    "the delivered request is not pending during unwind");
+            assertFalse(
+                    current.requestCancellation(),
+                    "the same recorded request remains idempotent during unwind");
+        });
+
+        ProtosTask child =
+                domain.createTask(
+                        parent,
+                        null,
+                        current -> {
+                            childSegments.incrementAndGet();
+                            current.complete("unexpected");
+                        });
+
+        assertTrue(domain.dispatchOne());
+        assertEquals(1, parentSegments.get());
+        assertEquals(ProtosTask.State.SUSPENDED, parent.state());
+        assertEquals(ProtosTask.CancellationPhase.UNWINDING, parent.cancellationPhase());
+        assertEquals(ProtosTask.CancellationPhase.REQUESTED, child.cancellationPhase());
+
+        assertTrue(domain.dispatchOne());
+        assertEquals(
+                0,
+                childSegments.get(),
+                "pre-start cancellation must win before child ordinary code");
+        assertEquals(ProtosTask.State.CANCELLED, child.state());
+        assertEquals(ProtosTask.State.RUNNABLE, parent.state());
+
+        assertTrue(domain.dispatchOne());
+        assertEquals(
+                1,
+                parentSegments.get(),
+                "child-drain completion must not re-enter parent ordinary continuation");
+        assertEquals(ProtosTask.State.CANCELLED, parent.state());
+        assertEquals(ProtosTask.CancellationPhase.TERMINAL, parent.cancellationPhase());
+        assertTrue(parent.children().isEmpty());
+    }
+
+    @Test
     void fifoQueueProvidesDeterministicWeakFairDispatch() {
         ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
         List<Integer> order = new ArrayList<>();

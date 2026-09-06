@@ -39,6 +39,22 @@ public final class ProtosTask {
         CANCELLED
     }
 
+    /**
+     * Internal lifecycle of the one idempotently recorded cancellation request.
+     *
+     * <p>This is runtime machinery, not a Protos-visible state model. REQUESTED means the
+     * request still awaits a portable observation boundary. UNWINDING means that request has
+     * already been observed and is draining existing structured cancellation work. TERMINAL
+     * means the recorded request can no longer be observed again because the task has reached
+     * a terminal outcome.
+     */
+    public enum CancellationPhase {
+        NONE,
+        REQUESTED,
+        UNWINDING,
+        TERMINAL
+    }
+
     /** Opaque semantic prerequisite. I009 can use a Future waiter as one implementation. */
     public interface WaitDependency {
         /** Removes only this task's waiting relationship; it must not cancel the dependency itself. */
@@ -60,7 +76,8 @@ public final class ProtosTask {
 
     private State state = State.RUNNABLE;
     private boolean queued;
-    private boolean cancellationRequested;
+    private boolean cancellationRequestRecorded;
+    private CancellationPhase cancellationPhase = CancellationPhase.NONE;
     private boolean continuationStarted;
     private WaitDependency waitDependency;
     private Object result;
@@ -102,8 +119,18 @@ public final class ProtosTask {
         return state;
     }
 
+    /**
+     * Whether the recorded cancellation request still awaits portable observation.
+     *
+     * <p>Once observation begins, the same request is no longer pending. I022-E2/E3 may extend
+     * the UNWINDING interval with ensure cleanup without changing this invariant.
+     */
     public synchronized boolean cancellationRequested() {
-        return cancellationRequested;
+        return cancellationPhase == CancellationPhase.REQUESTED;
+    }
+
+    public synchronized CancellationPhase cancellationPhase() {
+        return cancellationPhase;
     }
 
     public synchronized Optional<WaitDependency> waitDependency() {
@@ -146,7 +173,8 @@ public final class ProtosTask {
         } catch (ProtosEvaluatorSuspension suspended) {
             // suspend() already changed the task state; returning yields the host thread to the domain.
         } catch (ProtosTaskCancellationException cancelled) {
-            // observeCancellation() already terminalized the task.
+            // Cancellation was already observed; terminalization may be immediate or may be
+            // waiting only for existing structured children to drain.
         } catch (ProtosSignalException signalled) {
             fail(signalled.error());
         } finally {
@@ -206,12 +234,20 @@ public final class ProtosTask {
     void runContinuation() {
         Object deferredFailure;
         Object deferredCompletion;
+        boolean finishCancellationChildDrain;
         boolean cancelBeforeFirstOrdinaryInstruction;
         synchronized (this) {
             deferredFailure = failure;
             deferredCompletion = pendingCompletion;
-            cancelBeforeFirstOrdinaryInstruction = !continuationStarted && cancellationRequested;
-            if (!cancelBeforeFirstOrdinaryInstruction) {
+            finishCancellationChildDrain =
+                    cancellationPhase == CancellationPhase.UNWINDING
+                            && resumedDependency == childDrain;
+            if (finishCancellationChildDrain) {
+                resumedDependency = null;
+            }
+            cancelBeforeFirstOrdinaryInstruction =
+                    !continuationStarted && cancellationPhase == CancellationPhase.REQUESTED;
+            if (!cancelBeforeFirstOrdinaryInstruction && !finishCancellationChildDrain) {
                 // This is the semantic first-execution boundary. Once crossed, later cancellation
                 // cannot preempt arbitrary non-suspending ordinary code.
                 continuationStarted = true;
@@ -219,6 +255,10 @@ public final class ProtosTask {
         }
         if (deferredFailure != null) { finalizeFailure(deferredFailure); return; }
         if (deferredCompletion != null) { complete(deferredCompletion); return; }
+        if (finishCancellationChildDrain) {
+            finishCancellationAfterChildDrain();
+            return;
+        }
         if (cancelBeforeFirstOrdinaryInstruction) {
             if (!observeCancellation()) {
                 throw new IllegalStateException("pre-start cancellation was not observable");
@@ -236,7 +276,7 @@ public final class ProtosTask {
         } catch (ProtosEvaluatorSuspension suspended) {
             // suspension already changed task state
         } catch (ProtosTaskCancellationException cancelled) {
-            // cancellation already terminalized task
+            // Cancellation was already observed; structured child drain may still be pending.
         } catch (ProtosSignalException signalled) {
             fail(signalled.error());
         } finally {
@@ -255,7 +295,7 @@ public final class ProtosTask {
         boolean cancellationWake;
         synchronized (this) {
             requireState(State.RUNNING, "suspend");
-            if (cancellationRequested) {
+            if (cancellationPhase == CancellationPhase.REQUESTED) {
                 state = State.RUNNABLE;
                 waitDependency = null;
                 cancellationWake = true;
@@ -299,10 +339,11 @@ public final class ProtosTask {
             if (isTerminal()) {
                 return false;
             }
-            if (cancellationRequested) {
+            if (cancellationRequestRecorded) {
                 return false;
             }
-            cancellationRequested = true;
+            cancellationRequestRecorded = true;
+            cancellationPhase = CancellationPhase.REQUESTED;
             resumedDependency = null;
             if (state == State.SUSPENDED) {
                 cancelledWait = waitDependency;
@@ -325,22 +366,67 @@ public final class ProtosTask {
      */
     public boolean observeCancellation() {
         java.util.Set<ProtosTask> cancelChildren;
+        boolean terminalNow;
         synchronized (this) {
-            if (!cancellationRequested || isTerminal()) return false;
-            if (state != State.RUNNING) throw new IllegalStateException("cancellation can be observed only by running task");
+            if (cancellationPhase != CancellationPhase.REQUESTED || isTerminal()) {
+                return false;
+            }
+            if (state != State.RUNNING) {
+                throw new IllegalStateException(
+                        "cancellation can be observed only by running task");
+            }
+
+            cancellationPhase = CancellationPhase.UNWINDING;
             cancelChildren = Set.copyOf(children);
             if (!cancelChildren.isEmpty()) {
                 state = State.SUSPENDED;
                 waitDependency = childDrain;
+                terminalNow = false;
             } else {
+                cancellationPhase = CancellationPhase.TERMINAL;
                 state = State.CANCELLED;
+                terminalNow = true;
             }
         }
-        for (ProtosTask child : cancelChildren) child.requestCancellation();
-        if (!cancelChildren.isEmpty()) return true;
+
+        for (ProtosTask child : cancelChildren) {
+            child.requestCancellation();
+        }
+
+        if (terminalNow) {
+            publishCancellationTerminal();
+        }
+        return true;
+    }
+
+    /**
+     * Completes the existing structured-child part of cancellation unwind.
+     *
+     * <p>I022-E1 deliberately owns no ensure cleanup yet. This method only makes the already
+     * normative child-drain interval explicit so I022-E2/E3 can later extend UNWINDING without
+     * reinterpreting a still-pending request.
+     */
+    private void finishCancellationAfterChildDrain() {
+        synchronized (this) {
+            if (cancellationPhase != CancellationPhase.UNWINDING) {
+                throw new IllegalStateException(
+                        "cancellation child drain requires UNWINDING phase");
+            }
+            requireState(State.RUNNING, "finish cancellation child drain");
+            if (!children.isEmpty()) {
+                throw new IllegalStateException(
+                        "cancellation child drain resumed before children became terminal");
+            }
+            waitDependency = null;
+            cancellationPhase = CancellationPhase.TERMINAL;
+            state = State.CANCELLED;
+        }
+        publishCancellationTerminal();
+    }
+
+    private void publishCancellationTerminal() {
         owner.terminal(this);
         terminalizeAssociatedFuture(State.CANCELLED, null);
-        return true;
     }
 
     public void complete(Object value) {
@@ -354,6 +440,9 @@ public final class ProtosTask {
                 return;
             }
             state = State.COMPLETED;
+            if (cancellationRequestRecorded) {
+                cancellationPhase = CancellationPhase.TERMINAL;
+            }
             completed = pendingCompletion != null ? pendingCompletion : value;
             pendingCompletion = null;
             result = completed;
@@ -374,6 +463,9 @@ public final class ProtosTask {
                 waitDependency = childDrain;
             } else {
                 state = State.FAILED;
+                if (cancellationRequestRecorded) {
+                    cancellationPhase = CancellationPhase.TERMINAL;
+                }
                 failure = checked;
             }
         }
@@ -385,6 +477,9 @@ public final class ProtosTask {
     private void finalizeFailure(Object error) {
         synchronized (this) {
             if (state == State.RUNNING) state = State.FAILED;
+            if (cancellationRequestRecorded) {
+                cancellationPhase = CancellationPhase.TERMINAL;
+            }
             failure = error;
         }
         owner.terminal(this);

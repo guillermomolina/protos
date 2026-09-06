@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.184-SNAPSHOT
+
+- Close I022-E1 as the first publishable tranche of the decomposed I022-E cancellation work. Replace the single internal cancellation boolean with one idempotently recorded request plus explicit `NONE`, `REQUESTED`, `UNWINDING` and `TERMINAL` lifecycle phases. Only `REQUESTED` remains a pending portable observation; once observed, the same request is no longer exposed for redelivery.
+- Make the already-normative structured-child cancellation drain explicit inside `UNWINDING`: observation requests cancellation of existing children, the parent waits on its existing child-drain dependency, and drain completion terminalizes cancellation without re-entering parent ordinary code. Preserve the current no-cleanup observable path, including pre-start cancellation, suspended-task wakeup, upstream-wait isolation and immediate cancellation when no structured child remains.
+- Add Java-only focal coverage because E1 is intentionally internal scheduler/Task machinery rather than a new Protos-visible feature. Formalize I022-E1/E2/E3 in the implementation ledger: I022-E stays IN_PROGRESS, E2 becomes READY, and no `ensure`, Future public protocol, specification or native-Closure boundary change is made.
+
 ## 0.2.183-SNAPSHOT
 
 - Close `TOOL001-C4 — canonical TOML table assembly` with `TOOL001-C4B` (legacy manifest Slice 3B2-B2). Extend ordinary-Protos `self:TomlDocument.table(text)` with TOML 1.0 `[[array-of-tables]]`: the first header creates an Array containing one fresh table, repeated headers append fresh table elements in encounter order, and assignments target the selected fresh element.
