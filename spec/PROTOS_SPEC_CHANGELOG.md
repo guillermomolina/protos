@@ -9,6 +9,50 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.380] - 2026-09-06
+
+### Standard Closure `ensure` protocol (D043)
+- Closes the remaining public cleanup-protocol ambiguity by standardizing
+  `body.ensure(cleanup)` as an ordinary message with no new grammar category,
+  keyword, statement form, `Closure` prototype, destructor, or resource type.
+- Adds `ensure` beside `future` and `parallel` as an ordinary local
+  Closure-valued `Object` slot whose standard behavior accepts only a semantic
+  Closure receiver; ordinary lookup, reflection, extraction, shadowing, and
+  override rules remain unchanged.
+- Requires exactly one semantic Closure `cleanup` argument and completes all
+  receiver/argument evaluation plus standard-operation validation before the
+  protected body starts or any cleanup scope becomes active.
+- Defines exactly-once cleanup on normal completion, non-local return, Error
+  unwind, and cooperative cancellation unwind; suspension/replay is not scope
+  exit, nested cleanup is LIFO, and task/Future structured ownership remains
+  governed by the existing Future/Task contract.
+- Preserves the protected body's exact normal result when cleanup completes
+  normally and makes the cleanup's normal result irrelevant. Returning a Future
+  from body or cleanup does not implicitly extend the scope, wait, adopt, or
+  flatten it.
+- Generalizes the already-defined cleanup-Error precedence into one consistent
+  later-transfer rule: a control transfer initiated by cleanup supersedes the
+  pending completion/return/Error/cancellation transfer that triggered cleanup.
+  Invalid cleanup non-local return continues to signal ordinary `InvalidReturn`.
+- Retains the existing narrow cancellation shielding: the already-honored
+  cancellation request is not redelivered at suspension points reached by its
+  cleanup, without introducing a general cancellation-mask facility.
+- Keeps handler/cleanup composition unchanged: a handler selected before unwind
+  reaches cleanup is already inactive, so cleanup cannot recursively re-select
+  that consumed handler.
+
+### Compatibility
+- Existing programs that do not use the new standard `ensure` selector retain
+  their behavior and pay no cleanup-frame/runtime cost merely because the
+  selector exists.
+- Existing higher-level resource designs gain one exact portable primitive but
+  no automatic resource ownership, File-specific behavior, implicit Future
+  cancellation, hidden `detach`, or ambient authority.
+- D043 resolves the normative prerequisite for implementing the already-defined
+  dynamic Error-handler and unwind-safe cleanup machinery. `I022` is therefore
+  READY; resource-owning LIB004 work remains implementation-gated until I022 is
+  CLOSED.
+
 ## [0.1.379] - 2026-09-06
 
 ### Race-safe Filesystem namespace-entry selection (D042)

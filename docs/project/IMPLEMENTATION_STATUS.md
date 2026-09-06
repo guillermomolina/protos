@@ -54,6 +54,47 @@ an item.
 | I019-A | Actor source dominant-owner naming correction | CLOSED | `SAME_COMMIT` | `actor.protos` -> `Actor.protos`; public `Actor` is the dominant conceptual owner and private ActorRef/GroupRef/SendOperation prototype bindings are subordinate bootstrap helpers; naming guard and architecture classification reconciled |
 | I020 | Post-Ixxx implementation audit reconciliation | CLOSED | `SAME_COMMIT` | I020-A/B/C/D complete; D040 missing-`methodHome` `InvalidSuper` implemented; B005 closed |
 | I021 | Filesystem namespace replacement/removal | CLOSED | `SAME_COMMIT` | I021-A/B/C complete; D042 / spec `0.1.379`; production confined namespace backend and Protos-visible integrated conformance published; B006 CLOSED by package-tool Filesystem Slice 2B metadata publication integration |
+| I022 | Dynamic Error handlers / unwind-safe cleanup | READY | — | D043 / spec `0.1.380`; I022-A..F planned; general replay-stable handler/ensure/cancellation-unwind prerequisite for resource-owning LIB004 work |
+
+### I022 — Dynamic Error handlers and unwind-safe cleanup
+
+Status: READY
+
+Purpose: Implement the already-normative dynamic `Error.handle(body, handler)`
+control substrate together with D043's standard Closure `ensure(cleanup)`
+surface, including replay-stable dynamic control state, exactly-once cleanup,
+handler deactivation ordering, suspension, non-local return, and cooperative
+cancellation unwind. This is the general Core prerequisite required before
+resource-owning or in-flight-I/O-owning LIB004 conveniences may rely on cleanup.
+
+Normative owners:
+- `spec/semantics/ERRORS.md` for `Error.handle`, matching, non-resumability, and
+  selected-handler deactivation before cleanup unwind;
+- `spec/semantics/EXECUTION_AND_CONTROL.md` for D043 standard `ensure`, protected
+  extents, cleanup triggering, later-transfer precedence, and cancellation-safe
+  suspending cleanup;
+- `spec/semantics/CALLABLES.md` for the ordinary `Object.ensure` Closure-specific
+  selector placement and receiver-domain behavior;
+- `spec/concurrency/FUTURES_AND_TASKS.md` for structured task ownership,
+  suspension/resume cancellation boundaries, and terminal Future outcomes.
+
+Planned slices:
+
+| Slice | Status | Version | Closure evidence | Scope / unblock condition |
+|---|---|---|---|---|
+| I022-A | READY | — | — | Internal replay-stable dynamic-control substrate: task-local Handler/Ensure frame identity, active-transfer/unwind phase and child-task non-inheritance, without publishing a partial language-visible handler/cleanup surface. |
+| I022-B | BLOCKED_BY_DEPENDENCIES | — | — | Publish already-normative `Error.handle(body, handler)` over I022-A with Protos conformance for exact Error identity, prototype matching, nesting, handler deactivation, validation timing and non-resumability. |
+| I022-C | BLOCKED_BY_DEPENDENCIES | — | — | Publish D043 standard Closure `ensure(cleanup)` for synchronous normal/return/Error exits, exact result preservation, LIFO cleanup and later-transfer precedence. |
+| I022-D | BLOCKED_BY_DEPENDENCIES | — | — | Suspension/replay conformance: protected body and cleanup survive `Future.value()` suspension without duplicated frame installation, body execution, handler state, or cleanup effects. |
+| I022-E | BLOCKED_BY_DEPENDENCIES | — | — | Cooperative cancellation unwind: distinguish request/observation/unwind/terminal cancellation, shield only the already-delivered request during cleanup, permit suspending cleanup, and map cleanup failure to failed rather than cancelled Future. |
+| I022-F | BLOCKED_BY_DEPENDENCIES | — | — | Cross-feature closure: handler-deactivation-before-cleanup, Error/return/cancellation precedence, structured-child interaction, Actor/task isolation, native-boundary audit, Protos conformance and full-suite publication. |
+
+Dependencies:
+- I007 Core Error infrastructure — CLOSED; its historical scope intentionally did
+  not fake `Error.handle` before handler-frame/unwind machinery existed;
+- I009 Future / Task — CLOSED;
+- D043 / specification revision `0.1.380` — normative public `ensure` ambiguity
+  resolved.
 
 ### I021 — Filesystem namespace replacement/removal
 
@@ -513,25 +554,37 @@ Dependencies:
 - LIB002 convenience helpers are not required by LIB003-A/B/C core work.
 ### LIB004 — Filesystem / process conveniences
 
-Status: READY
+Status: BLOCKED_BY_DEPENDENCIES
 
 Description: Higher-level filesystem and Process conveniences layered over the
 standard capability-based File/Filesystem and Process I/O surfaces.
+
+Design record:
+- `docs/project/LIB004_FILESYSTEM_PROCESS_CONVENIENCES_DESIGN.md` remains the
+  non-normative draft checkpoint for the ongoing convenience-surface audit;
+- D043 / specification revision `0.1.380` closes the standard Closure
+  `ensure(cleanup)` public protocol needed by the resource-custody design;
+- implementation remains blocked until I022 publishes the general dynamic
+  handler/unwind-safe cleanup substrate. LIB004 must not bypass that dependency
+  with File/Filesystem-specific Java cleanup primitives.
 
 Planning boundary:
 - convenience code must preserve capability confinement, lifecycle, commitment,
   and authority-transfer semantics;
 - library code must not obtain ambient filesystem, process, subprocess, or other
   host authority merely because a host API exists;
-- no shell API, path utility surface, stream helper API, import spelling, module
-  layout, or implementation slices are assigned yet.
+- resource-owning whole-file helpers and in-flight-I/O-owning copy workflows
+  require I022's cancellation/unwind machinery before implementation;
+- no shell/subprocess API, ambient filesystem lookup, generic public resource
+  scope, or implementation slice is authorized by D043.
 
 Dependencies:
 - I013 Standard Path — CLOSED;
 - I014 Standard Byte I/O — CLOSED;
+- I015 Encoding / Text I/O — CLOSED;
 - I017 Process I/O / bootstrap — CLOSED;
-- re-audit I015/LIB002 dependencies for text-oriented conveniences when LIB004
-  work begins.
+- I022 Dynamic Error handlers / unwind-safe cleanup — READY and must be CLOSED
+  before the resource-owning/in-flight-I/O-owning initial LIB004 surface begins.
 
 
 ### LIB005 — Networking

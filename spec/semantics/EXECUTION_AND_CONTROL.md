@@ -374,8 +374,13 @@ A future `while (...) { ... }` form may be syntactic sugar.
 
 ## Resource Cleanup and `ensure`
 
-This section owns deterministic control-flow cleanup/unwind behavior. Error signaling/handler selection during cleanup composes with `ERRORS.md`; `ensure` syntax/lowering is owned by `../PROTOS_GRAMMAR.md`.
-
+This section is the primary normative owner of the standard Closure
+`ensure(cleanup)` behavior and deterministic control-flow cleanup/unwind
+semantics. Error signaling and handler selection during cleanup compose with
+`ERRORS.md`. `CALLABLES.md` owns the ordinary `Object` slot placement,
+Closure-family receiver domain, extraction, and invocation-role consequences.
+`../PROTOS_GRAMMAR.md` owns only the ordinary message syntax; `ensure` introduces
+no dedicated grammar production or lowering.
 
 Core v0.1 defines no deterministic object destructor.
 
@@ -386,41 +391,158 @@ file.close()
 socket.close()
 ```
 
-The runtime provides unwind-safe cleanup semantics through an `ensure`-style protocol. Conceptually:
+### Standard Closure cleanup operation
+
+Core exposes unwind-safe cleanup through the ordinary message:
 
 ```js
 body.ensure(cleanup)
 ```
 
-executes `cleanup` whenever execution leaves the protected scope, whether by:
+The standard behavior requires the original receiver `body` to be a semantic
+Closure, requires exactly one argument, and requires `cleanup` to be a semantic
+Closure.
 
-- normal completion,
-- non-local return with `^`,
-- error signaling and unwind,
+Receiver and argument expressions are evaluated by the ordinary invocation
+rules before the standard behavior begins. After that evaluation completes, the
+standard behavior validates its receiver domain, arity, and cleanup Closure
+before invoking `body` or establishing a protected extent. If validation fails,
+`body` and `cleanup` are not invoked and no partially installed cleanup scope is
+observable.
+
+After successful validation, one protected dynamic extent is established and
+`body` is invoked with zero arguments.
+
+The protected extent belongs to the executing dynamic flow. Merely creating a
+distinct asynchronous child task does not copy the `ensure` frame into that
+child's dynamic control state. Existing structured-ownership rules in
+`../concurrency/FUTURES_AND_TASKS.md` still apply: non-detached child work may
+delay the protected body's otherwise-normal completion, while detached work does
+not extend the `ensure` scope merely by remaining alive.
+
+### Suspension is not scope exit
+
+Suspending the protected execution does not trigger cleanup.
+
+In particular, `Future.value()` suspension, scheduler/carrier changes, host-stack
+unwinding used only to suspend, interpreter replay, compilation, deoptimization,
+or equivalent implementation machinery do not semantically leave the protected
+extent.
+
+Resumption continues inside the same protected extent. A single `ensure`
+installation therefore executes its cleanup exactly once on semantic scope exit,
+not once per physical suspension/replay segment.
+
+The same rule applies while cleanup itself is running: cleanup may explicitly
+suspend and later resume without re-invoking the protected body or repeating
+already-completed cleanup effects.
+
+### Normal completion and exact result
+
+If `body` completes normally with exact value `result`, cleanup runs before the
+`ensure` invocation completes.
+
+If cleanup also completes normally, the result of `ensure` is the exact
+`result` produced by `body`. The cleanup Closure's normal result is ignored.
+
+No copying, conversion, canonicalization, re-reading, Future adoption, or Future
+flattening is performed merely to produce the `ensure` result.
+
+Consequently, if `body` normally returns a Future as an ordinary value, cleanup
+runs when that body invocation reaches normal completion under the existing
+structured-ownership rules; `ensure` does not keep the scope open merely until
+that returned Future later becomes terminal.
+
+Likewise, if cleanup merely returns a Future as an ordinary value, `ensure` does
+not implicitly observe or adopt that Future. Cleanup that must wait for an
+asynchronous operation performs that wait explicitly, for example by invoking
+`value()` while cleanup is running.
+
+### Scope exits that trigger cleanup
+
+Once the protected body has begun, cleanup runs exactly once when execution
+semantically leaves its protected extent by any Core v0.1 exit mode:
+
+- normal completion;
+- non-local return with `^`;
+- Error unwind;
 - cooperative cancellation unwind.
 
+Nested protected extents unwind structurally from innermost to outermost.
+Nested `ensure` cleanup therefore executes in LIFO scope-exit order without
+introducing a programmer-visible cleanup-stack value or global registry.
+
+### Pending transfer and cleanup precedence
+
+The completion or control transfer that caused scope exit remains pending while
+cleanup runs.
+
+If cleanup completes normally, that pending completion or transfer continues
+unchanged. Normal cleanup therefore does not transform a normal result,
+non-local return, Error unwind, or cancellation unwind into another outcome.
+
+Cleanup is otherwise ordinary Protos execution. If cleanup initiates a later
+control transfer that leaves cleanup, that later transfer supersedes the pending
+completion or transfer that caused cleanup to run.
+
+This includes an ordinary non-local return initiated by cleanup. For example, if
+one non-local return is pending and cleanup successfully initiates another valid
+non-local return, the cleanup's later return is the active transfer and the
+earlier return does not resume afterward.
+
+The ordinary non-local-return validity rules remain unchanged. If cleanup uses
+`^` with an inactive return home, the resulting `InvalidReturn` is an Error
+raised during cleanup and follows the Error-precedence rule below.
+
+No special cleanup-return value, resumable pending transfer, dual-transfer
+state, suppressed-return record, or composite control-transfer object is exposed
+by Core.
+
+### Error precedence during cleanup
+
+Cleanup-triggered Error precedence and handler-search consequences are owned by
+`ERRORS.md`.
+
+If cleanup signals `cleanupError`, that Error becomes the active transfer and
+supersedes any pending normal completion, non-local return, Error unwind, or
+cancellation unwind. The superseded transfer does not become active again if
+`cleanupError` is subsequently handled.
+
+Core does not implicitly combine the old and new failures as a composite Error,
+suppressed-error list, cause chain, or wrapper. Libraries may build explicit
+reporting conventions with ordinary objects and handlers.
+
+When an Error handler was selected before unwind crossed this `ensure` scope,
+the selected handler is already inactive while cleanup runs under the ordering
+owned by `ERRORS.md`; cleanup cannot recursively re-select that consumed handler
+merely because its own Error also matches it.
+
+### Cancellation-safe cleanup
+
 Cleanup is part of the unwind that triggered it, not fresh ordinary execution
-subject to re-delivery of that same control transfer. In particular, once a
-pending cancellation request has been honored and cancellation unwind has begun,
-that already-honored request is not observed again at suspension boundaries
-reached while running `ensure` cleanup for that unwind. Cleanup may therefore
-perform ordinary asynchronous operations and suspend while releasing resources.
+subject to re-delivery of that same control transfer.
+
+Once a pending cancellation request has been honored and cancellation unwind has
+begun, that already-honored request is not observed again at suspension
+boundaries reached while running `ensure` cleanup for that unwind. Cleanup may
+therefore perform ordinary asynchronous operations and suspend while releasing
+resources.
 
 This shielding is only from the cancellation request already being delivered by
 the current unwind. It is not a general cancellation-masking facility and does
-not turn failures or independently observed Future outcomes into successful
-cleanup. An implementation may represent this with masking, a cancellation phase,
-or other machinery, but the distinction must be unobservable.
+not turn ordinary Errors, independently observed Future outcomes, or unrelated
+control transfers into successful cleanup. An implementation may represent this
+with masking, an unwind phase, continuation metadata, or other machinery, but
+the distinction is not otherwise observable.
 
-If `cleanup` completes normally, the original completion or control transfer
-continues unchanged. For cancellation unwind, cancellation resumes after cleanup
-and the task's Future reaches the cancelled state only after all applicable
-cleanup has completed.
+If cleanup completes normally during cancellation unwind, cancellation
+continues afterward. A task's Future reaches terminal cancelled state only after
+all applicable cleanup and the structured-cancellation requirements owned by
+`../concurrency/FUTURES_AND_TASKS.md` have completed.
 
-If `cleanup` signals an error, that new error becomes the active control transfer.
-Any previously active return, error unwind, or cancellation unwind is abandoned
-in favor of the newly signaled error. Thus a cleanup failure during cancellation
-makes the task fail with that cleanup error rather than complete as cancelled.
+If cleanup instead initiates another control transfer, the general later-transfer
+rules above apply. In particular, a cleanup Error makes the task fail with that
+Error rather than complete as cancelled.
 
 Core v0.1 Error signaling is non-resumable as owned by `ERRORS.md`. Every Error
 transfer that reaches this cleanup rule has abandoned the signaling continuation;
@@ -429,10 +551,8 @@ retrying, or supplying a value to the signal point. A future recovery facility,
 if standardized, must be a distinct control mechanism with its own cleanup
 contract rather than an alternate interpretation of Core `Error.signal()`.
 
-Higher-level resource protocols such as `use`, `withOpen`, or similar APIs may be implemented on top of this guarantee using ordinary messages and closures.
+Higher-level resource protocols such as `use`, `withOpen`, or similar APIs may
+be implemented on top of this guarantee using ordinary messages and closures.
 
-Garbage-collector finalization is not a resource-management guarantee and must not be relied upon for deterministic release of external resources.
-
-### Error precedence during `ensure` cleanup
-
-Cleanup-triggered Error precedence and handler-search consequences are owned by `ERRORS.md`. If cleanup signals an Error while another control transfer is pending, the applicable Error-domain rule determines which transfer continues; this section does not independently redefine that contract.
+Garbage-collector finalization is not a resource-management guarantee and must
+not be relied upon for deterministic release of external resources.

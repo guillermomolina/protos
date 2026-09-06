@@ -1088,3 +1088,37 @@ When that happens:
 - keep this document non-normative even after the design is closed;
 - change observable language/Core semantics only through their normative owners
   under `spec/`.
+
+## 2026-09-06 D043 / I022 prerequisite checkpoint
+
+Subsequent audit after this draft's original checkpoint closed the cleanup
+protocol ambiguity rather than adding a filesystem-specific escape hatch.
+
+D043 / specification revision `0.1.380` standardizes:
+
+```text
+body.ensure(cleanup)
+```
+
+as an ordinary Closure-specific `Object` behavior with no new syntax or
+`Closure` prototype. It fixes Closure-only receiver/cleanup validation, protected
+dynamic extent, exact normal-result preservation, exactly-once LIFO cleanup,
+suspension/replay behavior, later cleanup control-transfer precedence, and the
+already-designed narrow cancellation shielding.
+
+The implementation audit also confirms that the current Core substrate still
+needs the general dynamic handler/unwind machinery historically deferred by
+I007. That work is now tracked separately as `I022 — Dynamic Error handlers and
+unwind-safe cleanup`, READY after D043. LIB004 must not implement a native
+File/Filesystem-specific `withOpen` substitute.
+
+This checkpoint resolves the earlier question of whether the normative cleanup
+model itself was missing: the public `ensure` surface is now specified by D043,
+while executable handler/cleanup machinery is an I022 implementation
+prerequisite.
+
+The LIB004 convenience design remains non-normative and not yet implementation
+closed. The later audit direction continues to prefer a small byte-I/O /
+filesystem surface over Process text-wrapper caching or mode-string/OpenOptions
+aliases, but final LIB004 slices are assigned only after I022 closes and the
+then-current `origin/main` is re-audited.

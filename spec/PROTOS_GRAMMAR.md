@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-04
+Last updated: 2026-09-06
 ## Prelude Binding Note
 
 Prelude bindings introduce no additional grammar. The shared standard prelude is frozen by runtime semantics. Therefore `name = value` cannot modify a binding found only in the prelude; `name: value` creates a local slot and may explicitly shadow that name.
@@ -2851,19 +2851,24 @@ return ...value
 
 ## Resource Cleanup Syntax Note
 
-Core Grammar v0.1 introduces no destructor syntax and no mandatory `try` / `finally` construct.
-
-Cleanup may be exposed through ordinary message syntax such as:
+Core v0.1 cleanup is exposed through ordinary message syntax:
 
 ```js
 body.ensure(cleanup)
 ```
 
-or through higher-level library protocols built from closures and ordinary sends.
+This form introduces no dedicated `ensure` grammar production, keyword,
+statement form, or special lowering. It is parsed as the same ordinary
+member-read/invocation syntax used by other messages.
 
-The guaranteed execution of cleanup during scope exit is runtime control-flow semantics, not a parser-level special form.
+The standard `Object.ensure` slot placement and Closure-family receiver behavior
+are owned by `semantics/CALLABLES.md`. The protected extent, cleanup triggering,
+normal-result preservation, unwind, suspension, cancellation shielding, and
+control-transfer precedence of the standard behavior are owned by
+`semantics/EXECUTION_AND_CONTROL.md`.
 
-
+Higher-level cleanup/resource protocols may be built from Closures and ordinary
+message sends without adding grammar.
 ## Numeric Literals
 
 The normative lexical grammar for `number-literal` is:

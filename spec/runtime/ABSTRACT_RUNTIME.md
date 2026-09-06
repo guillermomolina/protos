@@ -1793,6 +1793,49 @@ runtime. A future explicit recovery/restart facility may introduce additional
 runtime control state only under a separate normative contract and must not make
 existing Core `Error.signal()` resumable.
 
+### Standard Closure `ensure` integration
+
+The exact programmer-visible `body.ensure(cleanup)` contract is owned by
+`../semantics/EXECUTION_AND_CONTROL.md`, with standard Closure-specific selector
+placement owned by `../semantics/CALLABLES.md`. The runtime must not reinterpret
+physical host-stack lifetime as the protected dynamic extent.
+
+Conceptually, an implementation needs persistent semantic state equivalent to:
+
+```text
+standardEnsure(body, cleanup, execution):
+    requireSemanticClosure(body)
+    requireSemanticClosure(cleanup)
+
+    scope = establishEnsureScope(execution)
+
+    pending = executeBodyWithin(scope, body)
+
+    when pending semantically leaves scope:
+        cleanupTransfer = executeCleanupExactlyOnce(
+            scope,
+            cleanup,
+            shieldingSameDeliveredCancellationIfApplicable
+        )
+
+        if cleanupTransfer exists:
+            return cleanupTransfer
+
+        return pending
+```
+
+`pending` above may represent normal completion, non-local return, Error unwind,
+or cancellation unwind. The pseudocode is intentionally representation-neutral:
+a runtime may use explicit frames, continuation records, replay-stable invocation
+state, host exceptions, or another mechanism.
+
+Suspension of the protected body or cleanup does not itself execute cleanup,
+remove the scope, or duplicate earlier effects. A cleanup-initiated control
+transfer supersedes the transfer that caused cleanup to run. Handler selection
+still consumes the selected handler frame before crossed `ensure` cleanup
+executes, and the same already-honored cancellation request remains shielded only
+for the cleanup of that cancellation unwind.
+
 ---
 
 # 30. Future Creation
