@@ -492,3 +492,16 @@ library/json/text-adapter-writer-output.protos	future-boolean	true
 library/json/text-adapter-writer-downstream-error.protos	future-error	-
 library/json/text-adapter-writer-reuse-after-finish-error.protos	future-error	-
 library/json/text-adapter-writer-overlap-error.protos	error	-
+text-reader/readline-framing-lf-crlf-cr-eof.protos	future-boolean	true
+text-reader/readline-cr-completes-before-following-lf.protos	future-boolean	true
+text-reader/readline-maxbytes-utf8-excludes-bom-and-terminator.protos	future-boolean	true
+text-reader/readline-maxbytes-utf16le-excludes-bom-and-crlf.protos	future-boolean	true
+text-reader/readline-maxbytes-too-long-error.protos	future-error-parent	LineTooLong
+text-reader/readline-line-too-long-precedes-malformed.protos	future-error-parent	LineTooLong
+text-reader/readline-malformed-before-limit-error.protos	future-error-parent	EncodingError
+text-reader/readline-partial-line-io-failure.protos	future-error-parent	IOError
+text-reader/readline-and-readtext-share-order.protos	future-boolean	true
+text-reader/readline-bound-zero-error.protos	future-error-parent	InvalidIOArgument
+text-reader/readline-bound-negative-error.protos	future-error-parent	InvalidIOArgument
+text-reader/readline-bound-wrong-type-error.protos	future-error-parent	InvalidIOArgument
+text-reader/readline-wrong-arity-error.protos	future-error-parent	InvalidIOArgument

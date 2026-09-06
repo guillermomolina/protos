@@ -179,6 +179,18 @@ final class ProtosLanguageConformanceTest {
                         };
                 assertEquals(expected, future.resolvedValue().orElseThrow());
             }
+            case "future-error-parent" -> {
+                ProtosActivation activation = prelude.newModuleActivation();
+                ProtosFutureValue future =
+                        assertInstanceOf(
+                                ProtosFutureValue.class,
+                                loader.load(source).call(activation));
+                awaitTerminal(future, activation);
+                assertEquals(ProtosFutureValue.State.FAILED, future.state());
+                org.junit.jupiter.api.Assertions.assertSame(
+                        prelude.bindings().readLocalSlot(testCase.expectedValue()).orElseThrow(),
+                        future.failedError().orElseThrow().parent().orElseThrow());
+            }
             case "future-error" -> {
                 ProtosActivation activation = prelude.newModuleActivation();
                 ProtosFutureValue future =
