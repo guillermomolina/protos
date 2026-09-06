@@ -4,6 +4,8 @@ This directory is a task-oriented cookbook: **how do I do X in Protos?** It is i
 
 All Protos source files use the canonical `.protos` extension. Examples are non-normative; `spec/` remains authoritative.
 
+Print-dependent cookbook programs are maintained as executable standalone-CLI sources. The CLI regression suite discovers every `.protos` file in this tree containing `print(` and executes it unchanged, including concurrent examples whose `Future.value()` suspension must run inside the Process RootActor task.
+
 | Task | Example |
 | --- | --- |
 | Print a value | `hello-world.protos` |

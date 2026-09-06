@@ -293,6 +293,7 @@ Closure result:
 | CLI004 | Standard-library module resolution | CLOSED | `0.2.120-SNAPSHOT` | `SAME_COMMIT` | official CLI host resolver for reserved `std:<logical-name>` distribution modules; logical relocation-independent ModuleKey identity; no search-path shadowing/fallback; bootstrap `core/` excluded; no normative Core module change |
 | CLI005 | Portable Standard Library naming | CLOSED | `0.2.131-SNAPSHOT` | `SAME_COMMIT` | case-significant ASCII `std:` identities; exact distributed path spelling independent of host filesystem case rules; case-fold ambiguity, bootstrap `core`, and Windows reserved device-name segments rejected; canonical LIB001 `Set`/`IdentitySet` spellings |
 | CLI006 | Standalone CLI print facility | CLOSED | `0.2.154-SNAPSHOT` | `SAME_COMMIT` | ordinary initial-context print Closure; borrowing TextWriter over Process stdout/Encoding; file/-e explicit-output-only policy; REPL result display retained; bundled tools remain unmodified; Core native boundary unchanged |
+| CLI007 | Standalone RootActor task entry execution and print-learning-material validation | CLOSED | `0.2.157-SNAPSHOT` | `SAME_COMMIT` | non-interactive file/-e and bundled-tool entries run as real RootActor ProtosTask work; pending Future.value may suspend/resume; all shipped print-dependent examples/tutorials execute unchanged through standalone CLI; REPL task model unchanged; no spec/native-boundary change |
 
 
 ## Standard Library

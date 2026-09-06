@@ -19,6 +19,7 @@ package com.guillermomolina.protos.cli;
 import com.guillermomolina.protos.execution.*;
 import com.guillermomolina.protos.parser.ParseError;
 import com.guillermomolina.protos.runtime.*;
+import com.oracle.truffle.api.CallTarget;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -142,7 +143,8 @@ public final class ProtosCli {
                 session.activation.context().createLocalSlot("filesystem", filesystem);
 
                 String source = resolver.loadSource(resolver.entryModule("Main"));
-                session.compiler.compile(source).call(session.activation);
+                executeStandaloneRootTask(
+                        session.compiler.compile(source), session.activation);
                 return 0;
             } catch (ParseError e) {
                 err.println("Package tool syntax error: " + e.getMessage());
@@ -529,7 +531,7 @@ public final class ProtosCli {
 
     private int eval(String src, Session s, PrintStream err) {
         try {
-            s.compiler.compile(src).call(s.activation);
+            executeStandaloneRootTask(s.compiler.compile(src), s.activation);
             return 0;
         } catch (ParseError e) {
             err.println("Syntax error: " + e.getMessage());
@@ -541,6 +543,57 @@ public final class ProtosCli {
             err.println("Runtime error: " + e.getMessage());
             return 1;
         }
+    }
+
+    /*
+     * A standalone entry is the initial execution of the Process RootActor. Execute its
+     * CallTarget as a real Actor-local cooperative task so a pending Future.value() can
+     * suspend and later resume the entry rather than escaping to the host as a missing-task
+     * implementation error.
+     *
+     * The default Actor scheduler independently drives spawned Actors. This loop owns only
+     * the RootActor entry domain; Future completion/resume enqueues the root task and wakes
+     * dispatchUntilTerminal.
+     */
+    private static Object executeStandaloneRootTask(
+            CallTarget target, ProtosActivation activation) {
+        ProtosActorExecutionDomain domain = activation.executionDomain();
+        ProtosTask rootTask =
+                domain.createTask(
+                        null,
+                        null,
+                        task -> task.executeProtos(target, activation));
+        domain.dispatchUntilTerminal(rootTask, () -> false);
+
+        return switch (rootTask.state()) {
+            case COMPLETED ->
+                    rootTask
+                            .result()
+                            .orElseThrow(
+                                    () ->
+                                            new IllegalStateException(
+                                                    "completed standalone root task has no result"));
+            case FAILED -> {
+                Object failure =
+                        rootTask
+                                .failure()
+                                .orElseThrow(
+                                        () ->
+                                                new IllegalStateException(
+                                                        "failed standalone root task has no error"));
+                if (!(failure instanceof ProtosObjectValue error)) {
+                    throw new IllegalStateException(
+                            "standalone root task failed with a non-Protos error value");
+                }
+                throw new ProtosSignalException(error);
+            }
+            case CANCELLED ->
+                    throw new IllegalStateException(
+                            "standalone root task was cancelled before entry completion");
+            default ->
+                    throw new IllegalStateException(
+                            "standalone root task returned before reaching a terminal state");
+        };
     }
 
     private static Path core() throws IOException {

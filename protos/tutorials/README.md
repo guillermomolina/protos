@@ -4,6 +4,8 @@ This directory teaches Protos progressively. Tutorial source files use the canon
 
 The tutorials are explanatory, non-normative material. If an example conflicts with the normative specification under `spec/`, the specification wins.
 
+Print-dependent tutorial programs are maintained as executable standalone-CLI sources. The CLI regression suite discovers every `.protos` file in this tree containing `print(` and executes it unchanged, including Future/Actor lessons that require RootActor task suspension and resumption.
+
 Start with the numbered directories in order. Each source file focuses on one language mechanism and is intentionally small.
 
 Current progression:

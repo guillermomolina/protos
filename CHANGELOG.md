@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.157-SNAPSHOT
+
+- Close `CLI007` by executing each non-interactive standalone entry CallTarget as a real cooperative task owned by the Process RootActor and driving that RootActor execution domain until terminal. This realizes the existing pending `Future.value()` suspension contract for file/`-e` programs instead of leaking the host-side missing-task implementation error. Preserve ordinary Protos Error mapping and use the same task entry path for the bundled package tool; the persistent REPL model is intentionally unchanged.
+- Restore executable validation for every shipped example/tutorial source that depends on CLI `print(...)`: dynamically discover all matching `.protos` files under `protos/examples` and `protos/tutorials`, execute each unchanged through the real standalone CLI, and require successful completion, observable stdout and blank stderr, including Future/Actor/ActorGroup learning programs. No normative specification change and no native-Closure boundary expansion.
+
+
 ## 0.2.156-SNAPSHOT
 
 - Start package-tool manifest Slice 3 with Slice 3A: add an internal `self:TomlSyntax` key/value engine written entirely in Protos. It scans semantic String input as UTF-8 octets and establishes reusable parsing for bare/quoted/dotted keys, single-line TOML basic/literal strings, booleans, signed and radix integers with the TOML signed-64-bit boundary, nested arrays with comments/trailing commas, and inline tables with dotted keys and duplicate rejection. Bare scalar forms outside the manifest generation 1 value model are retained as explicit `unsupported` nodes for later schema validation instead of acquiring package meaning.
