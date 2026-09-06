@@ -446,3 +446,7 @@ library/json/event-parser-duplicate-name-error.protos	error	-
 library/json/event-parser-incomplete-surrogate-error.protos	error	-
 library/json/event-parser-reuse-after-finish-error.protos	error	-
 library/json/event-parser-trailing-data-error.protos	error	-
+object/local-shadow-assignment-stays-local.protos	integer	31
+object/duplicate-local-create-error.protos	error	-
+object/composition-reservations.protos	integer	849
+object/composition-conflict-error.protos	error	-

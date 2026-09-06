@@ -116,49 +116,9 @@ class ProtosObjectValueTest {
     }
 
     @Test
-    void readsDelegateToNearestSlot() {
-        ProtosObjectValue root = ProtosObjectValue.rootObject();
-        ProtosObjectValue parent = new ProtosObjectValue(root);
-        ProtosObjectValue child = new ProtosObjectValue(parent);
-
-        parent.createLocalSlot("name", new ProtosStringValue("parent"));
-        assertEquals(
-                "parent",
-                ((ProtosStringValue) child.readSlot("name").orElseThrow()).value());
-
-        child.createLocalSlot("name", new ProtosStringValue("child"));
-        assertEquals(
-                "child",
-                ((ProtosStringValue) child.readSlot("name").orElseThrow()).value());
-    }
-
-    @Test
-    void writesOperateOnlyOnLocalSlots() {
-        ProtosObjectValue root = ProtosObjectValue.rootObject();
-        ProtosObjectValue parent = new ProtosObjectValue(root);
-        ProtosObjectValue child = new ProtosObjectValue(parent);
-
-        parent.createLocalSlot("alive", ProtosBooleanValue.TRUE);
-
-        assertThrows(
-                IllegalStateException.class,
-                () -> child.assignLocalSlot("alive", ProtosBooleanValue.FALSE));
-
-        child.createLocalSlot("alive", ProtosBooleanValue.FALSE);
-        child.assignLocalSlot("alive", ProtosBooleanValue.TRUE);
-
-        assertSame(ProtosBooleanValue.TRUE, child.readLocalSlot("alive").orElseThrow());
-        assertSame(ProtosBooleanValue.TRUE, parent.readLocalSlot("alive").orElseThrow());
-    }
-
-    @Test
-    void duplicateLocalCreationAndMissingLookupAreDistinctFailures() {
+    void missingReadSlotUsesEmptyOptionalForRuntimeLookupHelper() {
         ProtosObjectValue object = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        object.createLocalSlot("x", ProtosNullValue.INSTANCE);
 
-        assertThrows(
-                IllegalStateException.class,
-                () -> object.createLocalSlot("x", ProtosNullValue.INSTANCE));
         assertTrue(object.readSlot("missing").isEmpty());
     }
 
@@ -322,25 +282,14 @@ class ProtosObjectValueTest {
     }
 
     @Test
-    void compositionContributionIsAtomicAndHonorsReservations() {
+    void compositionContributionIsAtomicAfterConflict() {
         ProtosObjectValue root = ProtosObjectValue.rootObject();
         ProtosObjectValue target = new ProtosObjectValue(root);
-        ProtosObjectValue source = new ProtosObjectValue(root);
         Object contributed = new Object();
-        Object reserved = new Object();
-
-        source.createLocalSlot("contributed", contributed);
-        source.createLocalSlot("reserved", reserved);
-
-        target.composeLocalSlotsFrom(source, java.util.Set.of("reserved"));
-
-        assertSame(contributed, target.readLocalSlot("contributed").orElseThrow());
-        assertFalse(target.hasLocalSlot("reserved"));
-        assertSame(reserved, source.readLocalSlot("reserved").orElseThrow());
+        target.createLocalSlot("contributed", contributed);
 
         ProtosObjectValue conflictingSource = new ProtosObjectValue(root);
-        Object fresh = new Object();
-        conflictingSource.createLocalSlot("fresh", fresh);
+        conflictingSource.createLocalSlot("fresh", new Object());
         conflictingSource.createLocalSlot("contributed", new Object());
 
         assertThrows(
