@@ -31,6 +31,55 @@ should Protos have?". It is:
 > mechanisms Protos already has, and what is the smallest additional library
 > structure required for the remainder?
 
+## Core collection mechanisms versus Collections library
+
+`LIB001 — Collections` names a **Standard Library work domain**. It does not
+mean that every standard object whose purpose is collection-like belongs under
+`protos/lib/collections/`, nor does directory placement define whether something
+is conceptually a collection.
+
+Two classifications are intentionally independent:
+
+```text
+functional domain                 semantic layer
+-----------------                 --------------
+collection                        Core
+collection                        Standard Library
+I/O                               Core
+I/O convenience                   Standard Library
+...                               ...
+```
+
+For collections, Core v0.1 already owns the standard `Array`, `Map`, and
+`IdentityMap` prototype identities, receiver-owned collection state, construction
+contracts, and fundamental protocols. Their distributable source therefore
+remains under `protos/lib/core/` even though all three are collection concepts.
+They are Core mechanisms on which ordinary libraries may build.
+
+`protos/lib/collections/` instead contains importable Standard Library behavior
+that is built **over** those Core mechanisms without owning or redefining their
+Core identities or semantics. The existing pair makes the distinction concrete:
+
+```text
+protos/lib/core/Array.protos
+    Core Array object / bootstrap behavior
+
+protos/lib/collections/Array.protos
+    optional std:collections/Array algorithms over Core Arrays
+```
+
+The same rule applies to keyed collections. `protos/lib/core/Map.protos` and
+`IdentityMap.protos` remain the Core definitions. A future
+`protos/lib/collections/Map.protos`, if justified by a separate library API
+audit, could coexist as an importable module of Map algorithms; its existence
+would not move, replace, subclass, or redefine the Core `Map` prototype.
+
+Therefore LIB001 must not reclassify `Array`, `Map`, or `IdentityMap` as library
+objects merely because they fall within the collections problem domain. The
+architectural boundary is **Core semantic ownership versus ordinary library
+behavior**, not a Java-style taxonomy in which every collection-shaped concept
+must live in one collections package.
+
 ## Repository constraints established by the audit
 
 The design is constrained by the current Core contracts rather than by prior-art

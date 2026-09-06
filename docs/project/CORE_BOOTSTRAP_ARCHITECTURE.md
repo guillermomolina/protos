@@ -47,6 +47,34 @@ Examples include the standard `Context`, numeric-family prototype objects,
 collection prototypes, Error-family objects, and ordinary methods whose behavior
 can be expressed in Protos.
 
+### Semantic layer, not subject taxonomy
+
+`protos/lib/core/` is classified by **Core semantic ownership**, not by subject
+matter. A standard object does not move out of Core merely because its functional
+domain also has importable Standard Library modules. In particular, standard
+`Array`, `Map`, and `IdentityMap` are collection concepts and Core objects at the
+same time: their standard prelude identities and fundamental collection contracts
+are Core, while higher-level algorithms may be supplied by ordinary
+`std:collections/...` modules.
+
+Consequently, coexistence such as:
+
+```text
+protos/lib/core/Array.protos
+protos/lib/collections/Array.protos
+```
+
+is intentional rather than duplication. The first source participates in
+constructing/installing Core Array behavior; the second is an importable library
+module operating on Core Arrays. The same separation applies if an importable
+`protos/lib/collections/Map.protos` module is introduced in the future: Core
+`Map.protos` remains the owner of the standard Core Map object and its Core
+behavior.
+
+This directory rule is implementation architecture only. Normative ownership of
+`Array`, `Map`, `IdentityMap`, or any future standard concept remains determined
+by `spec/`, not by its physical pathname.
+
 The exact set of required standard objects, their identities, delegation
 relationships, receiver domains, state, and observable protocols comes only from
 the normative specification. A file existing under `protos/lib/core/` cannot
