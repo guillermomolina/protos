@@ -17,10 +17,14 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
+import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import java.util.List;
 
 public final class ProtosStandardObjectProtocol {
     private ProtosStandardObjectProtocol() {}
@@ -51,5 +55,71 @@ public final class ProtosStandardObjectProtocol {
                 return new com.guillermomolina.protos.runtime.ProtosIntegerValue(com.guillermomolina.protos.runtime.ProtosIdentity.identityHash(activation.receiver()));
             }));
         }
+        if (!object.hasLocalSlot("ensure")) {
+            object.createLocalSlot(
+                    "ensure",
+                    ProtosClosureValue.nativeClosure(ProtosStandardObjectProtocol::ensure));
+        }
     }
+
+    private static Object ensure(ProtosActivation activation, List<?> supplied) {
+        Object receiver = activation.receiver();
+        if (!(receiver instanceof ProtosClosureValue body)) {
+            throw invalid(activation);
+        }
+        if (supplied.size() != 1) {
+            throw invalid(activation);
+        }
+        Object cleanupValue = supplied.get(0);
+        if (!(cleanupValue instanceof ProtosClosureValue cleanup)) {
+            throw invalid(activation);
+        }
+
+        ProtosDynamicControlState state = activation.dynamicControlState();
+        ProtosDynamicControlState.Frame frame =
+                state.enterFrame(activation, ProtosDynamicControlState.FrameKind.ENSURE);
+
+        Object result;
+        try {
+            result = ProtosClosureInvoker.invoke(body, List.of(), activation);
+        } catch (ProtosEvaluatorSuspension suspension) {
+            throw suspension;
+        } catch (ProtosSignalException pending) {
+            runCleanup(state, frame, cleanup, activation);
+            throw pending;
+        } catch (ProtosNonLocalReturnException pending) {
+            runCleanup(state, frame, cleanup, activation);
+            throw pending;
+        } catch (ProtosTaskCancellationException pending) {
+            state.leaveFrame(frame);
+            throw pending;
+        } catch (RuntimeException hostFailure) {
+            state.leaveFrame(frame);
+            throw hostFailure;
+        }
+
+        runCleanup(state, frame, cleanup, activation);
+        return result;
+    }
+
+    private static void runCleanup(
+            ProtosDynamicControlState state,
+            ProtosDynamicControlState.Frame frame,
+            ProtosClosureValue cleanup,
+            ProtosActivation activation) {
+        try {
+            ProtosClosureInvoker.invoke(cleanup, List.of(), activation);
+            state.leaveFrame(frame);
+        } catch (ProtosEvaluatorSuspension suspension) {
+            throw suspension;
+        } catch (RuntimeException laterTransfer) {
+            state.leaveFrame(frame);
+            throw laterTransfer;
+        }
+    }
+
+    private static ProtosSignalException invalid(ProtosActivation activation) {
+        return ProtosCoreErrors.signal(activation, ProtosCoreErrors.newError(activation));
+    }
+
 }

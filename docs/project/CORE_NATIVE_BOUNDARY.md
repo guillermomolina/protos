@@ -40,7 +40,7 @@ the standard native boundary.
 
 | Provider | Native Closure sites | Classification | Audited reason for remaining native |
 |---|---:|---|---|
-| `ProtosStandardObjectProtocol.java` | 2 | host-irreducible | Generic polymorphic `call` performs Closure invocation or ordinary instance construction; `identityHash` exposes semantic identity without dynamic-dispatch substitution. |
+| `ProtosStandardObjectProtocol.java` | 3 | host-irreducible | Generic polymorphic `call` performs Closure invocation or ordinary instance construction; `identityHash` exposes semantic identity without dynamic-dispatch substitution; `ensure` establishes the D043 Closure-only protected dynamic extent and executes unwind cleanup before normal/return/Error propagation. |
 | `ProtosStandardBooleanProtocol.java` | 1 | host-irreducible | `ifTrue`/`ifFalse`/`and`/`or` are the primitive selective-control surface used to express branching itself, including path-sensitive callback validation. |
 | `ProtosStandardHashSupport.java` | 3 | representation bridge | Object identity hashing and Number/String hashing depend on semantic identity or exact represented values and must not be redefined through overrideable message sends. |
 | `ProtosStandardNumberEqualityProtocol.java` | 1 | representation bridge | Exact cross-family Number equality needs Integer/fixed/binary64 representation knowledge, including NaN and exact-integral Float handling. |
@@ -71,7 +71,7 @@ the standard native boundary.
 | `ProtosStandardFileProtocol.java` | 10 | resource/capability bridge | File objects are acquired resource capabilities whose exact local surface depends on backend-provided authority and whose operations own cursor/append/sync/close/commitment state. |
 | `ProtosStandardFilesystemProtocol.java` | 1 | resource/capability bridge | Host-provisioned Filesystem authority exposes standard `open`, `replace`, and `remove` through one shared audited operation-Closure construction helper. Open retains confined/race-free acquisition and File materialization; D041 namespace mutation uses an independent host-neutral effect/commit cutover and backend-provided confined atomic transition. |
 
-Total audited Core production construction sites: **108 across 30 providers**.
+Total audited Core production construction sites: **109 across 30 providers**.
 
 CLI/launcher-owned host conveniences are not Core standard behavior and therefore
 do not change that 30-provider / 107-site Core boundary. They are nevertheless
@@ -252,3 +252,5 @@ A change that intentionally adds or reclassifies a native standard boundary must
 therefore update both this inventory and the executable guard in the same
 reviewed change. A change that can instead be expressed faithfully in ordinary
 Protos must place that behavior under `protos/lib/core/`.
+
+I022-C is a reviewed host-irreducible control-boundary extension. D043's standard Closure `ensure(cleanup)` cannot be expressed by ordinary Protos before the protected dynamic extent/unwind primitive exists, so `ProtosStandardObjectProtocol` gains exactly one native Closure construction site. The selector remains an ordinary local `Object` slot with Closure-only standard receiver behavior; no resource-specific cleanup primitive or general cancellation mask is introduced. I022-C closes synchronous normal/non-local-return/Error cleanup; I022-D/E remain responsible for replay/suspension and cancellation-unwind closure.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.176-SNAPSHOT
+
+- Close I022-C by publishing D043's standard Closure `ensure(cleanup)` as one audited host-irreducible `Object` native control primitive. The operation validates the semantic Closure receiver, exact arity and semantic Closure cleanup before entering the protected dynamic extent; preserves the body's exact normal result; ignores the cleanup's normal result; runs synchronous cleanup for normal completion, non-local return and Error unwind; preserves nested LIFO ordering; and lets a later cleanup Error/non-local return supersede the pending transfer.
+- Integrate I022-B handler selection ordering: an Error handler selected by the body is already inactive while crossed `ensure` cleanup runs, so a cleanup Error cannot recursively re-select the consumed handler. Add Protos-source conformance for exact result identity, normal cleanup, LIFO nesting, Error preservation/precedence, selected-handler deactivation, non-local-return cleanup/precedence, eager validation, Closure-only cleanup and arity/receiver rejection.
+- Reconcile the I018 native boundary by increasing `ProtosStandardObjectProtocol` from two to three construction sites and the repository total by exactly one, with provider count unchanged. I022 remains IN_PROGRESS; I022-D becomes READY for suspension/replay closure and I022-E remains the owner of cancellation unwind/shielding.
+
 ## 0.2.175-SNAPSHOT
 
 - Continue `PERF003-A — Collection algorithm Truffle compilability` after valid external evidence against Protos `4b2d1c661ed943e51253ec44a324b45e798e1666` preserved `array-reduce` correctness (`528`) and reduced `GraphTooBig` from 40 failures to 2, but left one compiled graph at size 150500 against the 150000 limit. Refine only ordinary-Protos `Array.reduce` traversal so the balanced left-before-right range helper updates its invocation-local captured accumulator instead of threading accumulator/result values through recursive calls.
