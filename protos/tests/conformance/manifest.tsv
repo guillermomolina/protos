@@ -527,3 +527,7 @@ regression/missing-message-slot-not-found.protos	error-parent	SlotNotFound
 regression/super-lookup-exhaustion-slot-not-found.protos	error-parent	SlotNotFound
 regression/super-argument-failure-precedes-invalid-super.protos	error-parent	SlotNotFound
 regression/super-spread-validation-failure-precedes-invalid-super.protos	error-parent	Error
+core-surface/missing-boolean-binding.protos	error-parent	SlotNotFound
+core-surface/missing-p-binding.protos	error-parent	SlotNotFound
+core-surface/missing-groupref-binding.protos	error-parent	SlotNotFound
+core-surface/missing-internal-groupref-binding.protos	error-parent	SlotNotFound

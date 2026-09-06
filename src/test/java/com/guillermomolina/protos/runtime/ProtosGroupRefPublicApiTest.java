@@ -147,13 +147,6 @@ final class ProtosGroupRefPublicApiTest {
                         .value());
     }
 
-    @Test
-    void coreBootstrapKeepsTheGroupRefPrototypeInternal() throws Exception {
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-        assertFalse(prelude.bindings().hasLocalSlot("GroupRef"));
-        assertFalse(prelude.bindings().hasLocalSlot("_coreGroupRefPrototype"));
-    }
-
     private static ProtosActor readyActor(
             ProtosPrelude prelude,
             ProtosObjectValue actorRefPrototype,
