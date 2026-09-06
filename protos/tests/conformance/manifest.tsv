@@ -294,3 +294,17 @@ fixed-width/uint8-two-arity-error.protos	error	-
 fixed-width/uint8-zero-arity-error.protos	error	-
 numeric-conversion/copied-integer-factory-receiver-error.protos	error	-
 numeric-conversion/inherited-integer-factory-receiver-error.protos	error	-
+string/at-float-error.protos	error	-
+string/at-negative-error.protos	error	-
+string/at-out-of-range-error.protos	error	-
+string/at-string-error.protos	error	-
+string/at-wrong-arity-error.protos	error	-
+string/concat-exact.protos	boolean	true
+string/concat-integer-error.protos	error	-
+string/concat-null-error.protos	error	-
+string/delegated-concat-receiver-error.protos	error	-
+string/delegated-size-receiver-error.protos	error	-
+string/grapheme-at-exact.protos	boolean	true
+string/grapheme-size.protos	boolean	true
+string/size-wrong-arity-error.protos	error	-
+string/value-identity-and-no-normalization.protos	boolean	true
