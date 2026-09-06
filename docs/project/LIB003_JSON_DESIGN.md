@@ -1,6 +1,6 @@
 # LIB003 JSON Design Record
 
-Status: LIB003-A/B/C/D published; LIB003-E selected for final conformance and closure
+Status: LIB003-A/B/C/D/E published; initial LIB003 JSON scope CLOSED
 Work item: `LIB003`
 Nature: Project design record; **non-normative**
 Cross-cutting context: `docs/design/STRUCTURED_DATA_AND_SERIALIZATION.md`
@@ -651,6 +651,44 @@ of attempting to guess or reconstruct consumed input/output progress.
 No Java/runtime boundary, generic Serializer hierarchy, JSON-specific Future
 kind, implicit Encoding, ownership inference, hidden close, or new Core I/O
 semantics are introduced.
+
+### LIB003-E final closure
+
+LIB003-E closes the bounded initial JSON scope without adding another JSON API.
+The executable E1 tranche is published at
+`e215952e5459782e95f0d9c73c7bffc948bac943`. Its Protos-source conformance
+covers deep valid and truncated parsing, explicit D1/D2 event-stack streaming,
+large Array materialization, a large exact-decimal round-trip, long incremental
+String tokenization, and a complete B -> C -> D1 -> D2 -> B round-trip. The same
+publication also re-ran the existing Java-specific parser implementation stress,
+the JSON Actor graph-transfer boundary regression, and the complete Maven suite.
+
+Those stress cases are regression evidence for the implementation properties
+already selected by B/D; they do not standardize a portable maximum JSON input
+size, nesting depth, Array length, decimal digit count, or event count. Resource
+limits remain implementation concerns unless a later normative design explicitly
+standardizes one.
+
+E2 performs the final architecture audit over the published module rather than
+adding behavior. The exact-case `protos/lib/json/JSON.protos` file remains the
+only distributable source in the JSON module directory. No lowercase module
+alias, `Serializable`/`Serializer`/`Deserializer` hierarchy, `toJSON`-style
+object-binding hook, YAML/XML event vocabulary, runtime `typeOf`/`instanceof`
+classifier, `$id`/`$ref` reference convention, generic cross-format Node/Value
+institution, or identity-preserving object-persistence mechanism has been
+introduced.
+
+The Actor-local JSON module versus transferable ordinary JSON data boundary,
+strict semantic-String parsing, exact decimal representation, deterministic
+validated encoding, JSON-specific event vocabulary, and explicit
+TextReader/TextWriter ownership/Encoding boundary therefore remain the complete
+initial surface. Raw/lossless JSON, canonicalization, schema/pointer/patch,
+reflection binding, YAML/XML/CBOR-style formats, and object persistence remain
+separately scoped future work.
+
+E2 changes only project documentation/governance. It does not modify
+`protos/lib/**`, `src/**`, `spec/**`, the Maven implementation version, or
+normative Protos semantics. With A/B/C/D/E published, top-level LIB003 is CLOSED.
 
 ## Raw / lossless JSON
 

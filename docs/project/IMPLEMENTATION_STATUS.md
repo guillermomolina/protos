@@ -340,7 +340,7 @@ work may proceed without waiting for an earlier-numbered roadmap item.
 |---|---|---|---|---|
 | LIB001 | Collections library | CLOSED | `SAME_COMMIT` | LIB001-A/B/C/D/E closed; initial Set/IdentitySet and eager sequential Array algorithm surfaces are fully published with no new runtime collection family, generic hierarchy, or production Java boundary. |
 | LIB002 | Text / encoding conveniences | CLOSED | `SAME_COMMIT` | LIB002-A published the four audited ordinary portable-Encoding convenience modules with real-`std:` Protos conformance; initial LIB002 scope is closed with no Core, native-boundary, registry/default, or distributed-runtime semantic change. |
-| LIB003 | JSON | IN_PROGRESS | — | LIB003-A/B/C and LIB003-D1/D2/D3 streaming/text-I/O composition published; LIB003-D is CLOSED and LIB003-E final conformance is READY. |
+| LIB003 | JSON | CLOSED | `SAME_COMMIT` | LIB003-A/B/C/D/E closed; the bounded initial strict JSON tree, exact-decimal parser/encoder, JSON-specific event streaming, explicit TextReader/TextWriter composition, final stress/Actor-transfer evidence, and architecture audit are fully published without a generic serialization or object-persistence boundary. |
 | LIB004 | Filesystem / process conveniences | READY | — | I016 + I017 closed; begin with a fresh focused convenience-layer design/audit. Any text-oriented convenience that needs I015/LIB002 remains individually dependency-gated and must preserve explicit authority boundaries. |
 | LIB005 | Networking | OPEN | — | Roadmap item only; `spec/io/IO_CORE.md` currently leaves network authority acquisition, socket APIs, DNS/name resolution, and transport configuration outside its standardized scope. Re-audit and establish prerequisites before implementation. |
 
@@ -456,7 +456,7 @@ Dependencies:
 
 ### LIB003 — JSON
 
-Status: IN_PROGRESS
+Status: CLOSED
 
 Description: Strict JSON structured-data facilities implemented through an
 explicit JSON-specific data model made from ordinary Protos values and modules.
@@ -496,7 +496,9 @@ Planned slices:
 | LIB003-D1 | CLOSED | `0.2.164-SNAPSHOT` | `SAME_COMMIT` | Fresh ordinary `JSON.eventParser(consumer)` with synchronous `feed(String)` / `finish()`; JSON-specific structural/scalar/name events; strict chunk-invariant syntax, Unicode, duplicate-name and exact-decimal handling; explicit non-recursive container stack; no JSON tree materialization. |
 | LIB003-D2 | CLOSED | `0.2.165-SNAPSHOT` | `SAME_COMMIT` | Fresh ordinary `JSON.eventWriter(consumer)` with synchronous `feed(event)` / `finish()`; D1 JSON-specific vocabulary validation, deterministic punctuation/order, duplicate object-name rejection, exact scalar emission by reusing the published encoder, one String chunk per accepted event, and terminal non-reentrant consumer failure semantics. |
 | LIB003-D3 | CLOSED | `0.2.167-SNAPSHOT` | `SAME_COMMIT` | Ordinary `readEvents(textReader, consumer)` and `writeEvents(textWriter)` adapters; one outstanding operation per adapter, explicit backpressure, D1/D2 reuse, Future-shaped TextReader/TextWriter composition, empty-write finish barrier, no hidden Encoding/ownership/lifecycle semantics. |
-| LIB003-E | READY | — | — | Final cross-slice conformance/security/resource stress audit and top-level LIB003 closure may now validate the complete initial JSON data/tree/string/event/text-I/O surface. |
+| LIB003-E | CLOSED | — | `SAME_COMMIT` | Final closure decomposed into E1 executable conformance/stress and E2 architecture/status reconciliation; the bounded initial JSON surface is complete with no new runtime family, generic serializer, hidden I/O policy, or persistence semantics. |
+| LIB003-E1 | CLOSED | — | `e215952e5459782e95f0d9c73c7bffc948bac943` | Test-impact tranche: seven Protos final conformance cases plus existing Java-specific parser-stress and Actor-transfer boundary regressions and the complete Maven suite; no implementation-version change. |
+| LIB003-E2 | CLOSED | — | `SAME_COMMIT` | Documentation/governance-only final architecture audit and ledger/design/changelog reconciliation; confirms exact-case single-module scope and deferred cross-format/object-persistence boundaries. |
 
 Dependencies:
 - I003 Standard String — CLOSED;
