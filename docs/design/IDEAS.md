@@ -77,3 +77,20 @@ that motivated it and the semantic consequences the programmer should consider.
 - Can tooling estimate when the cost of crossing a P or A boundary outweighs the
   expected benefit?
 - How should intentional model choices suppress inappropriate diagnostics?
+
+## Standard Library candidate portfolio
+
+Status: IDEA
+
+A focused exploratory audit of future Standard Library domains, including the
+Core-versus-library numeric boundary, is recorded in
+[`STANDARD_LIBRARY_IDEAS.md`](STANDARD_LIBRARY_IDEAS.md).
+
+Current numeric direction: keep all existing Core numeric families including
+`Integer`, fixed-width integers such as `Int64`, and `Float` in Core; do not add
+a visible `BigInteger` family; explore one `std:math/...` library domain rather
+than a parallel `std:numbers/...` hierarchy. The detailed record also lists
+candidate future library areas and which ones are likely to require a separate
+runtime/capability prerequisite.
+
+No `LIBxxx` identifier or implementation commitment is created by this idea.
