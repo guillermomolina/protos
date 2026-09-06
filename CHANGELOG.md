@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.151-SNAPSHOT
+
+- Continue `LIB003 — JSON` with `LIB003-B`: publish strict `JSON.parse(text)` in ordinary Protos source over `Encoding.UTF8` octets. The parser accepts every JSON top-level value, rejects comments/trailing commas/extra roots, rejects duplicate member names after escape decoding, handles JSON escapes and surrogate pairs without Unicode normalization, and preserves deterministic Object insertion order.
+- Parse JSON Number syntax exactly into LIB003-A's unbounded Integer `coefficient * 10^exponent` representation without Float conversion or host/JVM decimal parsing. Leading zeroes, incomplete decimal/exponent forms, leading `+`, NaN and infinities are rejected.
+- Keep JSON structural nesting off the host recursive-descent stack with explicit linked parser frames. Normal-mode dispatch snapshots top-level/container state before consuming each octet, so an opening delimiter is routed exactly once. JSON Arrays use balanced power-of-two chunk accumulation rather than quadratic element-by-element growth.
+- Close LIB003-B with executable-impact focal and full-suite validation; keep LIB003-C READY. No normative specification or production Java boundary changes are introduced.
+
 ## 0.2.150-SNAPSHOT
 
 - Start `I020 — Post-Ixxx implementation audit reconciliation` with I020-A: execute the already-canonicalized `super.message(arguments...)` operation end-to-end for method-bound activations. Super lookup starts strictly at the parent of the physical `methodHome`, preserves the original dynamic receiver, binds any newly selected Closure to its own physical lookup home through the existing invocation path, and uses the same ordered argument/spread vector machinery as ordinary sends.

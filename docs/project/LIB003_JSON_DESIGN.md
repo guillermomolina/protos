@@ -50,9 +50,10 @@ A later multi-format abstraction must be earned by independently useful formats.
 - Reflection exposes ordinary object structure, not persistence intent.
 - Standard module instances are Actor-local; pure data can transfer under the
   existing graph-transfer rules.
-- Structural `freeze()` is normative Object behavior, but LIB003-A does not require
-  a library-internal immutability boundary to define JSON data correctly. The initial
-  model therefore remains ordinary fresh/open data and later consumers validate it.
+- LIB003-A uses the ordinary mutation states produced by its construction mechanisms:
+  node/Number-record/Object-Map components are fresh/open, while Array payloads are
+  fresh frozen standard Arrays because trailing rest capture has that existing
+  language contract. LIB003 introduces no private freezing primitive.
 - I015 Encoding/Text I/O is closed; later adapters can compose with it directly.
 - Core has no normative general Float-to-decimal String protocol. JSON must not
   promote JVM `Double.toString` into Protos semantics.
@@ -368,10 +369,10 @@ rather than node identity.
 
 ## Mutation and Actor transfer
 
-Every node/container/record allocated by the JSON constructors is fresh ordinary
-open Protos data. LIB003-A deliberately does not depend on an implementation-only
-freezing shortcut or add a new Core/runtime boundary merely to obtain immutable
-JSON nodes.
+JSON constructor-owned nodes, Number records and Object Maps are fresh/open ordinary
+Protos data; Array payloads are fresh frozen standard rest-capture Arrays. LIB003-A
+does not depend on an implementation-only freezing shortcut or add a new Core/runtime
+boundary merely to equalize those ordinary mutation states.
 
 The module instance contains Closures and remains Actor-local. The pure data
 tree contains no module Closure merely because JSON behavior exists and remains
@@ -401,6 +402,48 @@ be used for scalar/octet processing.
 The parser must avoid making JVM call-stack depth an accidental portable nesting
 limit. Fixed portable resource limits, if introduced, require an explicit
 library contract.
+
+## LIB003-B implementation closure
+
+LIB003-B publishes `parse(text)` on `std:json/JSON`, implemented entirely in
+ordinary Protos source.
+
+The parser requires a semantic Protos String and scans
+`Encoding.UTF8.encode(text)` octets. JSON structural syntax is ASCII, avoiding
+grapheme-oriented `String.at()` tokenization while preserving semantic Unicode
+String content.
+
+Container nesting uses an explicit linked stack of ordinary frame objects rather
+than recursive descent, so JSON nesting depth consumes heap state rather than one
+host/JVM call frame per container. No arbitrary portable nesting limit is added.
+
+For each non-whitespace octet in normal mode, the parser snapshots whether the
+octet begins at top level before consuming it. That octet is then routed exactly
+once through either top-level value start or the already-existing container frame;
+opening `[` or `{` cannot change depth and cause the same delimiter to be
+reprocessed inside the newly opened container.
+
+JSON Arrays use balanced power-of-two Array chunks. Appending performs binary-carry
+merges and closing combines remaining chunks before invoking the existing
+`array(...nodes)` constructor once. This avoids quadratic repeated
+`Array(...old, value)` growth; helper recursion is logarithmic in one Array's
+element count and independent of JSON nesting depth.
+
+Object member names are decoded to semantic Strings before insertion. Duplicate
+decoded names are rejected before a later value can replace the earlier entry;
+ordinary Map insertion order retains source member order.
+
+Number grammar is validated directly into an unbounded Integer coefficient and
+base-10 exponent. No Float conversion, JVM decimal parser, NaN, infinity, leading
+`+`, leading-zero extension, or incomplete fraction/exponent form is accepted.
+
+JSON escapes are decoded explicitly. High-surrogate `\uXXXX` escapes require an
+immediately following low-surrogate `\uXXXX`; unpaired low/high surrogates fail.
+No Unicode normalization is performed.
+
+Malformed syntax, duplicate names, invalid escape/surrogate structure, incomplete
+tokens, extra top-level values and non-String input signal ordinary Error. LIB003-B
+does not introduce a JSON-specific Error taxonomy.
 
 ## Encoding direction
 
