@@ -17,9 +17,22 @@
 
 package com.guillermomolina.protos.execution;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.*;
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -28,8 +41,14 @@ import org.junit.jupiter.api.Test;
 final class ProtosStandardEnvironmentProtocolTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
 
+    /**
+     * Deliberately Java-side: native name identity/representability and invalid
+     * native Unicode cannot be manufactured by ordinary Protos source. The same
+     * host-side test also preserves the whole-snapshot prevalidation cutover.
+     */
     @Test
-    void getAndContainsRespectNativeIdentityRepresentabilityAndDecodeTiming() throws Exception {
+    void nativeDomainDecodeTimingAndEnumerationPrevalidationStayHostSide()
+            throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosObjectValue prototype = ProtosStandardEnvironmentProtocol.createPrototype();
@@ -60,16 +79,23 @@ final class ProtosStandardEnvironmentProtocolTest {
                         domain,
                         List.of(
                                 new ProtosEnvironmentValue.NativeEntry("Path", "ok"),
-                                new ProtosEnvironmentValue.NativeEntry("BROKEN", invalidUnicode)));
+                                new ProtosEnvironmentValue.NativeEntry(
+                                        "BROKEN", invalidUnicode)));
 
         Object path =
                 ProtosInvocation.invokeMessage(
-                        environment, "get", List.of(new ProtosStringValue("pAtH")), activation);
+                        environment,
+                        "get",
+                        List.of(new ProtosStringValue("pAtH")),
+                        activation);
         assertEquals("ok", ((ProtosStringValue) path).value());
 
         Object missing =
                 ProtosInvocation.invokeMessage(
-                        environment, "get", List.of(new ProtosStringValue("MISSING")), activation);
+                        environment,
+                        "get",
+                        List.of(new ProtosStringValue("MISSING")),
+                        activation);
         assertSame(ProtosNullValue.INSTANCE, missing);
 
         Object brokenPresent =
@@ -99,83 +125,32 @@ final class ProtosStandardEnvironmentProtocolTest {
                                 List.of(new ProtosStringValue("bad=name")),
                                 activation));
         assertEquals(0, queryMatches.get());
-    }
 
-    @Test
-    void eachPrevalidatesEveryPairBeforeCallbacksAndReturnsReceiver() throws Exception {
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-        ProtosActivation activation = prelude.newModuleActivation();
-        ProtosObjectValue prototype = ProtosStandardEnvironmentProtocol.createPrototype();
-        String invalidUnicode = String.valueOf((char) 0xD800);
-
-        ProtosEnvironmentValue invalid =
+        ProtosEnvironmentValue invalidEnumeration =
                 environment(
                         prototype,
                         exactDomain(),
                         List.of(
                                 new ProtosEnvironmentValue.NativeEntry("A", "ok"),
-                                new ProtosEnvironmentValue.NativeEntry("B", invalidUnicode)));
-
-        AtomicInteger calls = new AtomicInteger();
+                                new ProtosEnvironmentValue.NativeEntry(
+                                        "B", invalidUnicode)));
+        AtomicInteger callbacks = new AtomicInteger();
         ProtosClosureValue callback =
                 ProtosClosureValue.nativeClosure(
                         (callActivation, supplied) -> {
-                            calls.incrementAndGet();
+                            callbacks.incrementAndGet();
                             return ProtosNullValue.INSTANCE;
                         });
-
-        assertThrows(
-                ProtosSignalException.class,
-                () -> ProtosInvocation.invokeMessage(invalid, "each", List.of(callback), activation));
-        assertEquals(0, calls.get());
 
         assertThrows(
                 ProtosSignalException.class,
                 () ->
                         ProtosInvocation.invokeMessage(
-                                invalid,
+                                invalidEnumeration,
                                 "each",
-                                List.of(new ProtosIntegerValue(java.math.BigInteger.ONE)),
+                                List.of(callback),
                                 activation));
-        assertEquals(0, calls.get());
-
-        ProtosEnvironmentValue empty = environment(prototype, exactDomain(), List.of());
-        Object result = ProtosInvocation.invokeMessage(empty, "each", List.of(callback), activation);
-        assertSame(empty, result);
-        assertEquals(0, calls.get());
-    }
-
-    @Test
-    void eachUsesCanonicalUnicodeScalarNameOrder() throws Exception {
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-        ProtosActivation activation = prelude.newModuleActivation();
-        ProtosObjectValue prototype = ProtosStandardEnvironmentProtocol.createPrototype();
-
-        String bmp = String.valueOf((char) 0xE000);
-        String supplementary = new String(Character.toChars(0x10000));
-
-        ProtosEnvironmentValue environment =
-                environment(
-                        prototype,
-                        exactDomain(),
-                        List.of(
-                                new ProtosEnvironmentValue.NativeEntry(supplementary, "second"),
-                                new ProtosEnvironmentValue.NativeEntry("A", "first"),
-                                new ProtosEnvironmentValue.NativeEntry(bmp, "middle")));
-
-        java.util.ArrayList<String> names = new java.util.ArrayList<>();
-        ProtosClosureValue callback =
-                ProtosClosureValue.nativeClosure(
-                        (callActivation, supplied) -> {
-                            names.add(((ProtosStringValue) supplied.get(0)).value());
-                            return ProtosNullValue.INSTANCE;
-                        });
-
-        Object result =
-                ProtosInvocation.invokeMessage(environment, "each", List.of(callback), activation);
-
-        assertSame(environment, result);
-        assertEquals(List.of("A", bmp, supplementary), names);
+        assertEquals(0, callbacks.get());
     }
 
     @Test
@@ -184,7 +159,9 @@ final class ProtosStandardEnvironmentProtocolTest {
         ProtosObjectValue prototype = ProtosStandardEnvironmentProtocol.createPrototype();
 
         assertSame(ProtosObjectValue.rootObject(), prototype.parent().orElseThrow());
-        assertEquals(java.util.Set.of("get", "contains", "each"), prototype.localSlotsSnapshot().keySet());
+        assertEquals(
+                java.util.Set.of("get", "contains", "each"),
+                prototype.localSlotsSnapshot().keySet());
         assertTrue(prototype.isFrozen());
         assertTrue(prelude.bindings().readLocalSlot("Environment").isEmpty());
         assertNotSame(prelude.mapPrototype(), prototype);

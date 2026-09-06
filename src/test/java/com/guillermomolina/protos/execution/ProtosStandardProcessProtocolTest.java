@@ -17,9 +17,25 @@
 
 package com.guillermomolina.protos.execution;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import com.guillermomolina.protos.runtime.*;
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosEncodingValue;
+import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
+import com.guillermomolina.protos.runtime.ProtosFutureValue;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosProcessCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
+import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamValue;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Set;
@@ -51,20 +67,12 @@ final class ProtosStandardProcessProtocolTest {
         assertFalse(process.hasLocalSlot("filesystem"));
     }
 
+    // args/environment stable identity and normal access are executable Protos
+    // conformance. Keep only the resource-backed standard stream surface here.
     @Test
-    void successfulAccessorsExposeOnlyAlreadyEstablishedProcessBootstrapState()
+    void successfulStreamAndEncodingAccessorsExposeEstablishedBootstrapState()
             throws Exception {
         Fixture fixture = fixture(true, true, true);
-
-        Object args1 = fixture.invoke("args");
-        Object args2 = fixture.invoke("args");
-        Object environment1 = fixture.invoke("environment");
-        Object environment2 = fixture.invoke("environment");
-
-        assertInstanceOf(ProtosProcessArgumentsValue.class, args1);
-        assertSame(args1, args2);
-        assertInstanceOf(ProtosEnvironmentValue.class, environment1);
-        assertSame(environment1, environment2);
 
         Object stdin1 = fixture.invoke("stdin");
         Object stdin2 = fixture.invoke("stdin");
@@ -72,15 +80,16 @@ final class ProtosStandardProcessProtocolTest {
         assertInstanceOf(ProtosProcessStandardStreamValue.class, stdin2);
         assertNotSame(stdin1, stdin2);
 
-        assertInstanceOf(ProtosProcessStandardStreamValue.class, fixture.invoke("stdout"));
-        assertInstanceOf(ProtosProcessStandardStreamValue.class, fixture.invoke("stderr"));
+        assertInstanceOf(
+                ProtosProcessStandardStreamValue.class, fixture.invoke("stdout"));
+        assertInstanceOf(
+                ProtosProcessStandardStreamValue.class, fixture.invoke("stderr"));
 
         assertSame(fixture.utf8, fixture.invoke("stdinEncoding"));
         assertSame(fixture.utf8, fixture.invoke("stdinEncoding"));
         assertSame(fixture.latin1, fixture.invoke("stdoutEncoding"));
         assertSame(fixture.utf16be, fixture.invoke("stderrEncoding"));
 
-        assertFalse(fixture.invoke("args") instanceof ProtosFutureValue);
         assertFalse(fixture.invoke("stdin") instanceof ProtosFutureValue);
         assertFalse(fixture.invoke("stdoutEncoding") instanceof ProtosFutureValue);
     }
@@ -91,17 +100,25 @@ final class ProtosStandardProcessProtocolTest {
         Fixture fixture = fixture(true, false, true);
 
         ProtosSignalException first =
-                assertThrows(ProtosSignalException.class, () -> fixture.invoke("stdout"));
+                assertThrows(
+                        ProtosSignalException.class,
+                        () -> fixture.invoke("stdout"));
         ProtosSignalException second =
-                assertThrows(ProtosSignalException.class, () -> fixture.invoke("stdout"));
+                assertThrows(
+                        ProtosSignalException.class,
+                        () -> fixture.invoke("stdout"));
         ProtosSignalException encoding =
                 assertThrows(
                         ProtosSignalException.class,
                         () -> fixture.invoke("stdoutEncoding"));
 
         assertNotSame(first.error(), second.error());
-        assertSame(fixture.prelude.errorPrototype(), first.error().parent().orElseThrow());
-        assertSame(fixture.prelude.errorPrototype(), encoding.error().parent().orElseThrow());
+        assertSame(
+                fixture.prelude.errorPrototype(),
+                first.error().parent().orElseThrow());
+        assertSame(
+                fixture.prelude.errorPrototype(),
+                encoding.error().parent().orElseThrow());
     }
 
     @Test
@@ -114,7 +131,6 @@ final class ProtosStandardProcessProtocolTest {
         establishStreams(prelude, process, true, false, false);
         ProtosEncodingValue utf8 = encoding(prelude, "UTF8");
 
-        // stdin exists but has no Encoding; stdout does not exist but is given one.
         process.establishStandardStreamEncodingsForRuntime(null, utf8, null);
 
         ProtosProcessCapabilityValue capability =
@@ -125,14 +141,19 @@ final class ProtosStandardProcessProtocolTest {
                 ProtosSignalException.class,
                 () ->
                         ProtosInvocation.invokeMessage(
-                                capability, "stdinEncoding", List.of(), activation));
+                                capability,
+                                "stdinEncoding",
+                                List.of(),
+                                activation));
         assertThrows(
                 ProtosSignalException.class,
                 () ->
                         ProtosInvocation.invokeMessage(
-                                capability, "stdoutEncoding", List.of(), activation));
+                                capability,
+                                "stdoutEncoding",
+                                List.of(),
+                                activation));
 
-        // The byte capability itself remains the D1-established resource.
         assertInstanceOf(
                 ProtosProcessStandardStreamValue.class,
                 ProtosInvocation.invokeMessage(
@@ -147,8 +168,10 @@ final class ProtosStandardProcessProtocolTest {
         ProtosProcessCapabilityValue delegated =
                 assertInstanceOf(
                         ProtosProcessCapabilityValue.class,
-                        ProtosActorValueTransfer.snapshotValue(
-                                fixture.capability, fixture.activation));
+                        com.guillermomolina.protos.runtime.ProtosActorValueTransfer
+                                .snapshotValue(
+                                        fixture.capability,
+                                        fixture.activation));
 
         assertTrue(fixture.process.requestTerminationForRuntime());
 
@@ -183,35 +206,11 @@ final class ProtosStandardProcessProtocolTest {
         }
     }
 
+    // args/environment arity is executable Process snapshot conformance.
     @Test
-    void ordinaryDescendantCannotMasqueradeAsProcessCapability()
-            throws Exception {
-        Fixture fixture = fixture(true, true, true);
-        ProtosObjectValue masquerade = new ProtosObjectValue(fixture.capability);
-
-        assertThrows(
-                ProtosSignalException.class,
-                () ->
-                        ProtosInvocation.invokeMessage(
-                                masquerade,
-                                "args",
-                                List.of(),
-                                fixture.activation));
-    }
-
-    @Test
-    void accessorArityIsExactAndSynchronous()
-            throws Exception {
+    void streamAccessorArityIsExactAndSynchronous() throws Exception {
         Fixture fixture = fixture(true, true, true);
 
-        assertThrows(
-                ProtosSignalException.class,
-                () ->
-                        ProtosInvocation.invokeMessage(
-                                fixture.capability,
-                                "args",
-                                List.of(ProtosNullValue.INSTANCE),
-                                fixture.activation));
         assertThrows(
                 ProtosSignalException.class,
                 () ->
@@ -222,8 +221,8 @@ final class ProtosStandardProcessProtocolTest {
                                 fixture.activation));
     }
 
-    private static Fixture fixture(boolean stdin, boolean stdout, boolean stderr)
-            throws Exception {
+    private static Fixture fixture(
+            boolean stdin, boolean stdout, boolean stderr) throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
         ProtosProcessRuntime process = processRuntime();
 
@@ -298,7 +297,8 @@ final class ProtosStandardProcessProtocolTest {
         };
     }
 
-    private static ProtosEncodingValue encoding(ProtosPrelude prelude, String name) {
+    private static ProtosEncodingValue encoding(
+            ProtosPrelude prelude, String name) {
         return assertInstanceOf(
                 ProtosEncodingValue.class,
                 prelude.encodingPrototype().readLocalSlot(name).orElseThrow());

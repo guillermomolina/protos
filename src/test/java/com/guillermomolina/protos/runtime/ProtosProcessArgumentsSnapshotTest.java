@@ -17,19 +17,22 @@
 
 package com.guillermomolina.protos.runtime;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
-import com.guillermomolina.protos.execution.ProtosInvocation;
 import com.guillermomolina.protos.execution.ProtosStandardProcessArgumentsProtocol;
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
 final class ProtosProcessArgumentsSnapshotTest {
@@ -92,143 +95,37 @@ final class ProtosProcessArgumentsSnapshotTest {
         assertTrue(process.argumentsSnapshotForRuntime().isEmpty());
     }
 
+    // Source-level per-Process identity and size/at/each semantics live in the
+    // Process snapshot conformance fixture. Keep only Actor transfer machinery here.
     @Test
-    void sizeAtAndPolymorphicEachExposeOnlyTheImmutableSequentialContract()
+    void actorTransferCreatesFreshDestinationIdentityAndPreservesAliases()
             throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosProcessRuntime process = process();
-        ProtosObjectValue prototype =
-                ProtosStandardProcessArgumentsProtocol.createPrototype();
-        assertEquals(
-                ProtosProcessRuntime.ArgumentsSnapshotState.AVAILABLE,
-                process.establishArgumentsForRuntime(
-                        prototype, List.of("alpha", "β", "😀")));
-        ProtosProcessArgumentsValue arguments =
+        process.establishArgumentsForRuntime(
+                ProtosStandardProcessArgumentsProtocol.createPrototype(),
+                List.of("same"));
+        ProtosProcessArgumentsValue source =
                 process.argumentsSnapshotForRuntime().orElseThrow();
 
-        assertEquals(
-                BigInteger.valueOf(3),
-                ((ProtosIntegerValue)
-                                ProtosInvocation.invokeMessage(
-                                        arguments,
-                                        "size",
-                                        List.of(),
-                                        activation))
-                        .value());
-        assertEquals(
-                "β",
-                ((ProtosStringValue)
-                                ProtosInvocation.invokeMessage(
-                                        arguments,
-                                        "at",
-                                        List.of(
-                                                new ProtosIntegerValue(
-                                                        BigInteger.ONE)),
-                                        activation))
-                        .value());
+        List<Object> copied =
+                ProtosActorValueTransfer.snapshotArguments(
+                        List.of(source, source), activation);
 
-        assertIndexedFailure(
-                arguments,
-                List.of(new ProtosIntegerValue(BigInteger.valueOf(-1))),
-                activation,
-                prelude);
-        assertIndexedFailure(
-                arguments,
-                List.of(new ProtosIntegerValue(BigInteger.valueOf(3))),
-                activation,
-                prelude);
-        assertIndexedFailure(
-                arguments,
-                List.of(new ProtosStringValue("1")),
-                activation,
-                prelude);
-
-        ArrayList<String> seen = new ArrayList<>();
-        ProtosObjectValue callable =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
-        callable.createLocalSlot(
-                "call",
-                ProtosClosureValue.nativeClosure(
-                        (callbackActivation, supplied) -> {
-                            assertEquals(1, supplied.size());
-                            seen.add(
-                                    ((ProtosStringValue) supplied.get(0))
-                                            .value());
-                            return ProtosNullValue.INSTANCE;
-                        }));
-
-        assertSame(
-                arguments,
-                ProtosInvocation.invokeMessage(
-                        arguments, "each", List.of(callable), activation));
-        assertEquals(List.of("alpha", "β", "😀"), seen);
-
-        AtomicInteger calls = new AtomicInteger();
-        ProtosObjectValue nonCallable =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
-        nonCallable.createLocalSlot(
-                "notCall",
-                ProtosClosureValue.nativeClosure(
-                        (callbackActivation, supplied) -> {
-                            calls.incrementAndGet();
-                            return ProtosNullValue.INSTANCE;
-                        }));
-        assertThrows(
-                ProtosSignalException.class,
-                () ->
-                        ProtosInvocation.invokeMessage(
-                                arguments,
-                                "each",
-                                List.of(nonCallable),
-                                activation));
-        assertEquals(0, calls.get());
-    }
-
-    @Test
-    void canonicalIdentityIsPerProcessWhileActorTransferCreatesDestinationIdentity()
-            throws Exception {
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-        ProtosActivation activation = prelude.newModuleActivation();
-        ProtosObjectValue prototype =
-                ProtosStandardProcessArgumentsProtocol.createPrototype();
-
-        ProtosProcessRuntime firstProcess = process();
-        ProtosProcessRuntime secondProcess = process();
-        firstProcess.establishArgumentsForRuntime(
-                prototype, List.of("same"));
-        secondProcess.establishArgumentsForRuntime(
-                prototype, List.of("same"));
-
-        ProtosProcessArgumentsValue canonical =
-                firstProcess.argumentsSnapshotForRuntime().orElseThrow();
-        ProtosProcessArgumentsValue sameProcessAgain =
-                firstProcess.argumentsSnapshotForRuntime().orElseThrow();
-        ProtosProcessArgumentsValue otherProcess =
-                secondProcess.argumentsSnapshotForRuntime().orElseThrow();
-
-        assertTrue(ProtosIdentity.identical(canonical, sameProcessAgain));
-        assertFalse(ProtosIdentity.identical(canonical, otherProcess));
-
-        ProtosProcessArgumentsValue copied =
+        ProtosProcessArgumentsValue destination =
                 assertInstanceOf(
-                        ProtosProcessArgumentsValue.class,
-                        ProtosActorValueTransfer.snapshotValue(
-                                canonical, activation));
-        assertNotSame(canonical, copied);
-        assertFalse(ProtosIdentity.identical(canonical, copied));
+                        ProtosProcessArgumentsValue.class, copied.get(0));
+        assertNotSame(source, destination);
+        assertFalse(ProtosIdentity.identical(source, destination));
+        assertSame(destination, copied.get(1));
         assertEquals(
-                canonical.valuesForRuntime().stream()
+                source.valuesForRuntime().stream()
                         .map(ProtosStringValue::value)
                         .toList(),
-                copied.valuesForRuntime().stream()
+                destination.valuesForRuntime().stream()
                         .map(ProtosStringValue::value)
                         .toList());
-
-        List<Object> aliasCopy =
-                ProtosActorValueTransfer.snapshotArguments(
-                        List.of(canonical, canonical), activation);
-        assertSame(aliasCopy.get(0), aliasCopy.get(1));
     }
 
     @Test
@@ -245,7 +142,8 @@ final class ProtosProcessArgumentsSnapshotTest {
 
         Class<?> transfer =
                 Class.forName(
-                        "com.guillermomolina.protos.execution.ProtosParallelRuntime$Transfer");
+                        "com.guillermomolina.protos.execution."
+                                + "ProtosParallelRuntime$Transfer");
         Method copy =
                 transfer.getDeclaredMethod(
                         "copy",
@@ -268,22 +166,6 @@ final class ProtosProcessArgumentsSnapshotTest {
         assertFalse(ProtosIdentity.identical(source, first));
         assertSame(first, second);
         assertEquals("p", first.indexedAtForRuntime(BigInteger.ZERO).value());
-    }
-
-    private static void assertIndexedFailure(
-            ProtosProcessArgumentsValue arguments,
-            List<?> supplied,
-            ProtosActivation activation,
-            ProtosPrelude prelude) {
-        ProtosSignalException signal =
-                assertThrows(
-                        ProtosSignalException.class,
-                        () ->
-                                ProtosInvocation.invokeMessage(
-                                        arguments, "at", supplied, activation));
-        assertSame(
-                prelude.errorPrototype(),
-                signal.error().parent().orElseThrow());
     }
 
     private static ProtosProcessRuntime process() {

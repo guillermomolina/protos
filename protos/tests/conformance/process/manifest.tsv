@@ -1,0 +1,15 @@
+args-accessor-wrong-arity-error.protos	error	-
+args-at-negative-error.protos	error	-
+args-at-noninteger-error.protos	error	-
+args-at-out-of-range-error.protos	error	-
+args-descendant-receiver-error.protos	error	-
+args-each-noninvokable-error.protos	error	-
+args-sequential.protos	boolean	true
+empty-snapshots-each.protos	boolean	true
+environment-accessor-wrong-arity-error.protos	error	-
+environment-descendant-receiver-error.protos	error	-
+environment-each-noninvokable-error.protos	error	-
+environment-each-order.protos	boolean	true
+environment-get-contains.protos	boolean	true
+process-descendant-receiver-error.protos	error	-
+snapshot-identity.protos	boolean	true

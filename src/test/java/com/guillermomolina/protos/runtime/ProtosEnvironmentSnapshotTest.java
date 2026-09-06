@@ -17,7 +17,13 @@
 
 package com.guillermomolina.protos.runtime;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import com.guillermomolina.protos.execution.ProtosStandardEnvironmentProtocol;
@@ -30,18 +36,23 @@ final class ProtosEnvironmentSnapshotTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
 
     @Test
-    void processOwnsOneCanonicalEnvironmentSnapshotAndDetachesHostList() throws Exception {
+    void processOwnsOneCanonicalEnvironmentSnapshotAndDetachesHostList()
+            throws Exception {
         ProtosObjectValue prototype = ProtosStandardEnvironmentProtocol.createPrototype();
-        ProtosProcessRuntime process = new ProtosProcessRuntime(actorRefPrototype());
+        ProtosProcessRuntime process =
+                new ProtosProcessRuntime(actorRefPrototype());
         ArrayList<ProtosEnvironmentValue.NativeEntry> host = new ArrayList<>();
         host.add(new ProtosEnvironmentValue.NativeEntry("A", "one"));
 
         assertEquals(
                 ProtosProcessRuntime.EnvironmentSnapshotState.AVAILABLE,
-                process.establishEnvironmentForRuntime(prototype, exactDomain(), host));
+                process.establishEnvironmentForRuntime(
+                        prototype, exactDomain(), host));
 
-        ProtosEnvironmentValue first = process.environmentSnapshotForRuntime().orElseThrow();
-        ProtosEnvironmentValue second = process.environmentSnapshotForRuntime().orElseThrow();
+        ProtosEnvironmentValue first =
+                process.environmentSnapshotForRuntime().orElseThrow();
+        ProtosEnvironmentValue second =
+                process.environmentSnapshotForRuntime().orElseThrow();
         assertSame(first, second);
         assertTrue(ProtosIdentity.identical(first, second));
         assertEquals("one", first.getForRuntime("A").orElseThrow().value());
@@ -55,13 +66,17 @@ final class ProtosEnvironmentSnapshotTest {
                         .getForRuntime("A")
                         .orElseThrow()
                         .value());
-        assertFalse(process.environmentSnapshotForRuntime().orElseThrow().containsForRuntime("B"));
+        assertFalse(
+                process.environmentSnapshotForRuntime()
+                        .orElseThrow()
+                        .containsForRuntime("B"));
     }
 
     @Test
     void duplicateEquivalentNativeNamesMakeAcquisitionStablyInvalid() {
         ProtosObjectValue prototype = ProtosStandardEnvironmentProtocol.createPrototype();
-        ProtosProcessRuntime process = new ProtosProcessRuntime(actorRefPrototype());
+        ProtosProcessRuntime process =
+                new ProtosProcessRuntime(actorRefPrototype());
 
         assertEquals(
                 ProtosProcessRuntime.EnvironmentSnapshotState.INVALID,
@@ -74,48 +89,32 @@ final class ProtosEnvironmentSnapshotTest {
         assertTrue(process.environmentSnapshotForRuntime().isEmpty());
         assertThrows(
                 IllegalStateException.class,
-                () -> process.establishEnvironmentForRuntime(prototype, exactDomain(), List.of()));
+                () ->
+                        process.establishEnvironmentForRuntime(
+                                prototype, exactDomain(), List.of()));
         assertEquals(
                 ProtosProcessRuntime.EnvironmentSnapshotState.INVALID,
                 process.environmentSnapshotStateForRuntime());
     }
 
     @Test
-    void distinctProcessesHaveDistinctCanonicalSnapshotIdentity() {
-        ProtosObjectValue prototype = ProtosStandardEnvironmentProtocol.createPrototype();
-        ProtosProcessRuntime firstProcess = new ProtosProcessRuntime(actorRefPrototype());
-        ProtosProcessRuntime secondProcess = new ProtosProcessRuntime(actorRefPrototype());
-
-        firstProcess.establishEnvironmentForRuntime(
-                prototype,
-                exactDomain(),
-                List.of(new ProtosEnvironmentValue.NativeEntry("A", "1")));
-        secondProcess.establishEnvironmentForRuntime(
-                prototype,
-                exactDomain(),
-                List.of(new ProtosEnvironmentValue.NativeEntry("A", "1")));
-
-        ProtosEnvironmentValue first = firstProcess.environmentSnapshotForRuntime().orElseThrow();
-        ProtosEnvironmentValue second = secondProcess.environmentSnapshotForRuntime().orElseThrow();
-
-        assertNotSame(first, second);
-        assertFalse(ProtosIdentity.identical(first, second));
-    }
-
-    @Test
-    void actorTransferCreatesFreshDestinationIdentityAndPreservesAliases() throws Exception {
+    void actorTransferCreatesFreshDestinationIdentityAndPreservesAliases()
+            throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosObjectValue prototype = ProtosStandardEnvironmentProtocol.createPrototype();
-        ProtosProcessRuntime process = new ProtosProcessRuntime(actorRefPrototype());
+        ProtosProcessRuntime process =
+                new ProtosProcessRuntime(actorRefPrototype());
         process.establishEnvironmentForRuntime(
                 prototype,
                 exactDomain(),
                 List.of(new ProtosEnvironmentValue.NativeEntry("A", "1")));
-        ProtosEnvironmentValue source = process.environmentSnapshotForRuntime().orElseThrow();
+        ProtosEnvironmentValue source =
+                process.environmentSnapshotForRuntime().orElseThrow();
 
         List<Object> copied =
-                ProtosActorValueTransfer.snapshotArguments(List.of(source, source), activation);
+                ProtosActorValueTransfer.snapshotArguments(
+                        List.of(source, source), activation);
 
         ProtosEnvironmentValue destination =
                 assertInstanceOf(ProtosEnvironmentValue.class, copied.get(0));
@@ -130,8 +129,14 @@ final class ProtosEnvironmentSnapshotTest {
         String bmp = String.valueOf((char) 0xE000);
         String supplementary = new String(Character.toChars(0x10000));
 
-        assertTrue(ProtosEnvironmentValue.compareUnicodeScalarsForTesting(bmp, supplementary) < 0);
-        assertTrue(ProtosEnvironmentValue.compareUnicodeScalarsForTesting(supplementary, bmp) > 0);
+        assertTrue(
+                ProtosEnvironmentValue.compareUnicodeScalarsForTesting(
+                                bmp, supplementary)
+                        < 0);
+        assertTrue(
+                ProtosEnvironmentValue.compareUnicodeScalarsForTesting(
+                                supplementary, bmp)
+                        > 0);
     }
 
     private static ProtosObjectValue actorRefPrototype() {
