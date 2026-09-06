@@ -47,7 +47,7 @@ The optimization must preserve:
 
 | Slice | Status | Scope / closure condition |
 |---|---|---|
-| PERF003-A | IN_PROGRESS | Implementation phase `0.2.170-SNAPSHOT` rewrites only the ordinary Protos-source traversal shape of Array `reduce` and the `sort` merge pass: balanced recursive range traversal replaces the internal `Array.each` callback loop while preserving exact left-to-right reducer/comparator effects, stable merge order, snapshot and failure laws. Repository focal/full/package/license validation is required here; exact GraalVM/Truffle diagnostics against the published commit remain the closure gate before PERF003-A can become CLOSED. |
+| PERF003-A | IN_PROGRESS | The `0.2.170-SNAPSHOT` implementation preserved correctness and reduced `array-reduce` from 40 to 2 `GraphTooBig` failures, but the valid external diagnostic still measured graph size 150500 against the 150000 limit. The corrective phase `0.2.175-SNAPSHOT` keeps balanced left-before-right traversal while updating one invocation-local captured accumulator instead of threading accumulator/result values through recursive calls. Repository validation is required here; exact external GraalVM/Truffle diagnostics against the newly published commit remain the closure gate. |
 | PERF003-B | BLOCKED_BY_DEPENDENCIES | After A, publish companion correctness-first external validation against the exact optimized Protos revision, retain pre/post evidence and diagnostics, and do not rewrite PERF001-E baseline evidence. |
 
 PERF003 closes only after PERF003-B evidence is published and reconciled into the
@@ -80,3 +80,36 @@ unchanged.
 No Java native protocol, benchmark identity check, Truffle boundary, runtime
 value family or normative behavior is added. Exact external optimizing-runtime
 evidence remains required before closing PERF003-A.
+
+## PERF003-A external diagnostic and reduce refinement
+
+The exact external diagnostic against Protos
+`4b2d1c661ed943e51253ec44a324b45e798e1666` with companion harness/evidence
+`guillermomolina/protos-benchmarks@4bff9f7f6c5e0e006530f166c188e0e988acf565`,
+GraalVM Community JDK 22, external Truffle `24.0.0`, and `-Xss128m` established:
+
+- `collections/array-reduce` interpreter correctness: PASS, exact result `528`;
+- optimizing-runtime correctness: PASS, exact result `528`;
+- optimizing compilations completed: 25;
+- optimization failures: 2, both `GraphTooBig`;
+- failing graph node count: 51951; graph size: 150500; configured limit: 150000.
+
+This is a large reduction from PERF001-E's 40 `GraphTooBig` failures, but it does
+not satisfy PERF003-A's zero-bailout closure condition. PERF003-A therefore remains
+IN_PROGRESS and PERF003-B remains BLOCKED_BY_DEPENDENCIES. The valid diagnostic
+stopped at the failing reduce gate, so no conclusion about the optimized `sort`
+rewrite is recorded from that run.
+
+The 0.2.175-SNAPSHOT corrective phase changes only ordinary Protos source in
+`std:collections/Array.reduce`. The balanced range helper still visits the left
+half completely before the right half, but it now updates the enclosing
+invocation-local `accumulator` binding exactly as the pre-PERF003 `Array.each`
+implementation did. Removing the recursive accumulator parameter, local result,
+left-result temporary, and recursive value return reduces graph shape without a
+new runtime primitive, Truffle boundary, benchmark identity check, or semantic
+shortcut. A 32-element repeated-reduction Protos conformance case guards exact
+left-fold results, reducer invocation count, and non-leakage of accumulator state
+between calls.
+
+Exact external optimizing-runtime evidence against the commit produced by this
+corrective phase is still required before PERF003-A may close.

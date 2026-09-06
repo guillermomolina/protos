@@ -175,6 +175,7 @@ library/collections/array-map-snapshot.protos	boolean	true
 library/collections/array-reduce-left-fold-snapshot.protos	boolean	true
 library/collections/array-reduce-trivial-inputs-do-not-inspect-reducer.protos	boolean	true
 library/collections/array-reduce-sort-balanced-traversal.protos	boolean	true
+library/collections/array-reduce-repeated-large-left-fold.protos	boolean	true
 library/collections/array-sort-stability.protos	boolean	true
 library/collections/array-sort-stable-merge-order.protos	boolean	true
 library/collections/array-sort-trivial-inputs-do-not-inspect-comparator.protos	boolean	true

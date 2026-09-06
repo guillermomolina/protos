@@ -108,24 +108,24 @@ reduce: (array, reducer, ...initial) => {
         startIndex = 1
     })
 
-    foldRange: (start, end, value) => {
+    foldRange: (start, end) => {
         length: end - start
-        result: value
 
         (length == 1).ifTrue(() => {
-            result = reducer(value, snapshot.at(start))
+            accumulator = reducer(accumulator, snapshot.at(start))
         })
 
         (length > 1).ifTrue(() => {
             middle: start + length.div(2)
-            leftResult: foldRange(start, middle, value)
-            result = foldRange(middle, end, leftResult)
+            foldRange(start, middle)
+            foldRange(middle, end)
         })
 
-        result
+        null
     }
 
-    foldRange(startIndex, snapshot.size(), accumulator)
+    foldRange(startIndex, snapshot.size())
+    accumulator
 }
 
 sort: (array, less) => {

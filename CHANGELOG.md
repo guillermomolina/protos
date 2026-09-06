@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.175-SNAPSHOT
+
+- Continue `PERF003-A — Collection algorithm Truffle compilability` after valid external evidence against Protos `4b2d1c661ed943e51253ec44a324b45e798e1666` preserved `array-reduce` correctness (`528`) and reduced `GraphTooBig` from 40 failures to 2, but left one compiled graph at size 150500 against the 150000 limit. Refine only ordinary-Protos `Array.reduce` traversal so the balanced left-before-right range helper updates its invocation-local captured accumulator instead of threading accumulator/result values through recursive calls.
+- Add 32-element repeated-reduction Protos conformance for exact results, 64 reducer calls across two reductions, and invocation-local accumulator isolation. No normative, Java/runtime, Truffle-boundary, benchmark-specific, or `sort` change is made. PERF003-A remains `IN_PROGRESS` pending an exact external rerun against this publication; PERF003-B remains `BLOCKED_BY_DEPENDENCIES`.
+
 ## 0.2.174-SNAPSHOT
 
 - Start `TOOL002-D` with `TOOL002-D1`: expose the closed B/C exact-source fresh-Process/captured-execution mechanism to the bundled Test Tool through one bootstrap-local `execution` capability. The capability is not Core/prelude state and owns no manifest, expectation, CaseId, scheduler, reporter or retry policy.
