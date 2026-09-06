@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.167-SNAPSHOT
+
+- Complete `LIB003-D — streaming and text/byte adapters` with `LIB003-D3`: add ordinary `JSON.readEvents(textReader, consumer)` and `JSON.writeEvents(textWriter)` composition over the published D1/D2 event surfaces. Input consumes one `TextReader.readText()` chunk per explicit Future-shaped `read()` call; output validates one D2 event then contributes its deterministic String chunk through ordered `TextWriter.writeText`.
+- Preserve explicit I/O boundaries: callers construct borrowing or owning TextReader/TextWriter with their chosen Encoding before adaptation; JSON does not infer ownership, acquire byte authority, close/flush resources, hide suspension, or create another codec/resource family. Each adapter permits one outstanding operation, providing bounded backpressure and becoming terminal after failed/cancelled/uncertain I/O instead of running JSON state past unknown source/target progress.
+- Make writer `finish()` Future-shaped with the standard ordered zero-output `TextWriter.writeText("")` barrier, which contributes no bytes or encoder-state transition while preserving predecessor failure/order semantics. Add Protos-source Future conformance for chunked/empty/EOF reader flow, truncation/reuse/overlap failure, deterministic writer output/barrier behavior, downstream Future failure, and post-finish/overlap rejection; tests return Futures to the conformance runner instead of calling pending `Future.value()` outside an Actor-local task.
+- Close LIB003-D and make LIB003-E READY. No normative specification or production Java boundary changes are introduced.
+
 ## 0.2.166-SNAPSHOT
 
 - Implement `LIB002-A` and close the initial `LIB002 — Text / encoding conveniences` surface with ordinary `std:text/UTF8`, `std:text/UTF16LE`, `std:text/UTF16BE`, and `std:text/Latin1` modules. Each module exposes only `encode`, `decode`, `reader`, `owningReader`, `writer`, and `owningWriter`, delegating directly to the corresponding finalized Core Encoding/TextReader/TextWriter operations.

@@ -1,6 +1,6 @@
 # LIB003 JSON Design Record
 
-Status: LIB003-A/B/C and LIB003-D1/D2 published; LIB003-D3 selected for next publication
+Status: LIB003-A/B/C/D published; LIB003-E selected for final conformance and closure
 Work item: `LIB003`
 Nature: Project design record; **non-normative**
 Cross-cutting context: `docs/design/STRUCTURED_DATA_AND_SERIALIZATION.md`
@@ -590,6 +590,67 @@ consumer is not rolled back when a later event is invalid; that is the intended
 incremental streaming boundary. No TextWriter/Future/ownership or byte-I/O
 lifecycle semantics are introduced by D2; those remain the sole purpose of D3.
 
+
+### LIB003-D3 implementation closure
+
+D3 publishes two ordinary protocol-composition helpers over the already
+standardized text-I/O surface:
+
+- `JSON.readEvents(textReader, consumer)` creates a fresh incremental input
+  adapter exposing `read() -> Future<Boolean>`;
+- `JSON.writeEvents(textWriter)` creates a fresh incremental output adapter
+  exposing `feed(event) -> Future` and `finish() -> Future`.
+
+The adapters deliberately receive an already-constructed text reader/writer
+rather than hiding `TextReader(source, encoding)`,
+`TextReader.owning(source, encoding)`, `TextWriter(target, encoding)`, or
+`TextWriter.owning(target, encoding)`. Byte authority, exact Encoding-family
+validation, borrowing versus owning choice, codec state, close/flush behavior,
+and underlying resource lifetime therefore remain explicit at the standard
+I/O boundary. Typical byte/Encoding composition is simply:
+
+```text
+JSON.readEvents(TextReader(source, encoding), consumer)
+JSON.writeEvents(TextWriter(target, encoding))
+```
+
+with the corresponding `.owning(...)` construction when ownership is intended.
+D3 does not acquire, close, flush, or enlarge authority on behalf of the caller.
+
+`read()` accepts at most one outstanding adapter operation. It invokes exactly
+one ordered `TextReader.readText()` operation. A non-null String chunk is fed
+synchronously into the published D1 parser and resolves the adapter Future to
+canonical `true`; a `null` EOF finalizes D1 and resolves to canonical `false`.
+Thus empty String chunks are progress results rather than EOF. Parser/consumer
+failure fails the continuation Future and leaves the adapter terminal. Reuse
+after successful EOF is rejected.
+
+`feed(event)` likewise permits at most one outstanding adapter operation. D2
+validates and converts that event to its single deterministic non-empty String
+chunk before the adapter invokes `TextWriter.writeText(chunk)`. The returned
+Future resolves only after that ordered text write succeeds. A downstream
+failure/cancellation leaves the adapter terminal rather than allowing later JSON
+state to run past an uncertain output operation.
+
+`finish()` first validates D2 structural completion and then issues
+`TextWriter.writeText("")` as an ordered zero-output barrier. Core TextWriter
+semantics define that empty write as contributing no encoded bytes and no encoder
+state transition while still participating in the writer's ordering/failure
+domain. D3 therefore remains Future-shaped without inventing a second flush,
+close, encoder-finalization, or commitment contract.
+
+The one-outstanding-operation rule is deliberate backpressure. D3 does not queue
+an unbounded number of JSON events/chunks, create another I/O ordering domain, or
+hide suspension. Callers observe the returned Future through ordinary Future
+mechanisms before issuing the next adapter operation. Cancelling the returned
+continuation Future retains Core downstream-only Future cancellation: it does not
+retroactively cancel an already accepted underlying TextReader/TextWriter
+operation. The adapter remains terminal after that uncertain operation instead
+of attempting to guess or reconstruct consumed input/output progress.
+
+No Java/runtime boundary, generic Serializer hierarchy, JSON-specific Future
+kind, implicit Encoding, ownership inference, hidden close, or new Core I/O
+semantics are introduced.
 
 ## Raw / lossless JSON
 

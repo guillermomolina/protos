@@ -2400,3 +2400,107 @@ eventWriter: (emit) => {
 
     writer
 }
+
+readEvents: (textReader, emit) => {
+    parser: eventParser(emit)
+    busy: false
+    finished: false
+    adapter: null
+
+    ensureReady: () => {
+        busy.ifTrue(() => {
+            Error().signal()
+        })
+        finished.ifTrue(() => {
+            Error().signal()
+        })
+    }
+
+    adapter = {
+        read: () => {
+            ensureReady()
+            busy = true
+
+            readFuture: textReader.readText()
+            completion: readFuture.then((chunk) => {
+                more: true
+
+                (chunk === null).ifTrue(() => {
+                    parser.finish()
+                    finished = true
+                    more = false
+                })
+
+                (chunk === null).ifFalse(() => {
+                    parser.feed(chunk)
+                })
+
+                busy = false
+                more
+            })
+
+            completion
+        }
+    }
+
+    adapter
+}
+
+writeEvents: (textWriter) => {
+    busy: false
+    finished: false
+    adapter: null
+    chunk: null
+
+    jsonWriter: eventWriter((text) => {
+        chunk = text
+    })
+
+    ensureReady: () => {
+        busy.ifTrue(() => {
+            Error().signal()
+        })
+        finished.ifTrue(() => {
+            Error().signal()
+        })
+    }
+
+    adapter = {
+        feed: (event) => {
+            ensureReady()
+
+            chunk = null
+            jsonWriter.feed(event)
+            (chunk === null).ifTrue(() => {
+                Error().signal()
+            })
+
+            busy = true
+            writeFuture: textWriter.writeText(chunk)
+            completion: writeFuture.then((ignored) => {
+                busy = false
+                adapter
+            })
+            completion
+        }
+
+        finish: () => {
+            ensureReady()
+            jsonWriter.finish()
+
+            // Empty TextWriter writes are ordered zero-output operations.  Using
+            // one here makes finish Future-shaped without inventing a second
+            // flush/finalization contract or contributing bytes of its own.
+            busy = true
+            barrier: textWriter.writeText("")
+            completion: barrier.then((ignored) => {
+                finished = true
+                busy = false
+                adapter
+            })
+            completion
+        }
+    }
+
+    adapter
+}

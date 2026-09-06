@@ -483,3 +483,12 @@ text-reader/borrowed-close-does-not-close-source.protos	future-boolean	true
 text-reader/owning-close-exactly-once-and-fresh-future.protos	future-boolean	true
 text-reader/closed-reader-read-error.protos	future-error	-
 text-reader/readtext-wrong-arity-error.protos	future-error	-
+library/json/text-adapter-reader-chunks.protos	future-boolean	true
+library/json/text-adapter-reader-empty-chunk.protos	future-boolean	true
+library/json/text-adapter-reader-truncated-error.protos	future-error	-
+library/json/text-adapter-reader-reuse-after-eof-error.protos	future-error	-
+library/json/text-adapter-reader-overlap-error.protos	error	-
+library/json/text-adapter-writer-output.protos	future-boolean	true
+library/json/text-adapter-writer-downstream-error.protos	future-error	-
+library/json/text-adapter-writer-reuse-after-finish-error.protos	future-error	-
+library/json/text-adapter-writer-overlap-error.protos	error	-
