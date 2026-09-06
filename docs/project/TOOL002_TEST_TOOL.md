@@ -63,7 +63,7 @@ freeze those decisions unless their own audited scope requires and resolves them
 | TOOL002-A | CLOSED | Exact bundled `protos test` dispatch and tiny ordinary-Protos entry published in the same commit at implementation version `0.2.168-SNAPSHOT`; no corpus migration or test policy. |
 | TOOL002-B | CLOSED | Publish the local, test-neutral `ProtosFreshProcessExecutor` over `ProtosStandaloneProcessBootstrap`, shared RootActor cooperative terminal dispatch through `ProtosRootTaskExecution`, and inert `ProtosExecutionOutcome`; every invocation uses a fresh semantic Process and terminates it before returning. No TestPlan/scheduler/worker/remote/test policy. Implementation version `0.2.169-SNAPSHOT`. |
 | TOOL002-C | CLOSED | Publish test-neutral sequential private-stream capture over `ProtosFreshProcessExecutor`: one exact compiled entry gets private stdin/stdout/stderr, a fresh semantic Process and an inert outcome plus detached captured bytes. No manifest/expectation/scheduler/result-transfer policy. Implementation version `0.2.171-SNAPSHOT`. |
-| TOOL002-D | IN_PROGRESS | TOOL002-D1 closes the safe Protos-consumable exact-execution/detached-observation boundary; D2-D4 remain. D2 is READY. `future-*` expectation policy remains assigned to TOOL002-F. |
+| TOOL002-D | IN_PROGRESS | D1 safe detached execution observation and D2 confined corpus + Protos-owned inert TestPlan/stable path CaseId are CLOSED; D3 ordinary expectation migration is READY, D4 remains dependent, and `future-*` remains TOOL002-F. |
 | TOOL002-E | BLOCKED_BY_DEPENDENCIES | After D, migrate Package Tool/TOML fixtures away from Java-owned runner policy. |
 | TOOL002-F | BLOCKED_BY_DEPENDENCIES | After E, preserve async/Future pending-work and terminal-outcome test coverage through production execution semantics. |
 | TOOL002-G | BLOCKED_BY_DEPENDENCIES | After F, migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |
@@ -208,8 +208,8 @@ TOOL002-D therefore uses these publishable sub-slices:
 | Slice | Status | Outcome |
 |---|---|---|
 | TOOL002-D1 | CLOSED | Bootstrap-local general `execution(source)` facility for the Test Tool over TOOL002-C, returning a caller-local observation through a strict authority-free detached-value boundary. No manifest/test policy. Implementation version `0.2.174-SNAPSHOT`. |
-| TOOL002-D2 | READY | Grant the Test Tool the minimum confined read authority needed for the existing conformance corpus; parse the retained TSV manifest in Protos into inert CaseSpec/TestPlan data with stable path-based CaseId before execution. |
-| TOOL002-D3 | BLOCKED_BY_DEPENDENCIES | After D2, migrate ordinary `boolean`, `null`, `integer`, `float-bits`, `float-nan`, `fixed-integer`, `error`, and `error-parent` interpretation from Java to Protos using D1 observations. |
+| TOOL002-D2 | CLOSED | Grant the Test Tool one read-only tree-confined standard Filesystem rooted at the conformance corpus; bundled `Manifest.protos` uses bounded ordered readLine/Future.all windows to parse retained TSV rows into frozen CaseSpec/TestPlan tuples with named Protos accessors and validated path-based stable CaseIds. No case execution/expectation policy. Implementation version `0.2.182-SNAPSHOT`. |
+| TOOL002-D3 | READY | D2 is closed; migrate ordinary `boolean`, `null`, `integer`, `float-bits`, `float-nan`, `fixed-integer`, `error`, and `error-parent` interpretation from Java to bundled Protos policy using D1 observations and D2 CaseSpecs. |
 | TOOL002-D4 | BLOCKED_BY_DEPENDENCIES | After D3, preserve the remaining non-Future `closure-error-parent-fresh` identity-sensitive expectations without leaking Closure authority; reconcile Java ownership for the D-migrated cases and close TOOL002-D. |
 
 The `future-*` families (`future-integer`, `future-null`, `future-boolean`,
@@ -235,6 +235,25 @@ D1 publishes only general mechanism:
   the host boundary and fail-closed authority rule.
 
 TOOL002-D2 is READY.
+
+### TOOL002-D2 closure
+
+D2 closes the corpus/planning prerequisite:
+
+- the Test Tool gets a standard `filesystem` capability rooted only at
+  `protos/tests/conformance`;
+- a new general read-only tree backend performs secure relative traversal and
+  nested opens without symlink following or write/mutation authority;
+- bundled `Manifest.protos` owns manifest syntax/policy and canonical path
+  validation;
+- each retained row becomes a frozen internal CaseSpec tuple with stable `caseId == path`, consumed through named bundled-Protos accessors;
+- the plan and its case Array are frozen inert Protos data;
+- `Main.protos` constructs the plan on ordinary `protos test` startup;
+- a Protos fixture verifies the first CaseSpec and reads its nested source
+  through the standard Filesystem authority;
+- no test case is executed and no expectation is interpreted yet.
+
+TOOL002-D3 is READY.
 
 ## Closure rule
 

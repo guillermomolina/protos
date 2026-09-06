@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.182-SNAPSHOT
+
+- Close `TOOL002-D2`: grant the bundled Test Tool one explicit standard `Filesystem` capability rooted at `protos/tests/conformance` and backed by a new general read-only tree-confined NIO backend. Nested opens remain relative to pinned `SecureDirectoryStream` handles with `NOFOLLOW_LINKS`; write/create/mutation authority is absent and unsupported host providers fail closed.
+- Add bundled `protos/tools/test/Manifest.protos`. The existing TSV manifest is read with bounded windows of ordinary ordered `TextReader.readLine` Futures, aggregated by `Future.all`, parsed in Protos, and materialized with balanced ordinary-Protos chunk accumulation as a frozen inert plan of frozen CaseSpec tuples. Named bundled-Protos accessors preserve the conceptual CaseSpec/TestPlan fields independently of that private representation. The initial stable `caseId` is the validated canonical relative manifest path and is independent of worker/completion order. No case is executed and no expectation is interpreted in D2.
+- `protos test` now constructs that plan during normal bundled-tool startup while retaining its existing bootstrap output. A Protos fixture validates the first CaseSpec and proves nested corpus source authority through the standard Filesystem surface. TOOL002-D3 becomes READY; `future-*` remains owned by TOOL002-F.
+
 ## 0.2.181-SNAPSHOT
 
 - Start `TOOL001-C4 — canonical TOML table assembly` with the smaller publishable `TOOL001-C4A` tranche. Extend ordinary-Protos `self:TomlDocument` with `table(text)`, producing the existing `{ kind, value }` TOML node model over C3 statement scanning and C1/C2 key/value parsing. Ordinary headers, dotted keys and inline tables normalize into the same nested Map representation without acquiring manifest-schema or package-policy meaning.

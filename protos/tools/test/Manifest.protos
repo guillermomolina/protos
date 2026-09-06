@@ -1,0 +1,233 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+
+fail: () => {
+    Error().signal()
+}
+
+// Rest capture is a fresh frozen standard Array. D2 uses that existing Core
+// semantic to materialize inert plan data without Java-owned CaseSpec/TestPlan
+// representations.
+frozenTuple: (...items) => {
+    items
+}
+
+fieldArray: (line) => {
+    source: Encoding.UTF8.encode(line)
+    fields: Array()
+    field: Encoding.UTF8.encode("")
+
+    source.each((octet) => {
+        (octet == 9).ifTrue(() => {
+            fields = Array(...fields, Encoding.UTF8.decode(field))
+            field = Encoding.UTF8.encode("")
+        })
+        (octet == 9).ifFalse(() => {
+            field.add(octet)
+        })
+    })
+
+    fields = Array(...fields, Encoding.UTF8.decode(field))
+    (fields.size() == 3).ifFalse(() => {
+        fail()
+    })
+    fields
+}
+
+pathValue: (text) => {
+    source: Encoding.UTF8.encode(text)
+    (source.size() == 0).ifTrue(() => {
+        fail()
+    })
+
+    path: Path.relative()
+    component: Encoding.UTF8.encode("")
+
+    finishComponent: () => {
+        (component.size() == 0).ifTrue(() => {
+            fail()
+        })
+        name: Encoding.UTF8.decode(component)
+        invalid: name == "."
+        (name == "..").ifTrue(() => {
+            invalid = true
+        })
+        invalid.ifTrue(() => {
+            fail()
+        })
+        path = path.child(name)
+        component = Encoding.UTF8.encode("")
+    }
+
+    source.each((octet) => {
+        invalid: octet == 0
+        (octet == 92).ifTrue(() => {
+            invalid = true
+        })
+        invalid.ifTrue(() => {
+            fail()
+        })
+
+        (octet == 47).ifTrue(() => {
+            finishComponent()
+        })
+        (octet == 47).ifFalse(() => {
+            component.add(octet)
+        })
+    })
+
+    finishComponent()
+    path
+}
+
+// Private CaseSpec tuple layout. Consumers use the named accessors below.
+caseSpec: (fields) => {
+    path: fields.at(0)
+    ignoredCanonicalValidation: pathValue(path)
+    expectation: fields.at(1)
+    expected: fields.at(2)
+
+    (expectation.size() == 0).ifTrue(() => {
+        fail()
+    })
+
+    frozenTuple(path, path, expectation, expected)
+}
+
+caseId: (spec) => {
+    spec.at(0)
+}
+
+casePath: (spec) => {
+    spec.at(1)
+}
+
+caseExpectation: (spec) => {
+    spec.at(2)
+}
+
+caseExpected: (spec) => {
+    spec.at(3)
+}
+
+parseLine: (line) => {
+    bytes: Encoding.UTF8.encode(line)
+    ignore: bytes.size() == 0
+    ignore.ifFalse(() => {
+        (bytes.at(0) == 35).ifTrue(() => {
+            ignore = true
+        })
+    })
+
+    result: null
+    ignore.ifFalse(() => {
+        result = caseSpec(fieldArray(line))
+    })
+    result
+}
+
+planCases: (plan) => {
+    plan.at(0)
+}
+
+load: (filesystem) => {
+    file: filesystem.open(Path.relative().child("manifest.tsv")).value()
+    reader: TextReader.owning(file, Encoding.UTF8)
+
+    chunks: Map()
+    maxChunkLevel: -1
+
+    carryChunk: null
+    carryChunk = (chunk, level) => {
+        present: chunks.containsKey(level)
+        present.ifTrue(() => {
+            left: chunks.at(level)
+            chunks.remove(level)
+            carryChunk(Array(...left, ...chunk), level + 1)
+        })
+        present.ifFalse(() => {
+            chunks.atPut(level, chunk)
+            (level > maxChunkLevel).ifTrue(() => {
+                maxChunkLevel = level
+            })
+        })
+    }
+
+    collectChunks: null
+    collectChunks = (level, result) => {
+        finalResult: result
+        (level >= 0).ifTrue(() => {
+            nextResult: result
+            chunks.containsKey(level).ifTrue(() => {
+                nextResult = Array(...result, ...chunks.at(level))
+            })
+            finalResult = collectChunks(level - 1, nextResult)
+        })
+        finalResult
+    }
+
+    // Issue a bounded window of ordered readLine operations at once. TextReader
+    // preserves invocation order for outstanding reads, and Future.all gives one
+    // suspension/aggregation point for the complete window. This turns the former
+    // one-recursive-frame-per-row traversal into one frame per 512 rows while
+    // preserving readLine's LF/CR/CRLF framing and maxBytes semantics.
+    batchTemplate: Array(null)
+    batchTemplate = Array(...batchTemplate, ...batchTemplate)
+    batchTemplate = Array(...batchTemplate, ...batchTemplate)
+    batchTemplate = Array(...batchTemplate, ...batchTemplate)
+    batchTemplate = Array(...batchTemplate, ...batchTemplate)
+    batchTemplate = Array(...batchTemplate, ...batchTemplate)
+    batchTemplate = Array(...batchTemplate, ...batchTemplate)
+    batchTemplate = Array(...batchTemplate, ...batchTemplate)
+    batchTemplate = Array(...batchTemplate, ...batchTemplate)
+    batchTemplate = Array(...batchTemplate, ...batchTemplate)
+
+    done: false
+    readBatch: null
+    readBatch = () => {
+        pending: Array(...batchTemplate)
+        issueIndex: 0
+        batchTemplate.each((ignored) => {
+            pending.atPut(issueIndex, reader.readLine(65536))
+            issueIndex = issueIndex + 1
+        })
+
+        lines: Future.all(...pending).value()
+        lines.each((line) => {
+            done.ifFalse(() => {
+                (line === null).ifTrue(() => {
+                    done = true
+                })
+                (line === null).ifFalse(() => {
+                    parsed: parseLine(line)
+                    (parsed === null).ifFalse(() => {
+                        carryChunk(Array(parsed), 0)
+                    })
+                })
+            })
+        })
+
+        done.ifFalse(() => {
+            readBatch()
+        })
+    }
+
+    readBatch()
+    reader.close().value()
+
+    cases: frozenTuple(...collectChunks(maxChunkLevel, Array()))
+    frozenTuple(cases)
+}

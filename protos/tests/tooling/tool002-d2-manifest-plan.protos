@@ -13,11 +13,21 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+
 Manifest: import("self:Manifest")
 plan: Manifest.load(filesystem)
+cases: Manifest.planCases(plan)
+first: cases.at(0)
+firstPath: Manifest.casePath(first)
 
-writer: TextWriter(process.stdout(), process.stdoutEncoding())
-writer.writeLine("Protos test tool bootstrap")
-writer.writeLine(process.args().at(0))
+sourceFile: filesystem.open(Manifest.pathValue(firstPath)).value()
+sourceReader: TextReader.owning(sourceFile, Encoding.UTF8)
+firstChunk: sourceReader.readText().value()
+sourceReader.close().value()
 
-plan
+(cases.size() > 100) &&
+(Manifest.caseId(first) == "integer/add-small.protos") &&
+(firstPath == Manifest.caseId(first)) &&
+(Manifest.caseExpectation(first) == "integer") &&
+(Manifest.caseExpected(first) == "2") &&
+(firstChunk.size() > 0)

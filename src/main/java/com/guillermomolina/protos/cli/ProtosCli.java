@@ -64,16 +64,7 @@ public final class ProtosCli {
                 return runBundledPackageTool(args, in, out, err);
             }
             if (args[0].equals("test")) {
-                return runBundledTool(
-                        "test",
-                        "Test",
-                        args,
-                        in,
-                        out,
-                        err,
-                        session ->
-                                ProtosExactExecutionFacility.install(
-                                        session.activation));
+                return runBundledTestTool(args, in, out, err);
             }
             if (args[0].equals("-e")) {
                 if (args.length < 2) return usage(err, "-e requires a source argument");
@@ -112,6 +103,30 @@ public final class ProtosCli {
         }
     }
 
+    private int runBundledTestTool(
+            String[] args,
+            InputStream in,
+            PrintStream out,
+            PrintStream err)
+            throws Exception {
+        Path corpusRoot =
+                core().getParent().getParent().resolve("tests").resolve("conformance");
+        try (ProtosNioReadOnlyTreeFilesystemBackend filesystemBackend =
+                new ProtosNioReadOnlyTreeFilesystemBackend(corpusRoot)) {
+            return runBundledTool(
+                    "test",
+                    "Test",
+                    args,
+                    in,
+                    out,
+                    err,
+                    session -> {
+                        ProtosExactExecutionFacility.install(session.activation);
+                        installBundledToolFilesystem(session, filesystemBackend);
+                    });
+        }
+    }
+
     private int runBundledPackageTool(
             String[] args,
             InputStream in,
@@ -131,7 +146,7 @@ public final class ProtosCli {
                     in,
                     out,
                     err,
-                    session -> installPackageToolFilesystem(session, filesystemBackend));
+                    session -> installBundledToolFilesystem(session, filesystemBackend));
         }
     }
 
@@ -190,8 +205,9 @@ public final class ProtosCli {
         }
     }
 
-    private static void installPackageToolFilesystem(
-            Session session, ProtosNioConfinedFilesystemBackend filesystemBackend) {
+    private static void installBundledToolFilesystem(
+            Session session,
+            ProtosStandardFilesystemProtocol.Backend filesystemBackend) {
         ProtosObjectValue rawFilesystem =
                 ProtosStandardFilesystemProtocol.createCapability(
                         session.activation
@@ -206,7 +222,7 @@ public final class ProtosCli {
         }
         if (session.activation.context().hasLocalSlot("filesystem")) {
             throw new IllegalStateException(
-                    "package tool Filesystem bootstrap slot already exists");
+                    "bundled tool Filesystem bootstrap slot already exists");
         }
         session.activation.context().createLocalSlot("filesystem", filesystem);
     }

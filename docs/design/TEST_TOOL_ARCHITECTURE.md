@@ -732,6 +732,65 @@ The existing `future-*` expectation families remain assigned to TOOL002-F, whose
 purpose is specifically to preserve async/Future pending-work and terminal
 outcome coverage. D does not silently absorb that later slice.
 
+## TOOL002-D2 confined corpus and initial TestPlan closure
+
+TOOL002-D2 establishes the planning input boundary without executing cases.
+
+The Test Tool receives one explicit standard Filesystem capability whose
+authority root is exactly `protos/tests/conformance`. The host mechanism is the
+general `ProtosNioReadOnlyTreeFilesystemBackend`:
+
+- authority is read-only and existing-file only;
+- the root and each intermediate directory are pinned through
+  `SecureDirectoryStream`;
+- every traversal/open is relative and uses `NOFOLLOW_LINKS`;
+- rooted, parent/non-normal, empty, host-multi-component and escaping paths fail;
+- providers unable to preserve secure directory confinement fail closed.
+
+No corpus-specific read primitive is introduced.
+
+`protos/tools/test/Manifest.protos` owns TSV interpretation. It preserves the
+standard `TextReader.readLine(65536)` framing/budget contract but issues reads in
+bounded windows of 512 ordered Futures and awaits each window with `Future.all`.
+This avoids retaining one Protos call frame per manifest row while keeping the
+reader's specified LF/CR/CRLF behavior and ordered input domain. Malformed rows
+are rejected, each path is validated as a canonical relative slash-separated
+path, and D2 produces:
+
+```text
+TestPlan
+    cases: Array(
+        CaseSpec {
+            caseId
+            path
+            expectation
+            expected
+        },
+        ...
+    )
+```
+
+Each CaseSpec tuple, the cases Array and the plan tuple are frozen through
+ordinary rest-parameter capture semantics. Named bundled-Protos accessors preserve
+the conceptual `caseId`, `path`, `expectation`, `expected` and `planCases` fields;
+tuple positions remain a private D2 representation. D2 therefore introduces no
+Java-owned CaseSpec/TestPlan class and needs no structural mutation operation merely
+to make plan data inert. The initial `caseId` is exactly the validated canonical
+manifest path. That identity is stable independently of later physical scheduling,
+completion order, worker or retry identity.
+
+D2 materializes the current plan because the retained corpus is finite and this
+slice is sequential. Construction uses balanced Array chunks rather than copying
+the complete growing plan once per row. Manifest I/O is likewise bounded by a
+fixed 512-read window, so the parser no longer consumes one recursive Protos frame
+per row; batch recursion grows only once per 512 rows. The selected scale
+architecture still permits later paging/streaming for much larger suites without
+changing CaseId or CaseSpec meaning.
+
+D2 does **not** execute a CaseSpec, interpret an expectation, select retries,
+schedule work or expose corpus Filesystem authority to child case Processes.
+The D1 `execution(source)` child still receives no default Filesystem.
+
 ## Tracked implementation sequencing
 
 `TOOL002` adopts the following cost-aware sequence. Preserve one coherent
@@ -745,7 +804,7 @@ each subsequent slice:
    test-neutral `ProtosFreshProcessExecutor` / `ProtosExecutionOutcome` boundary.
 4. **Single-case sequential runner** — CLOSED by TOOL002-C with private stdin/stdout/stderr
    and detached capture over the general fresh-Process mechanism.
-5. **Manifest/expectation migration** — IN_PROGRESS through TOOL002-D1; the safe Protos-consumable execution/observation boundary is closed. Continue D2-D4 before TOOL002-D closes; `future-*` cases remain assigned to TOOL002-F.
+5. **Manifest/expectation migration** — IN_PROGRESS through TOOL002-D2; D1 safe execution observation and D2 confined corpus + inert TestPlan/CaseId are CLOSED. D3 ordinary expectations is READY; D4 remains dependent and `future-*` remains assigned to TOOL002-F.
 6. **Package-tool fixture migration** — move Protos package-tool/TOML fixtures
    away from Java-owned runner logic.
 7. **Async/Future coverage** — preserve current pending-work/terminal-outcome
