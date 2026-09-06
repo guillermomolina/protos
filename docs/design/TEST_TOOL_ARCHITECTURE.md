@@ -1,6 +1,6 @@
 # Protos Test Tool Architecture Audit
 
-Status: exploratory architecture; non-normative
+Status: selected architecture; non-normative; implementation tracked by TOOL002
 
 Related architecture and project material:
 
@@ -14,10 +14,11 @@ Related architecture and project material:
 - `spec/semantics/MODULES.md`
 - `spec/semantics/ERRORS.md`
 
-This document records the architecture audit for a future `protos test` tool. It
-is deliberately non-normative: it does not add Core syntax, reserve a work-item
-identifier, change the language specification, or commit the repository to an
-implementation schedule.
+This document records the selected architecture for `protos test`. It remains
+deliberately non-normative and does not add Core syntax or change the language
+specification. The implementation has now been promoted to project work item
+`TOOL002`; promotion commits the project to the selected initial architecture and
+sequencing, while the decisions explicitly listed as open below remain open.
 
 The goal is to move Protos-language test orchestration out of Java/JUnit while
 retaining Java tests for Java/runtime/host implementation behavior.
@@ -518,11 +519,11 @@ crash isolation/retry policy
 
 These open items must not be silently decided by the first implementation slice.
 
-## Recommended implementation sequencing if promoted
+## Tracked implementation sequencing
 
-If this exploratory architecture is promoted to tracked implementation work,
-prefer cost-aware slices and preserve one coherent repository state after every
-slice:
+`TOOL002` adopts the following cost-aware sequence. Preserve one coherent
+repository state after every slice and re-audit the current `origin/main` before
+each subsequent slice:
 
 1. **Test tool bootstrap** — add exact bundled `protos test` dispatch and a tiny
    Protos entry without migrating the corpus.

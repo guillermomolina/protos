@@ -605,6 +605,66 @@ New Language Maturity work MUST allocate and persist its `LMxxx` identifier in
 the repository at publication time rather than relying on chat/prompt history.
 
 
+## Toolchain tools
+
+The `TOOLxxx` family records official toolchain-bundled developer tools whose
+implementation lifecycle and policy are independently meaningful. Public command
+spelling is orthogonal to ownership: `CLIxxx` remains the driver/terminal layer,
+while a bundled tool reached through `protos` remains `TOOLxxx`. `PERFxxx`
+continues to record project performance engineering, and `LIBxxx` continues to
+record distributable Standard Library functionality.
+
+| Item | Description | Status | Closure evidence | Dependencies / notes |
+|---|---|---|---|---|
+| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | Retrospectively indexes already-published package-tool work without renaming historical slices. Bootstrap, confined project Filesystem, atomic metadata publication, manifest Slice 3A, and Slice 3B1 are published; legacy manifest Slice 3 remains open. |
+| TOOL002 | Test Tool | READY | `docs/project/TOOL002_TEST_TOOL.md` | Selected architecture is `docs/design/TEST_TOOL_ARCHITECTURE.md`; no test-tool implementation slice is published yet. TOOL002-A bundled-tool bootstrap is READY. |
+
+### TOOL001 — Package Tool
+
+Status: IN_PROGRESS
+
+`TOOL001` is a tracking reconciliation over package-tool work that began before
+the `TOOLxxx` family existed. The legacy labels remain immutable historical
+evidence; TOOL001 supplies the canonical parent/slice lifecycle from this point
+forward.
+
+| TOOL001 slice | Legacy published label | Status | Closure evidence | Scope / notes |
+|---|---|---|---|---|
+| TOOL001-A | bundled package-tool bootstrap slice | CLOSED | `9c336932c502163c97ab02d3e6ba0c6ee6d10c26` | Exact toolchain-bundled `protos package` entry under `protos/tools/package`; no project graph used to acquire the tool itself. |
+| TOOL001-B1 | Package-tool Filesystem Slice 2A | CLOSED | `f5738f8d1063cdf6e2d969b792d786177bfa8a36` | Explicit read-only confined project Filesystem authority for package metadata. |
+| TOOL001-B2 | Package-tool Filesystem Slice 2B / B006 | CLOSED | `f128293fbe769cc8806879b0784262b56a08a4ba` | Explicit staging-write and namespace-mutation authority; metadata publication through ordinary File/Filesystem operations. |
+| TOOL001-C1 | package-tool manifest Slice 3A | CLOSED | `8150d8219664b50ec66748639a47a1629638a8ed` | Internal Protos `self:TomlSyntax` parser foundation; schema-v1 design prerequisite subsequently published at `85ac538d378eeb2153e318145cae69114563e858`. |
+| TOOL001-C2 | package-tool manifest Slice 3B1 | CLOSED | `dc82976cd95ad4f08d446fbb7aedb43adf818612` | Complete TOML 1.0 String surface required by manifest schema v1 while retaining package meaning/schema validation outside the syntax engine. |
+| TOOL001-C | legacy package-tool manifest Slice 3 parent | IN_PROGRESS | TOOL001-C1/C2 published | Continue from the current architecture/manifest records; full document/table assembly, schema-v1 validation, project metadata read/diagnostics and any remaining Slice 3 work must be re-audited against the then-current `origin/main`. |
+
+Detailed migration and continuation rules live in
+`docs/project/TOOL001_PACKAGE_TOOL.md`.
+
+### TOOL002 — Test Tool
+
+Status: READY
+
+The initial TOOL002 implementation sequence is promoted directly from the
+selected test-tool architecture. Hard timeout / OS-worker recovery remains a
+separate explicitly deferred design and is not silently made a prerequisite for
+the initial TOOL002 closure.
+
+| Slice | Status | Dependency / scope |
+|---|---|---|
+| TOOL002-A | READY | Exact bundled `protos test` dispatch plus a tiny Protos entry; do not migrate the corpus yet. |
+| TOOL002-B | BLOCKED_BY_DEPENDENCIES | TOOL002-A; establish/reuse a general fresh-Process exact-execution mechanism, not a test-specific executor. |
+| TOOL002-C | BLOCKED_BY_DEPENDENCIES | TOOL002-B; single-case sequential runner in a fresh Process with captured outcome/streams. |
+| TOOL002-D | BLOCKED_BY_DEPENDENCIES | TOOL002-C; migrate existing general conformance manifest/expectation interpretation from Java to Protos while retaining the corpus. |
+| TOOL002-E | BLOCKED_BY_DEPENDENCIES | TOOL002-D; migrate package-tool/TOML fixtures away from Java-owned runner policy. |
+| TOOL002-F | BLOCKED_BY_DEPENDENCIES | TOOL002-E; preserve async/Future pending-work and terminal-outcome coverage through production semantics. |
+| TOOL002-G | BLOCKED_BY_DEPENDENCIES | TOOL002-F; migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |
+| TOOL002-H | BLOCKED_BY_DEPENDENCIES | TOOL002-G; bounded parallel scheduling of independent fresh Processes with independent output capture and deterministic reporting. |
+| TOOL002-I | BLOCKED_BY_DEPENDENCIES | TOOL002-H; explicit resource constraints/private capabilities for real external-resource sharing. |
+| TOOL002-J | BLOCKED_BY_DEPENDENCIES | TOOL002-I; CI/launcher integration: Java implementation tests first, then the Protos test tool for the Protos corpus. |
+
+Detailed scope and architecture references live in
+`docs/project/TOOL002_TEST_TOOL.md`.
+
 ## Performance
 
 The `PERFxxx` family records non-normative performance engineering over
@@ -713,7 +773,7 @@ sufficient.
 
 ## Formally tracked project work
 
-This auto-generated registry complements, but does not duplicate, the curated implementation, CLI, Standard Library, Language Maturity, and Performance tables above. It indexes other formal work families from authoritative project records and published specification decisions.
+This auto-generated registry complements, but does not duplicate, the curated implementation, CLI, Standard Library, Language Maturity, Toolchain Tool, and Performance tables above. It indexes other formal work families from authoritative project records and published specification decisions.
 
 Identifier shape alone is insufficient: incidental IDs from design ideas, tests, benchmarks, examples, and arbitrary prose are intentionally excluded.
 

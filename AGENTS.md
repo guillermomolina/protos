@@ -675,6 +675,48 @@ remains tracked by the applicable Core implementation item rather than becoming
 
 
 
+### Toolchain tool work
+
+Official toolchain-bundled developer tools use the `TOOLxxx` family once they
+are promoted from exploratory architecture to tracked implementation work.
+`TOOLxxx` tracks the lifecycle and policy surface of the tool itself; it is
+independent of the public command spelling used to invoke that tool.
+
+The initial assignments are:
+
+- `TOOL001` — Package Tool;
+- `TOOL002` — Test Tool.
+
+Future official bundled tools such as benchmark, formatter, linter,
+documentation, coverage, or profiling tools should allocate the next unused
+`TOOLxxx` identifier when they become concrete tracked work. Do not create a new
+project-work family solely because a new tool has a distinct public command.
+
+Keep the following boundaries explicit:
+
+- `CLIxxx` owns independently meaningful driver, terminal, REPL, command
+  selection/dispatch, and general command-line UX mechanics. A bundled tool does
+  not become `CLIxxx` work merely because users reach it through `protos`.
+- `TOOLxxx` owns bundled-tool policy and tool-specific orchestration implemented
+  primarily as ordinary Protos code where the selected architecture permits it.
+- `PERFxxx` owns performance engineering of the Protos project itself. A future
+  user-facing benchmark or profiling tool is still `TOOLxxx`; `PERFxxx` may use
+  such a tool as evidence without becoming that tool.
+- `LIBxxx` owns distributable Standard Library API. Bundled tool implementation
+  modules are not Standard Library merely because they ship with the toolchain.
+- a future third-party plugin/extension mechanism is a separate design problem;
+  official bundled tools are not plugins by default.
+
+`TOOL001` was introduced after Package Tool implementation had already begun.
+Historical package-tool labels such as the bootstrap slice, Filesystem Slice 2A,
+Filesystem Slice 2B / B006, and manifest Slice 3 sub-slices remain valid
+historical names. The TOOL001 project record maps them into the canonical current
+lifecycle without rewriting commits, changelog entries, or prior evidence.
+
+When promoting a new bundled tool, record the `TOOLxxx` parent and any formalized
+slices in `docs/project/IMPLEMENTATION_STATUS.md` and an owning project record.
+Exploratory tool architecture alone does not reserve an identifier.
+
 ### Performance work
 
 Performance work uses the `PERFxxx` family. It records non-normative benchmark

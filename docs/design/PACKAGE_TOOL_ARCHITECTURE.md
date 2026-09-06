@@ -1,6 +1,6 @@
 # Protos Package Tool Architecture Audit
 
-Status: exploratory architecture; non-normative
+Status: selected architecture; non-normative; implementation tracked by TOOL001
 
 Related package-system design:
 - `docs/design/TOOLCHAIN_TOOL_ARCHITECTURE.md`
@@ -15,9 +15,13 @@ the lockfile audit: how the Protos package-management tooling should be divided
 between the irreducible host/toolchain bootstrap and tooling implemented in
 Protos itself.
 
-It does not implement the package manager, change Core language semantics, add a
-public import namespace, create a `LIBxxx` work item, define networking, or
-declare that every toolchain component must be written in Protos.
+The original audit did not itself implement the package manager, change Core
+language semantics, add a public import namespace, create a `LIBxxx` work item,
+define networking, or declare that every toolchain component must be written in
+Protos. Package-tool implementation has since begun and is now canonically
+tracked as `TOOL001`. That tracking assignment does not rename or invalidate the
+legacy bootstrap, Filesystem Slice 2A/2B, B006, or manifest Slice 3 labels already
+published in repository history.
 
 The selected direction is:
 

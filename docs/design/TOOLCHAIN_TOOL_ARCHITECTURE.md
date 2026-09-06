@@ -1,6 +1,6 @@
 # Protos Toolchain Tool Architecture
 
-Status: exploratory architecture; non-normative
+Status: selected architecture; non-normative
 
 Related architecture and project material:
 
@@ -12,9 +12,11 @@ Related architecture and project material:
 - `spec/io/PROCESS_IO.md`
 
 This document consolidates the architecture shared by the package tool, the
-future test tool, and plausible future toolchain facilities. It does not add
-Core syntax, define a public plugin API, reserve new commands, create a project
-work item, or require every future tool to be written in Protos.
+test tool, and plausible future toolchain facilities. It does not add Core
+syntax, define a public plugin API, reserve new commands, or require every
+future tool to be written in Protos. Concrete official bundled-tool
+implementation is tracked separately through the non-normative `TOOLxxx`
+project-work family.
 
 The selected direction is:
 
@@ -27,6 +29,38 @@ Package and test tooling are the first two concrete cases. Future facilities
 such as benchmarking, formatting, linting, documentation, checking, coverage,
 or profiling should be evaluated against the same boundary instead of each
 inventing a new launch, authority, isolation, or host-integration model.
+
+## Project work classification
+
+The architecture boundary and the project-work identifier are intentionally
+separate from CLI spelling.
+
+Official toolchain-bundled developer tools use `TOOLxxx` when they are promoted
+to concrete implementation work. The first assignments are:
+
+```text
+TOOL001  Package Tool
+TOOL002  Test Tool
+```
+
+Future benchmark, formatter, linter, documentation, coverage, profiling, or
+other official bundled tools should use later `TOOLxxx` identifiers rather than
+creating one project-work family per command.
+
+`CLIxxx` remains reserved for independently meaningful driver/terminal/REPL and
+general command-dispatch mechanics. Thus `protos package` may dispatch to
+TOOL001 and `protos test` may dispatch to TOOL002 without making package policy
+or test policy CLI work.
+
+`PERFxxx` remains project performance engineering. A future `protos bench` or
+`protos profile` implementation would be a `TOOLxxx` tool even when PERF work
+uses it to produce project evidence. Likewise, bundled tools are not `LIBxxx`
+Standard Library modules merely because both ship in one toolchain.
+
+TOOL001 is retrospective tracking because package-tool implementation predates
+the family. Its legacy bootstrap, Filesystem 2A/2B, B006, and manifest Slice 3
+labels remain historical truth and are mapped rather than renamed. TOOL002 is
+the first tool promoted under the family before implementation begins.
 
 ## Terminology
 
