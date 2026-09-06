@@ -126,50 +126,6 @@ final class ProtosInvalidSuperExecutionTest {
     }
 
     @Test
-    void argumentFailurePrecedesInvalidSuper() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        ProtosActivation activation = prelude.newModuleActivation();
-
-        ProtosSignalException signal =
-                assertThrows(
-                        ProtosSignalException.class,
-                        () ->
-                                execute(
-                                        activation,
-                                        """
-                                        runner: () => {
-                                            super.noSuchSelector(missingArgument)
-                                        }
-                                        runner()
-                                        """));
-
-        assertSame(
-                ProtosCoreErrors.prototype(activation, StandardError.SLOT_NOT_FOUND),
-                signal.error().parent().orElseThrow());
-    }
-
-    @Test
-    void spreadValidationFailurePrecedesInvalidSuper() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        ProtosActivation activation = prelude.newModuleActivation();
-
-        ProtosSignalException signal =
-                assertThrows(
-                        ProtosSignalException.class,
-                        () ->
-                                execute(
-                                        activation,
-                                        """
-                                        runner: () => {
-                                            super.noSuchSelector(...1)
-                                        }
-                                        runner()
-                                        """));
-
-        assertSame(prelude.errorPrototype(), signal.error().parent().orElseThrow());
-    }
-
-    @Test
     void spreadExpressionPreservesArgumentOrderBeforeInvalidSuper()
             throws IOException {
         ProtosPrelude prelude = corePrelude();

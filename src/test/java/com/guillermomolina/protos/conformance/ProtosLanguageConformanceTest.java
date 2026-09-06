@@ -209,6 +209,17 @@ final class ProtosLanguageConformanceTest {
                 awaitTerminal(future, activation);
                 assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
             }
+            case "error-parent" -> {
+                ProtosSignalException signal =
+                        assertThrows(
+                                ProtosSignalException.class,
+                                () ->
+                                        loader.load(source)
+                                                .call(prelude.newModuleActivation()));
+                org.junit.jupiter.api.Assertions.assertSame(
+                        prelude.bindings().readLocalSlot(testCase.expectedValue()).orElseThrow(),
+                        signal.error().parent().orElseThrow());
+            }
             case "error" ->
                     assertThrows(
                             ProtosSignalException.class,
