@@ -62,8 +62,8 @@ freeze those decisions unless their own audited scope requires and resolves them
 |---|---|---|
 | TOOL002-A | CLOSED | Exact bundled `protos test` dispatch and tiny ordinary-Protos entry published in the same commit at implementation version `0.2.168-SNAPSHOT`; no corpus migration or test policy. |
 | TOOL002-B | CLOSED | Publish the local, test-neutral `ProtosFreshProcessExecutor` over `ProtosStandaloneProcessBootstrap`, shared RootActor cooperative terminal dispatch through `ProtosRootTaskExecution`, and inert `ProtosExecutionOutcome`; every invocation uses a fresh semantic Process and terminates it before returning. No TestPlan/scheduler/worker/remote/test policy. Implementation version `0.2.169-SNAPSHOT`. |
-| TOOL002-C | READY | TOOL002-B is closed; next execute one exact `.protos` case sequentially through the fresh-Process mechanism and capture outcome plus private streams without manifest/expectation policy. |
-| TOOL002-D | BLOCKED_BY_DEPENDENCIES | After C, migrate existing general conformance manifest/expectation interpretation from Java to Protos while retaining the corpus. |
+| TOOL002-C | CLOSED | Publish test-neutral sequential private-stream capture over `ProtosFreshProcessExecutor`: one exact compiled entry gets private stdin/stdout/stderr, a fresh semantic Process and an inert outcome plus detached captured bytes. No manifest/expectation/scheduler/result-transfer policy. Implementation version `0.2.171-SNAPSHOT`. |
+| TOOL002-D | READY | TOOL002-C is closed; migrate the existing general conformance manifest/expectation interpretation from Java to Protos while retaining the corpus, including an audited safe boundary for consuming case results from the fresh-Process execution layer. |
 | TOOL002-E | BLOCKED_BY_DEPENDENCIES | After D, migrate Package Tool/TOML fixtures away from Java-owned runner policy. |
 | TOOL002-F | BLOCKED_BY_DEPENDENCIES | After E, preserve async/Future pending-work and terminal-outcome test coverage through production execution semantics. |
 | TOOL002-G | BLOCKED_BY_DEPENDENCIES | After F, migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |
@@ -171,6 +171,29 @@ B adds no discovery, TestPlan, CaseId, expectation, assertion, fixture, schedule
 resource, timeout, OS-worker, remote-backend, retry, cache or reporting policy.
 
 TOOL002-C is therefore READY.
+
+## TOOL002-C closure
+
+TOOL002-C publishes the local sequential captured-execution layer needed before
+manifest migration:
+
+- `ProtosCapturedProcessExecution` supplies private byte-backed stdin plus
+  independent stdout/stderr capture;
+- it delegates semantic execution and Process lifecycle entirely to the closed
+  TOOL002-B fresh-Process mechanism;
+- capture buffers are detached defensively from request/result callers;
+- a real `.protos` tooling fixture proves one exact case runs with independent
+  stdout/stderr and a normal semantic result;
+- a failure-path focal proves output committed before a Protos Error remains in
+  that case's private capture;
+- no TestPlan, expectation, assertion, CaseId, scheduler, retry, worker, remote,
+  cache or reporter policy is added.
+
+The C outcome remains host-inert. It does not leak arbitrary live child-Process
+objects into the bundled Test Tool Process. TOOL002-D must audit the safe
+Protos-side result-consumption boundary as part of migrating expectation policy.
+
+TOOL002-D is therefore READY.
 
 ## Closure rule
 

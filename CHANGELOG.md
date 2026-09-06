@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.171-SNAPSHOT
+
+- Close `TOOL002-C — single-case sequential captured execution`: add the test-neutral `ProtosCapturedProcessExecution` wrapper over TOOL002-B so one exact already-compiled Protos entry runs in a fresh semantic Process with private stdin, stdout, and stderr bindings and returns the inert semantic outcome plus detached captured output bytes. The initial capture is deliberately in-memory and sequential; it adds no parallel scheduler, manifest, expectation, retry, worker, remote, cache, reporter, or result-transfer policy.
+- Add executable evidence using a real `.protos` tooling fixture that writes independently to stdout/stderr and returns an Integer, verifies per-execution capture separation, and verifies that committed output preceding a semantic Error is retained. The host mechanism remains general and TOOL002-D becomes READY for Protos-owned manifest/expectation migration; cross-Process result exposure to the bundled tool is intentionally not invented in C.
+
 ## 0.2.170-SNAPSHOT
 
 - Continue `PERF003-A — Collection algorithm Truffle compilability` with the Protos-side implementation phase. Rewrite only `std:collections/Array.reduce` traversal and the internal merge traversal of stable `sort` from native `Array.each` callback loops into balanced ordinary-Protos range recursion. Preserve the pre-callback shallow snapshot, exact left-fold order and reducer invocation count, stable merge tree/order, two-direction comparator invocation/validation, failure behavior and fresh result semantics while avoiding a generic per-element Truffle boundary or benchmark-specific fast path.

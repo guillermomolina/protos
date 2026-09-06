@@ -637,6 +637,45 @@ expectations, allocate resources, schedule multiple cases, enforce hard timeout,
 create OS/remote workers, retry, cache or report results. Those remain later
 layers selected by the comparative and scale/distribution architecture.
 
+## TOOL002-C single-case captured execution closure
+
+TOOL002-C closes the next mechanical layer without moving test policy into Java:
+
+```text
+one exact already-compiled Protos entry
+        |
+        v
+ProtosCapturedProcessExecution
+        |
+        +-- private stdin bytes
+        +-- private stdout capture
+        +-- private stderr capture
+        |
+        v
+TOOL002-B ProtosFreshProcessExecutor
+        |
+        v
+fresh Process / RootActor
+        |
+        v
+inert semantic outcome + detached captured bytes
+```
+
+The C wrapper is still test-neutral. It knows nothing about manifests,
+expectations, assertions, case identity, filtering, reporting, scheduling,
+resources, retries or workers.
+
+The initial private capture implementation is in-memory because C is strictly
+sequential. This is not a commitment that future massively parallel execution
+must retain all output in controller memory; the scale/distribution architecture
+still permits bounded/artifact-backed capture at the later scheduler/reporting
+layer.
+
+C also deliberately does **not** expose arbitrary child-Process result objects
+directly into the bundled tool Process. TOOL002-D is the first slice that needs
+a Protos-side result/expectation consumption boundary, so that boundary must be
+audited there rather than invented as an incidental host object leak in C.
+
 ## Tracked implementation sequencing
 
 `TOOL002` adopts the following cost-aware sequence. Preserve one coherent
@@ -648,11 +687,11 @@ each subsequent slice:
    `docs/design/TEST_TOOL_COMPARATIVE_AUDIT.md`; TOOL002-B is READY.
 3. **Fresh-Process execution mechanism** — CLOSED by TOOL002-B with the local,
    test-neutral `ProtosFreshProcessExecutor` / `ProtosExecutionOutcome` boundary.
-4. **Single-case sequential runner** — READY after B; execute one exact `.protos`
-   case through the fresh-Process mechanism and capture outcome/streams.
-5. **Manifest/expectation migration** — move the existing general conformance
-   manifest interpretation from Java to Protos, assign stable case identity and
-   construct the initial inert TestPlan while retaining the corpus.
+4. **Single-case sequential runner** — CLOSED by TOOL002-C with private stdin/stdout/stderr
+   and detached capture over the general fresh-Process mechanism.
+5. **Manifest/expectation migration** — READY after C; move the existing general conformance
+   manifest interpretation from Java to Protos, assign stable case identity and construct
+   the initial inert TestPlan while retaining the corpus.
 6. **Package-tool fixture migration** — move Protos package-tool/TOML fixtures
    away from Java-owned runner logic.
 7. **Async/Future coverage** — preserve current pending-work/terminal-outcome
