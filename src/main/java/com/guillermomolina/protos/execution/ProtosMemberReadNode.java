@@ -62,8 +62,16 @@ public final class ProtosMemberReadNode extends ProtosExpressionNode {
         }
 
         if (result.value() instanceof ProtosClosureValue closure) {
-            return closure.bindMethod(receiverValue, result.home());
+            return bindExtractedMethod(closure, receiverValue, result.home());
         }
         return result.value();
+    }
+
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    private static ProtosClosureValue bindExtractedMethod(
+            ProtosClosureValue closure,
+            Object receiver,
+            ProtosObjectValue methodHome) {
+        return closure.bindMethod(receiver, methodHome);
     }
 }

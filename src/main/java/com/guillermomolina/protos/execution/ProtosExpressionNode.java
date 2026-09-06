@@ -17,7 +17,10 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.source.SourceSpan;
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
 import java.util.Objects;
@@ -34,7 +37,21 @@ public abstract class ProtosExpressionNode extends Node {
     }
 
     public final Object execute(VirtualFrame frame) {
-        return ProtosEvaluatorBridge.execute(this, frame);
+        if (frame == null) {
+            return executeDirect(null);
+        }
+
+        Object[] arguments = frame.getArguments();
+        if (arguments.length > 0
+                && arguments[0] instanceof ProtosActivation activation) {
+            ProtosTask task = activation.task().orElse(null);
+            if (task != null && task.evaluatorContinuation().segmentActive()) {
+                CompilerDirectives.transferToInterpreter();
+                return ProtosEvaluatorBridge.execute(this, frame);
+            }
+        }
+
+        return executeDirect(frame);
     }
 
     protected abstract Object executeDirect(VirtualFrame frame);

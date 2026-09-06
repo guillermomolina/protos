@@ -21,7 +21,9 @@ import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.source.SourceSpan;
+import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.nodes.ExplodeLoop;
 import com.oracle.truffle.api.nodes.Node.Children;
 import java.util.ArrayList;
 import java.util.List;
@@ -46,8 +48,10 @@ public final class ProtosArgumentVectorNode extends ProtosExpressionNode {
         }
     }
 
+    @ExplodeLoop
     @Override
     protected Object executeDirect(VirtualFrame frame) {
+        CompilerAsserts.compilationConstant(expressions.length);
         ArrayList<Object> supplied = new ArrayList<>();
         for (int i = 0; i < expressions.length; i++) {
             Object value = expressions[i].execute(frame);

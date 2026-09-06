@@ -19,7 +19,9 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.source.SourceSpan;
+import com.oracle.truffle.api.CompilerAsserts;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.nodes.ExplodeLoop;
 import java.util.Arrays;
 import java.util.Objects;
 
@@ -36,11 +38,13 @@ public final class ProtosSequenceNode extends ProtosExpressionNode {
         }
     }
 
+    @ExplodeLoop
     @Override
     protected Object executeDirect(VirtualFrame frame) {
+        CompilerAsserts.compilationConstant(expressions.length);
         Object result = ProtosNullValue.INSTANCE;
-        for (ProtosExpressionNode expression : expressions) {
-            result = expression.execute(frame);
+        for (int i = 0; i < expressions.length; i++) {
+            result = expressions[i].execute(frame);
         }
         return result;
     }

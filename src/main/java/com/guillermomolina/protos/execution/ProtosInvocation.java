@@ -112,6 +112,7 @@ public final class ProtosInvocation {
         if (!(selected.value() instanceof ProtosClosureValue closure)) {
             throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
         }
-        return ProtosClosureInvoker.invoke(closure.bindMethod(receiver, selected.home()), supplied, caller);
+        return ProtosClosureInvoker.invokeImmediateMethod(
+                closure, receiver, selected.home(), supplied, caller);
     }
 }

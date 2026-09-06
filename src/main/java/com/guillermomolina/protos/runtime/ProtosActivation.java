@@ -178,6 +178,45 @@ public final class ProtosActivation {
                 Objects.requireNonNull(executionDomain, "executionDomain"));
     }
 
+    public static ProtosActivation forImmediateMethodInvocation(
+            ProtosClosureValue closure,
+            java.util.List<?> supplied,
+            Object receiver,
+            ProtosObjectValue methodHome,
+            ProtosPrelude fallbackPrelude,
+            ProtosActorModuleState actorModuleState,
+            ProtosModuleKey currentModuleKey,
+            ProtosActorExecutionDomain executionDomain) {
+        Objects.requireNonNull(closure, "closure");
+        Objects.requireNonNull(supplied, "supplied");
+        Objects.requireNonNull(receiver, "receiver");
+        Objects.requireNonNull(methodHome, "methodHome");
+        Objects.requireNonNull(actorModuleState, "actorModuleState");
+
+        ProtosPrelude prelude = closure.prelude().orElse(fallbackPrelude);
+        if (prelude == null) {
+            throw new IllegalStateException("Closure invocation requires an owning Core prelude");
+        }
+        ProtosReturnHome capturedHome = closure.returnHome().orElse(null);
+        boolean ownsReturnHome = capturedHome == null;
+        ProtosReturnHome invocationHome =
+                ownsReturnHome ? new ProtosReturnHome() : capturedHome;
+
+        return new ProtosActivation(
+                prelude.newExecutionContext(),
+                closure.capturedLexicalContexts(),
+                receiver,
+                prelude,
+                prelude.newFrozenArray(supplied),
+                invocationHome,
+                methodHome,
+                ownsReturnHome,
+                false,
+                actorModuleState,
+                currentModuleKey,
+                Objects.requireNonNull(executionDomain, "executionDomain"));
+    }
+
     private ProtosActivation(
             ProtosObjectValue context,
             List<ProtosObjectValue> capturedLexicalContexts,

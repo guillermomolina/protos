@@ -417,3 +417,5 @@ call/method-args-exclude-receiver.protos	boolean	true
 call/nested-closure-has-own-args.protos	boolean	true
 call/non-local-return-carries-nested-args.protos	boolean	true
 call/message-send-spread-left-to-right.protos	integer	123123
+call/closure-local-call-override.protos	integer	7
+call/extracted-method-freshness-and-state.protos	boolean	true

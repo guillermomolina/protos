@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.162-SNAPSHOT
+
+- Publish `PERF002-A`, the Protos-side implementation/conformance slice of the Truffle compilability and dispatch optimization discovered while preparing PERF001-D. Fixed Sequence and argument-vector child arrays are exposed as compilation-constant exploded loops; ordinary execution avoids the evaluator continuation bridge unless an active cooperative-task segment requires it; immediate selected-method invocation preserves the original receiver and physical `methodHome` without materializing an unobservable extracted Closure.
+- Preserve actual extracted-method semantics exactly: a Closure-valued member read still creates a fresh receiver-bound Closure with copied local Closure slots, while only extraction materialization is kept outside Truffle partial evaluation. Deliberately do not add a Closure-type direct-call bypass, so ordinary local `call` shadowing remains observable.
+- Add Protos-source conformance for Closure-local `call` shadowing and extracted-method freshness/receiver/local-state preservation. `PERF002-A` is repository-native and requires only Protos static/focused/full/package/license validation; `PERF002-B` remains READY for GraalVM/Truffle/container validation in `guillermomolina/protos-benchmarks`. PERF002 remains IN_PROGRESS until that external evidence is published and reconciled.
+
 ## 0.2.161-SNAPSHOT
 
 - Close package-tool Filesystem Slice 2B / B006: provision the bundled package tool with explicit confined project-metadata read authority, write-only `createNew` staging authority, and namespace-mutation authority. Staging content is written through standard `File.write`/`close`, publication uses standard `Filesystem.replace`, and explicit abandoned-stage cleanup uses standard `Filesystem.remove`; ordinary application CLI sessions still receive no Filesystem authority.

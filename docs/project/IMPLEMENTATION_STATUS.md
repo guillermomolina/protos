@@ -600,7 +600,35 @@ Performance work follows these project rules:
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
 | PERF001 | Core v0.1 baseline benchmark suite | IN_PROGRESS | — | PERF001-A project-side methodology/ownership contract CLOSED; PERF001-B companion Docker harness CLOSED with external evidence `guillermomolina/protos-benchmarks@4e809acd839a0193250140c5b6dde48051d9aa9a`; PERF001-C cross-language corpus correctness CLOSED with external evidence `guillermomolina/protos-benchmarks@2da26df49f9b0673c56a9150a2d2f8cfc4a77c17`, consuming pinned Protos revision `42b8264a36254dafbd97d80f5181790e28b9de12`; PERF001-D/E READY. PERF001 remains open for measurement, broader sequential/concurrency coverage, and final reproducibility/reporting. |
+| PERF002 | Truffle compilability and dispatch optimization | IN_PROGRESS | — | PERF002-A implementation/conformance CLOSED at `0.2.162-SNAPSHOT` with SAME_COMMIT evidence; PERF002-B READY in `guillermomolina/protos-benchmarks` for external optimizing-Truffle validation against the exact published PERF002-A Protos revision. |
 
+
+### PERF002 — Truffle compilability and dispatch optimization
+
+Status: IN_PROGRESS
+
+Purpose: Preserve the existing callable, extraction, receiver, `methodHome` and
+task-continuation semantics while improving optimizing-Truffle compilability,
+without making the Protos repository depend on the external benchmark runtime.
+
+| Slice | Status | Version | Closure evidence | Implemented surface |
+|---|---|---|---|---|
+| PERF002-A | CLOSED | `0.2.162-SNAPSHOT` | `SAME_COMMIT` | Sequence/argument-vector compiler structure, ordinary evaluator fast path, immediate selected-method activation metadata, extracted-method materialization boundary, Protos-source semantic conformance, full Maven/package/license validation. |
+| PERF002-B | READY | — | — | Companion-repository optimizing-Truffle validation against the exact published PERF002-A Protos commit; publish retained external evidence, then reconcile it back into this ledger and close PERF002. |
+
+PERF002-A invariants:
+- fixed child arrays expose compilation-constant structure to Truffle;
+- active cooperative task segments retain the evaluator bridge and interpreter
+  transfer;
+- immediate selected-method calls preserve original receiver and physical
+  `methodHome` without manufacturing an unobservable extraction;
+- actual Closure-valued member reads still create a fresh receiver-bound Closure;
+- no direct Closure-type `call` bypass exists, so ordinary lookup/shadowing stays
+  intact;
+- Protos remains independently buildable/testable/publishable with no Docker,
+  GraalVM or `protos-benchmarks` dependency.
+
+Project record: `docs/project/PERF002_TRUFFLE_COMPILABILITY.md`.
 
 ### PERF001 — Core v0.1 baseline benchmark suite
 

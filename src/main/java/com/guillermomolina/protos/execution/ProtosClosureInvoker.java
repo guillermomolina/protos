@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import java.util.List;
 import java.util.Objects;
@@ -62,6 +63,42 @@ public final class ProtosClosureInvoker {
                                 caller.currentModuleKey().orElse(null), caller.executionDomain());
         ProtosActivation activation;
         if (caller != null && caller.task().isPresent()) {
+            com.guillermomolina.protos.runtime.ProtosTask task = caller.task().orElseThrow();
+            activation = task.evaluatorContinuation().invocationActivation(activationFactory);
+            activation.attachTask(task);
+        } else {
+            activation = activationFactory.get();
+        }
+        return invokePrepared(closure, supplied, activation);
+    }
+
+    public static Object invokeImmediateMethod(
+            ProtosClosureValue closure,
+            Object receiver,
+            ProtosObjectValue methodHome,
+            List<?> supplied,
+            ProtosActivation caller) {
+        Objects.requireNonNull(closure, "closure");
+        Objects.requireNonNull(receiver, "receiver");
+        Objects.requireNonNull(methodHome, "methodHome");
+        Objects.requireNonNull(supplied, "supplied");
+        Objects.requireNonNull(caller, "caller");
+
+        com.guillermomolina.protos.runtime.ProtosPrelude fallbackPrelude =
+                caller.prelude().orElse(null);
+        java.util.function.Supplier<ProtosActivation> activationFactory =
+                () -> ProtosActivation.forImmediateMethodInvocation(
+                        closure,
+                        supplied,
+                        receiver,
+                        methodHome,
+                        fallbackPrelude,
+                        caller.actorModuleState(),
+                        caller.currentModuleKey().orElse(null),
+                        caller.executionDomain());
+
+        ProtosActivation activation;
+        if (caller.task().isPresent()) {
             com.guillermomolina.protos.runtime.ProtosTask task = caller.task().orElseThrow();
             activation = task.evaluatorContinuation().invocationActivation(activationFactory);
             activation.attachTask(task);
