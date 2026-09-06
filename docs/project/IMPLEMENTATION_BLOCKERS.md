@@ -177,43 +177,53 @@ ActorGroup acquisition requirement.
 
 ## B005 — `super` without a physical methodHome
 
-Status: BLOCKED
+Status: READY
 
 Implementation area:
 I020-D execution/failure semantics for a syntactically valid `super.message(...)`
-whose current activation has no physical `methodHome`, such as execution outside
-a method-bound invocation.
+whose current activation has no physical `methodHome`, including execution in an
+unbound role or after a semantic boundary that intentionally removes caller
+method metadata.
 
 Normative dependency:
-`spec/semantics/EXECUTION_AND_CONTROL.md` §8 defines valid super lookup as
-preserving the current receiver while starting lookup at
-`parent(context.methodHome)`, but it does not define the observable result when
-`context.methodHome` is absent. The normative Error taxonomy likewise defines no
-standard `InvalidSuper` identity. `spec/runtime/ABSTRACT_RUNTIME.md` contains an
-informative `InvalidSuper()` pseudocode branch, but that document is explicitly
-non-normative and cannot introduce a new standard Error family.
+Satisfied by specification revision `0.1.377` / D040.
+`spec/semantics/EXECUTION_AND_CONTROL.md` §8 now defines super validity as a
+dynamic invocation property. After the ordinary caller-supplied argument/spread
+vector completes, absence of `methodHome` signals one fresh standard
+`InvalidSuper` occurrence and performs no lookup. A present `methodHome` with no
+delegation parent instead has an empty super lookup search and signals
+`SlotNotFound`.
 
 Specification authority:
 - `spec/semantics/EXECUTION_AND_CONTROL.md` §8 `super`
-- `spec/semantics/ERRORS.md` for standard Error construction/identity if failure
-  is the selected behavior
-- `spec/PROTOS_GRAMMAR.md` for the syntactic validity/scope of super-message-send
+- `spec/semantics/ERRORS.md` for `InvalidSuper` parentage and fresh standard
+  failure identity
+- `spec/PROTOS_GRAMMAR.md` for the unchanged syntactic validity/scope of
+  super-message-send
+- `spec/semantics/CALLABLES.md` for the ordinary caller-supplied argument vector,
+  the single Closure value kind, dynamic method role, and captured method metadata
 
 Unblock condition:
-The normative specification explicitly and uniquely defines whether executing a
-super message with no `methodHome` is dynamically invalid and, if it fails, the
-exact standard Error family/identity and failure timing. Independent
-implementations must be able to produce the same observable result without
-consulting `ABSTRACT_RUNTIME.md`.
+Satisfied by specification revision `0.1.377` / D040. Independent
+implementations can now determine the exact validity point, argument-before-
+dispatch precedence, absence of lookup on the invalid-context path, standard
+failure category and freshness, and the distinct `SlotNotFound` result for an
+empty or exhausted valid super lookup without consulting `ABSTRACT_RUNTIME.md`.
 
 Current consequence:
-I020-A implements the fully determined case where `methodHome` exists, including
-ordinary argument/spread evaluation, lookup after that home, preservation of the
-dynamic receiver, nested-Closure capture and `SlotNotFound` when lookup from the
-defined origin is exhausted. The missing-`methodHome` path remains an explicit
-implementation limitation and I020-D stays BLOCKED.
+I020-A already implements the valid `methodHome` path, including argument/spread
+evaluation, preservation of the dynamic receiver, nested-Closure capture and
+`SlotNotFound` after the defined lookup origin. I020-D is now READY to add the
+standard `InvalidSuper` Core prototype and translate the existing no-`methodHome`
+host limitation into the specified fresh Protos Error, with focused and language-
+level conformance.
+
+History:
+B005 moved `BLOCKED -> READY` when specification revision `0.1.377` / D040 made
+the missing-`methodHome` behavior normative. The earlier `InvalidSuper()` name in
+`spec/runtime/ABSTRACT_RUNTIME.md` was informative only and did not itself
+authorize implementation of the standard Error category.
 
 Independent work:
-I020-B concurrent test-harness reliability, I020-C ledger reconciliation, valid
-method-bound super execution/conformance, Standard Library work and unrelated
-implementation/performance work may proceed independently.
+Standard Library, performance, and unrelated implementation work may continue
+independently while I020-D is implemented and validated.

@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-04
+Last updated: 2026-09-06
 
 This document is the primary normative owner of Core Error objects, signaling, handling, propagation, identity, standard error-prototype taxonomy, and error-control semantics.
 
@@ -321,6 +321,7 @@ The standard prototypes required by Core v0.1 are:
 | --- | --- | --- |
 | `Error` | `Object` | this document |
 | `SlotNotFound` | `Error` | `EXECUTION_AND_CONTROL.md` / grammar lookup rules |
+| `InvalidSuper` | `Error` | `EXECUTION_AND_CONTROL.md` §8 |
 | `InvalidReturn` | `Error` | `CALLABLES.md` |
 | `Cancelled` | `Error` | `../concurrency/FUTURES_AND_TASKS.md` |
 | `FutureResolutionCycle` | `Error` | `../concurrency/FUTURES_AND_TASKS.md` |

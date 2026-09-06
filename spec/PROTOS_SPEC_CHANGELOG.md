@@ -9,6 +9,21 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.377] - 2026-09-06
+
+### Dynamic super-dispatch context (D040)
+- Defines super-send validity as a dynamic invocation property rather than a lexical Method category: Protos retains one executable value kind, Closure, and the same Closure source may execute with or without `methodHome` depending on its invocation role.
+- Requires the complete ordinary caller-supplied argument/spread vector to be evaluated left-to-right before super dispatch. If argument evaluation transfers control, no super-context failure or lookup is performed.
+- Defines execution with no current `methodHome` to signal one fresh standard `InvalidSuper` occurrence and perform no slot lookup.
+- Defines a present `methodHome` with no delegation parent as a valid super context with an empty continuation search, therefore signaling fresh `SlotNotFound`; ordinary lookup exhaustion after a non-root home remains `SlotNotFound`.
+- Adds `InvalidSuper` as one minimal standard Error prototype directly below `Error`, with no required payload and with occurrence freshness inherited from the existing standard-failure rules.
+- Applies the same rule when another semantic boundary deliberately omits caller method metadata, including isolated-parallel Closure projection; no P-specific super exception is introduced.
+
+### Compatibility
+- Valid method-bound super sends retain their existing receiver, lookup-origin, extraction, nested-Closure, and invocation semantics.
+- Programs that reach the previously unspecified no-`methodHome` case now have one deterministic portable failure category and timing. No syntax, first-class `super` value, static Method category, delegation rule, or hidden fallback lookup is added.
+- This revision resolves B005's normative dependency only. Runtime/Core publication remains I020-D implementation work, so B005 and I020-D become READY rather than CLOSED.
+
 ## [0.1.376] - 2026-09-05
 
 ### Public ActorGroup acquisition (D039)

@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-04
+Last updated: 2026-09-06
 
 This document is the primary normative owner of execution contexts, lookup/control foundations, intrinsic execution references, evaluation order, iteration/loop control, and related execution semantics.
 
@@ -242,6 +242,46 @@ Conceptually:
 receiver     = this
 lookupOrigin = parent(methodHome)
 ```
+
+The availability of `methodHome` is a dynamic invocation property, not a
+syntactic category of the Closure that contains the super send. `CALLABLES.md`
+defines one executable value kind, Closure, and method behavior as an invocation
+role. A syntactically valid super message send is therefore not rejected merely
+because the Closure was created in a source position that had no method role.
+
+For `super.message(arguments...)`, first form the complete caller-supplied
+positional argument vector under the ordinary call argument, spread, and
+trailing-Closure rules in `CALLABLES.md`. Argument items are evaluated exactly
+once from left to right. If that phase signals an Error or performs another
+control transfer, super dispatch does not begin and the super send produces no
+additional failure.
+
+After the argument vector completes normally, super dispatch proceeds exactly as
+follows:
+
+1. If the current execution has no `methodHome`, signal one fresh standard
+   `InvalidSuper` failure under the construction and identity rules in
+   `ERRORS.md`. No slot lookup is attempted.
+2. Otherwise preserve the current receiver and determine the lookup origin as
+   the immediate delegation parent of `methodHome`. If `methodHome` has no
+   delegation parent, the super lookup search space is empty and the send
+   signals one fresh standard `SlotNotFound` failure. Under `OBJECT_MODEL.md`,
+   this no-parent case can occur only for the unique root `Object`.
+3. Starting at that lookup origin, perform the ordinary delegating lookup for the
+   message name while preserving the original receiver. If no matching slot is
+   found, signal one fresh standard `SlotNotFound` failure. If a slot is selected,
+   its invocation follows the ordinary Closure/method rules in `CALLABLES.md`.
+
+`InvalidSuper` therefore identifies absence of the invocation metadata required
+to define a super lookup origin; it is not a failed selector lookup. Conversely,
+once `methodHome` exists, failure to find anything after that home is
+`SlotNotFound`, including the empty search after root `Object`.
+
+Effects already produced while evaluating earlier argument items are not rolled
+back if the subsequent super dispatch fails. This rule creates no static
+`Method` value kind, no first-class `super` object, and no fallback receiver or
+lookup origin.
+
 ## 8.1 Evaluation Order
 
 The language evaluates strict subexpressions from left to right. The receiver or assignment target is evaluated before arguments or the right-hand side, and arguments are evaluated left to right. Parent expressions are evaluated before object bodies. Standard binary operators evaluate their left operand before their right operand.
