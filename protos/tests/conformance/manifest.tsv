@@ -387,3 +387,4 @@ error/signal-instance.protos	error	-
 error/signal-invalid-return-instance.protos	error	-
 error/signal-prototype.protos	error	-
 error/signal-wrong-arity.protos	error	-
+future/then-never-inline.protos	future-integer	52
