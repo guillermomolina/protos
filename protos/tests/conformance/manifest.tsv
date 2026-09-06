@@ -407,3 +407,4 @@ call/object-call-runs-init-and-produces-fresh-child.protos	boolean	true
 call/object-init-returns-receiver.protos	boolean	true
 call/object-init-wrong-arity-error.protos	error	-
 call/plain-closure-call.protos	integer	42
+regression/non-local-return-from-default.protos	integer	42

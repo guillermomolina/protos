@@ -24,7 +24,6 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
-import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -39,23 +38,13 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ProtosNonLocalReturnTest {
-    @Test
-    void activeReturnFromOwningInvocationBecomesExactInvocationResult()
-            throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        ProtosClosureValue closure =
-                closure(prelude, "() => { ^42\n0 }");
-
-        Object expected =
-                com.guillermomolina.protos.runtime.ProtosNumberLiteral.materialize("42");
-        Object actual = ProtosClosureInvoker.invoke(closure, List.of());
-
-        assertSame(expected.getClass(), actual.getClass());
-        org.junit.jupiter.api.Assertions.assertEquals(
-                ((com.guillermomolina.protos.runtime.ProtosIntegerValue) expected).value(),
-                ((com.guillermomolina.protos.runtime.ProtosIntegerValue) actual).value());
-    }
-
+    /**
+     * Deliberately Java-side: this is an implementation-control test. It
+     * manufactures a Closure with a specific host ReturnHome and verifies that
+     * nested invocation rethrows the exact transfer to that still-active home.
+     * Executable Protos conformance independently covers the observable result
+     * of a nested non-local return.
+     */
     @Test
     void nestedInvocationWithCapturedActiveHomeRethrowsTransferToOwner()
             throws IOException {
@@ -82,6 +71,12 @@ class ProtosNonLocalReturnTest {
         assertTrue(capturedHome.isActive());
     }
 
+    /**
+     * Deliberately Java-side: the generic language conformance runner can
+     * observe that the escaped Closure signals, but cannot assert either the
+     * exact InvalidReturn prototype or that two independent observations
+     * manufacture distinct standard failure occurrences.
+     */
     @Test
     void escapedClosureSignalsFreshInvalidReturnAfterHomeCompleted()
             throws IOException {
@@ -117,20 +112,6 @@ class ProtosNonLocalReturnTest {
         org.junit.jupiter.api.Assertions.assertNotSame(
                 first.error(),
                 second.error());
-    }
-
-    @Test
-    void returnInsideDefaultUsesSameHomeAsBody()
-            throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        ProtosClosureValue closure =
-                closure(prelude, "(x = ^42) => 0");
-
-        Object actual = ProtosClosureInvoker.invoke(closure, List.of());
-
-        org.junit.jupiter.api.Assertions.assertEquals(
-                java.math.BigInteger.valueOf(42),
-                ((com.guillermomolina.protos.runtime.ProtosIntegerValue) actual).value());
     }
 
     private static ProtosClosureValue closure(
