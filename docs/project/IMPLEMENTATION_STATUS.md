@@ -53,7 +53,7 @@ an item.
 | I019 | Core source naming reconciliation | CLOSED | `SAME_COMMIT` | 29 dominant-owner distributable Core sources use exact canonical Protos names/case after I019-A; private subordinate bootstrap helpers do not defeat public conceptual ownership; all live explicit Core physical-path references reconciled; true aggregation/responsibility sources remain descriptive; no normative or native-boundary change |
 | I019-A | Actor source dominant-owner naming correction | CLOSED | `SAME_COMMIT` | `actor.protos` -> `Actor.protos`; public `Actor` is the dominant conceptual owner and private ActorRef/GroupRef/SendOperation prototype bindings are subordinate bootstrap helpers; naming guard and architecture classification reconciled |
 | I020 | Post-Ixxx implementation audit reconciliation | CLOSED | `SAME_COMMIT` | I020-A/B/C/D complete; D040 missing-`methodHome` `InvalidSuper` implemented; B005 closed |
-| I021 | Filesystem namespace replacement/removal | IN_PROGRESS | — | I021-A CLOSED; I021-B READY; D042 / spec `0.1.379` corrects D041; production confined namespace backend still required before package-tool metadata mutation and B006 closure |
+| I021 | Filesystem namespace replacement/removal | IN_PROGRESS | — | I021-A/B CLOSED; I021-C READY; D042 / spec `0.1.379`; production confined namespace backend is published while final integrated conformance remains before I021 closure and package-tool metadata mutation |
 
 ### I021 — Filesystem namespace replacement/removal
 
@@ -65,12 +65,13 @@ by D042 before any package-tool repository-metadata mutation relies on them.
 | Slice | Status | Version | Closure evidence | Implemented surface |
 |---|---|---|---|---|
 | I021-A | CLOSED | `0.2.159-SNAPSHOT` | `SAME_COMMIT` | Host-neutral asynchronous namespace-mutation substrate plus language-visible host-provisioned `Filesystem.replace`/`remove` dispatch. Valid Path arguments reach only the provisioned backend; unsupported backends fail `IOError`; pre-commit cancellation prevents the effect; one per-operation effect/commit cutover makes a successful atomic backend effect and Protos commitment indivisible. The existing Filesystem provider remains one native-Closure construction site through a shared operation helper. |
-| I021-B | READY | — | — | Implement a production confined namespace-entry backend for D042 replacement/removal, preserving final-entry non-follow selection, source/target authority, same-entry no-op, deterministic atomic visibility, non-recursive removal, and fail-closed `IOError` when the host cannot provide the required atomic transition for an entry kind/combination. |
-| I021-C | BLOCKED_BY_DEPENDENCIES | — | — | Integrated production conformance and final I021 closure after I021-B, including ordinary Protos-visible replacement/removal behavior and architecture/status reconciliation. |
+| I021-B | CLOSED | `0.2.160-SNAPSHOT` | `SAME_COMMIT` | Production `ProtosNioConfinedFilesystemBackend`: pinned `SecureDirectoryStream` namespace authority, independent readable/mutable direct-child allowlists, atomic relative move for replace, final-entry `deleteFile` for non-recursive remove, no final-entry preclassification/following, provider failure mapped through the I021-A `IOError` cutover, and host-boundary conformance including hard-link alias no-op and symlink non-follow behavior. Current package-tool provisioning remains read-only. |
+| I021-C | READY | — | — | Integrated production conformance and final I021 closure, including ordinary Protos-visible replacement/removal behavior and architecture/status reconciliation before package-tool mutation integration closes B006. |
 
-I021-A deliberately does not make the package tool writable and does not close
-B006. Package metadata mutation remains gated on I021-B's production confined
-backend and the subsequent package-tool integration.
+I021-A/B deliberately do not make the package tool writable and do not close B006.
+The current CLI still provisions the existing read-only project Filesystem. Package
+metadata mutation remains gated on I021-C final closure and subsequent explicit
+package-tool write/staging authority integration.
 
 ### I020 — Post-Ixxx implementation audit reconciliation
 

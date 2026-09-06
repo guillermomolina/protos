@@ -279,12 +279,14 @@ mutation uses it without an ambient/native package-only escape hatch. That
 implementation work is tracked as I021.
 
 Current consequence:
-I021 is IN_PROGRESS: I021-A is CLOSED and I021-B is READY. Package-tool Filesystem
-Slice 2B may proceed only after I021-B publishes a confined production
-`Filesystem.replace`/`remove` backend. Until then the package tool remains
-read-only for repository metadata and must not fall back to in-place
-truncate/write, `PackageNative.rename(...)`, ambient host filesystem access, or
-another package-only privileged path.
+I021 is IN_PROGRESS: I021-A and I021-B are CLOSED and I021-C is READY. I021-B
+publishes a confined production NIO `Filesystem.replace`/`remove` backend with
+separate read and namespace-mutation allowlists, but deliberately does not change
+the package tool's current read-only CLI provisioning. Package metadata therefore
+remains read-only until final I021 conformance and a subsequent package-tool slice
+explicitly grants the staging/write and namespace authority it needs. No path may
+fall back to in-place truncate/write, `PackageNative.rename(...)`, ambient host
+filesystem access, or another package-only privileged path.
 
 Once I021 is available, the intended package metadata publication composition is
 ordinary Protos code: create/write the staging file through the granted

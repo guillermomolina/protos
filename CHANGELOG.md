@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.160-SNAPSHOT
+
+- Close I021-B with a production confined direct-child NIO Filesystem backend for D042 namespace-entry replacement/removal. The backend retains a `SecureDirectoryStream` for the authority root, applies `replace` through one atomic relative `move`, applies non-recursive `remove` through relative `deleteFile`, never pre-classifies or follows the final entry, and fails closed when the host/provider cannot provide the required transition.
+- Keep read authority and namespace-mutation authority independent: `ProtosNioConfinedFilesystemBackend` delegates existing-file read opens to the established read-only backend while requiring a separate exact direct-child allowlist for `replace`/`remove`. The current package-tool CLI continues using `ProtosNioReadOnlyFilesystemBackend`, so I021-B does not silently make package metadata writable or grant staging policy ahead of the later package-tool integration.
+- Add host-boundary conformance for absent/existing-target replacement, hard-link same-resource no-op, source/target symlink non-follow behavior, non-recursive removal, authority rejection, and fail-closed providers. No Core native-Closure construction site or normative specification changes are introduced; I021-C becomes READY and B006 remains READY.
+
 ## 0.2.159-SNAPSHOT
 
 - Start I021 with I021-A: add the host-neutral asynchronous Filesystem namespace-mutation substrate for D041 `replace`/`remove`, including fresh Future results, eager Path-domain validation, independent operation state, pre-commit cancellation, exact Filesystem success results, and one per-operation effect/commit cutover that prevents cancellation from splitting a successful atomic backend effect from its Protos commitment.
