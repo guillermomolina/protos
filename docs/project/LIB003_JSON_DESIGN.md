@@ -1,6 +1,6 @@
 # LIB003 JSON Design Record
 
-Status: LIB003-A/B/C implementation contracts published; LIB003-D selected for next publication
+Status: LIB003-A/B/C and LIB003-D1 published; LIB003-D2 selected for next publication
 Work item: `LIB003`
 Nature: Project design record; **non-normative**
 Cross-cutting context: `docs/design/STRUCTURED_DATA_AND_SERIALIZATION.md`
@@ -508,6 +508,56 @@ and the reverse for output.
 XML/YAML may reuse the composition pattern but own their own event vocabularies.
 No generic Serializer hierarchy is justified by LIB003.
 
+
+### LIB003-D decomposition and D1 closure
+
+The current-main audit separates the original LIB003-D work into three ordered
+publication slices because incremental lexical state, event-output validation,
+and asynchronous I/O lifecycle composition have independently meaningful failure
+surfaces:
+
+- `LIB003-D1` — JSON-specific incremental parser events;
+- `LIB003-D2` — JSON-specific incremental event writer;
+- `LIB003-D3` — TextReader/TextWriter and byte/Encoding adapters.
+
+D1 publishes `JSON.eventParser(consumer)`. Each successful call returns one
+fresh ordinary parser object exposing synchronous `feed(text)` and `finish()`
+operations. `feed` accepts only semantic Protos String input and consumes that
+chunk immediately; `finish` marks semantic EOF. Empty chunks are allowed. A
+parser is single-use after successful finish, and syntax/consumer failure makes
+that parser unusable.
+
+The consumer is called synchronously with fresh ordinary JSON event objects whose
+`kind` / `value` vocabulary is format-specific:
+
+- `objectStart`, `objectEnd`, `arrayStart`, `arrayEnd` with `value === null`;
+- `name` with the decoded semantic String member name;
+- `null`, `boolean`, `string`, and `number` for scalar values, where Number value
+  is the exact ordinary `{ coefficient, exponent }` decimal record already used
+  by the JSON tree model.
+
+Events are emitted as soon as their complete JSON token or structural boundary
+is established. Therefore an already-emitted prefix is not rolled back if later
+input proves the overall document malformed; this is the deliberate streaming
+contract rather than a transactional tree-parse promise. Consumer invocation is
+non-reentrant for the parser. A consumer failure propagates and leaves the
+parser terminal instead of attempting to replay or duplicate an emitted event.
+
+D1 preserves the strict LIB003-B lexical grammar across arbitrary String chunk
+boundaries: JSON whitespace, literals, exact decimal grammar, escape handling,
+strict surrogate pairing, decoded duplicate-name rejection, one top-level value,
+and no trailing non-whitespace data. String chunks are independently valid
+Protos Strings; JSON escape/token state may span chunks without changing the
+result. No Unicode normalization, Float conversion, host JSON parser, or
+implementation-selected duplicate policy is introduced.
+
+Container state uses an explicit linked frame stack, so JSON nesting does not use
+host recursion. D1 does not materialize Array element collections or a complete
+JSON tree. Retained parser state is limited to open-container state, decoded
+member names needed to reject duplicates in currently open objects, and the
+currently incomplete String/Number token. Final resource-stress validation
+remains owned by LIB003-E.
+
 ## Raw / lossless JSON
 
 The initial tree is semantic/structural data, not a source-preserving CST. It
@@ -572,8 +622,11 @@ No production Java boundary is required for LIB003-A.
 
 ### LIB003-D — streaming and text/byte adapters
 
-- JSON-specific incremental parse/write events or equivalent streaming surface;
-- TextReader/TextWriter composition;
+Decomposed after the D1 current-main audit:
+
+- LIB003-D1 — JSON-specific incremental parser events;
+- LIB003-D2 — JSON-specific incremental event writer;
+- LIB003-D3 — TextReader/TextWriter and byte/Encoding composition;
 - no generic Serializer hierarchy.
 
 ### LIB003-E — final conformance and closure

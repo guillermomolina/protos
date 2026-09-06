@@ -1203,3 +1203,887 @@ encode: (root) => {
     visit(root)
     Encoding.UTF8.decode(output)
 }
+
+eventParser: (emit) => {
+    failed: false
+    finished: false
+    parser: null
+
+    fail: () => {
+        failed = true
+        Error().signal()
+    }
+
+    publish: (kind, value) => {
+        event: {
+            kind: kind
+            value: value
+        }
+
+        // Keep callbacks non-reentrant and make a consumer failure terminal.
+        failed = true
+        emit(event)
+        failed = false
+    }
+
+    isWhitespace: (octet) => {
+        result: octet == 32
+        (octet == 9).ifTrue(() => { result = true })
+        (octet == 10).ifTrue(() => { result = true })
+        (octet == 13).ifTrue(() => { result = true })
+        result
+    }
+
+    decimalDigit: (octet) => {
+        result: -1
+        (octet >= 48).ifTrue(() => {
+            (octet <= 57).ifTrue(() => {
+                result = octet - 48
+            })
+        })
+        result
+    }
+
+    hexDigit: (octet) => {
+        result: -1
+
+        (octet >= 48).ifTrue(() => {
+            (octet <= 57).ifTrue(() => {
+                result = octet - 48
+            })
+        })
+
+        (result < 0).ifTrue(() => {
+            (octet >= 65).ifTrue(() => {
+                (octet <= 70).ifTrue(() => {
+                    result = octet - 55
+                })
+            })
+        })
+
+        (result < 0).ifTrue(() => {
+            (octet >= 97).ifTrue(() => {
+                (octet <= 102).ifTrue(() => {
+                    result = octet - 87
+                })
+            })
+        })
+
+        result
+    }
+
+    isNumberCharacter: (octet) => {
+        result: decimalDigit(octet) >= 0
+        (octet == 45).ifTrue(() => { result = true })
+        (octet == 43).ifTrue(() => { result = true })
+        (octet == 46).ifTrue(() => { result = true })
+        (octet == 101).ifTrue(() => { result = true })
+        (octet == 69).ifTrue(() => { result = true })
+        result
+    }
+
+    isNumberTerminator: (octet) => {
+        result: isWhitespace(octet)
+        (octet == 44).ifTrue(() => { result = true })
+        (octet == 93).ifTrue(() => { result = true })
+        (octet == 125).ifTrue(() => { result = true })
+        result
+    }
+
+    appendScalarUtf8: (buffer, scalar) => {
+        handled: false
+
+        (scalar <= 127).ifTrue(() => {
+            buffer.add(scalar)
+            handled = true
+        })
+
+        handled.ifFalse(() => {
+            (scalar <= 2047).ifTrue(() => {
+                buffer.add(192 + scalar.div(64))
+                buffer.add(128 + scalar.mod(64))
+                handled = true
+            })
+        })
+
+        handled.ifFalse(() => {
+            (scalar <= 65535).ifTrue(() => {
+                buffer.add(224 + scalar.div(4096))
+                buffer.add(128 + scalar.div(64).mod(64))
+                buffer.add(128 + scalar.mod(64))
+                handled = true
+            })
+        })
+
+        handled.ifFalse(() => {
+            (scalar <= 1114111).ifTrue(() => {
+                buffer.add(240 + scalar.div(262144))
+                buffer.add(128 + scalar.div(4096).mod(64))
+                buffer.add(128 + scalar.div(64).mod(64))
+                buffer.add(128 + scalar.mod(64))
+                handled = true
+            })
+        })
+
+        handled.ifFalse(() => {
+            fail()
+        })
+    }
+
+    topFrame: null
+    depth: 0
+    rootDone: false
+
+    completeValue: () => {
+        (depth == 0).ifTrue(() => {
+            rootDone.ifTrue(() => {
+                fail()
+            })
+            rootDone = true
+        })
+
+        (depth == 0).ifFalse(() => {
+            frame: topFrame
+            handled: false
+
+            (frame.kind == "array").ifTrue(() => {
+                validPhase: frame.phase == "valueOrEnd"
+                (frame.phase == "value").ifTrue(() => {
+                    validPhase = true
+                })
+                validPhase.ifFalse(() => {
+                    fail()
+                })
+                frame.phase = "commaOrEnd"
+                handled = true
+            })
+
+            (frame.kind == "object").ifTrue(() => {
+                (frame.phase == "value").ifFalse(() => {
+                    fail()
+                })
+                frame.phase = "commaOrEnd"
+                handled = true
+            })
+
+            handled.ifFalse(() => {
+                fail()
+            })
+        })
+    }
+
+    pushArrayFrame: () => {
+        frame: {
+            parent: topFrame
+            kind: "array"
+            phase: "valueOrEnd"
+        }
+        topFrame = frame
+        depth = depth + 1
+        publish("arrayStart", null)
+    }
+
+    pushObjectFrame: () => {
+        frame: {
+            parent: topFrame
+            kind: "object"
+            phase: "nameOrEnd"
+            names: Map()
+        }
+        topFrame = frame
+        depth = depth + 1
+        publish("objectStart", null)
+    }
+
+    closeArray: () => {
+        frame: topFrame
+        (frame.kind == "array").ifFalse(() => {
+            fail()
+        })
+
+        validPhase: frame.phase == "valueOrEnd"
+        (frame.phase == "commaOrEnd").ifTrue(() => {
+            validPhase = true
+        })
+        validPhase.ifFalse(() => {
+            fail()
+        })
+
+        topFrame = frame.parent
+        depth = depth - 1
+        publish("arrayEnd", null)
+        completeValue()
+    }
+
+    closeObject: () => {
+        frame: topFrame
+        (frame.kind == "object").ifFalse(() => {
+            fail()
+        })
+
+        validPhase: frame.phase == "nameOrEnd"
+        (frame.phase == "commaOrEnd").ifTrue(() => {
+            validPhase = true
+        })
+        validPhase.ifFalse(() => {
+            fail()
+        })
+
+        topFrame = frame.parent
+        depth = depth - 1
+        publish("objectEnd", null)
+        completeValue()
+    }
+
+    mode: "normal"
+    stringRole: null
+    stringBuffer: Encoding.UTF8.encode("")
+    unicodeValue: 0
+    unicodeDigits: 0
+    pendingHighSurrogate: null
+
+    beginString: (role) => {
+        stringRole = role
+        stringBuffer = Encoding.UTF8.encode("")
+        pendingHighSurrogate = null
+        mode = "string"
+    }
+
+    completeString: () => {
+        decoded: Encoding.UTF8.decode(stringBuffer)
+        role: stringRole
+        stringRole = null
+        mode = "normal"
+
+        (role == "name").ifTrue(() => {
+            frame: topFrame
+            (frame.kind == "object").ifFalse(() => {
+                fail()
+            })
+            frame.names.containsKey(decoded).ifTrue(() => {
+                fail()
+            })
+            frame.names.atPut(decoded, true)
+            publish("name", decoded)
+            frame.phase = "colon"
+        })
+
+        (role == "value").ifTrue(() => {
+            publish("string", decoded)
+            completeValue()
+        })
+
+        validRole: role == "name"
+        (role == "value").ifTrue(() => {
+            validRole = true
+        })
+        validRole.ifFalse(() => {
+            fail()
+        })
+    }
+
+    numberBuffer: Encoding.UTF8.encode("")
+
+    beginNumber: (octet) => {
+        numberBuffer = Encoding.UTF8.encode("")
+        numberBuffer.add(octet)
+        mode = "number"
+    }
+
+    finalizeNumber: () => {
+        state: "start"
+        negative: false
+        coefficient: 0
+        fractionDigits: 0
+        exponentNegative: false
+        exponentValue: 0
+
+        numberBuffer.each((octet) => {
+            previous: state
+            digit: decimalDigit(octet)
+            handled: false
+
+            (previous == "start").ifTrue(() => {
+                (octet == 45).ifTrue(() => {
+                    negative = true
+                    state = "integerStart"
+                    handled = true
+                })
+                (digit >= 0).ifTrue(() => {
+                    coefficient = digit
+                    (digit == 0).ifTrue(() => {
+                        state = "afterZero"
+                    })
+                    (digit == 0).ifFalse(() => {
+                        state = "integer"
+                    })
+                    handled = true
+                })
+            })
+
+            (previous == "integerStart").ifTrue(() => {
+                (digit >= 0).ifTrue(() => {
+                    coefficient = digit
+                    (digit == 0).ifTrue(() => {
+                        state = "afterZero"
+                    })
+                    (digit == 0).ifFalse(() => {
+                        state = "integer"
+                    })
+                    handled = true
+                })
+            })
+
+            (previous == "afterZero").ifTrue(() => {
+                (octet == 46).ifTrue(() => {
+                    state = "fractionStart"
+                    handled = true
+                })
+                (octet == 101).ifTrue(() => {
+                    state = "exponentStart"
+                    handled = true
+                })
+                (octet == 69).ifTrue(() => {
+                    state = "exponentStart"
+                    handled = true
+                })
+            })
+
+            (previous == "integer").ifTrue(() => {
+                (digit >= 0).ifTrue(() => {
+                    coefficient = coefficient * 10 + digit
+                    handled = true
+                })
+                (octet == 46).ifTrue(() => {
+                    state = "fractionStart"
+                    handled = true
+                })
+                (octet == 101).ifTrue(() => {
+                    state = "exponentStart"
+                    handled = true
+                })
+                (octet == 69).ifTrue(() => {
+                    state = "exponentStart"
+                    handled = true
+                })
+            })
+
+            (previous == "fractionStart").ifTrue(() => {
+                (digit >= 0).ifTrue(() => {
+                    coefficient = coefficient * 10 + digit
+                    fractionDigits = 1
+                    state = "fraction"
+                    handled = true
+                })
+            })
+
+            (previous == "fraction").ifTrue(() => {
+                (digit >= 0).ifTrue(() => {
+                    coefficient = coefficient * 10 + digit
+                    fractionDigits = fractionDigits + 1
+                    handled = true
+                })
+                (octet == 101).ifTrue(() => {
+                    state = "exponentStart"
+                    handled = true
+                })
+                (octet == 69).ifTrue(() => {
+                    state = "exponentStart"
+                    handled = true
+                })
+            })
+
+            (previous == "exponentStart").ifTrue(() => {
+                (octet == 43).ifTrue(() => {
+                    state = "exponentDigitsStart"
+                    handled = true
+                })
+                (octet == 45).ifTrue(() => {
+                    exponentNegative = true
+                    state = "exponentDigitsStart"
+                    handled = true
+                })
+                (digit >= 0).ifTrue(() => {
+                    exponentValue = digit
+                    state = "exponent"
+                    handled = true
+                })
+            })
+
+            (previous == "exponentDigitsStart").ifTrue(() => {
+                (digit >= 0).ifTrue(() => {
+                    exponentValue = digit
+                    state = "exponent"
+                    handled = true
+                })
+            })
+
+            (previous == "exponent").ifTrue(() => {
+                (digit >= 0).ifTrue(() => {
+                    exponentValue = exponentValue * 10 + digit
+                    handled = true
+                })
+            })
+
+            handled.ifFalse(() => {
+                fail()
+            })
+        })
+
+        validEnd: state == "afterZero"
+        (state == "integer").ifTrue(() => { validEnd = true })
+        (state == "fraction").ifTrue(() => { validEnd = true })
+        (state == "exponent").ifTrue(() => { validEnd = true })
+        validEnd.ifFalse(() => {
+            fail()
+        })
+
+        negative.ifTrue(() => {
+            coefficient = 0 - coefficient
+        })
+
+        exponent: exponentValue
+        exponentNegative.ifTrue(() => {
+            exponent = 0 - exponentValue
+        })
+        exponent = exponent - fractionDigits
+
+        mode = "normal"
+        publish("number", {
+            coefficient: coefficient
+            exponent: exponent
+        })
+        completeValue()
+    }
+
+    literalKind: null
+    literalIndex: 0
+
+    beginLiteral: (kind) => {
+        literalKind = kind
+        literalIndex = 0
+        mode = "literal"
+    }
+
+    consumeLiteralOctet: (octet) => {
+        expected: -1
+        finalIndex: -1
+
+        (literalKind == "true").ifTrue(() => {
+            finalIndex = 2
+            (literalIndex == 0).ifTrue(() => { expected = 114 })
+            (literalIndex == 1).ifTrue(() => { expected = 117 })
+            (literalIndex == 2).ifTrue(() => { expected = 101 })
+        })
+
+        (literalKind == "false").ifTrue(() => {
+            finalIndex = 3
+            (literalIndex == 0).ifTrue(() => { expected = 97 })
+            (literalIndex == 1).ifTrue(() => { expected = 108 })
+            (literalIndex == 2).ifTrue(() => { expected = 115 })
+            (literalIndex == 3).ifTrue(() => { expected = 101 })
+        })
+
+        (literalKind == "null").ifTrue(() => {
+            finalIndex = 2
+            (literalIndex == 0).ifTrue(() => { expected = 117 })
+            (literalIndex == 1).ifTrue(() => { expected = 108 })
+            (literalIndex == 2).ifTrue(() => { expected = 108 })
+        })
+
+        (expected < 0).ifTrue(() => {
+            fail()
+        })
+        (octet == expected).ifFalse(() => {
+            fail()
+        })
+
+        done: literalIndex == finalIndex
+        literalIndex = literalIndex + 1
+
+        done.ifTrue(() => {
+            kind: literalKind
+            literalKind = null
+            mode = "normal"
+
+            (kind == "true").ifTrue(() => {
+                publish("boolean", true)
+            })
+            (kind == "false").ifTrue(() => {
+                publish("boolean", false)
+            })
+            (kind == "null").ifTrue(() => {
+                publish("null", null)
+            })
+            completeValue()
+        })
+    }
+
+    startValue: (octet) => {
+        handled: false
+
+        (octet == 34).ifTrue(() => {
+            beginString("value")
+            handled = true
+        })
+
+        (octet == 123).ifTrue(() => {
+            pushObjectFrame()
+            handled = true
+        })
+
+        (octet == 91).ifTrue(() => {
+            pushArrayFrame()
+            handled = true
+        })
+
+        (octet == 116).ifTrue(() => {
+            beginLiteral("true")
+            handled = true
+        })
+
+        (octet == 102).ifTrue(() => {
+            beginLiteral("false")
+            handled = true
+        })
+
+        (octet == 110).ifTrue(() => {
+            beginLiteral("null")
+            handled = true
+        })
+
+        (octet == 45).ifTrue(() => {
+            beginNumber(octet)
+            handled = true
+        })
+
+        (decimalDigit(octet) >= 0).ifTrue(() => {
+            beginNumber(octet)
+            handled = true
+        })
+
+        handled.ifFalse(() => {
+            fail()
+        })
+    }
+
+    processNormal: null
+    processNormal = (octet) => {
+        whitespace: isWhitespace(octet)
+
+        whitespace.ifFalse(() => {
+            wasTopLevel: depth == 0
+
+            wasTopLevel.ifTrue(() => {
+                rootDone.ifTrue(() => {
+                    fail()
+                })
+                rootDone.ifFalse(() => {
+                    startValue(octet)
+                })
+            })
+
+            wasTopLevel.ifFalse(() => {
+                frame: topFrame
+
+                (frame.kind == "array").ifTrue(() => {
+                    phase: frame.phase
+
+                    (phase == "valueOrEnd").ifTrue(() => {
+                        (octet == 93).ifTrue(() => {
+                            closeArray()
+                        })
+                        (octet == 93).ifFalse(() => {
+                            startValue(octet)
+                        })
+                    })
+
+                    (phase == "value").ifTrue(() => {
+                        startValue(octet)
+                    })
+
+                    (phase == "commaOrEnd").ifTrue(() => {
+                        handled: false
+                        (octet == 44).ifTrue(() => {
+                            frame.phase = "value"
+                            handled = true
+                        })
+                        (octet == 93).ifTrue(() => {
+                            closeArray()
+                            handled = true
+                        })
+                        handled.ifFalse(() => {
+                            fail()
+                        })
+                    })
+                })
+
+                (frame.kind == "object").ifTrue(() => {
+                    phase: frame.phase
+
+                    (phase == "nameOrEnd").ifTrue(() => {
+                        handled: false
+                        (octet == 125).ifTrue(() => {
+                            closeObject()
+                            handled = true
+                        })
+                        (octet == 34).ifTrue(() => {
+                            beginString("name")
+                            handled = true
+                        })
+                        handled.ifFalse(() => {
+                            fail()
+                        })
+                    })
+
+                    (phase == "name").ifTrue(() => {
+                        (octet == 34).ifFalse(() => {
+                            fail()
+                        })
+                        beginString("name")
+                    })
+
+                    (phase == "colon").ifTrue(() => {
+                        (octet == 58).ifFalse(() => {
+                            fail()
+                        })
+                        frame.phase = "value"
+                    })
+
+                    (phase == "value").ifTrue(() => {
+                        startValue(octet)
+                    })
+
+                    (phase == "commaOrEnd").ifTrue(() => {
+                        handled: false
+                        (octet == 44).ifTrue(() => {
+                            frame.phase = "name"
+                            handled = true
+                        })
+                        (octet == 125).ifTrue(() => {
+                            closeObject()
+                            handled = true
+                        })
+                        handled.ifFalse(() => {
+                            fail()
+                        })
+                    })
+                })
+            })
+        })
+    }
+
+    consumeOctet: (octet) => {
+        previousMode: mode
+
+        (previousMode == "normal").ifTrue(() => {
+            processNormal(octet)
+        })
+
+        (previousMode == "number").ifTrue(() => {
+            isNumberCharacter(octet).ifTrue(() => {
+                numberBuffer.add(octet)
+            })
+
+            isNumberCharacter(octet).ifFalse(() => {
+                isNumberTerminator(octet).ifFalse(() => {
+                    fail()
+                })
+                finalizeNumber()
+                processNormal(octet)
+            })
+        })
+
+        (previousMode == "literal").ifTrue(() => {
+            consumeLiteralOctet(octet)
+        })
+
+        (previousMode == "string").ifTrue(() => {
+            handled: false
+
+            (octet == 34).ifTrue(() => {
+                completeString()
+                handled = true
+            })
+
+            (octet == 92).ifTrue(() => {
+                mode = "escape"
+                handled = true
+            })
+
+            handled.ifFalse(() => {
+                (octet < 32).ifTrue(() => {
+                    fail()
+                })
+                stringBuffer.add(octet)
+            })
+        })
+
+        (previousMode == "escape").ifTrue(() => {
+            handled: false
+
+            (octet == 34).ifTrue(() => {
+                stringBuffer.add(34)
+                handled = true
+            })
+            (octet == 92).ifTrue(() => {
+                stringBuffer.add(92)
+                handled = true
+            })
+            (octet == 47).ifTrue(() => {
+                stringBuffer.add(47)
+                handled = true
+            })
+            (octet == 98).ifTrue(() => {
+                stringBuffer.add(8)
+                handled = true
+            })
+            (octet == 102).ifTrue(() => {
+                stringBuffer.add(12)
+                handled = true
+            })
+            (octet == 110).ifTrue(() => {
+                stringBuffer.add(10)
+                handled = true
+            })
+            (octet == 114).ifTrue(() => {
+                stringBuffer.add(13)
+                handled = true
+            })
+            (octet == 116).ifTrue(() => {
+                stringBuffer.add(9)
+                handled = true
+            })
+
+            (octet == 117).ifTrue(() => {
+                unicodeValue = 0
+                unicodeDigits = 0
+                mode = "unicode"
+                handled = true
+            })
+
+            handled.ifFalse(() => {
+                fail()
+            })
+
+            (mode == "escape").ifTrue(() => {
+                mode = "string"
+            })
+        })
+
+        (previousMode == "unicode").ifTrue(() => {
+            digit: hexDigit(octet)
+            (digit < 0).ifTrue(() => {
+                fail()
+            })
+
+            unicodeValue = unicodeValue * 16 + digit
+            unicodeDigits = unicodeDigits + 1
+
+            (unicodeDigits == 4).ifTrue(() => {
+                noPendingHigh: pendingHighSurrogate === null
+
+                noPendingHigh.ifTrue(() => {
+                    high: unicodeValue >= 55296
+                    (unicodeValue <= 56319).ifFalse(() => {
+                        high = false
+                    })
+
+                    low: unicodeValue >= 56320
+                    (unicodeValue <= 57343).ifFalse(() => {
+                        low = false
+                    })
+
+                    high.ifTrue(() => {
+                        pendingHighSurrogate = unicodeValue
+                        mode = "surrogateBackslash"
+                    })
+
+                    high.ifFalse(() => {
+                        low.ifTrue(() => {
+                            fail()
+                        })
+                        appendScalarUtf8(stringBuffer, unicodeValue)
+                        mode = "string"
+                    })
+                })
+
+                noPendingHigh.ifFalse(() => {
+                    low: unicodeValue >= 56320
+                    (unicodeValue <= 57343).ifFalse(() => {
+                        low = false
+                    })
+                    low.ifFalse(() => {
+                        fail()
+                    })
+
+                    scalar: 65536 + (pendingHighSurrogate - 55296) * 1024 + (unicodeValue - 56320)
+                    pendingHighSurrogate = null
+                    appendScalarUtf8(stringBuffer, scalar)
+                    mode = "string"
+                })
+            })
+        })
+
+        (previousMode == "surrogateBackslash").ifTrue(() => {
+            (octet == 92).ifFalse(() => {
+                fail()
+            })
+            mode = "surrogateU"
+        })
+
+        (previousMode == "surrogateU").ifTrue(() => {
+            (octet == 117).ifFalse(() => {
+                fail()
+            })
+            unicodeValue = 0
+            unicodeDigits = 0
+            mode = "unicode"
+        })
+    }
+
+    parser = {
+        feed: (text) => {
+            failed.ifTrue(() => {
+                Error().signal()
+            })
+            finished.ifTrue(() => {
+                fail()
+            })
+
+            ignoredStringValidation: text + ""
+            Encoding.UTF8.encode(text).each((octet) => {
+                consumeOctet(octet)
+            })
+            parser
+        }
+
+        finish: () => {
+            failed.ifTrue(() => {
+                Error().signal()
+            })
+            finished.ifTrue(() => {
+                fail()
+            })
+
+            (mode == "number").ifTrue(() => {
+                finalizeNumber()
+            })
+
+            (mode == "normal").ifFalse(() => {
+                fail()
+            })
+            (depth == 0).ifFalse(() => {
+                fail()
+            })
+            rootDone.ifFalse(() => {
+                fail()
+            })
+
+            finished = true
+            parser
+        }
+    }
+
+    parser
+}

@@ -439,3 +439,10 @@ library/json/encode-cycle-error.protos	error	-
 library/json/encode-malformed-number-error.protos	error	-
 library/json/encode-malformed-object-key-error.protos	error	-
 library/json/encode-malformed-kind-error.protos	error	-
+library/json/event-parser-chunk-boundaries.protos	boolean	true
+library/json/event-parser-top-level-number-finish.protos	boolean	true
+library/json/event-parser-empty-feed.protos	boolean	true
+library/json/event-parser-duplicate-name-error.protos	error	-
+library/json/event-parser-incomplete-surrogate-error.protos	error	-
+library/json/event-parser-reuse-after-finish-error.protos	error	-
+library/json/event-parser-trailing-data-error.protos	error	-

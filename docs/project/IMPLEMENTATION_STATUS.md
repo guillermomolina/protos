@@ -340,7 +340,7 @@ work may proceed without waiting for an earlier-numbered roadmap item.
 |---|---|---|---|---|
 | LIB001 | Collections library | CLOSED | `SAME_COMMIT` | LIB001-A/B/C/D/E closed; initial Set/IdentitySet and eager sequential Array algorithm surfaces are fully published with no new runtime collection family, generic hierarchy, or production Java boundary. |
 | LIB002 | Text / encoding conveniences | READY | — | I015 is CLOSED; begin with a fresh ordinary-library design/API audit over finalized Encoding/TextReader/TextWriter semantics without redefining Core conversion or I/O behavior. |
-| LIB003 | JSON | IN_PROGRESS | — | LIB003-A explicit JSON data model, LIB003-B strict semantic-String parser, and LIB003-C ordinary encoder published; LIB003-D streaming/adapters is READY and final conformance remains dependency-gated. |
+| LIB003 | JSON | IN_PROGRESS | — | LIB003-A/B/C and LIB003-D1 incremental event parsing published; LIB003-D2 event writing is READY, with TextReader/TextWriter adapters and final conformance still dependency-gated. |
 | LIB004 | Filesystem / process conveniences | READY | — | I016 + I017 closed; begin with a fresh focused convenience-layer design/audit. Any text-oriented convenience that needs I015/LIB002 remains individually dependency-gated and must preserve explicit authority boundaries. |
 | LIB005 | Networking | OPEN | — | Roadmap item only; `spec/io/IO_CORE.md` currently leaves network authority acquisition, socket APIs, DNS/name resolution, and transport configuration outside its standardized scope. Re-audit and establish prerequisites before implementation. |
 
@@ -466,7 +466,10 @@ Planned slices:
 | LIB003-A | CLOSED | `0.2.149-SNAPSHOT` | `SAME_COMMIT` | Exact-case `std:json/JSON`; six fresh ordinary JSON node constructors; exact decimal coefficient/exponent Number data; standard frozen rest-capture Array payloads; duplicate object-name rejection; module-local behavior vs transferable pure-data conformance; focused design record persisted. |
 | LIB003-B | CLOSED | `0.2.151-SNAPSHOT` | `SAME_COMMIT` | Strict RFC-8259-oriented semantic-String parser; UTF-8 octet scanner; explicit non-recursive JSON container stack; strict escapes/surrogate pairs; decoded duplicate-name rejection; exact coefficient/exponent decimal parsing; balanced Array chunk materialization; top-level scalar support. |
 | LIB003-C | CLOSED | `0.2.163-SNAPSHOT` | `SAME_COMMIT` | Ordinary `JSON.encode(node)` in Protos source: complete representation validation, exact coefficient/exponent decimal emission without Float formatting, JSON String escaping, retained Map traversal order, active-path IdentityMap cycle rejection, and shared non-cyclic subtree support. |
-| LIB003-D | READY | — | — | JSON-specific incremental events and TextReader/TextWriter/byte adapters may now build on the published tree parser/encoder contracts; no generic Serializer hierarchy. |
+| LIB003-D | IN_PROGRESS | — | — | Decomposed after the mandatory current-main audit: D1 incremental parser events published; D2 incremental event writer READY; D3 TextReader/TextWriter adapters dependency-gated. No generic Serializer hierarchy. |
+| LIB003-D1 | CLOSED | `0.2.164-SNAPSHOT` | `SAME_COMMIT` | Fresh ordinary `JSON.eventParser(consumer)` with synchronous `feed(String)` / `finish()`; JSON-specific structural/scalar/name events; strict chunk-invariant syntax, Unicode, duplicate-name and exact-decimal handling; explicit non-recursive container stack; no JSON tree materialization. |
+| LIB003-D2 | READY | — | — | JSON-specific incremental event writer over the D1 vocabulary with structural validation and deterministic JSON text emission; no TextWriter coupling yet. |
+| LIB003-D3 | BLOCKED_BY_DEPENDENCIES | — | — | Compose the completed incremental parser/writer surfaces with standard TextReader/TextWriter and byte/Encoding adapters while preserving the existing I/O ordering, lifecycle, ownership and Future contracts. |
 | LIB003-E | BLOCKED_BY_DEPENDENCIES | — | — | Final cross-slice conformance/security/resource stress audit and top-level LIB003 closure after A-D satisfy the initial JSON surface. |
 
 Dependencies:

@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.164-SNAPSHOT
+
+- Continue `LIB003 — JSON` with `LIB003-D1`: publish fresh ordinary `JSON.eventParser(consumer)` instances with synchronous `feed(String)` and `finish()` operations and a JSON-specific event vocabulary for object/array boundaries, member names, and null/boolean/string/exact-decimal scalar values.
+- Preserve the strict LIB003-B grammar across arbitrary semantic-String chunk boundaries, including split literals/numbers/escapes/surrogate pairs, decoded duplicate-name rejection, exact unbounded coefficient/exponent decimals, one top-level value and trailing-data rejection. Container parsing uses an explicit linked frame stack and does not materialize a JSON tree.
+- Make consumer callbacks non-reentrant for the parser and terminal on consumer failure; already-emitted events are not rolled back if later JSON input is malformed. Keep YAML/XML vocabularies, generic Serializer abstractions, object persistence, TextReader/TextWriter lifecycle and byte-adapter policy outside D1.
+- Decompose the remaining streaming work into LIB003-D2 incremental event writing and LIB003-D3 I/O adapters. LIB003-D remains IN_PROGRESS and top-level LIB003 remains IN_PROGRESS; no normative specification or production Java boundary changes are introduced.
+
 ## 0.2.163-SNAPSHOT
 
 - Continue `LIB003 — JSON` with `LIB003-C`: publish ordinary-Protos `JSON.encode(node)` for the explicit JSON tree model. The encoder validates each visited representation, preserves Array order and retained Object Map traversal order, and rejects malformed or cyclic trees instead of reflecting over arbitrary application objects or inventing references.
