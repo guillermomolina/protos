@@ -450,3 +450,11 @@ object/local-shadow-assignment-stays-local.protos	integer	31
 object/duplicate-local-create-error.protos	error	-
 object/composition-reservations.protos	integer	849
 object/composition-conflict-error.protos	error	-
+library/json/event-writer-nested-output.protos	boolean	true
+library/json/event-writer-parser-pipeline.protos	boolean	true
+library/json/event-writer-top-level-number.protos	boolean	true
+library/json/event-writer-duplicate-name-error.protos	error	-
+library/json/event-writer-name-outside-object-error.protos	error	-
+library/json/event-writer-missing-object-value-error.protos	error	-
+library/json/event-writer-malformed-number-error.protos	error	-
+library/json/event-writer-reuse-after-finish-error.protos	error	-

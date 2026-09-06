@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.165-SNAPSHOT
+
+- Continue `LIB003 — JSON` with `LIB003-D2`: publish fresh ordinary `JSON.eventWriter(consumer)` instances with synchronous `feed(event)` and `finish()` over the JSON-specific D1 event vocabulary. The writer validates structural order, matching container boundaries, one root value, object name/value pairing and duplicate member names while inserting deterministic JSON punctuation itself.
+- Emit exactly one semantic String chunk for each accepted event. Reuse the published JSON constructors/encoder for String escaping, strict Boolean/String/Number domains and exact unbounded coefficient/exponent decimal output, preventing a second divergent scalar-encoding contract.
+- Keep consumer callbacks synchronous/non-reentrant and terminal on consumer failure; already-consumed output is not rolled back by later invalid events. Keep TextWriter/Future/ownership and byte-I/O lifecycle behavior outside D2 for LIB003-D3.
+- Close LIB003-D2 and make LIB003-D3 READY. LIB003-D and top-level LIB003 remain IN_PROGRESS; no normative specification or production Java boundary changes are introduced.
+
 ## 0.2.164-SNAPSHOT
 
 - Continue `LIB003 — JSON` with `LIB003-D1`: publish fresh ordinary `JSON.eventParser(consumer)` instances with synchronous `feed(String)` and `finish()` operations and a JSON-specific event vocabulary for object/array boundaries, member names, and null/boolean/string/exact-decimal scalar values.

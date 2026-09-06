@@ -2087,3 +2087,316 @@ eventParser: (emit) => {
 
     parser
 }
+
+eventWriter: (emit) => {
+    failed: false
+    finished: false
+    writer: null
+    topFrame: null
+    depth: 0
+    rootDone: false
+    chunk: ""
+
+    fail: () => {
+        failed = true
+        Error().signal()
+    }
+
+    append: (text) => {
+        chunk = chunk + text
+    }
+
+    publishChunk: () => {
+        // Keep callbacks non-reentrant and make a consumer failure terminal.
+        failed = true
+        emit(chunk)
+        failed = false
+    }
+
+    prepareValue: () => {
+        (depth == 0).ifTrue(() => {
+            rootDone.ifTrue(() => {
+                fail()
+            })
+        })
+
+        (depth == 0).ifFalse(() => {
+            frame: topFrame
+            handled: false
+
+            (frame.kind == "array").ifTrue(() => {
+                (frame.phase == "valueOrEnd").ifFalse(() => {
+                    fail()
+                })
+                frame.first.ifFalse(() => {
+                    append(",")
+                })
+                frame.first = false
+                frame.phase = "inValue"
+                handled = true
+            })
+
+            (frame.kind == "object").ifTrue(() => {
+                (frame.phase == "value").ifFalse(() => {
+                    fail()
+                })
+                frame.phase = "inValue"
+                handled = true
+            })
+
+            handled.ifFalse(() => {
+                fail()
+            })
+        })
+    }
+
+    completeValue: () => {
+        (depth == 0).ifTrue(() => {
+            rootDone.ifTrue(() => {
+                fail()
+            })
+            rootDone = true
+        })
+
+        (depth == 0).ifFalse(() => {
+            frame: topFrame
+            handled: false
+
+            (frame.kind == "array").ifTrue(() => {
+                (frame.phase == "inValue").ifFalse(() => {
+                    fail()
+                })
+                frame.phase = "valueOrEnd"
+                handled = true
+            })
+
+            (frame.kind == "object").ifTrue(() => {
+                (frame.phase == "inValue").ifFalse(() => {
+                    fail()
+                })
+                frame.phase = "nameOrEnd"
+                handled = true
+            })
+
+            handled.ifFalse(() => {
+                fail()
+            })
+        })
+    }
+
+    beginArray: () => {
+        prepareValue()
+        append("[")
+        frame: {
+            parent: topFrame
+            kind: "array"
+            phase: "valueOrEnd"
+            first: true
+        }
+        topFrame = frame
+        depth = depth + 1
+    }
+
+    endArray: () => {
+        (depth > 0).ifFalse(() => {
+            fail()
+        })
+        frame: topFrame
+        (frame.kind == "array").ifFalse(() => {
+            fail()
+        })
+        (frame.phase == "valueOrEnd").ifFalse(() => {
+            fail()
+        })
+
+        topFrame = frame.parent
+        depth = depth - 1
+        append("]")
+        completeValue()
+    }
+
+    beginObject: () => {
+        prepareValue()
+        append("{")
+        frame: {
+            parent: topFrame
+            kind: "object"
+            phase: "nameOrEnd"
+            first: true
+            names: Map()
+        }
+        topFrame = frame
+        depth = depth + 1
+    }
+
+    endObject: () => {
+        (depth > 0).ifFalse(() => {
+            fail()
+        })
+        frame: topFrame
+        (frame.kind == "object").ifFalse(() => {
+            fail()
+        })
+        (frame.phase == "nameOrEnd").ifFalse(() => {
+            fail()
+        })
+
+        topFrame = frame.parent
+        depth = depth - 1
+        append("}")
+        completeValue()
+    }
+
+    emitName: (name) => {
+        (depth > 0).ifFalse(() => {
+            fail()
+        })
+        frame: topFrame
+        (frame.kind == "object").ifFalse(() => {
+            fail()
+        })
+        (frame.phase == "nameOrEnd").ifFalse(() => {
+            fail()
+        })
+
+        // Reuse the published encoder for String-domain validation and escaping.
+        encodedName: encode(string(name))
+        frame.names.containsKey(name).ifTrue(() => {
+            fail()
+        })
+        frame.names.atPut(name, true)
+
+        frame.first.ifFalse(() => {
+            append(",")
+        })
+        frame.first = false
+        append(encodedName)
+        append(":")
+        frame.phase = "value"
+    }
+
+    emitScalar: (kind, value) => {
+        encoded: null
+        handled: false
+
+        // Validate/encode the complete scalar before changing structural state.
+        // Invalid scalar arguments therefore contribute no output and consume no
+        // event position, matching the ordinary synchronous argument boundary.
+        (kind == "null").ifTrue(() => {
+            (value === null).ifFalse(() => {
+                fail()
+            })
+            encoded = "null"
+            handled = true
+        })
+
+        (kind == "boolean").ifTrue(() => {
+            encoded = encode(boolean(value))
+            handled = true
+        })
+
+        (kind == "string").ifTrue(() => {
+            encoded = encode(string(value))
+            handled = true
+        })
+
+        (kind == "number").ifTrue(() => {
+            coefficient: value.coefficient
+            exponent: value.exponent
+            encoded = encode(number(coefficient, exponent))
+            handled = true
+        })
+
+        handled.ifFalse(() => {
+            fail()
+        })
+        prepareValue()
+        append(encoded)
+        completeValue()
+    }
+
+    writer = {
+        feed: (event) => {
+            failed.ifTrue(() => {
+                Error().signal()
+            })
+            finished.ifTrue(() => {
+                fail()
+            })
+
+            chunk = ""
+            kind: event.kind
+            value: event.value
+            ignoredKindValidation: kind + ""
+            handled: false
+
+            (kind == "objectStart").ifTrue(() => {
+                (value === null).ifFalse(() => { fail() })
+                beginObject()
+                handled = true
+            })
+            (kind == "objectEnd").ifTrue(() => {
+                (value === null).ifFalse(() => { fail() })
+                endObject()
+                handled = true
+            })
+            (kind == "arrayStart").ifTrue(() => {
+                (value === null).ifFalse(() => { fail() })
+                beginArray()
+                handled = true
+            })
+            (kind == "arrayEnd").ifTrue(() => {
+                (value === null).ifFalse(() => { fail() })
+                endArray()
+                handled = true
+            })
+            (kind == "name").ifTrue(() => {
+                emitName(value)
+                handled = true
+            })
+            (kind == "null").ifTrue(() => {
+                emitScalar(kind, value)
+                handled = true
+            })
+            (kind == "boolean").ifTrue(() => {
+                emitScalar(kind, value)
+                handled = true
+            })
+            (kind == "string").ifTrue(() => {
+                emitScalar(kind, value)
+                handled = true
+            })
+            (kind == "number").ifTrue(() => {
+                emitScalar(kind, value)
+                handled = true
+            })
+
+            handled.ifFalse(() => {
+                fail()
+            })
+
+            publishChunk()
+            writer
+        }
+
+        finish: () => {
+            failed.ifTrue(() => {
+                Error().signal()
+            })
+            finished.ifTrue(() => {
+                fail()
+            })
+            (depth == 0).ifFalse(() => {
+                fail()
+            })
+            rootDone.ifFalse(() => {
+                fail()
+            })
+
+            finished = true
+            writer
+        }
+    }
+
+    writer
+}

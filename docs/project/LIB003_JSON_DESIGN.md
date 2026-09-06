@@ -1,6 +1,6 @@
 # LIB003 JSON Design Record
 
-Status: LIB003-A/B/C and LIB003-D1 published; LIB003-D2 selected for next publication
+Status: LIB003-A/B/C and LIB003-D1/D2 published; LIB003-D3 selected for next publication
 Work item: `LIB003`
 Nature: Project design record; **non-normative**
 Cross-cutting context: `docs/design/STRUCTURED_DATA_AND_SERIALIZATION.md`
@@ -557,6 +557,39 @@ JSON tree. Retained parser state is limited to open-container state, decoded
 member names needed to reject duplicates in currently open objects, and the
 currently incomplete String/Number token. Final resource-stress validation
 remains owned by LIB003-E.
+
+### LIB003-D2 implementation closure
+
+D2 publishes `JSON.eventWriter(consumer)`. Each call creates one fresh ordinary
+writer exposing synchronous `feed(event)` and `finish()` operations. The accepted
+event vocabulary is exactly the JSON-specific D1 vocabulary; D2 does not create
+a generic serializer/event hierarchy or reuse JSON names for YAML/XML.
+
+Each successful `feed` validates one complete event against the writer's current
+JSON structural state before invoking the consumer. A valid event contributes
+exactly one non-empty semantic String chunk. Array separators, object member
+separators and colons are inserted deterministically by the writer; callers do
+not provide punctuation events.
+
+Object member `name` events require semantic Strings and are escaped through the
+published ordinary JSON encoder contract. Duplicate names are rejected per open
+object using a local Map. Scalar null/Boolean/String/Number events reuse the
+published constructor/encoder validation, so exact decimal coefficient/exponent
+semantics, String escaping, Unicode preservation and invalid scalar domains do
+not acquire a second implementation contract.
+
+The writer maintains an explicit linked container stack. `objectEnd` and
+`arrayEnd` must match the current open container, object names must be followed
+by exactly one value, only one root value is accepted, and `finish()` succeeds
+only after that root is complete and every container is closed. A successful
+finish makes the writer single-use.
+
+Consumer callbacks are synchronous and non-reentrant for the writer. A consumer
+failure propagates and leaves that writer terminal. Output already accepted by a
+consumer is not rolled back when a later event is invalid; that is the intended
+incremental streaming boundary. No TextWriter/Future/ownership or byte-I/O
+lifecycle semantics are introduced by D2; those remain the sole purpose of D3.
+
 
 ## Raw / lossless JSON
 
