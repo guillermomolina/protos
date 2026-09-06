@@ -369,3 +369,14 @@ collections/array-read-out-of-range-error.protos	error	-
 collections/array-write-float-index-error.protos	error	-
 collections/array-write-negative-index-error.protos	error	-
 collections/array-write-out-of-range-error.protos	error	-
+collections/array-each-copied-receiver-error.protos	error	-
+collections/array-each-delegated-receiver-error.protos	error	-
+collections/array-each-empty-noninvokable-error.protos	error	-
+collections/array-each-noninvokable-error.protos	error	-
+collections/array-each-order-and-return-receiver.protos	boolean	true
+collections/array-each-polymorphic-callable.protos	boolean	true
+collections/array-each-shallow-snapshot.protos	boolean	true
+collections/array-each-wrong-arity-error.protos	error	-
+collections/array-size-copied-receiver-error.protos	error	-
+collections/array-size-delegated-receiver-error.protos	error	-
+collections/array-size-wrong-arity-error.protos	error	-

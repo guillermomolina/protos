@@ -37,19 +37,26 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 /**
- * Java-side completion coverage that still requires host-established lifecycle
- * state or host observation of callback control transfer. Factory/indexing,
- * ordinary identity, and receiver-domain behavior are covered in .protos.
+ * Java-side Array coverage retained only where the current test must establish
+ * represented lifecycle state directly or inspect host-visible control transfer
+ * after a callback signal. Ordinary size/each semantics live in .protos.
  */
 class ProtosArrayConformanceCompletionTest {
     @Test
-    void closedArrayAllowsReplacementButFrozenArrayRejectsWithoutMutation()
+    void representedLifecyclePreservesClosedReplacementFrozenRejectionAndSize()
             throws IOException {
         ProtosPrelude prelude = corePrelude();
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosArrayValue xs =
-                prelude.newArray(List.of(new ProtosIntegerValue(BigInteger.ONE)));
+                prelude.newArray(
+                        List.of(
+                                new ProtosIntegerValue(BigInteger.ONE),
+                                new ProtosIntegerValue(BigInteger.TWO)));
         activation.context().createLocalSlot("xs", xs);
+
+        assertEquals(
+                BigInteger.TWO,
+                ((ProtosIntegerValue) execute(activation, "xs.size()")).value());
 
         xs.close();
         assertEquals(
@@ -58,87 +65,26 @@ class ProtosArrayConformanceCompletionTest {
         assertEquals(
                 BigInteger.TWO,
                 ((ProtosIntegerValue) xs.indexedAt(BigInteger.ZERO)).value());
+        assertEquals(
+                BigInteger.TWO,
+                ((ProtosIntegerValue) execute(activation, "xs.size()")).value());
 
         xs.freeze();
-        assertThrows(
-                ProtosSignalException.class,
-                () -> execute(activation, "xs[0] = 3"));
+        ProtosSignalException signal =
+                assertThrows(
+                        ProtosSignalException.class,
+                        () -> execute(activation, "xs[0] = 3"));
+        assertSame(prelude.errorPrototype(), signal.error().parent().orElseThrow());
         assertEquals(
                 BigInteger.TWO,
                 ((ProtosIntegerValue) xs.indexedAt(BigInteger.ZERO)).value());
-    }
-
-    @Test
-    void sizeIsSemanticIntegerAcrossStatesAndRejectsWrongArity()
-            throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        ProtosActivation activation = prelude.newModuleActivation();
-        ProtosArrayValue xs =
-                prelude.newArray(
-                        List.of(
-                                new ProtosIntegerValue(BigInteger.ONE),
-                                new ProtosIntegerValue(BigInteger.TWO)));
-        activation.context().createLocalSlot("xs", xs);
-
         assertEquals(
                 BigInteger.TWO,
                 ((ProtosIntegerValue) execute(activation, "xs.size()")).value());
-        xs.close();
-        assertEquals(
-                BigInteger.TWO,
-                ((ProtosIntegerValue) execute(activation, "xs.size()")).value());
-        xs.freeze();
-        assertEquals(
-                BigInteger.TWO,
-                ((ProtosIntegerValue) execute(activation, "xs.size()")).value());
-        assertThrows(
-                ProtosSignalException.class,
-                () -> execute(activation, "xs.size(1)"));
     }
 
     @Test
-    void eachAcceptsOrdinaryInvokableObjectUsesSnapshotOrderAndReturnsReceiver()
-            throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        ProtosActivation activation = prelude.newModuleActivation();
-        ProtosArrayValue xs =
-                prelude.newArray(
-                        List.of(
-                                new ProtosIntegerValue(BigInteger.ONE),
-                                new ProtosIntegerValue(BigInteger.TWO)));
-        List<Object> seen = new ArrayList<>();
-        ProtosObjectValue callback =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
-        callback.createLocalSlot(
-                "call",
-                ProtosClosureValue.nativeClosure(
-                        (callbackActivation, supplied) -> {
-                            seen.add(supplied.get(0));
-                            if (seen.size() == 1) {
-                                xs.indexedPut(
-                                        BigInteger.ONE,
-                                        new ProtosIntegerValue(BigInteger.valueOf(99)));
-                            }
-                            return supplied.get(0);
-                        }));
-        activation.context().createLocalSlot("xs", xs);
-        activation.context().createLocalSlot("callback", callback);
-
-        Object result = execute(activation, "xs.each(callback)");
-
-        assertSame(xs, result);
-        assertEquals(2, seen.size());
-        assertEquals(BigInteger.ONE, ((ProtosIntegerValue) seen.get(0)).value());
-        assertEquals(
-                BigInteger.TWO,
-                ((ProtosIntegerValue) seen.get(1)).value());
-        assertEquals(
-                BigInteger.valueOf(99),
-                ((ProtosIntegerValue) xs.indexedAt(BigInteger.ONE)).value());
-    }
-
-    @Test
-    void eachPropagatesCallbackFailureAndStopsAtFailingElement()
+    void eachPropagatesExactCallbackFailureAndStopsAtFailingElement()
             throws IOException {
         ProtosPrelude prelude = corePrelude();
         ProtosActivation activation = prelude.newModuleActivation();
