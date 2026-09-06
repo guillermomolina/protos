@@ -32,74 +32,15 @@ import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 class ProtosArrayIndexedProtocolTest {
-    @Test
-    void bracketReadUsesStandardArrayAt() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-
-        Object result =
-                execute(
-                        prelude,
-                        """
-                        xs: Array(10, 20)
-                        xs[1]
-                        """);
-
-        assertEquals(
-                BigInteger.valueOf(20),
-                ((ProtosIntegerValue) result).value());
-    }
-
-    @Test
-    void indexedAssignmentMutatesExistingElementAndReturnsExactRhs() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        ProtosActivation activation = prelude.newModuleActivation();
-        Object marker = new com.guillermomolina.protos.runtime.ProtosObjectValue(
-                com.guillermomolina.protos.runtime.ProtosObjectValue.rootObject());
-        activation.context().createLocalSlot("marker", marker);
-
-        Object result =
-                new ProtosSourceCompiler()
-                        .compile(
-                                """
-                                xs: Array(10, 20)
-                                xs[0] = marker
-                                """)
-                        .call(activation);
-
-        ProtosArrayValue xs =
-                (ProtosArrayValue)
-                        activation.context().readLocalSlot("xs").orElseThrow();
-        assertSame(marker, result);
-        assertSame(marker, xs.indexedAt(BigInteger.ZERO));
-        assertEquals(BigInteger.valueOf(2), xs.indexedSize());
-    }
-
-    @Test
-    void customAtPutReturnValueDoesNotReplaceIndexedAssignmentResult() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-
-        Object result =
-                execute(
-                        prelude,
-                        """
-                        receiver: {
-                            atPut: (index, value) => 999
-                        }
-                        receiver[0] = 7
-                        """);
-
-        assertEquals(
-                BigInteger.valueOf(7),
-                ((ProtosIntegerValue) result).value());
-    }
-
+    // Retained until the lifecycle slice: source code has no operation that
+    // directly establishes this host-side closed represented-array state.
     @Test
     void closedArrayMayReplaceExistingElement() throws IOException {
         ProtosPrelude prelude = corePrelude();
         ProtosActivation activation = prelude.newModuleActivation();
-        ProtosArrayValue xs = prelude.newArray(
-                java.util.List.of(
-                        new ProtosIntegerValue(BigInteger.ONE)));
+        ProtosArrayValue xs =
+                prelude.newArray(
+                        java.util.List.of(new ProtosIntegerValue(BigInteger.ONE)));
         xs.close();
         activation.context().createLocalSlot("xs", xs);
 
@@ -116,13 +57,14 @@ class ProtosArrayIndexedProtocolTest {
                 ((ProtosIntegerValue) xs.indexedAt(BigInteger.ZERO)).value());
     }
 
+    // Retained until the lifecycle slice for the same reason as the closed case.
     @Test
     void frozenArrayAtPutSignalsBeforeMutation() throws IOException {
         ProtosPrelude prelude = corePrelude();
         ProtosActivation activation = prelude.newModuleActivation();
-        ProtosArrayValue xs = prelude.newArray(
-                java.util.List.of(
-                        new ProtosIntegerValue(BigInteger.ONE)));
+        ProtosArrayValue xs =
+                prelude.newArray(
+                        java.util.List.of(new ProtosIntegerValue(BigInteger.ONE)));
         xs.freeze();
         activation.context().createLocalSlot("xs", xs);
 
@@ -140,29 +82,7 @@ class ProtosArrayIndexedProtocolTest {
                 ((ProtosIntegerValue) xs.indexedAt(BigInteger.ZERO)).value());
     }
 
-    @Test
-    void standardArrayAtRejectsNonIntegerAndOutOfBounds() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-
-        assertThrows(
-                ProtosSignalException.class,
-                () -> execute(prelude, "Array(1).at(1.0)"));
-        assertThrows(
-                ProtosSignalException.class,
-                () -> execute(prelude, "Array(1).at(1)"));
-        assertThrows(
-                ProtosSignalException.class,
-                () -> execute(prelude, "Array(1).at(-1)"));
-    }
-
-    private static Object execute(ProtosPrelude prelude, String source) {
-        return new ProtosSourceCompiler()
-                .compile(source)
-                .call(prelude.newModuleActivation());
-    }
-
     private static ProtosPrelude corePrelude() throws IOException {
-        return new ProtosCoreBootstrap()
-                .bootstrap(Path.of("protos", "lib", "core"));
+        return new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
     }
 }

@@ -17,72 +17,22 @@
 
 package com.guillermomolina.protos.execution;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
-import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.file.Path;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ProtosStandardArrayFactoryTest {
+    // Deliberately Java-side: this verifies the represented-value materialization
+    // and mutation state, while source-level factory semantics live in .protos.
     @Test
-    void arrayCallCreatesFreshOpenArrayWithExactSuppliedElements() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        ProtosActivation activation = prelude.newModuleActivation();
-        Object marker = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        activation.context().createLocalSlot("marker", marker);
-
-        ProtosArrayValue first =
-                (ProtosArrayValue)
-                        new ProtosSourceCompiler()
-                                .compile("Array(1, marker)")
-                                .call(activation);
-        ProtosArrayValue second =
-                (ProtosArrayValue)
-                        new ProtosSourceCompiler()
-                                .compile("Array(1, marker)")
-                                .call(activation);
-
-        assertNotSame(first, second);
-        assertFalse(first.isClosed());
-        assertFalse(first.isFrozen());
-        assertSame(prelude.arrayPrototype(), first.parent().orElseThrow());
-        assertEquals(BigInteger.valueOf(2), first.indexedSize());
-        assertEquals(
-                BigInteger.ONE,
-                ((ProtosIntegerValue) first.indexedAt(BigInteger.ZERO)).value());
-        assertSame(marker, first.indexedAt(BigInteger.ONE));
-    }
-
-    @Test
-    void singleIntegerArgumentIsOneExactElementNotLength() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-
-        ProtosArrayValue result =
-                (ProtosArrayValue)
-                        new ProtosSourceCompiler()
-                                .compile("Array(3)")
-                                .call(prelude.newModuleActivation());
-
-        assertEquals(BigInteger.ONE, result.indexedSize());
-        assertEquals(
-                BigInteger.valueOf(3),
-                ((ProtosIntegerValue) result.indexedAt(BigInteger.ZERO)).value());
-    }
-
-    @Test
-    void inheritedArrayFactoryUsesInvocationReceiverAsNewArrayParent() throws IOException {
+    void factoryMaterializesOpenRepresentedArrayWithInvocationReceiverParent()
+            throws IOException {
         ProtosPrelude prelude = corePrelude();
         ProtosActivation activation = prelude.newModuleActivation();
 
@@ -99,34 +49,15 @@ class ProtosStandardArrayFactoryTest {
                                 .call(activation);
 
         Object myArray = activation.context().readLocalSlot("MyArray").orElseThrow();
+        assertFalse(result.isClosed());
+        assertFalse(result.isFrozen());
         assertSame(myArray, result.parent().orElseThrow());
-        assertEquals(BigInteger.valueOf(2), result.indexedSize());
-    }
-
-    @Test
-    void copiedStandardArrayFactoryRejectsUnrelatedReceiver() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        Object standardCall =
-                prelude.arrayPrototype().readLocalSlot("call").orElseThrow();
-        ProtosObjectValue unrelated =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
-        unrelated.createLocalSlot("call", standardCall);
-        ProtosActivation activation = prelude.newModuleActivation();
-        activation.context().createLocalSlot("unrelated", unrelated);
-
-        ProtosSignalException signal =
-                assertThrows(
-                        ProtosSignalException.class,
-                        () ->
-                                new ProtosSourceCompiler()
-                                        .compile("unrelated()")
-                                        .call(activation));
-
-        assertSame(prelude.errorPrototype(), signal.error().parent().orElseThrow());
+        assertSame(
+                prelude.arrayPrototype(),
+                prelude.bindings().readLocalSlot("Array").orElseThrow());
     }
 
     private static ProtosPrelude corePrelude() throws IOException {
-        return new ProtosCoreBootstrap()
-                .bootstrap(Path.of("protos", "lib", "core"));
+        return new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
     }
 }
