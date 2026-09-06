@@ -72,37 +72,6 @@ final class ProtosStandardTextWriterProtocolTest {
     }
 
     @Test
-    void writeTextAndWriteLinePreserveWholeOperationOrdering() throws Exception {
-        ProtosPrelude prelude = core();
-        ProtosActivation activation = prelude.newModuleActivation();
-        ScriptedTarget target = new ScriptedTarget(activation, false, false);
-        Pending firstLower = target.pendingWrite();
-
-        ProtosObjectValue writer =
-                writer(
-                        prelude,
-                        activation,
-                        target.target,
-                        encoding(prelude, "UTF8"),
-                        false);
-
-        ProtosFutureValue first = writeText(writer, activation, "A");
-        ProtosFutureValue second = writeLine(writer, activation, "B");
-
-        assertEquals(ProtosFutureValue.State.PENDING, first.state());
-        assertEquals(ProtosFutureValue.State.PENDING, second.state());
-        assertEquals(1, target.writes);
-        assertArrayEquals(new byte[] {'A'}, target.payloads.get(0));
-
-        firstLower.resolve(target.target, activation);
-
-        assertEquals(ProtosFutureValue.State.RESOLVED, first.state());
-        assertEquals(ProtosFutureValue.State.RESOLVED, second.state());
-        assertEquals(2, target.writes);
-        assertArrayEquals(new byte[] {'B', '\n'}, target.payloads.get(1));
-    }
-
-    @Test
     void emptyWriteDoesNoEncodingOrTargetIoButStaysBehindEarlierOperation()
             throws Exception {
         ProtosPrelude prelude = core();
@@ -132,32 +101,6 @@ final class ProtosStandardTextWriterProtocolTest {
                 1,
                 target.writes,
                 "writeText(\"\") must contribute no target write");
-    }
-
-    @Test
-    void encodingFailureIsAtomicAndDoesNotPoisonWriter() throws Exception {
-        ProtosPrelude prelude = core();
-        ProtosActivation activation = prelude.newModuleActivation();
-        ScriptedTarget target = new ScriptedTarget(activation, false, false);
-
-        ProtosObjectValue writer =
-                writer(
-                        prelude,
-                        activation,
-                        target.target,
-                        encoding(prelude, "Latin1"),
-                        false);
-
-        ProtosFutureValue rejected = writeText(writer, activation, "€");
-        assertEquals(ProtosFutureValue.State.FAILED, rejected.state());
-        assertErrorParent(
-                prelude, rejected.failedError().orElseThrow(), "EncodingError");
-        assertEquals(0, target.writes);
-
-        ProtosFutureValue valid = writeText(writer, activation, "A");
-        assertEquals(ProtosFutureValue.State.RESOLVED, valid.state());
-        assertEquals(1, target.writes);
-        assertArrayEquals(new byte[] {'A'}, target.payloads.get(0));
     }
 
     @Test
@@ -191,36 +134,6 @@ final class ProtosStandardTextWriterProtocolTest {
         assertSame(ioError, flush.failedError().orElseThrow());
         assertEquals(1, target.writes);
         assertEquals(0, target.flushes);
-    }
-
-    @Test
-    void flushChainsOnlyWhenImmediateTargetExposesFlushable() throws Exception {
-        ProtosPrelude prelude = core();
-        ProtosActivation activation = prelude.newModuleActivation();
-
-        ScriptedTarget flushable = new ScriptedTarget(activation, true, false);
-        ProtosObjectValue writer =
-                writer(
-                        prelude,
-                        activation,
-                        flushable.target,
-                        encoding(prelude, "UTF8"),
-                        false);
-        ProtosFutureValue flushed = flush(writer, activation);
-        assertEquals(ProtosFutureValue.State.RESOLVED, flushed.state());
-        assertEquals(1, flushable.flushes);
-
-        ScriptedTarget plain = new ScriptedTarget(activation, false, false);
-        ProtosObjectValue plainWriter =
-                writer(
-                        prelude,
-                        activation,
-                        plain.target,
-                        encoding(prelude, "UTF8"),
-                        false);
-        ProtosFutureValue plainFlush = flush(plainWriter, activation);
-        assertEquals(ProtosFutureValue.State.RESOLVED, plainFlush.state());
-        assertEquals(0, plain.flushes);
     }
 
     @Test
@@ -291,42 +204,6 @@ final class ProtosStandardTextWriterProtocolTest {
     }
 
     @Test
-    void borrowingCloseLeavesTargetOpenAndOwningCloseClosesItExactlyOnce()
-            throws Exception {
-        ProtosPrelude prelude = core();
-        ProtosActivation activation = prelude.newModuleActivation();
-
-        ScriptedTarget borrowedTarget = new ScriptedTarget(activation, false, true);
-        ProtosObjectValue borrowed =
-                writer(
-                        prelude,
-                        activation,
-                        borrowedTarget.target,
-                        encoding(prelude, "UTF8"),
-                        false);
-        assertEquals(
-                ProtosFutureValue.State.RESOLVED,
-                close(borrowed, activation).state());
-        assertEquals(0, borrowedTarget.closes);
-
-        ScriptedTarget ownedTarget = new ScriptedTarget(activation, false, true);
-        ProtosObjectValue owned =
-                writer(
-                        prelude,
-                        activation,
-                        ownedTarget.target,
-                        encoding(prelude, "UTF8"),
-                        true);
-
-        ProtosFutureValue firstClose = close(owned, activation);
-        ProtosFutureValue secondClose = close(owned, activation);
-        assertNotSame(firstClose, secondClose);
-        assertEquals(ProtosFutureValue.State.RESOLVED, firstClose.state());
-        assertEquals(ProtosFutureValue.State.RESOLVED, secondClose.state());
-        assertEquals(1, ownedTarget.closes);
-    }
-
-    @Test
     void owningClosePreservesEarlierWrapperFailureAsPrimaryButStillClosesTarget()
             throws Exception {
         ProtosPrelude prelude = core();
@@ -356,46 +233,6 @@ final class ProtosStandardTextWriterProtocolTest {
         assertEquals(ProtosFutureValue.State.FAILED, close.state());
         assertSame(writeError, close.failedError().orElseThrow());
         assertEquals(1, target.closes);
-    }
-
-    @Test
-    void invalidTextArgumentsReturnFailedFutureBeforeTargetIo() throws Exception {
-        ProtosPrelude prelude = core();
-        ProtosActivation activation = prelude.newModuleActivation();
-        ScriptedTarget target = new ScriptedTarget(activation, false, false);
-
-        ProtosObjectValue writer =
-                writer(
-                        prelude,
-                        activation,
-                        target.target,
-                        encoding(prelude, "UTF8"),
-                        false);
-
-        ProtosFutureValue wrongType =
-                assertInstanceOf(
-                        ProtosFutureValue.class,
-                        ProtosInvocation.invokeMessage(
-                                writer,
-                                "writeText",
-                                List.of(new ProtosIntegerValue(BigInteger.ONE)),
-                                activation));
-        assertEquals(ProtosFutureValue.State.FAILED, wrongType.state());
-        assertErrorParent(
-                prelude,
-                wrongType.failedError().orElseThrow(),
-                "InvalidIOArgument");
-
-        ProtosFutureValue wrongArity =
-                assertInstanceOf(
-                        ProtosFutureValue.class,
-                        ProtosInvocation.invokeMessage(
-                                writer,
-                                "writeLine",
-                                List.of(),
-                                activation));
-        assertEquals(ProtosFutureValue.State.FAILED, wrongArity.state());
-        assertEquals(0, target.writes);
     }
 
     private static ProtosPrelude core() throws Exception {

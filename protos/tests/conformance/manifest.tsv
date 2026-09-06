@@ -505,3 +505,12 @@ text-reader/readline-bound-zero-error.protos	future-error-parent	InvalidIOArgume
 text-reader/readline-bound-negative-error.protos	future-error-parent	InvalidIOArgument
 text-reader/readline-bound-wrong-type-error.protos	future-error-parent	InvalidIOArgument
 text-reader/readline-wrong-arity-error.protos	future-error-parent	InvalidIOArgument
+text-writer/write-order-text-then-line.protos	future-boolean	true
+text-writer/encoding-error-parent.protos	future-error-parent	EncodingError
+text-writer/encoding-failure-atomic-and-reusable.protos	future-boolean	true
+text-writer/flush-forwards-only-to-flushable-target.protos	future-boolean	true
+text-writer/borrowed-close-does-not-close-target.protos	future-boolean	true
+text-writer/owning-close-exactly-once-and-fresh-future.protos	future-boolean	true
+text-writer/writetext-wrong-type-error.protos	future-error-parent	InvalidIOArgument
+text-writer/writeline-wrong-arity-error.protos	future-error-parent	InvalidIOArgument
+text-writer/invalid-argument-no-target-io-and-reusable.protos	future-boolean	true

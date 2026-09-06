@@ -1,0 +1,59 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+state: {
+    writes: 0
+    firstSize: 0
+    first0: 0
+    secondSize: 0
+    second0: 0
+    second1: 0
+}
+
+target: {
+    write: (bytes) => {
+        current: state.writes
+        (current == 0).ifTrue(() => {
+            state.firstSize = bytes.size()
+            state.first0 = bytes.at(0)
+        })
+        (current == 1).ifTrue(() => {
+            state.secondSize = bytes.size()
+            state.second0 = bytes.at(0)
+            state.second1 = bytes.at(1)
+        })
+        state.writes = current + 1
+        (() => { target }).future()
+    }
+}
+
+writer: TextWriter(target, Encoding.UTF8)
+writer.writeText("A")
+second: writer.writeLine("B")
+second.then((result) => {
+    (result === writer).and() {
+        (state.writes == 2).and() {
+            (state.firstSize == 1).and() {
+                (state.first0 == 65).and() {
+                    (state.secondSize == 2).and() {
+                        (state.second0 == 66).and() { state.second1 == 10 }
+                    }
+                }
+            }
+        }
+    }
+})
