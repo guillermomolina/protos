@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-04
+Last updated: 2026-09-06
 
 This document is the primary normative owner of File opening, filesystem authority, Path, and URL/filesystem conversion semantics.
 
@@ -383,7 +383,106 @@ When a Filesystem maps a normal component to a concrete backend, that component 
 
 Whether a concrete Filesystem treats two distinct normal names as referring to the same backend entry is a property of that Filesystem's namespace semantics. That lookup behavior does not change portable Path equality.
 
-The minimum filesystem operation closed by this model is `open`. Existence queries, metadata/stat, remove, mkdir, rename, symlink operations, directory iteration, and richer namespace operations remain outside this I/O revision.
+### 20.3 Atomic file-entry replacement and removal
+
+Core v0.1 additionally closes the minimum namespace-mutation surface needed to
+publish a completely prepared file without exposing partial target content:
+
+```text
+filesystem.replace(sourcePath, targetPath) -> Future<Filesystem>
+filesystem.remove(path)                     -> Future<Filesystem>
+```
+
+Both operations are standardized asynchronous Filesystem operations. After
+successful dispatch, each invocation produces its own fresh standard Future
+identity under the general Future result-identity rule. On successful completion
+the Future resolves to the exact Filesystem receiver.
+
+Each supplied path must be a semantic `Path`. Invalid Path-domain arguments fail
+the returned Future with a fresh `InvalidIOArgument` before namespace/backend
+effects. Target absence, source absence, confinement rejection, unsupported
+namespace-entry kind, lack of backend support, and other operational failures are
+ordinary `IOError` outcomes unless another existing I/O rule requires a narrower
+category.
+
+The one Filesystem receiver supplies all authority for both paths. `replace`
+does not combine authority from two Filesystem capabilities and does not fall
+back to ambient host paths. Both paths are resolved under section 20.1
+confinement. If a backend cannot prove confinement and the required atomic
+transition for the selected entries, it must fail without committing the
+operation.
+
+The initial standard surface is file-entry-only. A source selected by `replace`
+must be an existing ordinary file entry. Its target may be absent or an existing
+ordinary file entry. `remove` likewise applies only to an existing ordinary file
+entry. Directories and final-component symbolic-link/reparse/other indirection
+entries are outside these two initial operations; an implementation must not
+silently follow or reinterpret such a final entry in order to make the operation
+succeed. Intermediate resolution remains governed by the ordinary Filesystem
+confinement rules.
+
+`replace(sourcePath, targetPath)` performs one indivisible namespace transition.
+At its commitment point the entry selected by `sourcePath` ceases to exist under
+that source name and `targetPath` names that exact selected source resource. If a
+target file entry existed immediately before commitment, that target entry is
+replaced in the same transition. An observer resolving the target across the
+transition therefore sees either the previously selected target resource or the
+source resource; it never observes an operation-created missing-target window or
+partially copied target content. If the target was absent, source removal and
+target appearance are still one transition rather than a remove-then-create
+sequence.
+
+If source and target resolve to the same existing namespace entry/resource at the
+operation's selection point, `replace` succeeds as a namespace no-op: it does not
+remove that entry merely because the two supplied Paths are distinct values or
+backend aliases.
+
+`replace` is a namespace operation, not a byte-copy protocol. It does not modify,
+snapshot, flush, close, or synchronize the selected source resource's contents.
+Callers that require a prepared immutable-at-publication byte state establish that
+state through ordinary File sequencing before invoking `replace`. Independently
+authorized writes to the selected resource remain governed by their existing File
+and backend ordering semantics.
+
+`remove(path)` performs one indivisible namespace transition in which the
+selected file entry ceases to exist. It does not close, cancel, retarget, or
+otherwise revoke already-open `File` capabilities bound to that resource. The
+stable selected-resource rule remains in force: a File opened before a successful
+replace/remove continues to denote the resource it selected even if the namespace
+entry later names another resource or no longer exists.
+
+For both operations, all validation and tentative backend work before commitment
+must remain non-observable as a namespace mutation attributable to the operation.
+If cancellation wins or the operation fails before commitment, the source and
+target namespace entries remain unchanged by that operation. The atomic namespace
+transition itself is the irreversible semantic commitment boundary. Once it has
+committed, cancellation can no longer win and the standard operation resolves
+successfully; it does not report a failed/cancelled result whose own namespace
+effect is implementation-selectably old, new, or uncertain. A backend that cannot
+provide a determinate committed-success versus uncommitted-failure outcome must
+not expose that attempt as a conforming standard replace/remove operation.
+
+These operations introduce no implicit Filesystem FIFO. Separate opens,
+replacements, and removals remain independently progressing asynchronous
+operations unless ordinary Protos sequencing or another normative dependency
+orders them. When operations are genuinely concurrent, the backend may choose
+which atomic selection/commitment point occurs first; once chosen, each operation
+must preserve its own stable resource selection and atomic transition semantics.
+
+Atomic namespace visibility is distinct from crash durability. Successful
+`replace` or `remove` does not imply a namespace-durability barrier, and
+`File.sync()` remains scoped to the selected File resource under `BYTE_IO.md`; it
+does not make creation, removal, replacement, or parent-directory metadata
+portable-crash-durable. Core v0.1 therefore does not promise which otherwise
+valid namespace binding survives a later host/backend crash solely because a
+replace/remove Future previously resolved. A future namespace-sync capability may
+add such a guarantee without weakening the live atomic-visibility contract here.
+
+The minimum Filesystem namespace surface closed by this revision is therefore
+`open`, file-entry `replace`, and file-entry `remove`. Existence queries,
+metadata/stat, mkdir, general rename/move beyond the replacement contract,
+symlink operations, directory iteration, directory removal, and richer namespace
+operations remain outside this I/O revision.
 
 ---
 ## 21. URL and Path

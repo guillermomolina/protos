@@ -2,6 +2,8 @@
 
 ## 0.2.158-SNAPSHOT
 
+- Resolve B006 normatively with D041 / specification revision `0.1.378`: add the minimal general confined file-entry `Filesystem.replace(sourcePath, targetPath)` and `Filesystem.remove(path)` surface, with failure-atomic namespace visibility, explicit commitment/cancellation/failure aftermath, stable already-open File binding, and no implicit namespace crash-durability guarantee.
+- Transition B006 from BLOCKED to READY and formalize I021 as the implementation owner for the new general Filesystem namespace surface. Package-tool metadata mutation remains disabled until I021 is published; no package-specific native rename/truncate-write workaround is authorized.
 - Continue package-tool manifest Slice 3 with Slice 3B1 by completing the TOML 1.0 String surface required by manifest schema v1. `self:TomlSyntax` now handles multiline basic and literal strings, first-newline trimming, deterministic CRLF-to-LF normalization, basic-string line continuations, one/two quote runs inside multiline strings, and the one/two content quotes permitted immediately next to a closing triple-quote delimiter. Multiline quote runs are consumed by an exclusive branch so they cannot fall through and be appended twice.
 - Add Protos-owned conformance for multiline basic/literal values, line continuation folding, CRLF normalization, internal single/double quote runs, four/five-quote closing boundaries, overlong closing runs, and literal newlines rejected by single-line strings. No production Java parser, Filesystem write, lock mutation, schema/CLI behavior, Standard Library dependency, or LIB work item is introduced; Slice 3 remains open.
 

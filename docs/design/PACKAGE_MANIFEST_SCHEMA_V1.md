@@ -681,8 +681,10 @@ publication remain later networking/registry work.
 Schema v1 is read-only compatible.
 
 `protos add`, `remove`, `resolve`, or any operation that must safely replace
-`protos.toml` or `protos.lock` remains blocked by B006 until general Filesystem
-namespace replacement semantics and implementation are available.
+`protos.toml` or `protos.lock` remains implementation-gated by I021/B006 closure.
+D041 now defines the required general Filesystem namespace replacement/removal
+semantics, but mutation must wait until that general capability is faithfully
+implemented and provisioned to the bundled package tool.
 
 ## Rejected alternatives
 

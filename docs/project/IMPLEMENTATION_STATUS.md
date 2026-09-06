@@ -53,6 +53,7 @@ an item.
 | I019 | Core source naming reconciliation | CLOSED | `SAME_COMMIT` | 29 dominant-owner distributable Core sources use exact canonical Protos names/case after I019-A; private subordinate bootstrap helpers do not defeat public conceptual ownership; all live explicit Core physical-path references reconciled; true aggregation/responsibility sources remain descriptive; no normative or native-boundary change |
 | I019-A | Actor source dominant-owner naming correction | CLOSED | `SAME_COMMIT` | `actor.protos` -> `Actor.protos`; public `Actor` is the dominant conceptual owner and private ActorRef/GroupRef/SendOperation prototype bindings are subordinate bootstrap helpers; naming guard and architecture classification reconciled |
 | I020 | Post-Ixxx implementation audit reconciliation | CLOSED | `SAME_COMMIT` | I020-A/B/C/D complete; D040 missing-`methodHome` `InvalidSuper` implemented; B005 closed |
+| I021 | Filesystem namespace replacement/removal | READY | — | D041 / spec `0.1.378`; implement the general confined failure-atomic `Filesystem.replace`/`remove` surface before package-tool metadata mutation; prerequisite for B006 closure |
 
 ### I020 — Post-Ixxx implementation audit reconciliation
 
@@ -640,6 +641,9 @@ Identifier shape alone is insufficient: incidental IDs from design ideas, tests,
 | B001 | Empty Sequence execution | CLOSED | Implementation area: Truffle lowering / execution of a `CanonicalSequence` containing zero expressions. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
 | B002 | Delegation parent of `without` / `alias` result objects | CLOSED | Implementation area: Standard `Object.without(name)` and `Object.alias(sourceName, aliasName)` message behavior and any runtime helper that constructs their result objects. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
 | B003 | Delegation parent / lookup chain of canonical Boolean values | CLOSED | Implementation area: Standard prototype/delegation bridge for the canonical `true` and `false` runtime representations, including ordinary member lookup and polymorphic invocation through their delegation chains. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
+| B004 | Public Group/GroupRef acquisition and discovery API | CLOSED | D039 defines and I011-21 implements the exact Core v0.1 `Actor.group(...) -> GroupRef` acquisition surface; portable service discovery remains outside Core v0.1. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
+| B005 | `super` without a physical methodHome | CLOSED | D040 defines missing-`methodHome` `InvalidSuper` semantics and I020-D implements them. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
+| B006 | Atomic package metadata replacement | READY | D041 closes the general Filesystem replace/remove semantics; I021 production implementation and package-tool integration remain before final blocker closure. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
 
 ### D family
 
@@ -668,6 +672,8 @@ Identifier shape alone is insufficient: incidental IDs from design ideas, tests,
 | D037 | Path equality versus semantic identity | CLOSED | Clarifies that portable Path equality is structural and filesystem-independent, using rootedness plus the ordered component sequence, while Path semantic identity remains ordinary individual object identity. | `spec/PROTOS_SPEC_CHANGELOG.md` |
 | D038 | Encoding semantic-family membership and receiver domain | CLOSED | Defines Encoding descriptors positively as Encoding semantic values produced or provisioned by normative Encoding-producing operations or explicit permitted host Encoding-provisioning boundaries. | `spec/PROTOS_SPEC_CHANGELOG.md` |
 | D039 | Public ActorGroup acquisition | CLOSED | Defines `Actor.group(firstMember, additionalMembers...) -> GroupRef` as the only Core v0.1 direct Group acquisition surface, with explicit ActorRef initial membership, caller-Process ownership, communication-only GroupRef authority, and service discovery outside Core. | `spec/PROTOS_SPEC_CHANGELOG.md` |
+| D040 | Dynamic super-dispatch context | CLOSED | Defines no-`methodHome` super execution as fresh `InvalidSuper` after ordinary argument-vector evaluation while preserving valid super lookup and `SlotNotFound` behavior. | `spec/PROTOS_SPEC_CHANGELOG.md` |
+| D041 | Failure-atomic Filesystem namespace replacement/removal | CLOSED | Defines confined file-entry `Filesystem.replace`/`remove`, atomic visibility, commitment/cancellation/failure aftermath, stable open-File binding, and the explicit namespace-durability boundary. | `spec/PROTOS_SPEC_CHANGELOG.md` |
 
 <!-- END AUTO-DISCOVERED WORK REGISTRY -->
 

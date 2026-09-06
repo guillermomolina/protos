@@ -477,21 +477,30 @@ the current production CLI.
 This is an implementation prerequisite, not a reason to move manifest parsing
 into Java.
 
-### Filesystem v0.1 is not yet a complete package-store namespace API
+### Filesystem v0.1 closes the metadata-publication minimum, not the full store API
 
-The current normative Filesystem surface focuses on `filesystem.open(path,
-options)` and File capabilities.
+D041 extends the normative Filesystem surface beyond `filesystem.open(path,
+options)` with general confined file-entry `replace(sourcePath, targetPath)` and
+`remove(path)` operations. That is the minimum semantic namespace machinery
+needed for a Protos-written package tool to stage a complete `protos.toml` or
+`protos.lock`, publish it without a partial-target window, and clean abandoned
+staging entries.
 
-A complete package store/archive implementation will eventually need additional
-namespace operations such as directory enumeration/materialization, safe
-directory creation, metadata/type inspection, symlink/reparse handling, atomic
-replace/rename, and deletion/garbage-collection behavior.
+The semantics are now closed, but production availability is still implementation
+work under I021. Package-tool metadata mutation must remain disabled until the
+bundled tool receives that faithful general capability; D041 is not permission
+for a package-specific Java/native rename escape hatch.
 
-Those operations must be designed as general Filesystem capabilities rather than
-as package-manager-only native escape hatches.
+A complete package store/archive implementation still needs additional namespace
+operations such as directory enumeration/materialization, safe directory
+creation, metadata/type inspection, symlink/reparse handling, broader move/rename
+policy, directory removal/garbage-collection behavior, and eventually other
+capabilities identified by the package architecture.
 
-Initial package-tool slices should therefore avoid pretending that the full store
-can already be implemented portably.
+Those remaining operations must likewise be designed as general Filesystem
+capabilities rather than package-manager-only native escape hatches. Initial
+package-tool slices should therefore distinguish the now-closed metadata
+publication minimum from the still-incomplete full store surface.
 
 ### Portable networking is not ready
 

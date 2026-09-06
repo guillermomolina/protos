@@ -9,6 +9,23 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.378] - 2026-09-06
+
+### Failure-atomic Filesystem namespace replacement/removal (D041)
+- Adds the minimal general file-entry namespace mutation surface `filesystem.replace(sourcePath, targetPath) -> Future<Filesystem>` and `filesystem.remove(path) -> Future<Filesystem>`; both use only the explicit Filesystem receiver's authority and preserve the existing confinement model.
+- Defines `replace` as one indivisible source-to-target namespace transition: an existing target remains continuously bound to either the old target resource or the selected source resource, while an absent target appears in the same transition that removes the source name. Copy-then-delete, truncate-and-write, ambient paths, and package-specific rename escapes are not conforming substitutes.
+- Defines `remove` as one indivisible file-entry removal and keeps already-open File capabilities bound to their previously selected resource across replace/remove, preserving the existing stable-resource rule.
+- Restricts the initial new surface to ordinary file entries. Directories and final-component symbolic-link/reparse/other indirection entries remain outside these operations, avoiding an accidental general rename/symlink policy.
+- Makes invalid Path-domain arguments pre-effect `InvalidIOArgument` failures and leaves source/target absence, confinement, unsupported entry/backend and other operational failures in the existing `IOError` family.
+- Fixes cancellation/failure at one commitment point: before commitment a cancelled/failed operation contributes no namespace mutation; the atomic transition is irreversible commitment; after it commits the standard Future resolves successfully rather than exposing an implementation-selectable uncertain replacement outcome.
+- Keeps distinct Filesystem operations independently asynchronous unless ordinary Protos sequencing orders them; no global Filesystem lock, per-Path queue, or same-Actor implicit FIFO is introduced.
+- Separates live atomic visibility from crash durability. Neither successful replace/remove nor File `sync()` implies a namespace-durability barrier; a later namespace-sync capability remains a separate design question.
+
+### Compatibility
+- Existing code that does not use the new Filesystem selectors is unchanged and receives no new ambient Filesystem authority. Filesystem remains host-provisioned rather than a Core-prelude singleton or constructor.
+- The new surface is deliberately narrower than a general move/rename/stat/directory API and does not close package-store enumeration, mkdir, symlink, directory-removal, or network prerequisites.
+- This revision resolves B006's normative dependency and makes I021 implementation work READY. Package-tool metadata mutation remains implementation-gated until the faithful general Filesystem replace/remove capability is available; D041 does not authorize a package-specific native escape hatch.
+
 ## [0.1.377] - 2026-09-06
 
 ### Dynamic super-dispatch context (D040)

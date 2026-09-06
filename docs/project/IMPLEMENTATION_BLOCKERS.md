@@ -235,7 +235,7 @@ No implementation work remains blocked by B005.
 
 ## B006 — Atomic package metadata replacement
 
-Status: BLOCKED
+Status: READY
 
 Implementation area:
 Package-tool Filesystem Slice 2B and every future `protos add`, `protos remove`,
@@ -243,46 +243,54 @@ Package-tool Filesystem Slice 2B and every future `protos add`, `protos remove`,
 `protos.toml` or `protos.lock`.
 
 Normative dependency:
-The current Filesystem v0.1 contract closes `filesystem.open(...)` as its minimum
-namespace operation and explicitly leaves `remove`, `mkdir`, `rename`, symlink
-operations, directory iteration, and richer namespace operations outside this I/O
-revision. File write/truncate can modify one already-selected resource, but that
-surface does not define the failure/cancellation/commitment semantics of replacing
-one namespace entry with a fully written new resource. In-place truncate-and-write
-would permit a failed package operation to expose empty or partial repository
-metadata, so it is not an acceptable substitute for a general replacement
-operation.
+Satisfied by specification revision `0.1.378` / D041. Core Filesystem now defines
+two general file-entry namespace operations:
 
-`Syncable` durability for a File likewise does not, by itself, define durability
-of filesystem namespace changes such as creation, deletion, rename, or directory
-entry replacement.
+```text
+filesystem.replace(sourcePath, targetPath) -> Future<Filesystem>
+filesystem.remove(path)                     -> Future<Filesystem>
+```
+
+`replace` performs one confined failure-atomic source-to-target namespace
+transition, and `remove` performs one confined failure-atomic file-entry removal.
+The contract fixes Path validation, authority, file-entry scope,
+atomicity/visibility, commitment, cancellation, failure aftermath, stable open
+File binding, concurrency, and the explicit separation between live namespace
+atomicity and crash durability.
 
 Specification authority:
-- `spec/io/FILESYSTEM.md` §18 File Open Semantics and §20 Filesystem Authority
-  and Path, especially §20.2's explicit boundary on namespace operations
+- `spec/io/FILESYSTEM.md` §20 Filesystem Authority and Path, especially §20.1
+  confinement and §20.3 atomic file-entry replacement/removal
 - `spec/io/BYTE_IO.md` for File/Syncable durability and its namespace-durability
   exclusion
-- `spec/io/IO_CORE.md` for I/O commitment, cancellation, lifecycle, and failure
-  rules
+- `spec/io/IO_CORE.md` for I/O Future identity, commitment, cancellation,
+  lifecycle, and failure rules
 
 Unblock condition:
-The normative general Filesystem surface defines a confined namespace operation,
-or a composition of general operations, sufficient to publish a completely
-written replacement for an existing metadata file without exposing partial
-content. The specification must determine the relevant validation, authority,
-atomicity/visibility, commitment, cancellation, failure aftermath, and any
-required namespace-durability behavior precisely enough for independent
-implementations to agree. A faithful production implementation of that general
-surface must then be available to the package tool without a package-specific
-native escape hatch.
+The normative portion is satisfied by revision `0.1.378` / D041: independent
+implementations can now agree on the general operation shape and every
+programmer-visible success/failure/cancellation outcome needed for safe metadata
+publication without choosing package-specific semantics.
+
+B006 closes only after a faithful production implementation of that general
+Filesystem surface is available to the bundled package tool and package metadata
+mutation uses it without an ambient/native package-only escape hatch. That
+implementation work is tracked as I021.
 
 Current consequence:
-Package-tool Slice 2A may provision and use a read-only, explicitly confined
-Filesystem capability for project metadata. Package metadata mutation remains
-blocked. The package tool must not fall back to in-place truncate/write,
-`PackageNative.rename(...)`, ambient host filesystem access, or another
-package-only privileged path merely to create or replace `protos.toml` or
-`protos.lock`.
+I021 is READY. Package-tool Filesystem Slice 2B may proceed only after the
+applicable I021 implementation slice publishes a confined production
+`Filesystem.replace`/`remove` backend. Until then the package tool remains
+read-only for repository metadata and must not fall back to in-place
+truncate/write, `PackageNative.rename(...)`, ambient host filesystem access, or
+another package-only privileged path.
+
+Once I021 is available, the intended package metadata publication composition is
+ordinary Protos code: create/write the staging file through the granted
+Filesystem/File capabilities, complete the required File sequencing, atomically
+replace the target through `filesystem.replace(...)`, and use
+`filesystem.remove(...)` to clean an uncommitted staging entry when required.
+D041 itself does not prescribe staging-name policy or package-command policy.
 
 Independent work:
 Read-only TOML parsing and manifest validation, lock parsing/canonical validation,
@@ -290,6 +298,14 @@ semantic resolution-input modeling, in-memory version/constraint resolution, and
 read-only execution preflight can continue independently. Work that needs only
 already-open File byte/text behavior also remains independent.
 
+History:
+B006 was introduced as BLOCKED because Filesystem v0.1 exposed only `open` and
+File operations; truncate-and-write could expose partial package metadata and no
+general namespace replacement contract existed. D041 / revision `0.1.378`
+closes that semantic gap with general file-entry replace/remove operations, so
+B006 transitions `BLOCKED -> READY`. It remains READY, not CLOSED, until I021 and
+the package-tool integration satisfy the implementation side of the blocker.
+
 Library dependency:
-None. B006 is a missing general Filesystem semantic/capability boundary, not a
-missing Standard Library package and does not allocate a `LIBxxx` item.
+None. B006 is a general Filesystem semantic/capability boundary, not a missing
+Standard Library package and does not allocate a `LIBxxx` item.
