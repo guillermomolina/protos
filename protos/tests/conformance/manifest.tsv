@@ -270,3 +270,10 @@ equality/numeric-exact-float-equality.protos	boolean	true
 equality/numeric-nan-signed-zero-equality.protos	boolean	true
 equality/numeric-non-number-equality-false.protos	boolean	true
 equality/numeric-non-number-receiver-error.protos	error	-
+integer/copied-standard-plus-noninteger-receiver-error.protos	error	-
+integer/div-both-negative.protos	integer	2
+integer/division-negative-divisor.protos	float-bits	bfe0000000000000
+integer/mod-big.protos	integer	9
+integer/mod-both-negative.protos	integer	-1
+integer/negated-delegated-noninteger-receiver-error.protos	error	-
+integer/percent-delegated-noninteger-receiver-before-mod-error.protos	error	-
