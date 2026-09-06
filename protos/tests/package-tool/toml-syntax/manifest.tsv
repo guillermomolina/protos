@@ -46,3 +46,13 @@ document-table-dotted-header-redefinition-error.protos	error
 document-table-header-dotted-redefinition-error.protos	error
 document-table-inline-extension-error.protos	error
 document-table-scalar-to-table-error.protos	error
+document-table-array-of-tables-basic.protos	true
+document-table-array-of-tables-nested-latest.protos	true
+document-table-array-of-tables-implicit-super-later.protos	true
+document-table-array-of-tables-static-array-conflict-error.protos	error
+document-table-array-of-tables-table-to-array-conflict-error.protos	error
+document-table-array-of-tables-array-to-table-conflict-error.protos	error
+document-table-array-of-tables-child-before-parent-error.protos	error
+document-table-array-of-tables-nested-array-to-table-conflict-error.protos	error
+document-table-array-of-tables-nested-table-to-array-conflict-error.protos	error
+document-table-array-of-tables-inline-parent-conflict-error.protos	error

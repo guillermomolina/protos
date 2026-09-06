@@ -53,13 +53,13 @@ its relation to any legacy Slice 3 terminology that remains useful for continuit
 | TOOL001-C1 | package-tool manifest Slice 3A | CLOSED | `8150d8219664b50ec66748639a47a1629638a8ed` | Internal `self:TomlSyntax` parser foundation is written in Protos and deliberately does not acquire package-schema meaning. |
 | TOOL001-C2 | package-tool manifest Slice 3B1 | CLOSED | `dc82976cd95ad4f08d446fbb7aedb43adf818612` | TOML 1.0 String surface required by manifest schema v1 is completed; schema/CLI behavior remains above the syntax engine. |
 | TOOL001-C3 | package-tool manifest Slice 3B2-A | CLOSED | `SAME_COMMIT` | `self:TomlDocument.statements(text)` provides document-level lexical statement segmentation without table/schema meaning. |
-| TOOL001-C4 | package-tool manifest Slice 3B2-B | IN_PROGRESS | TOOL001-C4A published | Canonical TOML document/table assembly parent; C4A closes ordinary headers/dotted/inline-table assembly and C4B remains READY for arrays-of-tables plus table-model closure. |
+| TOOL001-C4 | package-tool manifest Slice 3B2-B | CLOSED | `SAME_COMMIT` | Canonical TOML document/table assembly is complete across C4A ordinary tables and C4B arrays-of-tables; schema/package meaning remains above this parser boundary. |
 | TOOL001-C4A | package-tool manifest Slice 3B2-B1 | CLOSED | `SAME_COMMIT` | `self:TomlDocument.table(text)` assembles ordinary TOML headers, dotted keys and inline tables into the canonical nested node/Map model with TOML redefinition invariants. |
-| TOOL001-C4B | package-tool manifest Slice 3B2-B2 | READY | — | Add TOML 1.0 arrays-of-tables and final table-model conformance without schema/package meaning. |
-| TOOL001-C5 | package-tool manifest Slice 3C | BLOCKED_BY_DEPENDENCIES | — | Validate manifest schema v1 and construct ordinary-Protos `ManifestV1` data after C4. |
+| TOOL001-C4B | package-tool manifest Slice 3B2-B2 | CLOSED | `SAME_COMMIT` | TOML 1.0 arrays-of-tables append in source order, nested headers resolve through the latest array element, and table/array/static-array conflicts fail closed. |
+| TOOL001-C5 | package-tool manifest Slice 3C | READY | — | Validate manifest schema v1 over the now-complete canonical TOML model and construct ordinary-Protos `ManifestV1` data. |
 | TOOL001-C6 | package-tool manifest Slice 3D | BLOCKED_BY_DEPENDENCIES | — | Read exactly `protos.toml` through existing confined project Filesystem authority, UTF-8 decode, parse/validate and produce user-facing diagnostics. |
 | TOOL001-C7 | package-tool manifest Slice 3 closure | BLOCKED_BY_DEPENDENCIES | — | Cross-slice conformance, architecture/status reconciliation and closure of the bounded legacy manifest Slice 3 surface. |
-| TOOL001-C | historical manifest Slice 3 parent | IN_PROGRESS | C1/C2/C3/C4A plus schema-v1 design `85ac538d378eeb2153e318145cae69114563e858` | C4A closes ordinary table assembly; continue with C4B arrays-of-tables/table-model closure before C5 schema validation and later read/diagnostic closure. |
+| TOOL001-C | historical manifest Slice 3 parent | IN_PROGRESS | C1/C2/C3/C4 plus schema-v1 design `85ac538d378eeb2153e318145cae69114563e858` | Canonical TOML parsing is closed through C4; continue with C5 schema-v1 validation/model construction, then C6 read/diagnostics and C7 closure. |
 
 B006's normative prerequisite path through I021 remains historical evidence; it
 is not reopened by this tracking migration.

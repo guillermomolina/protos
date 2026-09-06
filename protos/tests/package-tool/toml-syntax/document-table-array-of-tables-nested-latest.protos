@@ -1,0 +1,33 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Document: import("self:TomlDocument")
+root: Document.table("[[fruits]]\nname = \"apple\"\n[fruits.physical]\ncolor = \"red\"\n[[fruits.varieties]]\nname = \"red delicious\"\n[[fruits.varieties]]\nname = \"granny smith\"\n[[fruits]]\nname = \"banana\"\n[[fruits.varieties]]\nname = \"plantain\"\n")
+fruits: root.value.at("fruits").value
+apple: fruits.at(0)
+banana: fruits.at(1)
+appleVarieties: apple.value.at("varieties").value
+bananaVarieties: banana.value.at("varieties").value
+ok: fruits.size() == 2
+(apple.value.at("name").value == "apple").ifFalse(() => { ok = false })
+(apple.value.at("physical").value.at("color").value == "red").ifFalse(() => { ok = false })
+(appleVarieties.size() == 2).ifFalse(() => { ok = false })
+(appleVarieties.at(0).value.at("name").value == "red delicious").ifFalse(() => { ok = false })
+(appleVarieties.at(1).value.at("name").value == "granny smith").ifFalse(() => { ok = false })
+(banana.value.at("name").value == "banana").ifFalse(() => { ok = false })
+(banana.value.containsKey("physical")).ifTrue(() => { ok = false })
+(bananaVarieties.size() == 1).ifFalse(() => { ok = false })
+(bananaVarieties.at(0).value.at("name").value == "plantain").ifFalse(() => { ok = false })
+ok

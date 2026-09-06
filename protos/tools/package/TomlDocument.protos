@@ -444,6 +444,50 @@ table: (text) => {
         })
     }
 
+    latestArrayTable: (arrayNode) => {
+        (arrayNode.kind == "array").ifFalse(() => {
+            fail()
+        })
+        states.containsKey(arrayNode).ifFalse(() => {
+            fail()
+        })
+        (states.at(arrayNode) == "array-table").ifFalse(() => {
+            fail()
+        })
+        elements: arrayNode.value
+        (elements.size() == 0).ifTrue(() => {
+            fail()
+        })
+        selected: elements.at(elements.size() - 1)
+        (selected.kind == "table").ifFalse(() => {
+            fail()
+        })
+        selected
+    }
+
+    existingParent: (child) => {
+        selected: null
+
+        (child.kind == "table").ifTrue(() => {
+            states.containsKey(child).ifFalse(() => {
+                fail()
+            })
+            (states.at(child) == "inline").ifTrue(() => {
+                fail()
+            })
+            selected = child
+        })
+
+        (child.kind == "array").ifTrue(() => {
+            selected = latestArrayTable(child)
+        })
+
+        (selected === null).ifTrue(() => {
+            fail()
+        })
+        selected
+    }
+
     selectHeader: (parts) => {
         selected: root
         position: 0
@@ -457,24 +501,26 @@ table: (text) => {
 
             entries.containsKey(name).ifTrue(() => {
                 child = entries.at(name)
-                (child.kind == "table").ifFalse(() => {
-                    fail()
-                })
-                states.containsKey(child).ifFalse(() => {
-                    fail()
-                })
-                state: states.at(child)
-                (state == "inline").ifTrue(() => {
-                    fail()
-                })
 
                 last.ifTrue(() => {
+                    (child.kind == "table").ifFalse(() => {
+                        fail()
+                    })
+                    states.containsKey(child).ifFalse(() => {
+                        fail()
+                    })
+                    state: states.at(child)
                     (state == "implicit").ifTrue(() => {
                         states.atPut(child, "header")
                     })
                     (state == "implicit").ifFalse(() => {
                         fail()
                     })
+                    selected = child
+                })
+
+                last.ifFalse(() => {
+                    selected = existingParent(child)
                 })
             })
 
@@ -487,9 +533,9 @@ table: (text) => {
                 last.ifFalse(() => {
                     states.atPut(child, "implicit")
                 })
+                selected = child
             })
 
-            selected = child
             last.ifFalse(() => {
                 position = position + 1
                 walk()
@@ -498,6 +544,67 @@ table: (text) => {
 
         walk()
         selected
+    }
+
+    selectArrayHeader: (parts) => {
+        selected: root
+        position: 0
+        created: null
+
+        walk: null
+        walk = () => {
+            name: parts.at(position)
+            last: position == parts.size() - 1
+            entries: selected.value
+            child: null
+
+            last.ifTrue(() => {
+                element: node("table", Map())
+                states.atPut(element, "array-element")
+
+                entries.containsKey(name).ifTrue(() => {
+                    child = entries.at(name)
+                    (child.kind == "array").ifFalse(() => {
+                        fail()
+                    })
+                    states.containsKey(child).ifFalse(() => {
+                        fail()
+                    })
+                    (states.at(child) == "array-table").ifFalse(() => {
+                        fail()
+                    })
+                    child.value = Array(...child.value, element)
+                })
+
+                entries.containsKey(name).ifFalse(() => {
+                    child = node("array", Array(element))
+                    entries.atPut(name, child)
+                    states.atPut(child, "array-table")
+                })
+
+                created = element
+            })
+
+            last.ifFalse(() => {
+                entries.containsKey(name).ifTrue(() => {
+                    child = entries.at(name)
+                    selected = existingParent(child)
+                })
+
+                entries.containsKey(name).ifFalse(() => {
+                    child = node("table", Map())
+                    entries.atPut(name, child)
+                    states.atPut(child, "implicit")
+                    selected = child
+                })
+
+                position = position + 1
+                walk()
+            })
+        }
+
+        walk()
+        created
     }
 
     parseHeader: (statement) => {
@@ -513,15 +620,29 @@ table: (text) => {
             fail()
         })
 
-        // Arrays of tables are assigned to TOOL001-C4B.
-        (bounds.left + 1 < bounds.right).ifTrue(() => {
-            (source.at(bounds.left + 1) == 91).ifTrue(() => {
-                fail()
+        arrayHeader: false
+        keyStart: bounds.left + 1
+        keyEnd: bounds.right - 1
+
+        (keyStart < keyEnd).ifTrue(() => {
+            (source.at(keyStart) == 91).ifTrue(() => {
+                arrayHeader = true
+                (keyStart + 1 >= keyEnd).ifTrue(() => {
+                    fail()
+                })
+                (source.at(keyEnd - 1) == 93).ifFalse(() => {
+                    fail()
+                })
+                keyStart = keyStart + 1
+                keyEnd = keyEnd - 1
             })
         })
 
-        keyText: decodeRange(source, bounds.left + 1, bounds.right - 1)
-        Toml.keyPath(keyText)
+        keyText: decodeRange(source, keyStart, keyEnd)
+        {
+            array: arrayHeader
+            path: Toml.keyPath(keyText)
+        }
     }
 
     parseAssignment: (statement) => {
@@ -620,7 +741,13 @@ table: (text) => {
 
             header: source.at(bounds.left) == 91
             header.ifTrue(() => {
-                current = selectHeader(parseHeader(statement))
+                parsedHeader: parseHeader(statement)
+                parsedHeader.array.ifTrue(() => {
+                    current = selectArrayHeader(parsedHeader.path)
+                })
+                parsedHeader.array.ifFalse(() => {
+                    current = selectHeader(parsedHeader.path)
+                })
             })
 
             header.ifFalse(() => {

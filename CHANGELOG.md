@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.183-SNAPSHOT
+
+- Close `TOOL001-C4 — canonical TOML table assembly` with `TOOL001-C4B` (legacy manifest Slice 3B2-B2). Extend ordinary-Protos `self:TomlDocument.table(text)` with TOML 1.0 `[[array-of-tables]]`: the first header creates an Array containing one fresh table, repeated headers append fresh table elements in encounter order, and assignments target the selected fresh element.
+- Resolve ordinary/nested headers through the most recently defined array element exactly at the TOML data-model boundary, including nested arrays-of-tables. Reject static-Array append attempts, normal-table/array-of-table redefinition in either direction, inline-table traversal, and child-before-parent-element ordering. Array-of-table provenance remains parser-private `IdentityMap` state; the returned model stays ordinary `{ kind, value }` nodes backed by Maps and Arrays and acquires no package/schema meaning.
+- Add Protos-owned conformance for ordered append, nested latest-element routing, implicit-super-table completion and the invalid collision/ordering cases from the TOML 1.0 array-of-tables contract. `TOOL001-C4` and C4B close; `TOOL001-C5` becomes READY for strict manifest schema-v1 validation/model construction while C6/C7 remain dependency-gated.
+
 ## 0.2.182-SNAPSHOT
 
 - Close `TOOL002-D2`: grant the bundled Test Tool one explicit standard `Filesystem` capability rooted at `protos/tests/conformance` and backed by a new general read-only tree-confined NIO backend. Nested opens remain relative to pinned `SecureDirectoryStream` handles with `NOFOLLOW_LINKS`; write/create/mutation authority is absent and unsupported host providers fail closed.
