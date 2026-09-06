@@ -51,6 +51,12 @@ Current expectation kinds:
 - `future-error-parent`: the program must return a Future whose terminal state is
   `failed` and whose recorded Error has the standard Error prototype named by
   field 3 as its immediate delegation parent;
+- `future-observation-error-identity`: the program must return an ordinary object
+  with local `future` and zero-argument `observe` slots; the runner waits for the
+  Future to become terminal, invokes `observe` twice, and interprets field 3 as
+  `MODE:ErrorPrototype`. `stored` additionally requires a local `error` slot and
+  both observations must signal that exact object; `fresh` requires distinct
+  Error identities. Both modes require the named immediate Error parent;
 - `future-cancelled`: the program must return a Future whose terminal state is
   `cancelled`; field 3 is `-`.
 

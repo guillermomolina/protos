@@ -161,6 +161,8 @@ future/then-flattens.protos	future-integer	42
 future/all-preserves-input-order.protos	future-integer	42
 future/all-empty.protos	future-integer	0
 future/cancel-before-start.protos	future-cancelled	-
+future/failed-value-resignals-recorded-error.protos	future-observation-error-identity	stored:Error
+future/cancelled-value-fresh-error.protos	future-observation-error-identity	fresh:Cancelled
 future/then-rejects-noninvokable.protos	error	-
 regression/super-send-preserves-dynamic-receiver.protos	integer	17
 regression/nested-closure-super-retains-method-home.protos	integer	9

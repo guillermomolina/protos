@@ -33,6 +33,7 @@ import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.io.IOException;
@@ -201,6 +202,64 @@ final class ProtosLanguageConformanceTest {
                                 loader.load(source).call(activation));
                 awaitTerminal(future, activation);
                 assertEquals(ProtosFutureValue.State.FAILED, future.state());
+            }
+            case "future-observation-error-identity" -> {
+                ProtosActivation activation = prelude.newModuleActivation();
+                ProtosObjectValue fixture =
+                        assertInstanceOf(
+                                ProtosObjectValue.class,
+                                loader.load(source).call(activation));
+                ProtosFutureValue future =
+                        assertInstanceOf(
+                                ProtosFutureValue.class,
+                                fixture.readLocalSlot("future").orElseThrow());
+                ProtosClosureValue observe =
+                        assertInstanceOf(
+                                ProtosClosureValue.class,
+                                fixture.readLocalSlot("observe").orElseThrow());
+                awaitTerminal(future, activation);
+
+                String[] expected = testCase.expectedValue().split(":", 2);
+                if (expected.length != 2) {
+                    throw new IllegalArgumentException(
+                            "future-observation-error-identity expectation must be MODE:ErrorPrototype");
+                }
+                Object expectedParent =
+                        prelude.bindings().readLocalSlot(expected[1]).orElseThrow();
+
+                ProtosSignalException first =
+                        assertThrows(
+                                ProtosSignalException.class,
+                                () -> ProtosClosureInvoker.invoke(observe, List.of(), activation));
+                ProtosSignalException second =
+                        assertThrows(
+                                ProtosSignalException.class,
+                                () -> ProtosClosureInvoker.invoke(observe, List.of(), activation));
+
+                org.junit.jupiter.api.Assertions.assertSame(
+                        expectedParent, first.error().parent().orElseThrow());
+                org.junit.jupiter.api.Assertions.assertSame(
+                        expectedParent, second.error().parent().orElseThrow());
+
+                switch (expected[0]) {
+                    case "stored" -> {
+                        assertEquals(ProtosFutureValue.State.FAILED, future.state());
+                        ProtosObjectValue error =
+                                assertInstanceOf(
+                                        ProtosObjectValue.class,
+                                        fixture.readLocalSlot("error").orElseThrow());
+                        org.junit.jupiter.api.Assertions.assertSame(error, first.error());
+                        org.junit.jupiter.api.Assertions.assertSame(error, second.error());
+                    }
+                    case "fresh" -> {
+                        assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
+                        org.junit.jupiter.api.Assertions.assertNotSame(
+                                first.error(), second.error());
+                    }
+                    default ->
+                            throw new IllegalArgumentException(
+                                    "future-observation-error-identity mode must be stored or fresh");
+                }
             }
             case "future-cancelled" -> {
                 ProtosActivation activation = prelude.newModuleActivation();

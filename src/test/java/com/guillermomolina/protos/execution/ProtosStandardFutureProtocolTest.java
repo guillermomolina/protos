@@ -1,12 +1,25 @@
-/* APL-1.0 licensed work; see LICENSE.TXT. */
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -19,7 +32,6 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import java.math.BigInteger;
 import java.nio.file.Path;
@@ -135,50 +147,6 @@ class ProtosStandardFutureProtocolTest {
 
         future.resolve(ProtosNullValue.INSTANCE, activation);
         assertFalse(domain.dispatchOne());
-    }
-
-    // Deliberately Java-side: the generic source runner can observe a signal but
-    // cannot assert the exact stored Error identity or freshness of repeated
-    // Cancelled observations.
-    @Test
-    void failedAndCancelledObservationHaveRequiredIdentity() throws Exception {
-        ProtosPrelude prelude = core();
-        ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
-        ProtosActivation activation =
-                prelude.newModuleActivation(
-                        new ProtosActorModuleState(),
-                        null,
-                        prelude.newExecutionContext(),
-                        domain);
-
-        ProtosFutureValue failed =
-                new ProtosFutureValue(prelude.futurePrototype(), domain);
-        ProtosObjectValue error = ProtosCoreErrors.newError(activation);
-        failed.fail(error);
-        activation.context().createLocalSlot("f", failed);
-
-        ProtosSignalException failedSignal =
-                assertThrows(
-                        ProtosSignalException.class,
-                        () -> eval(prelude, activation, "f.value()"));
-        assertSame(error, failedSignal.error());
-
-        ProtosFutureValue cancelled =
-                new ProtosFutureValue(prelude.futurePrototype(), domain);
-        cancelled.cancelTerminal();
-        activation.context().createLocalSlot("c", cancelled);
-
-        ProtosObjectValue first =
-                assertThrows(
-                                ProtosSignalException.class,
-                                () -> eval(prelude, activation, "c.value()"))
-                        .error();
-        ProtosObjectValue second =
-                assertThrows(
-                                ProtosSignalException.class,
-                                () -> eval(prelude, activation, "c.value()"))
-                        .error();
-        assertNotSame(first, second);
     }
 
     // Success ordering and empty-input behavior already have executable Protos
