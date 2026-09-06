@@ -163,3 +163,4 @@ future/cancel-before-start.protos	future-cancelled	-
 future/then-rejects-noninvokable.protos	error	-
 regression/super-send-preserves-dynamic-receiver.protos	integer	17
 regression/nested-closure-super-retains-method-home.protos	integer	9
+regression/super-without-method-home-signals-invalid-super.protos	error	-

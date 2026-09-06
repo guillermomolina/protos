@@ -81,8 +81,8 @@ public final class ProtosInvocation {
                 caller.methodHome()
                         .orElseThrow(
                                 () ->
-                                        new IllegalStateException(
-                                                "super dispatch without methodHome is unresolved by B005"));
+                                        new ProtosSignalException(
+                                                ProtosCoreErrors.newInvalidSuper(caller)));
         Object lookupOrigin =
                 methodHome.parent()
                         .orElseThrow(

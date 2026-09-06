@@ -52,11 +52,11 @@ an item.
 | I018 | Core self-hosting / bootstrap minimization | CLOSED | `SAME_COMMIT` | I018-L exhaustive native-boundary inventory and architectural guard complete; I016-D pause lifted |
 | I019 | Core source naming reconciliation | CLOSED | `SAME_COMMIT` | 29 dominant-owner distributable Core sources use exact canonical Protos names/case after I019-A; private subordinate bootstrap helpers do not defeat public conceptual ownership; all live explicit Core physical-path references reconciled; true aggregation/responsibility sources remain descriptive; no normative or native-boundary change |
 | I019-A | Actor source dominant-owner naming correction | CLOSED | `SAME_COMMIT` | `actor.protos` -> `Actor.protos`; public `Actor` is the dominant conceptual owner and private ActorRef/GroupRef/SendOperation prototype bindings are subordinate bootstrap helpers; naming guard and architecture classification reconciled |
-| I020 | Post-Ixxx implementation audit reconciliation | IN_PROGRESS | — | I020-A/B/C CLOSED; I020-D READY after specification revision `0.1.377` / D040 resolved B005 |
+| I020 | Post-Ixxx implementation audit reconciliation | CLOSED | `SAME_COMMIT` | I020-A/B/C/D complete; D040 missing-`methodHome` `InvalidSuper` implemented; B005 closed |
 
 ### I020 — Post-Ixxx implementation audit reconciliation
 
-Status: IN_PROGRESS
+Status: CLOSED
 
 Purpose: Reconcile implementation gaps and validation weaknesses found by the
 post-I001..I019 implementation audit without redefining already-closed normative
@@ -67,15 +67,15 @@ semantics.
 | I020-A | CLOSED | `0.2.150-SNAPSHOT` | `SAME_COMMIT` | Execute canonical `super.message(arguments...)` end-to-end when a physical `methodHome` exists: lookup starts at `parent(methodHome)`, the original dynamic receiver is preserved, the newly selected lookup home is rebound through the ordinary Closure invocation path, spreads use the ordinary ordered argument-vector machinery, nested Closures retain captured receiver/methodHome semantics, and absence after the lookup origin signals `SlotNotFound`. Adds Java and `.protos` conformance. No native-Closure boundary expansion and no normative spec change. |
 | I020-B | CLOSED | — | `SAME_COMMIT` | Test-only reliability closure: both real ExecutorService scheduler tests wait for accepted turns to finish before teardown; managed carrier pools shut down gracefully and propagate any uncaught carrier-thread Throwable back through JUnit instead of permitting Maven/Surefire to report a false green. No production/runtime/specification behavior or implementation version changes. |
 | I020-C | CLOSED | — | `SAME_COMMIT` | Documentation-only reconciliation: repair the literal row-separator escape introduced by I020-A; reconcile the I019 canonical one-owner source count with the executable naming architecture guard; verify and preserve the newer LIB003-A summary/detail dependency reconciliation. No production, test, library, specification or implementation-version change. |
-| I020-D | READY | — | — | Specification revision `0.1.377` / D040 defines missing-`methodHome` super dispatch as one fresh standard `InvalidSuper` failure after ordinary caller-supplied argument/spread evaluation and before lookup; implement the Core prototype/runtime translation and final conformance, then close B005 and I020. |
+| I020-D | CLOSED | `0.2.152-SNAPSHOT` | `SAME_COMMIT` | D040 missing-`methodHome` super semantics: source-backed standard `InvalidSuper -> Error`; caller-supplied arguments/spreads complete first exactly once left-to-right; absent `methodHome` then signals one fresh `InvalidSuper` with no lookup/fallback; present root `methodHome` and exhausted valid lookup remain `SlotNotFound`. Adds focused Java and language conformance and closes B005/I020 without a normative change. |
 
-Audit boundary after I020-A:
+Final I020 closure boundary:
 - valid method-bound `super` is no longer an unsupported canonical expression;
 - the Actor scheduler's real-carrier tests now wait for turn completion and surface uncaught carrier failures to JUnit, eliminating the audit-observed path where an `AssertionError` could be printed from a pool thread while Surefire still reported PASS;
 - project-status drift is reconciled against current executable evidence: I019 records the live canonical one-owner source count, the I020 table separator is valid Markdown again, and the independently published LIB003-A reconciliation is preserved rather than overwritten;
 - dispatch reuses `ProtosValueLookup`, existing Closure binding, activation receiver and physical `methodHome`; there is no parallel method system or runtime `super` object;
 - a nested Closure created during method execution continues to use its captured receiver and `methodHome`, so `super` remains tied to the physical method lookup origin while `this` stays dynamic;
-- D040 closes the previously unspecified no-`methodHome` case as fresh `InvalidSuper` after ordinary argument-vector evaluation and before lookup; B005 and I020-D are READY, with only implementation/conformance remaining;
+- D040 missing-`methodHome` semantics are implemented: after ordinary argument-vector evaluation, absence of `methodHome` signals a fresh `InvalidSuper` before lookup; valid method-bound and root/exhausted `SlotNotFound` paths remain distinct. B005 and I020-D are CLOSED, completing I020.
 - I018 remains unchanged because I020-A adds execution machinery only and no `ProtosClosureValue.nativeClosure(...)` construction site.
 
 ### I011 — Actors

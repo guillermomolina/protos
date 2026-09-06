@@ -29,6 +29,7 @@ _corePreludeBindings: Context {
     Error: Error
     InvalidReturn: InvalidReturn
     SlotNotFound: SlotNotFound
+    InvalidSuper: InvalidSuper
     Cancelled: Cancelled
     FutureResolutionCycle: FutureResolutionCycle
     RequestOutcomeUncertain: RequestOutcomeUncertain

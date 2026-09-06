@@ -113,6 +113,7 @@ class ProtosCoreBootstrapTest {
                         "Error",
                         "InvalidReturn",
                         "SlotNotFound",
+                        "InvalidSuper",
                         "Cancelled",
                         "FutureResolutionCycle",
                         "RequestOutcomeUncertain",

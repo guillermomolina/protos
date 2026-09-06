@@ -13,22 +13,8 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-SlotNotFound: Error {}
-InvalidSuper: Error {}
-Cancelled: Error {}
-FutureResolutionCycle: Error {}
-RequestOutcomeUncertain: Error {}
-NonTransferableValue: Error {}
-NonParallelValue: Error {}
-InvalidPredicateResult: Error {}
-InvalidComparatorResult: Error {}
-InvalidComparatorOrder: Error {}
-ParallelRegionOverlap: Error {}
-ParallelRegionInUse: Error {}
-ParallelRegionOutsideP: Error {}
-IOError: Error {}
-InvalidIOArgument: IOError {}
-IOLifecycleError: IOError {}
-IOCapacityExhausted: IOError {}
-EncodingError: IOError {}
-LineTooLong: IOError {}
+runner: () => {
+    super.noSuchSelector()
+}
+
+runner()

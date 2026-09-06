@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.152-SNAPSHOT
+
+- Close `I020-D` and the post-Ixxx `I020` audit reconciliation by implementing D040 missing-`methodHome` super semantics. Core now publishes source-backed `InvalidSuper -> Error`; after the complete ordinary argument/spread vector finishes, a super send without `methodHome` signals one fresh `InvalidSuper` occurrence before any lookup, while valid method-bound super lookup and `SlotNotFound` behavior remain unchanged.
+- Add focused Java and implementation-independent `.protos` conformance for `InvalidSuper` parentage/freshness, no host `IllegalStateException` leakage, argument-before-dispatch precedence, left-to-right exactly-once effects, spread precedence/order, no receiver fallback, and the root-`Object` empty-search `SlotNotFound` case. B005 and I020 are closed with no normative specification change and no native-Closure boundary expansion.
+
 ## 0.2.151-SNAPSHOT
 
 - Continue `LIB003 — JSON` with `LIB003-B`: publish strict `JSON.parse(text)` in ordinary Protos source over `Encoding.UTF8` octets. The parser accepts every JSON top-level value, rejects comments/trailing commas/extra roots, rejects duplicate member names after escape decoding, handles JSON escapes and surrogate pairs without Unicode normalization, and preserves deterministic Object insertion order.

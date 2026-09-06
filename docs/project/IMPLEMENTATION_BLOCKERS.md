@@ -175,9 +175,10 @@ APIs, durability, explicit Group termination, placement policy, and richer distr
 remain future extension/design work and do not block completion of the now-closed Core v0.1
 ActorGroup acquisition requirement.
 
+
 ## B005 — `super` without a physical methodHome
 
-Status: READY
+Status: CLOSED
 
 Implementation area:
 I020-D execution/failure semantics for a syntactically valid `super.message(...)`
@@ -187,7 +188,7 @@ method metadata.
 
 Normative dependency:
 Satisfied by specification revision `0.1.377` / D040.
-`spec/semantics/EXECUTION_AND_CONTROL.md` §8 now defines super validity as a
+`spec/semantics/EXECUTION_AND_CONTROL.md` §8 defines super validity as a
 dynamic invocation property. After the ordinary caller-supplied argument/spread
 vector completes, absence of `methodHome` signals one fresh standard
 `InvalidSuper` occurrence and performs no lookup. A present `methodHome` with no
@@ -205,25 +206,29 @@ Specification authority:
 
 Unblock condition:
 Satisfied by specification revision `0.1.377` / D040. Independent
-implementations can now determine the exact validity point, argument-before-
-dispatch precedence, absence of lookup on the invalid-context path, standard
-failure category and freshness, and the distinct `SlotNotFound` result for an
-empty or exhausted valid super lookup without consulting `ABSTRACT_RUNTIME.md`.
+implementations can determine the exact validity point, argument-before-dispatch
+precedence, absence of lookup on the invalid-context path, standard failure
+category and freshness, and the distinct `SlotNotFound` result for an empty or
+exhausted valid super lookup.
 
 Current consequence:
-I020-A already implements the valid `methodHome` path, including argument/spread
-evaluation, preservation of the dynamic receiver, nested-Closure capture and
-`SlotNotFound` after the defined lookup origin. I020-D is now READY to add the
-standard `InvalidSuper` Core prototype and translate the existing no-`methodHome`
-host limitation into the specified fresh Protos Error, with focused and language-
-level conformance.
+Implemented by I020-D. Core source publishes `InvalidSuper` as a standard direct
+child of `Error`, the frozen prelude exposes that exact prototype, and the typed
+runtime Error factory creates one fresh occurrence per missing-`methodHome`
+failure. The super-send execution path evaluates the complete ordinary
+argument/spread vector before dispatch and then translates absent `methodHome`
+into the standard Protos `InvalidSuper` control transfer without attempting
+lookup or exposing the former host `IllegalStateException`. I020-A valid
+method-bound receiver/methodHome behavior and `SlotNotFound` outcomes remain
+unchanged.
 
 History:
 B005 moved `BLOCKED -> READY` when specification revision `0.1.377` / D040 made
-the missing-`methodHome` behavior normative. The earlier `InvalidSuper()` name in
-`spec/runtime/ABSTRACT_RUNTIME.md` was informative only and did not itself
-authorize implementation of the standard Error category.
+the missing-`methodHome` behavior normative. I020-D implements that rule and
+publishes focused Java plus language-level conformance, completing the transition
+`READY -> CLOSED`. The earlier `InvalidSuper()` name in
+`spec/runtime/ABSTRACT_RUNTIME.md` remains informative only and was not used as
+independent normative authority.
 
 Independent work:
-Standard Library, performance, and unrelated implementation work may continue
-independently while I020-D is implemented and validated.
+No implementation work remains blocked by B005.

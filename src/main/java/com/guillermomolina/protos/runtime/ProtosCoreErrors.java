@@ -24,6 +24,7 @@ public final class ProtosCoreErrors {
         ERROR("Error"),
         INVALID_RETURN("InvalidReturn"),
         SLOT_NOT_FOUND("SlotNotFound"),
+        INVALID_SUPER("InvalidSuper"),
         CANCELLED("Cancelled"),
         FUTURE_RESOLUTION_CYCLE("FutureResolutionCycle"),
         REQUEST_OUTCOME_UNCERTAIN("RequestOutcomeUncertain"),
@@ -79,6 +80,10 @@ public final class ProtosCoreErrors {
 
     public static ProtosObjectValue newSlotNotFound(ProtosActivation activation) {
         return newOccurrence(activation, StandardError.SLOT_NOT_FOUND);
+    }
+
+    public static ProtosObjectValue newInvalidSuper(ProtosActivation activation) {
+        return newOccurrence(activation, StandardError.INVALID_SUPER);
     }
 
     public static ProtosObjectValue newUnqualifiedLookupError(ProtosActivation activation) {
