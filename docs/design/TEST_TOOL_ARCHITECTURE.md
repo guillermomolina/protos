@@ -527,6 +527,15 @@ each subsequent slice:
 
 1. **Test tool bootstrap** — add exact bundled `protos test` dispatch and a tiny
    Protos entry without migrating the corpus.
+
+After item 1 is published and before item 2 begins, perform an expanded
+comparative architecture audit across mature language-native, framework-driven,
+worker-based, and hermetic/incremental test systems. Challenge the selected
+fresh-Process isolation boundary and the still-open discovery/manifest,
+assertion/expectation, fixture, output, parallelism, resource, timeout,
+sharding/distribution, and CI choices. Record any retained or revised decisions
+before implementation makes them expensive to change.
+
 2. **Fresh-Process execution mechanism** — establish/reuse a general mechanical
    execution boundary that is not test-specific.
 3. **Single-case sequential runner** — execute one `.protos` case in a fresh

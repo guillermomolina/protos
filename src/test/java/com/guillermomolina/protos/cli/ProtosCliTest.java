@@ -32,6 +32,7 @@ final class ProtosCliTest {
         assertTrue(help.o.contains("[args...]"));
         assertTrue(help.o.contains("process.args()"));
         assertTrue(help.o.contains("protos package"));
+        assertTrue(help.o.contains("protos test"));
         assertTrue(help.o.contains("explicit program output"));
 
         assertTrue(run("--version").o.startsWith("Protos "));
@@ -123,6 +124,15 @@ final class ProtosCliTest {
 
         assertEquals(0, result.c);
         assertEquals("Protos package tool bootstrap\npackage\n", result.o);
+        assertTrue(result.e.isBlank(), result.e);
+    }
+
+    @Test
+    void testSubcommandRunsBundledProtosToolThroughCommonBootstrap() {
+        R result = run("test");
+
+        assertEquals(0, result.c);
+        assertEquals("Protos test tool bootstrap\ntest\n", result.o);
         assertTrue(result.e.isBlank(), result.e);
     }
 

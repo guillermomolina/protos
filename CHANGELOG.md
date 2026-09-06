@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.168-SNAPSHOT
+
+- Close `TOOL002-A — Test Tool bundled bootstrap`: add public `protos test` dispatch to the exact toolchain-bundled `protos/tools/test/Main.protos` entry and execute it as ordinary Protos through the existing bundled-tool resolver. Factor package/test entry execution through one small common CLI bootstrap helper while retaining the Package Tool's separately provisioned confined Filesystem capability. The Test Tool receives only its ordinary Process/bootstrap streams in this slice and gains no Filesystem authority, test discovery, assertions, manifests, Process-per-test runner, timeout, parallelism, filtering, reporting, or corpus-migration policy.
+- Add Java CLI/bootstrap conformance because the changed subject is Java host/driver functionality, while keeping language-test policy out of Java. Persist the required expanded cross-language/test-system comparative architecture audit as a dependency before `TOOL002-B` fresh-Process execution work begins. No normative Protos specification change is introduced.
+
 ## 0.2.167-SNAPSHOT
 
 - Formalize official bundled-tool implementation tracking with the new non-normative `TOOLxxx` family. `TOOL001` retrospectively indexes the already-published Package Tool bootstrap, confined Filesystem 2A/2B, B006 metadata publication, and manifest Slice 3 sub-slices without renaming historical evidence; `TOOL002` promotes the selected Test Tool architecture with TOOL002-A READY and later slices dependency-gated. Keep `CLIxxx` for independently meaningful driver/terminal/dispatch mechanics, `PERFxxx` for project performance engineering, and `LIBxxx` for Standard Library API. No runtime, language, specification, distributable-code, or implementation-version change is introduced.

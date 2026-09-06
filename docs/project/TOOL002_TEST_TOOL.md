@@ -1,6 +1,6 @@
 # TOOL002 — Test Tool
 
-Status: READY
+Status: IN_PROGRESS
 
 Nature: non-normative project implementation record
 
@@ -58,8 +58,8 @@ freeze those decisions unless their own audited scope requires and resolves them
 
 | Slice | Status | Outcome |
 |---|---|---|
-| TOOL002-A | READY | Add exact bundled `protos test` dispatch and a tiny Protos entry. Do not migrate the corpus in this slice. |
-| TOOL002-B | BLOCKED_BY_DEPENDENCIES | After A, establish/reuse a general fresh-Process exact-execution mechanism. It must not be a Java `TestExecutor` or another test-specific privileged runtime institution. |
+| TOOL002-A | CLOSED | Exact bundled `protos test` dispatch and tiny ordinary-Protos entry published in the same commit at implementation version `0.2.168-SNAPSHOT`; no corpus migration or test policy. |
+| TOOL002-B | BLOCKED_BY_DEPENDENCIES | TOOL002-A is closed, but implementation waits for the required post-A expanded comparative architecture audit; after that checkpoint, establish/reuse a general fresh-Process exact-execution mechanism, not a Java `TestExecutor` or other test-specific privileged runtime institution. |
 | TOOL002-C | BLOCKED_BY_DEPENDENCIES | After B, execute one `.protos` case sequentially in a fresh Process and capture inert outcome plus private streams. |
 | TOOL002-D | BLOCKED_BY_DEPENDENCIES | After C, migrate existing general conformance manifest/expectation interpretation from Java to Protos while retaining the corpus. |
 | TOOL002-E | BLOCKED_BY_DEPENDENCIES | After D, migrate Package Tool/TOML fixtures away from Java-owned runner policy. |
@@ -74,9 +74,9 @@ TOOL002-A and is not silently made a blocker for the useful initial Test Tool.
 If guaranteed recovery from non-preemptible infinite tests becomes a product
 requirement, promote that question through an explicit later design/work item.
 
-## First implementation boundary: TOOL002-A
+## TOOL002-A closure
 
-TOOL002-A should be deliberately narrow:
+TOOL002-A closes the deliberately narrow bundled-tool bootstrap boundary:
 
 ```text
 protos test
@@ -85,14 +85,31 @@ protos test
     -> ordinary Protos execution
 ```
 
-The slice should prove the common bundled-tool acquisition boundary and create
-no test-discovery, assertion, manifest, Process-per-test, timeout, parallelism,
-filter, or reporting policy in Java.
+The published slice reuses the existing generic bundled-tool resolver and factors
+the package/test entry execution through one small common CLI bootstrap helper.
+Package retains its separately provisioned confined Filesystem authority; the
+test tool receives no Filesystem authority in TOOL002-A. No separate `CLIxxx`
+item is created because no independently meaningful public driver mechanism was
+needed beyond this TOOL002 bootstrap.
 
-If the audit finds that the current driver lacks a genuinely general bundled-tool
-dispatch/index mechanism useful across package/test/bench/etc., that mechanism
-may justify separate `CLIxxx` work. Do not create one CLI item merely to hardcode
-a second command.
+TOOL002-A adds no test discovery, assertion, manifest, Process-per-test, timeout,
+parallelism, filter, reporter, or corpus-migration policy.
+
+## Required post-A comparative architecture checkpoint
+
+Before TOOL002-B implementation begins, perform and persist an expanded
+comparative audit of mature test systems across multiple architectural models,
+including at least Python/pytest, Rust cargo/libtest/nextest, Go `go test`,
+Java/JUnit build runners, JavaScript/Node runners, .NET runners, Erlang/Elixir,
+C/C++ test runners, and hermetic/incremental systems such as Bazel/Buck-like
+execution. The purpose is to challenge the current fresh-Process, worker,
+discovery/manifest, expectations/assertions, fixtures, output capture,
+parallelism, resource constraints, timeout, sharding/distribution, and CI
+boundaries before the runner mechanism hardens.
+
+This checkpoint does not reopen or delay the already mechanical TOOL002-A
+bootstrap. It is a dependency of TOOL002-B, and TOOL002-B remains
+`BLOCKED_BY_DEPENDENCIES` until the audit is recorded.
 
 ## Closure rule
 

@@ -63,6 +63,9 @@ public final class ProtosCli {
             if (args[0].equals("package")) {
                 return runBundledPackageTool(args, in, out, err);
             }
+            if (args[0].equals("test")) {
+                return runBundledTool("test", "Test", args, in, out, err);
+            }
             if (args[0].equals("-e")) {
                 if (args.length < 2) return usage(err, "-e requires a source argument");
                 return evalOneShot(
@@ -106,65 +109,102 @@ public final class ProtosCli {
             PrintStream out,
             PrintStream err)
             throws Exception {
-        Path core = core();
-        Path toolRoot =
-                core.getParent().getParent().resolve("tools").resolve("package");
-        ProtosBundledToolModuleResolver resolver =
-                new ProtosBundledToolModuleResolver(
-                        "package",
-                        toolRoot,
-                        new ProtosStandardLibraryModuleResolver(core.getParent()));
-
         try (ProtosNioConfinedFilesystemBackend filesystemBackend =
                 new ProtosNioConfinedFilesystemBackend(
                         Path.of("").toAbsolutePath().normalize(),
                         PACKAGE_METADATA_FILES,
                         PACKAGE_METADATA_STAGING_FILES,
                         PACKAGE_METADATA_MUTABLE_FILES)) {
-            Session session =
-                    session(
-                            core,
-                            resolver,
-                            applicationArguments(args, 0),
-                            in,
-                            out,
-                            err);
-            try {
-                ProtosObjectValue rawFilesystem =
-                        ProtosStandardFilesystemProtocol.createCapability(
-                                session.activation
-                                        .prelude()
-                                        .orElseThrow()
-                                        .bytesPrototypeForRuntime(),
-                                session.activation,
-                                filesystemBackend);
-                if (!(rawFilesystem instanceof ProtosFilesystemValue filesystem)) {
-                    throw new IllegalStateException(
-                            "standard Filesystem bridge returned the wrong value family");
-                }
-                if (session.activation.context().hasLocalSlot("filesystem")) {
-                    throw new IllegalStateException(
-                            "package tool Filesystem bootstrap slot already exists");
-                }
-                session.activation.context().createLocalSlot("filesystem", filesystem);
-
-                String source = resolver.loadSource(resolver.entryModule("Main"));
-                executeStandaloneRootTask(
-                        session.compiler.compile(source), session.activation);
-                return 0;
-            } catch (ParseError e) {
-                err.println("Package tool syntax error: " + e.getMessage());
-                return 1;
-            } catch (ProtosSignalException e) {
-                err.println("Package tool error: " + renderer.render(e.error()));
-                return 1;
-            } catch (RuntimeException e) {
-                err.println("Package tool runtime error: " + e.getMessage());
-                return 1;
-            } finally {
-                session.terminate();
-            }
+            return runBundledTool(
+                    "package",
+                    "Package",
+                    args,
+                    in,
+                    out,
+                    err,
+                    session -> installPackageToolFilesystem(session, filesystemBackend));
         }
+    }
+
+    private int runBundledTool(
+            String toolName,
+            String diagnosticName,
+            String[] args,
+            InputStream in,
+            PrintStream out,
+            PrintStream err)
+            throws Exception {
+        return runBundledTool(
+                toolName, diagnosticName, args, in, out, err, session -> {});
+    }
+
+    private int runBundledTool(
+            String toolName,
+            String diagnosticName,
+            String[] args,
+            InputStream in,
+            PrintStream out,
+            PrintStream err,
+            BundledToolSessionProvisioner provisioner)
+            throws Exception {
+        Path core = core();
+        Path toolRoot = core.getParent().getParent().resolve("tools").resolve(toolName);
+        ProtosBundledToolModuleResolver resolver =
+                new ProtosBundledToolModuleResolver(
+                        toolName,
+                        toolRoot,
+                        new ProtosStandardLibraryModuleResolver(core.getParent()));
+        Session session =
+                session(
+                        core,
+                        resolver,
+                        applicationArguments(args, 0),
+                        in,
+                        out,
+                        err);
+        try {
+            provisioner.provision(session);
+            String source = resolver.loadSource(resolver.entryModule("Main"));
+            executeStandaloneRootTask(session.compiler.compile(source), session.activation);
+            return 0;
+        } catch (ParseError e) {
+            err.println(diagnosticName + " tool syntax error: " + e.getMessage());
+            return 1;
+        } catch (ProtosSignalException e) {
+            err.println(diagnosticName + " tool error: " + renderer.render(e.error()));
+            return 1;
+        } catch (RuntimeException e) {
+            err.println(diagnosticName + " tool runtime error: " + e.getMessage());
+            return 1;
+        } finally {
+            session.terminate();
+        }
+    }
+
+    private static void installPackageToolFilesystem(
+            Session session, ProtosNioConfinedFilesystemBackend filesystemBackend) {
+        ProtosObjectValue rawFilesystem =
+                ProtosStandardFilesystemProtocol.createCapability(
+                        session.activation
+                                .prelude()
+                                .orElseThrow()
+                                .bytesPrototypeForRuntime(),
+                        session.activation,
+                        filesystemBackend);
+        if (!(rawFilesystem instanceof ProtosFilesystemValue filesystem)) {
+            throw new IllegalStateException(
+                    "standard Filesystem bridge returned the wrong value family");
+        }
+        if (session.activation.context().hasLocalSlot("filesystem")) {
+            throw new IllegalStateException(
+                    "package tool Filesystem bootstrap slot already exists");
+        }
+        session.activation.context().createLocalSlot("filesystem", filesystem);
+    }
+
+    @FunctionalInterface
+    private interface BundledToolSessionProvisioner {
+        void provision(Session session);
     }
 
     private static List<String> applicationArguments(String[] args, int start) {
@@ -627,6 +667,7 @@ public final class ProtosCli {
                         + "  protos <file> [args...]\n"
                         + "  protos -e <source> [args...]\n"
                         + "  protos package [args...]\n"
+                        + "  protos test [args...]\n"
                         + "  protos\n\n"
                         + "Options:\n"
                         + "  -e <source> [args...]\n"
