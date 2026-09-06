@@ -47,7 +47,7 @@ The optimization must preserve:
 
 | Slice | Status | Scope / closure condition |
 |---|---|---|
-| PERF003-A | IN_PROGRESS | The `0.2.170-SNAPSHOT` implementation cut `array-reduce` from 40 to 2 `GraphTooBig` failures. The `0.2.175-SNAPSHOT` correction then reduced the failing graph from 150500 to 150069 against the 150000 limit while preserving exact result `528`; only 69 graph-size units remain. This second corrective phase `0.2.178-SNAPSHOT` keeps the same balanced strict left fold, caches the two immutable internal cardinalities used repeatedly by `reduce`, and removes a redundant helper result expression. Repository validation is required here; exact external GraalVM/Truffle diagnostics against the newly published commit remain the closure gate. |
+| PERF003-A | IN_PROGRESS | The `0.2.170-SNAPSHOT` implementation cut `array-reduce` from 40 to 2 `GraphTooBig` failures. The `0.2.175-SNAPSHOT` correction reduced graph size to 150069 / 150000, and the `0.2.178-SNAPSHOT` correction reduced it again to 150036 while preserving exact result `528`; only 36 graph-size units remain. This third corrective phase `0.2.180-SNAPSHOT` removes redundant reduce initialization state by deriving the fold start directly from the already-validated zero-or-one `initialSize`. Repository validation is required here; exact external GraalVM/Truffle diagnostics against the newly published commit remain the closure gate. |
 | PERF003-B | BLOCKED_BY_DEPENDENCIES | After A, publish companion correctness-first external validation against the exact optimized Protos revision, retain pre/post evidence and diagnostics, and do not rewrite PERF001-E baseline evidence. |
 
 PERF003 closes only after PERF003-B evidence is published and reconciled into the
@@ -150,4 +150,42 @@ No `sort`, Java/runtime, native protocol, Truffle boundary, benchmark identity
 check, or normative rule changes. Existing 32-element repeated-reduction Protos
 conformance remains the focal semantic guard. Exact external optimizing-runtime
 evidence against the commit produced by this second corrective phase is still
+required before PERF003-A may close.
+
+## PERF003-A third external diagnostic and initialization-state refinement
+
+The exact external diagnostic against Protos
+`5404667964dec84b8b8de2ff8dbe7923a5d1dd2e` with companion harness/evidence
+`guillermomolina/protos-benchmarks@4bff9f7f6c5e0e006530f166c188e0e988acf565`,
+GraalVM Community JDK 22, external Truffle `24.0.0`, and `-Xss128m` established:
+
+- `collections/array-reduce` interpreter correctness: PASS, exact result `528`;
+- optimizing-runtime correctness: PASS, exact result `528`;
+- optimizing compilations completed: 25;
+- optimization failures: 2, both `GraphTooBig`;
+- failing graph node count: 50471; graph size: 150036; configured limit: 150000;
+- graph-size reduction relative to the preceding diagnostic: 33;
+- cumulative graph-size reduction from the first PERF003-A diagnostic: 464;
+- remaining margin to the limit: 36.
+
+The second correction therefore preserves the same semantic workload and again
+reduces the failing graph, but PERF003-A still does not satisfy its zero-bailout
+closure condition. The diagnostic stopped at the failing reduce gate, so no new
+optimized `sort` conclusion is recorded from this run.
+
+The `0.2.180-SNAPSHOT` third corrective phase remains ordinary Protos
+source only. After the existing `initialSize > 1` failure guard completes
+normally, `initialSize` can only be zero or one. The implementation therefore no
+longer stores that fact again in `hasInitial` or tracks a mutable `startIndex`.
+It executes the same seeded/unseeded initialization branches directly and derives
+the fold start as `1 - initialSize` (zero for a seeded fold, one for an unseeded
+fold). The balanced helper remains outside those branch callbacks and still
+visits its left half completely before its right half. Snapshot timing, exact
+accumulator flow, reducer invocation count/order, callback effects/failures,
+empty/singleton behavior, and initial-value semantics remain unchanged.
+
+No `sort`, Java/runtime, native protocol, Truffle boundary, benchmark identity
+check, or normative rule changes. Existing 32-element repeated-reduction Protos
+conformance remains the focal semantic guard. Exact external optimizing-runtime
+evidence against the commit produced by this third corrective phase is still
 required before PERF003-A may close.

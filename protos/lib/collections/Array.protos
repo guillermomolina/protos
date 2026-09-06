@@ -94,20 +94,17 @@ reduce: (array, reducer, ...initial) => {
     })
 
     snapshotSize: snapshot.size()
-    hasInitial: initialSize == 1
     accumulator: null
-    startIndex: 0
 
-    hasInitial.ifTrue(() => {
+    (initialSize == 1).ifTrue(() => {
         accumulator = initial.at(0)
     })
 
-    hasInitial.ifFalse(() => {
+    (initialSize == 0).ifTrue(() => {
         (snapshotSize == 0).ifTrue(() => {
             ^null
         })
         accumulator = snapshot.at(0)
-        startIndex = 1
     })
 
     foldRange: (start, end) => {
@@ -124,7 +121,7 @@ reduce: (array, reducer, ...initial) => {
         })
     }
 
-    foldRange(startIndex, snapshotSize)
+    foldRange(1 - initialSize, snapshotSize)
     accumulator
 }
 

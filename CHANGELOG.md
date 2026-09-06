@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.180-SNAPSHOT
+
+- Continue `PERF003-A — Collection algorithm Truffle compilability` after the exact external diagnostic against Protos `5404667964dec84b8b8de2ff8dbe7923a5d1dd2e` again preserved `array-reduce` correctness (`528`, `rc=0`) and reduced the remaining failing graph from 150069 to 150036 against the 150000 limit. The bailout count remains 2, so PERF003-A is not closed.
+- Refine only ordinary-Protos `Array.reduce` initialization state: after the existing `initialSize > 1` guard, `initialSize` is exactly 0 or 1, so remove the `hasInitial` and mutable `startIndex` bindings, select the same two initialization paths directly, and derive the fold start as `1 - initialSize`. Preserve the pre-callback shallow snapshot, strict left fold, exact reducer calls/effects/failures and zero-or-one initial semantics. No `sort`, Java/runtime, Truffle-boundary, benchmark-specific, or normative change is made. Exact external validation against this publication remains required.
+
 ## 0.2.179-SNAPSHOT
 
 - Close I022-D by first making the cooperative Task producer Closure activation itself replay-stable across segments: `invokeInTask()` now reuses one root activation so lexical bindings and ReturnHome identity survive suspension. Then make D043 `ensure(cleanup)` replay-stable across real `Future.value()` suspension in both protected body and cleanup. ENSURE frames now persist BODY/CLEANUP phase, the exact pending normal result/Error/non-local-return transfer and the body replay cursor. If cleanup suspended after the body had semantically exited, replay skips that body instead of reconstructing its transfer or effects.
