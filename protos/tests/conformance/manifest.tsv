@@ -259,3 +259,4 @@ library/json/parse-unclosed-object-error.protos	error	-
 library/json/parse-unpaired-high-surrogate-error.protos	error	-
 library/json/parse-unpaired-low-surrogate-error.protos	error	-
 library/json/parse-whitespace-only-error.protos	error	-
+boolean/nonboolean-receiver-error.protos	error	-
