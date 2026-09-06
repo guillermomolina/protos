@@ -260,3 +260,8 @@ library/json/parse-unpaired-high-surrogate-error.protos	error	-
 library/json/parse-unpaired-low-surrogate-error.protos	error	-
 library/json/parse-whitespace-only-error.protos	error	-
 boolean/nonboolean-receiver-error.protos	error	-
+number/ordering-cross-family-exact.protos	boolean	true
+number/ordering-integer-selectors.protos	boolean	true
+number/ordering-non-number-argument-error.protos	error	-
+number/ordering-non-number-receiver-error.protos	error	-
+number/ordering-signed-zero-infinity-nan.protos	boolean	true
