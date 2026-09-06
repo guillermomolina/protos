@@ -49,6 +49,14 @@ final class ProtosReplTest {
     }
 
     @Test
+    void printUsesCliStdoutAndReplStillDisplaysTheReturnedNull() {
+        R r = repl("print(\"hello\")\n:quit\n");
+        assertEquals(0, r.c);
+        assertTrue(r.o.contains("protos> hello\nnull\nprotos> "), r.o);
+        assertTrue(r.e.isBlank(), r.e);
+    }
+
+    @Test
     void multilineClosureDeclarationPersistsTopLevelContext() {
         R r = repl("identity: (value) => {\n"
                 + "    value\n"

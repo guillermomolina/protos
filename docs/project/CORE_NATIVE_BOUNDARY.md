@@ -71,7 +71,15 @@ the standard native boundary.
 | `ProtosStandardFileProtocol.java` | 10 | resource/capability bridge | File objects are acquired resource capabilities whose exact local surface depends on backend-provided authority and whose operations own cursor/append/sync/close/commitment state. |
 | `ProtosStandardFilesystemProtocol.java` | 1 | resource/capability bridge | Host-provisioned Filesystem authority exposes the standard `open` bridge; its backend owns confined/race-free namespace selection, create/truncate commitment, stable-resource acquisition, cancellation cleanup, and standard File materialization. |
 
-Total audited production construction sites: **107 across 30 providers**.
+Total audited Core production construction sites: **107 across 30 providers**.
+
+CLI/launcher-owned host conveniences are not Core standard behavior and therefore
+do not change that 30-provider / 107-site Core boundary. They are nevertheless
+kept explicit rather than allowed to accumulate invisibly:
+
+| Non-Core provider | Native Closure sites | Boundary | Reason |
+|---|---:|---|---|
+| `ProtosCliPrintFacility.java` | 1 | standalone CLI host/display bridge | Installs one ordinary initial-context `print` Closure only for normal standalone CLI sessions. General value rendering is CLI policy; output is delegated through a borrowing standard `TextWriter` over the already-provisioned Process stdout capability and Encoding. Bundled tools, Core bootstrap, imported modules and non-root Actor bootstrap do not receive this binding. |
 
 I018-L closed with the 90-site/22-provider baseline. I016-D1 was an explicitly
 reviewed post-I018 resource/capability extension adding exactly one

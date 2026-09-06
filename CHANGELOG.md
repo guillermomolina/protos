@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.154-SNAPSHOT
+
+- Close `CLI006` with a standalone CLI-owned `print(value)` binding installed as an ordinary Closure only in normal initial CLI sessions. String values print their contents directly; other values reuse CLI display rendering; each call delegates one complete line through a borrowing standard `TextWriter` over the already-provisioned Process stdout capability and Encoding, then returns canonical `null`.
+- Make file and `-e` execution explicit-output-only instead of implicitly echoing the final evaluation result; retain the REPL general result-display policy. Add a Protos-source CLI fixture plus focused host/bootstrap/architecture conformance and end-to-end dogfooding of the published hello-world and values tutorial. Preserve the bundled `protos package` tool bootstrap without injecting `print` into its internal tool context. No normative specification change and no Core native-Closure provider/site expansion.
+
+
 ## 0.2.153-SNAPSHOT
 
 - Establish the first bundled-tool bootstrap slice for the package-system architecture. `protos package` now launches an exact toolchain-bundled Protos entry from `protos/tools/package` without reading a project manifest, lockfile, package store, or ambient module search path. Tool-local `self:` imports resolve to internal `bundled-tool:` ModuleKeys while `std:` remains delegated to the selected Standard Library resolver.

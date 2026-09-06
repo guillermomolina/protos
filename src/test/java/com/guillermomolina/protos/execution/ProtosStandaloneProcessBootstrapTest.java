@@ -73,6 +73,9 @@ final class ProtosStandaloneProcessBootstrapTest {
         assertSame(process, capability.processForRuntime());
         assertSame(prelude.processPrototype(), capability.representedDelegationParent(prelude));
         assertFalse(result.activation().context().hasLocalSlot("filesystem"));
+        assertFalse(
+                result.activation().context().hasLocalSlot("print"),
+                "host-neutral standalone Process bootstrap must not install CLI conveniences");
 
         assertEquals(
                 List.of("alpha", "beta"),

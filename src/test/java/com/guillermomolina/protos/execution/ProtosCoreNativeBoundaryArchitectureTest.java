@@ -82,9 +82,13 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardNumberOrderingProtocol.java", 1),
                     Map.entry("execution/ProtosStandardNumericConversionProtocol.java", 1));
 
+    private static final Map<String, Integer> EXPECTED_NON_CORE_NATIVE_PROVIDERS =
+            Map.of("cli/ProtosCliPrintFacility.java", 1);
+
     @Test
     void javaNativeClosureProvidersMatchTheAuditedBoundaryExactly() throws IOException {
-        Map<String, Integer> actual = new TreeMap<>();
+        Map<String, Integer> actualCore = new TreeMap<>();
+        Map<String, Integer> actualNonCore = new TreeMap<>();
         try (Stream<Path> files = Files.walk(JAVA_ROOT)) {
             for (Path file : files.filter(path -> path.toString().endsWith(".java")).toList()) {
                 String source = Files.readString(file);
@@ -92,7 +96,11 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 if (count > 0) {
                     String relative =
                             JAVA_ROOT.relativize(file).toString().replace('\\', '/');
-                    actual.put(relative, count);
+                    if (relative.startsWith("cli/")) {
+                        actualNonCore.put(relative, count);
+                    } else {
+                        actualCore.put(relative, count);
+                    }
                 }
                 assertFalse(
                         source.contains(
@@ -101,9 +109,10 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
             }
         }
 
-        assertEquals(EXPECTED_NATIVE_PROVIDERS, actual);
-        assertEquals(30, actual.size());
-        assertEquals(107, actual.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
+        assertEquals(30, actualCore.size());
+        assertEquals(107, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
         String inventory =
                 Files.readString(Path.of("docs", "project", "CORE_NATIVE_BOUNDARY.md"));

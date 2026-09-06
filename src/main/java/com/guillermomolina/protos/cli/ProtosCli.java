@@ -145,7 +145,7 @@ public final class ProtosCli {
             throws IOException {
         Session session = session(applicationArguments, in, out, err);
         try {
-            return eval(source, session, out, err);
+            return eval(source, session, err);
         } finally {
             session.terminate();
         }
@@ -302,13 +302,16 @@ public final class ProtosCli {
             PrintStream err)
             throws IOException {
         Path core = core();
-        return session(
-                core,
-                new ProtosStandardLibraryModuleResolver(core.getParent()),
-                applicationArguments,
-                in,
-                out,
-                err);
+        Session session =
+                session(
+                        core,
+                        new ProtosStandardLibraryModuleResolver(core.getParent()),
+                        applicationArguments,
+                        in,
+                        out,
+                        err);
+        ProtosCliPrintFacility.install(session.activation(), session.process(), renderer);
+        return session;
     }
 
     private Session session(
@@ -496,11 +499,9 @@ public final class ProtosCli {
         };
     }
 
-    private int eval(String src, Session s, PrintStream out, PrintStream err) {
+    private int eval(String src, Session s, PrintStream err) {
         try {
-            out.println(
-                    renderer.render(
-                            s.compiler.compile(src).call(s.activation)));
+            s.compiler.compile(src).call(s.activation);
             return 0;
         } catch (ParseError e) {
             err.println("Syntax error: " + e.getMessage());
@@ -548,6 +549,8 @@ public final class ProtosCli {
                         + "the file/source launcher identity is excluded.\n"
                         + "The CLI provisions stdin/stdout/stderr as byte streams with "
                         + "UTF-8 host-selected Encoding associations.\n"
+                        + "File and -e execution write only explicit program output; "
+                        + "the interactive REPL also displays evaluation results.\n"
                         + "Interactive REPL: arrow-key editing/history; Ctrl-D exits.");
     }
 

@@ -292,6 +292,7 @@ Closure result:
 | CLI003 | Multiline REPL input | CLOSED | `0.2.80-SNAPSHOT` | `254c80c0fb9e70f1dd07ef711f06ce71faa93829` | published multiline REPL input; parser-EOF accumulation, one-unit bracketed paste, persistent top-level context, recovery/history/stream coverage; recursive factorial regression is covered after standard numeric ordering completion |
 | CLI004 | Standard-library module resolution | CLOSED | `0.2.120-SNAPSHOT` | `SAME_COMMIT` | official CLI host resolver for reserved `std:<logical-name>` distribution modules; logical relocation-independent ModuleKey identity; no search-path shadowing/fallback; bootstrap `core/` excluded; no normative Core module change |
 | CLI005 | Portable Standard Library naming | CLOSED | `0.2.131-SNAPSHOT` | `SAME_COMMIT` | case-significant ASCII `std:` identities; exact distributed path spelling independent of host filesystem case rules; case-fold ambiguity, bootstrap `core`, and Windows reserved device-name segments rejected; canonical LIB001 `Set`/`IdentitySet` spellings |
+| CLI006 | Standalone CLI print facility | CLOSED | `0.2.154-SNAPSHOT` | `SAME_COMMIT` | ordinary initial-context print Closure; borrowing TextWriter over Process stdout/Encoding; file/-e explicit-output-only policy; REPL result display retained; bundled tools remain unmodified; Core native boundary unchanged |
 
 
 ## Standard Library
