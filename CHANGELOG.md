@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.158-SNAPSHOT
+
+- Continue package-tool manifest Slice 3 with Slice 3B1 by completing the TOML 1.0 String surface required by manifest schema v1. `self:TomlSyntax` now handles multiline basic and literal strings, first-newline trimming, deterministic CRLF-to-LF normalization, basic-string line continuations, one/two quote runs inside multiline strings, and the one/two content quotes permitted immediately next to a closing triple-quote delimiter. Multiline quote runs are consumed by an exclusive branch so they cannot fall through and be appended twice.
+- Add Protos-owned conformance for multiline basic/literal values, line continuation folding, CRLF normalization, internal single/double quote runs, four/five-quote closing boundaries, overlong closing runs, and literal newlines rejected by single-line strings. No production Java parser, Filesystem write, lock mutation, schema/CLI behavior, Standard Library dependency, or LIB work item is introduced; Slice 3 remains open.
+
 ## 0.2.157-SNAPSHOT
 
 - Close `CLI007` by executing each non-interactive standalone entry CallTarget as a real cooperative task owned by the Process RootActor and driving that RootActor execution domain until terminal. This realizes the existing pending `Future.value()` suspension contract for file/`-e` programs instead of leaking the host-side missing-task implementation error. Preserve ordinary Protos Error mapping and use the same task entry path for the bundled package tool; the persistent REPL model is intentionally unchanged.

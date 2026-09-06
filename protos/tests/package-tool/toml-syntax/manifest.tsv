@@ -16,3 +16,13 @@ invalid-unicode-scalar-error.protos	error
 inline-table-trailing-comma-error.protos	error
 inline-table-duplicate-error.protos	error
 signed-radix-unsupported.protos	true
+string-multiline-basic-quotes.protos	true
+string-multiline-basic-too-many-closing-quotes-error.protos	error
+string-multiline-basic.protos	true
+string-multiline-closing-quotes.protos	true
+string-multiline-continuation.protos	true
+string-multiline-crlf.protos	true
+string-multiline-literal-quotes.protos	true
+string-multiline-literal-too-many-closing-quotes-error.protos	error
+string-multiline-literal.protos	true
+string-singleline-newline-error.protos	error
