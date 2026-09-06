@@ -988,9 +988,9 @@ preserving its semantics before weakening ordinary test isolation.
 
 ## 27. Consequences for TOOL002-B
 
-TOOL002-B remains READY.
+TOOL002-B is CLOSED by the local general fresh-Process execution mechanism.
 
-Its implementation boundary is now even more explicit:
+The published implementation boundary is:
 
 ```text
 ExactExecutionDescriptor
@@ -1144,7 +1144,7 @@ output inline/spill thresholds
 fixture/helper API
 ```
 
-None of these open decisions blocks TOOL002-B.
+None of these open decisions blocked TOOL002-B, and none is introduced by its closure.
 
 ## Official references reviewed
 

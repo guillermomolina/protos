@@ -670,7 +670,7 @@ record distributable Standard Library functionality.
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
 | TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | Retrospectively indexes already-published package-tool work without renaming historical slices. Bootstrap, confined project Filesystem, atomic metadata publication, manifest Slice 3A, and Slice 3B1 are published; legacy manifest Slice 3 remains open. |
-| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | TOOL002-A bundled-tool bootstrap CLOSED at `0.2.168-SNAPSHOT`; comparative and scale/distribution architecture checkpoints are selected/closed by `docs/design/TEST_TOOL_COMPARATIVE_AUDIT.md` and `docs/design/TEST_TOOL_SCALE_AND_DISTRIBUTION_ARCHITECTURE.md`; TOOL002-B local fresh-Process mechanism remains READY. |
+| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | TOOL002-A bundled bootstrap CLOSED; comparative + scale/distribution checkpoints CLOSED; TOOL002-B local fresh-Process executor CLOSED at `0.2.169-SNAPSHOT`; TOOL002-C single-case sequential runner is READY. |
 
 ### TOOL001 — Package Tool
 
@@ -705,8 +705,8 @@ the initial TOOL002 closure.
 | Slice | Status | Dependency / scope |
 |---|---|---|
 | TOOL002-A | CLOSED | `0.2.168-SNAPSHOT` / `SAME_COMMIT`; exact bundled `protos test` dispatch plus a tiny ordinary-Protos entry, with no corpus migration or test policy. |
-| TOOL002-B | READY | Comparative + scale/distribution checkpoints CLOSED; establish/reuse the local general fresh-Process exact-execution mechanism with explicit capabilities/private streams and inert outcome. Keep TestPlan identity, physical worker placement, scheduler/resources, OS-worker/remote backends and reporting policy outside B. |
-| TOOL002-C | BLOCKED_BY_DEPENDENCIES | TOOL002-B; single-case sequential runner in a fresh Process with captured outcome/streams. |
+| TOOL002-B | CLOSED | `0.2.169-SNAPSHOT` / `SAME_COMMIT`; local test-neutral fresh-Process exact-entry executor, shared RootActor cooperative terminal dispatch, inert COMPLETED/FAILED/CANCELLED outcome, explicit bootstrap authority and Process termination before return; no test policy. |
+| TOOL002-C | READY | TOOL002-B CLOSED; single exact `.protos` case sequentially through the fresh-Process executor with private captured streams/outcome, still without manifest or expectation interpretation. |
 | TOOL002-D | BLOCKED_BY_DEPENDENCIES | TOOL002-C; migrate existing general conformance manifest/expectation interpretation from Java to Protos while retaining the corpus. |
 | TOOL002-E | BLOCKED_BY_DEPENDENCIES | TOOL002-D; migrate package-tool/TOML fixtures away from Java-owned runner policy. |
 | TOOL002-F | BLOCKED_BY_DEPENDENCIES | TOOL002-E; preserve async/Future pending-work and terminal-outcome coverage through production semantics. |

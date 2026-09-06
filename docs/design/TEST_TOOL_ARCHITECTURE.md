@@ -601,6 +601,42 @@ These open items must not be silently decided by TOOL002-B. The expanded
 comparative checkpoint is complete and no longer blocks the general
 fresh-Process mechanism.
 
+## TOOL002-B fresh-Process execution closure
+
+TOOL002-B publishes the first local backend mechanism without introducing test
+policy:
+
+```text
+already-selected Prelude/module resolver + exact compiled entry
+        |
+        v
+ProtosFreshProcessExecutor
+        |
+        v
+fresh Protos Process / RootActor
+        |
+        v
+ProtosRootTaskExecution
+        |
+        v
+inert ProtosExecutionOutcome
+```
+
+The mechanism reuses `ProtosStandaloneProcessBootstrap` for Process-local
+arguments, Environment, standard streams/Encodings and optional default
+Filesystem authority. Each invocation owns one fresh Process and requests its
+termination before returning. The terminal outcome contains no Process, Actor,
+task, worker, retry, CaseId or reporter handle.
+
+CLI standalone execution now consumes the same RootActor terminal-dispatch
+mechanism and translates FAILED/CANCELLED outcomes into its existing diagnostics.
+That reuse keeps the executor itself free of CLI or Test Tool policy.
+
+TOOL002-B intentionally does not construct TestPlans, discover tests, interpret
+expectations, allocate resources, schedule multiple cases, enforce hard timeout,
+create OS/remote workers, retry, cache or report results. Those remain later
+layers selected by the comparative and scale/distribution architecture.
+
 ## Tracked implementation sequencing
 
 `TOOL002` adopts the following cost-aware sequence. Preserve one coherent
@@ -610,11 +646,10 @@ each subsequent slice:
 1. **Test tool bootstrap** — CLOSED by TOOL002-A.
 2. **Post-A expanded comparative architecture checkpoint** — CLOSED by
    `docs/design/TEST_TOOL_COMPARATIVE_AUDIT.md`; TOOL002-B is READY.
-3. **Fresh-Process execution mechanism** — establish/reuse a general local mechanical
-   execution boundary that is not test-specific, returns inert outcomes, avoids global
-   mutable executor state and keeps physical worker placement outside semantic identity.
-4. **Single-case sequential runner** — execute one exact `.protos` case in a
-   fresh Process and capture outcome/streams.
+3. **Fresh-Process execution mechanism** — CLOSED by TOOL002-B with the local,
+   test-neutral `ProtosFreshProcessExecutor` / `ProtosExecutionOutcome` boundary.
+4. **Single-case sequential runner** — READY after B; execute one exact `.protos`
+   case through the fresh-Process mechanism and capture outcome/streams.
 5. **Manifest/expectation migration** — move the existing general conformance
    manifest interpretation from Java to Protos, assign stable case identity and
    construct the initial inert TestPlan while retaining the corpus.

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.169-SNAPSHOT
+
+- Close `TOOL002-B — general fresh-Process execution mechanism`: add the test-neutral `ProtosFreshProcessExecutor` over the existing host-neutral standalone Process bootstrap, execute the exact precompiled entry as a real RootActor-local cooperative task, and return inert `ProtosExecutionOutcome` data for completed, failed, or cancelled terminal states. Every invocation creates and terminates a fresh semantic Protos Process; semantic Protos Errors are result data rather than CLI/test-specific host exceptions.
+- Extract RootActor terminal dispatch from CLI-owned machinery into `ProtosRootTaskExecution` and keep the CLI's existing diagnostics as a consumer translation of the shared outcome. Add Java mechanism tests for fresh Process identity, Future suspension/resume, semantic failure capture, and Process termination. No test manifest, TestPlan, CaseId, scheduler, resource policy, timeout, worker, remote execution, retry, cache, reporter, Core semantic or specification change is introduced.
+
 ## 0.2.168-SNAPSHOT
 
 - Close `PERF001-E` by reconciling companion reference evidence `guillermomolina/protos-benchmarks@4bff9f7f6c5e0e006530f166c188e0e988acf565` produced by harness `280173d743b2ed838a89be0ad930b20828d89558` against exact Protos corpus revision `86b35d8bb2d7ab2ad54bc2947e1bf7fbff1fca15`. All 18 cross-language correctness cases pass and startup/warmup/steady-state evidence is retained in 54 raw result records. Separate Truffle diagnostics retain two optimization findings: `collections/array-reduce` and `collections/array-sort` each execute correctly (`rc=0`) but record 40 `GraphTooBig` optimization failures. Introduce `PERF003 — Collection algorithm Truffle compilability` as READY so those findings are handled separately without rewriting PERF001-E baseline evidence. This reconciliation is documentation/project-state only and changes no implementation, specification, distributable artifact or implementation version.

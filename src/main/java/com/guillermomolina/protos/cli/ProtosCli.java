@@ -592,53 +592,20 @@ public final class ProtosCli {
     }
 
     /*
-     * A standalone entry is the initial execution of the Process RootActor. Execute its
-     * CallTarget as a real Actor-local cooperative task so a pending Future.value() can
-     * suspend and later resume the entry rather than escaping to the host as a missing-task
-     * implementation error.
-     *
-     * The default Actor scheduler independently drives spawned Actors. This loop owns only
-     * the RootActor entry domain; Future completion/resume enqueues the root task and wakes
-     * dispatchUntilTerminal.
+     * CLI policy translates the shared mechanical terminal outcome into the historical
+     * standalone command behavior. The cooperative RootActor task execution itself is owned by
+     * ProtosRootTaskExecution so test/tool consumers do not need a CLI-specific executor.
      */
     private static Object executeStandaloneRootTask(
             CallTarget target, ProtosActivation activation) {
-        ProtosActorExecutionDomain domain = activation.executionDomain();
-        ProtosTask rootTask =
-                domain.createTask(
-                        null,
-                        null,
-                        task -> task.executeProtos(target, activation));
-        domain.dispatchUntilTerminal(rootTask, () -> false);
-
-        return switch (rootTask.state()) {
-            case COMPLETED ->
-                    rootTask
-                            .result()
-                            .orElseThrow(
-                                    () ->
-                                            new IllegalStateException(
-                                                    "completed standalone root task has no result"));
-            case FAILED -> {
-                Object failure =
-                        rootTask
-                                .failure()
-                                .orElseThrow(
-                                        () ->
-                                                new IllegalStateException(
-                                                        "failed standalone root task has no error"));
-                if (!(failure instanceof ProtosObjectValue error)) {
-                    throw new IllegalStateException(
-                            "standalone root task failed with a non-Protos error value");
-                }
-                throw new ProtosSignalException(error);
-            }
+        ProtosExecutionOutcome outcome =
+                ProtosRootTaskExecution.execute(target, activation);
+        return switch (outcome.state()) {
+            case COMPLETED -> outcome.value();
+            case FAILED -> throw new ProtosSignalException(outcome.error());
             case CANCELLED ->
                     throw new IllegalStateException(
                             "standalone root task was cancelled before entry completion");
-            default ->
-                    throw new IllegalStateException(
-                            "standalone root task returned before reaching a terminal state");
         };
     }
 

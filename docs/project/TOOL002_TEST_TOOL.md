@@ -61,8 +61,8 @@ freeze those decisions unless their own audited scope requires and resolves them
 | Slice | Status | Outcome |
 |---|---|---|
 | TOOL002-A | CLOSED | Exact bundled `protos test` dispatch and tiny ordinary-Protos entry published in the same commit at implementation version `0.2.168-SNAPSHOT`; no corpus migration or test policy. |
-| TOOL002-B | READY | Comparative and scale/distribution checkpoints CLOSED; establish/reuse the local general fresh-Process exact-execution mechanism and inert outcome boundary, not a Java `TestExecutor` or other test-specific privileged runtime institution. Keep physical placement, TestPlan identity and scheduler/remote policy outside B. |
-| TOOL002-C | BLOCKED_BY_DEPENDENCIES | After B, execute one `.protos` case sequentially in a fresh Process and capture inert outcome plus private streams. |
+| TOOL002-B | CLOSED | Publish the local, test-neutral `ProtosFreshProcessExecutor` over `ProtosStandaloneProcessBootstrap`, shared RootActor cooperative terminal dispatch through `ProtosRootTaskExecution`, and inert `ProtosExecutionOutcome`; every invocation uses a fresh semantic Process and terminates it before returning. No TestPlan/scheduler/worker/remote/test policy. Implementation version `0.2.169-SNAPSHOT`. |
+| TOOL002-C | READY | TOOL002-B is closed; next execute one exact `.protos` case sequentially through the fresh-Process mechanism and capture outcome plus private streams without manifest/expectation policy. |
 | TOOL002-D | BLOCKED_BY_DEPENDENCIES | After C, migrate existing general conformance manifest/expectation interpretation from Java to Protos while retaining the corpus. |
 | TOOL002-E | BLOCKED_BY_DEPENDENCIES | After D, migrate Package Tool/TOML fixtures away from Java-owned runner policy. |
 | TOOL002-F | BLOCKED_BY_DEPENDENCIES | After E, preserve async/Future pending-work and terminal-outcome test coverage through production execution semantics. |
@@ -145,6 +145,32 @@ The checkpoint also records that remote/distributed execution cannot assume
 exactly-once physical execution and that resource constraints eventually need
 locality/scope as well as capacity. These are architecture constraints for future
 layers, not new Core semantics.
+
+## TOOL002-B closure
+
+TOOL002-B closes the general local execution prerequisite needed by the Test
+Tool without creating a test-specific host institution.
+
+Published implementation:
+
+- `ProtosFreshProcessExecutor` creates one fresh semantic Process/RootActor per
+  invocation using the already-established standalone Process bootstrap;
+- the request receives an already-selected Prelude/module-resolution environment,
+  exact compiled entry, argument/environment snapshots, stream backends/Encodings
+  and optional default Filesystem authority;
+- `ProtosRootTaskExecution` owns the cooperative RootActor task dispatch required
+  for real Future suspension/resume;
+- `ProtosExecutionOutcome` carries only terminal COMPLETED/FAILED/CANCELLED data;
+- Protos semantic failure is returned as FAILED outcome data rather than being
+  reclassified as host/infrastructure failure;
+- Process termination is requested before the executor returns;
+- CLI standalone execution reuses RootActor terminal dispatch and preserves its
+  existing CLI-specific error translation.
+
+B adds no discovery, TestPlan, CaseId, expectation, assertion, fixture, scheduler,
+resource, timeout, OS-worker, remote-backend, retry, cache or reporting policy.
+
+TOOL002-C is therefore READY.
 
 ## Closure rule
 
