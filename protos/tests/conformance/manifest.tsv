@@ -419,3 +419,4 @@ call/non-local-return-carries-nested-args.protos	boolean	true
 call/message-send-spread-left-to-right.protos	integer	123123
 call/closure-local-call-override.protos	integer	7
 call/extracted-method-freshness-and-state.protos	boolean	true
+call/super-spread-uses-ordinary-argument-vector.protos	integer	5

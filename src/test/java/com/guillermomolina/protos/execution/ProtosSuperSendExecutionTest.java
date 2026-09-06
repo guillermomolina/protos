@@ -16,95 +16,28 @@
  */
 package com.guillermomolina.protos.execution;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors.StandardError;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 final class ProtosSuperSendExecutionTest {
+    /**
+     * Deliberately Java-side: executable Protos conformance covers valid
+     * methodHome continuation, dynamic receiver preservation, nested-Closure
+     * methodHome capture, and ordinary spread-vector semantics. The generic
+     * language-conformance `error` expectation cannot inspect the transported
+     * Error category, so retain the exact exhausted-lookup SlotNotFound check.
+     */
     @Test
-    void superContinuesAfterPhysicalMethodHomeAndKeepsDynamicReceiver()
+    void superLookupExhaustionSignalsExactSlotNotFoundCategory()
             throws IOException {
-        ProtosPrelude prelude = corePrelude();
-
-        Object result =
-                execute(
-                        prelude,
-                        """
-                        base: {
-                            value: 1
-                            read: () => { value }
-                        }
-                        middle: base {
-                            read: () => { super.read() + 10 }
-                        }
-                        leaf: middle {
-                            value: 7
-                        }
-                        leaf.read()
-                        """);
-
-        assertEquals(BigInteger.valueOf(17), ((ProtosIntegerValue) result).value());
-    }
-
-    @Test
-    void nestedClosureRetainsMethodHomeForSuper() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-
-        Object result =
-                execute(
-                        prelude,
-                        """
-                        base: {
-                            value: 1
-                            read: () => { value }
-                        }
-                        middle: base {
-                            read: () => {
-                                nested: () => { super.read() }
-                                nested()
-                            }
-                        }
-                        leaf: middle {
-                            value: 9
-                        }
-                        leaf.read()
-                        """);
-
-        assertEquals(BigInteger.valueOf(9), ((ProtosIntegerValue) result).value());
-    }
-
-    @Test
-    void superArgumentsUseOrdinarySpreadVectorSemantics() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-
-        Object result =
-                execute(
-                        prelude,
-                        """
-                        base: {
-                            sum: (a, b) => { a + b }
-                        }
-                        child: base {
-                            sum: (a, b) => { super.sum(...args) }
-                        }
-                        child.sum(2, 3)
-                        """);
-
-        assertEquals(BigInteger.valueOf(5), ((ProtosIntegerValue) result).value());
-    }
-
-    @Test
-    void superLookupExhaustionSignalsSlotNotFound() throws IOException {
         ProtosPrelude prelude = corePrelude();
 
         ProtosSignalException signal =
