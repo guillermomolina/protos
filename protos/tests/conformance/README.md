@@ -28,14 +28,29 @@ Current expectation kinds:
 - `float-nan`: the program must complete normally with the semantic Float NaN
   value; field 3 is `-` because NaN payload/sign bits are not portable Protos
   semantics;
-- `error`: the program must signal a Protos Error; field 3 is `-` because the
-  current harness checks the semantic fact of signaling an Error, not a narrower
-  Error category.
+- `error`: the program must signal a Protos Error; field 3 is `-` because this
+  expectation checks only the semantic fact of signaling an Error, not a narrower
+  Error category;
+- `error-parent`: the program must signal a Protos Error whose immediate
+  delegation parent is the standard Error prototype named by field 3;
+- `closure-error-parent-fresh`: the program must complete normally with a
+  zero-argument Closure; the runner invokes that exact Closure twice, requires
+  both invocations to signal Errors whose immediate delegation parent is the
+  standard Error prototype named by field 3, and requires the two Error
+  occurrences to have distinct identity;
 - `future-integer`: the program must return a Future; the runner waits for that
   Future to become terminal and requires resolution to the exact mathematical
   Integer in field 3;
 - `future-null`: the program must return a Future that eventually resolves to
   canonical `null`; field 3 is `-`;
+- `future-boolean`: the program must return a Future that eventually resolves to
+  canonical `true` or `false` as named by field 3;
+- `future-error`: the program must return a Future whose terminal state is
+  `failed`; field 3 is `-` because this expectation does not require a narrower
+  Error category;
+- `future-error-parent`: the program must return a Future whose terminal state is
+  `failed` and whose recorded Error has the standard Error prototype named by
+  field 3 as its immediate delegation parent;
 - `future-cancelled`: the program must return a Future whose terminal state is
   `cancelled`; field 3 is `-`.
 
