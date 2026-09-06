@@ -280,3 +280,17 @@ integer/percent-delegated-noninteger-receiver-before-mod-error.protos	error	-
 float/copied-standard-plus-nonfloat-receiver-error.protos	error	-
 float/negated-delegated-nonfloat-receiver-error.protos	error	-
 float/negated-normal.protos	float-bits	bff8000000000000
+fixed-width/inherited-uint8-factory-receiver-error.protos	error	-
+fixed-width/int64-overflow-error.protos	error	-
+fixed-width/int8-float-min.protos	fixed-integer	Int8:-128
+fixed-width/int8-float-overflow-error.protos	error	-
+fixed-width/int8-infinity-error.protos	error	-
+fixed-width/uint16-from-int8-negative-error.protos	error	-
+fixed-width/uint16-from-int8-negative-zero.protos	fixed-integer	UInt16:0
+fixed-width/uint64-overflow-error.protos	error	-
+fixed-width/uint8-nan-error.protos	error	-
+fixed-width/uint8-object-error.protos	error	-
+fixed-width/uint8-two-arity-error.protos	error	-
+fixed-width/uint8-zero-arity-error.protos	error	-
+numeric-conversion/copied-integer-factory-receiver-error.protos	error	-
+numeric-conversion/inherited-integer-factory-receiver-error.protos	error	-
