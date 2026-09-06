@@ -577,7 +577,7 @@ Performance work follows these project rules:
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| PERF001 | Core v0.1 baseline benchmark suite | IN_PROGRESS | — | PERF001-A project-side methodology/ownership contract CLOSED; PERF001-B companion Docker harness CLOSED with external evidence `guillermomolina/protos-benchmarks@4e809acd839a0193250140c5b6dde48051d9aa9a`; PERF001-C cross-language corpus harness READY. Work may use already-closed semantics immediately; a report labelled the complete Core v0.1 baseline requires I015 to be CLOSED. PERF001 observes the baseline; optimization follow-ups receive separate PERF identifiers. |
+| PERF001 | Core v0.1 baseline benchmark suite | IN_PROGRESS | — | PERF001-A project-side methodology/ownership contract CLOSED; PERF001-B companion Docker harness CLOSED with external evidence `guillermomolina/protos-benchmarks@4e809acd839a0193250140c5b6dde48051d9aa9a`; PERF001-C cross-language corpus correctness CLOSED with external evidence `guillermomolina/protos-benchmarks@2da26df49f9b0673c56a9150a2d2f8cfc4a77c17`, consuming pinned Protos revision `42b8264a36254dafbd97d80f5181790e28b9de12`; PERF001-D/E READY. PERF001 remains open for measurement, broader sequential/concurrency coverage, and final reproducibility/reporting. |
 
 
 ### PERF001 — Core v0.1 baseline benchmark suite
@@ -594,9 +594,9 @@ lifecycle state.
 |---|---|---|---|
 | PERF001-A | CLOSED | `SAME_COMMIT` | Publish the Protos-side benchmark contract: ownership split, correctness gate, cross-language equivalence, startup/warmup/steady-state measurement classes, Docker timing boundary, reproducibility metadata, baseline-vs-optimization rule, and canonical corpus handoff. |
 | PERF001-B | CLOSED | `guillermomolina/protos-benchmarks@4e809acd839a0193250140c5b6dde48051d9aa9a` | Companion Docker harness published and validated while consuming pinned Protos revision `509b09562233b925d8414ce9a65196efd08da472`; runtime definitions, host/runtime inventory capture, CPU-affinity/resource policy, raw-result schema, and correctness-gated Protos/Python smoke are present. No timing results are published by this slice. |
-| PERF001-C | READY | — | Implement materially equivalent cross-language versions and runner integration for the existing Protos micro/runtime/algorithm corpus, preserving the correctness and equivalence gates established by PERF001-A/B. |
-| PERF001-D | BLOCKED_BY_DEPENDENCIES | — | After C, publish startup, warmup and steady-state Protos measurements plus interpreter-vs-Truffle compilation comparison and separate compilation diagnostics. |
-| PERF001-E | BLOCKED_BY_DEPENDENCIES | — | After C, extend comparable sequential coverage to closed collection/Core workloads selected by a fresh audit. |
+| PERF001-C | CLOSED | `guillermomolina/protos-benchmarks@2da26df49f9b0673c56a9150a2d2f8cfc4a77c17` | Published and validated algorithm-equivalent Protos/Python/JavaScript coverage for all 11 existing canonical micro/runtime/algorithm workloads at pinned Protos revision `42b8264a36254dafbd97d80f5181790e28b9de12`; 33 correctness cases pass, Protos records `-Xss64m`, Python records recursion limit 50000, Node records `--stack-size=32768`, and no timing results are published by this slice. |
+| PERF001-D | READY | — | Publish startup, warmup and steady-state Protos measurements plus interpreter-vs-Truffle compilation comparison and separate compilation diagnostics, building on the closed PERF001-C correctness/equivalence gate. |
+| PERF001-E | READY | — | Extend comparable sequential coverage to closed collection/Core workloads selected by a fresh audit, building on the closed PERF001-C correctness/equivalence gate. |
 | PERF001-F | BLOCKED_BY_DEPENDENCIES | — | After B and a focused concurrency audit, add Future/P/Actor measurements with explicit CPU-set and scheduling methodology. |
 | PERF001-G | BLOCKED_BY_DEPENDENCIES | — | Final reproducibility run and baseline report; complete-Core-v0.1 labelling additionally requires I015 CLOSED. |
 
