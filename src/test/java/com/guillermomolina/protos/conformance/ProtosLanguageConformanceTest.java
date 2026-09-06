@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import com.guillermomolina.protos.execution.ProtosSourceFileLoader;
+import com.guillermomolina.protos.execution.ProtosStandardLibraryModuleResolver;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
@@ -45,6 +46,7 @@ import org.junit.jupiter.api.TestFactory;
 
 final class ProtosLanguageConformanceTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
+    private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path ROOT = Path.of("protos", "tests", "conformance");
     private static final Path MANIFEST = ROOT.resolve("manifest.tsv");
 
@@ -65,7 +67,12 @@ final class ProtosLanguageConformanceTest {
     }
 
     private static void executeCase(Case testCase) throws IOException {
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(
+                                CORE,
+                                new ProtosStandardLibraryModuleResolver(
+                                        STANDARD_LIBRARY));
         ProtosSourceFileLoader loader = new ProtosSourceFileLoader();
         Path source = ROOT.resolve(testCase.path());
 

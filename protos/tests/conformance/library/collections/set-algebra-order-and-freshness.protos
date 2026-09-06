@@ -1,0 +1,60 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE: https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis, WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for the specific language governing rights and limitations under the License.
+ */
+
+Set: import("std:collections/Set")
+left: Set(1, 2, 3)
+right: Set(2.0, 4, 1.0)
+
+union: Set.union(left, right)
+intersection: Set.intersection(left, right)
+difference: Set.difference(left, right)
+
+unionOrder: Map()
+unionIndex: 0
+Set.each(union, (element) => {
+    unionOrder.atPut(unionIndex, element)
+    unionIndex = unionIndex + 1
+})
+
+intersectionOrder: Map()
+intersectionIndex: 0
+Set.each(intersection, (element) => {
+    intersectionOrder.atPut(intersectionIndex, element)
+    intersectionIndex = intersectionIndex + 1
+})
+
+differenceOrder: Map()
+differenceIndex: 0
+Set.each(difference, (element) => {
+    differenceOrder.atPut(differenceIndex, element)
+    differenceIndex = differenceIndex + 1
+})
+
+added: Set.add(union, 5)
+
+ok: true
+(union !== left).ifFalse(() => { ok = false })
+(union !== right).ifFalse(() => { ok = false })
+(intersection !== left).ifFalse(() => { ok = false })
+(difference !== left).ifFalse(() => { ok = false })
+(Set.size(left) == 3).ifFalse(() => { ok = false })
+(Set.size(right) == 3).ifFalse(() => { ok = false })
+(unionIndex == 4).ifFalse(() => { ok = false })
+(unionOrder.at(0) === 1).ifFalse(() => { ok = false })
+(unionOrder.at(1) === 2).ifFalse(() => { ok = false })
+(unionOrder.at(2) === 3).ifFalse(() => { ok = false })
+(unionOrder.at(3) === 4).ifFalse(() => { ok = false })
+(intersectionIndex == 2).ifFalse(() => { ok = false })
+(intersectionOrder.at(0) === 1).ifFalse(() => { ok = false })
+(intersectionOrder.at(1) === 2).ifFalse(() => { ok = false })
+(differenceIndex == 1).ifFalse(() => { ok = false })
+(differenceOrder.at(0) === 3).ifFalse(() => { ok = false })
+(added === union).ifFalse(() => { ok = false })
+Set.contains(union, 5).ifFalse(() => { ok = false })
+(union.at(1) === true).ifFalse(() => { ok = false })
+(intersection.at(1) === true).ifFalse(() => { ok = false })
+(difference.at(3) === true).ifFalse(() => { ok = false })
+ok
