@@ -1,12 +1,70 @@
 /* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.execution;
-import static org.junit.jupiter.api.Assertions.*; import com.guillermomolina.protos.runtime.*; import java.io.IOException; import java.math.BigInteger; import java.nio.file.Path; import org.junit.jupiter.api.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosFloatValue;
+import com.guillermomolina.protos.runtime.ProtosIdentity;
+import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import java.io.IOException;
+import java.math.BigInteger;
+import java.nio.file.Path;
+import org.junit.jupiter.api.Test;
+
 class ProtosIdentityMapConformanceTest {
- @Test void factoryAndPrelude() throws IOException {var p=core();Object a=exec(p,"IdentityMap()"),b=exec(p,"IdentityMap()");assertInstanceOf(ProtosIdentityMapValue.class,a);assertNotSame(a,b);assertTrue(((ProtosIdentityMapValue)a).isOpen());assertSame(p.identityMapPrototype(),p.bindings().readLocalSlot("IdentityMap").orElseThrow());assertThrows(ProtosSignalException.class,()->exec(p,"IdentityMap(1)"));}
- @Test void valueIdentityAndFamilyIdentity() throws IOException {var p=core();assertInt(1,exec(p,"m: IdentityMap()\nm[\"hel\" + \"lo\"] = 1\nm[\"hello\"] = 2\nm.size()"));assertInt(2,exec(p,"m: IdentityMap()\nm[1] = 1\nm[1.0] = 2\nm.size()"));}
- @Test void ordinaryObjectsRemainIndividualKeys() throws IOException {var p=core();assertInt(2,exec(p,"a: { x: 1 }\nb: { x: 1 }\nm: IdentityMap()\nm[a] = 1\nm[b] = 2\nm.size()"));}
- @Test void lookupUpdateContainsRemove() throws IOException {var p=core();assertInt(7,exec(p,"m: IdentityMap()\nk: {}\nm[k] = 5\nm[k] = 7\nm[k]"));assertSame(ProtosBooleanValue.FALSE,exec(p,"IdentityMap().containsKey({})"));assertThrows(ProtosSignalException.class,()->exec(p,"IdentityMap()[{}]"));assertInt(5,exec(p,"m: IdentityMap()\nk: {}\nm[k] = 5\nm.remove(k)"));}
- @Test void delegationDoesNotConferMembership() throws IOException {var p=core();assertThrows(ProtosSignalException.class,()->exec(p,"Fake: IdentityMap {}\nFake.size()"));}
- @Test void identityHashesAreCoherent(){var a=new ProtosFixedIntegerValue(ProtosFixedIntegerValue.Family.INT32,BigInteger.ONE);var b=new ProtosFixedIntegerValue(ProtosFixedIntegerValue.Family.INT32,BigInteger.ONE);var c=new ProtosFixedIntegerValue(ProtosFixedIntegerValue.Family.UINT32,BigInteger.ONE);assertTrue(ProtosIdentity.identical(a,b));assertEquals(ProtosIdentity.identityHash(a),ProtosIdentity.identityHash(b));assertFalse(ProtosIdentity.identical(a,c));var n1=new ProtosFloatValue(Double.longBitsToDouble(0x7ff8000000000001L));var n2=new ProtosFloatValue(Double.longBitsToDouble(0x7ff8000000000002L));assertTrue(ProtosIdentity.identical(n1,n2));assertEquals(ProtosIdentity.identityHash(n1),ProtosIdentity.identityHash(n2));assertFalse(ProtosIdentity.identical(new ProtosFloatValue(0.0),new ProtosFloatValue(-0.0)));}
- private static void assertInt(long n,Object x){assertEquals(BigInteger.valueOf(n),((ProtosIntegerValue)x).value());} private static Object exec(ProtosPrelude p,String s){return new ProtosSourceCompiler().compile(s).call(p.newModuleActivation());} private static ProtosPrelude core() throws IOException{return new ProtosCoreBootstrap().bootstrap(Path.of("protos","lib","core"));}
+    // Deliberately Java-side: this checks implementation representation and the
+    // exact bootstrap binding, not ordinary source-visible IdentityMap behavior.
+    @Test
+    void factoryMaterializesRepresentedIdentityMapAndPreludeBinding() throws IOException {
+        ProtosPrelude prelude = core();
+        Object value = exec(prelude, "IdentityMap()");
+
+        assertInstanceOf(ProtosIdentityMapValue.class, value);
+        assertSame(
+                prelude.identityMapPrototype(),
+                prelude.bindings().readLocalSlot("IdentityMap").orElseThrow());
+    }
+
+    // Deliberately Java-side: ProtosIdentity is the primitive representation
+    // helper consumed by IdentityMap; testing its raw family/NaN/signed-zero
+    // behavior is an implementation contract rather than a message-level test.
+    @Test
+    void identityHashesAreCoherent() {
+        var a =
+                new ProtosFixedIntegerValue(
+                        ProtosFixedIntegerValue.Family.INT32, BigInteger.ONE);
+        var b =
+                new ProtosFixedIntegerValue(
+                        ProtosFixedIntegerValue.Family.INT32, BigInteger.ONE);
+        var c =
+                new ProtosFixedIntegerValue(
+                        ProtosFixedIntegerValue.Family.UINT32, BigInteger.ONE);
+
+        assertTrue(ProtosIdentity.identical(a, b));
+        assertEquals(ProtosIdentity.identityHash(a), ProtosIdentity.identityHash(b));
+        assertFalse(ProtosIdentity.identical(a, c));
+
+        var nan1 = new ProtosFloatValue(Double.longBitsToDouble(0x7ff8000000000001L));
+        var nan2 = new ProtosFloatValue(Double.longBitsToDouble(0x7ff8000000000002L));
+        assertTrue(ProtosIdentity.identical(nan1, nan2));
+        assertEquals(ProtosIdentity.identityHash(nan1), ProtosIdentity.identityHash(nan2));
+
+        assertFalse(
+                ProtosIdentity.identical(
+                        new ProtosFloatValue(0.0), new ProtosFloatValue(-0.0)));
+    }
+
+    private static Object exec(ProtosPrelude prelude, String source) {
+        return new ProtosSourceCompiler().compile(source).call(prelude.newModuleActivation());
+    }
+
+    private static ProtosPrelude core() throws IOException {
+        return new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
+    }
 }

@@ -348,3 +348,9 @@ collections/map-lookup-update-contains-size-identity.protos	boolean	true
 collections/map-missing-key-error.protos	error	-
 collections/map-remove-returns-old-value.protos	boolean	true
 collections/map-wrong-receiver-error.protos	error	-
+collections/identity-map-cross-numeric-family-distinct.protos	boolean	true
+collections/identity-map-delegated-receiver-error.protos	error	-
+collections/identity-map-factory-fresh-open.protos	boolean	true
+collections/identity-map-factory-wrong-arity-error.protos	error	-
+collections/identity-map-lookup-update-contains-remove.protos	boolean	true
+collections/identity-map-missing-key-error.protos	error	-
