@@ -600,12 +600,12 @@ Performance work follows these project rules:
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
 | PERF001 | Core v0.1 baseline benchmark suite | IN_PROGRESS | — | PERF001-A project-side methodology/ownership contract CLOSED; PERF001-B companion Docker harness CLOSED with external evidence `guillermomolina/protos-benchmarks@4e809acd839a0193250140c5b6dde48051d9aa9a`; PERF001-C cross-language corpus correctness CLOSED with external evidence `guillermomolina/protos-benchmarks@2da26df49f9b0673c56a9150a2d2f8cfc4a77c17`, consuming pinned Protos revision `42b8264a36254dafbd97d80f5181790e28b9de12`; PERF001-D/E READY. PERF001 remains open for measurement, broader sequential/concurrency coverage, and final reproducibility/reporting. |
-| PERF002 | Truffle compilability and dispatch optimization | IN_PROGRESS | — | PERF002-A implementation/conformance CLOSED at `0.2.162-SNAPSHOT` with SAME_COMMIT evidence; PERF002-B READY in `guillermomolina/protos-benchmarks` for external optimizing-Truffle validation against the exact published PERF002-A Protos revision. |
+| PERF002 | Truffle compilability and dispatch optimization | CLOSED | `guillermomolina/protos-benchmarks@c69248714a60dd62894164bf5332b55f780d6fe4` | PERF002-A implementation/conformance CLOSED at `0.2.162-SNAPSHOT`; PERF002-B CLOSED with harness `224ce852f550a7d9126fad9f5923a9a2fd8194cc` and retained external evidence `c69248714a60dd62894164bf5332b55f780d6fe4` against exact Protos revision `3c93912a5579326374782a43527fbb51046f8f91`. Semantic smoke, canonical 11x2 interpreter/Truffle correctness, known bailout/runtime guards, and 10/10 polymorphic-dispatch stability PASS at `-Xss128m`; no timing results were published. |
 
 
 ### PERF002 — Truffle compilability and dispatch optimization
 
-Status: IN_PROGRESS
+Status: CLOSED
 
 Purpose: Preserve the existing callable, extraction, receiver, `methodHome` and
 task-continuation semantics while improving optimizing-Truffle compilability,
@@ -614,7 +614,7 @@ without making the Protos repository depend on the external benchmark runtime.
 | Slice | Status | Version | Closure evidence | Implemented surface |
 |---|---|---|---|---|
 | PERF002-A | CLOSED | `0.2.162-SNAPSHOT` | `SAME_COMMIT` | Sequence/argument-vector compiler structure, ordinary evaluator fast path, immediate selected-method activation metadata, extracted-method materialization boundary, Protos-source semantic conformance, full Maven/package/license validation. |
-| PERF002-B | READY | — | — | Companion-repository optimizing-Truffle validation against the exact published PERF002-A Protos commit; publish retained external evidence, then reconcile it back into this ledger and close PERF002. |
+| PERF002-B | CLOSED | — | `guillermomolina/protos-benchmarks@c69248714a60dd62894164bf5332b55f780d6fe4` | Exact harness `224ce852f550a7d9126fad9f5923a9a2fd8194cc` validates Protos `3c93912a5579326374782a43527fbb51046f8f91` with GraalVM Community JDK 22, external `truffle-runtime:24.0.0`, semantic smoke PASS, canonical 11x2 correctness PASS, known bailout/runtime guards PASS, and 10/10 polymorphic-dispatch Truffle stability PASS at `-Xss128m`; no timing results published. |
 
 PERF002-A invariants:
 - fixed child arrays expose compilation-constant structure to Truffle;
@@ -629,6 +629,13 @@ PERF002-A invariants:
   GraalVM or `protos-benchmarks` dependency.
 
 Project record: `docs/project/PERF002_TRUFFLE_COMPILABILITY.md`.
+
+Closure evidence:
+- PERF002-A implementation commit: `3c93912a5579326374782a43527fbb51046f8f91`;
+- PERF002-B harness commit: `guillermomolina/protos-benchmarks@224ce852f550a7d9126fad9f5923a9a2fd8194cc`;
+- PERF002-B evidence commit: `guillermomolina/protos-benchmarks@c69248714a60dd62894164bf5332b55f780d6fe4`;
+- optimizing runtime: `HotSpotTruffleRuntime`, external Truffle `24.0.0`, `-Xss128m`;
+- validation: semantic smoke PASS, canonical 11x2 correctness PASS, known bailout/runtime guards PASS, polymorphic stability 10/10 PASS, `opt_done=238`, `opt_failed=0`.
 
 ### PERF001 — Core v0.1 baseline benchmark suite
 
