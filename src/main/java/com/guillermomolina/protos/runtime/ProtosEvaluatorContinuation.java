@@ -33,6 +33,7 @@ public final class ProtosEvaluatorContinuation {
     private final ArrayList<Event> events = new ArrayList<>();
     private final ArrayDeque<Active> active = new ArrayDeque<>();
     private final Map<InvocationKey, ProtosActivation> invocationActivations = new HashMap<>();
+    private ProtosActivation rootInvocationActivation;
     private int cursor;
     private boolean segmentActive;
     private boolean controlUnwind;
@@ -90,6 +91,62 @@ public final class ProtosEvaluatorContinuation {
     public void leaveIncomplete(Entry entry) {
         Active current = active.pop();
         if (current.eventIndex != entry.index()) throw new IllegalStateException("evaluator stack mismatch");
+    }
+
+    /** Current replay-tape cursor after the events already traversed in this segment. */
+    public int cursorPosition() {
+        if (!segmentActive) {
+            throw new IllegalStateException("no evaluator segment active");
+        }
+        return cursor;
+    }
+
+    /**
+     * Re-enters a native control primitive after one direct Closure invocation has already
+     * semantically completed in an earlier segment.
+     *
+     * <p>The skipped invocation still consumes its parent-event invocation ordinal so a later
+     * direct invocation (for example ensure cleanup) reuses the same replay-stable activation.
+     * The cursor jump skips only the previously traversed body event range recorded by that
+     * control primitive.
+     */
+    public void skipInvocationReplayTo(int targetCursor) {
+        if (!segmentActive) {
+            throw new IllegalStateException("no evaluator segment active");
+        }
+        Active current = active.peek();
+        if (current == null) {
+            throw new IllegalStateException("no active evaluator event for invocation replay");
+        }
+        if (targetCursor < cursor || targetCursor > events.size()) {
+            throw new IllegalStateException(
+                    "invalid replay cursor jump from " + cursor + " to " + targetCursor);
+        }
+        current.invocationOrdinal++;
+        cursor = targetCursor;
+    }
+
+    /**
+     * Replay-stable activation for the one root Closure executed by a cooperative Task.
+     *
+     * <p>At Task entry no evaluator event is active yet, so ordinary invocationActivation()
+     * cannot provide a stable key. Retaining the root activation across segments preserves
+     * its lexical execution context and ReturnHome while the event tape reconstructs only
+     * the host stack.
+     */
+    public ProtosActivation rootInvocationActivation(Supplier<ProtosActivation> factory) {
+        Objects.requireNonNull(factory, "factory");
+        if (!segmentActive) {
+            throw new IllegalStateException("no evaluator segment active");
+        }
+        if (!active.isEmpty()) {
+            throw new IllegalStateException(
+                    "root invocation activation requested after evaluator events started");
+        }
+        if (rootInvocationActivation == null) {
+            rootInvocationActivation = factory.get();
+        }
+        return rootInvocationActivation;
     }
 
     public ProtosActivation invocationActivation(Supplier<ProtosActivation> factory) {

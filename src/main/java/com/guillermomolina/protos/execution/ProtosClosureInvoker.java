@@ -41,7 +41,7 @@ public final class ProtosClosureInvoker {
             com.guillermomolina.protos.runtime.ProtosTask task) {
         Objects.requireNonNull(creator, "creator");
         Objects.requireNonNull(task, "task");
-        ProtosActivation activation = task.evaluatorContinuation().invocationActivation(() ->
+        ProtosActivation activation = task.evaluatorContinuation().rootInvocationActivation(() ->
                 ProtosActivation.forClosureInvocation(
                         closure, supplied, creator.prelude().orElse(null), creator.actorModuleState(),
                         creator.currentModuleKey().orElse(null), creator.executionDomain()));

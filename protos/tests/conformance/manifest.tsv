@@ -568,3 +568,13 @@ control/ensure-normal-result.protos	integer	41
 control/ensure-selected-handler-inactive-during-cleanup.protos	boolean	true
 control/ensure-wrong-arity-two.protos	error	-
 control/ensure-wrong-arity-zero.protos	error	-
+control/ensure-body-and-cleanup-both-suspend.protos	future-integer	1111
+control/ensure-body-suspension-exact-once.protos	future-integer	111
+control/ensure-cleanup-suspension-exact-once.protos	future-integer	111
+control/ensure-cleanup-suspension-exact-result-identity.protos	future-boolean	true
+control/ensure-error-cleanup-suspension-exact-error-identity.protos	future-boolean	true
+control/ensure-nested-cleanup-suspension-lifo.protos	future-integer	1234
+control/ensure-return-cleanup-suspension-preserves-return.protos	future-integer	1142
+control/ensure-selected-handler-inactive-across-cleanup-suspension.protos	future-integer	2
+future/root-activation-preserves-local-binding-across-suspension.protos	future-integer	42
+future/root-activation-preserves-return-home-across-suspension.protos	future-integer	42

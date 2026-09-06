@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
+import com.guillermomolina.protos.runtime.ProtosEvaluatorContinuation;
 import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
@@ -79,27 +80,65 @@ public final class ProtosStandardObjectProtocol {
         ProtosDynamicControlState.Frame frame =
                 state.enterFrame(activation, ProtosDynamicControlState.FrameKind.ENSURE);
 
-        Object result;
-        try {
-            result = ProtosClosureInvoker.invoke(body, List.of(), activation);
-        } catch (ProtosEvaluatorSuspension suspension) {
-            throw suspension;
-        } catch (ProtosSignalException pending) {
-            runCleanup(state, frame, cleanup, activation);
-            throw pending;
-        } catch (ProtosNonLocalReturnException pending) {
-            runCleanup(state, frame, cleanup, activation);
-            throw pending;
-        } catch (ProtosTaskCancellationException pending) {
-            state.leaveFrame(frame);
-            throw pending;
-        } catch (RuntimeException hostFailure) {
-            state.leaveFrame(frame);
-            throw hostFailure;
+        boolean replayingCleanup =
+                frame.ensurePhase() == ProtosDynamicControlState.EnsurePhase.CLEANUP;
+
+        if (!replayingCleanup) {
+            try {
+                Object result = ProtosClosureInvoker.invoke(body, List.of(), activation);
+                state.beginEnsureCleanup(
+                        frame,
+                        ProtosDynamicControlState.EnsureExitKind.NORMAL,
+                        result,
+                        replayCursor(activation));
+            } catch (ProtosEvaluatorSuspension suspension) {
+                throw suspension;
+            } catch (ProtosSignalException pending) {
+                state.beginEnsureCleanup(
+                        frame,
+                        ProtosDynamicControlState.EnsureExitKind.ERROR,
+                        pending,
+                        replayCursor(activation));
+            } catch (ProtosNonLocalReturnException pending) {
+                state.beginEnsureCleanup(
+                        frame,
+                        ProtosDynamicControlState.EnsureExitKind.RETURN,
+                        pending,
+                        replayCursor(activation));
+            } catch (ProtosTaskCancellationException pending) {
+                // I022-E owns cancellation unwind and same-request cleanup shielding.
+                state.leaveFrame(frame);
+                throw pending;
+            } catch (RuntimeException hostFailure) {
+                state.leaveFrame(frame);
+                throw hostFailure;
+            }
+        } else {
+            resumeEnsureCleanupReplay(frame, activation);
         }
 
+        return finishEnsure(state, frame, cleanup, activation);
+    }
+
+    private static Object finishEnsure(
+            ProtosDynamicControlState state,
+            ProtosDynamicControlState.Frame frame,
+            ProtosClosureValue cleanup,
+            ProtosActivation activation) {
+        ProtosDynamicControlState.EnsureExitKind exitKind =
+                frame.ensureExitKind().orElseThrow(
+                        () -> new IllegalStateException("ensure cleanup has no pending exit"));
+        Object outcome =
+                frame.ensureOutcome().orElseThrow(
+                        () -> new IllegalStateException("ensure cleanup has no pending outcome"));
+
         runCleanup(state, frame, cleanup, activation);
-        return result;
+
+        return switch (exitKind) {
+            case NORMAL -> outcome;
+            case ERROR -> throw (ProtosSignalException) outcome;
+            case RETURN -> throw (ProtosNonLocalReturnException) outcome;
+        };
     }
 
     private static void runCleanup(
@@ -111,11 +150,39 @@ public final class ProtosStandardObjectProtocol {
             ProtosClosureInvoker.invoke(cleanup, List.of(), activation);
             state.leaveFrame(frame);
         } catch (ProtosEvaluatorSuspension suspension) {
+            // The frame remains in CLEANUP phase so replay resumes cleanup, never the body.
             throw suspension;
         } catch (RuntimeException laterTransfer) {
             state.leaveFrame(frame);
             throw laterTransfer;
         }
+    }
+
+    private static int replayCursor(ProtosActivation activation) {
+        if (activation.task().isEmpty()) {
+            return -1;
+        }
+        ProtosEvaluatorContinuation continuation =
+                activation.task().orElseThrow().evaluatorContinuation();
+        return continuation.segmentActive() ? continuation.cursorPosition() : -1;
+    }
+
+    private static void resumeEnsureCleanupReplay(
+            ProtosDynamicControlState.Frame frame,
+            ProtosActivation activation) {
+        int targetCursor = frame.ensureBodyReplayCursor();
+        if (targetCursor < 0) {
+            throw new IllegalStateException(
+                    "suspended ensure cleanup requires a replay cursor checkpoint");
+        }
+        ProtosEvaluatorContinuation continuation =
+                activation.task()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "suspended ensure cleanup requires a task"))
+                        .evaluatorContinuation();
+        continuation.skipInvocationReplayTo(targetCursor);
     }
 
     private static ProtosSignalException invalid(ProtosActivation activation) {

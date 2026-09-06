@@ -147,4 +147,43 @@ class ProtosDynamicControlStateTest {
         state.leaveFrame(outer);
     }
 
+
+    @Test
+    void ensureCleanupPhaseRetainsExactOutcomeAcrossReplayFrameReuse() {
+        ProtosDynamicControlState state = new ProtosDynamicControlState();
+        Object invocation = new Object();
+        Object result = new Object();
+
+        ProtosDynamicControlState.Frame frame =
+                state.enterFrame(invocation, ProtosDynamicControlState.FrameKind.ENSURE);
+        assertEquals(ProtosDynamicControlState.EnsurePhase.BODY, frame.ensurePhase());
+
+        state.beginEnsureCleanup(
+                frame,
+                ProtosDynamicControlState.EnsureExitKind.NORMAL,
+                result,
+                17);
+
+        ProtosDynamicControlState.Frame replay =
+                state.enterFrame(invocation, ProtosDynamicControlState.FrameKind.ENSURE);
+        assertSame(frame, replay);
+        assertEquals(ProtosDynamicControlState.EnsurePhase.CLEANUP, replay.ensurePhase());
+        assertEquals(
+                ProtosDynamicControlState.EnsureExitKind.NORMAL,
+                replay.ensureExitKind().orElseThrow());
+        assertSame(result, replay.ensureOutcome().orElseThrow());
+        assertEquals(17, replay.ensureBodyReplayCursor());
+
+        assertThrows(
+                IllegalStateException.class,
+                () ->
+                        state.beginEnsureCleanup(
+                                frame,
+                                ProtosDynamicControlState.EnsureExitKind.NORMAL,
+                                result,
+                                18));
+
+        state.leaveFrame(frame);
+    }
+
 }

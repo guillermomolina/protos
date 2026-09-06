@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.179-SNAPSHOT
+
+- Close I022-D by first making the cooperative Task producer Closure activation itself replay-stable across segments: `invokeInTask()` now reuses one root activation so lexical bindings and ReturnHome identity survive suspension. Then make D043 `ensure(cleanup)` replay-stable across real `Future.value()` suspension in both protected body and cleanup. ENSURE frames now persist BODY/CLEANUP phase, the exact pending normal result/Error/non-local-return transfer and the body replay cursor. If cleanup suspended after the body had semantically exited, replay skips that body instead of reconstructing its transfer or effects.
+- Extend the existing per-Task evaluator replay tape with one internal control-primitive operation that consumes the already-exited body's direct Closure-invocation ordinal while advancing to its recorded event boundary. Cleanup therefore reuses the same invocation activation and resumes its incomplete expression range; there is no second continuation stack, programmer-visible cleanup object or native-boundary expansion.
+- Add Protos-source Future regressions for root lexical-binding and ReturnHome preservation across suspension, plus conformance for body and cleanup suspension, exact-once effects, exact normal-result and Error identity, selected-handler inactivity across suspended cleanup, pending non-local return, nested LIFO cleanup and two suspension phases in one ensure. I022 remains IN_PROGRESS and I022-E becomes READY for cooperative cancellation unwind and same-request shielding.
+
 ## 0.2.178-SNAPSHOT
 
 - Continue `PERF003-A — Collection algorithm Truffle compilability` after the exact external rerun against Protos `eb8b9c588bb363309da5193bf8d98d64d5456cee` again preserved `array-reduce` result `528` and reduced the failing graph from 150500 to 150069 / 150000, leaving only 69 graph-size units while still recording 2 `GraphTooBig` failures. Refine only ordinary-Protos `Array.reduce`: cache the immutable invocation-local `initial` cardinality and fresh internal snapshot cardinality once, reuse them through validation/fold setup, and remove the recursive helper's redundant explicit `null` result expression.

@@ -41,6 +41,17 @@ public final class ProtosDynamicControlState {
         ENSURE
     }
 
+    public enum EnsurePhase {
+        BODY,
+        CLEANUP
+    }
+
+    public enum EnsureExitKind {
+        NORMAL,
+        ERROR,
+        RETURN
+    }
+
     public enum TransferKind {
         RETURN,
         ERROR,
@@ -54,11 +65,16 @@ public final class ProtosDynamicControlState {
         private final Object invocationIdentity;
         private boolean active = true;
         private ProtosObjectValue handlerMatchPrototype;
+        private EnsurePhase ensurePhase;
+        private EnsureExitKind ensureExitKind;
+        private Object ensureOutcome;
+        private int ensureBodyReplayCursor = -1;
 
         private Frame(long id, FrameKind kind, Object invocationIdentity) {
             this.id = id;
             this.kind = Objects.requireNonNull(kind, "kind");
             this.invocationIdentity = Objects.requireNonNull(invocationIdentity, "invocationIdentity");
+            this.ensurePhase = kind == FrameKind.ENSURE ? EnsurePhase.BODY : null;
         }
 
         public long id() {
@@ -81,6 +97,29 @@ public final class ProtosDynamicControlState {
             return Optional.ofNullable(handlerMatchPrototype);
         }
 
+        public EnsurePhase ensurePhase() {
+            requireEnsureFrame();
+            return ensurePhase;
+        }
+
+        public Optional<EnsureExitKind> ensureExitKind() {
+            requireEnsureFrame();
+            return Optional.ofNullable(ensureExitKind);
+        }
+
+        public Optional<Object> ensureOutcome() {
+            requireEnsureFrame();
+            return Optional.ofNullable(ensureOutcome);
+        }
+
+        public int ensureBodyReplayCursor() {
+            requireEnsureFrame();
+            if (ensurePhase != EnsurePhase.CLEANUP) {
+                throw new IllegalStateException("ensure body has not exited yet");
+            }
+            return ensureBodyReplayCursor;
+        }
+
         private void bindHandlerMatchPrototype(ProtosObjectValue matchPrototype) {
             Objects.requireNonNull(matchPrototype, "matchPrototype");
             if (handlerMatchPrototype != null && handlerMatchPrototype != matchPrototype) {
@@ -88,6 +127,29 @@ public final class ProtosDynamicControlState {
                         "replay invocation changed handler match prototype");
             }
             handlerMatchPrototype = matchPrototype;
+        }
+
+        private void beginEnsureCleanup(
+                EnsureExitKind exitKind, Object outcome, int bodyReplayCursor) {
+            requireEnsureFrame();
+            Objects.requireNonNull(exitKind, "exitKind");
+            Objects.requireNonNull(outcome, "outcome");
+            if (ensurePhase != EnsurePhase.BODY) {
+                throw new IllegalStateException("ensure body exit was already recorded");
+            }
+            if (bodyReplayCursor < -1) {
+                throw new IllegalArgumentException("invalid ensure body replay cursor");
+            }
+            ensureExitKind = exitKind;
+            ensureOutcome = outcome;
+            ensureBodyReplayCursor = bodyReplayCursor;
+            ensurePhase = EnsurePhase.CLEANUP;
+        }
+
+        private void requireEnsureFrame() {
+            if (kind != FrameKind.ENSURE) {
+                throw new IllegalStateException("handler frame has no ensure phase");
+            }
         }
 
         private void deactivate() {
@@ -182,6 +244,15 @@ public final class ProtosDynamicControlState {
             }
             current = parentObject;
         }
+    }
+
+    public void beginEnsureCleanup(
+            Frame frame,
+            EnsureExitKind exitKind,
+            Object outcome,
+            int bodyReplayCursor) {
+        requirePresent(frame);
+        frame.beginEnsureCleanup(exitKind, outcome, bodyReplayCursor);
     }
 
     public Optional<Frame> frameForInvocation(Object invocationIdentity) {
