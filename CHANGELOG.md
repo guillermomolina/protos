@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.2.163-SNAPSHOT
+
+- Continue `LIB003 — JSON` with `LIB003-C`: publish ordinary-Protos `JSON.encode(node)` for the explicit JSON tree model. The encoder validates each visited representation, preserves Array order and retained Object Map traversal order, and rejects malformed or cyclic trees instead of reflecting over arbitrary application objects or inventing references.
+- Emit semantic Strings as strict JSON text over UTF-8, escaping quote/backslash and U+0000..U+001F without Unicode normalization. Emit exact Number coefficient/exponent data entirely through unbounded Integer arithmetic (`coefficient` plus optional `e` exponent), with no Float conversion, binary64 formatting, host/JVM decimal formatter, or eager normalization.
+- Detect cycles only along the active traversal path with an ordinary `IdentityMap`, so shared acyclic JSON nodes remain valid and are encoded at each occurrence. Add Protos-source conformance for exact scalar/decimal output, escapes/Unicode round-trip, deterministic nested order, shared subtrees, malformed representations, and cycle rejection.
+- Close LIB003-C with executable-impact focal/full-suite validation and make LIB003-D READY. Top-level LIB003 remains IN_PROGRESS pending streaming/adapters and final cross-slice conformance; no normative specification or production Java boundary changes are introduced.
+
 ## 0.2.162-SNAPSHOT
 
 - Publish `PERF002-A`, the Protos-side implementation/conformance slice of the Truffle compilability and dispatch optimization discovered while preparing PERF001-D. Fixed Sequence and argument-vector child arrays are exposed as compilation-constant exploded loops; ordinary execution avoids the evaluator continuation bridge unless an active cooperative-task segment requires it; immediate selected-method invocation preserves the original receiver and physical `methodHome` without materializing an unobservable extracted Closure.

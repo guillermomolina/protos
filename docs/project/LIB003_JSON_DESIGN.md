@@ -1,6 +1,6 @@
 # LIB003 JSON Design Record
 
-Status: initial design closed for implementation; LIB003-A selected for first publication
+Status: LIB003-A/B/C implementation contracts published; LIB003-D selected for next publication
 Work item: `LIB003`
 Nature: Project design record; **non-normative**
 Cross-cutting context: `docs/design/STRUCTURED_DATA_AND_SERIALIZATION.md`
@@ -455,6 +455,45 @@ retained Map traversal order for deterministic ordinary output, and reject
 malformed/cyclic trees rather than inventing references.
 
 Canonical JSON/JCS remains a separate possible profile.
+
+## LIB003-C implementation closure
+
+LIB003-C publishes `encode(node)` on `std:json/JSON`, implemented entirely in
+ordinary Protos source.
+
+The encoder accepts the explicit LIB003 JSON tree only. It validates every
+visited node's exact `kind` tag and the representation invariant owned by that
+kind before emitting the corresponding value. It does not reflect over arbitrary
+application objects, invoke a `toJSON` hook, introduce a runtime JSON family, or
+add a generic Serializer abstraction.
+
+String emission scans the semantic String's UTF-8 octets. Quote and backslash
+are escaped, control octets U+0000 through U+001F are emitted as lowercase
+`\u00xx`, and all other UTF-8 octets are preserved without Unicode
+normalization. This is ordinary deterministic JSON output, not a
+source-preserving or canonical-JCS profile.
+
+Number emission validates the stored coefficient and exponent through the same
+strict unbounded-Integer receiver domain used by the constructors. The
+coefficient is written as an exact base-10 Integer. A nonzero exponent is
+written as `e` followed by its exact base-10 Integer. No Float conversion,
+binary64 formatting, host decimal formatter, eager normalization, or
+precision/range narrowing occurs.
+
+Arrays preserve payload order. Objects traverse their ordinary Map payload in
+retained insertion order, validate each key as a semantic String, and emit that
+order deterministically.
+
+Cycle detection uses an ordinary local `IdentityMap` containing only JSON node
+objects on the active traversal path. Re-entering an active node signals
+ordinary Error; nodes are removed after their subtree completes. Consequently,
+shared but acyclic child nodes are valid and are encoded independently at each
+tree occurrence. No reference IDs or object-persistence semantics are invented.
+
+Malformed node tags, scalar payloads, Number records, object keys, container
+payloads, child nodes, or cyclic trees signal ordinary Error. Output is built in
+a fresh local Bytes buffer and returned only after the complete traversal
+succeeds, so an encoding failure does not expose a partial String result.
 
 ## Streaming direction
 

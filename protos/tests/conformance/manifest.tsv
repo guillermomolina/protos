@@ -431,3 +431,11 @@ integer/number-prototype-slot-visible.protos	integer	52
 integer/numeric-parent-does-not-confer-membership.protos	error	-
 integer/numeric-value-parent-continues-family-lookup.protos	integer	77
 integer/prototype-local-slot-visible.protos	integer	41
+library/json/encode-scalars-exact-decimals.protos	boolean	true
+library/json/encode-string-roundtrip-escapes-unicode.protos	boolean	true
+library/json/encode-nested-retained-order.protos	boolean	true
+library/json/encode-shared-child-not-cycle.protos	boolean	true
+library/json/encode-cycle-error.protos	error	-
+library/json/encode-malformed-number-error.protos	error	-
+library/json/encode-malformed-object-key-error.protos	error	-
+library/json/encode-malformed-kind-error.protos	error	-

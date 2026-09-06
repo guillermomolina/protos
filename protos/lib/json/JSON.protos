@@ -1009,3 +1009,197 @@ parse: (text) => {
 
     root
 }
+
+encode: (root) => {
+    output: Encoding.UTF8.encode("")
+
+    fail: () => {
+        Error().signal()
+    }
+
+    emitAsciiText: (text) => {
+        Encoding.UTF8.encode(text).each((octet) => {
+            output.add(octet)
+        })
+    }
+
+    emitHexNibble: (digit) => {
+        (digit < 10).ifTrue(() => {
+            output.add(48 + digit)
+        })
+        (digit >= 10).ifTrue(() => {
+            output.add(87 + digit)
+        })
+    }
+
+    emitString: (text) => {
+        ignoredStringValidation: text + ""
+
+        output.add(34)
+        Encoding.UTF8.encode(text).each((octet) => {
+            handled: false
+
+            (octet == 34).ifTrue(() => {
+                output.add(92)
+                output.add(34)
+                handled = true
+            })
+
+            (octet == 92).ifTrue(() => {
+                output.add(92)
+                output.add(92)
+                handled = true
+            })
+
+            handled.ifFalse(() => {
+                (octet < 32).ifTrue(() => {
+                    output.add(92)
+                    output.add(117)
+                    output.add(48)
+                    output.add(48)
+                    emitHexNibble(octet.div(16))
+                    emitHexNibble(octet.mod(16))
+                    handled = true
+                })
+            })
+
+            handled.ifFalse(() => {
+                output.add(octet)
+            })
+        })
+        output.add(34)
+    }
+
+    emitUnsignedInteger: null
+    emitUnsignedInteger = (value) => {
+        quotient: value.div(10)
+        (quotient > 0).ifTrue(() => {
+            emitUnsignedInteger(quotient)
+        })
+        output.add(48 + value.mod(10))
+    }
+
+    emitInteger: (value) => {
+        ignoredIntegerValidation: value.div(1)
+
+        negative: value < 0
+        magnitude: value
+
+        negative.ifTrue(() => {
+            output.add(45)
+            magnitude = 0 - value
+        })
+
+        (magnitude == 0).ifTrue(() => {
+            output.add(48)
+        })
+
+        (magnitude == 0).ifFalse(() => {
+            emitUnsignedInteger(magnitude)
+        })
+    }
+
+    active: IdentityMap()
+    visit: null
+
+    visit = (node) => {
+        kind: node.kind
+        value: node.value
+        handled: false
+
+        (kind === "null").ifTrue(() => {
+            (value === null).ifFalse(() => {
+                fail()
+            })
+            emitAsciiText("null")
+            handled = true
+        })
+
+        (kind === "boolean").ifTrue(() => {
+            (value === true).ifTrue(() => {
+                emitAsciiText("true")
+                handled = true
+            })
+            (value === false).ifTrue(() => {
+                emitAsciiText("false")
+                handled = true
+            })
+            handled.ifFalse(() => {
+                fail()
+            })
+        })
+
+        (kind === "string").ifTrue(() => {
+            emitString(value)
+            handled = true
+        })
+
+        (kind === "number").ifTrue(() => {
+            coefficient: value.coefficient
+            exponent: value.exponent
+
+            ignoredCoefficientValidation: coefficient.div(1)
+            ignoredExponentValidation: exponent.div(1)
+
+            emitInteger(coefficient)
+            (exponent == 0).ifFalse(() => {
+                output.add(101)
+                emitInteger(exponent)
+            })
+            handled = true
+        })
+
+        (kind === "array").ifTrue(() => {
+            active.containsKey(node).ifTrue(() => {
+                fail()
+            })
+            active.atPut(node, true)
+
+            output.add(91)
+            first: true
+            value.each((child) => {
+                first.ifFalse(() => {
+                    output.add(44)
+                })
+                visit(child)
+                first = false
+            })
+            output.add(93)
+
+            active.remove(node)
+            handled = true
+        })
+
+        (kind === "object").ifTrue(() => {
+            active.containsKey(node).ifTrue(() => {
+                fail()
+            })
+            active.atPut(node, true)
+
+            output.add(123)
+            first: true
+            value.each((name, child) => {
+                ignoredNameValidation: name + ""
+
+                first.ifFalse(() => {
+                    output.add(44)
+                })
+                emitString(name)
+                output.add(58)
+                visit(child)
+                first = false
+            })
+            output.add(125)
+
+            active.remove(node)
+            handled = true
+        })
+
+        handled.ifFalse(() => {
+            fail()
+        })
+    }
+
+    visit(root)
+    Encoding.UTF8.decode(output)
+}
