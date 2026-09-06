@@ -14,85 +14,22 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
-
 package com.guillermomolina.protos.execution;
 
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.io.IOException;
+import java.math.BigInteger;
 import java.nio.file.Path;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ProtosStandardNumberEqualityTest {
-    @Test
-    void equalityComparesMathematicalValueAcrossNumericFamilies() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-
-        assertBoolean(prelude, "1 == 1.0", true);
-        assertBoolean(prelude, "UInt8(1) == 1", true);
-        assertBoolean(prelude, "Int32(1) == UInt32(1)", true);
-        assertBoolean(prelude, "Int8(-1) == -1", true);
-        assertBoolean(prelude, "UInt64(18446744073709551615) == 18446744073709551615", true);
-    }
-
-    @Test
-    void equalityUsesExactFloatValueWithoutIntegerRounding() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-
-        assertBoolean(prelude, "9007199254740992 == 9007199254740992.0", true);
-        assertBoolean(prelude, "9007199254740993 == 9007199254740993.0", false);
-        assertBoolean(
-                prelude,
-                "99999999999999991611392 == 1e23",
-                true);
-        assertBoolean(prelude, "1 == 1.5", false);
-    }
-
-    @Test
-    void floatNanAndSignedZeroFollowNormativeEquality() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-
-        assertBoolean(prelude, "(0.0 / 0.0) == (0.0 / 0.0)", false);
-        assertBoolean(prelude, "(0.0 / 0.0) == 0", false);
-        assertBoolean(prelude, "0.0 == -0.0", true);
-        assertBoolean(prelude, "0 == -0.0", true);
-        assertBoolean(prelude, "(1.0 / 0.0) == (1.0 / 0.0)", true);
-        assertBoolean(prelude, "(1.0 / 0.0) == (-1.0 / 0.0)", false);
-    }
-
-    @Test
-    void numericEqualityWithNonNumberReturnsFalse() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-
-        assertBoolean(prelude, "1 == {}", false);
-        assertBoolean(prelude, "1.0 == {}", false);
-        assertBoolean(prelude, "UInt8(1) == {}", false);
-        assertBoolean(prelude, "1 == null", false);
-        assertBoolean(prelude, "1 == true", false);
-    }
-
-    @Test
-    void standardEqualityRejectsNonNumericOriginalReceiver() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        ProtosObjectValue ordinary = new ProtosObjectValue(prelude.integerPrototype());
-
-        assertThrows(
-                ProtosSignalException.class,
-                () ->
-                        ProtosInvocation.invokeMessage(
-                                ordinary,
-                                "==",
-                                java.util.List.of(
-                                        new com.guillermomolina.protos.runtime.ProtosIntegerValue(
-                                                java.math.BigInteger.ONE)),
-                                prelude.newModuleActivation()));
-    }
-
+    // Deliberately Java-side: normal Protos operator syntax fixes == to one
+    // right operand, so this probes the host/runtime protocol boundary directly.
     @Test
     void wrongAritySignalsError() throws IOException {
         ProtosPrelude prelude = corePrelude();
@@ -101,28 +38,12 @@ class ProtosStandardNumberEqualityTest {
                 ProtosSignalException.class,
                 () ->
                         ProtosInvocation.invokeMessage(
-                                new com.guillermomolina.protos.runtime.ProtosIntegerValue(
-                                        java.math.BigInteger.ONE),
+                                new ProtosIntegerValue(BigInteger.ONE),
                                 "==",
-                                java.util.List.of(
-                                        new com.guillermomolina.protos.runtime.ProtosIntegerValue(
-                                                java.math.BigInteger.ONE),
-                                        new com.guillermomolina.protos.runtime.ProtosIntegerValue(
-                                                java.math.BigInteger.TWO)),
+                                List.of(
+                                        new ProtosIntegerValue(BigInteger.ONE),
+                                        new ProtosIntegerValue(BigInteger.TWO)),
                                 prelude.newModuleActivation()));
-    }
-
-    private static void assertBoolean(ProtosPrelude prelude, String source, boolean expected) {
-        Object result = execute(prelude, source);
-        assertSame(
-                expected ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE,
-                result);
-    }
-
-    private static Object execute(ProtosPrelude prelude, String source) {
-        return new ProtosSourceCompiler()
-                .compile(source)
-                .call(prelude.newModuleActivation());
     }
 
     private static ProtosPrelude corePrelude() throws IOException {
