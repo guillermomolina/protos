@@ -304,6 +304,83 @@ The required reasoning order is:
 Do not design an implementation first and then search the specification for
 justification.
 
+### Cost-aware task decomposition
+
+After the required audit and before implementation, assess whether the requested
+work is too large, costly, risky, or uncertain to implement safely as one
+monolithic change. When coherent independent boundaries exist, prefer a sequence
+of smaller implementation slices over one oversized patch.
+
+Signals that decomposition is appropriate include, without being mechanical
+thresholds:
+
+- several independently meaningful behaviors, subsystems, or semantic owners
+  would change at once;
+- the expected diff or validation surface is large enough that failures would be
+  difficult to localize;
+- one part can establish a prerequisite or invariant that later parts can build
+  on independently;
+- a monolithic change would create an unnecessarily long validation/publication
+  cycle or large exposure to concurrent `origin/main` movement;
+- implementation uncertainty is concentrated in separable areas;
+- available environment, tool, memory, context, or execution constraints make a
+  smaller validated unit materially safer to complete.
+
+Decomposition is an implementation strategy, **not a reduction of the requested
+outcome**. If the user asks to implement or close a parent item completely, the
+parent remains open until every slice required for that outcome is implemented,
+validated, and published. Completing one convenient slice is not evidence that
+the parent task is complete.
+
+A good slice SHOULD:
+
+- have one narrow, explainable objective;
+- state its prerequisites and the invariants it establishes for later slices;
+- be independently reviewable and validatable;
+- leave the repository in a coherent, buildable/publishable state under the
+  adaptive validation policy;
+- avoid temporary observable semantics that will immediately be replaced by a
+  later slice;
+- minimize overlap with unrelated files and concurrent work;
+- make failure or rollback attributable to that slice rather than to a large
+  mixed change.
+
+Order slices by real dependency. Prefer foundational representation or internal
+mechanism before behavior that depends on it, and behavior before final
+cross-slice closure/conformance. Do not create a dependency merely to force a
+preferred order when two slices can progress independently.
+
+Do not invent a new formal project work item merely because an informal task was
+decomposed. When the parent is already a formally tracked item and the canonical
+ledger/design record uses slice suffixes, use the existing family convention
+(for example `Ixxx-A` or `LIBxxx-B`) and persist newly formalized slice state in
+the owning project record when appropriate. Otherwise, descriptive local slice
+names are sufficient.
+
+Before starting each subsequent slice, re-fetch and inspect the current
+`origin/main` and re-check the assumptions that slice depends on. A previously
+published slice is historical evidence, not permission to assume that unrelated
+concurrent changes have not altered the implementation surface.
+
+For an explicitly requested complete implementation in an automated workflow,
+agents SHOULD continue through the derived slices until the parent outcome is
+closed, unless a genuine normative blocker, environment limitation, failed
+validation, publication conflict, or user-requested stopping point prevents
+further progress. Do not ask the user to choose among obvious implementation
+slices when the dependency order can be derived from the audited repository.
+
+When the workflow requires the user to execute publication launchers manually,
+provide one safe publishable slice at a time. After the user reports successful
+publication, continue from the new `origin/main` with the next required slice
+without reopening design decisions that were already closed, unless current
+repository evidence invalidates them.
+
+Do not decompose a change when the semantics or repository invariants require it
+to be atomic, when no independently valid intermediate state exists, or when the
+coordination/ledger overhead of slicing would exceed the risk it removes. In
+that case, keep the change atomic and explain the reason in the implementation
+plan/report.
+
 ### Search, do not guess the relevant documents
 
 Actively search documentation and specification using the concepts, symbols,
