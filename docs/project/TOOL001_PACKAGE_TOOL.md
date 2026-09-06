@@ -56,10 +56,14 @@ its relation to any legacy Slice 3 terminology that remains useful for continuit
 | TOOL001-C4 | package-tool manifest Slice 3B2-B | CLOSED | `SAME_COMMIT` | Canonical TOML document/table assembly is complete across C4A ordinary tables and C4B arrays-of-tables; schema/package meaning remains above this parser boundary. |
 | TOOL001-C4A | package-tool manifest Slice 3B2-B1 | CLOSED | `SAME_COMMIT` | `self:TomlDocument.table(text)` assembles ordinary TOML headers, dotted keys and inline tables into the canonical nested node/Map model with TOML redefinition invariants. |
 | TOOL001-C4B | package-tool manifest Slice 3B2-B2 | CLOSED | `SAME_COMMIT` | TOML 1.0 arrays-of-tables append in source order, nested headers resolve through the latest array element, and table/array/static-array conflicts fail closed. |
-| TOOL001-C5 | package-tool manifest Slice 3C | READY | — | Validate manifest schema v1 over the now-complete canonical TOML model and construct ordinary-Protos `ManifestV1` data. |
+| TOOL001-C5 | package-tool manifest Slice 3C | IN_PROGRESS | TOOL001-C5A published | Cost-aware schema-v1 implementation parent. C5A removes manifest-scale parser stack growth; C5B root/manifest-version/package is READY; C5C optional sections and C5D dependencies/final schema closure remain dependency-ordered. |
+| TOOL001-C5A | package-tool manifest Slice 3C prerequisite | CLOSED | `SAME_COMMIT` | Preserve C3/C4 TOML semantics while removing one-call-per-octet and one-call-per-statement linear stack growth; add manifest-scale Protos regression. |
+| TOOL001-C5B | package-tool manifest Slice 3C1 | READY | — | Schema-v1 root allowlist, exact `manifest-version = 1`, required `[package]`, non-empty id/version and optional non-empty locator; ordinary-Protos model only. |
+| TOOL001-C5C | package-tool manifest Slice 3C2 | BLOCKED_BY_DEPENDENCIES | — | After C5B, validate/model `compatibility`, `exports` and `workspace`, including fail-closed fields and duplicate-free members. |
+| TOOL001-C5D | package-tool manifest Slice 3C3 | BLOCKED_BY_DEPENDENCIES | — | After C5C, dependency alias declarations, registry/Git/path exclusivity, cross-schema conformance and final C5 closure. |
 | TOOL001-C6 | package-tool manifest Slice 3D | BLOCKED_BY_DEPENDENCIES | — | Read exactly `protos.toml` through existing confined project Filesystem authority, UTF-8 decode, parse/validate and produce user-facing diagnostics. |
 | TOOL001-C7 | package-tool manifest Slice 3 closure | BLOCKED_BY_DEPENDENCIES | — | Cross-slice conformance, architecture/status reconciliation and closure of the bounded legacy manifest Slice 3 surface. |
-| TOOL001-C | historical manifest Slice 3 parent | IN_PROGRESS | C1/C2/C3/C4 plus schema-v1 design `85ac538d378eeb2153e318145cae69114563e858` | Canonical TOML parsing is closed through C4; continue with C5 schema-v1 validation/model construction, then C6 read/diagnostics and C7 closure. |
+| TOOL001-C | historical manifest Slice 3 parent | IN_PROGRESS | C1/C2/C3/C4 plus C5A published | Canonical TOML parsing remains closed; C5 schema-v1 work is now deliberately subdivided with C5B READY, followed by C5C/C5D, then C6 read/diagnostics and C7 final closure. |
 
 B006's normative prerequisite path through I021 remains historical evidence; it
 is not reopened by this tracking migration.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.185-SNAPSHOT
+
+- Start the cost-aware subdivision of `TOOL001-C5` with `TOOL001-C5A — manifest-scale parser prerequisite`. The first C5 schema corpus exposed that the already-published C3/C4 document implementation consumed host stack linearly: `statements(text)` recursively invoked one Protos Closure per source octet and `table(text)` recursively invoked one Closure per logical statement.
+- Preserve the C3/C4 TOML contract while replacing those two unbounded linear-recursion paths with ordered standard collection traversal: `Bytes.each` advances the existing scanner state only at the current consumed index, including multi-octet CRLF/escape/quote consumption, and `Array.each` processes logical statements in encounter order. No TOML syntax, table ownership, canonical node shape or package/schema meaning changes.
+- Add one Protos-owned long flat-document regression that parses 96 ordered assignments and observes the first/last values without StackOverflow. Formalize the remaining smaller C5 slices: C5B root/manifest-version/package is READY; C5C compatibility/exports/workspace and C5D dependencies/final schema closure remain dependency-ordered. `TOOL001-C6` stays blocked until C5 closes.
+
 ## 0.2.184-SNAPSHOT
 
 - Close I022-E1 as the first publishable tranche of the decomposed I022-E cancellation work. Replace the single internal cancellation boolean with one idempotently recorded request plus explicit `NONE`, `REQUESTED`, `UNWINDING` and `TERMINAL` lifecycle phases. Only `REQUESTED` remains a pending portable observation; once observed, the same request is no longer exposed for redelivery.

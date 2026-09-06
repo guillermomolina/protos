@@ -115,84 +115,56 @@ statements: (text) => {
         })
     }
 
-    loop: null
-    loop = () => {
-        (index < length).ifTrue(() => {
-            octet: peek()
+    step: () => {
+        octet: peek()
 
-            wasComment: comment
-            wasComment.ifTrue(() => {
-                isNewline: octet == 10
-                (octet == 13).ifTrue(() => { isNewline = true })
+        wasComment: comment
+        wasComment.ifTrue(() => {
+            isNewline: octet == 10
+            (octet == 13).ifTrue(() => { isNewline = true })
 
-                isNewline.ifTrue(() => {
-                    comment = false
-                    nested: squareDepth > 0
-                    (braceDepth > 0).ifTrue(() => { nested = true })
-                    nested.ifTrue(() => {
-                        appendNewline(true)
-                    })
-                    nested.ifFalse(() => {
-                        appendNewline(false)
-                        finish()
-                    })
+            isNewline.ifTrue(() => {
+                comment = false
+                nested: squareDepth > 0
+                (braceDepth > 0).ifTrue(() => { nested = true })
+                nested.ifTrue(() => {
+                    appendNewline(true)
                 })
-
-                isNewline.ifFalse(() => {
-                    index = index + 1
+                nested.ifFalse(() => {
+                    appendNewline(false)
+                    finish()
                 })
             })
 
-            wasComment.ifFalse(() => {
-                wasString: stringQuote >= 0
-                wasString.ifTrue(() => {
-                    wasMultiline: multiline
-                    wasMultiline.ifTrue(() => {
-                        // Snapshot this before closing mutates stringQuote.
-                        quoteOctet: octet == stringQuote
-                        quoteOctet.ifTrue(() => {
-                            run: quoteRun(stringQuote)
-                            (run >= 3).ifTrue(() => {
-                                (run > 5).ifTrue(() => {
-                                    fail()
-                                })
-                                appendQuotes(stringQuote, run)
-                                index = index + run
-                                stringQuote = -1
-                                multiline = false
+            isNewline.ifFalse(() => {
+                index = index + 1
+            })
+        })
+
+        wasComment.ifFalse(() => {
+            wasString: stringQuote >= 0
+            wasString.ifTrue(() => {
+                wasMultiline: multiline
+                wasMultiline.ifTrue(() => {
+                    // Snapshot this before closing mutates stringQuote.
+                    quoteOctet: octet == stringQuote
+                    quoteOctet.ifTrue(() => {
+                        run: quoteRun(stringQuote)
+                        (run >= 3).ifTrue(() => {
+                            (run > 5).ifTrue(() => {
+                                fail()
                             })
-                            (run < 3).ifTrue(() => {
-                                append(take())
-                            })
+                            appendQuotes(stringQuote, run)
+                            index = index + run
+                            stringQuote = -1
+                            multiline = false
                         })
-
-                        quoteOctet.ifFalse(() => {
-                            escapedBasic: stringQuote == 34
-                            (octet == 92).ifFalse(() => {
-                                escapedBasic = false
-                            })
-
-                            escapedBasic.ifTrue(() => {
-                                append(take())
-                                (index >= length).ifTrue(() => {
-                                    fail()
-                                })
-                                append(take())
-                            })
-
-                            escapedBasic.ifFalse(() => {
-                                append(take())
-                            })
+                        (run < 3).ifTrue(() => {
+                            append(take())
                         })
                     })
 
-                    wasMultiline.ifFalse(() => {
-                        isNewline: octet == 10
-                        (octet == 13).ifTrue(() => { isNewline = true })
-                        isNewline.ifTrue(() => {
-                            fail()
-                        })
-
+                    quoteOctet.ifFalse(() => {
                         escapedBasic: stringQuote == 34
                         (octet == 92).ifFalse(() => {
                             escapedBasic = false
@@ -208,97 +180,131 @@ statements: (text) => {
 
                         escapedBasic.ifFalse(() => {
                             append(take())
-                            (octet == stringQuote).ifTrue(() => {
-                                stringQuote = -1
-                            })
                         })
                     })
                 })
 
-                wasString.ifFalse(() => {
-                    (octet == 35).ifTrue(() => {
-                        comment = true
-                        index = index + 1
+                wasMultiline.ifFalse(() => {
+                    isNewline: octet == 10
+                    (octet == 13).ifTrue(() => { isNewline = true })
+                    isNewline.ifTrue(() => {
+                        fail()
                     })
 
-                    (octet == 35).ifFalse(() => {
-                        isQuote: octet == 34
-                        (octet == 39).ifTrue(() => { isQuote = true })
+                    escapedBasic: stringQuote == 34
+                    (octet == 92).ifFalse(() => {
+                        escapedBasic = false
+                    })
 
-                        isQuote.ifTrue(() => {
-                            run: quoteRun(octet)
-                            (run >= 3).ifTrue(() => {
-                                appendQuotes(octet, 3)
-                                index = index + 3
-                                stringQuote = octet
-                                multiline = true
-                            })
-                            (run < 3).ifTrue(() => {
-                                append(take())
-                                stringQuote = octet
-                                multiline = false
-                            })
+                    escapedBasic.ifTrue(() => {
+                        append(take())
+                        (index >= length).ifTrue(() => {
+                            fail()
                         })
+                        append(take())
+                    })
 
-                        isQuote.ifFalse(() => {
-                            (octet == 91).ifTrue(() => {
-                                squareDepth = squareDepth + 1
-                                append(take())
-                            })
-                            (octet == 93).ifTrue(() => {
-                                (squareDepth == 0).ifTrue(() => {
-                                    fail()
-                                })
-                                squareDepth = squareDepth - 1
-                                append(take())
-                            })
-                            (octet == 123).ifTrue(() => {
-                                braceDepth = braceDepth + 1
-                                append(take())
-                            })
-                            (octet == 125).ifTrue(() => {
-                                (braceDepth == 0).ifTrue(() => {
-                                    fail()
-                                })
-                                braceDepth = braceDepth - 1
-                                append(take())
-                            })
-
-                            structural: octet == 91
-                            (octet == 93).ifTrue(() => { structural = true })
-                            (octet == 123).ifTrue(() => { structural = true })
-                            (octet == 125).ifTrue(() => { structural = true })
-
-                            structural.ifFalse(() => {
-                                isNewline: octet == 10
-                                (octet == 13).ifTrue(() => { isNewline = true })
-
-                                isNewline.ifTrue(() => {
-                                    nested: squareDepth > 0
-                                    (braceDepth > 0).ifTrue(() => { nested = true })
-                                    nested.ifTrue(() => {
-                                        appendNewline(true)
-                                    })
-                                    nested.ifFalse(() => {
-                                        appendNewline(false)
-                                        finish()
-                                    })
-                                })
-
-                                isNewline.ifFalse(() => {
-                                    append(take())
-                                })
-                            })
+                    escapedBasic.ifFalse(() => {
+                        append(take())
+                        (octet == stringQuote).ifTrue(() => {
+                            stringQuote = -1
                         })
                     })
                 })
             })
 
-            loop()
+            wasString.ifFalse(() => {
+                (octet == 35).ifTrue(() => {
+                    comment = true
+                    index = index + 1
+                })
+
+                (octet == 35).ifFalse(() => {
+                    isQuote: octet == 34
+                    (octet == 39).ifTrue(() => { isQuote = true })
+
+                    isQuote.ifTrue(() => {
+                        run: quoteRun(octet)
+                        (run >= 3).ifTrue(() => {
+                            appendQuotes(octet, 3)
+                            index = index + 3
+                            stringQuote = octet
+                            multiline = true
+                        })
+                        (run < 3).ifTrue(() => {
+                            append(take())
+                            stringQuote = octet
+                            multiline = false
+                        })
+                    })
+
+                    isQuote.ifFalse(() => {
+                        (octet == 91).ifTrue(() => {
+                            squareDepth = squareDepth + 1
+                            append(take())
+                        })
+                        (octet == 93).ifTrue(() => {
+                            (squareDepth == 0).ifTrue(() => {
+                                fail()
+                            })
+                            squareDepth = squareDepth - 1
+                            append(take())
+                        })
+                        (octet == 123).ifTrue(() => {
+                            braceDepth = braceDepth + 1
+                            append(take())
+                        })
+                        (octet == 125).ifTrue(() => {
+                            (braceDepth == 0).ifTrue(() => {
+                                fail()
+                            })
+                            braceDepth = braceDepth - 1
+                            append(take())
+                        })
+
+                        structural: octet == 91
+                        (octet == 93).ifTrue(() => { structural = true })
+                        (octet == 123).ifTrue(() => { structural = true })
+                        (octet == 125).ifTrue(() => { structural = true })
+
+                        structural.ifFalse(() => {
+                            isNewline: octet == 10
+                            (octet == 13).ifTrue(() => { isNewline = true })
+
+                            isNewline.ifTrue(() => {
+                                nested: squareDepth > 0
+                                (braceDepth > 0).ifTrue(() => { nested = true })
+                                nested.ifTrue(() => {
+                                    appendNewline(true)
+                                })
+                                nested.ifFalse(() => {
+                                    appendNewline(false)
+                                    finish()
+                                })
+                            })
+
+                            isNewline.ifFalse(() => {
+                                append(take())
+                            })
+                        })
+                    })
+                })
+            })
         })
+
     }
 
-    loop()
+    visitIndex: 0
+    source.each((ignoredOctet) => {
+        (visitIndex == index).ifTrue(() => {
+            step()
+        })
+        visitIndex = visitIndex + 1
+    })
+
+    (index == length).ifFalse(() => {
+        fail()
+    })
 
     (stringQuote >= 0).ifTrue(() => {
         fail()
@@ -729,36 +735,28 @@ table: (text) => {
         }
     }
 
-    processAt: null
-    processAt = (position) => {
-        (position < items.size()).ifTrue(() => {
-            statement: items.at(position)
-            source: Encoding.UTF8.encode(statement)
-            bounds: trimBounds(source)
-            (bounds.left >= bounds.right).ifTrue(() => {
-                fail()
-            })
-
-            header: source.at(bounds.left) == 91
-            header.ifTrue(() => {
-                parsedHeader: parseHeader(statement)
-                parsedHeader.array.ifTrue(() => {
-                    current = selectArrayHeader(parsedHeader.path)
-                })
-                parsedHeader.array.ifFalse(() => {
-                    current = selectHeader(parsedHeader.path)
-                })
-            })
-
-            header.ifFalse(() => {
-                assignment: parseAssignment(statement)
-                putDotted(current, assignment.path, 0, assignment.value)
-            })
-
-            processAt(position + 1)
+    items.each((statement) => {
+        source: Encoding.UTF8.encode(statement)
+        bounds: trimBounds(source)
+        (bounds.left >= bounds.right).ifTrue(() => {
+            fail()
         })
-    }
 
-    processAt(0)
+        header: source.at(bounds.left) == 91
+        header.ifTrue(() => {
+            parsedHeader: parseHeader(statement)
+            parsedHeader.array.ifTrue(() => {
+                current = selectArrayHeader(parsedHeader.path)
+            })
+            parsedHeader.array.ifFalse(() => {
+                current = selectHeader(parsedHeader.path)
+            })
+        })
+
+        header.ifFalse(() => {
+            assignment: parseAssignment(statement)
+            putDotted(current, assignment.path, 0, assignment.value)
+        })
+    })
     root
 }

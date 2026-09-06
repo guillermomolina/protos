@@ -56,3 +56,4 @@ document-table-array-of-tables-child-before-parent-error.protos	error
 document-table-array-of-tables-nested-array-to-table-conflict-error.protos	error
 document-table-array-of-tables-nested-table-to-array-conflict-error.protos	error
 document-table-array-of-tables-inline-parent-conflict-error.protos	error
+document-table-long-flat-stack-regression.protos	true
