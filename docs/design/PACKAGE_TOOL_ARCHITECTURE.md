@@ -501,10 +501,12 @@ staging entries. Package policy still uses ordinary files; the broader
 namespace-entry selection rule exists so the general capability can be
 implemented faithfully under concurrent namespace change.
 
-The semantics are now closed, but production availability is still implementation
-work under I021. Package-tool metadata mutation must remain disabled until the
-bundled tool receives that faithful general capability; D042 is not permission
-for a package-specific Java/native rename escape hatch.
+I021 now provides the production confined Filesystem namespace backend. Package-tool
+Filesystem Slice 2B closes the remaining metadata-publication integration by
+provisioning only explicit project-metadata read, exact staging create/write, and
+namespace-mutation authority to the bundled tool. Publication itself remains
+ordinary Protos code using standard File write/close plus Filesystem replace/remove;
+D042 is not used as permission for a package-specific Java/native filesystem escape.
 
 A complete package store/archive implementation still needs additional namespace
 operations such as directory enumeration/materialization, safe directory

@@ -36,6 +36,10 @@ import org.jline.terminal.*;
 public final class ProtosCli {
     private static final Set<String> PACKAGE_METADATA_FILES =
             Set.of("protos.toml", "protos.lock");
+    private static final Set<String> PACKAGE_METADATA_STAGING_FILES =
+            Set.of(".protos.toml.stage", ".protos.lock.stage");
+    private static final Set<String> PACKAGE_METADATA_MUTABLE_FILES =
+            Set.of("protos.toml", "protos.lock", ".protos.toml.stage", ".protos.lock.stage");
 
     private final ProtosValueRenderer renderer = new ProtosValueRenderer();
 
@@ -111,10 +115,12 @@ public final class ProtosCli {
                         toolRoot,
                         new ProtosStandardLibraryModuleResolver(core.getParent()));
 
-        try (ProtosNioReadOnlyFilesystemBackend filesystemBackend =
-                new ProtosNioReadOnlyFilesystemBackend(
+        try (ProtosNioConfinedFilesystemBackend filesystemBackend =
+                new ProtosNioConfinedFilesystemBackend(
                         Path.of("").toAbsolutePath().normalize(),
-                        PACKAGE_METADATA_FILES)) {
+                        PACKAGE_METADATA_FILES,
+                        PACKAGE_METADATA_STAGING_FILES,
+                        PACKAGE_METADATA_MUTABLE_FILES)) {
             Session session =
                     session(
                             core,

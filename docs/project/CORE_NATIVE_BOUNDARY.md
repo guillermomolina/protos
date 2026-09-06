@@ -102,10 +102,10 @@ introduced.
 I021-B adds the production confined NIO namespace backend behind that existing
 Filesystem bridge and adds no `ProtosClosureValue.nativeClosure(...)` construction
 site. I021-C closes I021 with ordinary Protos-source integrated conformance over
-the production backend. The definitive Core native boundary therefore remains
-**107 sites across 30 providers**, and B006 package-tool integration must reuse
-the standard Filesystem capability rather than adding a package-specific native
-rename/remove escape.
+the production backend. Package-tool Filesystem Slice 2B / B006 reuses that same
+standard bridge for exact staging `createNew` writes and namespace replace/remove;
+it adds no Core native Closure construction site or package-specific filesystem
+primitive. The definitive Core native boundary therefore remains **107 sites across 30 providers**.
 
 I017-B is a reviewed post-I018 representation-boundary extension. It adds exactly
 three native-Closure construction sites for the construction-only Process-argument

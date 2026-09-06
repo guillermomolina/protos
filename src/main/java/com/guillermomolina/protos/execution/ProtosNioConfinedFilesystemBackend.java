@@ -16,25 +16,35 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemNamespaceMutationFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
 import java.io.IOException;
+import java.math.BigInteger;
+import java.nio.ByteBuffer;
+import java.nio.channels.SeekableByteChannel;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
+import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.SecureDirectoryStream;
+import java.nio.file.StandardOpenOption;
 import java.util.LinkedHashSet;
 import java.util.Objects;
 import java.util.Set;
 
 /**
- * Confined direct-child NIO Filesystem backend with independent read and namespace authority.
+ * Confined direct-child NIO Filesystem backend with independent read, staging-write, and
+ * namespace authority.
  *
  * <p>Existing-file read opens delegate to {@link ProtosNioReadOnlyFilesystemBackend}; namespace
- * mutation is separately restricted to an explicit set of direct-child names. The two allowlists
- * therefore do not accidentally grant one another's authority.
+ * mutation is separately restricted to an explicit set of direct-child names. Optional
+ * staging-write authority is a third independent allowlist and accepts only write-only positioned
+ * createNew opens.
+ * These allowlists therefore do not accidentally grant one another's authority.
  *
  * <p>Namespace operations retain a {@link SecureDirectoryStream} for the authority root and use
  * only relative entry operations on that pinned directory. They never pre-classify a mutable final
@@ -44,12 +54,13 @@ import java.util.Set;
  * performs recursive deletion.
  *
  * <p>This backend is intentionally general and contains no package-manifest, lockfile, staging-name,
- * or package-command policy. Hosts choose the readable and namespace-mutable direct-child sets when
- * provisioning a Filesystem capability.
+ * or package-command policy. Hosts choose the readable, staging-writable, and namespace-mutable
+ * direct-child sets when provisioning a Filesystem capability.
  */
 public final class ProtosNioConfinedFilesystemBackend
         implements ProtosStandardFilesystemProtocol.Backend, AutoCloseable {
     private final Path authorityRoot;
+    private final Set<String> writableDirectChildren;
     private final Set<String> mutableDirectChildren;
     private final ProtosNioReadOnlyFilesystemBackend readBackend;
     private final SecureDirectoryStream<Path> secureRoot;
@@ -60,10 +71,27 @@ public final class ProtosNioConfinedFilesystemBackend
             Set<String> readableDirectChildren,
             Set<String> mutableDirectChildren)
             throws IOException {
+        this(authorityRoot, readableDirectChildren, Set.of(), mutableDirectChildren);
+    }
+
+    public ProtosNioConfinedFilesystemBackend(
+            Path authorityRoot,
+            Set<String> readableDirectChildren,
+            Set<String> writableDirectChildren,
+            Set<String> mutableDirectChildren)
+            throws IOException {
         this.authorityRoot =
                 Objects.requireNonNull(authorityRoot, "authorityRoot")
                         .toAbsolutePath()
                         .normalize();
+
+        LinkedHashSet<String> writableNames = new LinkedHashSet<>();
+        for (String name :
+                Objects.requireNonNull(writableDirectChildren, "writableDirectChildren")) {
+            requireDirectChildName(name);
+            writableNames.add(name);
+        }
+        this.writableDirectChildren = Set.copyOf(writableNames);
 
         LinkedHashSet<String> mutableNames = new LinkedHashSet<>();
         for (String name : Objects.requireNonNull(mutableDirectChildren, "mutableDirectChildren")) {
@@ -105,7 +133,48 @@ public final class ProtosNioConfinedFilesystemBackend
             ProtosPathValue path,
             ProtosFilesystemOpenOptions options,
             ProtosStandardFilesystemProtocol.OpenCompletion completion) {
+        Objects.requireNonNull(path, "path");
+        Objects.requireNonNull(options, "options");
+        Objects.requireNonNull(completion, "completion");
+
+        String writableChild = permittedDirectChild(path, writableDirectChildren);
+        if (writableChild != null && writeOnlyCreateNew(options)) {
+            return openWritableCreateNew(writableChild, completion);
+        }
         return readBackend.open(path, options, completion);
+    }
+
+    private ProtosFilesystemOpenFlow.Cancellation openWritableCreateNew(
+            String child, ProtosStandardFilesystemProtocol.OpenCompletion completion) {
+        if (closed || secureRoot == null) {
+            completion.failed();
+            return () -> {};
+        }
+
+        if (!completion.commitPortableEffect()) {
+            return () -> {};
+        }
+
+        SeekableByteChannel channel = null;
+        try {
+            Set<OpenOption> openOptions =
+                    Set.of(
+                            StandardOpenOption.WRITE,
+                            StandardOpenOption.CREATE_NEW,
+                            LinkOption.NOFOLLOW_LINKS);
+            channel = secureRoot.newByteChannel(nativeChild(child), openOptions);
+            WritableResource resource = new WritableResource(channel);
+            channel = null;
+            completion.succeeded(
+                    resource,
+                    new ProtosFileFlow.Capabilities(
+                            false, true, false, false, false, false, false),
+                    resource::closeSilently);
+        } catch (IOException | RuntimeException failure) {
+            closeSilently(channel);
+            completion.failed();
+        }
+        return () -> {};
     }
 
     @Override
@@ -178,6 +247,10 @@ public final class ProtosNioConfinedFilesystemBackend
     }
 
     private String permittedMutableDirectChild(ProtosPathValue path) {
+        return permittedDirectChild(path, mutableDirectChildren);
+    }
+
+    private static String permittedDirectChild(ProtosPathValue path, Set<String> allowedNames) {
         if (path.rooted() || path.components().size() != 1) {
             return null;
         }
@@ -185,7 +258,15 @@ public final class ProtosNioConfinedFilesystemBackend
         if (!(component instanceof ProtosPathValue.Normal normal)) {
             return null;
         }
-        return mutableDirectChildren.contains(normal.name()) ? normal.name() : null;
+        return allowedNames.contains(normal.name()) ? normal.name() : null;
+    }
+
+    private static boolean writeOnlyCreateNew(ProtosFilesystemOpenOptions options) {
+        return !options.readAccess()
+                && options.writeAccess()
+                && options.creation() == ProtosFilesystemOpenOptions.Creation.CREATE_NEW
+                && !options.truncateInitialContent()
+                && options.placement() == ProtosFilesystemOpenOptions.Placement.POSITIONED;
     }
 
     private Path nativeChild(String name) {
@@ -203,6 +284,91 @@ public final class ProtosNioConfinedFilesystemBackend
                 || candidate.getParent() != null
                 || !candidate.toString().equals(name)) {
             throw new IllegalArgumentException("mutable name is not one native direct child");
+        }
+    }
+
+    private static void closeSilently(SeekableByteChannel channel) {
+        if (channel == null) {
+            return;
+        }
+        try {
+            channel.close();
+        } catch (IOException ignored) {
+            // Failed acquisition retains no Protos-visible resource custody.
+        }
+    }
+
+    private static final class WritableResource implements ProtosFileFlow.WritableResource {
+        private final SeekableByteChannel channel;
+        private boolean closed;
+
+        WritableResource(SeekableByteChannel channel) {
+            this.channel = Objects.requireNonNull(channel, "channel");
+        }
+
+        @Override
+        public synchronized ProtosFileFlow.Cancellation writeAt(
+                BigInteger position, byte[] bytes, ProtosFileFlow.WriteCompletion completion) {
+            Objects.requireNonNull(position, "position");
+            Objects.requireNonNull(bytes, "bytes");
+            Objects.requireNonNull(completion, "completion");
+            if (closed
+                    || position.signum() < 0
+                    || position.compareTo(BigInteger.valueOf(Long.MAX_VALUE)) > 0) {
+                completion.failed(0);
+                return () -> {};
+            }
+            if (bytes.length == 0) {
+                completion.succeeded();
+                return () -> {};
+            }
+
+            ByteBuffer buffer = ByteBuffer.wrap(bytes);
+            try {
+                channel.position(position.longValueExact());
+                if (!completion.commitFirstContribution()) {
+                    return () -> {};
+                }
+                while (buffer.hasRemaining()) {
+                    int written = channel.write(buffer);
+                    if (written <= 0) {
+                        completion.failed(buffer.position());
+                        return () -> {};
+                    }
+                }
+                completion.succeeded();
+            } catch (IOException | RuntimeException failure) {
+                completion.failed(buffer.position());
+            }
+            return () -> {};
+        }
+
+        @Override
+        public synchronized void close(ProtosFileFlow.CloseCompletion completion) {
+            Objects.requireNonNull(completion, "completion");
+            if (closed) {
+                completion.succeeded();
+                return;
+            }
+            closed = true;
+            try {
+                channel.close();
+                completion.succeeded();
+            } catch (IOException failure) {
+                completion.failed();
+            }
+        }
+
+        void closeSilently() {
+            if (closed) {
+                return;
+            }
+            closed = true;
+            try {
+                channel.close();
+            } catch (IOException ignored) {
+                // Backend custody cleanup cannot create a new portable File result.
+            }
         }
     }
 

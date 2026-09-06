@@ -235,82 +235,45 @@ No implementation work remains blocked by B005.
 
 ## B006 — Atomic package metadata replacement
 
-Status: READY
+Status: CLOSED
 
 Implementation area:
-Package-tool Filesystem Slice 2B and every future `protos add`, `protos remove`,
-`protos resolve`, or `protos update` path that must safely publish changes to
+Package-tool Filesystem Slice 2B and future package commands that safely publish
 `protos.toml` or `protos.lock`.
 
 Normative dependency:
-Satisfied by specification revision `0.1.379` / D042, which corrects D041's
-final-entry type restriction. Core Filesystem defines two general namespace-entry
-operations:
+Satisfied by specification revision `0.1.379` / D042 and the closed I021
+production implementation. Core Filesystem supplies standard confined
+`open`, `replace`, and `remove`; D042 preserves final-entry non-follow selection,
+failure-atomic namespace visibility, commitment/cancellation semantics, and
+non-recursive removal.
 
-```text
-filesystem.replace(sourcePath, targetPath) -> Future<Filesystem>
-filesystem.remove(path)                     -> Future<Filesystem>
-```
-
-`replace` performs one confined failure-atomic source-to-target namespace
-transition, and `remove` performs one confined failure-atomic namespace-entry
-removal. The contract fixes Path validation, authority, final-entry non-follow
-selection, atomicity/visibility, commitment, cancellation, failure aftermath,
-stable open File binding, concurrency, non-recursive removal, and the explicit
-separation between live namespace atomicity and crash durability.
-
-Specification authority:
-- `spec/io/FILESYSTEM.md` §20 Filesystem Authority and Path, especially §20.1
-  confinement and §20.3 atomic namespace-entry replacement/removal
-- `spec/io/BYTE_IO.md` for File/Syncable durability and its namespace-durability
-  exclusion
-- `spec/io/IO_CORE.md` for I/O Future identity, commitment, cancellation,
-  lifecycle, and failure rules
-
-Unblock condition:
-The normative portion is satisfied by revision `0.1.379` / D042: independent
-implementations can now agree on the general operation shape, final-entry
-selection rule, and every programmer-visible success/failure/cancellation outcome
-needed for safe metadata publication without choosing package-specific semantics.
-
-B006 closes only after a faithful production implementation of that general
-Filesystem surface is available to the bundled package tool and package metadata
-mutation uses it without an ambient/native package-only escape hatch. That
-implementation work was tracked as I021 and is now CLOSED.
+Closure evidence:
+Package-tool Filesystem Slice 2B provisions one explicit confined project
+Filesystem to the bundled Protos tool with three independent authority sets:
+read access to `protos.toml`/`protos.lock`, write-only positioned `createNew`
+access to the two exact staging names, and namespace mutation over those target
+and staging entries. `self:MetadataPublication` performs content encoding,
+standard File staging write/close, atomic `filesystem.replace(...)`, and explicit
+`filesystem.remove(...)` discard in Protos code. An existing staging entry is not
+silently removed or reused: `createNew` fails before the target is changed.
 
 Current consequence:
-I021 is CLOSED: I021-A/B/C are published, including Protos-source integrated
-conformance over the confined production NIO `Filesystem.replace`/`remove` backend.
-The package tool still deliberately uses its read-only CLI provisioning, so B006
-remains READY until a subsequent package-tool slice explicitly grants staging/write
-and namespace-mutation authority and performs metadata publication through the
-standard Filesystem operations. No path may
-fall back to in-place truncate/write, `PackageNative.rename(...)`, ambient host
-filesystem access, or another package-only privileged path.
-
-Once I021 is available, the intended package metadata publication composition is
-ordinary Protos code: create/write the staging file through the granted
-Filesystem/File capabilities, complete the required File sequencing, atomically
-replace the target through `filesystem.replace(...)`, and use
-`filesystem.remove(...)` to clean an uncommitted staging entry when required.
-D042 does not prescribe staging-name policy or package-command policy.
-
-Independent work:
-Read-only TOML parsing and manifest validation, lock parsing/canonical validation,
-semantic resolution-input modeling, in-memory version/constraint resolution, and
-read-only execution preflight can continue independently. Work that needs only
-already-open File byte/text behavior also remains independent.
+B006 is CLOSED. Package metadata has a production-safe publication composition
+without in-place target truncation, `PackageNative` filesystem helpers, ambient
+host paths, or another package-only privileged mutation path. Future `add`,
+`remove`, `resolve`, and `update` command policy may reuse this mechanism without
+reopening the atomic-publication blocker. Full package-store/archive operations
+remain outside B006 and still require their separately designed capabilities.
 
 History:
-B006 was introduced as BLOCKED because Filesystem v0.1 exposed only `open` and
-File operations; truncate-and-write could expose partial package metadata and no
-general namespace replacement contract existed. D041 / revision `0.1.378`
-closed the operation shape and moved B006 `BLOCKED -> READY`; D042 / revision
-`0.1.379` then corrected the ordinary-file-only preclassification without changing
-the API, atomicity, or package composition. B006 remains READY, not CLOSED, until
-the package-tool integration satisfies the remaining implementation side of the
+B006 was introduced as BLOCKED because Filesystem initially exposed only `open`;
+D041 / revision `0.1.378` defined atomic replacement/removal and moved it to
+READY, D042 / revision `0.1.379` corrected final-entry selection, and I021-A/B/C
+published the general runtime/backend/conformance. Package-tool Filesystem Slice
+2B now completes the remaining write/staging-authority integration and closes the
 blocker.
 
 Library dependency:
-None. B006 is a general Filesystem semantic/capability boundary, not a missing
-Standard Library package and does not allocate a `LIBxxx` item.
+None. B006 remains a general Filesystem capability/integration boundary and does
+not allocate a `LIBxxx` item.

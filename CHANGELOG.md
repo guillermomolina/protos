@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.161-SNAPSHOT
+
+- Close package-tool Filesystem Slice 2B / B006: provision the bundled package tool with explicit confined project-metadata read authority, write-only `createNew` staging authority, and namespace-mutation authority. Staging content is written through standard `File.write`/`close`, publication uses standard `Filesystem.replace`, and explicit abandoned-stage cleanup uses standard `Filesystem.remove`; ordinary application CLI sessions still receive no Filesystem authority.
+- Add `self:MetadataPublication` in ordinary Protos code. It validates Path/String/Encoding inputs before staging creation, refuses to overwrite an existing staging name through `createNew`, completes the staging write and close before atomic replacement, and exposes explicit discard rather than silently deleting a colliding stage. Protos-owned fixtures exercise both `protos.toml` and `protos.lock`, collision preservation, pre-stage validation, forbidden targets, and cleanup.
+- Preserve the audited Core native boundary at 107 construction sites across 30 providers: no package-specific native rename/write primitive, ambient filesystem access, new Core native Closure site, or normative specification change is introduced. I021 remains CLOSED and B006 transitions READY -> CLOSED.
+
 ## 0.2.160-SNAPSHOT
 
 - Close I021-B with a production confined direct-child NIO Filesystem backend for D042 namespace-entry replacement/removal. The backend retains a `SecureDirectoryStream` for the authority root, applies `replace` through one atomic relative `move`, applies non-recursive `remove` through relative `deleteFile`, never pre-classifies or follows the final entry, and fails closed when the host/provider cannot provide the required transition.
