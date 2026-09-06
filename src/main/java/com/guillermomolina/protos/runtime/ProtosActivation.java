@@ -35,6 +35,7 @@ public final class ProtosActivation {
     private final ProtosModuleKey currentModuleKey;
     private final ProtosActorExecutionDomain executionDomain;
     private ProtosTask task;
+    private ProtosDynamicControlState directDynamicControlState;
 
     public ProtosActivation(
             ProtosObjectValue context,
@@ -264,7 +265,11 @@ public final class ProtosActivation {
                 enclosing.actorModuleState,
                 enclosing.currentModuleKey,
                 enclosing.executionDomain);
-        enclosing.task().ifPresent(construction::attachTask);
+        if (enclosing.task().isPresent()) {
+            construction.attachTask(enclosing.task().orElseThrow());
+        } else {
+            construction.inheritDynamicControlState(enclosing);
+        }
         return construction;
     }
 
@@ -293,6 +298,43 @@ public final class ProtosActivation {
     /** Internal execution context used only by cooperative Actor-local task evaluation. */
     public Optional<ProtosTask> task() {
         return Optional.ofNullable(task);
+    }
+
+    public synchronized ProtosDynamicControlState dynamicControlState() {
+        if (task != null) {
+            return task.dynamicControlState();
+        }
+        if (directDynamicControlState == null) {
+            directDynamicControlState = new ProtosDynamicControlState();
+        }
+        return directDynamicControlState;
+    }
+
+    public synchronized Optional<ProtosDynamicControlState> dynamicControlStateIfPresent() {
+        if (task != null) {
+            return task.dynamicControlStateIfPresent();
+        }
+        return Optional.ofNullable(directDynamicControlState);
+    }
+
+    public void inheritDynamicControlState(ProtosActivation enclosing) {
+        Objects.requireNonNull(enclosing, "enclosing");
+        Optional<ProtosDynamicControlState> inherited =
+                enclosing.dynamicControlStateIfPresent();
+        if (inherited.isEmpty()) {
+            return;
+        }
+        synchronized (this) {
+            if (task != null) {
+                return;
+            }
+            ProtosDynamicControlState state = inherited.orElseThrow();
+            if (directDynamicControlState != null && directDynamicControlState != state) {
+                throw new IllegalStateException(
+                        "activation already belongs to another direct dynamic-control flow");
+            }
+            directDynamicControlState = state;
+        }
     }
 
     /** Attaches this activation to exactly one Actor-local task. */

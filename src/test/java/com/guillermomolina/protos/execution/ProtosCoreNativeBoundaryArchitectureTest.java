@@ -71,7 +71,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardIdentityMapProtocol.java", 7),
                     Map.entry("execution/ProtosStandardStringProtocol.java", 3),
                     Map.entry("execution/ProtosStandardBufferedByteIoProtocol.java", 6),
-                    Map.entry("execution/ProtosStandardErrorProtocol.java", 1),
+                    Map.entry("execution/ProtosStandardErrorProtocol.java", 2),
                     Map.entry("execution/ProtosStandardImportProtocol.java", 1),
                     Map.entry("execution/ProtosStandardIntegerProtocol.java", 3),
                     Map.entry("execution/ProtosStandardFutureProtocol.java", 2),
@@ -111,7 +111,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
         assertEquals(30, actualCore.size());
-        assertEquals(107, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(108, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
         String inventory =
@@ -178,7 +178,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         }
 
         assertNativeSelectors("Context", prelude.contextPrototype(), Set.of());
-        assertNativeSelectors("Error", prelude.errorPrototype(), Set.of("signal"));
+        assertNativeSelectors("Error", prelude.errorPrototype(), Set.of("signal", "handle"));
         assertNativeSelectors(
                 "Array",
                 prelude.arrayPrototype(),

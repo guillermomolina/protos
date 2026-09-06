@@ -14,34 +14,4 @@
  * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
  * the specific language governing rights and limitations under the License.
  */
-
-package com.guillermomolina.protos.runtime;
-
-import java.util.Objects;
-import java.util.Optional;
-
-public final class ProtosSignalException extends RuntimeException {
-    private final ProtosObjectValue error;
-    private ProtosDynamicControlState.Frame selectedHandlerFrame;
-
-    public ProtosSignalException(ProtosObjectValue error) {
-        super(null, null, false, false);
-        this.error = Objects.requireNonNull(error, "error");
-    }
-
-    public ProtosObjectValue error() {
-        return error;
-    }
-
-    public Optional<ProtosDynamicControlState.Frame> selectedHandlerFrame() {
-        return Optional.ofNullable(selectedHandlerFrame);
-    }
-
-    void selectHandlerFrame(ProtosDynamicControlState.Frame frame) {
-        Objects.requireNonNull(frame, "frame");
-        if (selectedHandlerFrame != null && selectedHandlerFrame != frame) {
-            throw new IllegalStateException("Error transfer already selected another handler");
-        }
-        selectedHandlerFrame = frame;
-    }
-}
+Error.handle(0, (caught) => null)

@@ -124,4 +124,27 @@ class ProtosDynamicControlStateTest {
 
         task.evaluatorContinuation().endSegment();
     }
+
+    @Test
+    void innermostMatchingHandlerSelectionUsesDelegationAndDeactivatesSelection() {
+        ProtosDynamicControlState state = new ProtosDynamicControlState();
+        ProtosObjectValue errorRoot = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue specificPrototype = new ProtosObjectValue(errorRoot);
+        ProtosObjectValue occurrence = new ProtosObjectValue(specificPrototype);
+
+        ProtosDynamicControlState.Frame outer =
+                state.enterHandlerFrame(new Object(), errorRoot);
+        ProtosDynamicControlState.Frame inner =
+                state.enterHandlerFrame(new Object(), specificPrototype);
+
+        assertSame(inner, state.selectMatchingHandler(occurrence).orElseThrow());
+        assertFalse(inner.active());
+        assertTrue(outer.active());
+
+        state.leaveFrame(inner);
+        assertSame(outer, state.selectMatchingHandler(occurrence).orElseThrow());
+        assertFalse(outer.active());
+        state.leaveFrame(outer);
+    }
+
 }

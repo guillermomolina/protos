@@ -53,6 +53,7 @@ public final class ProtosDynamicControlState {
         private final FrameKind kind;
         private final Object invocationIdentity;
         private boolean active = true;
+        private ProtosObjectValue handlerMatchPrototype;
 
         private Frame(long id, FrameKind kind, Object invocationIdentity) {
             this.id = id;
@@ -74,6 +75,19 @@ public final class ProtosDynamicControlState {
 
         public boolean active() {
             return active;
+        }
+
+        public Optional<ProtosObjectValue> handlerMatchPrototype() {
+            return Optional.ofNullable(handlerMatchPrototype);
+        }
+
+        private void bindHandlerMatchPrototype(ProtosObjectValue matchPrototype) {
+            Objects.requireNonNull(matchPrototype, "matchPrototype");
+            if (handlerMatchPrototype != null && handlerMatchPrototype != matchPrototype) {
+                throw new IllegalStateException(
+                        "replay invocation changed handler match prototype");
+            }
+            handlerMatchPrototype = matchPrototype;
         }
 
         private void deactivate() {
@@ -132,6 +146,42 @@ public final class ProtosDynamicControlState {
         framesByInvocation.put(invocationIdentity, created);
         framesNewestFirst.addFirst(created);
         return created;
+    }
+
+    public Frame enterHandlerFrame(
+            Object invocationIdentity, ProtosObjectValue matchPrototype) {
+        Frame frame = enterFrame(invocationIdentity, FrameKind.HANDLER);
+        frame.bindHandlerMatchPrototype(matchPrototype);
+        return frame;
+    }
+
+    public Optional<Frame> selectMatchingHandler(ProtosObjectValue error) {
+        Objects.requireNonNull(error, "error");
+        for (Frame frame : framesNewestFirst) {
+            if (frame.active()
+                    && frame.kind() == FrameKind.HANDLER
+                    && frame.handlerMatchPrototype().isPresent()
+                    && matches(error, frame.handlerMatchPrototype().orElseThrow())) {
+                frame.deactivate();
+                return Optional.of(frame);
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static boolean matches(
+            ProtosObjectValue error, ProtosObjectValue matchPrototype) {
+        ProtosObjectValue current = error;
+        while (true) {
+            if (current == matchPrototype) {
+                return true;
+            }
+            Object parent = current.parent().orElse(null);
+            if (!(parent instanceof ProtosObjectValue parentObject)) {
+                return false;
+            }
+            current = parentObject;
+        }
     }
 
     public Optional<Frame> frameForInvocation(Object invocationIdentity) {

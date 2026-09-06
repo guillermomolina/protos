@@ -130,6 +130,10 @@ public final class ProtosTask {
         return dynamicControlState;
     }
 
+    public synchronized Optional<ProtosDynamicControlState> dynamicControlStateIfPresent() {
+        return Optional.ofNullable(dynamicControlState);
+    }
+
     /** Executes one real Truffle evaluation segment for this cooperative task. */
     public void executeProtos(CallTarget target, ProtosActivation activation) {
         Objects.requireNonNull(target, "target");

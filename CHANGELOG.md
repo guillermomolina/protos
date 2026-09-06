@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.173-SNAPSHOT
+
+- Close I022-B by publishing the already-normative `Error.handle(body, handler)` protocol over I022-A's dynamic-control substrate: eager Closure-only validation, ordinary-delegation matching, dynamically innermost selection, selected-frame deactivation before boundary unwind, exact Error identity and non-resumable handler transfer. Explicit `Error.signal()` preselects immediately; runtime-created Error transfers select at Closure invocation boundaries so both paths share one mechanism.
+- Preserve pay-for-use/task isolation: Task-backed activations use Task-owned I022 state; direct synchronous activations propagate an existing flow-local state and allocate none until `handle` is actually used. Add Protos-source conformance for matching, nesting, validation, non-resumability, copied receiver rejection and runtime `SlotNotFound` handling, plus narrow Java machinery/native-boundary focal coverage.
+- Reconcile the I018 native boundary for the one justified primitive: `ProtosStandardErrorProtocol` moves from one to two native Closure construction sites with provider count unchanged. I022 remains IN_PROGRESS and I022-C becomes READY.
+
 ## 0.2.172-SNAPSHOT
 
 - Close I022-A with the internal replay-stable dynamic-control substrate required by D043/I022: add lazy per-task `ProtosDynamicControlState`, semantic Handler/Ensure frame identity keyed by stable invocation identity, pre-unwind frame deactivation distinct from LIFO extent removal, and a replaceable active transfer record for later return/Error/cancellation unwind integration. Structured child tasks receive independent state while synchronous activations continue sharing their existing task association.

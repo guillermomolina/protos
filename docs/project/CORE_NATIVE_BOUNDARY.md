@@ -61,7 +61,7 @@ the standard native boundary.
 | `ProtosStandardIdentityMapProtocol.java` | 7 | representation bridge | IdentityMap storage and lookup require primitive semantic identity/identityHash plus keyed representation state and iteration snapshots. |
 | `ProtosStandardBytesProtocol.java` | 7 | representation bridge | Bytes owns octet-indexed mutable state, reservation state, exact octet validation, snapshot iteration, and P-region interaction. Its standard prototype identity is already source-backed and construction-only. |
 | `ProtosStandardPathProtocol.java` | 6 | representation bridge | Path construction, components, structural equality, and structural hash operate on the immutable Path representation. |
-| `ProtosStandardErrorProtocol.java` | 1 | host-irreducible | `Error.signal` performs the language Error control transfer with exact signaled-object preservation. |
+| `ProtosStandardErrorProtocol.java` | 2 | host-irreducible | `Error.signal` performs the language Error control transfer with exact signaled-object preservation; `Error.handle` installs and consumes the dynamic handler frame whose selection precedes unwind cleanup. |
 | `ProtosStandardFutureProtocol.java` | 2 | concurrency/runtime bridge | `future`, `value`, `cancel`, `detach`, `then`, and `all` depend on Task ownership, suspension, observation, terminal states, cancellation, and Actor-local execution domains. |
 | `ProtosParallelRuntime.java` | 2 | concurrency/runtime bridge | `parallel`, Array parallel operations, Bytes/ByteRegion `parallelRange`, snapshot transfer, reservations, commitment, and bounded host carriers form the P execution substrate. |
 | `ProtosStandardActorProtocol.java` | 9 | concurrency/runtime bridge | `spawn`/`current`/`group`, ActorRef `send`/`request`/`stop`/`termination`, GroupRef `send`/`request`, and SendOperation `cancel`/`retry` cross Actor/Group routing, transfer, admission, scheduler, uncertainty, and lifecycle boundaries. ActorRef and GroupRef receive distinct Closure values from the same two audited communication construction helpers; ActorRef, GroupRef, and SendOperation prototype identities are source-backed. |
@@ -71,7 +71,7 @@ the standard native boundary.
 | `ProtosStandardFileProtocol.java` | 10 | resource/capability bridge | File objects are acquired resource capabilities whose exact local surface depends on backend-provided authority and whose operations own cursor/append/sync/close/commitment state. |
 | `ProtosStandardFilesystemProtocol.java` | 1 | resource/capability bridge | Host-provisioned Filesystem authority exposes standard `open`, `replace`, and `remove` through one shared audited operation-Closure construction helper. Open retains confined/race-free acquisition and File materialization; D041 namespace mutation uses an independent host-neutral effect/commit cutover and backend-provided confined atomic transition. |
 
-Total audited Core production construction sites: **107 across 30 providers**.
+Total audited Core production construction sites: **108 across 30 providers**.
 
 CLI/launcher-owned host conveniences are not Core standard behavior and therefore
 do not change that 30-provider / 107-site Core boundary. They are nevertheless

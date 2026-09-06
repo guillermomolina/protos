@@ -16,32 +16,84 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import java.util.List;
 
-/** Standard Error protocol behavior that can be installed independently of bootstrap layout. */
 final class ProtosStandardErrorProtocol {
     private ProtosStandardErrorProtocol() {}
 
     static void install(ProtosObjectValue errorPrototype) {
-        if (errorPrototype.hasLocalSlot("signal")) {
-            throw new IllegalStateException("Core Error already defines a local signal slot");
+        if (errorPrototype.hasLocalSlot("signal") || errorPrototype.hasLocalSlot("handle")) {
+            throw new IllegalStateException("Core Error protocol slots already installed");
         }
         errorPrototype.createLocalSlot(
                 "signal",
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) -> {
                             if (!supplied.isEmpty()) {
-                                throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+                                throw invalid(activation);
                             }
-                            Object receiver=activation.receiver();
+                            Object receiver = activation.receiver();
                             if (!(receiver instanceof ProtosObjectValue error)
-                                    || !ProtosCoreErrors.isError(activation,error)) {
-                                throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+                                    || !ProtosCoreErrors.isError(activation, error)) {
+                                throw invalid(activation);
                             }
-                            throw ProtosCoreErrors.signal(activation,error);
+                            throw ProtosCoreErrors.signal(activation, error);
                         }));
+        errorPrototype.createLocalSlot(
+                "handle",
+                ProtosClosureValue.nativeClosure(ProtosStandardErrorProtocol::handle));
+    }
+
+    private static Object handle(ProtosActivation activation, List<?> supplied) {
+        Object receiver = activation.receiver();
+        if (!(receiver instanceof ProtosObjectValue matchPrototype)
+                || !ProtosCoreErrors.isError(activation, matchPrototype)) {
+            throw invalid(activation);
+        }
+        if (supplied.size() != 2) {
+            throw invalid(activation);
+        }
+
+        Object bodyValue = supplied.get(0);
+        if (!(bodyValue instanceof ProtosClosureValue body)) {
+            throw invalid(activation);
+        }
+        Object handlerValue = supplied.get(1);
+        if (!(handlerValue instanceof ProtosClosureValue handler)) {
+            throw invalid(activation);
+        }
+
+        ProtosDynamicControlState state = activation.dynamicControlState();
+        ProtosDynamicControlState.Frame frame =
+                state.enterHandlerFrame(activation, matchPrototype);
+
+        try {
+            Object result = ProtosClosureInvoker.invoke(body, List.of(), activation);
+            state.leaveFrame(frame);
+            return result;
+        } catch (ProtosEvaluatorSuspension suspension) {
+            throw suspension;
+        } catch (ProtosSignalException transfer) {
+            if (transfer.selectedHandlerFrame().orElse(null) == frame) {
+                state.leaveFrame(frame);
+                return ProtosClosureInvoker.invoke(
+                        handler, List.of(transfer.error()), activation);
+            }
+            state.leaveFrame(frame);
+            throw transfer;
+        } catch (RuntimeException transfer) {
+            state.leaveFrame(frame);
+            throw transfer;
+        }
+    }
+
+    private static ProtosSignalException invalid(ProtosActivation activation) {
+        return ProtosCoreErrors.signal(activation, ProtosCoreErrors.newError(activation));
     }
 }

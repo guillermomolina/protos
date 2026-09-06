@@ -19,9 +19,11 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.util.List;
 import java.util.Objects;
 
@@ -56,11 +58,23 @@ public final class ProtosClosureInvoker {
         com.guillermomolina.protos.runtime.ProtosPrelude fallbackPrelude =
                 caller == null ? null : caller.prelude().orElse(null);
         java.util.function.Supplier<ProtosActivation> activationFactory =
-                () -> caller == null
-                        ? ProtosActivation.forClosureInvocation(closure, supplied, fallbackPrelude)
-                        : ProtosActivation.forClosureInvocation(
-                                closure, supplied, fallbackPrelude, caller.actorModuleState(),
-                                caller.currentModuleKey().orElse(null), caller.executionDomain());
+                () -> {
+                    ProtosActivation created =
+                            caller == null
+                                    ? ProtosActivation.forClosureInvocation(
+                                            closure, supplied, fallbackPrelude)
+                                    : ProtosActivation.forClosureInvocation(
+                                            closure,
+                                            supplied,
+                                            fallbackPrelude,
+                                            caller.actorModuleState(),
+                                            caller.currentModuleKey().orElse(null),
+                                            caller.executionDomain());
+                    if (caller != null && caller.task().isEmpty()) {
+                        created.inheritDynamicControlState(caller);
+                    }
+                    return created;
+                };
         ProtosActivation activation;
         if (caller != null && caller.task().isPresent()) {
             com.guillermomolina.protos.runtime.ProtosTask task = caller.task().orElseThrow();
@@ -87,15 +101,22 @@ public final class ProtosClosureInvoker {
         com.guillermomolina.protos.runtime.ProtosPrelude fallbackPrelude =
                 caller.prelude().orElse(null);
         java.util.function.Supplier<ProtosActivation> activationFactory =
-                () -> ProtosActivation.forImmediateMethodInvocation(
-                        closure,
-                        supplied,
-                        receiver,
-                        methodHome,
-                        fallbackPrelude,
-                        caller.actorModuleState(),
-                        caller.currentModuleKey().orElse(null),
-                        caller.executionDomain());
+                () -> {
+                    ProtosActivation created =
+                            ProtosActivation.forImmediateMethodInvocation(
+                                    closure,
+                                    supplied,
+                                    receiver,
+                                    methodHome,
+                                    fallbackPrelude,
+                                    caller.actorModuleState(),
+                                    caller.currentModuleKey().orElse(null),
+                                    caller.executionDomain());
+                    if (caller.task().isEmpty()) {
+                        created.inheritDynamicControlState(caller);
+                    }
+                    return created;
+                };
 
         ProtosActivation activation;
         if (caller.task().isPresent()) {
@@ -124,6 +145,9 @@ public final class ProtosClosureInvoker {
                     () -> new IllegalStateException("Closure invocation requires a prepared execution plan"));
             plan.bind(activation);
             return plan.executeBody(activation);
+        } catch (ProtosSignalException transfer) {
+            ProtosCoreErrors.selectHandlerIfNeeded(activation, transfer);
+            throw transfer;
         } catch (ProtosNonLocalReturnException transfer) {
             if (activation.ownsReturnHome()
                     && transfer.target() == returnHome) {

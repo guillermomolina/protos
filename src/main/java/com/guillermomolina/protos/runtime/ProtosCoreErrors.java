@@ -113,6 +113,20 @@ public final class ProtosCoreErrors {
             throw new IllegalArgumentException(
                     "semantic signaling requires an Error object from the current Core prelude");
         }
-        return new ProtosSignalException(error);
+        return selectHandlerIfNeeded(activation, new ProtosSignalException(error));
     }
+
+    public static ProtosSignalException selectHandlerIfNeeded(
+            ProtosActivation activation, ProtosSignalException transfer) {
+        Objects.requireNonNull(activation, "activation");
+        Objects.requireNonNull(transfer, "transfer");
+        if (transfer.selectedHandlerFrame().isPresent()) {
+            return transfer;
+        }
+        activation.dynamicControlStateIfPresent()
+                .flatMap(state -> state.selectMatchingHandler(transfer.error()))
+                .ifPresent(transfer::selectHandlerFrame);
+        return transfer;
+    }
+
 }
