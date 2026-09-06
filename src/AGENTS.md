@@ -141,6 +141,9 @@ modified scope unless doing so is unavailable or unreasonably expensive.
 
 Static verification does not imply running tests.
 
-Follow the root rule that tests run only when explicitly requested. When tests
-are part of the task, use them to validate specified semantics, not historical
-implementation accidents.
+Follow the root adaptive test/validation matrix. Production changes under
+`src/main/**` are executable-impact changes; test changes under `src/test/**` are
+test-impact changes. A publication-capable automated patch therefore runs the
+focused and complete-suite validation required by the root policy without a
+separate confirmation step when the user executes that launcher. Use tests to
+validate specified semantics, not historical implementation accidents.

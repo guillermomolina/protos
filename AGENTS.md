@@ -401,7 +401,7 @@ remain local.
 
 For the standard patch-publication workflow, publish the validated commit
 directly to `main` only after synchronizing with the current `origin/main` and
-rerunning the required tests.
+rerunning the validation required by the adaptive test/validation rules below.
 
 Do not leave temporary remote branches behind after successful publication.
 
@@ -773,13 +773,66 @@ Clearly report compatibility consequences when changing already implemented beha
 
 Test execution
 
-Do not run tests automatically.
+Select test scope from the actual changed-file delta and the behavioral impact of
+that delta. Tests are evidence for executable behavior; they are not a mandatory
+ritual for every repository edit.
 
-Only run tests when the user explicitly asks you to do so.
+For a publication-capable patch or implementation change, classify the definitive
+delta after synchronizing with the current `origin/main`:
 
-When tests are requested, run only those directly relevant to the current change. Do not run the complete test suite unless the user explicitly requests it.
+- **Executable-impact changes** include production implementation under
+  `src/main/**`, distributable Protos source under `protos/lib/**`, and build,
+  generation, packaging, or runtime configuration whose change can alter the
+  compiled or distributed program. Run the focused tests that exercise the
+  changed behavior when such tests exist, then run the complete Maven test suite
+  before publication.
+- **Test-impact changes** under `src/test/**`, `protos/tests/**`, or equivalent
+  executable test infrastructure require the affected/focused tests and, for a
+  publication change, the complete Maven test suite unless the changed test
+  surface is intentionally outside Maven and an equivalent complete project
+  validation is documented.
+- **Specification-only changes** under `spec/**` do not run Maven tests by
+  default. Run the applicable specification governance, consistency, changelog,
+  and static checks. If a specific executable guard consumes the modified
+  specification artifact, run that focused guard; a full suite is not required
+  merely because normative text changed.
+- **Documentation/governance-only changes** such as `docs/**`, `AGENTS.md`,
+  `CHANGELOG.md`, and project ledgers do not run Maven tests by default. Run the
+  applicable documentation, status, governance, formatting, link/integrity, or
+  other static checks. If an executable guard specifically consumes a modified
+  document or ledger, run that focused guard only unless the delta also has
+  executable impact.
+- **Mixed changes** use the strongest applicable validation class. Adding docs,
+  specification text, changelog entries, or status updates to an executable
+  change never weakens the executable-change test requirements.
 
-Do not repeatedly rerun failing tests without first understanding and changing the likely cause.
+Do not classify only by file extension. For example, `pom.xml`, code generators,
+packaging scripts, or runtime configuration may have executable impact even
+though they are not Java or Protos source. Conversely, a Markdown-only design
+clarification does not gain executable impact merely because it describes code.
+
+Patch launchers SHOULD derive and print their validation class from the actual
+post-apply delta, for example:
+
+    VALIDATION_CLASS: EXECUTABLE_IMPACT
+    FOCAL_TESTS: PASS
+    FULL_TEST_SUITE: PASS
+
+or:
+
+    VALIDATION_CLASS: DOCUMENTATION_ONLY
+    FOCAL_TESTS: SKIPPED (not applicable)
+    FULL_TEST_SUITE: SKIPPED (documentation-only change)
+
+A user request for a publication-capable automated patch/launcher authorizes that
+launcher, when the user executes it, to run the tests required by this matrix and
+to publish only after those required validations pass. Do not ask for a second
+test confirmation solely because the matrix requires focal or full-suite tests.
+Outside such an authorized publication workflow, do not start expensive test
+runs automatically; follow the user's requested validation scope.
+
+Do not repeatedly rerun failing tests without first understanding and changing
+the likely cause.
 
 Static verification
 
