@@ -27,11 +27,15 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.jline.reader.*;
 import org.jline.reader.impl.history.DefaultHistory;
 import org.jline.terminal.*;
 
 public final class ProtosCli {
+    private static final Set<String> PACKAGE_METADATA_FILES =
+            Set.of("protos.toml", "protos.lock");
+
     private final ProtosValueRenderer renderer = new ProtosValueRenderer();
 
     public static void main(String[] args) {
@@ -105,29 +109,53 @@ public final class ProtosCli {
                         "package",
                         toolRoot,
                         new ProtosStandardLibraryModuleResolver(core.getParent()));
-        Session session =
-                session(
-                        core,
-                        resolver,
-                        applicationArguments(args, 0),
-                        in,
-                        out,
-                        err);
-        try {
-            String source = resolver.loadSource(resolver.entryModule("Main"));
-            session.compiler.compile(source).call(session.activation);
-            return 0;
-        } catch (ParseError e) {
-            err.println("Package tool syntax error: " + e.getMessage());
-            return 1;
-        } catch (ProtosSignalException e) {
-            err.println("Package tool error: " + renderer.render(e.error()));
-            return 1;
-        } catch (RuntimeException e) {
-            err.println("Package tool runtime error: " + e.getMessage());
-            return 1;
-        } finally {
-            session.terminate();
+
+        try (ProtosNioReadOnlyFilesystemBackend filesystemBackend =
+                new ProtosNioReadOnlyFilesystemBackend(
+                        Path.of("").toAbsolutePath().normalize(),
+                        PACKAGE_METADATA_FILES)) {
+            Session session =
+                    session(
+                            core,
+                            resolver,
+                            applicationArguments(args, 0),
+                            in,
+                            out,
+                            err);
+            try {
+                ProtosObjectValue rawFilesystem =
+                        ProtosStandardFilesystemProtocol.createCapability(
+                                session.activation
+                                        .prelude()
+                                        .orElseThrow()
+                                        .bytesPrototypeForRuntime(),
+                                session.activation,
+                                filesystemBackend);
+                if (!(rawFilesystem instanceof ProtosFilesystemValue filesystem)) {
+                    throw new IllegalStateException(
+                            "standard Filesystem bridge returned the wrong value family");
+                }
+                if (session.activation.context().hasLocalSlot("filesystem")) {
+                    throw new IllegalStateException(
+                            "package tool Filesystem bootstrap slot already exists");
+                }
+                session.activation.context().createLocalSlot("filesystem", filesystem);
+
+                String source = resolver.loadSource(resolver.entryModule("Main"));
+                session.compiler.compile(source).call(session.activation);
+                return 0;
+            } catch (ParseError e) {
+                err.println("Package tool syntax error: " + e.getMessage());
+                return 1;
+            } catch (ProtosSignalException e) {
+                err.println("Package tool error: " + renderer.render(e.error()));
+                return 1;
+            } catch (RuntimeException e) {
+                err.println("Package tool runtime error: " + e.getMessage());
+                return 1;
+            } finally {
+                session.terminate();
+            }
         }
     }
 

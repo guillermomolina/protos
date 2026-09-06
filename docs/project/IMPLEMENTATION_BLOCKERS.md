@@ -232,3 +232,64 @@ independent normative authority.
 
 Independent work:
 No implementation work remains blocked by B005.
+
+## B006 — Atomic package metadata replacement
+
+Status: BLOCKED
+
+Implementation area:
+Package-tool Filesystem Slice 2B and every future `protos add`, `protos remove`,
+`protos resolve`, or `protos update` path that must safely publish changes to
+`protos.toml` or `protos.lock`.
+
+Normative dependency:
+The current Filesystem v0.1 contract closes `filesystem.open(...)` as its minimum
+namespace operation and explicitly leaves `remove`, `mkdir`, `rename`, symlink
+operations, directory iteration, and richer namespace operations outside this I/O
+revision. File write/truncate can modify one already-selected resource, but that
+surface does not define the failure/cancellation/commitment semantics of replacing
+one namespace entry with a fully written new resource. In-place truncate-and-write
+would permit a failed package operation to expose empty or partial repository
+metadata, so it is not an acceptable substitute for a general replacement
+operation.
+
+`Syncable` durability for a File likewise does not, by itself, define durability
+of filesystem namespace changes such as creation, deletion, rename, or directory
+entry replacement.
+
+Specification authority:
+- `spec/io/FILESYSTEM.md` §18 File Open Semantics and §20 Filesystem Authority
+  and Path, especially §20.2's explicit boundary on namespace operations
+- `spec/io/BYTE_IO.md` for File/Syncable durability and its namespace-durability
+  exclusion
+- `spec/io/IO_CORE.md` for I/O commitment, cancellation, lifecycle, and failure
+  rules
+
+Unblock condition:
+The normative general Filesystem surface defines a confined namespace operation,
+or a composition of general operations, sufficient to publish a completely
+written replacement for an existing metadata file without exposing partial
+content. The specification must determine the relevant validation, authority,
+atomicity/visibility, commitment, cancellation, failure aftermath, and any
+required namespace-durability behavior precisely enough for independent
+implementations to agree. A faithful production implementation of that general
+surface must then be available to the package tool without a package-specific
+native escape hatch.
+
+Current consequence:
+Package-tool Slice 2A may provision and use a read-only, explicitly confined
+Filesystem capability for project metadata. Package metadata mutation remains
+blocked. The package tool must not fall back to in-place truncate/write,
+`PackageNative.rename(...)`, ambient host filesystem access, or another
+package-only privileged path merely to create or replace `protos.toml` or
+`protos.lock`.
+
+Independent work:
+Read-only TOML parsing and manifest validation, lock parsing/canonical validation,
+semantic resolution-input modeling, in-memory version/constraint resolution, and
+read-only execution preflight can continue independently. Work that needs only
+already-open File byte/text behavior also remains independent.
+
+Library dependency:
+None. B006 is a missing general Filesystem semantic/capability boundary, not a
+missing Standard Library package and does not allocate a `LIBxxx` item.

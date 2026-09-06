@@ -118,12 +118,17 @@ final class ProtosCliTest {
     }
 
     @Test
-    void packageSubcommandRunsBundledProtosToolWithProcessArgsAndStdout() {
+    void packageSubcommandRunsBundledProtosToolWithProcessArgsStdoutAndRestrictedFilesystem() {
         R result = run("package");
 
         assertEquals(0, result.c);
         assertEquals("Protos package tool bootstrap\npackage\n", result.o);
         assertTrue(result.e.isBlank(), result.e);
+    }
+
+    @Test
+    void ordinaryCliApplicationDoesNotReceivePackageToolFilesystemAuthority() {
+        assertNotEquals(0, run("-e", "filesystem").c);
     }
 
     @Test

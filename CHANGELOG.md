@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.155-SNAPSHOT
+
+- Close package-tool Filesystem Slice 2A by provisioning the bundled Protos package tool with one explicit read-only Filesystem capability rooted at the launcher's project directory and restricted to the exact direct-child names `protos.toml` and `protos.lock`. The NIO backend uses a pinned `SecureDirectoryStream` plus `NOFOLLOW_LINKS` when the host provider can preserve the standard confinement contract and fails closed otherwise; ordinary CLI applications still receive no Filesystem authority.
+- Exercise the capability from ordinary Protos source through `Path`, `filesystem.open(...).value()`, `TextReader`, and `Encoding.UTF8`; no package-specific file-read primitive or Standard Library dependency is introduced. Record B006 for metadata mutation because Filesystem v0.1 explicitly leaves rename/replace and richer namespace operations undefined, so Slice 2B must not publish `protos.toml`/`protos.lock` via fragile in-place truncate/write or a `PackageNative` escape hatch.
+
 ## 0.2.154-SNAPSHOT
 
 - Close `CLI006` with a standalone CLI-owned `print(value)` binding installed as an ordinary Closure only in normal initial CLI sessions. String values print their contents directly; other values reuse CLI display rendering; each call delegates one complete line through a borrowing standard `TextWriter` over the already-provisioned Process stdout capability and Encoding, then returns canonical `null`.
