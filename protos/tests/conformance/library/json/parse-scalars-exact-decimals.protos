@@ -1,0 +1,49 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+JSON: import("std:json/JSON")
+
+nullNode: JSON.parse("null")
+trueNode: JSON.parse("true")
+falseNode: JSON.parse("false")
+stringNode: JSON.parse("\"hello\"")
+zero: JSON.parse("0")
+negativeZero: JSON.parse("-0")
+integer: JSON.parse("123")
+decimal: JSON.parse("-12.3400e+2")
+largeExponent: JSON.parse("1e400")
+
+ok: true
+(nullNode.kind == "null").ifFalse(() => { ok = false })
+(nullNode.value === null).ifFalse(() => { ok = false })
+(trueNode.kind == "boolean").ifFalse(() => { ok = false })
+(trueNode.value === true).ifFalse(() => { ok = false })
+(falseNode.kind == "boolean").ifFalse(() => { ok = false })
+(falseNode.value === false).ifFalse(() => { ok = false })
+(stringNode.kind == "string").ifFalse(() => { ok = false })
+(stringNode.value == "hello").ifFalse(() => { ok = false })
+(zero.value.coefficient == 0).ifFalse(() => { ok = false })
+(zero.value.exponent == 0).ifFalse(() => { ok = false })
+(negativeZero.value.coefficient == 0).ifFalse(() => { ok = false })
+(negativeZero.value.exponent == 0).ifFalse(() => { ok = false })
+(integer.value.coefficient == 123).ifFalse(() => { ok = false })
+(integer.value.exponent == 0).ifFalse(() => { ok = false })
+(decimal.value.coefficient == -123400).ifFalse(() => { ok = false })
+(decimal.value.exponent == -2).ifFalse(() => { ok = false })
+(largeExponent.value.coefficient == 1).ifFalse(() => { ok = false })
+(largeExponent.value.exponent == 400).ifFalse(() => { ok = false })
+ok

@@ -1,0 +1,51 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+JSON: import("std:json/JSON")
+
+one: JSON.number(1, 0)
+arrayNode: JSON.array(one, JSON.string("x"), JSON.nullValue())
+objectNode: JSON.object(
+    "first", one,
+    "second", arrayNode,
+    "third", JSON.boolean(true)
+)
+
+seen: Map()
+index: 0
+objectNode.value.each((key, node) => {
+    seen.atPut(index, key)
+    index = index + 1
+})
+
+objectNode.value.atPut("fourth", JSON.nullValue())
+
+ok: true
+(arrayNode.kind == "array").ifFalse(() => { ok = false })
+(arrayNode.value.size() == 3).ifFalse(() => { ok = false })
+(arrayNode.value.at(0) === one).ifFalse(() => { ok = false })
+(arrayNode.value.at(1).kind == "string").ifFalse(() => { ok = false })
+(arrayNode.value.at(2).kind == "null").ifFalse(() => { ok = false })
+(objectNode.kind == "object").ifFalse(() => { ok = false })
+(index == 3).ifFalse(() => { ok = false })
+(seen.at(0) == "first").ifFalse(() => { ok = false })
+(seen.at(1) == "second").ifFalse(() => { ok = false })
+(seen.at(2) == "third").ifFalse(() => { ok = false })
+(objectNode.value.at("first") === one).ifFalse(() => { ok = false })
+(objectNode.value.at("second") === arrayNode).ifFalse(() => { ok = false })
+(objectNode.value.containsKey("fourth")).ifFalse(() => { ok = false })
+ok
