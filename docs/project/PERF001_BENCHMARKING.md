@@ -15,8 +15,7 @@ The Protos-language workload corpus remains under `protos/benchmarks/`. Those
 sources are the canonical Protos versions of workloads used by PERF work and are
 pinned by the Protos Git commit recorded for each benchmark run.
 
-A future companion repository, currently intended as
-`guillermomolina/protos-benchmarks`, may own:
+The companion repository `guillermomolina/protos-benchmarks` owns:
 
 - Docker/container definitions for benchmark runtimes;
 - the external benchmark runner and statistics/reporting tools;
@@ -147,8 +146,8 @@ repositories.
 | Slice | Status | Scope / closure condition |
 |---|---|---|
 | PERF001-A | CLOSED | Protos-side benchmark ownership, correctness/equivalence rules, Docker timing boundary, reproducibility contract, corpus handoff, and persisted PERF001 slice plan are published and validated. |
-| PERF001-B | READY | Create the companion Docker benchmark harness with pinned runtime images, machine/runtime inventory, CPU-affinity policy, raw-result schema, and a smoke benchmark consuming a pinned `guillermomolina/protos` revision. |
-| PERF001-C | BLOCKED_BY_DEPENDENCIES | After B, implement correctness-gated cross-language equivalents and runner integration for the existing micro/runtime/algorithm corpus. |
+| PERF001-B | CLOSED | Companion Docker benchmark harness published at exact external commit `guillermomolina/protos-benchmarks@4e809acd839a0193250140c5b6dde48051d9aa9a`, consuming pinned Protos revision `509b09562233b925d8414ce9a65196efd08da472`; runtime definitions, machine/runtime inventory, CPU-affinity policy, raw-result schema, and correctness-gated smoke validation are present. No timing results are published by this slice. |
+| PERF001-C | READY | Implement correctness-gated cross-language equivalents and runner integration for the existing micro/runtime/algorithm corpus on top of the published PERF001-B harness. |
 | PERF001-D | BLOCKED_BY_DEPENDENCIES | After C, establish startup, warmup-curve and steady-state Protos measurements, including interpreter-versus-Truffle-compilation and non-timing compilation diagnostics. |
 | PERF001-E | BLOCKED_BY_DEPENDENCIES | After C, extend comparable coverage for closed collection semantics and other sequential Core workloads selected by the then-current audit. |
 | PERF001-F | BLOCKED_BY_DEPENDENCIES | After B and the relevant workload audit, add Future/P/Actor concurrency measurements with explicit CPU-set and scheduling methodology. |
