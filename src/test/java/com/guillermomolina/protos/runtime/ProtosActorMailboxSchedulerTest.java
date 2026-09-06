@@ -25,8 +25,10 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.Test;
 
 final class ProtosActorMailboxSchedulerTest {
@@ -136,13 +138,13 @@ final class ProtosActorMailboxSchedulerTest {
 
     @Test
     void oneActorNeverRunsTwoSegmentsConcurrently() throws Exception {
-        ExecutorService carriers = Executors.newFixedThreadPool(4);
-        try {
-            ProtosActorScheduler scheduler = new ProtosActorScheduler(carriers, 4);
+        try (CarrierPool carriers = new CarrierPool(4)) {
+            ProtosActorScheduler scheduler = new ProtosActorScheduler(carriers.executor(), 4);
             ProtosActor actor = actorWithMailboxCapacity(4);
             CountDownLatch firstEntered = new CountDownLatch(1);
             CountDownLatch releaseFirst = new CountDownLatch(1);
             CountDownLatch secondEntered = new CountDownLatch(1);
+            CountDownLatch bothCompleted = new CountDownLatch(2);
             AtomicInteger active = new AtomicInteger();
             AtomicInteger maxActive = new AtomicInteger();
 
@@ -150,53 +152,65 @@ final class ProtosActorMailboxSchedulerTest {
             actor.markReady();
             actor.tryAcceptMessageForRuntime(
                     task -> {
-                        int now = active.incrementAndGet();
-                        maxActive.accumulateAndGet(now, Math::max);
-                        firstEntered.countDown();
-                        await(releaseFirst);
-                        active.decrementAndGet();
-                        task.complete(null);
+                        try {
+                            int now = active.incrementAndGet();
+                            maxActive.accumulateAndGet(now, Math::max);
+                            firstEntered.countDown();
+                            await(releaseFirst);
+                            active.decrementAndGet();
+                            task.complete(null);
+                        } finally {
+                            bothCompleted.countDown();
+                        }
                     });
             actor.tryAcceptMessageForRuntime(
                     task -> {
-                        int now = active.incrementAndGet();
-                        maxActive.accumulateAndGet(now, Math::max);
-                        secondEntered.countDown();
-                        active.decrementAndGet();
-                        task.complete(null);
+                        try {
+                            int now = active.incrementAndGet();
+                            maxActive.accumulateAndGet(now, Math::max);
+                            secondEntered.countDown();
+                            active.decrementAndGet();
+                            task.complete(null);
+                        } finally {
+                            bothCompleted.countDown();
+                        }
                     });
 
             assertTrue(firstEntered.await(2, TimeUnit.SECONDS));
             assertFalse(secondEntered.await(100, TimeUnit.MILLISECONDS));
             releaseFirst.countDown();
             assertTrue(secondEntered.await(2, TimeUnit.SECONDS));
+            assertTrue(
+                    bothCompleted.await(2, TimeUnit.SECONDS),
+                    "both Actor turns must finish before carrier teardown");
             assertEquals(1, maxActive.get());
-        } finally {
-            carriers.shutdownNow();
         }
     }
 
     @Test
     void distinctActorsCanMakeProgressOnDifferentCarriers() throws Exception {
-        ExecutorService carriers = Executors.newFixedThreadPool(2);
-        try {
-            ProtosActorScheduler scheduler = new ProtosActorScheduler(carriers, 2);
+        try (CarrierPool carriers = new CarrierPool(2)) {
+            ProtosActorScheduler scheduler = new ProtosActorScheduler(carriers.executor(), 2);
             ProtosActor first = actorWithMailboxCapacity(2);
             ProtosActor second = actorWithMailboxCapacity(2);
             CountDownLatch bothEntered = new CountDownLatch(2);
             CountDownLatch release = new CountDownLatch(1);
+            CountDownLatch bothCompleted = new CountDownLatch(2);
 
             scheduler.attach(first);
             scheduler.attach(second);
             first.markReady();
             second.markReady();
-            first.tryAcceptMessageForRuntime(blockingTurn(bothEntered, release));
-            second.tryAcceptMessageForRuntime(blockingTurn(bothEntered, release));
+            first.tryAcceptMessageForRuntime(
+                    blockingTurn(bothEntered, release, bothCompleted));
+            second.tryAcceptMessageForRuntime(
+                    blockingTurn(bothEntered, release, bothCompleted));
 
             assertTrue(bothEntered.await(2, TimeUnit.SECONDS));
             release.countDown();
-        } finally {
-            carriers.shutdownNow();
+            assertTrue(
+                    bothCompleted.await(2, TimeUnit.SECONDS),
+                    "both Actor turns must finish before carrier teardown");
         }
     }
 
@@ -217,11 +231,17 @@ final class ProtosActorMailboxSchedulerTest {
     }
 
     private static ProtosTask.Continuation blockingTurn(
-            CountDownLatch entered, CountDownLatch release) {
+            CountDownLatch entered,
+            CountDownLatch release,
+            CountDownLatch completed) {
         return task -> {
-            entered.countDown();
-            await(release);
-            task.complete(null);
+            try {
+                entered.countDown();
+                await(release);
+                task.complete(null);
+            } finally {
+                completed.countDown();
+            }
         };
     }
 
@@ -239,6 +259,54 @@ final class ProtosActorMailboxSchedulerTest {
         } catch (InterruptedException error) {
             Thread.currentThread().interrupt();
             throw new AssertionError(error);
+        }
+    }
+
+    private static final class CarrierPool implements AutoCloseable {
+        private final AtomicReference<Throwable> uncaughtFailure =
+                new AtomicReference<>();
+        private final ExecutorService executor;
+
+        CarrierPool(int threadCount) {
+            AtomicInteger sequence = new AtomicInteger();
+            ThreadFactory threadFactory =
+                    runnable -> {
+                        Thread thread =
+                                new Thread(
+                                        runnable,
+                                        "protos-test-carrier-"
+                                                + sequence.incrementAndGet());
+                        thread.setUncaughtExceptionHandler(
+                                (ignored, failure) ->
+                                        uncaughtFailure.compareAndSet(
+                                                null, failure));
+                        return thread;
+                    };
+            executor = Executors.newFixedThreadPool(threadCount, threadFactory);
+        }
+
+        ExecutorService executor() {
+            return executor;
+        }
+
+        @Override
+        public void close() throws Exception {
+            executor.shutdown();
+            if (!executor.awaitTermination(2, TimeUnit.SECONDS)) {
+                executor.shutdownNow();
+                assertTrue(
+                        executor.awaitTermination(2, TimeUnit.SECONDS),
+                        "carrier pool failed to terminate");
+            }
+
+            Throwable failure = uncaughtFailure.get();
+            if (failure != null) {
+                AssertionError assertion =
+                        new AssertionError(
+                                "uncaught carrier-thread failure escaped the test body");
+                assertion.initCause(failure);
+                throw assertion;
+            }
         }
     }
 
