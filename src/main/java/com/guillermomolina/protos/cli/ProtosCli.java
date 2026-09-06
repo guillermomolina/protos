@@ -64,7 +64,16 @@ public final class ProtosCli {
                 return runBundledPackageTool(args, in, out, err);
             }
             if (args[0].equals("test")) {
-                return runBundledTool("test", "Test", args, in, out, err);
+                return runBundledTool(
+                        "test",
+                        "Test",
+                        args,
+                        in,
+                        out,
+                        err,
+                        session ->
+                                ProtosExactExecutionFacility.install(
+                                        session.activation));
             }
             if (args[0].equals("-e")) {
                 if (args.length < 2) return usage(err, "-e requires a source argument");

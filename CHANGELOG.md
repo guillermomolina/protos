@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.174-SNAPSHOT
+
+- Start `TOOL002-D` with `TOOL002-D1`: expose the closed B/C exact-source fresh-Process/captured-execution mechanism to the bundled Test Tool through one bootstrap-local `execution` capability. The capability is not Core/prelude state and owns no manifest, expectation, CaseId, scheduler, reporter or retry policy.
+- Add `ProtosDetachedExecutionValue`, a deliberately stricter-than-Actor transfer boundary for execution observations. Scalar and explicitly audited authority-free Object/Array/Bytes graphs are detached into fresh destination identities; Process, Actor/Group refs, streams, Filesystem/File, Closure, Future, task, activation and other execution/resource values fail closed with `NonTransferableValue` rather than leaking a child-Process graph into the tool Process.
+- Record the cost-aware TOOL002-D decomposition: D2 will grant/read the confined conformance corpus and construct inert TestPlan/CaseId data in Protos; D3 migrates ordinary scalar/Error expectations; D4 handles the remaining non-Future closure/identity-sensitive expectations. Existing `future-*` expectation policy remains intentionally assigned to TOOL002-F by the already-selected sequence.
+
 ## 0.2.173-SNAPSHOT
 
 - Close I022-B by publishing the already-normative `Error.handle(body, handler)` protocol over I022-A's dynamic-control substrate: eager Closure-only validation, ordinary-delegation matching, dynamically innermost selection, selected-frame deactivation before boundary unwind, exact Error identity and non-resumable handler transfer. Explicit `Error.signal()` preselects immediately; runtime-created Error transfers select at Closure invocation boundaries so both paths share one mechanism.

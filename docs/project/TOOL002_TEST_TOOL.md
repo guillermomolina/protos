@@ -63,7 +63,7 @@ freeze those decisions unless their own audited scope requires and resolves them
 | TOOL002-A | CLOSED | Exact bundled `protos test` dispatch and tiny ordinary-Protos entry published in the same commit at implementation version `0.2.168-SNAPSHOT`; no corpus migration or test policy. |
 | TOOL002-B | CLOSED | Publish the local, test-neutral `ProtosFreshProcessExecutor` over `ProtosStandaloneProcessBootstrap`, shared RootActor cooperative terminal dispatch through `ProtosRootTaskExecution`, and inert `ProtosExecutionOutcome`; every invocation uses a fresh semantic Process and terminates it before returning. No TestPlan/scheduler/worker/remote/test policy. Implementation version `0.2.169-SNAPSHOT`. |
 | TOOL002-C | CLOSED | Publish test-neutral sequential private-stream capture over `ProtosFreshProcessExecutor`: one exact compiled entry gets private stdin/stdout/stderr, a fresh semantic Process and an inert outcome plus detached captured bytes. No manifest/expectation/scheduler/result-transfer policy. Implementation version `0.2.171-SNAPSHOT`. |
-| TOOL002-D | READY | TOOL002-C is closed; migrate the existing general conformance manifest/expectation interpretation from Java to Protos while retaining the corpus, including an audited safe boundary for consuming case results from the fresh-Process execution layer. |
+| TOOL002-D | IN_PROGRESS | TOOL002-D1 closes the safe Protos-consumable exact-execution/detached-observation boundary; D2-D4 remain. D2 is READY. `future-*` expectation policy remains assigned to TOOL002-F. |
 | TOOL002-E | BLOCKED_BY_DEPENDENCIES | After D, migrate Package Tool/TOML fixtures away from Java-owned runner policy. |
 | TOOL002-F | BLOCKED_BY_DEPENDENCIES | After E, preserve async/Future pending-work and terminal-outcome test coverage through production execution semantics. |
 | TOOL002-G | BLOCKED_BY_DEPENDENCIES | After F, migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |
@@ -194,6 +194,47 @@ objects into the bundled Test Tool Process. TOOL002-D must audit the safe
 Protos-side result-consumption boundary as part of migrating expectation policy.
 
 TOOL002-D is therefore READY.
+
+## TOOL002-D decomposition
+
+The C -> D boundary audit found that the existing general manifest mixes simple
+value/Error expectations with Future and callable/identity-sensitive cases.
+Migrating all of that together would combine filesystem authority, TestPlan
+representation, cross-Process value safety and several independent expectation
+policies in one oversized change.
+
+TOOL002-D therefore uses these publishable sub-slices:
+
+| Slice | Status | Outcome |
+|---|---|---|
+| TOOL002-D1 | CLOSED | Bootstrap-local general `execution(source)` facility for the Test Tool over TOOL002-C, returning a caller-local observation through a strict authority-free detached-value boundary. No manifest/test policy. Implementation version `0.2.174-SNAPSHOT`. |
+| TOOL002-D2 | READY | Grant the Test Tool the minimum confined read authority needed for the existing conformance corpus; parse the retained TSV manifest in Protos into inert CaseSpec/TestPlan data with stable path-based CaseId before execution. |
+| TOOL002-D3 | BLOCKED_BY_DEPENDENCIES | After D2, migrate ordinary `boolean`, `null`, `integer`, `float-bits`, `float-nan`, `fixed-integer`, `error`, and `error-parent` interpretation from Java to Protos using D1 observations. |
+| TOOL002-D4 | BLOCKED_BY_DEPENDENCIES | After D3, preserve the remaining non-Future `closure-error-parent-fresh` identity-sensitive expectations without leaking Closure authority; reconcile Java ownership for the D-migrated cases and close TOOL002-D. |
+
+The `future-*` families (`future-integer`, `future-null`, `future-boolean`,
+`future-error`, `future-error-parent`, `future-observation-error-identity`,
+`future-cancelled`) remain deliberately covered by the later TOOL002-F slice.
+This keeps the already-selected async/Future migration boundary meaningful.
+
+### TOOL002-D1 closure
+
+D1 publishes only general mechanism:
+
+- `ProtosExactExecutionFacility` installs `execution` only in the explicitly
+  granted initial tool module context;
+- each call runs one exact source String through TOOL002-C with a fresh Process,
+  private streams, empty args/environment and no default Filesystem;
+- the returned frozen observation is caller-local and contains state, detached
+  value/error data, and frozen captured stdout/stderr Bytes;
+- `ProtosDetachedExecutionValue` never rematerializes capabilities and fails
+  closed with `NonTransferableValue` for authority/execution values;
+- frozen standard prelude objects may be shared, while copied identity-bearing
+  data receives fresh destination identity;
+- a Protos fixture owns the observable success/failure checks; Java tests cover
+  the host boundary and fail-closed authority rule.
+
+TOOL002-D2 is READY.
 
 ## Closure rule
 

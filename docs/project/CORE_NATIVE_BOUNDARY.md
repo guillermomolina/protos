@@ -80,6 +80,7 @@ kept explicit rather than allowed to accumulate invisibly:
 | Non-Core provider | Native Closure sites | Boundary | Reason |
 |---|---:|---|---|
 | `ProtosCliPrintFacility.java` | 1 | standalone CLI host/display bridge | Installs one ordinary initial-context `print` Closure only for normal standalone CLI sessions. General value rendering is CLI policy; output is delegated through a borrowing standard `TextWriter` over the already-provisioned Process stdout capability and Encoding. Bundled tools, Core bootstrap, imported modules and non-root Actor bootstrap do not receive this binding. |
+| `ProtosExactExecutionFacility.java` | 1 | bundled-tool bootstrap execution bridge | Installs one ordinary initial-context `execution` Closure only when the host explicitly grants the Test Tool execution capability. It delegates to the general fresh-Process/private-capture machinery and returns only detached authority-free observation data. It is not a Core/prelude binding and therefore does not widen the 30-provider / 108-site Core standard native boundary. |
 
 I018-L closed with the 90-site/22-provider baseline. I016-D1 was an explicitly
 reviewed post-I018 resource/capability extension adding exactly one

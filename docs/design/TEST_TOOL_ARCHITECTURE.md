@@ -676,6 +676,62 @@ directly into the bundled tool Process. TOOL002-D is the first slice that needs
 a Protos-side result/expectation consumption boundary, so that boundary must be
 audited there rather than invented as an incidental host object leak in C.
 
+## TOOL002-D result-consumption boundary
+
+TOOL002-C deliberately stopped before exposing child-Process values to the
+bundled tool. TOOL002-D begins by closing that boundary without weakening
+Process isolation.
+
+The selected initial mechanism is:
+
+```text
+bundled Test Tool Process
+        |
+        | bootstrap-local `execution(source)`
+        v
+TOOL002-C private captured execution
+        |
+        v
+fresh child Process / RootActor
+        |
+        v
+semantic outcome
+        |
+        v
+strict authority-free detached snapshot
+        |
+        v
+caller-local observation object
+```
+
+`execution` is a host-granted bundled-tool capability, not a Core/prelude
+binding, intrinsic, service locator or test-specific global object. Its first
+implementation accepts one already-selected source String and grants the child
+empty arguments/environment, private UTF-8 streams and no Filesystem authority.
+
+The returned observation has ordinary caller-local slots `state`, `value`,
+`error`, `stdout` and `stderr`. No live Process, Actor, task, Future, Closure,
+stream, Filesystem/File or other child authority may cross this boundary.
+Non-transferable results fail with the existing `NonTransferableValue` category.
+
+This is intentionally stricter than Actor transfer: ActorRef/GroupRef/Process
+capabilities are **not** rematerialized for observation. The Test Tool needs
+data, not delegated authority into a completed case.
+
+TOOL002-D is decomposed because the current manifest contains substantially
+different expectation families:
+
+```text
+D1  Protos-consumable exact execution + detached observation
+D2  confined corpus read + manifest -> inert TestPlan / stable CaseId
+D3  ordinary scalar/Error expectation interpretation in Protos
+D4  remaining non-Future Closure/error-identity expectations
+```
+
+The existing `future-*` expectation families remain assigned to TOOL002-F, whose
+purpose is specifically to preserve async/Future pending-work and terminal
+outcome coverage. D does not silently absorb that later slice.
+
 ## Tracked implementation sequencing
 
 `TOOL002` adopts the following cost-aware sequence. Preserve one coherent
@@ -689,9 +745,7 @@ each subsequent slice:
    test-neutral `ProtosFreshProcessExecutor` / `ProtosExecutionOutcome` boundary.
 4. **Single-case sequential runner** — CLOSED by TOOL002-C with private stdin/stdout/stderr
    and detached capture over the general fresh-Process mechanism.
-5. **Manifest/expectation migration** — READY after C; move the existing general conformance
-   manifest interpretation from Java to Protos, assign stable case identity and construct
-   the initial inert TestPlan while retaining the corpus.
+5. **Manifest/expectation migration** — IN_PROGRESS through TOOL002-D1; the safe Protos-consumable execution/observation boundary is closed. Continue D2-D4 before TOOL002-D closes; `future-*` cases remain assigned to TOOL002-F.
 6. **Package-tool fixture migration** — move Protos package-tool/TOML fixtures
    away from Java-owned runner logic.
 7. **Async/Future coverage** — preserve current pending-work/terminal-outcome
