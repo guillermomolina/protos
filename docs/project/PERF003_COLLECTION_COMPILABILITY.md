@@ -1,6 +1,6 @@
 # PERF003 — Collection algorithm Truffle compilability
 
-Status: READY
+Status: IN_PROGRESS
 
 This is a non-normative project record. It tracks performance engineering
 discovered by `PERF001-E`; it does not define Protos language or Standard Library
@@ -47,7 +47,7 @@ The optimization must preserve:
 
 | Slice | Status | Scope / closure condition |
 |---|---|---|
-| PERF003-A | READY | Fresh current-main profiling, then the narrowest semantic-preserving Protos-side optimization. Targeted reduce/sort diagnostics must execute correctly without the recorded `GraphTooBig`; focal/full/package/license validation must pass. |
+| PERF003-A | IN_PROGRESS | Implementation phase `0.2.170-SNAPSHOT` rewrites only the ordinary Protos-source traversal shape of Array `reduce` and the `sort` merge pass: balanced recursive range traversal replaces the internal `Array.each` callback loop while preserving exact left-to-right reducer/comparator effects, stable merge order, snapshot and failure laws. Repository focal/full/package/license validation is required here; exact GraalVM/Truffle diagnostics against the published commit remain the closure gate before PERF003-A can become CLOSED. |
 | PERF003-B | BLOCKED_BY_DEPENDENCIES | After A, publish companion correctness-first external validation against the exact optimized Protos revision, retain pre/post evidence and diagnostics, and do not rewrite PERF001-E baseline evidence. |
 
 PERF003 closes only after PERF003-B evidence is published and reconciled into the
@@ -59,3 +59,24 @@ The A audit must identify the real graph-growth owner before choosing an
 optimization: source-backed `Array.each`, reducer/comparator invocation
 structure, recursive/merge algorithm shape, CallTarget/node structure, or another
 implementation-only source revealed by diagnostics.
+
+## PERF003-A implementation-phase finding
+
+The current source audit identifies the shared high-growth shape as a large
+user-callback body nested inside standard native `Array.each`. `array-map` also
+uses `each` but its callback body is materially smaller and did not hit the
+PERF001-E graph limit.
+
+Rather than adding a per-element Truffle boundary to generic Core `Array.each`,
+this implementation keeps the optimization entirely in ordinary Standard
+Library Protos source. `reduce` uses a balanced recursive range fold whose left
+half completes before the right half, preserving strict left-fold order with
+O(log n) helper recursion depth. The `sort` merge pass likewise visits output
+positions in strictly ascending order through a balanced range traversal,
+preserving the existing left/right cursor transitions, comparator call pairs,
+stable-equality choice, errors and writes. The outer stable merge tree is
+unchanged.
+
+No Java native protocol, benchmark identity check, Truffle boundary, runtime
+value family or normative behavior is added. Exact external optimizing-runtime
+evidence remains required before closing PERF003-A.

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.170-SNAPSHOT
+
+- Continue `PERF003-A — Collection algorithm Truffle compilability` with the Protos-side implementation phase. Rewrite only `std:collections/Array.reduce` traversal and the internal merge traversal of stable `sort` from native `Array.each` callback loops into balanced ordinary-Protos range recursion. Preserve the pre-callback shallow snapshot, exact left-fold order and reducer invocation count, stable merge tree/order, two-direction comparator invocation/validation, failure behavior and fresh result semantics while avoiding a generic per-element Truffle boundary or benchmark-specific fast path.
+- Add Protos-source conformance over an eight-element reduce/sort case and retain the complete existing LIB001 reduce/sort semantic corpus. PERF003-A remains `IN_PROGRESS` until the exact published implementation revision is validated under the external GraalVM Community JDK 22 / Truffle 24.0.0 / `-Xss128m` diagnostic environment and the two recorded `GraphTooBig` findings are shown absent.
+
 ## 0.2.169-SNAPSHOT
 
 - Close `TOOL002-B — general fresh-Process execution mechanism`: add the test-neutral `ProtosFreshProcessExecutor` over the existing host-neutral standalone Process bootstrap, execute the exact precompiled entry as a real RootActor-local cooperative task, and return inert `ProtosExecutionOutcome` data for completed, failed, or cancelled terminal states. Every invocation creates and terminates a fresh semantic Protos Process; semantic Protos Errors are result data rather than CLI/test-specific host exceptions.

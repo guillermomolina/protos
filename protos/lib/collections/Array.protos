@@ -108,15 +108,24 @@ reduce: (array, reducer, ...initial) => {
         startIndex = 1
     })
 
-    index: 0
-    snapshot.each((element) => {
-        (index < startIndex).ifFalse(() => {
-            accumulator = reducer(accumulator, element)
-        })
-        index = index + 1
-    })
+    foldRange: (start, end, value) => {
+        length: end - start
+        result: value
 
-    accumulator
+        (length == 1).ifTrue(() => {
+            result = reducer(value, snapshot.at(start))
+        })
+
+        (length > 1).ifTrue(() => {
+            middle: start + length.div(2)
+            leftResult: foldRange(start, middle, value)
+            result = foldRange(middle, end, leftResult)
+        })
+
+        result
+    }
+
+    foldRange(startIndex, snapshot.size(), accumulator)
 }
 
 sort: (array, less) => {
@@ -128,66 +137,75 @@ sort: (array, less) => {
         rightSize: right.size()
         leftIndex: 0
         rightIndex: 0
-        outputIndex: 0
+        mergeRange: (start, end) => {
+            length: end - start
 
-        result.each((ignored) => {
-            leftDone: leftIndex == leftSize
-            rightDone: rightIndex == rightSize
+            (length == 1).ifTrue(() => {
+                leftDone: leftIndex == leftSize
+                rightDone: rightIndex == rightSize
 
-            leftDone.ifTrue(() => {
-                result.atPut(outputIndex, right.at(rightIndex))
-                rightIndex = rightIndex + 1
-            })
-
-            leftDone.ifFalse(() => {
-                rightDone.ifTrue(() => {
-                    result.atPut(outputIndex, left.at(leftIndex))
-                    leftIndex = leftIndex + 1
+                leftDone.ifTrue(() => {
+                    result.atPut(start, right.at(rightIndex))
+                    rightIndex = rightIndex + 1
                 })
 
-                rightDone.ifFalse(() => {
-                    leftValue: left.at(leftIndex)
-                    rightValue: right.at(rightIndex)
-                    lr: less(leftValue, rightValue)
-
-                    (lr === true).ifFalse(() => {
-                        (lr === false).ifFalse(() => {
-                            InvalidComparatorResult().signal()
-                        })
-                    })
-
-                    rl: less(rightValue, leftValue)
-
-                    (rl === true).ifFalse(() => {
-                        (rl === false).ifFalse(() => {
-                            InvalidComparatorResult().signal()
-                        })
-                    })
-
-                    (lr === true).ifTrue(() => {
-                        (rl === true).ifTrue(() => {
-                            InvalidComparatorOrder().signal()
-                        })
-                        result.atPut(outputIndex, leftValue)
+                leftDone.ifFalse(() => {
+                    rightDone.ifTrue(() => {
+                        result.atPut(start, left.at(leftIndex))
                         leftIndex = leftIndex + 1
                     })
 
-                    (lr === false).ifTrue(() => {
-                        (rl === true).ifTrue(() => {
-                            result.atPut(outputIndex, rightValue)
-                            rightIndex = rightIndex + 1
+                    rightDone.ifFalse(() => {
+                        leftValue: left.at(leftIndex)
+                        rightValue: right.at(rightIndex)
+                        lr: less(leftValue, rightValue)
+
+                        (lr === true).ifFalse(() => {
+                            (lr === false).ifFalse(() => {
+                                InvalidComparatorResult().signal()
+                            })
                         })
-                        (rl === false).ifTrue(() => {
-                            result.atPut(outputIndex, leftValue)
+
+                        rl: less(rightValue, leftValue)
+
+                        (rl === true).ifFalse(() => {
+                            (rl === false).ifFalse(() => {
+                                InvalidComparatorResult().signal()
+                            })
+                        })
+
+                        (lr === true).ifTrue(() => {
+                            (rl === true).ifTrue(() => {
+                                InvalidComparatorOrder().signal()
+                            })
+                            result.atPut(start, leftValue)
                             leftIndex = leftIndex + 1
+                        })
+
+                        (lr === false).ifTrue(() => {
+                            (rl === true).ifTrue(() => {
+                                result.atPut(start, rightValue)
+                                rightIndex = rightIndex + 1
+                            })
+                            (rl === false).ifTrue(() => {
+                                result.atPut(start, leftValue)
+                                leftIndex = leftIndex + 1
+                            })
                         })
                     })
                 })
             })
 
-            outputIndex = outputIndex + 1
-        })
+            (length > 1).ifTrue(() => {
+                middle: start + length.div(2)
+                mergeRange(start, middle)
+                mergeRange(middle, end)
+            })
 
+            null
+        }
+
+        mergeRange(0, result.size())
         result
     }
 
