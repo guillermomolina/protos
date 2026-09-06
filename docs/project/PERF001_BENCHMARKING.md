@@ -149,7 +149,7 @@ repositories.
 | PERF001-B | CLOSED | Companion Docker benchmark harness published at exact external commit `guillermomolina/protos-benchmarks@4e809acd839a0193250140c5b6dde48051d9aa9a`, consuming pinned Protos revision `509b09562233b925d8414ce9a65196efd08da472`; runtime definitions, machine/runtime inventory, CPU-affinity policy, raw-result schema, and correctness-gated smoke validation are present. No timing results are published by this slice. |
 | PERF001-C | CLOSED | Companion correctness suite published at exact external commit `guillermomolina/protos-benchmarks@2da26df49f9b0673c56a9150a2d2f8cfc4a77c17`, consuming pinned Protos revision `42b8264a36254dafbd97d80f5181790e28b9de12`; all 11 canonical micro/runtime/algorithm workloads have materially equivalent Python and JavaScript implementations, all 33 Protos/Python/JavaScript correctness cases pass, runtime stack/recursion settings are recorded, and no timing results are published by this slice. |
 | PERF001-D | CLOSED | Companion reference measurement evidence published at exact external commit `guillermomolina/protos-benchmarks@52b083cef5f8726f73be869c56f3cd2933e919ab`, produced by harness `0a406373c497df1173ff26a3ed4fcada015e0879`. It compares exact pre/post-PERF002 Protos revisions `8f363d0146164f99e72210eb44667f4efb7b88e7` / `3c93912a5579326374782a43527fbb51046f8f91` with 10 fresh-JVM startup samples, 20 retained warmup iterations and 20 steady-state samples for each of the 11 canonical workloads in interpreter and Truffle modes, plus separate non-timing compilation diagnostics; raw samples and environment/runtime identity are retained. |
-| PERF001-E | READY | Extend comparable coverage for closed collection semantics and other sequential Core workloads selected by the then-current audit, on top of the closed PERF001-C correctness gate. |
+| PERF001-E | IN_PROGRESS | Fresh audit selected six canonical sequential collection workloads: LIB001 Array `map`/`filter`/`reduce`/`sort`, Core Map lookup/update, and Map-backed Set algebra. The Protos corpus phase publishes and validates those exact workloads first; companion Python/JavaScript equivalents plus correctness/timing evidence must then consume the exact corpus commit before PERF001-E can close. |
 | PERF001-F | BLOCKED_BY_DEPENDENCIES | After B and the relevant workload audit, add Future/P/Actor concurrency measurements with explicit CPU-set and scheduling methodology. |
 | PERF001-G | BLOCKED_BY_DEPENDENCIES | Final reproducibility run and baseline report across the completed PERF001 surface. A report labelled the complete Core v0.1 baseline additionally requires I015 to be CLOSED. |
 
@@ -181,6 +181,30 @@ workloads with zero `opt_failed`, `GraphTooBig`, `FrameWithoutBoxing`,
 deep-inlining, `StackOverflowError`, or `BootstrapMethodError` occurrences.
 Individual pre/post timing ratios remain workload- and mode-specific
 observations and are not generalized into a whole-language performance claim.
+
+### PERF001-E fresh workload audit and corpus phase
+
+The fresh audit selects only closed, deterministic, sequential collection
+surfaces that have a credible algorithm-equivalent comparison boundary:
+
+- `std:collections/Array.map`;
+- `std:collections/Array.filter`;
+- `std:collections/Array.reduce`;
+- stable `std:collections/Array.sort`;
+- Core `Map.at` / `Map.atPut`;
+- `std:collections/Set` union/intersection/difference over its ordinary Map-backed
+  representation.
+
+The corpus deliberately excludes concurrency, Future/P/Actor work (PERF001-F),
+I/O/resource timing, JSON/text processing, and IdentityMap identity-sensitive
+comparisons from this slice. It also avoids introducing a generic iterable
+benchmark contract that Protos does not define.
+
+The Protos publication establishes the canonical six workload sources and
+expected values. PERF001-E remains `IN_PROGRESS` until the companion repository
+publishes materially equivalent Python/JavaScript implementations, correctness
+evidence and retained measurements against the exact Protos corpus commit, and
+that evidence is reconciled back into this ledger.
 
 ## Cross-repository publication rule
 

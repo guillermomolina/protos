@@ -21,8 +21,28 @@ Initial families:
 - `micro/` — small language/runtime mechanisms.
 - `algorithms/` — implementation-independent algorithms.
 - `runtime/` — workloads especially relevant to delegation and dispatch.
+- `collections/` — sequential closed Core/Standard-Library collection workloads.
 - `concurrency/` — reserved for concurrency workloads grounded in the normative concurrency model.
 - `io/` — reserved for workloads grounded in the normative I/O model.
+
+## PERF001-E collection workload contracts
+
+The first PERF001-E corpus extension is intentionally limited to already-closed
+sequential collection behavior. It adds no collection semantics.
+
+| Workload | Fixed work shape | Expected final value |
+|---|---|---:|
+| `collections/array-map` | 500 eager maps over 16 Integers; transform `value * 3` | `408` |
+| `collections/array-filter` | 250 eager filters over 32 Integers; retain values `< 17` | `136` |
+| `collections/array-reduce` | 1000 eager left reductions over 32 Integers | `528` |
+| `collections/array-sort` | 100 stable merge-sort runs over the same 32-Integer permutation | `321601` |
+| `collections/map-lookup-update` | 1000 `Map.at`/`atPut` update-and-lookup steps over 16 Integer keys | `1250` |
+| `collections/set-algebra` | 250 `union`/`intersection`/`difference` rounds over two overlapping 16-member Sets | `240808` |
+
+Comparison-language implementations must preserve these explicit loops,
+collection sizes, callback work, inputs and observable results. They must not
+replace the Array or Set algorithms with host bulk primitives when that would
+perform materially different work.
 
 ## PERF001 corpus ownership and external-runner boundary
 

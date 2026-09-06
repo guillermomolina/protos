@@ -1,0 +1,38 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+repeat: (count, operation) => {
+    (count > 0).ifTrue() {
+        operation()
+        repeat(count - 1, operation)
+    }
+}
+
+Arrays: import("std:collections/Array")
+source: Array(
+    17, 4, 29, 8, 1, 24, 12, 31,
+    6, 20, 15, 3, 27, 10, 32, 14,
+    22, 7, 18, 25, 2, 30, 11, 16,
+    28, 5, 21, 9, 26, 13, 23, 19
+)
+result: Array()
+
+repeat(100, () => {
+    result = Arrays.sort(source, (left, right) => { left < right })
+})
+
+result.at(0) + (result.at(15) * 100) + (result.at(31) * 10000)
