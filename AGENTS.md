@@ -983,6 +983,35 @@ delta after synchronizing with the current `origin/main`:
   other static checks. If an executable guard specifically consumes a modified
   document or ledger, run that focused guard only unless the delta also has
   executable impact.
+
+### Prefer Protos-level tests for observable language behavior
+
+When behavior can be expressed and observed by executing Protos source, prefer a
+Protos-language test over a Java test.
+
+Tests whose primary purpose is to validate observable Protos language semantics,
+regressions, conformance, or user-visible standard-library behavior SHOULD
+normally be written as executable Protos source under `protos/tests/**` or the
+applicable Protos-level test harness. Do not default to JUnit merely because the
+implementation under test is written in Java or because a Java test is easier to
+write.
+
+A Java test alone SHOULD NOT be treated as sufficient coverage for observable
+Protos behavior when the same behavior can reasonably be exercised through
+Protos source. In that case, add or update the Protos-level test; a focused Java
+test may additionally be kept when it provides useful implementation-level
+coverage or diagnostics.
+
+Java tests under `src/test/**` are preferred when the subject being tested is
+specifically Java-side implementation behavior rather than Protos language
+behavior, including internal Java APIs, representations, invariants, parser or
+lowering machinery, Truffle/JVM integration, host interop, bootstrap code, and
+test-harness infrastructure that is not meaningfully testable from Protos.
+
+Do not contort a Protos test to reach a purely internal Java contract. The
+distinction is semantic: test the language as Protos when the contract is visible
+to Protos programs, and test Java as Java when the contract belongs to the
+implementation itself.
 - **Mixed changes** use the strongest applicable validation class. Adding docs,
   specification text, changelog entries, or status updates to an executable
   change never weakens the executable-change test requirements.
