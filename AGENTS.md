@@ -8,6 +8,37 @@ The project deliberately separates language design from implementation. The impl
 
 When behavior is unclear, incomplete, or contradictory, do not invent semantics. Report the ambiguity and ask for a design decision.
 
+## Current project coordinates
+
+The following identifiers are the repository's current operational coordinates.
+They are exact spellings, not names that agents should reconstruct from a
+person's name, memory, convention, or an approximate prompt:
+
+- GitHub repository: `guillermomolina/protos`
+- Maven groupId: `com.guillermomolina`
+- Java package root: `com.guillermomolina.protos`
+- Java source/test package path root: `com/guillermomolina/protos`
+
+In particular, `guillermolina` (with only one `mo` sequence across the joined
+surname boundary) is not a valid current repository owner, Maven coordinate,
+Java package root, or package-path component for this project. Do not silently
+introduce that spelling or another guessed variant.
+
+When generating repository URLs, package declarations, imports, source paths,
+license-header URLs, scripts, Maven coordinates, or other project identifiers,
+prefer copying the current coordinate from authoritative repository state over
+typing it from memory. Relevant sources include the configured Git remote,
+`pom.xml`, and existing canonical package declarations/paths. If those sources
+disagree, report the inconsistency instead of guessing which spelling is
+intended.
+
+These coordinates are implementation/project metadata, not Protos language
+semantics and not a permanent claim about project ownership. A future move to a
+GitHub organization, Maven namespace, or Java package root is allowed, but it
+must be an explicit migration. Such a migration must update this section and
+all affected repository references coherently in the same planned change; until
+then, agents must preserve the exact current coordinates above.
+
 <!-- BEGIN PROTOS DESIGN PHILOSOPHY -->
 ## Protos design philosophy
 
