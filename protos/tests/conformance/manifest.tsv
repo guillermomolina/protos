@@ -308,3 +308,14 @@ string/grapheme-at-exact.protos	boolean	true
 string/grapheme-size.protos	boolean	true
 string/size-wrong-arity-error.protos	error	-
 string/value-identity-and-no-normalization.protos	boolean	true
+path/child-empty-error.protos	error	-
+path/child-dot-error.protos	error	-
+path/child-dotdot-error.protos	error	-
+path/child-nonstring-error.protos	error	-
+path/component-separators-are-data.protos	boolean	true
+path/delegated-path-receiver-error.protos	error	-
+path/equal-structural-paths-have-equal-hash.protos	boolean	true
+path/equality-distinguishes-structure.protos	boolean	true
+path/factory-child-receiver-error.protos	error	-
+path/factory-parent-component-receiver-error.protos	error	-
+path/parent-component-is-not-collapsed.protos	boolean	true
