@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.150-SNAPSHOT
+
+- Start `I020 — Post-Ixxx implementation audit reconciliation` with I020-A: execute the already-canonicalized `super.message(arguments...)` operation end-to-end for method-bound activations. Super lookup starts strictly at the parent of the physical `methodHome`, preserves the original dynamic receiver, binds any newly selected Closure to its own physical lookup home through the existing invocation path, and uses the same ordered argument/spread vector machinery as ordinary sends.
+- Add focused Java and implementation-independent `.protos` conformance for multilevel delegation with dynamic receiver state, nested Closure capture of `methodHome`, super-send spread arguments, and `SlotNotFound` after the defined super lookup origin. I020-A adds no native Closure construction site and changes no normative specification.
+- Record B005 instead of inventing semantics for executing `super.message(...)` when the activation has no `methodHome`: the normative execution spec defines `parent(methodHome)` lookup but does not define that absent-home failure, while the `InvalidSuper` branch exists only in non-normative abstract-runtime pseudocode. I020-B and I020-C remain independently READY; I020-D is BLOCKED on B005.
+
 ## 0.2.149-SNAPSHOT
 
 - Start `LIB003 — JSON` with `LIB003-A`: publish exact-case `std:json/JSON` as an ordinary Protos Standard Library module and establish an explicit JSON data model made only from fresh ordinary objects, Arrays, Maps, Strings, canonical Booleans/null and exact unbounded Integers. No JSON runtime family, `typeOf` mechanism, reflection-based object serializer, generic serialization hierarchy or production Java boundary is introduced.

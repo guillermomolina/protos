@@ -71,6 +71,42 @@ public final class ProtosInvocation {
         return invokeSelected(receiver, selected, supplied, caller);
     }
 
+    public static Object invokeSuperMessage(
+            String selector, List<?> supplied, ProtosActivation caller) {
+        Objects.requireNonNull(selector, "selector");
+        Objects.requireNonNull(supplied, "supplied");
+        Objects.requireNonNull(caller, "caller");
+
+        ProtosObjectValue methodHome =
+                caller.methodHome()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "super dispatch without methodHome is unresolved by B005"));
+        Object lookupOrigin =
+                methodHome.parent()
+                        .orElseThrow(
+                                () ->
+                                        new ProtosSignalException(
+                                                ProtosCoreErrors.newSlotNotFound(caller)));
+
+        com.guillermomolina.protos.runtime.ProtosPrelude prelude =
+                caller.prelude().orElse(null);
+        ProtosSlotLookupResult selected;
+        try {
+            selected =
+                    ProtosValueLookup.lookup(lookupOrigin, selector, prelude)
+                            .orElseThrow(
+                                    () ->
+                                            new ProtosSignalException(
+                                                    ProtosCoreErrors.newSlotNotFound(caller)));
+        } catch (UnsupportedOperationException unsupportedRepresentation) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
+        }
+
+        return invokeSelected(caller.receiver(), selected, supplied, caller);
+    }
+
     private static Object invokeSelected(
             Object receiver, ProtosSlotLookupResult selected, List<?> supplied, ProtosActivation caller) {
         if (!(selected.value() instanceof ProtosClosureValue closure)) {

@@ -51,7 +51,29 @@ an item.
 | I017 | Process I/O / bootstrap | CLOSED | `SAME_COMMIT` | I017-A/B/C/D1/D2/E1/E2/E3/F complete; final authority/termination/CLI/native-boundary conformance published |
 | I018 | Core self-hosting / bootstrap minimization | CLOSED | `SAME_COMMIT` | I018-L exhaustive native-boundary inventory and architectural guard complete; I016-D pause lifted |
 | I019 | Core source naming reconciliation | CLOSED | `SAME_COMMIT` | 27 dominant-owner distributable Core sources use exact canonical Protos names/case after I019-A; private subordinate bootstrap helpers do not defeat public conceptual ownership; all live explicit Core physical-path references reconciled; true aggregation/responsibility sources remain descriptive; no normative or native-boundary change |
-| I019-A | Actor source dominant-owner naming correction | CLOSED | `SAME_COMMIT` | `actor.protos` -> `Actor.protos`; public `Actor` is the dominant conceptual owner and private ActorRef/GroupRef/SendOperation prototype bindings are subordinate bootstrap helpers; naming guard and architecture classification reconciled |
+| I019-A | Actor source dominant-owner naming correction | CLOSED | `SAME_COMMIT` | `actor.protos` -> `Actor.protos`; public `Actor` is the dominant conceptual owner and private ActorRef/GroupRef/SendOperation prototype bindings are subordinate bootstrap helpers; naming guard and architecture classification reconciled |\n| I020 | Post-Ixxx implementation audit reconciliation | IN_PROGRESS | — | I020-A valid-method `super` execution CLOSED; I020-B concurrent test-harness reliability READY; I020-C implementation-ledger reconciliation READY; I020-D missing-`methodHome` super behavior BLOCKED by B005 |
+
+### I020 — Post-Ixxx implementation audit reconciliation
+
+Status: IN_PROGRESS
+
+Purpose: Reconcile implementation gaps and validation weaknesses found by the
+post-I001..I019 implementation audit without redefining already-closed normative
+semantics.
+
+| Slice | Status | Version | Closure evidence | Implemented surface |
+|---|---|---|---|---|
+| I020-A | CLOSED | `0.2.150-SNAPSHOT` | `SAME_COMMIT` | Execute canonical `super.message(arguments...)` end-to-end when a physical `methodHome` exists: lookup starts at `parent(methodHome)`, the original dynamic receiver is preserved, the newly selected lookup home is rebound through the ordinary Closure invocation path, spreads use the ordinary ordered argument-vector machinery, nested Closures retain captured receiver/methodHome semantics, and absence after the lookup origin signals `SlotNotFound`. Adds Java and `.protos` conformance. No native-Closure boundary expansion and no normative spec change. |
+| I020-B | READY | — | — | Eliminate false-green concurrent test outcomes by making carrier-thread failures and turn completion observable to JUnit before executor teardown. |
+| I020-C | READY | — | — | Reconcile post-I015/I019/LIB001 implementation-ledger drift identified by the audit, without changing implementation semantics. |
+| I020-D | BLOCKED | — | — | Define and then implement the observable result of executing `super.message(...)` when the current activation has no `methodHome`; B005 records the missing normative rule. |
+
+Audit boundary after I020-A:
+- valid method-bound `super` is no longer an unsupported canonical expression;
+- dispatch reuses `ProtosValueLookup`, existing Closure binding, activation receiver and physical `methodHome`; there is no parallel method system or runtime `super` object;
+- a nested Closure created during method execution continues to use its captured receiver and `methodHome`, so `super` remains tied to the physical method lookup origin while `this` stays dynamic;
+- `super` outside a method remains intentionally unclosed rather than receiving an invented implementation-defined Error identity; B005 must be resolved normatively before I020-D can close;
+- I018 remains unchanged because I020-A adds execution machinery only and no `ProtosClosureValue.nativeClosure(...)` construction site.
 
 ### I011 — Actors
 

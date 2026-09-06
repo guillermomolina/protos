@@ -174,3 +174,46 @@ Optional service discovery, post-creation Group control/membership, desired-card
 APIs, durability, explicit Group termination, placement policy, and richer distributed Authority
 remain future extension/design work and do not block completion of the now-closed Core v0.1
 ActorGroup acquisition requirement.
+
+## B005 — `super` without a physical methodHome
+
+Status: BLOCKED
+
+Implementation area:
+I020-D execution/failure semantics for a syntactically valid `super.message(...)`
+whose current activation has no physical `methodHome`, such as execution outside
+a method-bound invocation.
+
+Normative dependency:
+`spec/semantics/EXECUTION_AND_CONTROL.md` §8 defines valid super lookup as
+preserving the current receiver while starting lookup at
+`parent(context.methodHome)`, but it does not define the observable result when
+`context.methodHome` is absent. The normative Error taxonomy likewise defines no
+standard `InvalidSuper` identity. `spec/runtime/ABSTRACT_RUNTIME.md` contains an
+informative `InvalidSuper()` pseudocode branch, but that document is explicitly
+non-normative and cannot introduce a new standard Error family.
+
+Specification authority:
+- `spec/semantics/EXECUTION_AND_CONTROL.md` §8 `super`
+- `spec/semantics/ERRORS.md` for standard Error construction/identity if failure
+  is the selected behavior
+- `spec/PROTOS_GRAMMAR.md` for the syntactic validity/scope of super-message-send
+
+Unblock condition:
+The normative specification explicitly and uniquely defines whether executing a
+super message with no `methodHome` is dynamically invalid and, if it fails, the
+exact standard Error family/identity and failure timing. Independent
+implementations must be able to produce the same observable result without
+consulting `ABSTRACT_RUNTIME.md`.
+
+Current consequence:
+I020-A implements the fully determined case where `methodHome` exists, including
+ordinary argument/spread evaluation, lookup after that home, preservation of the
+dynamic receiver, nested-Closure capture and `SlotNotFound` when lookup from the
+defined origin is exhausted. The missing-`methodHome` path remains an explicit
+implementation limitation and I020-D stays BLOCKED.
+
+Independent work:
+I020-B concurrent test-harness reliability, I020-C ledger reconciliation, valid
+method-bound super execution/conformance, Standard Library work and unrelated
+implementation/performance work may proceed independently.
