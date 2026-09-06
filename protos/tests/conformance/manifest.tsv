@@ -388,3 +388,16 @@ error/signal-invalid-return-instance.protos	error	-
 error/signal-prototype.protos	error	-
 error/signal-wrong-arity.protos	error	-
 future/then-never-inline.protos	future-integer	52
+encoding/utf8-encode-exact-and-fresh.protos	boolean	true
+encoding/utf8-initial-bom-consumed.protos	boolean	true
+encoding/utf8-late-bom-preserved.protos	boolean	true
+encoding/utf8-malformed-error.protos	error	-
+encoding/utf16-endianness.protos	boolean	true
+encoding/utf16-matching-bom-consumed.protos	boolean	true
+encoding/utf16-incomplete-error.protos	error	-
+encoding/latin1-roundtrip.protos	boolean	true
+encoding/latin1-unrepresentable-error.protos	error	-
+encoding/encode-nonstring-error.protos	error	-
+encoding/decode-nonbytes-error.protos	error	-
+encoding/delegated-receiver-error.protos	error	-
+encoding/empty-encode-fresh-open-no-bom.protos	boolean	true

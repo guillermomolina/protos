@@ -17,9 +17,21 @@
 
 package com.guillermomolina.protos.execution;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.*;
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosBytesValue;
+import com.guillermomolina.protos.runtime.ProtosEncodingValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
@@ -29,6 +41,9 @@ import org.junit.jupiter.api.Test;
 final class ProtosStandardEncodingProtocolTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
 
+    // Deliberately Java-side: physical bootstrap representation, exact local-slot
+    // inventory, internal portable descriptor kind, and represented parent are
+    // implementation-owned checks rather than source-level conversion behavior.
     @Test
     void bootstrapExposesFrozenEncodingFactoryAndExactlyFourPortableDescriptors()
             throws Exception {
@@ -48,223 +63,48 @@ final class ProtosStandardEncodingProtocolTest {
         assertFalse(encoding.hasLocalSlot("call"));
     }
 
+    // Deliberately Java-side: the generic executable Protos manifest can assert
+    // that conversion signals, but cannot inspect the exact signaled Error object
+    // after terminal control transfer. Preserve the normative EncodingError category.
     @Test
-    void utf8OneShotIsStrictConsumesOnlyInitialMatchingBomAndReturnsFreshBytes()
-            throws Exception {
+    void strictConversionFailuresUseExactEncodingErrorCategory() throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
         ProtosActivation activation = prelude.newModuleActivation();
-        ProtosEncodingValue utf8 = descriptor(prelude, "UTF8");
 
-        ProtosBytesValue first =
-                (ProtosBytesValue)
-                        ProtosInvocation.invokeMessage(
-                                utf8,
-                                "encode",
-                                List.of(new ProtosStringValue("A😀")),
-                                activation);
-        ProtosBytesValue second =
-                (ProtosBytesValue)
-                        ProtosInvocation.invokeMessage(
-                                utf8,
-                                "encode",
-                                List.of(new ProtosStringValue("A😀")),
-                                activation);
-
-        assertNotSame(first, second);
-        assertEquals(List.of(0x41, 0xf0, 0x9f, 0x98, 0x80), octets(first));
-        assertEquals(octets(first), octets(second));
-
-        assertEquals(
-                "A",
-                ((ProtosStringValue)
-                                ProtosInvocation.invokeMessage(
-                                        utf8,
-                                        "decode",
-                                        List.of(bytes(0xef, 0xbb, 0xbf, 0x41)),
-                                        activation))
-                        .value());
-        assertEquals(
-                "A\uFEFFB",
-                ((ProtosStringValue)
-                                ProtosInvocation.invokeMessage(
-                                        utf8,
-                                        "decode",
-                                        List.of(bytes(0x41, 0xef, 0xbb, 0xbf, 0x42)),
-                                        activation))
-                        .value());
-
-        ProtosSignalException malformed =
-                assertThrows(
-                        ProtosSignalException.class,
-                        () ->
-                                ProtosInvocation.invokeMessage(
-                                        utf8,
-                                        "decode",
-                                        List.of(bytes(0xc0, 0xaf)),
-                                        activation));
-        assertSame(
-                prelude.bindings().readLocalSlot("EncodingError").orElseThrow(),
-                malformed.error().parent().orElseThrow());
-    }
-
-    @Test
-    void utf16DescriptorsUseSelectedEndiannessAndConsumeMatchingInitialBom()
-            throws Exception {
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-        ProtosActivation activation = prelude.newModuleActivation();
-        ProtosEncodingValue le = descriptor(prelude, "UTF16LE");
-        ProtosEncodingValue be = descriptor(prelude, "UTF16BE");
-
-        assertEquals(
-                List.of(0x41, 0x00, 0x3d, 0xd8, 0x00, 0xde),
-                octets(
-                        (ProtosBytesValue)
-                                ProtosInvocation.invokeMessage(
-                                        le,
-                                        "encode",
-                                        List.of(new ProtosStringValue("A😀")),
-                                        activation)));
-        assertEquals(
-                List.of(0x00, 0x41, 0xd8, 0x3d, 0xde, 0x00),
-                octets(
-                        (ProtosBytesValue)
-                                ProtosInvocation.invokeMessage(
-                                        be,
-                                        "encode",
-                                        List.of(new ProtosStringValue("A😀")),
-                                        activation)));
-
-        assertEquals(
-                "A",
-                ((ProtosStringValue)
-                                ProtosInvocation.invokeMessage(
-                                        le,
-                                        "decode",
-                                        List.of(bytes(0xff, 0xfe, 0x41, 0x00)),
-                                        activation))
-                        .value());
-        assertEquals(
-                "A",
-                ((ProtosStringValue)
-                                ProtosInvocation.invokeMessage(
-                                        be,
-                                        "decode",
-                                        List.of(bytes(0xfe, 0xff, 0x00, 0x41)),
-                                        activation))
-                        .value());
-
-        ProtosSignalException incomplete =
-                assertThrows(
-                        ProtosSignalException.class,
-                        () ->
-                                ProtosInvocation.invokeMessage(
-                                        le,
-                                        "decode",
-                                        List.of(bytes(0x41)),
-                                        activation));
-        assertSame(
-                prelude.bindings().readLocalSlot("EncodingError").orElseThrow(),
-                incomplete.error().parent().orElseThrow());
-    }
-
-    @Test
-    void latin1IsIso88591AndRejectsUnrepresentableText() throws Exception {
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-        ProtosActivation activation = prelude.newModuleActivation();
-        ProtosEncodingValue latin1 = descriptor(prelude, "Latin1");
-
-        ProtosBytesValue encoded =
-                (ProtosBytesValue)
-                        ProtosInvocation.invokeMessage(
-                                latin1,
-                                "encode",
-                                List.of(new ProtosStringValue("\u0000\u0080\u00ff")),
-                                activation);
-        assertEquals(List.of(0x00, 0x80, 0xff), octets(encoded));
-        assertEquals(
-                "\u0000\u0080\u00ff",
-                ((ProtosStringValue)
-                                ProtosInvocation.invokeMessage(
-                                        latin1,
-                                        "decode",
-                                        List.of(bytes(0x00, 0x80, 0xff)),
-                                        activation))
-                        .value());
-
-        ProtosSignalException unrepresentable =
-                assertThrows(
-                        ProtosSignalException.class,
-                        () ->
-                                ProtosInvocation.invokeMessage(
-                                        latin1,
-                                        "encode",
-                                        List.of(new ProtosStringValue("€")),
-                                        activation));
-        assertSame(
-                prelude.bindings().readLocalSlot("EncodingError").orElseThrow(),
-                unrepresentable.error().parent().orElseThrow());
-    }
-
-    @Test
-    void exactSemanticDomainsAndReceiverFamilyAreSynchronous() throws Exception {
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-        ProtosActivation activation = prelude.newModuleActivation();
-        ProtosEncodingValue utf8 = descriptor(prelude, "UTF8");
-
-        assertThrows(
-                ProtosSignalException.class,
+        assertEncodingError(
+                prelude,
                 () ->
                         ProtosInvocation.invokeMessage(
-                                utf8,
-                                "encode",
-                                List.of(new ProtosIntegerValue(BigInteger.ONE)),
-                                activation));
-        assertThrows(
-                ProtosSignalException.class,
-                () ->
-                        ProtosInvocation.invokeMessage(
-                                utf8,
+                                descriptor(prelude, "UTF8"),
                                 "decode",
-                                List.of(new ProtosStringValue("not Bytes")),
+                                List.of(bytes(0xc0, 0xaf)),
                                 activation));
 
-        ProtosObjectValue masquerade = new ProtosObjectValue(utf8);
-        assertThrows(
-                ProtosSignalException.class,
+        assertEncodingError(
+                prelude,
                 () ->
                         ProtosInvocation.invokeMessage(
-                                masquerade,
+                                descriptor(prelude, "UTF16LE"),
+                                "decode",
+                                List.of(bytes(0x41)),
+                                activation));
+
+        assertEncodingError(
+                prelude,
+                () ->
+                        ProtosInvocation.invokeMessage(
+                                descriptor(prelude, "Latin1"),
                                 "encode",
-                                List.of(new ProtosStringValue("x")),
+                                List.of(new ProtosStringValue("€")),
                                 activation));
     }
 
-    @Test
-    void emptyEncodeProducesFreshOpenEmptyBytesWithoutBomByDefault() throws Exception {
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-        ProtosActivation activation = prelude.newModuleActivation();
-        ProtosEncodingValue utf8 = descriptor(prelude, "UTF8");
-
-        ProtosBytesValue first =
-                (ProtosBytesValue)
-                        ProtosInvocation.invokeMessage(
-                                utf8,
-                                "encode",
-                                List.of(new ProtosStringValue("")),
-                                activation);
-        ProtosBytesValue second =
-                (ProtosBytesValue)
-                        ProtosInvocation.invokeMessage(
-                                utf8,
-                                "encode",
-                                List.of(new ProtosStringValue("")),
-                                activation);
-
-        assertNotSame(first, second);
-        assertEquals(BigInteger.ZERO, first.indexedSize());
-        assertEquals(BigInteger.ZERO, second.indexedSize());
-        assertTrue(first.isOpen());
-        assertTrue(second.isOpen());
+    private static void assertEncodingError(ProtosPrelude prelude, Runnable action) {
+        ProtosSignalException signal =
+                assertThrows(ProtosSignalException.class, action::run);
+        assertSame(
+                prelude.bindings().readLocalSlot("EncodingError").orElseThrow(),
+                signal.error().parent().orElseThrow());
     }
 
     private static void assertPortable(
@@ -295,11 +135,5 @@ final class ProtosStandardEncodingProtocolTest {
             bytes.indexedAdd(new ProtosIntegerValue(BigInteger.valueOf(value)));
         }
         return bytes;
-    }
-
-    private static List<Integer> octets(ProtosBytesValue bytes) {
-        return bytes.indexedSnapshot().stream()
-                .map(value -> ((ProtosIntegerValue) value).value().intValueExact())
-                .toList();
     }
 }
