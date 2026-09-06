@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.186-SNAPSHOT
+
+- Start the subdivided `TOOL002-D3` implementation with `TOOL002-D3A1`: add bundled `Runner.readSource(spec, filesystem)` as ordinary Protos policy. It resolves the D2 canonical CaseSpec path through the confined standard Filesystem, consumes the ordered File with bounded 16-read / 64-KiB windows, accumulates exact bytes, closes the File, and decodes UTF-8 exactly once so codec scalars split across read results remain intact.
+- Keep D3A1 deliberately below the execution/expectation boundary: no call to `execution(source)`, no PASS/FAIL interpretation, no TestPlan traversal and no `Main.protos` integration. A Protos fixture validates a 1,100,007-byte source crossing the 1-MiB batch boundary and verifies exact UTF-8 bytes around a multi-byte scalar boundary. `TOOL002-D3A2` becomes READY.
+
 ## 0.2.185-SNAPSHOT
 
 - Start the cost-aware subdivision of `TOOL001-C5` with `TOOL001-C5A — manifest-scale parser prerequisite`. The first C5 schema corpus exposed that the already-published C3/C4 document implementation consumed host stack linearly: `statements(text)` recursively invoked one Protos Closure per source octet and `table(text)` recursively invoked one Closure per logical statement.

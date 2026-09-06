@@ -209,7 +209,7 @@ TOOL002-D therefore uses these publishable sub-slices:
 |---|---|---|
 | TOOL002-D1 | CLOSED | Bootstrap-local general `execution(source)` facility for the Test Tool over TOOL002-C, returning a caller-local observation through a strict authority-free detached-value boundary. No manifest/test policy. Implementation version `0.2.174-SNAPSHOT`. |
 | TOOL002-D2 | CLOSED | Grant the Test Tool one read-only tree-confined standard Filesystem rooted at the conformance corpus; bundled `Manifest.protos` uses bounded ordered readLine/Future.all windows to parse retained TSV rows into frozen CaseSpec/TestPlan tuples with named Protos accessors and validated path-based stable CaseIds. No case execution/expectation policy. Implementation version `0.2.182-SNAPSHOT`. |
-| TOOL002-D3 | READY | D2 is closed; migrate ordinary `boolean`, `null`, `integer`, `float-bits`, `float-nan`, `fixed-integer`, `error`, and `error-parent` interpretation from Java to bundled Protos policy using D1 observations and D2 CaseSpecs. |
+| TOOL002-D3 | IN_PROGRESS | Subdivided after D2: D3A1 complete-source loading is CLOSED; D3A2 single-case simple expectation interpretation is READY; D3A3 sequential TestPlan integration, D3B fixed/error-parent and D3C float policy remain dependent. |
 | TOOL002-D4 | BLOCKED_BY_DEPENDENCIES | After D3, preserve the remaining non-Future `closure-error-parent-fresh` identity-sensitive expectations without leaking Closure authority; reconcile Java ownership for the D-migrated cases and close TOOL002-D. |
 
 The `future-*` families (`future-integer`, `future-null`, `future-boolean`,
@@ -254,6 +254,35 @@ D2 closes the corpus/planning prerequisite:
 - no test case is executed and no expectation is interpreted yet.
 
 TOOL002-D3 is READY.
+
+### TOOL002-D3 decomposition
+
+The post-D2 audit found three independent uncertainties inside the original
+ordinary-expectation migration: complete source acquisition, single-case
+expectation policy, and whole-plan sequential traversal. D3 is therefore
+implemented as smaller publishable slices before the fixed/error-parent and
+Float families:
+
+| Slice | Status | Outcome |
+|---|---|---|
+| TOOL002-D3A1 | CLOSED | Bundled `Runner.readSource(spec, filesystem)` loads one complete UTF-8 case source through the D2 confined standard Filesystem/File surface. Ordered File reads are issued in bounded 16-read windows, exact bytes are accumulated before one UTF-8 decode, and the File is explicitly closed. No case execution or expectation policy. Implementation version `0.2.186-SNAPSHOT`. |
+| TOOL002-D3A2 | READY | Interpret one already-supplied source/CaseSpec for only `boolean`, `null`, `integer`, and `error` through the D1 `execution(source)` observation boundary. No TestPlan traversal or Filesystem ownership. |
+| TOOL002-D3A3 | BLOCKED_BY_DEPENDENCIES | After A2, compose D2 CaseSpecs + A1 source loading + A2 expectation policy into the initial sequential supported-case runner without one recursive Protos frame per case. |
+| TOOL002-D3B | BLOCKED_BY_DEPENDENCIES | After D3A, migrate `fixed-integer` and `error-parent` policy. |
+| TOOL002-D3C | BLOCKED_BY_DEPENDENCIES | After D3B, migrate `float-bits` and `float-nan` with exact binary64 requirements preserved. |
+
+D3A1 deliberately does not modify `Main.protos`: ordinary `protos test`
+continues to construct the inert D2 TestPlan but does not execute it yet.
+Likewise D3A1 does not call the D1 `execution` capability and owns no PASS/FAIL
+or expectation-kind logic.
+
+`Runner.readSource` preserves source acquisition semantics by accumulating File
+bytes and decoding UTF-8 only after EOF. It does not decode each read chunk
+independently, so a multi-byte UTF-8 scalar may cross a File.read boundary
+without becoming an artificial codec error. File ordering supplies the byte
+sequence; the tool does not introduce a second source resolver.
+
+TOOL002-D3A2 is READY.
 
 ## Closure rule
 
