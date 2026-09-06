@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.156-SNAPSHOT
+
+- Start package-tool manifest Slice 3 with Slice 3A: add an internal `self:TomlSyntax` key/value engine written entirely in Protos. It scans semantic String input as UTF-8 octets and establishes reusable parsing for bare/quoted/dotted keys, single-line TOML basic/literal strings, booleans, signed and radix integers with the TOML signed-64-bit boundary, nested arrays with comments/trailing commas, and inline tables with dotted keys and duplicate rejection. Bare scalar forms outside the manifest generation 1 value model are retained as explicit `unsupported` nodes for later schema validation instead of acquiring package meaning.
+- Keep this sub-slice internal and non-authoritative until Slice 3 closes: TOML multiline string forms, full document/table assembly, schema-v1 validation, project Filesystem reads, and package CLI diagnostics remain for the next sub-slice. Protos fixtures own parser behavior while a small Java test harness only executes them through the existing bundled-tool resolver. No production Java parser, `std:toml` dependency, metadata mutation, lock behavior, normative spec change, or `LIBxxx` item is introduced.
+
 ## 0.2.155-SNAPSHOT
 
 - Close package-tool Filesystem Slice 2A by provisioning the bundled Protos package tool with one explicit read-only Filesystem capability rooted at the launcher's project directory and restricted to the exact direct-child names `protos.toml` and `protos.lock`. The NIO backend uses a pinned `SecureDirectoryStream` plus `NOFOLLOW_LINKS` when the host provider can preserve the standard confinement contract and fails closed otherwise; ordinary CLI applications still receive no Filesystem authority.

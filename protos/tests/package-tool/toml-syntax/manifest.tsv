@@ -1,0 +1,18 @@
+# path	expectation
+key-bare-dotted.protos	true
+key-quoted-unicode.protos	true
+string-basic-escapes.protos	true
+string-literal.protos	true
+integer-radix.protos	true
+integer-boundary.protos	true
+unsupported-scalars.protos	true
+array-comments-trailing-comma.protos	true
+array-two-values.protos	true
+inline-table-dotted.protos	true
+nested-array.protos	true
+invalid-key-error.protos	error
+invalid-string-escape-error.protos	error
+invalid-unicode-scalar-error.protos	error
+inline-table-trailing-comma-error.protos	error
+inline-table-duplicate-error.protos	error
+signed-radix-unsupported.protos	true
