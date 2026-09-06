@@ -33,24 +33,16 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ProtosDefaultEqualityAndNonIdentityTest {
-    @Test
-    void defaultObjectEqualityUsesSemanticIdentity() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        ProtosObjectValue a = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        ProtosObjectValue b = new ProtosObjectValue(ProtosObjectValue.rootObject());
-
-        assertSame(
-                ProtosBooleanValue.TRUE,
-                ProtosInvocation.invokeMessage(a, "==", List.of(a), prelude.newModuleActivation()));
-        assertSame(
-                ProtosBooleanValue.FALSE,
-                ProtosInvocation.invokeMessage(a, "==", List.of(b), prelude.newModuleActivation()));
-    }
-
+    /**
+     * Retained Java-side until Core exposes a source-level way to install a
+     * symbolic local slot named "==". Object.alias is normatively specified,
+     * but current Core does not expose alias as an Object message.
+     */
     @Test
     void defaultInequalityComplementsDynamicEqualityOverride() throws IOException {
         ProtosPrelude prelude = corePrelude();
-        ProtosObjectValue receiver = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue receiver =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
         receiver.createLocalSlot(
                 "==",
                 ProtosClosureValue.nativeClosure(
@@ -61,18 +53,27 @@ class ProtosDefaultEqualityAndNonIdentityTest {
                 ProtosInvocation.invokeMessage(
                         receiver,
                         "!=",
-                        List.of(new ProtosObjectValue(ProtosObjectValue.rootObject())),
+                        List.of(
+                                new ProtosObjectValue(
+                                        ProtosObjectValue.rootObject())),
                         prelude.newModuleActivation()));
     }
 
+    /**
+     * Retained for the same source-construction boundary. This specifically
+     * proves that inherited Object.!= rejects a non-Boolean result from the
+     * dynamically selected == behavior instead of applying truthiness.
+     */
     @Test
     void defaultInequalityRejectsInvalidEqualityResult() throws IOException {
         ProtosPrelude prelude = corePrelude();
-        ProtosObjectValue receiver = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue receiver =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
         receiver.createLocalSlot(
                 "==",
                 ProtosClosureValue.nativeClosure(
-                        (activation, supplied) -> new ProtosIntegerValue(BigInteger.ONE)));
+                        (activation, supplied) ->
+                                new ProtosIntegerValue(BigInteger.ONE)));
 
         assertThrows(
                 ProtosSignalException.class,
@@ -84,33 +85,8 @@ class ProtosDefaultEqualityAndNonIdentityTest {
                                 prelude.newModuleActivation()));
     }
 
-    @Test
-    void sourceInequalityUsesObjectInequalityProtocol() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-
-        assertBoolean(prelude, "1 != 2", true);
-        assertBoolean(prelude, "1 != 1.0", false);
-        assertBoolean(prelude, "UInt8(1) != Int32(1)", false);
-    }
-
-    @Test
-    void nonIdentityIsPrimitiveComplementWithoutNotDispatch() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-
-        assertBoolean(prelude, "1 !== 1", false);
-        assertBoolean(prelude, "1 !== 1.0", true);
-        assertBoolean(prelude, "{} !== {}", true);
-    }
-
-    private static void assertBoolean(ProtosPrelude prelude, String source, boolean expected) {
-        Object result =
-                new ProtosSourceCompiler()
-                        .compile(source)
-                        .call(prelude.newModuleActivation());
-        assertSame(expected ? ProtosBooleanValue.TRUE : ProtosBooleanValue.FALSE, result);
-    }
-
     private static ProtosPrelude corePrelude() throws IOException {
-        return new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
+        return new ProtosCoreBootstrap()
+                .bootstrap(Path.of("protos", "lib", "core"));
     }
 }
