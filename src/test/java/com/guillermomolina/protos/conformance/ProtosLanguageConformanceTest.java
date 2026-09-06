@@ -22,10 +22,12 @@ import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
+import com.guillermomolina.protos.execution.ProtosClosureInvoker;
 import com.guillermomolina.protos.execution.ProtosSourceFileLoader;
 import com.guillermomolina.protos.execution.ProtosStandardLibraryModuleResolver;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
@@ -208,6 +210,33 @@ final class ProtosLanguageConformanceTest {
                                 loader.load(source).call(activation));
                 awaitTerminal(future, activation);
                 assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
+            }
+            case "closure-error-parent-fresh" -> {
+                ProtosClosureValue closure =
+                        assertInstanceOf(
+                                ProtosClosureValue.class,
+                                loader.load(source)
+                                        .call(prelude.newModuleActivation()));
+                ProtosSignalException first =
+                        assertThrows(
+                                ProtosSignalException.class,
+                                () -> ProtosClosureInvoker.invoke(closure, List.of()));
+                ProtosSignalException second =
+                        assertThrows(
+                                ProtosSignalException.class,
+                                () -> ProtosClosureInvoker.invoke(closure, List.of()));
+                Object expectedParent =
+                        prelude.bindings()
+                                .readLocalSlot(testCase.expectedValue())
+                                .orElseThrow();
+                org.junit.jupiter.api.Assertions.assertSame(
+                        expectedParent,
+                        first.error().parent().orElseThrow());
+                org.junit.jupiter.api.Assertions.assertSame(
+                        expectedParent,
+                        second.error().parent().orElseThrow());
+                org.junit.jupiter.api.Assertions.assertNotSame(
+                        first.error(), second.error());
             }
             case "error-parent" -> {
                 ProtosSignalException signal =

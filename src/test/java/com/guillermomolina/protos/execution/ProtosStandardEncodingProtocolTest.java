@@ -21,20 +21,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
-import com.guillermomolina.protos.runtime.ProtosStringValue;
-import java.math.BigInteger;
 import java.nio.file.Path;
-import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -63,50 +55,6 @@ final class ProtosStandardEncodingProtocolTest {
         assertFalse(encoding.hasLocalSlot("call"));
     }
 
-    // Deliberately Java-side: the generic executable Protos manifest can assert
-    // that conversion signals, but cannot inspect the exact signaled Error object
-    // after terminal control transfer. Preserve the normative EncodingError category.
-    @Test
-    void strictConversionFailuresUseExactEncodingErrorCategory() throws Exception {
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-        ProtosActivation activation = prelude.newModuleActivation();
-
-        assertEncodingError(
-                prelude,
-                () ->
-                        ProtosInvocation.invokeMessage(
-                                descriptor(prelude, "UTF8"),
-                                "decode",
-                                List.of(bytes(0xc0, 0xaf)),
-                                activation));
-
-        assertEncodingError(
-                prelude,
-                () ->
-                        ProtosInvocation.invokeMessage(
-                                descriptor(prelude, "UTF16LE"),
-                                "decode",
-                                List.of(bytes(0x41)),
-                                activation));
-
-        assertEncodingError(
-                prelude,
-                () ->
-                        ProtosInvocation.invokeMessage(
-                                descriptor(prelude, "Latin1"),
-                                "encode",
-                                List.of(new ProtosStringValue("€")),
-                                activation));
-    }
-
-    private static void assertEncodingError(ProtosPrelude prelude, Runnable action) {
-        ProtosSignalException signal =
-                assertThrows(ProtosSignalException.class, action::run);
-        assertSame(
-                prelude.bindings().readLocalSlot("EncodingError").orElseThrow(),
-                signal.error().parent().orElseThrow());
-    }
-
     private static void assertPortable(
             ProtosObjectValue encoding,
             String slot,
@@ -120,20 +68,4 @@ final class ProtosStandardEncodingProtocolTest {
         assertEquals(kind, descriptor.portableKindForRuntime());
     }
 
-    private static ProtosEncodingValue descriptor(ProtosPrelude prelude, String name) {
-        return assertInstanceOf(
-                ProtosEncodingValue.class,
-                prelude.encodingPrototype().readLocalSlot(name).orElseThrow());
-    }
-
-    private static ProtosBytesValue bytes(int... values) {
-        ProtosObjectValue parent =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
-        ProtosStandardBytesProtocol.install(parent);
-        ProtosBytesValue bytes = new ProtosBytesValue(parent);
-        for (int value : values) {
-            bytes.indexedAdd(new ProtosIntegerValue(BigInteger.valueOf(value)));
-        }
-        return bytes;
-    }
 }

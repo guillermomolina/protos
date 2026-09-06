@@ -17,8 +17,6 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -34,23 +32,6 @@ import org.junit.jupiter.api.Test;
 class ProtosCollectionsArrayReduceSortModuleTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
-
-    @Test
-    void sortSignalsFreshComparatorResultAndOrderOccurrences() throws Exception {
-        assertComparatorError(
-                "InvalidComparatorResult",
-                """
-                Arrays: import("std:collections/Array")
-                Arrays.sort(Array(2, 1), (left, right) => { 123 })
-                """);
-
-        assertComparatorError(
-                "InvalidComparatorOrder",
-                """
-                Arrays: import("std:collections/Array")
-                Arrays.sort(Array(2, 1), (left, right) => { true })
-                """);
-    }
 
     @Test
     void reduceAndSortWrongSourceFailBeforeAnyUserCallback() throws Exception {
@@ -89,24 +70,4 @@ class ProtosCollectionsArrayReduceSortModuleTest {
         }
     }
 
-    private static void assertComparatorError(String prototypeName, String source)
-            throws Exception {
-        ProtosStandardLibraryModuleResolver resolver =
-                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        Object prototype =
-                prelude.bindings().readLocalSlot(prototypeName).orElseThrow();
-
-        ProtosSignalException signal =
-                assertThrows(
-                        ProtosSignalException.class,
-                        () ->
-                                new ProtosSourceCompiler()
-                                        .compile(source)
-                                        .call(prelude.newModuleActivation()));
-
-        ProtosObjectValue occurrence = signal.error();
-        assertSame(prototype, occurrence.parent().orElseThrow());
-        assertNotSame(prototype, occurrence);
-    }
 }

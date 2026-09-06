@@ -17,7 +17,6 @@
 
 package com.guillermomolina.protos.execution;
 
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -26,10 +25,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
-import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import java.io.IOException;
@@ -69,49 +66,6 @@ class ProtosNonLocalReturnTest {
 
         assertSame(capturedHome, transfer.target());
         assertTrue(capturedHome.isActive());
-    }
-
-    /**
-     * Deliberately Java-side: the generic language conformance runner can
-     * observe that the escaped Closure signals, but cannot assert either the
-     * exact InvalidReturn prototype or that two independent observations
-     * manufacture distinct standard failure occurrences.
-     */
-    @Test
-    void escapedClosureSignalsFreshInvalidReturnAfterHomeCompleted()
-            throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        ProtosClosureValue maker =
-                closure(prelude, "() => { () => ^42 }");
-
-        ProtosClosureValue escaped =
-                assertInstanceOf(
-                        ProtosClosureValue.class,
-                        ProtosClosureInvoker.invoke(maker, List.of()));
-        ProtosReturnHome completedHome = escaped.returnHome().orElseThrow();
-
-        assertFalse(completedHome.isActive());
-
-        ProtosSignalException first =
-                assertThrows(
-                        ProtosSignalException.class,
-                        () -> ProtosClosureInvoker.invoke(escaped, List.of()));
-        ProtosSignalException second =
-                assertThrows(
-                        ProtosSignalException.class,
-                        () -> ProtosClosureInvoker.invoke(escaped, List.of()));
-
-        ProtosObjectValue invalidReturnPrototype =
-                prelude.invalidReturnPrototype();
-        assertSame(
-                invalidReturnPrototype,
-                first.error().parent().orElseThrow());
-        assertSame(
-                invalidReturnPrototype,
-                second.error().parent().orElseThrow());
-        org.junit.jupiter.api.Assertions.assertNotSame(
-                first.error(),
-                second.error());
     }
 
     private static ProtosClosureValue closure(

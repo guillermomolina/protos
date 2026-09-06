@@ -17,8 +17,6 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
-import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -34,40 +32,6 @@ import org.junit.jupiter.api.Test;
 class ProtosCollectionsArrayAlgorithmsModuleTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
-
-    @Test
-    void filterAndFindIndexSignalFreshInvalidPredicateResultOccurrences()
-            throws Exception {
-        for (String operation : new String[] {"filter", "findIndex"}) {
-            ProtosStandardLibraryModuleResolver resolver =
-                    new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
-            ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-            Object invalidPredicatePrototype =
-                    prelude.bindings()
-                            .readLocalSlot("InvalidPredicateResult")
-                            .orElseThrow();
-
-            ProtosSignalException signal =
-                    assertThrows(
-                            ProtosSignalException.class,
-                            () ->
-                                    new ProtosSourceCompiler()
-                                            .compile(
-                                                    """
-                                                    Arrays: import("std:collections/Array")
-                                                    Arrays.%s(Array(1), (element) => { 123 })
-                                                    """
-                                                            .formatted(operation))
-                                            .call(prelude.newModuleActivation()));
-
-            ProtosObjectValue occurrence = signal.error();
-            assertSame(
-                    invalidPredicatePrototype,
-                    occurrence.parent().orElseThrow(),
-                    operation);
-            assertNotSame(invalidPredicatePrototype, occurrence, operation);
-        }
-    }
 
     @Test
     void wrongSourceReceiverFailsBeforeAnyUserCallback() throws Exception {

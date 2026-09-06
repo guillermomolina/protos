@@ -57,40 +57,6 @@ final class ProtosInvalidSuperExecutionTest {
     }
 
     @Test
-    void superWithoutMethodHomeSignalsFreshInvalidSuperInsteadOfHostFailure()
-            throws IOException {
-        ProtosPrelude prelude = corePrelude();
-
-        ProtosSignalException first =
-                assertThrows(
-                        ProtosSignalException.class,
-                        () ->
-                                execute(
-                                        prelude.newModuleActivation(),
-                                        """
-                                        runner: () => { super.noSuchSelector() }
-                                        runner()
-                                        """));
-        ProtosSignalException second =
-                assertThrows(
-                        ProtosSignalException.class,
-                        () ->
-                                execute(
-                                        prelude.newModuleActivation(),
-                                        """
-                                        runner: () => { super.noSuchSelector() }
-                                        runner()
-                                        """));
-
-        ProtosObjectValue prototype =
-                ProtosCoreErrors.prototype(
-                        prelude.newModuleActivation(), StandardError.INVALID_SUPER);
-        assertSame(prototype, first.error().parent().orElseThrow());
-        assertSame(prototype, second.error().parent().orElseThrow());
-        assertNotSame(first.error(), second.error());
-    }
-
-    @Test
     void invalidSuperHappensAfterArgumentsExactlyOnceAndLeftToRight()
             throws IOException {
         ProtosPrelude prelude = corePrelude();
