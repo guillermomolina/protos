@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.149-SNAPSHOT
+
+- Start `LIB003 — JSON` with `LIB003-A`: publish exact-case `std:json/JSON` as an ordinary Protos Standard Library module and establish an explicit JSON data model made only from fresh ordinary objects, Arrays, Maps, Strings, canonical Booleans/null and exact unbounded Integers. No JSON runtime family, `typeOf` mechanism, reflection-based object serializer, generic serialization hierarchy or production Java boundary is introduced.
+- Add constructors for all six JSON value categories: `nullValue`, `boolean`, `string`, exact decimal `number(coefficient, exponent)`, ordered `array`, and String-keyed `object` over alternating name/node pairs. Number data remains exact as coefficient × 10^exponent without Float conversion or eager decimal normalization; JSON Array payloads use the language's existing fresh frozen trailing-rest capture, while object construction rejects duplicate semantic String names instead of silently choosing first/last-wins behavior.
+- Persist `docs/project/LIB003_JSON_DESIGN.md` with the comparative JSON/YAML/XML/object-persistence audit, strict parser/encoder direction, Unicode/duplicate/order/streaming boundaries and planned LIB003-B/C/D/E slices. Reconcile stale LIB003 dependency text now that LIB001 and I015 are closed. LIB003-A is CLOSED; top-level LIB003 remains IN_PROGRESS.
+
 ## 0.2.148-SNAPSHOT
 
 - Close `LM005 — Concurrent Language Maturity` with `LM005-C`: add a Group-aware conformance harness over ordinary `.protos` programs and the already-closed I011 ActorGroup surface. The harness drives a real Process RootActor, deterministic test-host Actor bootstrap and scheduler work, while assertions remain host-side. No test-only Protos syntax, production runtime behavior, native boundary, or normative specification change is introduced.

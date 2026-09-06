@@ -293,7 +293,7 @@ work may proceed without waiting for an earlier-numbered roadmap item.
 |---|---|---|---|---|
 | LIB001 | Collections library | CLOSED | `SAME_COMMIT` | LIB001-A/B/C/D/E closed; initial Set/IdentitySet and eager sequential Array algorithm surfaces are fully published with no new runtime collection family, generic hierarchy, or production Java boundary. |
 | LIB002 | Text / encoding conveniences | READY | — | I015 is CLOSED; begin with a fresh ordinary-library design/API audit over finalized Encoding/TextReader/TextWriter semantics without redefining Core conversion or I/O behavior. |
-| LIB003 | JSON / serialization | OPEN | — | LIB001 is CLOSED; begin a fresh JSON/serialization design and dependency audit against the then-current I015/LIB002 text/encoding and stream-adapter surfaces before declaring implementation readiness. |
+| LIB003 | JSON | IN_PROGRESS | — | LIB003-A explicit immutable JSON data model and exact decimal representation published; B/C parser+encoder slices are READY; no generic serialization, reflection/object persistence or LIB002 dependency is implied. |
 | LIB004 | Filesystem / process conveniences | READY | — | I016 + I017 closed; begin with a fresh focused convenience-layer design/audit. Any text-oriented convenience that needs I015/LIB002 remains individually dependency-gated and must preserve explicit authority boundaries. |
 | LIB005 | Networking | OPEN | — | Roadmap item only; `spec/io/IO_CORE.md` currently leaves network authority acquisition, socket APIs, DNS/name resolution, and transport configuration outside its standardized scope. Re-audit and establish prerequisites before implementation. |
 
@@ -381,30 +381,58 @@ Dependencies:
 - I015 Encoding / Text I/O — CLOSED.
 
 
-### LIB003 — JSON / serialization
+### LIB003 — JSON
 
-Status: BLOCKED_BY_DEPENDENCIES
+Status: IN_PROGRESS
 
-Description: Structured-data encoding, decoding, and serialization facilities
-implemented through ordinary Protos values, collections, modules, and explicit
-text/byte adaptation where required.
+Description: Strict JSON structured-data facilities implemented through an
+explicit JSON-specific data model made from ordinary Protos values and modules.
 
-Planning boundary:
-- no special JSON syntax, implicit conversion, hidden object serialization, or
-  new Core semantic category is implied by this roadmap item;
-- roadmap numbering does not create a dependency on LIB002 by itself;
-- when LIB003 design begins, re-audit whether particular textual, encoded-byte,
-  streaming, or file adapters depend on LIB002, I015, or later I/O work;
-- no concrete data model, API, import spelling, module layout, or slices are
-  assigned yet.
+Design record:
+- `docs/project/LIB003_JSON_DESIGN.md` records the completed comparative
+  JSON/YAML/XML/object-persistence audit and initial JSON data-model/codec
+  decisions;
+- `docs/design/STRUCTURED_DATA_AND_SERIALIZATION.md` remains the broader
+  cross-format architecture record;
+- neither document redefines Core semantics.
+
+Implementation boundary:
+- canonical module identity is `std:json/JSON`, physically
+  `protos/lib/json/JSON.protos`;
+- JSON data is explicit ordinary fresh/open data, not arbitrary application objects;
+- no `typeOf`, runtime JSON family/tag, implicit conversion, reflection-based
+  serializer, `toJSON` hook or generic Serializer hierarchy is introduced;
+- JSON Number is exact decimal data represented by unbounded Integer
+  coefficient/exponent with mathematical value `coefficient * 10^exponent`;
+- JSON objects use fresh open ordinary Map storage with semantic String names,
+  duplicate-name rejection and deterministic retained insertion order;
+- JSON arrays use the fresh frozen standard Array produced by trailing-rest capture;
+- the JSON module contains behavior and remains Actor-local while pure
+  constructor-created data remains eligible for ordinary Actor transfer;
+- YAML, XML, canonical/lossless JSON and object-graph persistence remain separate
+  future concerns.
+
+Planned slices:
+
+| Slice | Status | Version | Closure evidence | Scope / unblock condition |
+|---|---|---|---|---|
+| LIB003-A | CLOSED | `0.2.149-SNAPSHOT` | `SAME_COMMIT` | Exact-case `std:json/JSON`; six fresh ordinary JSON node constructors; exact decimal coefficient/exponent Number data; standard frozen rest-capture Array payloads; duplicate object-name rejection; module-local behavior vs transferable pure-data conformance; focused design record persisted. |
+| LIB003-B | READY | — | — | Strict RFC-8259-oriented semantic-String parser to the A tree: exact decimal parsing, duplicate-name rejection, strict escapes/surrogates, deterministic order and non-host-recursive nesting strategy. |
+| LIB003-C | READY | — | — | Ordinary JSON tree-to-String encoder: representation validation, exact decimal emission without Float formatting, JSON String escaping, retained object traversal order, malformed-tree/cycle rejection. |
+| LIB003-D | BLOCKED_BY_DEPENDENCIES | — | — | JSON-specific incremental events and TextReader/TextWriter/byte adapters after the tree parser/encoder contracts are published; no generic Serializer hierarchy. |
+| LIB003-E | BLOCKED_BY_DEPENDENCIES | — | — | Final cross-slice conformance/security/resource stress audit and top-level LIB003 closure after A-D satisfy the initial JSON surface. |
 
 Dependencies:
-- existing Core Array, Map, String, Bytes, and Modules foundations are available;
-- LIB001 Collections — not CLOSED;
-- exact optional adapter dependencies must be established by the future LIB003
-  audit rather than guessed here.
-
-
+- I003 Standard String — CLOSED;
+- I004 Array completion — CLOSED;
+- I005 Standard Map — CLOSED;
+- I007 Error infrastructure — CLOSED;
+- I008 Modules — CLOSED;
+- I012 Standard Bytes — CLOSED;
+- I015 Encoding / Text I/O — CLOSED;
+- LIB001 Collections — CLOSED and useful design precedent, but not a runtime
+  dependency of the JSON data model;
+- LIB002 convenience helpers are not required by LIB003-A/B/C core work.
 ### LIB004 — Filesystem / process conveniences
 
 Status: READY
