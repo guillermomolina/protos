@@ -20,7 +20,6 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
@@ -28,7 +27,6 @@ import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Path;
@@ -36,52 +34,41 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ProtosPolymorphicInvocationTest {
+    /**
+     * Deliberately Java-side: executable Protos conformance covers freshness,
+     * init execution, and inherited behavior, while this assertion preserves the
+     * exact represented immediate-parent materialization performed by Object.call.
+     * Source parent() reflection is not used as a test oracle here.
+     */
     @Test
-    void plainClosureCallUsesInheritedObjectCall() throws IOException {
-        Object result = execute(corePrelude(), "f: (x) => x\nf(42)");
-        assertEquals(BigInteger.valueOf(42), assertInstanceOf(ProtosIntegerValue.class, result).value());
-    }
-
-    @Test
-    void ordinaryLocalCallSlotOverridesInheritedObjectCall() throws IOException {
-        Object result = execute(corePrelude(), "callable: { call: (x) => x }\ncallable(7)");
-        assertEquals(BigInteger.valueOf(7), assertInstanceOf(ProtosIntegerValue.class, result).value());
-    }
-
-    @Test
-    void inheritedCallKeepsOriginalReceiver() throws IOException {
+    void objectCallMaterializesDirectChildOfInvocationReceiver() throws IOException {
         ProtosPrelude prelude = corePrelude();
         ProtosActivation activation = prelude.newModuleActivation();
-        Object result = new ProtosSourceCompiler().compile("parent: { call: () => this }\nchild: parent {}\nchild()").call(activation);
-        assertSame(activation.context().readLocalSlot("child").orElseThrow(), result);
-    }
 
-    @Test
-    void nonClosureShadowingCallStopsLookupAndSignalsError() throws IOException {
-        assertThrows(ProtosSignalException.class, () -> execute(corePrelude(), "blocked: { call: 42 }\nblocked()"));
-    }
+        Object result =
+                new ProtosSourceCompiler()
+                        .compile(
+                                """
+                                Thing: {}
+                                Thing()
+                                """)
+                        .call(activation);
 
-    @Test
-    void inheritedObjectCallConstructsAndRunsOverriddenInit() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        ProtosActivation activation = prelude.newModuleActivation();
-        Object result = new ProtosSourceCompiler().compile(
-                "Thing: { init: (x) => { this.value: x; null } }\ninstance: Thing(42)\ninstance").call(activation);
-        ProtosObjectValue thing = assertInstanceOf(ProtosObjectValue.class, activation.context().readLocalSlot("Thing").orElseThrow());
-        ProtosObjectValue instance = assertInstanceOf(ProtosObjectValue.class, result);
+        ProtosObjectValue thing =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        activation.context().readLocalSlot("Thing").orElseThrow());
+        ProtosObjectValue instance =
+                assertInstanceOf(ProtosObjectValue.class, result);
         assertSame(thing, instance.parent().orElseThrow());
-        assertEquals(BigInteger.valueOf(42), assertInstanceOf(ProtosIntegerValue.class, instance.readLocalSlot("value").orElseThrow()).value());
     }
 
-    @Test
-    void standardObjectInitReturnsReceiverAndRejectsArguments() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        ProtosActivation caller = prelude.newModuleActivation();
-        ProtosObjectValue receiver = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        assertSame(receiver, ProtosInvocation.invokeMessage(receiver, "init", List.of(), caller));
-        assertThrows(ProtosSignalException.class, () -> ProtosInvocation.invokeMessage(receiver, "init", List.of(new ProtosObjectValue(ProtosObjectValue.rootObject())), caller));
-    }
-
+    /**
+     * Deliberately Java-side: this verifies call-spread lowering into the exact
+     * frozen rest-Array representation while preserving injected host object
+     * identities. Language-visible rest/spread behavior has independent .protos
+     * conformance.
+     */
     @Test
     void callSpreadFlattensBeforeClosureActivation() throws IOException {
         ProtosPrelude prelude = corePrelude();
@@ -89,7 +76,16 @@ class ProtosPolymorphicInvocationTest {
         Object first = new ProtosObjectValue(ProtosObjectValue.rootObject());
         Object second = new ProtosObjectValue(ProtosObjectValue.rootObject());
         activation.context().createLocalSlot("xs", prelude.newArray(List.of(first, second)));
-        Object result = new ProtosSourceCompiler().compile("f: (...items) => items\nf(...xs)").call(activation);
+
+        Object result =
+                new ProtosSourceCompiler()
+                        .compile(
+                                """
+                                f: (...items) => items
+                                f(...xs)
+                                """)
+                        .call(activation);
+
         ProtosArrayValue rest = assertInstanceOf(ProtosArrayValue.class, result);
         assertEquals(BigInteger.valueOf(2), rest.indexedSize());
         assertSame(first, rest.indexedAt(BigInteger.ZERO));
@@ -97,23 +93,35 @@ class ProtosPolymorphicInvocationTest {
         assertTrue(rest.isFrozen());
     }
 
+    /**
+     * Deliberately Java-side: the purpose of this test is the compiler/lowering
+     * path for a nested call expression inside a Closure, not merely the source
+     * result 99.
+     */
     @Test
     void nestedCallInsideClosureUsesCallableLowering() throws IOException {
-        Object result = execute(corePrelude(), "identity: (x) => x\nouter: () => identity(99)\nouter()");
-        assertEquals(BigInteger.valueOf(99), assertInstanceOf(ProtosIntegerValue.class, result).value());
-    }
+        Object result =
+                execute(
+                        corePrelude(),
+                        """
+                        identity: (x) => x
+                        outer: () => identity(99)
+                        outer()
+                        """);
 
-    @Test
-    void nonLocalReturnCrossesNestedOrdinaryCall() throws IOException {
-        Object result = execute(corePrelude(), "outer: () => { inner: () => ^42; inner(); 0 }\nouter()");
-        assertEquals(BigInteger.valueOf(42), assertInstanceOf(ProtosIntegerValue.class, result).value());
+        assertEquals(
+                BigInteger.valueOf(99),
+                assertInstanceOf(ProtosIntegerValue.class, result).value());
     }
 
     private static Object execute(ProtosPrelude prelude, String source) {
-        return new ProtosSourceCompiler().compile(source).call(prelude.newModuleActivation());
+        return new ProtosSourceCompiler()
+                .compile(source)
+                .call(prelude.newModuleActivation());
     }
 
     private static ProtosPrelude corePrelude() throws IOException {
-        return new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
+        return new ProtosCoreBootstrap()
+                .bootstrap(Path.of("protos", "lib", "core"));
     }
 }

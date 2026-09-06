@@ -401,3 +401,9 @@ encoding/encode-nonstring-error.protos	error	-
 encoding/decode-nonbytes-error.protos	error	-
 encoding/delegated-receiver-error.protos	error	-
 encoding/empty-encode-fresh-open-no-bom.protos	boolean	true
+call/local-call-slot-overrides-object-call.protos	integer	7
+call/non-local-return-crosses-nested-call.protos	integer	42
+call/object-call-runs-init-and-produces-fresh-child.protos	boolean	true
+call/object-init-returns-receiver.protos	boolean	true
+call/object-init-wrong-arity-error.protos	error	-
+call/plain-closure-call.protos	integer	42
