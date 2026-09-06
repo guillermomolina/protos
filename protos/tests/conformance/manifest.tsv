@@ -344,3 +344,7 @@ bytes/identity-equality-hash.protos	boolean	true
 bytes/remove-negative-error.protos	error	-
 bytes/remove-out-of-range-error.protos	error	-
 bytes/size-at-bracket.protos	boolean	true
+collections/map-lookup-update-contains-size-identity.protos	boolean	true
+collections/map-missing-key-error.protos	error	-
+collections/map-remove-returns-old-value.protos	boolean	true
+collections/map-wrong-receiver-error.protos	error	-
