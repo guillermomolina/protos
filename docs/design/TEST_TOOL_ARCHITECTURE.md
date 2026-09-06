@@ -33,6 +33,17 @@ The package tool is the primary architectural precedent: policy and tool behavio
 belong in Protos while the host retains only irreducible bootstrap and execution
 mechanisms.
 
+## Post-A comparative checkpoint
+
+The required expanded post-TOOL002-A comparison is recorded in
+`docs/design/TEST_TOOL_COMPARATIVE_AUDIT.md`. That checkpoint retains the fresh
+semantic Process isolation boundary while adding two architectural refinements
+before TOOL002-B: an inert TestPlan/stable-case planning boundary above the
+general executor, and future scheduler resource accounting based on capacities
+rather than Boolean groups alone. It also confirms that arbitrary hard timeout
+requires a separately owned physical worker boundary and is not part of
+TOOL002-B.
+
 ## Current repository problem
 
 Many tests already express the behavior under test as ordinary `.protos` source,
@@ -200,7 +211,8 @@ The exact module split is not fixed by this audit.
 
 The Protos tool should own:
 
-- manifest parsing;
+- manifest parsing and inert TestPlan construction;
+- stable case identity assignment before physical scheduling;
 - suite/case selection;
 - filtering;
 - expectation interpretation;
@@ -216,6 +228,18 @@ The Protos tool should own:
 Java must not become the owner of concepts such as `test`, `suite`, `assert`,
 `expected error`, tags, filters, or reporting merely because the current runtime
 is implemented in Java.
+
+### B -> C planning boundary: inert TestPlan
+
+The post-A comparative audit makes suite planning explicit. Current manifests and
+any future discovery mechanism should produce stable CaseSpec/CaseId records and
+one inert TestPlan before physical scheduling. Filtering, seeded order, future
+sharding, resource accounting and retry policy consume that plan. The exact
+representation is ordinary Test Tool policy and remains open.
+
+The general executor below does not interpret CaseIds, expectations, tags,
+fixtures, resources, retries or reporting. It receives only an exact mechanical
+execution request and returns an inert outcome.
 
 ### C. General fresh-Process execution mechanism
 
@@ -274,6 +298,11 @@ case.protos    future-integer   10
 The first migration should move interpretation of those rows from Java to Protos.
 A later design may introduce ordinary Protos assertion/helper modules or
 self-asserting tests, but that is a separate API decision.
+
+The initial manifest migration should therefore compile existing rows to an
+inert TestPlan with stable case identity rather than dispatching directly from
+manifest parsing. Future discovery may coexist, but it must produce the same
+planning shape instead of creating another executor path.
 
 ## Isolation audit
 
@@ -397,36 +426,30 @@ order.
 ## Explicit resources and parallel safety
 
 Fresh Process isolation removes shared mutable Protos state between cases, but it
-cannot automatically isolate external resources such as:
+cannot automatically isolate external resources such as writable host files,
+databases, fixed ports, service accounts, simulators, hardware or other
+explicitly shared capabilities.
 
-- one writable host file;
-- one database;
-- one fixed TCP port;
-- one external service account;
-- one hardware/device resource;
-- another explicitly shared capability.
-
-Prefer private capabilities where practical. For example, tests requiring a
-writable Filesystem can receive separate test-root authorities, and each Process
-can receive independently captured stdout/stderr streams.
-
-Where a resource truly must be shared, the test tool should support a
-resource/group constraint that prevents conflicting cases from running
-simultaneously without disabling unrelated parallelism.
-
-Conceptually:
+Prefer private capabilities and case-private resources wherever practical. When
+sharing is real, the post-A comparative audit generalizes the earlier Boolean
+resource/group idea into **capacity accounting**:
 
 ```text
-test A: resource db:integration
-test B: resource db:integration
-    -> never overlap
+global execution capacity = N
+case A requires 1 slot
+case B requires 4 slots
 
-test C: private filesystem C
-test D: private filesystem D
-    -> may run in parallel
+resource db:integration capacity = 1
+resource simulator capacity = 3
 ```
 
-The exact manifest/API spelling remains open.
+A named resource with capacity 1 behaves as a mutex; larger capacities behave as
+semaphores/pools. This one model can express mutual exclusion, heavyweight cases
+and scarce devices without creating separate scheduler institutions. Exact
+declaration syntax and the initial `jobs=auto` formula remain open and require
+later design/benchmark evidence.
+
+TOOL002-B does not implement this scheduler policy.
 
 ## Output isolation
 
@@ -481,8 +504,7 @@ implementation work.
 
 ## Decisions closed by this audit
 
-The following architectural directions are sufficiently supported to treat as
-selected for subsequent implementation design:
+The initial audit plus the required post-A expanded comparison select:
 
 ```text
 bundled `protos test` written primarily in Protos        YES
@@ -493,31 +515,51 @@ no privileged global Test object                         YES
 no Java-owned assertion/suite/expectation policy         YES
 fresh Protos Process per ordinary test case              YES
 fresh RootActor per ordinary test case                   YES
+OS process per ordinary case                             NO
+separate inert TestPlan before physical scheduling       YES
+stable case identity before scheduling                   YES
+future discovery feeds the same TestPlan boundary        YES
 parallel test execution as the normal target             YES
 bounded outer parallelism                                YES
+capacity-based scheduler/resource model                  YES
 private per-test stdout/stderr                            YES
 explicit per-test capabilities                           YES
-resource/group serialization for true shared resources   YES
 `Closure.parallel` as runner isolation                    NO
 P/Actors/Groups/Futures usable inside tests               YES
 preserve existing manifests during initial migration     YES
+assertions may coexist with external expectations        YES
+hard arbitrary same-runtime timeout guarantee             NO
+initial silent retry / hidden flaky evidence              NO
+initial test-result caching                               NO
 ```
 
 ## Decisions intentionally left open
 
 ```text
-exact `protos test` CLI flags and manifest syntax
+exact `protos test` CLI flags
+exact current-manifest migration syntax/evolution
+future discovery convention and scope
+exact textual stable CaseId representation
+concrete ordinary-Protos TestPlan/CaseSpec representation
 assertion/helper library API
-self-asserting-test migration, if any
-recursive discovery versus explicit manifests
+fixture/setup/cleanup API and scopes
+filter/tag syntax
+seed/randomization CLI and default policy
 initial `jobs=auto` formula after benchmarks
-resource/group declaration syntax
-hard timeout semantics
-operating-system worker/controller architecture
-crash isolation/retry policy
+per-case execution-capacity declaration syntax
+named-resource capacity/pool declaration syntax
+machine-readable report schema
+hard timeout semantics and OS worker/controller architecture
+retry/flaky policy and CLI
+shard selection CLI and stable partition algorithm
+watch-mode dependency graph/source
+cache hermeticity and input/environment/capability fingerprint model
+crash diagnostics for future physical workers
 ```
 
-These open items must not be silently decided by the first implementation slice.
+These open items must not be silently decided by TOOL002-B. The expanded
+comparative checkpoint is complete and no longer blocks the general
+fresh-Process mechanism.
 
 ## Tracked implementation sequencing
 
@@ -525,40 +567,35 @@ These open items must not be silently decided by the first implementation slice.
 repository state after every slice and re-audit the current `origin/main` before
 each subsequent slice:
 
-1. **Test tool bootstrap** — add exact bundled `protos test` dispatch and a tiny
-   Protos entry without migrating the corpus.
-
-After item 1 is published and before item 2 begins, perform an expanded
-comparative architecture audit across mature language-native, framework-driven,
-worker-based, and hermetic/incremental test systems. Challenge the selected
-fresh-Process isolation boundary and the still-open discovery/manifest,
-assertion/expectation, fixture, output, parallelism, resource, timeout,
-sharding/distribution, and CI choices. Record any retained or revised decisions
-before implementation makes them expensive to change.
-
-2. **Fresh-Process execution mechanism** — establish/reuse a general mechanical
-   execution boundary that is not test-specific.
-3. **Single-case sequential runner** — execute one `.protos` case in a fresh
-   Process and capture outcome/streams.
-4. **Manifest/expectation migration** — move the existing general conformance
-   manifest interpretation from Java to Protos while retaining the corpus.
-5. **Package-tool fixture migration** — move Protos package-tool/TOML fixtures
+1. **Test tool bootstrap** — CLOSED by TOOL002-A.
+2. **Post-A expanded comparative architecture checkpoint** — CLOSED by
+   `docs/design/TEST_TOOL_COMPARATIVE_AUDIT.md`; TOOL002-B is READY.
+3. **Fresh-Process execution mechanism** — establish/reuse a general mechanical
+   execution boundary that is not test-specific and returns inert outcomes.
+4. **Single-case sequential runner** — execute one exact `.protos` case in a
+   fresh Process and capture outcome/streams.
+5. **Manifest/expectation migration** — move the existing general conformance
+   manifest interpretation from Java to Protos, assign stable case identity and
+   construct the initial inert TestPlan while retaining the corpus.
+6. **Package-tool fixture migration** — move Protos package-tool/TOML fixtures
    away from Java-owned runner logic.
-6. **Async/Future coverage** — preserve current pending-work/terminal-outcome
+7. **Async/Future coverage** — preserve current pending-work/terminal-outcome
    expectations through ordinary production execution semantics.
-7. **Actor/Group coverage** — migrate scheduler-sensitive language tests without
+8. **Actor/Group coverage** — migrate scheduler-sensitive language tests without
    introducing a test-only concurrency model.
-8. **Bounded parallel scheduler** — run independent fresh Processes concurrently,
-   capture output independently, and preserve deterministic reporting.
-9. **Resource constraints/private capabilities** — add explicit parallel-safety
-   policy where real external-resource sharing requires it.
-10. **CI/launcher integration** — validate Java implementation tests first and
+9. **Bounded parallel scheduler** — schedule independent CaseSpecs with explicit
+   capacity accounting, private output capture, reproducible seeded plan order
+   and deterministic reporting independent of completion order.
+10. **Resource capacities/private capabilities** — add named capacity/pool
+    constraints where real external-resource sharing requires them.
+11. **CI/launcher integration** — validate Java implementation tests first and
     then invoke the Protos test tool for the Protos corpus.
-11. **Hard-timeout audit** — separately evaluate amortized OS workers only if the
-    product requires guaranteed recovery from non-preemptible infinite tests.
 
-Do not merge several of these slices merely to reach parallel execution sooner.
-Isolation correctness precedes concurrency optimization.
+Hard OS-worker containment, retries, sharding/distribution, watch/incremental
+selection and result caching remain later explicitly promoted work unless a
+future audit adds them to the parent scope. Do not merge implementation slices
+merely to reach parallel execution sooner; isolation correctness and the
+mechanism/policy boundary precede concurrency optimization.
 
 ## Intended final validation shape
 

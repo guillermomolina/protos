@@ -8,6 +8,7 @@ Architecture owners:
 
 - `docs/design/TOOLCHAIN_TOOL_ARCHITECTURE.md`
 - `docs/design/TEST_TOOL_ARCHITECTURE.md`
+- `docs/design/TEST_TOOL_COMPARATIVE_AUDIT.md`
 
 Normative dependencies inspected by the architecture include:
 
@@ -59,7 +60,7 @@ freeze those decisions unless their own audited scope requires and resolves them
 | Slice | Status | Outcome |
 |---|---|---|
 | TOOL002-A | CLOSED | Exact bundled `protos test` dispatch and tiny ordinary-Protos entry published in the same commit at implementation version `0.2.168-SNAPSHOT`; no corpus migration or test policy. |
-| TOOL002-B | BLOCKED_BY_DEPENDENCIES | TOOL002-A is closed, but implementation waits for the required post-A expanded comparative architecture audit; after that checkpoint, establish/reuse a general fresh-Process exact-execution mechanism, not a Java `TestExecutor` or other test-specific privileged runtime institution. |
+| TOOL002-B | READY | Post-A comparative checkpoint CLOSED by `docs/design/TEST_TOOL_COMPARATIVE_AUDIT.md`; establish/reuse the general fresh-Process exact-execution mechanism and inert outcome boundary, not a Java `TestExecutor` or other test-specific privileged runtime institution. |
 | TOOL002-C | BLOCKED_BY_DEPENDENCIES | After B, execute one `.protos` case sequentially in a fresh Process and capture inert outcome plus private streams. |
 | TOOL002-D | BLOCKED_BY_DEPENDENCIES | After C, migrate existing general conformance manifest/expectation interpretation from Java to Protos while retaining the corpus. |
 | TOOL002-E | BLOCKED_BY_DEPENDENCIES | After D, migrate Package Tool/TOML fixtures away from Java-owned runner policy. |
@@ -95,21 +96,29 @@ needed beyond this TOOL002 bootstrap.
 TOOL002-A adds no test discovery, assertion, manifest, Process-per-test, timeout,
 parallelism, filter, reporter, or corpus-migration policy.
 
-## Required post-A comparative architecture checkpoint
+## Post-A comparative architecture checkpoint — CLOSED
 
-Before TOOL002-B implementation begins, perform and persist an expanded
-comparative audit of mature test systems across multiple architectural models,
-including at least Python/pytest, Rust cargo/libtest/nextest, Go `go test`,
-Java/JUnit build runners, JavaScript/Node runners, .NET runners, Erlang/Elixir,
-C/C++ test runners, and hermetic/incremental systems such as Bazel/Buck-like
-execution. The purpose is to challenge the current fresh-Process, worker,
-discovery/manifest, expectations/assertions, fixtures, output capture,
-parallelism, resource constraints, timeout, sharding/distribution, and CI
-boundaries before the runner mechanism hardens.
+`docs/design/TEST_TOOL_COMPARATIVE_AUDIT.md` completes the required checkpoint
+after TOOL002-A. The comparison covers framework-driven, language-native,
+process-worker, native-isolation and hermetic/distributed systems.
 
-This checkpoint does not reopen or delay the already mechanical TOOL002-A
-bootstrap. It is a dependency of TOOL002-B, and TOOL002-B remains
-`BLOCKED_BY_DEPENDENCIES` until the audit is recorded.
+The checkpoint retains fresh semantic Process / RootActor isolation and adds two
+important refinements before runner implementation hardens:
+
+- manifests and future discovery feed stable CaseSpec/CaseId values and one inert
+  TestPlan before physical scheduling;
+- future parallel scheduling uses general capacity accounting, with capacity-1
+  named resources naturally providing mutex/group behavior.
+
+It also confirms that arbitrary hard timeout requires a separately owned physical
+worker boundary, that retries must retain flaky evidence, and that result caching
+should wait for an explicit hermetic input/capability model.
+
+TOOL002-B is therefore READY. B remains deliberately mechanical: exact entry,
+arguments, explicit capabilities, private streams, fresh Process/RootActor,
+production execution and inert outcome. TestPlan parsing, assertions, manifests,
+fixtures, resources, retry, timeout, sharding, watch, cache and reporting remain
+outside B.
 
 ## Closure rule
 
