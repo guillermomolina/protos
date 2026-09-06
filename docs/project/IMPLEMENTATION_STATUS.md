@@ -339,7 +339,7 @@ work may proceed without waiting for an earlier-numbered roadmap item.
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
 | LIB001 | Collections library | CLOSED | `SAME_COMMIT` | LIB001-A/B/C/D/E closed; initial Set/IdentitySet and eager sequential Array algorithm surfaces are fully published with no new runtime collection family, generic hierarchy, or production Java boundary. |
-| LIB002 | Text / encoding conveniences | READY | — | I015 is CLOSED; begin with a fresh ordinary-library design/API audit over finalized Encoding/TextReader/TextWriter semantics without redefining Core conversion or I/O behavior. |
+| LIB002 | Text / encoding conveniences | READY | — | Comparative/API/future-proofing audit closed in `docs/project/LIB002_TEXT_ENCODING_DESIGN.md`; `LIB002-A` is READY to publish four ordinary portable-Encoding convenience modules without redefining Core conversion, I/O, transfer, or distributed-runtime behavior. |
 | LIB003 | JSON | IN_PROGRESS | — | LIB003-A/B/C and LIB003-D1 incremental event parsing published; LIB003-D2 event writing is READY, with TextReader/TextWriter adapters and final conformance still dependency-gated. |
 | LIB004 | Filesystem / process conveniences | READY | — | I016 + I017 closed; begin with a fresh focused convenience-layer design/audit. Any text-oriented convenience that needs I015/LIB002 remains individually dependency-gated and must preserve explicit authority boundaries. |
 | LIB005 | Networking | OPEN | — | Roadmap item only; `spec/io/IO_CORE.md` currently leaves network authority acquisition, socket APIs, DNS/name resolution, and transport configuration outside its standardized scope. Re-audit and establish prerequisites before implementation. |
@@ -413,20 +413,46 @@ Status: READY
 Description: Ergonomic text and encoding helpers implemented as ordinary Protos
 library functionality on top of finalized Core Encoding/Text I/O semantics.
 
-Planning boundary:
+Design record:
+- `docs/project/LIB002_TEXT_ENCODING_DESIGN.md` records the completed focused
+  normative, comparative, falsification, and future-proofing audit;
+- the record compares Pharo/Smalltalk, Self, Io, Erlang/Elixir, C#/.NET, Java,
+  C++, Python, Ruby, Rust, and Swift against the Protos object, module, I/O,
+  Actor, Process, and distributed-runtime model;
+- the record is non-normative and does not redefine Core semantics.
+
+Implementation boundary:
 - Core Encoding, TextReader, and TextWriter semantics remain owned by I015 and
   the normative I/O specification;
-- reciprocal or convenience operations may be library functionality only when
-  they preserve the canonical Core operations and argument/result semantics;
-- no concrete API, import spelling, module layout, or implementation slices are
-  assigned by this roadmap entry; derive them from the current repository when
-  LIB002 work begins.
+- the initial convenience surface is four ordinary Actor-local modules:
+  `std:text/UTF8`, `std:text/UTF16LE`, `std:text/UTF16BE`, and
+  `std:text/Latin1`;
+- each module supplies exactly `encode`, `decode`, `reader`, `owningReader`,
+  `writer`, and `owningWriter` by delegating to its corresponding mandatory
+  Core Encoding descriptor and TextReader/TextWriter factory;
+- helper modules are not Encoding semantic values and acquire no Encoding
+  identity, per-flow codec state, I/O authority, registry role, or ambient
+  default behavior;
+- host-provided Encoding values remain first-class Core inputs and require no
+  Standard Library registration or wrapper;
+- no production Java/native boundary, shared mutable codec state, global/default
+  Encoding, automatic encoding detection, or second I/O ordering domain is
+  introduced;
+- `readAll`/`readLines`/`writeAll`, Unicode transformations, normalization,
+  locale/collation, encoding discovery/registries, and reciprocal Core
+  String/Bytes augmentation are outside the initial LIB002 closure and require
+  separate focused design if pursued.
+
+Planned slices:
+
+| Slice | Status | Version | Closure evidence | Scope / unblock condition |
+|---|---|---|---|---|
+| LIB002-A | READY | — | — | Publish `std:text/UTF8`, `UTF16LE`, `UTF16BE`, and `Latin1` as ordinary Protos modules with exact Core-preserving one-shot conversion plus borrowing/owning TextReader/TextWriter construction; add real-`std:` Protos conformance, verify no Java/native-boundary growth, and close top-level LIB002 in the same executable publication if the complete selected surface passes focal/full-suite and governance validation. |
 
 Dependencies:
 - I003 Standard String — CLOSED;
 - I012 Standard Bytes — CLOSED;
 - I015 Encoding / Text I/O — CLOSED.
-
 
 ### LIB003 — JSON
 
