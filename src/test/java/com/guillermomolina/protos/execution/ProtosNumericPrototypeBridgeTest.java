@@ -17,181 +17,36 @@
 
 package com.guillermomolina.protos.execution;
 
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 
-import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
-import com.guillermomolina.protos.runtime.ProtosFloatValue;
-import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
-import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import java.io.IOException;
-import java.math.BigInteger;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
 class ProtosNumericPrototypeBridgeTest {
+    // Deliberately Java-side: exact physical prototype topology is a
+    // bootstrap/representation invariant. Source tests exercise the same chain
+    // through ordinary lookup without using parent() as an oracle.
     @Test
-    void sourceBackedNumericPrototypeHierarchyIsNormativeHierarchy() throws IOException {
+    void sourceBackedNumericPrototypeHierarchyIsNormativeHierarchy()
+            throws IOException {
         ProtosPrelude prelude = corePrelude();
 
-        assertSame(prelude.numberPrototype(), prelude.integerPrototype().parent().orElseThrow());
-        assertSame(prelude.numberPrototype(), prelude.floatPrototype().parent().orElseThrow());
+        assertSame(
+                prelude.numberPrototype(),
+                prelude.integerPrototype().parent().orElseThrow());
+        assertSame(
+                prelude.numberPrototype(),
+                prelude.floatPrototype().parent().orElseThrow());
         assertSame(
                 ProtosObjectValue.rootObject(),
                 prelude.numberPrototype().parent().orElseThrow());
-    }
-
-    @Test
-    void integerMemberLookupStartsAtIntegerPrototype() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        Object marker = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        prelude.integerPrototype().createLocalSlot("marker", marker);
-
-        Object result = execute(prelude, "(42).marker");
-
-        assertSame(marker, result);
-    }
-
-    @Test
-    void integerLookupDelegatesThroughNumberPrototype() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        Object marker = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        prelude.numberPrototype().createLocalSlot("numericMarker", marker);
-
-        Object result = execute(prelude, "(42).numericMarker");
-
-        assertSame(marker, result);
-    }
-
-    @Test
-    void floatMemberLookupStartsAtFloatThenNumber() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        Object marker = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        prelude.numberPrototype().createLocalSlot("numericMarker", marker);
-
-        Object result = execute(prelude, "(1.5).numericMarker");
-
-        assertSame(marker, result);
-    }
-
-    @Test
-    void childWhoseParentIsNumericValueContinuesThroughThatExactValuesFamilyChain()
-            throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        Object marker = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        prelude.integerPrototype().createLocalSlot("integerMarker", marker);
-
-        ProtosObjectValue child =
-                new ProtosObjectValue(
-                        new ProtosIntegerValue(BigInteger.valueOf(7)));
-        ProtosActivation activation = prelude.newModuleActivation();
-        activation.context().createLocalSlot("child", child);
-
-        Object result =
-                new ProtosSourceCompiler()
-                        .compile("child.integerMarker")
-                        .call(activation);
-
-        assertSame(marker, result);
-    }
-
-    @Test
-    void inheritedNumericMethodBindsOriginalNumericReceiverAndPhysicalHome()
-            throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        ProtosActivation activation = prelude.newModuleActivation();
-
-        Object result =
-                new ProtosSourceCompiler()
-                        .compile(
-                                """
-                                Integer.echoReceiver: () => this
-                                ((23).echoReceiver)()
-                                """)
-                        .call(activation);
-
-        assertEquals(
-                BigInteger.valueOf(23),
-                ((ProtosIntegerValue) result).value());
-    }
-
-    @Test
-    void floatRepresentationRemainsExactReceiverForInheritedMethod()
-            throws IOException {
-        ProtosPrelude prelude = corePrelude();
-
-        Object result =
-                execute(
-                        prelude,
-                        """
-                        Number.echoReceiver: () => this
-                        ((2.5).echoReceiver)()
-                        """);
-
-        assertEquals(2.5d, ((ProtosFloatValue) result).value());
-    }
-
-    private static Object execute(ProtosPrelude prelude, String source) {
-        return new ProtosSourceCompiler()
-                .compile(source)
-                .call(prelude.newModuleActivation());
     }
 
     private static ProtosPrelude corePrelude() throws IOException {
         return new ProtosCoreBootstrap()
                 .bootstrap(Path.of("protos", "lib", "core"));
     }
-
-    @Test
-    void canonicalBooleansLookupDirectlyThroughObjectWithoutBooleanPrototype() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        Object inheritedCall =
-                ProtosObjectValue.rootObject().readLocalSlot("call").orElseThrow();
-
-        assertSame(
-                inheritedCall,
-                ProtosValueLookup.lookup(ProtosBooleanValue.TRUE, "call", prelude)
-                        .orElseThrow()
-                        .value());
-        assertSame(
-                ProtosObjectValue.rootObject(),
-                ProtosValueLookup.lookup(ProtosBooleanValue.TRUE, "call", prelude)
-                        .orElseThrow()
-                        .home());
-        assertSame(
-                inheritedCall,
-                ProtosValueLookup.lookup(ProtosBooleanValue.FALSE, "call", prelude)
-                        .orElseThrow()
-                        .value());
-        assertSame(
-                ProtosObjectValue.rootObject(),
-                ProtosValueLookup.lookup(ProtosBooleanValue.FALSE, "call", prelude)
-                        .orElseThrow()
-                        .home());
-
-        assertFalse(prelude.bindings().hasLocalSlot("Boolean"));
-    }
-
-    @Test
-    void canonicalBooleanPolymorphicInvocationUsesInheritedObjectCall() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        ProtosActivation activation = prelude.newModuleActivation();
-
-        assertThrows(
-                ProtosSignalException.class,
-                () -> ProtosInvocation.invoke(
-                        ProtosBooleanValue.TRUE, java.util.List.of(), activation));
-        assertThrows(
-                ProtosSignalException.class,
-                () -> ProtosInvocation.invoke(
-                        ProtosBooleanValue.FALSE, java.util.List.of(), activation));
-    }
-
-
 }

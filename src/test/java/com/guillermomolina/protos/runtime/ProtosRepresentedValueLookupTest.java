@@ -16,14 +16,10 @@
  */
 package com.guillermomolina.protos.runtime;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
-import com.guillermomolina.protos.execution.ProtosInvocation;
-import com.guillermomolina.protos.execution.ProtosSourceCompiler;
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.file.Path;
@@ -31,10 +27,13 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ProtosRepresentedValueLookupTest {
+    // Deliberately Java-side: exact lookup-home identity is internal lookup
+    // machinery, not merely the language-visible selected value.
     @Test
     void ordinaryObjectLookupRemainsOrdinaryObjectLookup() throws IOException {
         ProtosPrelude prelude = corePrelude();
-        ProtosObjectValue parent = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue parent =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosObjectValue child = new ProtosObjectValue(parent);
         Object marker = new ProtosObjectValue(ProtosObjectValue.rootObject());
         parent.createLocalSlot("marker", marker);
@@ -46,12 +45,18 @@ class ProtosRepresentedValueLookupTest {
         assertSame(parent, selected.home());
     }
 
+    // Deliberately Java-side: specialized host representations must map to the
+    // exact physical source-backed family prototype objects.
     @Test
-    void numericRepresentationsUseTheirNormativePrototypeParents() throws IOException {
+    void numericRepresentationsUseTheirNormativePrototypeParents()
+            throws IOException {
         ProtosPrelude prelude = corePrelude();
-        Object integerMarker = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        Object floatMarker = new ProtosObjectValue(ProtosObjectValue.rootObject());
-        Object fixedMarker = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        Object integerMarker =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        Object floatMarker =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        Object fixedMarker =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
 
         prelude.integerPrototype().createLocalSlot("integerMarker", integerMarker);
         prelude.floatPrototype().createLocalSlot("floatMarker", floatMarker);
@@ -68,7 +73,10 @@ class ProtosRepresentedValueLookupTest {
                         .value());
         assertSame(
                 floatMarker,
-                ProtosValueLookup.lookup(new ProtosFloatValue(2.5d), "floatMarker", prelude)
+                ProtosValueLookup.lookup(
+                                new ProtosFloatValue(2.5d),
+                                "floatMarker",
+                                prelude)
                         .orElseThrow()
                         .value());
         assertSame(
@@ -83,11 +91,15 @@ class ProtosRepresentedValueLookupTest {
                         .value());
     }
 
+    // Deliberately Java-side: this fixes exact root lookup-home identity and the
+    // physical absence of a standard Boolean prelude prototype.
     @Test
     void canonicalBooleanAndNullBridgeDirectlyToObject() throws IOException {
         ProtosPrelude prelude = corePrelude();
         Object inheritedCall =
-                ProtosObjectValue.rootObject().readLocalSlot("call").orElseThrow();
+                ProtosObjectValue.rootObject()
+                        .readLocalSlot("call")
+                        .orElseThrow();
 
         for (Object value :
                 List.of(
@@ -103,9 +115,12 @@ class ProtosRepresentedValueLookupTest {
         assertFalse(prelude.bindings().hasLocalSlot("Boolean"));
     }
 
+    // Deliberately Java-side: this verifies the implementation extension point
+    // itself can participate in lookup without central dispatcher cases.
     @Test
     void representedLookupExtensionDoesNotRequireCentralDispatcherCases() {
-        ProtosObjectValue parent = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosObjectValue parent =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
         Object marker = new ProtosObjectValue(ProtosObjectValue.rootObject());
         parent.createLocalSlot("marker", marker);
         TestRepresentedValue value = new TestRepresentedValue(parent);
@@ -117,68 +132,13 @@ class ProtosRepresentedValueLookupTest {
         assertSame(parent, selected.home());
     }
 
-    @Test
-    void inheritedMethodReceivesOriginalRepresentedReceiver() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-
-        Object result =
-                new ProtosSourceCompiler()
-                        .compile(
-                                """
-                                Integer.echoReceiver: () => this
-                                ((23).echoReceiver)()
-                                """)
-                        .call(prelude.newModuleActivation());
-
-        assertEquals(
-                BigInteger.valueOf(23),
-                ((ProtosIntegerValue) result).value());
-    }
-
-    @Test
-    void delegatingToNumericValueDoesNotConferNumericMembership() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        ProtosActivation caller = prelude.newModuleActivation();
-        ProtosObjectValue child =
-                new ProtosObjectValue(new ProtosIntegerValue(BigInteger.valueOf(7)));
-
-        ProtosSignalException failure =
-                assertThrows(
-                        ProtosSignalException.class,
-                        () ->
-                                ProtosInvocation.invokeMessage(
-                                        child,
-                                        "==",
-                                        List.of(new ProtosIntegerValue(BigInteger.valueOf(7))),
-                                        caller));
-
-        assertSame(prelude.errorPrototype(), failure.error().parent().orElseThrow());
-    }
-
-    @Test
-    void polymorphicInvocationUsesRepresentedLookupWithoutHostLookupFailure()
-            throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        ProtosActivation caller = prelude.newModuleActivation();
-
-        assertThrows(
-                ProtosSignalException.class,
-                () -> ProtosInvocation.invoke(ProtosBooleanValue.TRUE, List.of(), caller));
-        assertThrows(
-                ProtosSignalException.class,
-                () -> ProtosInvocation.invoke(ProtosNullValue.INSTANCE, List.of(), caller));
-        assertThrows(
-                ProtosSignalException.class,
-                () ->
-                        ProtosInvocation.invoke(
-                                new ProtosIntegerValue(BigInteger.ONE), List.of(), caller));
-    }
-
     private static ProtosPrelude corePrelude() throws IOException {
-        return new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
+        return new ProtosCoreBootstrap()
+                .bootstrap(Path.of("protos", "lib", "core"));
     }
 
-    private record TestRepresentedValue(Object parent) implements ProtosRepresentedValue {
+    private record TestRepresentedValue(Object parent)
+            implements ProtosRepresentedValue {
         @Override
         public Object representedDelegationParent(ProtosPrelude prelude) {
             return parent;

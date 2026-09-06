@@ -420,3 +420,14 @@ call/message-send-spread-left-to-right.protos	integer	123123
 call/closure-local-call-override.protos	integer	7
 call/extracted-method-freshness-and-state.protos	boolean	true
 call/super-spread-uses-ordinary-argument-vector.protos	integer	5
+call/canonical-false-polymorphic-call-error.protos	error	-
+call/canonical-null-polymorphic-call-error.protos	error	-
+call/canonical-true-polymorphic-call-error.protos	error	-
+call/integer-polymorphic-call-error.protos	error	-
+float/extracted-inherited-method-preserves-receiver.protos	boolean	true
+float/number-prototype-slot-visible.protos	integer	63
+integer/extracted-inherited-method-preserves-receiver.protos	integer	23
+integer/number-prototype-slot-visible.protos	integer	52
+integer/numeric-parent-does-not-confer-membership.protos	error	-
+integer/numeric-value-parent-continues-family-lookup.protos	integer	77
+integer/prototype-local-slot-visible.protos	integer	41
