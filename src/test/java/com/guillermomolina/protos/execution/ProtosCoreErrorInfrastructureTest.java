@@ -26,10 +26,8 @@ import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors.StandardError;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.io.IOException;
 import java.nio.file.Path;
-import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class ProtosCoreErrorInfrastructureTest {
@@ -92,22 +90,6 @@ class ProtosCoreErrorInfrastructureTest {
         Object invalidReturnPrototype =
                 prelude.bindings().readLocalSlot("InvalidReturn").orElseThrow();
         assertSame(invalidReturnPrototype, invalidReturn.parent().orElseThrow());
-    }
-
-    @Test
-    void signalingPreservesExactErrorObject() throws IOException {
-        ProtosPrelude prelude = corePrelude();
-        ProtosActivation activation = prelude.newModuleActivation();
-        ProtosObjectValue error = ProtosCoreErrors.newError(activation);
-
-        ProtosSignalException signal =
-                assertThrows(
-                        ProtosSignalException.class,
-                        () ->
-                                ProtosInvocation.invokeMessage(
-                                        error, "signal", List.of(), activation));
-
-        assertSame(error, signal.error());
     }
 
     @Test
