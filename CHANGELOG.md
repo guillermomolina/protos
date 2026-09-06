@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.153-SNAPSHOT
+
+- Establish the first bundled-tool bootstrap slice for the package-system architecture. `protos package` now launches an exact toolchain-bundled Protos entry from `protos/tools/package` without reading a project manifest, lockfile, package store, or ambient module search path. Tool-local `self:` imports resolve to internal `bundled-tool:` ModuleKeys while `std:` remains delegated to the selected Standard Library resolver.
+- Keep package policy out of Java: the bundled Protos probe imports a second bundled module, observes the ordinary `process.args()` snapshot, and writes through the ordinary Process stdout/TextWriter path. The host change is limited to exact bundled-tool discovery/loading and CLI dispatch; no package resolution, filesystem authority, registry/networking, new public `tool:` namespace, normative semantics, or Standard Library work item is introduced.
+
 ## 0.2.152-SNAPSHOT
 
 - Close `I020-D` and the post-Ixxx `I020` audit reconciliation by implementing D040 missing-`methodHome` super semantics. Core now publishes source-backed `InvalidSuper -> Error`; after the complete ordinary argument/spread vector finishes, a super send without `methodHome` signals one fresh `InvalidSuper` occurrence before any lookup, while valid method-bound super lookup and `SlotNotFound` behavior remain unchanged.

@@ -51,6 +51,9 @@ public final class ProtosCli {
                 out.println("Protos " + (v == null ? "development" : v));
                 return 0;
             }
+            if (args[0].equals("package")) {
+                return runBundledPackageTool(args, in, out, err);
+            }
             if (args[0].equals("-e")) {
                 if (args.length < 2) return usage(err, "-e requires a source argument");
                 return evalOneShot(
@@ -85,6 +88,46 @@ public final class ProtosCli {
             err.println("Internal error: " + e);
             e.printStackTrace(err);
             return 70;
+        }
+    }
+
+    private int runBundledPackageTool(
+            String[] args,
+            InputStream in,
+            PrintStream out,
+            PrintStream err)
+            throws Exception {
+        Path core = core();
+        Path toolRoot =
+                core.getParent().getParent().resolve("tools").resolve("package");
+        ProtosBundledToolModuleResolver resolver =
+                new ProtosBundledToolModuleResolver(
+                        "package",
+                        toolRoot,
+                        new ProtosStandardLibraryModuleResolver(core.getParent()));
+        Session session =
+                session(
+                        core,
+                        resolver,
+                        applicationArguments(args, 0),
+                        in,
+                        out,
+                        err);
+        try {
+            String source = resolver.loadSource(resolver.entryModule("Main"));
+            session.compiler.compile(source).call(session.activation);
+            return 0;
+        } catch (ParseError e) {
+            err.println("Package tool syntax error: " + e.getMessage());
+            return 1;
+        } catch (ProtosSignalException e) {
+            err.println("Package tool error: " + renderer.render(e.error()));
+            return 1;
+        } catch (RuntimeException e) {
+            err.println("Package tool runtime error: " + e.getMessage());
+            return 1;
+        } finally {
+            session.terminate();
         }
     }
 
@@ -259,8 +302,23 @@ public final class ProtosCli {
             PrintStream err)
             throws IOException {
         Path core = core();
-        ProtosModuleResolver moduleResolver =
-                new ProtosStandardLibraryModuleResolver(core.getParent());
+        return session(
+                core,
+                new ProtosStandardLibraryModuleResolver(core.getParent()),
+                applicationArguments,
+                in,
+                out,
+                err);
+    }
+
+    private Session session(
+            Path core,
+            ProtosModuleResolver moduleResolver,
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream out,
+            PrintStream err)
+            throws IOException {
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap().bootstrap(core, moduleResolver);
         ProtosEncodingValue utf8 = utf8(prelude);
@@ -480,6 +538,7 @@ public final class ProtosCli {
                 "Usage:\n"
                         + "  protos <file> [args...]\n"
                         + "  protos -e <source> [args...]\n"
+                        + "  protos package [args...]\n"
                         + "  protos\n\n"
                         + "Options:\n"
                         + "  -e <source> [args...]\n"

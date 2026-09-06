@@ -31,6 +31,7 @@ final class ProtosCliTest {
         assertEquals(0, help.c);
         assertTrue(help.o.contains("[args...]"));
         assertTrue(help.o.contains("process.args()"));
+        assertTrue(help.o.contains("protos package"));
 
         assertTrue(run("--version").o.startsWith("Protos "));
         assertEquals("2\n", run("-e", "1 + 1").o);
@@ -76,6 +77,15 @@ final class ProtosCliTest {
         assertEquals(
                 "true\n",
                 run("-e", "Actor.current() === Actor.current()").o);
+    }
+
+    @Test
+    void packageSubcommandRunsBundledProtosToolWithProcessArgsAndStdout() {
+        R result = run("package");
+
+        assertEquals(0, result.c);
+        assertEquals("Protos package tool bootstrap\npackage\n", result.o);
+        assertTrue(result.e.isBlank(), result.e);
     }
 
     @Test
