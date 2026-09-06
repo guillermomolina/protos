@@ -339,7 +339,7 @@ work may proceed without waiting for an earlier-numbered roadmap item.
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
 | LIB001 | Collections library | CLOSED | `SAME_COMMIT` | LIB001-A/B/C/D/E closed; initial Set/IdentitySet and eager sequential Array algorithm surfaces are fully published with no new runtime collection family, generic hierarchy, or production Java boundary. |
-| LIB002 | Text / encoding conveniences | READY | — | Comparative/API/future-proofing audit closed in `docs/project/LIB002_TEXT_ENCODING_DESIGN.md`; `LIB002-A` is READY to publish four ordinary portable-Encoding convenience modules without redefining Core conversion, I/O, transfer, or distributed-runtime behavior. |
+| LIB002 | Text / encoding conveniences | CLOSED | `SAME_COMMIT` | LIB002-A published the four audited ordinary portable-Encoding convenience modules with real-`std:` Protos conformance; initial LIB002 scope is closed with no Core, native-boundary, registry/default, or distributed-runtime semantic change. |
 | LIB003 | JSON | IN_PROGRESS | — | LIB003-A/B/C plus LIB003-D1 parser events and LIB003-D2 event writing published; LIB003-D3 TextReader/TextWriter adapters are READY and final conformance remains dependency-gated. |
 | LIB004 | Filesystem / process conveniences | READY | — | I016 + I017 closed; begin with a fresh focused convenience-layer design/audit. Any text-oriented convenience that needs I015/LIB002 remains individually dependency-gated and must preserve explicit authority boundaries. |
 | LIB005 | Networking | OPEN | — | Roadmap item only; `spec/io/IO_CORE.md` currently leaves network authority acquisition, socket APIs, DNS/name resolution, and transport configuration outside its standardized scope. Re-audit and establish prerequisites before implementation. |
@@ -408,7 +408,7 @@ Dependencies:
 
 ### LIB002 — Text / encoding conveniences
 
-Status: READY
+Status: CLOSED
 
 Description: Ergonomic text and encoding helpers implemented as ordinary Protos
 library functionality on top of finalized Core Encoding/Text I/O semantics.
@@ -424,7 +424,7 @@ Design record:
 Implementation boundary:
 - Core Encoding, TextReader, and TextWriter semantics remain owned by I015 and
   the normative I/O specification;
-- the initial convenience surface is four ordinary Actor-local modules:
+- the closed initial convenience surface is four ordinary Actor-local modules:
   `std:text/UTF8`, `std:text/UTF16LE`, `std:text/UTF16BE`, and
   `std:text/Latin1`;
 - each module supplies exactly `encode`, `decode`, `reader`, `owningReader`,
@@ -440,14 +440,14 @@ Implementation boundary:
   introduced;
 - `readAll`/`readLines`/`writeAll`, Unicode transformations, normalization,
   locale/collation, encoding discovery/registries, and reciprocal Core
-  String/Bytes augmentation are outside the initial LIB002 closure and require
-  separate focused design if pursued.
+  String/Bytes augmentation remain outside this closed initial LIB002 scope and
+  require separate focused design if pursued.
 
 Planned slices:
 
 | Slice | Status | Version | Closure evidence | Scope / unblock condition |
 |---|---|---|---|---|
-| LIB002-A | READY | — | — | Publish `std:text/UTF8`, `UTF16LE`, `UTF16BE`, and `Latin1` as ordinary Protos modules with exact Core-preserving one-shot conversion plus borrowing/owning TextReader/TextWriter construction; add real-`std:` Protos conformance, verify no Java/native-boundary growth, and close top-level LIB002 in the same executable publication if the complete selected surface passes focal/full-suite and governance validation. |
+| LIB002-A | CLOSED | `0.2.166-SNAPSHOT` | `SAME_COMMIT` | Published `std:text/UTF8`, `UTF16LE`, `UTF16BE`, and `Latin1` as ordinary Protos modules with exact Core-preserving one-shot conversion plus borrowing/owning TextReader/TextWriter construction; real-`std:` Protos conformance covers conversion, freshness/open Bytes, strict failures, wrapper construction/capability validation, import identity, and the non-Encoding helper boundary; no production Java/native-boundary growth. |
 
 Dependencies:
 - I003 Standard String — CLOSED;

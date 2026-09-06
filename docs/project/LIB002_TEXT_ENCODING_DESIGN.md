@@ -1,6 +1,6 @@
 # LIB002 Text / Encoding Conveniences Design Record
 
-Status: comparative research, future-proofing audit, falsification, and initial API design closed; `LIB002-A` ready for implementation
+Status: `LIB002-A` implementation published; initial `LIB002` scope closed
 Work item: `LIB002`
 Nature: Project design record; **non-normative**
 Research closed: 2026-09-06
@@ -1148,7 +1148,7 @@ surface.
 The result of the focused investigation is:
 
 ```text
-LIB002: READY
+LIB002: CLOSED
 REPOSITORY AUDIT: CLOSED
 NORMATIVE AUDIT: CLOSED
 PRIOR-ART AUDIT: CLOSED
@@ -1156,8 +1156,8 @@ DESIGN FALSIFICATION: CLOSED
 FUTURE-PROOFING / SCALE AUDIT: CLOSED
 NORMATIVE_BLOCKER: NONE
 API DESIGN: CLOSED
-IMPLEMENTATION: NOT STARTED
-LIB002-A: READY
+IMPLEMENTATION: CLOSED
+LIB002-A: CLOSED
 ```
 
 Implementation should not reopen these decisions solely because another familiar

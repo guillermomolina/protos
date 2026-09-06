@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.166-SNAPSHOT
+
+- Implement `LIB002-A` and close the initial `LIB002 — Text / encoding conveniences` surface with ordinary `std:text/UTF8`, `std:text/UTF16LE`, `std:text/UTF16BE`, and `std:text/Latin1` modules. Each module exposes only `encode`, `decode`, `reader`, `owningReader`, `writer`, and `owningWriter`, delegating directly to the corresponding finalized Core Encoding/TextReader/TextWriter operations.
+- Preserve Core argument/result, strict decoding/encoding, fresh/open Bytes, wrapper ownership, I/O authority, ordering, lifecycle, cancellation, and per-flow codec-state semantics without a new runtime value family, registry, default Encoding, automatic detection, production Java/native boundary, or shared mutable state.
+- Add real-`std:` Protos conformance for all four one-shot codecs, import caching, borrowing/owning wrapper construction, invalid argument/capability paths, strict malformed/unrepresentable failures, and the explicit rule that helper module instances are not Encoding semantic values. Deferred read-all, Unicode transformation/normalization/locale, registry/discovery, and Core String/Bytes augmentation remain outside this closed initial scope.
+
 ## 0.2.165-SNAPSHOT
 
 - Continue `LIB003 — JSON` with `LIB003-D2`: publish fresh ordinary `JSON.eventWriter(consumer)` instances with synchronous `feed(event)` and `finish()` over the JSON-specific D1 event vocabulary. The writer validates structural order, matching container boundaries, one root value, object name/value pairing and duplicate member names while inserting deterministic JSON punctuation itself.

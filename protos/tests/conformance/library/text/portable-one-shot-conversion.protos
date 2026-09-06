@@ -1,0 +1,68 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+UTF8: import("std:text/UTF8")
+UTF16LE: import("std:text/UTF16LE")
+UTF16BE: import("std:text/UTF16BE")
+Latin1: import("std:text/Latin1")
+
+utf8First: UTF8.encode("A\u{1f600}")
+utf8Second: UTF8.encode("A\u{1f600}")
+utf16leFirst: UTF16LE.encode("A")
+utf16leSecond: UTF16LE.encode("A")
+utf16beFirst: UTF16BE.encode("A")
+utf16beSecond: UTF16BE.encode("A")
+latin1First: Latin1.encode("A\u{e9}")
+latin1Second: Latin1.encode("A\u{e9}")
+
+ok: true
+(utf8First !== utf8Second).ifFalse(() => { ok = false })
+(utf16leFirst !== utf16leSecond).ifFalse(() => { ok = false })
+(utf16beFirst !== utf16beSecond).ifFalse(() => { ok = false })
+(latin1First !== latin1Second).ifFalse(() => { ok = false })
+
+(utf8Second.size() == 5).ifFalse(() => { ok = false })
+(utf8Second.at(0) == 65).ifFalse(() => { ok = false })
+(utf8Second.at(1) == 240).ifFalse(() => { ok = false })
+(utf8Second.at(2) == 159).ifFalse(() => { ok = false })
+(utf8Second.at(3) == 152).ifFalse(() => { ok = false })
+(utf8Second.at(4) == 128).ifFalse(() => { ok = false })
+
+(utf16leSecond.size() == 2).ifFalse(() => { ok = false })
+(utf16leSecond.at(0) == 65).ifFalse(() => { ok = false })
+(utf16leSecond.at(1) == 0).ifFalse(() => { ok = false })
+(utf16beSecond.size() == 2).ifFalse(() => { ok = false })
+(utf16beSecond.at(0) == 0).ifFalse(() => { ok = false })
+(utf16beSecond.at(1) == 65).ifFalse(() => { ok = false })
+(latin1Second.size() == 2).ifFalse(() => { ok = false })
+(latin1Second.at(0) == 65).ifFalse(() => { ok = false })
+(latin1Second.at(1) == 233).ifFalse(() => { ok = false })
+
+(UTF8.decode(utf8Second) == "A\u{1f600}").ifFalse(() => { ok = false })
+(UTF16LE.decode(utf16leSecond) == "A").ifFalse(() => { ok = false })
+(UTF16BE.decode(utf16beSecond) == "A").ifFalse(() => { ok = false })
+(Latin1.decode(latin1Second) == "A\u{e9}").ifFalse(() => { ok = false })
+
+utf8First.add(0)
+utf16leFirst.add(0)
+utf16beFirst.add(0)
+latin1First.add(0)
+(utf8First.size() == 6).ifFalse(() => { ok = false })
+(utf16leFirst.size() == 3).ifFalse(() => { ok = false })
+(utf16beFirst.size() == 3).ifFalse(() => { ok = false })
+(latin1First.size() == 3).ifFalse(() => { ok = false })
+ok

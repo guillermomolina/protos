@@ -458,3 +458,15 @@ library/json/event-writer-name-outside-object-error.protos	error	-
 library/json/event-writer-missing-object-value-error.protos	error	-
 library/json/event-writer-malformed-number-error.protos	error	-
 library/json/event-writer-reuse-after-finish-error.protos	error	-
+library/text/portable-one-shot-conversion.protos	boolean	true
+library/text/import-cache.protos	boolean	true
+library/text/wrapper-construction.protos	boolean	true
+library/text/encode-non-string-error.protos	error	-
+library/text/decode-non-bytes-error.protos	error	-
+library/text/utf8-malformed-error.protos	error	-
+library/text/latin1-unrepresentable-error.protos	error	-
+library/text/reader-invalid-capability-error.protos	error	-
+library/text/owning-reader-requires-close-error.protos	error	-
+library/text/writer-invalid-capability-error.protos	error	-
+library/text/owning-writer-requires-close-error.protos	error	-
+library/text/helper-module-is-not-encoding-error.protos	error	-
