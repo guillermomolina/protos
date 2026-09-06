@@ -87,12 +87,14 @@ findIndex: (array, predicate) => {
 
 reduce: (array, reducer, ...initial) => {
     snapshot: Array(...array)
+    initialSize: initial.size()
 
-    (initial.size() > 1).ifTrue(() => {
+    (initialSize > 1).ifTrue(() => {
         Error().signal()
     })
 
-    hasInitial: initial.size() == 1
+    snapshotSize: snapshot.size()
+    hasInitial: initialSize == 1
     accumulator: null
     startIndex: 0
 
@@ -101,7 +103,7 @@ reduce: (array, reducer, ...initial) => {
     })
 
     hasInitial.ifFalse(() => {
-        (snapshot.size() == 0).ifTrue(() => {
+        (snapshotSize == 0).ifTrue(() => {
             ^null
         })
         accumulator = snapshot.at(0)
@@ -120,11 +122,9 @@ reduce: (array, reducer, ...initial) => {
             foldRange(start, middle)
             foldRange(middle, end)
         })
-
-        null
     }
 
-    foldRange(startIndex, snapshot.size())
+    foldRange(startIndex, snapshotSize)
     accumulator
 }
 

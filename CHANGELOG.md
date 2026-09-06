@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.178-SNAPSHOT
+
+- Continue `PERF003-A — Collection algorithm Truffle compilability` after the exact external rerun against Protos `eb8b9c588bb363309da5193bf8d98d64d5456cee` again preserved `array-reduce` result `528` and reduced the failing graph from 150500 to 150069 / 150000, leaving only 69 graph-size units while still recording 2 `GraphTooBig` failures. Refine only ordinary-Protos `Array.reduce`: cache the immutable invocation-local `initial` cardinality and fresh internal snapshot cardinality once, reuse them through validation/fold setup, and remove the recursive helper's redundant explicit `null` result expression.
+- Keep the balanced left-before-right traversal, exact left-fold accumulator flow, reducer effects/failures, zero-or-one initial semantics and existing 32-element repeated-reduction conformance unchanged. No `sort`, Java/runtime, Truffle-boundary, benchmark-specific, or normative change is made. PERF003-A remains `IN_PROGRESS` pending an exact external rerun against this publication; PERF003-B remains `BLOCKED_BY_DEPENDENCIES`.
+
 ## 0.2.177-SNAPSHOT
 
 - Close `TOOL001-C3 — TOML document scanner` (legacy manifest Slice 3B2-A) with ordinary-Protos `self:TomlDocument.statements(text)`. The scanner segments a TOML document into logical source statements while respecting basic/literal strings, multiline strings, comments, CRLF, nested arrays and inline tables; it rejects unterminated strings and unbalanced delimiters without assigning table or manifest-schema meaning.

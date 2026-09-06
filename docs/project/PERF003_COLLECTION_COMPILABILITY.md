@@ -47,7 +47,7 @@ The optimization must preserve:
 
 | Slice | Status | Scope / closure condition |
 |---|---|---|
-| PERF003-A | IN_PROGRESS | The `0.2.170-SNAPSHOT` implementation preserved correctness and reduced `array-reduce` from 40 to 2 `GraphTooBig` failures, but the valid external diagnostic still measured graph size 150500 against the 150000 limit. The corrective phase `0.2.175-SNAPSHOT` keeps balanced left-before-right traversal while updating one invocation-local captured accumulator instead of threading accumulator/result values through recursive calls. Repository validation is required here; exact external GraalVM/Truffle diagnostics against the newly published commit remain the closure gate. |
+| PERF003-A | IN_PROGRESS | The `0.2.170-SNAPSHOT` implementation cut `array-reduce` from 40 to 2 `GraphTooBig` failures. The `0.2.175-SNAPSHOT` correction then reduced the failing graph from 150500 to 150069 against the 150000 limit while preserving exact result `528`; only 69 graph-size units remain. This second corrective phase `0.2.178-SNAPSHOT` keeps the same balanced strict left fold, caches the two immutable internal cardinalities used repeatedly by `reduce`, and removes a redundant helper result expression. Repository validation is required here; exact external GraalVM/Truffle diagnostics against the newly published commit remain the closure gate. |
 | PERF003-B | BLOCKED_BY_DEPENDENCIES | After A, publish companion correctness-first external validation against the exact optimized Protos revision, retain pre/post evidence and diagnostics, and do not rewrite PERF001-E baseline evidence. |
 
 PERF003 closes only after PERF003-B evidence is published and reconciled into the
@@ -113,3 +113,41 @@ between calls.
 
 Exact external optimizing-runtime evidence against the commit produced by this
 corrective phase is still required before PERF003-A may close.
+
+## PERF003-A second external diagnostic and cardinality refinement
+
+The exact external diagnostic against Protos
+`eb8b9c588bb363309da5193bf8d98d64d5456cee` with companion harness/evidence
+`guillermomolina/protos-benchmarks@4bff9f7f6c5e0e006530f166c188e0e988acf565`,
+GraalVM Community JDK 22, external Truffle `24.0.0`, and `-Xss128m` established:
+
+- `collections/array-reduce` interpreter correctness: PASS, exact result `528`;
+- optimizing-runtime correctness: PASS, exact result `528`;
+- optimizing compilations completed: 25;
+- optimization failures: 2, both `GraphTooBig`;
+- failing graph node count: 51446; graph size: 150069; configured limit: 150000;
+- graph-size reduction relative to the first PERF003-A diagnostic: 431;
+- remaining margin to the limit: 69.
+
+The first correction therefore moved the same semantic workload materially closer
+to compilability without introducing a new failure mode, but PERF003-A still does
+not satisfy its zero-bailout closure condition. The diagnostic again stopped at
+the failing reduce gate, so no new optimized `sort` conclusion is recorded from
+that run.
+
+The 0.2.178-SNAPSHOT second corrective phase remains ordinary Protos source only.
+`initial` is the invocation-local rest Array and `snapshot` is the fresh internal
+pre-callback shallow snapshot; neither cardinality can change during the reduce
+invocation. Their `size()` results are therefore computed once as `initialSize`
+and `snapshotSize` and reused by the existing validation/selection/fold logic.
+The recursive helper also drops its final explicit `null`: its result is wholly
+internal and ignored, and both existing branches already complete with `null` on
+the paths where that result exists. Reducer order, invocation count, exact
+accumulator flow, callback effects/failures, initial-value behavior and snapshot
+semantics are unchanged.
+
+No `sort`, Java/runtime, native protocol, Truffle boundary, benchmark identity
+check, or normative rule changes. Existing 32-element repeated-reduction Protos
+conformance remains the focal semantic guard. Exact external optimizing-runtime
+evidence against the commit produced by this second corrective phase is still
+required before PERF003-A may close.
