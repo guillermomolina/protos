@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.159-SNAPSHOT
+
+- Start I021 with I021-A: add the host-neutral asynchronous Filesystem namespace-mutation substrate for D041 `replace`/`remove`, including fresh Future results, eager Path-domain validation, independent operation state, pre-commit cancellation, exact Filesystem success results, and one per-operation effect/commit cutover that prevents cancellation from splitting a successful atomic backend effect from its Protos commitment.
+- Widen the host-provisioned Filesystem bridge to the standard `open`, `replace`, and `remove` selectors without adding a Java native-Closure construction site: one audited operation-Closure helper serves all three resource/capability selectors. Backends that do not implement namespace mutation fail those valid operations as `IOError` instead of gaining ambient authority or a host fallback.
+- Keep B006 READY and package metadata mutation blocked on the production confined namespace backend: I021-A establishes the protocol/substrate only; I021-B remains the next dependency.
+
 ## 0.2.158-SNAPSHOT
 
 - Resolve B006 normatively with D041 / specification revision `0.1.378`: add the minimal general confined file-entry `Filesystem.replace(sourcePath, targetPath)` and `Filesystem.remove(path)` surface, with failure-atomic namespace visibility, explicit commitment/cancellation/failure aftermath, stable already-open File binding, and no implicit namespace crash-durability guarantee.

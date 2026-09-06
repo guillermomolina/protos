@@ -69,7 +69,7 @@ the standard native boundary.
 | `ProtosStandardByteIoProtocol.java` | 12 | resource/capability bridge | Byte I/O operations are capability-honest wrappers over ordered flow state, Future commitment, positioning, sizing, truncation, sync, and directional shutdown. |
 | `ProtosStandardBufferedByteIoProtocol.java` | 6 | resource/capability bridge | Source-backed factories retain native construction bridges because wrappers attach buffering, ownership, underlying-capability validation, Future, and lifecycle state. |
 | `ProtosStandardFileProtocol.java` | 10 | resource/capability bridge | File objects are acquired resource capabilities whose exact local surface depends on backend-provided authority and whose operations own cursor/append/sync/close/commitment state. |
-| `ProtosStandardFilesystemProtocol.java` | 1 | resource/capability bridge | Host-provisioned Filesystem authority exposes the standard `open` bridge; its backend owns confined/race-free namespace selection, create/truncate commitment, stable-resource acquisition, cancellation cleanup, and standard File materialization. |
+| `ProtosStandardFilesystemProtocol.java` | 1 | resource/capability bridge | Host-provisioned Filesystem authority exposes standard `open`, `replace`, and `remove` through one shared audited operation-Closure construction helper. Open retains confined/race-free acquisition and File materialization; D041 namespace mutation uses an independent host-neutral effect/commit cutover and backend-provided confined atomic transition. |
 
 Total audited Core production construction sites: **107 across 30 providers**.
 
@@ -90,6 +90,14 @@ I016-D3 re-audited the complete boundary after D2. The current result remains
 Actor/P transfer guards add no native Closure construction site, and D3 adds
 only conformance/architecture evidence. `Filesystem` remains absent from the
 Core prelude. No source-expressible standard behavior has moved back into Java.
+
+I021-A widens the already-audited Filesystem resource/capability selector surface
+from `open` to `open`/`replace`/`remove` through the same single
+`ProtosClosureValue.nativeClosure(...)` construction helper. The repository-wide
+definitive boundary therefore remains **107 sites across 30 providers**. The new
+host-neutral namespace flow owns Future/cancellation/commitment mechanics; no
+package-manager-specific native operation or ambient Filesystem authority is
+introduced.
 
 I017-B is a reviewed post-I018 representation-boundary extension. It adds exactly
 three native-Closure construction sites for the construction-only Process-argument

@@ -53,7 +53,24 @@ an item.
 | I019 | Core source naming reconciliation | CLOSED | `SAME_COMMIT` | 29 dominant-owner distributable Core sources use exact canonical Protos names/case after I019-A; private subordinate bootstrap helpers do not defeat public conceptual ownership; all live explicit Core physical-path references reconciled; true aggregation/responsibility sources remain descriptive; no normative or native-boundary change |
 | I019-A | Actor source dominant-owner naming correction | CLOSED | `SAME_COMMIT` | `actor.protos` -> `Actor.protos`; public `Actor` is the dominant conceptual owner and private ActorRef/GroupRef/SendOperation prototype bindings are subordinate bootstrap helpers; naming guard and architecture classification reconciled |
 | I020 | Post-Ixxx implementation audit reconciliation | CLOSED | `SAME_COMMIT` | I020-A/B/C/D complete; D040 missing-`methodHome` `InvalidSuper` implemented; B005 closed |
-| I021 | Filesystem namespace replacement/removal | READY | — | D041 / spec `0.1.378`; implement the general confined failure-atomic `Filesystem.replace`/`remove` surface before package-tool metadata mutation; prerequisite for B006 closure |
+| I021 | Filesystem namespace replacement/removal | IN_PROGRESS | — | I021-A CLOSED; I021-B READY; D041 / spec `0.1.378`; production confined namespace backend still required before package-tool metadata mutation and B006 closure |
+
+### I021 — Filesystem namespace replacement/removal
+
+Status: IN_PROGRESS
+
+Purpose: Implement D041's general Filesystem file-entry replacement/removal
+semantics before any package-tool repository-metadata mutation relies on them.
+
+| Slice | Status | Version | Closure evidence | Implemented surface |
+|---|---|---|---|---|
+| I021-A | CLOSED | `0.2.159-SNAPSHOT` | `SAME_COMMIT` | Host-neutral asynchronous namespace-mutation substrate plus language-visible host-provisioned `Filesystem.replace`/`remove` dispatch. Valid Path arguments reach only the provisioned backend; unsupported backends fail `IOError`; pre-commit cancellation prevents the effect; one per-operation effect/commit cutover makes a successful atomic backend effect and Protos commitment indivisible. The existing Filesystem provider remains one native-Closure construction site through a shared operation helper. |
+| I021-B | READY | — | — | Implement a production confined file-entry backend for D041 replacement/removal, preserving final-entry no-follow/file-only scope, source/target authority, same-entry no-op, deterministic atomic visibility, and fail-closed behavior when the host cannot provide the required transition. |
+| I021-C | BLOCKED_BY_DEPENDENCIES | — | — | Integrated production conformance and final I021 closure after I021-B, including ordinary Protos-visible replacement/removal behavior and architecture/status reconciliation. |
+
+I021-A deliberately does not make the package tool writable and does not close
+B006. Package metadata mutation remains gated on I021-B's production confined
+backend and the subsequent package-tool integration.
 
 ### I020 — Post-Ixxx implementation audit reconciliation
 

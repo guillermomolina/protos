@@ -1,4 +1,19 @@
-/* APL-1.0 licensed work; see LICENSE.TXT. */
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -8,6 +23,7 @@ import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.ArrayDeque;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
@@ -30,12 +46,14 @@ class ProtosStandardFilesystemProtocolTest {
     }
 
     @Test
-    void capabilityIsHostProvisionedOpenOnlyAndAbsentFromCorePrelude() throws Exception {
+    void capabilityIsHostProvisionedAndAbsentFromCorePrelude() throws Exception {
         Fixture x = fixture();
         assertTrue(x.prelude.bindings().readLocalSlot("Filesystem").isEmpty());
         assertTrue(x.filesystem instanceof ProtosFilesystemValue);
-        assertEquals(1, x.filesystem.localSlotsSnapshot().size());
+        assertEquals(Set.of("open", "replace", "remove"), x.filesystem.localSlotsSnapshot().keySet());
         assertTrue(x.filesystem.hasLocalSlot("open"));
+        assertTrue(x.filesystem.hasLocalSlot("replace"));
+        assertTrue(x.filesystem.hasLocalSlot("remove"));
         assertSame(ProtosObjectValue.rootObject(), x.filesystem.parent().orElseThrow());
     }
 
@@ -146,6 +164,32 @@ class ProtosStandardFilesystemProtocolTest {
     }
 
     @Test
+    void validNamespaceMutationOnUnsupportedBackendFailsAsIoError() throws Exception {
+        Fixture x = fixture();
+
+        ProtosFutureValue replace =
+                (ProtosFutureValue)
+                        ProtosInvocation.invokeMessage(
+                                x.filesystem,
+                                "replace",
+                                List.of(
+                                        path(x.prelude, "source.bin"),
+                                        path(x.prelude, "target.bin")),
+                                x.activation);
+        ProtosFutureValue remove =
+                (ProtosFutureValue)
+                        ProtosInvocation.invokeMessage(
+                                x.filesystem,
+                                "remove",
+                                List.of(path(x.prelude, "staging.bin")),
+                                x.activation);
+
+        assertIoError(x, replace);
+        assertIoError(x, remove);
+        assertTrue(x.backend.invocations.isEmpty());
+    }
+
+    @Test
     void mismatchedBackendAuthorityIsReleasedAndNeverExposedAsFile() throws Exception {
         Fixture x = fixture();
         ProtosFutureValue future =
@@ -165,6 +209,13 @@ class ProtosStandardFilesystemProtocolTest {
                 releases::incrementAndGet);
 
         assertEquals(1, releases.get());
+        assertEquals(ProtosFutureValue.State.FAILED, future.state());
+        assertSame(
+                x.prelude.bindings().readLocalSlot("IOError").orElseThrow(),
+                future.failedError().orElseThrow().parent().orElseThrow());
+    }
+
+    private static void assertIoError(Fixture x, ProtosFutureValue future) {
         assertEquals(ProtosFutureValue.State.FAILED, future.state());
         assertSame(
                 x.prelude.bindings().readLocalSlot("IOError").orElseThrow(),
