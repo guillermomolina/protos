@@ -161,6 +161,33 @@ final class ProtosLanguageConformanceTest {
                         ProtosNullValue.INSTANCE,
                         future.resolvedValue().orElseThrow());
             }
+            case "future-boolean" -> {
+                ProtosActivation activation = prelude.newModuleActivation();
+                ProtosFutureValue future =
+                        assertInstanceOf(
+                                ProtosFutureValue.class,
+                                loader.load(source).call(activation));
+                awaitTerminal(future, activation);
+                assertEquals(ProtosFutureValue.State.RESOLVED, future.state());
+                ProtosBooleanValue expected =
+                        switch (testCase.expectedValue()) {
+                            case "true" -> ProtosBooleanValue.TRUE;
+                            case "false" -> ProtosBooleanValue.FALSE;
+                            default ->
+                                    throw new IllegalArgumentException(
+                                            "future-boolean expectation must be true or false");
+                        };
+                assertEquals(expected, future.resolvedValue().orElseThrow());
+            }
+            case "future-error" -> {
+                ProtosActivation activation = prelude.newModuleActivation();
+                ProtosFutureValue future =
+                        assertInstanceOf(
+                                ProtosFutureValue.class,
+                                loader.load(source).call(activation));
+                awaitTerminal(future, activation);
+                assertEquals(ProtosFutureValue.State.FAILED, future.state());
+            }
             case "future-cancelled" -> {
                 ProtosActivation activation = prelude.newModuleActivation();
                 ProtosFutureValue future =

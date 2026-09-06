@@ -470,3 +470,16 @@ library/text/owning-reader-requires-close-error.protos	error	-
 library/text/writer-invalid-capability-error.protos	error	-
 library/text/owning-writer-requires-close-error.protos	error	-
 library/text/helper-module-is-not-encoding-error.protos	error	-
+text-reader/factory-fresh.protos	boolean	true
+text-reader/factory-owning-requires-close-error.protos	error	-
+text-reader/factory-fake-encoding-error.protos	error	-
+text-reader/readtext-utf8-progress-and-bom.protos	future-boolean	true
+text-reader/readtext-utf16le-state.protos	future-boolean	true
+text-reader/readtext-utf16be.protos	future-boolean	true
+text-reader/readtext-latin1.protos	future-boolean	true
+text-reader/readtext-deferred-malformed-error.protos	future-error	-
+text-reader/readtext-incomplete-eof-error.protos	future-error	-
+text-reader/borrowed-close-does-not-close-source.protos	future-boolean	true
+text-reader/owning-close-exactly-once-and-fresh-future.protos	future-boolean	true
+text-reader/closed-reader-read-error.protos	future-error	-
+text-reader/readtext-wrong-arity-error.protos	future-error	-

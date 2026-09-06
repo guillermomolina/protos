@@ -67,24 +67,6 @@ final class ProtosTextIoFinalConformanceTest {
     }
 
     @Test
-    void portableReadTextReturnsAllImmediatelyAvailableValidPrefix() throws Exception {
-        ProtosPrelude prelude = core();
-        ProtosActivation activation = prelude.newModuleActivation();
-        ScriptedSource source = new ScriptedSource(activation);
-        source.bytes(0x00, 0x80, 0xff);
-        source.eof();
-
-        ProtosObjectValue reader =
-                reader(
-                        prelude,
-                        activation,
-                        source.source,
-                        encoding(prelude, "Latin1"));
-
-        assertEquals("\u0000\u0080\u00ff", string(readText(reader, activation)));
-    }
-
-    @Test
     void portableReplacementUsesMaximalSubpartsIndependentOfReadChunking() throws Exception {
         ProtosPrelude prelude = core();
         ProtosActivation activation = prelude.newModuleActivation();

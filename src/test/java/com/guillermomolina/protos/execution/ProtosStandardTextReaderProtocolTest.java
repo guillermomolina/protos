@@ -32,7 +32,7 @@ final class ProtosStandardTextReaderProtocolTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
 
     @Test
-    void coreFactoryIsFrozenFreshAndAcceptsRepresentedByteReadableCapability()
+    void coreFactoryBoundaryIsFrozenAndAcceptsRepresentedByteReadableCapability()
             throws Exception {
         ProtosPrelude prelude = core();
         ProtosActivation activation = prelude.newModuleActivation();
@@ -42,26 +42,6 @@ final class ProtosStandardTextReaderProtocolTest {
         assertSame(ProtosObjectValue.rootObject(), factory.parent().orElseThrow());
         assertTrue(factory.isFrozen());
         assertEquals(Set.of("call", "owning"), factory.localSlotsSnapshot().keySet());
-
-        ScriptedSource ordinary = new ScriptedSource(activation, true);
-        ProtosObjectValue first =
-                assertInstanceOf(
-                        ProtosObjectValue.class,
-                        ProtosInvocation.invokeMessage(
-                                factory,
-                                "call",
-                                List.of(ordinary.source, utf8),
-                                activation));
-        ProtosObjectValue second =
-                assertInstanceOf(
-                        ProtosObjectValue.class,
-                        ProtosInvocation.invokeMessage(
-                                factory,
-                                "call",
-                                List.of(ordinary.source, utf8),
-                                activation));
-        assertNotSame(first, second);
-        assertEquals(Set.of("readText", "readLine", "close"), first.localSlotsSnapshot().keySet());
 
         ProtosProcessRuntime process =
                 new ProtosProcessRuntime(prelude.actorRefPrototypeForRuntime());
@@ -101,80 +81,18 @@ final class ProtosStandardTextReaderProtocolTest {
 
         ProtosObjectValue fakeEncoding =
                 new ProtosObjectValue(prelude.encodingPrototype());
-        assertThrows(
-                ProtosSignalException.class,
-                () ->
-                        ProtosInvocation.invokeMessage(
-                                factory,
-                                "call",
-                                List.of(ordinary.source, fakeEncoding),
-                                activation));
-    }
-
-    @Test
-    void utf8ReadTextConsumesInitialBomAndReturnsProgressBeforeIncompleteSuffix()
-            throws Exception {
-        ProtosPrelude prelude = core();
-        ProtosActivation activation = prelude.newModuleActivation();
-        ScriptedSource source = new ScriptedSource(activation, false);
-        source.bytes(0xef, 0xbb);
-        source.bytes(0xbf, 0x41, 0xf0, 0x9f);
-        source.bytes(0x98, 0x80);
-        source.eof();
-
-        ProtosObjectValue reader =
-                reader(prelude, activation, source, "UTF8", false);
-
-        ProtosFutureValue first = readText(reader, activation);
-        assertEquals("A", stringResult(first));
-        assertEquals(
-                2,
-                source.reads,
-                "reader must not wait for a larger chunk once A is returnable");
-
-        ProtosFutureValue second = readText(reader, activation);
-        assertEquals("😀", stringResult(second));
-        assertEquals(3, source.reads);
-
-        ProtosFutureValue third = readText(reader, activation);
-        assertSame(ProtosNullValue.INSTANCE, third.resolvedValue().orElseThrow());
-        assertEquals(4, source.reads);
-    }
-
-    @Test
-    void portableUtf16AndLatin1KeepIndependentStrictPerFlowState()
-            throws Exception {
-        ProtosPrelude prelude = core();
-        ProtosActivation activation = prelude.newModuleActivation();
-
-        ScriptedSource leSource = new ScriptedSource(activation, false);
-        leSource.bytes(0xff);
-        leSource.bytes(0xfe, 0x41, 0x00, 0x3d, 0xd8);
-        leSource.bytes(0x00, 0xde);
-        leSource.eof();
-        ProtosObjectValue le =
-                reader(prelude, activation, leSource, "UTF16LE", false);
-        assertEquals("A", stringResult(readText(le, activation)));
-        assertEquals("😀", stringResult(readText(le, activation)));
-        assertSame(
-                ProtosNullValue.INSTANCE,
-                readText(le, activation).resolvedValue().orElseThrow());
-
-        ScriptedSource beSource = new ScriptedSource(activation, false);
-        beSource.bytes(0xfe, 0xff, 0x00, 0x41);
-        beSource.eof();
-        ProtosObjectValue be =
-                reader(prelude, activation, beSource, "UTF16BE", false);
-        assertEquals("A", stringResult(readText(be, activation)));
-
-        ScriptedSource latinSource = new ScriptedSource(activation, false);
-        latinSource.bytes(0x00, 0x80, 0xff);
-        latinSource.eof();
-        ProtosObjectValue latin =
-                reader(prelude, activation, latinSource, "Latin1", false);
-        assertEquals(
-                "\u0000\u0080\u00ff",
-                stringResult(readText(latin, activation)));
+        ScriptedSource ordinary = new ScriptedSource(activation, true);
+        ProtosSignalException invalidEncoding =
+                assertThrows(
+                        ProtosSignalException.class,
+                        () ->
+                                ProtosInvocation.invokeMessage(
+                                        factory,
+                                        "call",
+                                        List.of(ordinary.source, fakeEncoding),
+                                        activation));
+        assertErrorParent(
+                prelude, invalidEncoding.error(), "InvalidIOArgument");
     }
 
     @Test
@@ -206,25 +124,6 @@ final class ProtosStandardTextReaderProtocolTest {
                 1,
                 source.reads,
                 "permanently failed TextReader must not consume more source input");
-    }
-
-    @Test
-    void incompleteFinalSequenceFailsStrictlyAtEof()
-            throws Exception {
-        ProtosPrelude prelude = core();
-        ProtosActivation activation = prelude.newModuleActivation();
-        ScriptedSource source = new ScriptedSource(activation, false);
-        source.bytes(0xf0, 0x9f);
-        source.eof();
-
-        ProtosObjectValue reader =
-                reader(prelude, activation, source, "UTF8", false);
-        ProtosFutureValue failure = readText(reader, activation);
-
-        assertEquals(ProtosFutureValue.State.FAILED, failure.state());
-        assertErrorParent(
-                prelude, failure.failedError().orElseThrow(), "EncodingError");
-        assertEquals(2, source.reads);
     }
 
     @Test
@@ -281,38 +180,6 @@ final class ProtosStandardTextReaderProtocolTest {
     }
 
     @Test
-    void borrowingAndOwningCloseRespectCutoverAndReleaseObligations()
-            throws Exception {
-        ProtosPrelude prelude = core();
-        ProtosActivation activation = prelude.newModuleActivation();
-
-        ScriptedSource borrowedSource = new ScriptedSource(activation, true);
-        ProtosObjectValue borrowed =
-                reader(prelude, activation, borrowedSource, "UTF8", false);
-        ProtosFutureValue borrowedClose = close(borrowed, activation);
-        assertEquals(ProtosFutureValue.State.RESOLVED, borrowedClose.state());
-        assertSame(borrowed, borrowedClose.resolvedValue().orElseThrow());
-        assertEquals(0, borrowedSource.closes);
-
-        ScriptedSource ownedSource = new ScriptedSource(activation, true);
-        ProtosObjectValue owned =
-                reader(prelude, activation, ownedSource, "UTF8", true);
-        ProtosFutureValue firstClose = close(owned, activation);
-        ProtosFutureValue secondClose = close(owned, activation);
-        assertNotSame(firstClose, secondClose);
-        assertEquals(ProtosFutureValue.State.RESOLVED, firstClose.state());
-        assertEquals(ProtosFutureValue.State.RESOLVED, secondClose.state());
-        assertEquals(1, ownedSource.closes);
-
-        ProtosFutureValue rejected = readText(owned, activation);
-        assertEquals(ProtosFutureValue.State.FAILED, rejected.state());
-        assertErrorParent(
-                prelude,
-                rejected.failedError().orElseThrow(),
-                "IOLifecycleError");
-    }
-
-    @Test
     void readerFailureDoesNotAutoCloseOwnedSourceButLaterCloseStillReleasesIt()
             throws Exception {
         ProtosPrelude prelude = core();
@@ -359,32 +226,6 @@ final class ProtosStandardTextReaderProtocolTest {
         assertEquals(
                 ProtosFutureValue.State.FAILED,
                 readText(reader, activation).state());
-    }
-
-    @Test
-    void operationArityValidationUsesFailedFutureAfterDispatch()
-            throws Exception {
-        ProtosPrelude prelude = core();
-        ProtosActivation activation = prelude.newModuleActivation();
-        ScriptedSource source = new ScriptedSource(activation, false);
-        ProtosObjectValue reader =
-                reader(prelude, activation, source, "UTF8", false);
-
-        ProtosFutureValue badRead =
-                assertInstanceOf(
-                        ProtosFutureValue.class,
-                        ProtosInvocation.invokeMessage(
-                                reader,
-                                "readText",
-                                List.of(ProtosNullValue.INSTANCE),
-                                activation));
-        assertEquals(ProtosFutureValue.State.FAILED, badRead.state());
-        assertErrorParent(
-                prelude,
-                badRead.failedError().orElseThrow(),
-                "InvalidIOArgument");
-
-        assertEquals(0, source.reads);
     }
 
     private static ProtosPrelude core() throws Exception {
