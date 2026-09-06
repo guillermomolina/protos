@@ -380,3 +380,10 @@ collections/array-each-wrong-arity-error.protos	error	-
 collections/array-size-copied-receiver-error.protos	error	-
 collections/array-size-delegated-receiver-error.protos	error	-
 collections/array-size-wrong-arity-error.protos	error	-
+error/copied-signal-nonerror-receiver.protos	error	-
+error/ordinary-error-construction-fresh.protos	boolean	true
+error/signal-deep-io-prototype.protos	error	-
+error/signal-instance.protos	error	-
+error/signal-invalid-return-instance.protos	error	-
+error/signal-prototype.protos	error	-
+error/signal-wrong-arity.protos	error	-

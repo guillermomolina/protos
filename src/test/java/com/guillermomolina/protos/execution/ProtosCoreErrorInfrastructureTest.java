@@ -22,7 +22,6 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors.StandardError;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -35,23 +34,23 @@ import org.junit.jupiter.api.Test;
 
 class ProtosCoreErrorInfrastructureTest {
     private static ProtosPrelude corePrelude() throws IOException {
-        return new ProtosCoreBootstrap().bootstrap(Path.of("protos","lib","core"));
+        return new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
     }
 
-    private static void assertParent(ProtosPrelude prelude,String child,String parent) {
-        ProtosObjectValue c=assertInstanceOf(
-                ProtosObjectValue.class,prelude.bindings().readLocalSlot(child).orElseThrow());
-        Object expected="Object".equals(parent)
-                ? ProtosObjectValue.rootObject()
-                : prelude.bindings().readLocalSlot(parent).orElseThrow();
-        assertSame(expected,c.parent().orElseThrow());
-    }
+    /**
+     * Java-side boundary coverage retained for exact prototype parentage and the
+     * typed runtime failure factory. Source-level signaling/construction behavior
+     * is covered in executable Protos; current source parent() reflection used by
+     * the attempted migration signals before these parentage assertions can run.
+     */
+    @Test
+    void standardTaxonomyAndFailureFactoryRemainJavaSide() throws IOException {
+        ProtosPrelude prelude = corePrelude();
 
-    @Test void installsNormativeCoreErrorParents() throws IOException {
-        ProtosPrelude prelude=corePrelude();
         assertParent(prelude, "Error", "Object");
         assertParent(prelude, "InvalidReturn", "Error");
         assertParent(prelude, "SlotNotFound", "Error");
+        assertParent(prelude, "InvalidSuper", "Error");
         assertParent(prelude, "Cancelled", "Error");
         assertParent(prelude, "FutureResolutionCycle", "Error");
         assertParent(prelude, "RequestOutcomeUncertain", "Error");
@@ -69,60 +68,70 @@ class ProtosCoreErrorInfrastructureTest {
         assertParent(prelude, "IOCapacityExhausted", "IOError");
         assertParent(prelude, "EncodingError", "IOError");
         assertParent(prelude, "LineTooLong", "IOError");
+
+        ProtosActivation activation = prelude.newModuleActivation();
+
+        ProtosObjectValue genericA = ProtosCoreErrors.newError(activation);
+        ProtosObjectValue genericB = ProtosCoreErrors.newError(activation);
+        assertNotSame(genericA, genericB);
+        assertSame(prelude.errorPrototype(), genericA.parent().orElseThrow());
+        assertSame(prelude.errorPrototype(), genericB.parent().orElseThrow());
+
+        ProtosObjectValue slotA =
+                ProtosCoreErrors.newOccurrence(activation, StandardError.SLOT_NOT_FOUND);
+        ProtosObjectValue slotB =
+                ProtosCoreErrors.newOccurrence(activation, StandardError.SLOT_NOT_FOUND);
+        assertNotSame(slotA, slotB);
+        Object slotPrototype =
+                prelude.bindings().readLocalSlot("SlotNotFound").orElseThrow();
+        assertSame(slotPrototype, slotA.parent().orElseThrow());
+        assertSame(slotPrototype, slotB.parent().orElseThrow());
+
+        ProtosObjectValue invalidReturn =
+                ProtosCoreErrors.newInvalidReturn(activation);
+        Object invalidReturnPrototype =
+                prelude.bindings().readLocalSlot("InvalidReturn").orElseThrow();
+        assertSame(invalidReturnPrototype, invalidReturn.parent().orElseThrow());
     }
 
-    @Test void standardOccurrencesAreFresh() throws IOException {
-        ProtosPrelude prelude=corePrelude();
-        ProtosActivation a=prelude.newModuleActivation();
-        ProtosObjectValue x=ProtosCoreErrors.newOccurrence(a,StandardError.SLOT_NOT_FOUND);
-        ProtosObjectValue y=ProtosCoreErrors.newOccurrence(a,StandardError.SLOT_NOT_FOUND);
-        assertNotSame(x,y);
-        assertSame(prelude.bindings().readLocalSlot("SlotNotFound").orElseThrow(),x.parent().orElseThrow());
-        assertSame(x.parent().orElseThrow(),y.parent().orElseThrow());
+    @Test
+    void signalingPreservesExactErrorObject() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosObjectValue error = ProtosCoreErrors.newError(activation);
+
+        ProtosSignalException signal =
+                assertThrows(
+                        ProtosSignalException.class,
+                        () ->
+                                ProtosInvocation.invokeMessage(
+                                        error, "signal", List.of(), activation));
+
+        assertSame(error, signal.error());
     }
 
-    @Test void invalidReturnDelegatesExactlyThroughInvalidReturnAndError() throws IOException {
-        ProtosPrelude prelude=corePrelude();
-        ProtosObjectValue occurrence=ProtosCoreErrors.newInvalidReturn(prelude.newModuleActivation());
-        ProtosObjectValue prototype=assertInstanceOf(
-                ProtosObjectValue.class,prelude.bindings().readLocalSlot("InvalidReturn").orElseThrow());
-        assertSame(prototype,occurrence.parent().orElseThrow());
-        assertSame(prelude.errorPrototype(),prototype.parent().orElseThrow());
+    @Test
+    void internalSignalApiDoesNotCoerceNonErrors() throws IOException {
+        ProtosPrelude prelude = corePrelude();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosObjectValue nonError =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+
+        assertThrows(
+                IllegalArgumentException.class,
+                () -> ProtosCoreErrors.signal(activation, nonError));
     }
 
-    @Test void signalingPreservesExactErrorObject() throws IOException {
-        ProtosPrelude prelude=corePrelude();
-        ProtosActivation a=prelude.newModuleActivation();
-        ProtosObjectValue error=ProtosCoreErrors.newError(a);
-        ProtosSignalException signal=assertThrows(
-                ProtosSignalException.class,
-                () -> ProtosInvocation.invokeMessage(error,"signal",List.of(),a));
-        assertSame(error,signal.error());
-    }
-
-    @Test void equivalentErrorsDoNotBecomeIdentical() throws IOException {
-        ProtosPrelude prelude=corePrelude();
-        ProtosActivation a=prelude.newModuleActivation();
-        assertNotSame(ProtosCoreErrors.newError(a),ProtosCoreErrors.newError(a));
-    }
-
-    @Test void copiedSignalRejectsNonErrorReceiverWithProtosError() throws IOException {
-        ProtosPrelude prelude=corePrelude();
-        ProtosActivation a=prelude.newModuleActivation();
-        Object behavior=assertInstanceOf(
-                ProtosClosureValue.class,prelude.errorPrototype().readLocalSlot("signal").orElseThrow());
-        ProtosObjectValue nonError=new ProtosObjectValue(ProtosObjectValue.rootObject());
-        nonError.createLocalSlot("signal",behavior);
-        ProtosSignalException signal=assertThrows(
-                ProtosSignalException.class,
-                () -> ProtosInvocation.invokeMessage(nonError,"signal",List.of(),a));
-        assertSame(prelude.errorPrototype(),signal.error().parent().orElseThrow());
-    }
-
-    @Test void internalSignalApiDoesNotCoerceNonErrors() throws IOException {
-        ProtosPrelude prelude=corePrelude();
-        ProtosActivation a=prelude.newModuleActivation();
-        ProtosObjectValue nonError=new ProtosObjectValue(ProtosObjectValue.rootObject());
-        assertThrows(IllegalArgumentException.class,() -> ProtosCoreErrors.signal(a,nonError));
+    private static void assertParent(
+            ProtosPrelude prelude, String child, String parent) {
+        ProtosObjectValue childPrototype =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        prelude.bindings().readLocalSlot(child).orElseThrow());
+        Object expected =
+                "Object".equals(parent)
+                        ? ProtosObjectValue.rootObject()
+                        : prelude.bindings().readLocalSlot(parent).orElseThrow();
+        assertSame(expected, childPrototype.parent().orElseThrow());
     }
 }
