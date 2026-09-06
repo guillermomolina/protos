@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.177-SNAPSHOT
+
+- Close `TOOL001-C3 — TOML document scanner` (legacy manifest Slice 3B2-A) with ordinary-Protos `self:TomlDocument.statements(text)`. The scanner segments a TOML document into logical source statements while respecting basic/literal strings, multiline strings, comments, CRLF, nested arrays and inline tables; it rejects unterminated strings and unbalanced delimiters without assigning table or manifest-schema meaning.
+- Keep the boundary intentionally below document assembly: C3 returns source-compatible statement Strings and does not interpret `key = value`, table headers, dotted-key ownership, duplicate/redefinition policy, arrays of tables, manifest generation, package fields, Filesystem reads or diagnostics. Add Protos-owned fixtures to the existing package-tool TOML conformance corpus; TOOL001-C remains IN_PROGRESS and C4 becomes READY for canonical TOML table assembly.
+
 ## 0.2.176-SNAPSHOT
 
 - Close I022-C by publishing D043's standard Closure `ensure(cleanup)` as one audited host-irreducible `Object` native control primitive. The operation validates the semantic Closure receiver, exact arity and semantic Closure cleanup before entering the protected dynamic extent; preserves the body's exact normal result; ignores the cleanup's normal result; runs synchronous cleanup for normal completion, non-local return and Error unwind; preserves nested LIFO ordering; and lets a later cleanup Error/non-local return supersede the pending transfer.

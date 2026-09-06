@@ -26,3 +26,10 @@ string-multiline-literal-quotes.protos	true
 string-multiline-literal-too-many-closing-quotes-error.protos	error
 string-multiline-literal.protos	true
 string-singleline-newline-error.protos	error
+document-statements-basic.protos	true
+document-statements-nested.protos	true
+document-statements-multiline.protos	true
+document-statements-crlf.protos	true
+document-statements-unclosed-string-error.protos	error
+document-statements-unbalanced-array-error.protos	error
+document-statements-stray-close-error.protos	error

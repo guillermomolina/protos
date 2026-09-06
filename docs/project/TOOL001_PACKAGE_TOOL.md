@@ -52,7 +52,12 @@ its relation to any legacy Slice 3 terminology that remains useful for continuit
 | TOOL001-B2 | Package-tool Filesystem Slice 2B / B006 | CLOSED | `f128293fbe769cc8806879b0784262b56a08a4ba` | Package Tool receives narrowly scoped staging-write/namespace-mutation authority and publishes metadata through ordinary standard File/Filesystem operations. |
 | TOOL001-C1 | package-tool manifest Slice 3A | CLOSED | `8150d8219664b50ec66748639a47a1629638a8ed` | Internal `self:TomlSyntax` parser foundation is written in Protos and deliberately does not acquire package-schema meaning. |
 | TOOL001-C2 | package-tool manifest Slice 3B1 | CLOSED | `dc82976cd95ad4f08d446fbb7aedb43adf818612` | TOML 1.0 String surface required by manifest schema v1 is completed; schema/CLI behavior remains above the syntax engine. |
-| TOOL001-C | historical manifest Slice 3 parent | IN_PROGRESS | C1/C2 plus schema-v1 design `85ac538d378eeb2153e318145cae69114563e858` | Continue the existing manifest implementation rather than restarting Package Tool under the new family. |
+| TOOL001-C3 | package-tool manifest Slice 3B2-A | CLOSED | `SAME_COMMIT` | `self:TomlDocument.statements(text)` provides document-level lexical statement segmentation without table/schema meaning. |
+| TOOL001-C4 | package-tool manifest Slice 3B2-B | READY | — | Assemble canonical TOML tables/dotted keys/headers over C3 plus the existing `TomlSyntax` value/key engine. |
+| TOOL001-C5 | package-tool manifest Slice 3C | BLOCKED_BY_DEPENDENCIES | — | Validate manifest schema v1 and construct ordinary-Protos `ManifestV1` data after C4. |
+| TOOL001-C6 | package-tool manifest Slice 3D | BLOCKED_BY_DEPENDENCIES | — | Read exactly `protos.toml` through existing confined project Filesystem authority, UTF-8 decode, parse/validate and produce user-facing diagnostics. |
+| TOOL001-C7 | package-tool manifest Slice 3 closure | BLOCKED_BY_DEPENDENCIES | — | Cross-slice conformance, architecture/status reconciliation and closure of the bounded legacy manifest Slice 3 surface. |
+| TOOL001-C | historical manifest Slice 3 parent | IN_PROGRESS | C1/C2/C3 plus schema-v1 design `85ac538d378eeb2153e318145cae69114563e858` | C3 closes document statement scanning; continue with C4 table assembly, then schema/read/diagnostic closure without restarting Package Tool. |
 
 B006's normative prerequisite path through I021 remains historical evidence; it
 is not reopened by this tracking migration.
