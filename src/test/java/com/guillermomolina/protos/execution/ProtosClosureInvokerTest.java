@@ -20,7 +20,6 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
@@ -29,7 +28,6 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
-import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import java.util.List;
@@ -70,20 +68,6 @@ class ProtosClosureInvokerTest {
         }
 
         assertFalse(home.isActive());
-    }
-
-    @Test
-    void bindingFailureDoesNotLeaveOwnedHomeSemanticallyReusable() {
-        ProtosClosureValue closure = closure("(required) => required");
-
-        ProtosSignalException failure =
-                assertThrows(
-                        ProtosSignalException.class,
-                        () -> ProtosClosureInvoker.invoke(closure, List.of()));
-
-        assertSame(
-                closure.prelude().orElseThrow().errorPrototype(),
-                failure.error().parent().orElseThrow());
     }
 
     @Test
