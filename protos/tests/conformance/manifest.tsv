@@ -277,3 +277,6 @@ integer/mod-big.protos	integer	9
 integer/mod-both-negative.protos	integer	-1
 integer/negated-delegated-noninteger-receiver-error.protos	error	-
 integer/percent-delegated-noninteger-receiver-before-mod-error.protos	error	-
+float/copied-standard-plus-nonfloat-receiver-error.protos	error	-
+float/negated-delegated-nonfloat-receiver-error.protos	error	-
+float/negated-normal.protos	float-bits	bff8000000000000
