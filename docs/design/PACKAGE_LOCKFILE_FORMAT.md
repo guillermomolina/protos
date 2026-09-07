@@ -139,6 +139,107 @@ F1A does not decide body punctuation/keywords, node-key serialization, scalar
 escaping, line wrapping for body fields, diagnostic locator emission, artifact
 transport digest emission, or source-kind-specific records.
 
+## Lock-format 1 body scalars and node references — selected by TOOL001-F1B1
+
+F1B1 freezes only the reusable lexical building blocks required by later body
+records. Root/workspace structure and external-node blocks remain F1B2/F1B3.
+
+### Canonical quoted scalar
+
+Every body value whose own public lexical grammar is not part of lock-format 1 is
+encoded as one canonical quoted UTF-8 string:
+
+```text
+qstring = DQUOTE *qchar DQUOTE
+```
+
+The represented value is a Unicode scalar-value sequence. Canonical emission is:
+
+- U+0022 (`"`) -> `\"`;
+- U+005C (`\`) -> `\\`;
+- U+0000 through U+001F and U+007F -> `\u00xx` using exactly four lowercase
+  hexadecimal digits after `\u`;
+- every other Unicode scalar value -> its literal shortest-form UTF-8 bytes.
+
+No other escape spelling is canonical. In particular, writers do not emit
+`\n`, `\r`, `\t`, `\/`, uppercase hex, unnecessary `\u` escapes, surrogate
+escapes, or non-shortest UTF-8. Readers of lock-format 1 reject invalid UTF-8,
+unpaired/non-scalar Unicode encodings, unknown escapes, and non-canonical escape
+spellings.
+
+This gives one byte representation per scalar value while keeping ordinary names
+and URLs reviewable.
+
+### Typed node references
+
+A lock node reference is a typed tuple, not one delimiter-composed opaque key:
+
+```text
+node-ref =
+    registry-ref
+    | git-ref
+    | workspace-ref
+
+registry-ref =
+    "registry" SP qstring SP qstring
+
+git-ref =
+    "git" SP qstring SP qstring
+
+workspace-ref =
+    "workspace" SP qstring
+```
+
+The tuple components mean:
+
+```text
+registry <PackageId-text> <ReleaseVersion-text>
+git      <PackageId-text> <exact-revision-text>
+workspace <PackageId-text>
+```
+
+All tuple values are encoded as `qstring`. The semantic values still obey their
+own owners: ReleaseVersion remains the closed D1 value; exact VCS revision
+requirements remain source-policy owned; PackageId remains an opaque durable
+identity whose public textual encoding is intentionally not frozen by F1B1.
+
+The reference grammar therefore does **not** make any of these equations:
+
+```text
+PackageId == package locator
+PackageId == registry path
+PackageId == content digest
+node identity == concatenated "pkg:<id>@<version>" text
+```
+
+Two references are textually equal exactly when their source-kind token and
+decoded tuple components are equal. A writer must emit the exact source-kind
+keywords above in lowercase.
+
+### Why tuples instead of composite node-key strings
+
+The earlier illustrative `pkg:<PackageId>@1.2.3` form remains useful explanatory
+notation but is not selected lock-format-1 syntax. Its delimiters would either
+constrain PackageId/revision alphabets prematurely or require a second escaping
+layer inside an already machine-owned format.
+
+Typed tuples keep the stable identity-derived reference property while leaving
+PackageId's eventual external encoding independently evolvable.
+
+F1B1 does not yet decide:
+
+- which node reference form may appear as the resolution root;
+- how workspace roots/members are listed;
+- node block opening/closing syntax;
+- registry locator/authority/content fields;
+- Git fetch/content/revision field redundancy;
+- dependency alias/target record syntax;
+- body block separation and total record ordering;
+- whether diagnostic PackageLocator is mandatory;
+- artifact transport digest inclusion.
+
+Those are F1B2/F1B3 decisions.
+
 
 ## Illustrative canonical body shape
 
@@ -802,11 +903,10 @@ merge conflicts resolved from manifests + deterministic regeneration
 Deliberately replaceable details:
 
 ```text
-exact body punctuation/keywords after the F1A header
-exact body line wrapping
+exact root/workspace/external-node/edge punctuation after F1B1 lexical primitives
+exact body block separation/ordering
 whether diagnostic PackageLocator is always emitted
 whether artifact transport digests are included
-exact canonical escaping syntax
 future compact lock-format generations
 ```
 

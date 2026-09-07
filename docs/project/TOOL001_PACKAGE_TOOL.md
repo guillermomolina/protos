@@ -76,7 +76,10 @@ its relation to any legacy Slice 3 terminology that remains useful for continuit
 | TOOL001-E2 | retained exact-version preference | CLOSED | `SAME_COMMIT` | `self:RetainedVersionSelection.select/selectText` preserves an available exact retained ReleaseVersion while it still satisfies D2; otherwise it delegates to E1 fresh selection. No physical lockfile or package-identity policy is implied. |
 | TOOL001-F | canonical physical lockfile v1 | IN_PROGRESS | TOOL001-F1A published | Physical `protos.lock` format work after closed pure selection E; F1A header grammar CLOSED, F1B body node/edge grammar READY. Parser/writer and graph integration remain later slices. |
 | TOOL001-F1A | canonical lock header grammar | CLOSED | `SAME_COMMIT` | Exact three-line v1 header grammar and canonical lexical rules are frozen without implementing a parser/writer or choosing body node/edge syntax. |
-| TOOL001-F1B | canonical lock body node/edge grammar | READY | — | Freeze exact root/package/VCS/workspace/dependency record keywords, punctuation, ordering and references while preserving the already-selected stable-key graph model; escaping and remaining body questions must be resolved explicitly within the bounded design slice. |
+| TOOL001-F1B | canonical lock body node/edge grammar | IN_PROGRESS | TOOL001-F1B1 published | F1B1 canonical scalar strings + typed node references CLOSED; F1B2 root/workspace representation READY; F1B3 registry/git blocks + fields/edges/final closure dependency-gated. |
+| TOOL001-F1B1 | canonical scalar strings + typed node references | CLOSED | `SAME_COMMIT` | Body variable values use one deterministic quoted UTF-8 scalar encoding; node references are source-kind-tagged tuples over quoted identity components, avoiding delimiter-composed PackageId keys while PackageId textual encoding remains open. |
+| TOOL001-F1B2 | root/workspace representation | READY | — | Freeze exact root record and workspace-node/member representation using F1B1 typed references, without choosing external registry/git field blocks or dependency-edge syntax. |
+| TOOL001-F1B3 | external node blocks + dependency edges + F1B closure | BLOCKED_BY_DEPENDENCIES | — | After F1B2, freeze registry/git block fields/order, content/provenance fields, dependency-edge serialization, artifact-digest/diagnostic-locator decisions and final canonical body ordering. |
 
 
 
@@ -91,11 +94,11 @@ local/offline version-selection parent `TOOL001-E` are CLOSED.
 
 `TOOL001-F` is the current bounded continuation for the canonical physical
 `protos.lock` v1 format. `TOOL001-F1A` is CLOSED and freezes only the exact
-three-line header grammar plus its canonical lexical rules. `TOOL001-F1B` is
-READY for the body node/edge grammar.
+three-line header grammar plus its canonical lexical rules. `TOOL001-F1B` is IN_PROGRESS through closed F1B1; F1B2 root/workspace representation is READY.
 
-F1A does not implement a parser/writer and does not choose body record syntax.
-Complete candidate eligibility, graph resolution, workspace/store,
+F1A/F1B1 do not implement a parser/writer. F1B1 freezes only body scalar encoding
+and typed node references; F1B2/F1B3 still own body structure. Complete candidate
+eligibility, graph resolution, workspace/store,
 registry/network and update operations remain separately scoped work.
 
 A separate non-committing note in `docs/design/PACKAGE_TOOL_ARCHITECTURE.md`
