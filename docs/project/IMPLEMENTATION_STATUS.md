@@ -1021,10 +1021,10 @@ repository when formally introduced rather than relying on chat/prompt history.
 |---|---|---|---|---|
 | DIST001 | End-user distribution and release engineering | IN_PROGRESS | DIST001-A + DIST001-C published | B/D/E remain; public release publication is deliberately separate from ordinary implementation publication. |
 | DIST001-A | Relocatable portable distribution layout and runtime contract | CLOSED | `SAME_COMMIT` | Constructible POSIX/JVM ZIP; shared checkout/distribution launcher preserves caller CWD through `PROTOS_HOME`; exact source/runtime metadata and checksums; initial supported optimizing stack is GraalVM Community JDK 22 + external `truffle-runtime:24.0.0`; no tag/release. |
-| DIST001-B | Extracted-distribution smoke/conformance | IN_PROGRESS | DIST001-B1 published | B is subdivided into B1 hygiene/planning, B2 clean-source archive identity, B3 outside-checkout CWD/package execution, B4 bundled Test Tool + optimizing-runtime probe, and B5 cross-slice closure. |
+| DIST001-B | Extracted-distribution smoke/conformance | IN_PROGRESS | DIST001-B1 + DIST001-B2 published | B is subdivided into B1 hygiene/planning, B2 clean-source archive identity, B3 outside-checkout CWD/package execution, B4 bundled Test Tool + optimizing-runtime probe, and B5 cross-slice closure. |
 | DIST001-B1 | Validation hygiene and bounded smoke decomposition | CLOSED | `SAME_COMMIT` | Ignore Python bytecode/cache outputs and persist the bounded B1..B5 validation plan; no executable distribution behavior changes. |
-| DIST001-B2 | Clean-source archive identity | READY | — | Rebuild the A archive from a clean committed candidate and prove `SOURCE.txt`, archive CRC/layout, and internal checksums correspond to that exact revision. |
-| DIST001-B3 | Outside-checkout CWD and Package Tool smoke | BLOCKED_BY_DEPENDENCIES | — | After B2, extract to a separate temporary toolchain tree; execute a relative `.protos` source and `package manifest` from a distinct caller project CWD. |
+| DIST001-B2 | Clean-source archive identity | CLOSED | `SAME_COMMIT` | Rebuild the A archive from the exact clean committed candidate; direct ZIP verification proves CRC/single-root safety, exact `SOURCE.txt` HEAD identity with `source_dirty=false`, and complete SHA-256 coverage/value integrity for every distributed file except `SHA256SUMS` itself. |
+| DIST001-B3 | Outside-checkout CWD and Package Tool smoke | READY | — | After B2, extract to a separate temporary toolchain tree; execute a relative `.protos` source and `package manifest` from a distinct caller project CWD. |
 | DIST001-B4 | Bundled Test Tool and optimizing-runtime probe | BLOCKED_BY_DEPENDENCIES | — | After B3, exercise the bundled Test Tool and require exact `com.oracle.truffle.runtime.hotspot.HotSpotTruffleRuntime` from the distribution classpath while preserving the selected JDK22 support boundary. |
 | DIST001-B5 | Cross-slice distribution closure | BLOCKED_BY_DEPENDENCIES | — | After B2-B4, rerun the bounded cross-slice evidence, close parent B, and make DIST001-D READY. |
 | DIST001-C | Release selection and publication policy | CLOSED | `SAME_COMMIT` | Non-normative policy in `docs/project/DIST001_RELEASE_POLICY.md`; implementation snapshots are not releases; selected public releases may skip internal versions. |
@@ -1032,7 +1032,7 @@ repository when formally introduced rather than relying on chat/prompt history.
 | DIST001-E | First selected GitHub pre-release | BLOCKED_BY_DEPENDENCIES | — | Depends on A-D plus an explicit release decision for an exact validated candidate revision. |
 
 DIST001-A and C are closed. DIST001-B is IN_PROGRESS through the bounded
-B1..B5 decomposition above. DIST001-B1 is closed and DIST001-B2 is the next
+B1..B5 decomposition above. DIST001-B1/B2 are closed and DIST001-B3 is the next
 READY slice. Parent B does not close until B5 publishes the cross-slice evidence.
 
 ## P-label classification

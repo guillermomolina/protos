@@ -262,9 +262,11 @@ DIST001-B remains the independent extracted-execution gate, but is intentionally
 split into bounded validation slices so failures are isolated and publication
 does not depend on one large all-or-nothing launcher:
 
-- `DIST001-B1` — validation hygiene and B1..B5 decomposition;
-- `DIST001-B2` — clean-source archive identity/checksums;
-- `DIST001-B3` — outside-checkout caller-CWD and Package Tool execution;
+- `DIST001-B1` — validation hygiene and B1..B5 decomposition — CLOSED;
+- `DIST001-B2` — clean-source archive identity/checksums — CLOSED after direct
+  ZIP verification of exact clean source revision and complete internal checksum
+  coverage;
+- `DIST001-B3` — outside-checkout caller-CWD and Package Tool execution — READY;
 - `DIST001-B4` — bundled Test Tool and exact optimizing-runtime probe;
 - `DIST001-B5` — cross-slice closure and DIST001-D readiness.
 

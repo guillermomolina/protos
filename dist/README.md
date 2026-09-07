@@ -83,6 +83,23 @@ different claims. Moving the distribution to a newer GraalVM/Truffle stack
 requires explicit revalidation rather than silently following the build
 container.
 
+## Archive identity verification
+
+`DIST001-B2` adds a non-executing archive verifier:
+
+```sh
+python3 dist/build_portable.py
+python3 dist/verify_portable.py --require-clean-source
+```
+
+The verifier opens the ZIP directly. It checks the ZIP CRCs and one-root layout,
+requires `SOURCE.txt` to identify the exact repository `HEAD` and a clean source
+tree, and verifies that `SHA256SUMS` covers every distributed file except itself
+with no missing, extra, duplicate, unsafe, or mismatched entries.
+
+This slice deliberately does not extract or execute Protos. Outside-checkout
+source/Package Tool execution remains `DIST001-B3`.
+
 ## DIST001 boundary
 
 DIST001-A proves that the distribution can be constructed and that its archive
