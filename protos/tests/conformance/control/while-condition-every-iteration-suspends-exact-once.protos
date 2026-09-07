@@ -1,0 +1,51 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+work: () => {
+    before: 0
+    after: 0
+    bodyRuns: 0
+    childRuns: 0
+    observedSum: 0
+
+    condition: () => {
+        before = before + 1
+
+        dependency: (() => {
+            childRuns = childRuns + 1
+            before
+        }).future()
+
+        observed: dependency.value()
+        after = after + 1
+        observedSum = observedSum + observed
+
+        before < 3
+    }
+
+    condition.while() {
+        bodyRuns = bodyRuns + 1
+    }
+
+    (before * 10000) +
+    (after * 1000) +
+    (bodyRuns * 100) +
+    (childRuns * 10) +
+    observedSum
+}
+
+work.future()
