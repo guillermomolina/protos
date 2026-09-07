@@ -622,3 +622,4 @@ control/while-body-future-not-cancelled.protos	boolean	true
 control/while-body-future-task-scoped-ownership.protos	boolean	true
 control/while-condition-suspension-exact-once.protos	future-integer	221
 control/while-condition-every-iteration-suspends-exact-once.protos	future-integer	33236
+control/while-body-every-iteration-suspends-exact-once.protos	future-integer	322223
