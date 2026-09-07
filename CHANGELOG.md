@@ -1,3 +1,9 @@
+## 0.2.202-SNAPSHOT
+
+- Close `TOOL001-D2C — explicit bounded intervals`. Extend ordinary bundled-Protos `self:DependencyConstraint` with exactly two whitespace-joined primitive comparisons over full ReleaseVersion values, requiring one lower (`>`/`>=`) and one upper (`<`/`<=`) bound. Conjunction order is irrelevant; stable candidates are evaluated by D1 precedence with exact inclusive/exclusive endpoints.
+- Keep D2C deliberately bounded: open-ended requirements, extra comparisons and same-side pairs fail closed. Bounds may parse prerelease ReleaseVersions, but any interval satisfaction involving a prerelease bound/candidate remains fail-closed until D2D owns the cross-form prerelease-admission policy. Candidate selection, resolver, lockfile, workspace, store and registry/network behavior remain outside D2.
+- Promote the D2A deferred interval fixture into a successful parse fixture and extend the existing Protos-owned package-version corpus with boundary, reversed-order, tab-separator, prerelease-parse and malformed/deferred-prerelease cases. `TOOL001-D2C` closes and `TOOL001-D2D` becomes READY.
+
 ## 0.2.201-SNAPSHOT
 
 - Publish `TOOL002-D3C1`: bundled Protos now owns retained `float-nan` expectation policy. The expected payload must be exactly `-`; the Test Tool constructs the Core semantic Float NaN with ordinary `0.0 / 0.0` arithmetic and compares the detached completed value by primitive `===`, preserving Float-family membership while remaining independent of host NaN payload/sign representation.

@@ -24,7 +24,7 @@ constraint-exact-stable-mismatch.protos	true
 constraint-exact-prerelease-match.protos	true
 constraint-exact-prerelease-distinct.protos	true
 constraint-caret-deferred-error.protos	true
-constraint-interval-deferred-error.protos	error
+constraint-interval-deferred-error.protos	true
 constraint-partial-rejected-error.protos	error
 constraint-wildcard-rejected-error.protos	error
 constraint-caret-major.protos	true
@@ -35,3 +35,16 @@ constraint-caret-prerelease-parse.protos	true
 constraint-caret-prerelease-satisfaction-deferred-error.protos	error
 constraint-caret-candidate-prerelease-deferred-error.protos	error
 constraint-caret-empty-error.protos	error
+constraint-interval-basic.protos	true
+constraint-interval-exclusive-inclusive.protos	true
+constraint-interval-reversed-conjunction.protos	true
+constraint-interval-tab-separator.protos	true
+constraint-interval-prerelease-parse.protos	true
+constraint-interval-prerelease-satisfaction-deferred-error.protos	error
+constraint-interval-candidate-prerelease-deferred-error.protos	error
+constraint-interval-open-lower-error.protos	error
+constraint-interval-open-upper-error.protos	error
+constraint-interval-same-side-error.protos	error
+constraint-interval-three-comparisons-error.protos	error
+constraint-interval-trailing-space-error.protos	error
+constraint-interval-spaced-operator-error.protos	error

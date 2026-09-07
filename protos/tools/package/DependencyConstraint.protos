@@ -19,6 +19,18 @@ fail: () => {
     Error().signal()
 }
 
+emptyBytes: () => {
+    Encoding.UTF8.encode("")
+}
+
+isSeparator: (octet) => {
+    result: octet == 32
+    (octet == 9).ifTrue(() => {
+        result = true
+    })
+    result
+}
+
 coreVersion: (major, minor, patch) => {
     {
         major: major
@@ -62,38 +74,194 @@ caretConstraint: (text, lower) => {
     }
 }
 
+bytesAfter: (source, start) => {
+    result: emptyBytes()
+    index: 0
+    source.each((octet) => {
+        (index >= start).ifTrue(() => {
+            result.add(octet)
+        })
+        index = index + 1
+    })
+    result
+}
+
+parseComparison: (token) => {
+    (token.size() < 2).ifTrue(() => {
+        fail()
+    })
+
+    first: token.at(0)
+    lower: first == 62
+    upper: first == 60
+
+    validDirection: lower
+    upper.ifTrue(() => {
+        validDirection = true
+    })
+    validDirection.ifFalse(() => {
+        fail()
+    })
+
+    inclusive: false
+    versionStart: 1
+
+    (token.size() > 1).ifTrue(() => {
+        (token.at(1) == 61).ifTrue(() => {
+            inclusive = true
+            versionStart = 2
+        })
+    })
+
+    (token.size() <= versionStart).ifTrue(() => {
+        fail()
+    })
+
+    version: Version.parse(
+        Encoding.UTF8.decode(bytesAfter(token, versionStart))
+    )
+
+    {
+        lower: lower
+        inclusive: inclusive
+        version: version
+    }
+}
+
+intervalConstraint: (text, source) => {
+    first: emptyBytes()
+    second: emptyBytes()
+    inSecond: false
+    afterSecond: false
+
+    source.each((octet) => {
+        separator: isSeparator(octet)
+
+        separator.ifTrue(() => {
+            inSecond.ifFalse(() => {
+                (first.size() == 0).ifTrue(() => {
+                    fail()
+                })
+                inSecond = true
+            })
+
+            inSecond.ifTrue(() => {
+                (second.size() > 0).ifTrue(() => {
+                    afterSecond = true
+                })
+            })
+        })
+
+        separator.ifFalse(() => {
+            afterSecond.ifTrue(() => {
+                fail()
+            })
+
+            inSecond.ifTrue(() => {
+                second.add(octet)
+            })
+            inSecond.ifFalse(() => {
+                first.add(octet)
+            })
+        })
+    })
+
+    inSecond.ifFalse(() => {
+        fail()
+    })
+    (second.size() == 0).ifTrue(() => {
+        fail()
+    })
+    afterSecond.ifTrue(() => {
+        fail()
+    })
+
+    left: parseComparison(first)
+    right: parseComparison(second)
+
+    (left.lower === right.lower).ifTrue(() => {
+        fail()
+    })
+
+    lower: left
+    upper: right
+    left.lower.ifFalse(() => {
+        lower = right
+        upper = left
+    })
+
+    {
+        kind: "interval"
+        lower: lower
+        upper: upper
+        text: text
+    }
+}
+
 parse: (text) => {
     source: Encoding.UTF8.encode(text)
 
     caret: false
+    interval: false
+
     (source.size() > 0).ifTrue(() => {
         (source.at(0) == 94).ifTrue(() => {
             caret = true
+        })
+        (source.at(0) == 62).ifTrue(() => {
+            interval = true
+        })
+        (source.at(0) == 60).ifTrue(() => {
+            interval = true
         })
     })
 
     result: null
 
     caret.ifTrue(() => {
-        versionBytes: Encoding.UTF8.encode("")
-        index: 0
-        source.each((octet) => {
-            (index > 0).ifTrue(() => {
-                versionBytes.add(octet)
-            })
-            index = index + 1
-        })
-
-        lower: Version.parse(Encoding.UTF8.decode(versionBytes))
+        lower: Version.parse(
+            Encoding.UTF8.decode(bytesAfter(source, 1))
+        )
         result = caretConstraint(text, lower)
     })
 
     caret.ifFalse(() => {
-        result = {
-            kind: "exact"
-            version: Version.parse(text)
-            text: text
-        }
+        interval.ifTrue(() => {
+            result = intervalConstraint(text, source)
+        })
+
+        interval.ifFalse(() => {
+            result = {
+                kind: "exact"
+                version: Version.parse(text)
+                text: text
+            }
+        })
+    })
+
+    result
+}
+
+comparisonSatisfied: (comparison, candidate) => {
+    order: Version.compare(candidate, comparison.version)
+    result: false
+
+    comparison.lower.ifTrue(() => {
+        result = order == 1
+        comparison.inclusive.ifTrue(() => {
+            (order == 0).ifTrue(() => {
+                result = true
+            })
+        })
+    })
+
+    comparison.lower.ifFalse(() => {
+        result = order == -1
+        comparison.inclusive.ifTrue(() => {
+            (order == 0).ifTrue(() => {
+                result = true
+            })
+        })
     })
 
     result
@@ -111,8 +279,6 @@ satisfies: (constraint, candidate) => {
     (constraint.kind === "caret").ifTrue(() => {
         known = true
 
-        // D2B owns caret bounds and stable-candidate satisfaction.
-        // General prerelease admission remains D2D.
         (constraint.lower.prerelease === null).ifFalse(() => {
             fail()
         })
@@ -137,6 +303,27 @@ satisfies: (constraint, candidate) => {
             result.ifTrue(() => {
                 result = upperOrder == -1
             })
+        })
+    })
+
+    (constraint.kind === "interval").ifTrue(() => {
+        known = true
+
+        // D2C owns interval syntax/stable satisfaction only.
+        // Cross-form prerelease admission remains D2D.
+        (constraint.lower.version.prerelease === null).ifFalse(() => {
+            fail()
+        })
+        (constraint.upper.version.prerelease === null).ifFalse(() => {
+            fail()
+        })
+        (candidate.prerelease === null).ifFalse(() => {
+            fail()
+        })
+
+        result = comparisonSatisfied(constraint.lower, candidate)
+        result.ifTrue(() => {
+            result = comparisonSatisfied(constraint.upper, candidate)
         })
     })
 

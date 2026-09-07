@@ -14,5 +14,15 @@
 // the specific language governing rights and limitations under the License.
 
 Constraint: import("self:DependencyConstraint")
-Constraint.parse(">=1.4.2 <2.0.0")
-true
+c: Constraint.parse(">=1.4.2 <1.8.0")
+ok: true
+(c.kind === "interval").ifFalse(() => { ok = false })
+(c.lower.lower === true).ifFalse(() => { ok = false })
+(c.lower.inclusive === true).ifFalse(() => { ok = false })
+(c.upper.lower === false).ifFalse(() => { ok = false })
+(c.upper.inclusive === false).ifFalse(() => { ok = false })
+Constraint.satisfiesText(">=1.4.2 <1.8.0", "1.4.2").ifFalse(() => { ok = false })
+Constraint.satisfiesText(">=1.4.2 <1.8.0", "1.7.9").ifFalse(() => { ok = false })
+Constraint.satisfiesText(">=1.4.2 <1.8.0", "1.4.1").ifTrue(() => { ok = false })
+Constraint.satisfiesText(">=1.4.2 <1.8.0", "1.8.0").ifTrue(() => { ok = false })
+ok

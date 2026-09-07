@@ -14,5 +14,4 @@
 // the specific language governing rights and limitations under the License.
 
 Constraint: import("self:DependencyConstraint")
-Constraint.parse(">=1.4.2 <2.0.0")
-true
+Constraint.satisfiesText(">=2.0.0-rc.1 <2.0.0", "2.0.0-rc.2")
