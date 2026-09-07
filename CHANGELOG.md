@@ -1,3 +1,9 @@
+## 0.2.222-SNAPSHOT
+
+- Publish `TOOL002-E2A2B — real Package/TOML failed-fixture integration`. The exact-source facility now supplies its selected execution Prelude to the E2A2A detached snapshot for completed and failed observations.
+- Add one ordinary-Protos integration fixture for retained `invalid-key-error.protos`: read through E1B `packageTomlFilesystem`, execute through E2A1 `packageExecution`, and prove a failed observation with a fresh caller-domain Error whose immediate parent is the Test Tool `Error`. Java only provisions host mechanics and asserts canonical true.
+- Keep parent closure separate: E2A2B closes and E2A2C becomes READY; no full TOML TestPlan traversal, expectation-policy cutover, Java-runner retirement, authority broadening, or normative specification change.
+
 ## 0.2.221-SNAPSHOT
 
 - Close `DIST001-B2 — clean-source archive identity`. Add a non-executing `dist/verify_portable.py` guard that opens the generated ZIP directly, validates CRC and a single safe distribution root, requires `SOURCE.txt` to identify the exact clean committed `HEAD`, and requires `SHA256SUMS` to cover every distributed file except itself exactly once with matching SHA-256 values. The definitive publication candidate is rebuilt after commit before verification. `DIST001-B3` becomes READY; no extracted Protos execution, Git tag, GitHub Release, normative specification, implementation-version, or license-term change.

@@ -123,13 +123,18 @@ public final class ProtosExactExecutionFacility {
                                 utf8,
                                 null));
 
-        return observation(result, caller, callerPrelude);
+        return observation(
+                result,
+                caller,
+                callerPrelude,
+                executionPrelude);
     }
 
     private static ProtosObjectValue observation(
             ProtosCapturedProcessExecution.Result result,
             ProtosActivation caller,
-            ProtosPrelude prelude) {
+            ProtosPrelude prelude,
+            ProtosPrelude executionPrelude) {
         ProtosObjectValue observation =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
 
@@ -147,6 +152,7 @@ public final class ProtosExactExecutionFacility {
                         "value",
                         ProtosDetachedExecutionValue.snapshot(
                                 result.outcome().value(),
+                                executionPrelude,
                                 caller));
                 observation.createLocalSlot(
                         "error",
@@ -160,6 +166,7 @@ public final class ProtosExactExecutionFacility {
                         "error",
                         ProtosDetachedExecutionValue.snapshot(
                                 result.outcome().error(),
+                                executionPrelude,
                                 caller));
             }
             case CANCELLED -> {
