@@ -275,10 +275,18 @@ publication:
     public-prerelease archive, require explicit specification/capability/
     limitation context, and emit release notes, asset manifest and portable
     outer archive checksum. No candidate is selected or published.
-  - `DIST001-E3C` — candidate validation entry point + E3 closure — READY.
-    Compose release-mode archive identity, complete extracted-distribution
-    validation, notes/assets/checksums, release-claim guards, and transition E4
-    to candidate-selection readiness without creating a tag or GitHub Release.
+  - `DIST001-E3C` — candidate validation entry point + E3 closure — IN_PROGRESS:
+    - `DIST001-E3C1` — release-aware B2/B5 identity/conformance plumbing —
+      CLOSED. Preserve development mode as default while allowing an explicit
+      clean public-prerelease candidate/baseline identity to enter the same B5
+      extracted-distribution gate.
+    - `DIST001-E3C2` — independent E3B envelope verifier — READY. Verify notes,
+      manifest, portable outer checksum, candidate/source/runtime identity and
+      asset digests without publishing anything.
+    - `DIST001-E3C3` — candidate gate composition + E3 closure —
+      `BLOCKED_BY_DEPENDENCIES` on E3C2. Compose C1+C2 with candidate/tag/claim
+      guards, close E3, and transition E4 to explicit candidate-selection
+      readiness.
 - `DIST001-E4` — exact candidate selection and validation —
   `BLOCKED_BY_DEPENDENCIES` on E2/E3 and additionally requires an explicit user
   decision selecting the exact source revision/public version. E4 validates and

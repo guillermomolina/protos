@@ -23,6 +23,8 @@ fail() {
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 
 source_mode=require-clean
+artifact_mode=development
+release_baseline=
 archive=
 while [ "$#" -gt 0 ]; do
     case "$1" in
@@ -38,6 +40,15 @@ while [ "$#" -gt 0 ]; do
         --require-clean-source)
             source_mode=require-clean
             shift
+            ;;
+        --public-prerelease)
+            artifact_mode=public-prerelease
+            shift
+            ;;
+        --release-baseline)
+            [ "$#" -ge 2 ] || fail "--release-baseline requires an exact commit SHA"
+            release_baseline=$2
+            shift 2
             ;;
         *)
             fail "unknown argument: $1"
@@ -59,19 +70,39 @@ esac
 command -v sha256sum >/dev/null 2>&1 || fail "sha256sum is required"
 archive_sha_before=$(sha256sum "$archive" | awk '{print $1}')
 
-case "$source_mode" in
-    require-clean)
+case "$artifact_mode" in
+    development)
+        [ -z "$release_baseline" ] ||
+            fail "--release-baseline is valid only with --public-prerelease"
+        case "$source_mode" in
+            require-clean)
+                python3 "$ROOT/dist/verify_portable.py" \
+                    --archive "$archive" \
+                    --require-clean-source
+                ;;
+            allow-dirty)
+                python3 "$ROOT/dist/verify_portable.py" \
+                    --archive "$archive" \
+                    --allow-dirty-source
+                ;;
+            *)
+                fail "internal source-mode error: $source_mode"
+                ;;
+        esac
+        ;;
+    public-prerelease)
+        [ "$source_mode" = require-clean ] ||
+            fail "public prerelease B5 validation requires clean source"
+        [ -n "$release_baseline" ] ||
+            fail "--public-prerelease requires --release-baseline"
         python3 "$ROOT/dist/verify_portable.py" \
             --archive "$archive" \
+            --public-prerelease \
+            --release-baseline "$release_baseline" \
             --require-clean-source
         ;;
-    allow-dirty)
-        python3 "$ROOT/dist/verify_portable.py" \
-            --archive "$archive" \
-            --allow-dirty-source
-        ;;
     *)
-        fail "internal source-mode error: $source_mode"
+        fail "internal artifact-mode error: $artifact_mode"
         ;;
 esac
 
@@ -93,6 +124,7 @@ archive_sha_after=$(sha256sum "$archive" | awk '{print $1}')
     fail "cross-slice validation modified the distribution archive"
 
 echo "DIST_B5_SINGLE_ARCHIVE_CHECK: PASS sha256=$archive_sha_after"
+echo "DIST_B5_ARTIFACT_MODE_CHECK: PASS mode=$artifact_mode"
 echo "DIST_B5_ARCHIVE_IDENTITY_CHECK: PASS"
 echo "DIST_B5_CWD_PACKAGE_CHECK: PASS"
 echo "DIST_B5_TEST_TOOL_CHECK: PASS"

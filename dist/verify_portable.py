@@ -24,6 +24,12 @@ import sys
 import xml.etree.ElementTree as ET
 import zipfile
 
+from release_identity import (
+    require_public_version,
+    require_snapshot_version,
+    validate_release_baseline,
+)
+
 
 def fail(message: str) -> "NoReturn":
     raise SystemExit("distribution identity verification failed: " + message)
@@ -75,6 +81,36 @@ def verify(args: argparse.Namespace) -> None:
     root = Path(__file__).resolve().parents[1]
     version = project_version(root)
     head = run_git(root, "rev-parse", "HEAD")
+
+    if args.public_prerelease:
+        try:
+            require_public_version(version)
+        except ValueError as exc:
+            fail(str(exc))
+        if not args.release_baseline:
+            fail("--public-prerelease requires --release-baseline")
+        if args.allow_dirty_source:
+            fail("--public-prerelease cannot be combined with --allow-dirty-source")
+        try:
+            baseline_version = validate_release_baseline(
+                root,
+                public_version=version,
+                baseline_revision=args.release_baseline,
+                source_revision=head,
+            )
+        except ValueError as exc:
+            fail(str(exc))
+        artifact_mode = "public-prerelease"
+    else:
+        try:
+            require_snapshot_version(version)
+        except ValueError as exc:
+            fail(str(exc))
+        if args.release_baseline:
+            fail("--release-baseline is valid only with --public-prerelease")
+        baseline_version = None
+        artifact_mode = "development-distribution"
+
     archive_path = (
         Path(args.archive).resolve()
         if args.archive
@@ -117,9 +153,25 @@ def verify(args: argparse.Namespace) -> None:
             "implementation_version": version,
             "source_repository": "https://github.com/guillermomolina/protos",
             "source_path": "/tree/" + source.get("source_revision", ""),
-            "artifact_kind": "development-distribution",
-            "public_release": "false",
         }
+        if args.public_prerelease:
+            expected.update(
+                {
+                    "artifact_kind": "public-prerelease",
+                    "public_release": "true",
+                    "release_baseline_revision": args.release_baseline,
+                    "release_baseline_version": baseline_version,
+                    "release_version": version,
+                    "release_tag": "v" + version,
+                }
+            )
+        else:
+            expected.update(
+                {
+                    "artifact_kind": "development-distribution",
+                    "public_release": "false",
+                }
+            )
         for key, value in expected.items():
             if source.get(key) != value:
                 fail(
@@ -142,6 +194,8 @@ def verify(args: argparse.Namespace) -> None:
         dirty = source.get("source_dirty")
         if dirty not in {"true", "false"}:
             fail("SOURCE.txt source_dirty is not true/false")
+        if args.public_prerelease and dirty != "false":
+            fail("public prerelease archive must identify clean source")
         if args.require_clean_source and dirty != "false":
             fail("definitive archive was not built from a clean source tree")
         if not args.allow_dirty_source and not args.require_clean_source and dirty == "true":
@@ -197,6 +251,7 @@ def verify(args: argparse.Namespace) -> None:
     print("DIST_ARCHIVE_CRC_CHECK: PASS")
     print("DIST_SINGLE_ROOT_CHECK: PASS")
     print("DIST_SOURCE_REVISION_CHECK: PASS revision=" + head)
+    print("DIST_ARTIFACT_MODE_CHECK: PASS mode=" + artifact_mode)
     print("DIST_SOURCE_CLEAN_CHECK: " + ("PASS" if dirty == "false" else "DIRTY_ALLOWED"))
     print("DIST_INTERNAL_CHECKSUM_COVERAGE_CHECK: PASS files=" + str(len(recorded)))
     print("DIST_INTERNAL_CHECKSUM_VALUE_CHECK: PASS")
@@ -208,6 +263,21 @@ def main() -> int:
         description="Verify DIST001-B2 archive identity and internal checksums without executing Protos."
     )
     parser.add_argument("--archive", help="explicit portable ZIP path")
+    parser.add_argument(
+        "--public-prerelease",
+        action="store_true",
+        help=(
+            "verify public-prerelease SOURCE identity against the current "
+            "non-SNAPSHOT candidate checkout"
+        ),
+    )
+    parser.add_argument(
+        "--release-baseline",
+        help=(
+            "exact 40-hex V-SNAPSHOT development baseline for "
+            "--public-prerelease"
+        ),
+    )
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
         "--allow-dirty-source",

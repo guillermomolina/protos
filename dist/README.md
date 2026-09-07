@@ -350,6 +350,44 @@ The checksum records only the portable ZIP basename and is suitable for
 identity, runtime identity, archive SHA-256, checksum SHA-256, and notes SHA-256.
 E3C owns end-to-end validation of this envelope against the candidate archive.
 
+
+## Release-aware complete distribution gate
+
+`DIST001-E3C1` extends the existing B2/B5 validation machinery without changing
+its development-snapshot default.
+
+Development validation remains:
+
+```sh
+PROTOS_DIST001_B4B_JAVA_HOME=/path/to/graalvm-community-jdk-22.0.0 \
+    sh dist/validate_portable.sh --require-clean-source
+```
+
+A future E4 candidate checkout whose project version is public `V` uses:
+
+```sh
+PROTOS_DIST001_B4B_JAVA_HOME=/path/to/graalvm-community-jdk-22.0.0 \
+    sh dist/validate_portable.sh \
+        --archive /path/to/protos-V-posix-jvm.zip \
+        --public-prerelease \
+        --release-baseline <exact-V-SNAPSHOT-baseline-sha> \
+        --require-clean-source
+```
+
+The release-aware B2 identity step requires the candidate ZIP to identify the
+current candidate `HEAD`, clean source, `artifact_kind=public-prerelease`,
+`public_release=true`, public version `V`, tag `vV`, and the exact selected
+baseline whose committed `pom.xml` is `V-SNAPSHOT` and which is an ancestor of
+the candidate commit.
+
+After that identity check, B3 caller-CWD/Package Tool, B4A Test Tool, and B4B
+exact optimizing-runtime validation run against the same immutable ZIP exactly
+as they do for development snapshots.
+
+E3C1 does not select or build a real candidate. It only makes the already-proven
+B5 machinery capable of validating one once E4 supplies an explicitly approved
+candidate.
+
 ## DIST001 boundary
 
 DIST001-A proves that the distribution can be constructed and that its archive

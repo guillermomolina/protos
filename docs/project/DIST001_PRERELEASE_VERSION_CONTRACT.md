@@ -225,3 +225,16 @@ and then checked by E3C/E4 against blockers and the exact candidate.
 The output envelope contains `RELEASE_NOTES.md`, `RELEASE_MANIFEST.txt`, and a
 portable `<archive>.sha256`. E3B still selects no concrete baseline, candidate,
 or public version and publishes no Git tag, GitHub Release, or release asset.
+
+## E3C1 implementation checkpoint
+
+E3C1 threads the E2/E3A release identity through the already-closed B2/B5
+distribution-conformance machinery. Development `V-SNAPSHOT` verification
+remains the default. Explicit public-prerelease mode requires public `V`, clean
+candidate `HEAD`, exact `V-SNAPSHOT` baseline provenance, and the E3A SOURCE
+release fields before the existing extracted B3/B4A/B4B checks run against the
+same immutable archive.
+
+No candidate is selected by this implementation. E3C2 owns independent E3B
+envelope verification; E3C3 then composes both validation surfaces into the
+candidate-specific entry point used by E4.
