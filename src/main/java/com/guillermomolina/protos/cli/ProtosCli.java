@@ -109,10 +109,22 @@ public final class ProtosCli {
             PrintStream out,
             PrintStream err)
             throws Exception {
-        Path testsRoot = core().getParent().getParent().resolve("tests");
+        Path core = core();
+        Path distributionRoot = core.getParent().getParent();
+        Path testsRoot = distributionRoot.resolve("tests");
         Path conformanceRoot = testsRoot.resolve("conformance");
         Path packageTomlRoot =
                 testsRoot.resolve("package-tool").resolve("toml-syntax");
+        Path packageToolRoot = distributionRoot.resolve("tools").resolve("package");
+        ProtosPrelude packagePrelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(
+                                core,
+                                new ProtosBundledToolModuleResolver(
+                                        "package",
+                                        packageToolRoot,
+                                        new ProtosStandardLibraryModuleResolver(
+                                                core.getParent())));
         try (ProtosNioReadOnlyTreeFilesystemBackend filesystemBackend =
                         new ProtosNioReadOnlyTreeFilesystemBackend(conformanceRoot);
                 ProtosNioReadOnlyTreeFilesystemBackend packageTomlFilesystemBackend =
@@ -126,6 +138,10 @@ public final class ProtosCli {
                     err,
                     session -> {
                         ProtosExactExecutionFacility.install(session.activation);
+                        ProtosExactExecutionFacility.install(
+                                session.activation,
+                                "packageExecution",
+                                packagePrelude);
                         installBundledToolFilesystem(
                                 session, "filesystem", filesystemBackend);
                         installBundledToolFilesystem(

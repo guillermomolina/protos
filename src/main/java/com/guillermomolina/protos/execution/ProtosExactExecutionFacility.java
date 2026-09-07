@@ -27,11 +27,13 @@ import java.util.Objects;
  * <p>The facility is installed only when a host explicitly grants it to an initial tool module
  * context. It is not a Core/prelude binding, intrinsic, service locator or test framework.
  *
- * <p>The callable local slot {@code execution} accepts exactly one Protos String containing an
- * already-selected source unit. It runs that source through the general TOOL002-B/C mechanisms in
- * a fresh Process with empty arguments/environment, no Filesystem authority and private UTF-8
- * streams. It returns a caller-local frozen observation object with slots {@code state},
- * {@code value}, {@code error}, {@code stdout}, and {@code stderr}.
+ * <p>The default callable local slot {@code execution} accepts exactly one Protos String
+ * containing an already-selected source unit. A host may also install the same mechanism under a
+ * different bootstrap-local slot with an already-selected Prelude/module-resolution environment.
+ * Every call runs that source through the general TOOL002-B/C mechanisms in a fresh Process with
+ * empty arguments/environment, no Filesystem authority and private UTF-8 streams. It returns a
+ * caller-local frozen observation object with slots {@code state}, {@code value}, {@code error},
+ * {@code stdout}, and {@code stderr}.
  *
  * <p>Completed values or errors that cannot cross the strict detached-observation boundary signal
  * {@code NonTransferableValue} in the calling tool Process instead of leaking child execution
@@ -44,41 +46,73 @@ public final class ProtosExactExecutionFacility {
 
     public static void install(ProtosActivation activation) {
         Objects.requireNonNull(activation, "activation");
-        if (activation.context().hasLocalSlot(BOOTSTRAP_SLOT)) {
-            throw new IllegalStateException(
-                    "exact execution bootstrap slot already exists");
-        }
-
-        activation
-                .context()
-                .createLocalSlot(
-                        BOOTSTRAP_SLOT,
-                        ProtosClosureValue.nativeClosure(
-                                (callActivation, arguments) ->
-                                        execute(callActivation, arguments)));
-    }
-
-    private static Object execute(
-            ProtosActivation caller,
-            List<?> arguments) {
-        if (arguments.size() != 1
-                || !(arguments.get(0) instanceof ProtosStringValue source)) {
-            throw ordinaryError(caller);
-        }
-
-        ProtosPrelude prelude =
-                caller
+        ProtosPrelude executionPrelude =
+                activation
                         .prelude()
                         .orElseThrow(
                                 () ->
                                         new IllegalStateException(
                                                 "exact execution facility requires Core prelude"));
-        ProtosEncodingValue utf8 = utf8(prelude);
+        install(activation, BOOTSTRAP_SLOT, executionPrelude);
+    }
+
+    /**
+     * Installs one named exact-source execution facility using an already-selected execution
+     * Prelude/module-resolution environment.
+     *
+     * <p>The host chooses both the bootstrap-local slot and the Prelude before installation. The
+     * facility performs no module discovery or policy selection of its own.
+     */
+    public static void install(
+            ProtosActivation activation,
+            String slotName,
+            ProtosPrelude executionPrelude) {
+        Objects.requireNonNull(activation, "activation");
+        Objects.requireNonNull(slotName, "slotName");
+        Objects.requireNonNull(executionPrelude, "executionPrelude");
+        if (slotName.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "exact execution bootstrap slot name must not be empty");
+        }
+        if (activation.context().hasLocalSlot(slotName)) {
+            throw new IllegalStateException(
+                    "exact execution bootstrap slot already exists: " + slotName);
+        }
+
+        activation
+                .context()
+                .createLocalSlot(
+                        slotName,
+                        ProtosClosureValue.nativeClosure(
+                                (callActivation, arguments) ->
+                                        execute(
+                                                callActivation,
+                                                arguments,
+                                                executionPrelude)));
+    }
+
+    private static Object execute(
+            ProtosActivation caller,
+            List<?> arguments,
+            ProtosPrelude executionPrelude) {
+        if (arguments.size() != 1
+                || !(arguments.get(0) instanceof ProtosStringValue source)) {
+            throw ordinaryError(caller);
+        }
+
+        ProtosPrelude callerPrelude =
+                caller
+                        .prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "exact execution observation requires caller Core prelude"));
+        ProtosEncodingValue utf8 = utf8(executionPrelude);
 
         ProtosCapturedProcessExecution.Result result =
                 ProtosCapturedProcessExecution.execute(
                         new ProtosCapturedProcessExecution.Request(
-                                prelude,
+                                executionPrelude,
                                 new ProtosSourceCompiler().compile(source.value()),
                                 List.of(),
                                 exactEnvironmentDomain(),
@@ -89,7 +123,7 @@ public final class ProtosExactExecutionFacility {
                                 utf8,
                                 null));
 
-        return observation(result, caller, prelude);
+        return observation(result, caller, callerPrelude);
     }
 
     private static ProtosObjectValue observation(

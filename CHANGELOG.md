@@ -1,3 +1,9 @@
+## 0.2.219-SNAPSHOT
+
+- Publish `TOOL002-E2A1 — selected Package Tool resolver execution environment`. Generalize the existing test-neutral `ProtosExactExecutionFacility` so a host may install a named bootstrap-local exact-source executor backed by an already-selected Prelude/module resolver. The default `execution` slot remains unchanged. `protos test` now provisions `packageExecution` with the existing `ProtosBundledToolModuleResolver("package", ...)`, and every invocation still executes through TOOL002-B/C in one fresh semantic Process with private streams, empty args/environment and no child Filesystem authority.
+- Prove the mechanism with ordinary Protos source: the E2A1 fixture reads the first real Package/TOML case through E1B `packageTomlFilesystem`, invokes it through `packageExecution`, and observes successful canonical `true`, demonstrating that fixture `self:TomlSyntax` resolves inside the exact bundled Package Tool environment. Do not activate the TOML plan in `Runner`, interpret the corpus as a whole, or retire the legacy Java conformance runner yet.
+- Subdivide parent `TOOL002-E2A` after cross-Prelude outcome audit. E2A1 closes only the normal selected-resolver path; E2A2 remains READY to close safe failed/Error observation across the distinct Package Prelude without leaking or copying execution-environment authority. E2B remains blocked until parent E2A closes. No normative specification change.
+
 ## 0.2.218-SNAPSHOT
 
 - Close documentation/design slice `TOOL001-F2B2 — resolution-root/workspace semantic assembly design` without changing the implementation version. Freeze one active root workspace per resolution root; canonical `/`-separated root-relative member paths over normative Path components; unique root/member PackageIds; non-recursive member workspace declarations; and path dependencies normalized relative to their declaring package but constrained to the root or one explicitly declared member.
