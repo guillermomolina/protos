@@ -248,6 +248,44 @@ Release automation may eventually perform the mechanical steps, but it must
 still require an explicitly selected release candidate and must never
 automatically release every successful `main` revision.
 
+### DIST001-E execution slices
+
+DIST001-E is deliberately decomposed so preparation cannot silently become
+publication:
+
+- `DIST001-E1` — readiness/candidate-envelope audit — CLOSED. A-D are sufficient
+  to begin pre-release preparation, but no exact source revision or public
+  version is selected. Current open work such as I023/B008 is a candidate-time
+  release-claim constraint rather than an automatic blanket ban: any limitation
+  that remains must be disclosed, and any blocker that makes an advertised
+  capability materially false blocks publication.
+- `DIST001-E2` — coherent public pre-release version contract — READY. Define how
+  the internal Maven `0.2.N-SNAPSHOT` development identity transitions to one
+  coherent public pre-release identity across tool output, tag, release metadata,
+  and asset names. This slice does not select a candidate.
+- `DIST001-E3` — release metadata/assets/validation preparation —
+  `BLOCKED_BY_DEPENDENCIES` on E2. Prepare release-note metadata, checksums,
+  asset manifest, and a candidate validation entry point without creating a tag
+  or GitHub Release.
+- `DIST001-E4` — exact candidate selection and validation —
+  `BLOCKED_BY_DEPENDENCIES` on E2/E3 and additionally requires an explicit user
+  decision selecting the exact source revision/public version. E4 validates and
+  freezes that candidate but does not publish the GitHub Release.
+- `DIST001-E5` — first GitHub pre-release publication —
+  `BLOCKED_BY_DEPENDENCIES` on the explicitly selected, fully validated E4
+  candidate. This is the first slice allowed to create the public tag, GitHub
+  pre-release, and release assets.
+- `DIST001-E6` — post-publication verification and DIST001 closure —
+  `BLOCKED_BY_DEPENDENCIES` on E5. Verify tag/source identity, release metadata,
+  assets/checksums and downloadability, then close DIST001.
+
+The detailed E1 readiness envelope is recorded in
+`docs/project/DIST001_FIRST_PRERELEASE_READINESS.md`.
+
+No E1-E3 result authorizes release publication. A candidate must remain
+explicitly unselected until the user makes the exact-candidate decision required
+by policy.
+
 ## Expected release metadata
 
 A release should make it possible for an external tester to answer:

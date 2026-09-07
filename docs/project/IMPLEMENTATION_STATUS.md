@@ -1039,7 +1039,7 @@ repository when formally introduced rather than relying on chat/prompt history.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| DIST001 | End-user distribution and release engineering | IN_PROGRESS | DIST001-A/B/C/D published | DIST001-E is READY for bounded prerelease-readiness work; actual public release publication still requires an explicit exact-candidate decision. |
+| DIST001 | End-user distribution and release engineering | IN_PROGRESS | DIST001-A/B/C/D + DIST001-E1 published | DIST001-E2 is READY. No public candidate/tag/release is selected; DIST001 closes only after E2-E6 and observed post-publication verification. |
 | DIST001-A | Relocatable portable distribution layout and runtime contract | CLOSED | `SAME_COMMIT` | Constructible POSIX/JVM ZIP; shared checkout/distribution launcher preserves caller CWD through `PROTOS_HOME`; exact source/runtime metadata and checksums; initial supported optimizing stack is GraalVM Community JDK 22 + external `truffle-runtime:24.0.0`; no tag/release. |
 | DIST001-B | Extracted-distribution smoke/conformance | CLOSED | DIST001-B1/B2/B3/B4A/B4B/B5 published | One exact clean-source ZIP passes archive/checksum identity, outside-checkout caller-CWD + Package Tool, bundled Test Tool, and exact GraalVM Community JDK22/Truffle24 `HotSpotTruffleRuntime` evidence through the composed B5 gate. |
 | DIST001-B1 | Validation hygiene and bounded smoke decomposition | CLOSED | `SAME_COMMIT` | Ignore Python bytecode/cache outputs and persist the bounded B1..B5 validation plan; no executable distribution behavior changes. |
@@ -1055,13 +1055,20 @@ repository when formally introduced rather than relying on chat/prompt history.
 | DIST001-D2 | Observed CI snapshot artifact closure | CLOSED | DIST001-D2A + DIST001-D2B published | Repaired run 34101588533 for exact source 994429173b6ec0fc086f307f4a49815f219c6523 completed green; artifact 10010752033 contained the expected portable ZIP and basename-only `.sha256`, which passed independent `sha256sum -c` after download. |
 | DIST001-D2A | Portable external snapshot checksum repair | CLOSED | `SAME_COMMIT` | Generate `.sha256` from the archive directory so it records only the ZIP basename; require `sha256sum -c` to pass in CI before upload. The first D1 artifact digest value itself was correct; only its absolute runner pathname was non-portable. |
 | DIST001-D2B | Observed repaired CI snapshot artifact closure | CLOSED | `SAME_COMMIT` | Run 34101588533; source `994429173b6ec0fc086f307f4a49815f219c6523`; artifact `protos-snapshot-994429173b6ec0fc086f307f4a49815f219c6523` / id `10010752033`; `protos-0.2.230-SNAPSHOT-posix-jvm.zip` SHA-256 `f66f011ba9a7c579f81b5aad7098bd4ec421ebc8117b3c4c8954374441e94337`; downloaded basename-only checksum verified successfully outside the runner workspace. |
-| DIST001-E | First selected GitHub pre-release | READY | — | DIST001-A/B/C/D are closed. Begin with bounded readiness/candidate audit only; no tag, GitHub Release, or asset publication is authorized until the user explicitly selects an exact candidate revision/version. |
+| DIST001-E | First selected GitHub pre-release | IN_PROGRESS | DIST001-E1 published | E is decomposed into E1-E6. E2 is READY; E4 cannot become candidate-specific until the user explicitly selects an exact source revision/public version; E5 is the first publication slice. |
+| DIST001-E1 | First pre-release readiness and candidate envelope | CLOSED | `SAME_COMMIT` | A-D readiness is sufficient to begin bounded preparation; persist candidate eligibility, current limitation/claim boundary, E1-E6 decomposition, and explicit approval boundary. No candidate/version selected and no tag/release/assets published. |
+| DIST001-E2 | Coherent public pre-release version contract | READY | — | Define one public pre-release identity coherent across distributed tool output, Maven/project version transition where applicable, Git tag, GitHub Release metadata and asset names; do not select a candidate or publish. |
+| DIST001-E3 | Release metadata, assets and validation preparation | BLOCKED_BY_DEPENDENCIES | — | Depends on E2; prepare release notes/metadata/checksums/asset manifest and candidate validation entry point without creating a tag or GitHub Release. |
+| DIST001-E4 | Exact candidate selection and immutable validation | BLOCKED_BY_DEPENDENCIES | — | Depends on E2/E3 and an explicit user decision selecting the exact source revision/public version; validate/freeze that candidate only, with no GitHub Release publication. |
+| DIST001-E5 | First GitHub pre-release publication | BLOCKED_BY_DEPENDENCIES | — | Depends on the explicitly selected, fully validated E4 candidate; first slice allowed to create the public tag, GitHub pre-release and release assets. |
+| DIST001-E6 | Published pre-release verification and DIST001 closure | BLOCKED_BY_DEPENDENCIES | — | Depends on E5; independently verify tag/source identity, pre-release metadata, downloadable assets/checksums and runtime/source disclosures, then close DIST001. |
 
-DIST001-A/B/C/D are closed. The B5 gate is the reusable
+DIST001-A/B/C/D and DIST001-E1 are closed. The B5 gate remains the reusable
 extracted-distribution conformance entry point and the D workflow continuously
 publishes validated transient snapshots with portable external checksums.
-DIST001-E is READY for bounded prerelease-readiness work. No public release is
-authorized until the user explicitly selects an exact candidate revision/version.
+DIST001-E is IN_PROGRESS through the bounded E1-E6 plan; E2 is READY. No public
+candidate, tag, GitHub Release, or release asset is selected or authorized until
+the explicit candidate/publication boundaries recorded by E1 are satisfied.
 
 ## P-label classification
 
