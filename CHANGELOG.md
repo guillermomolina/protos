@@ -1,3 +1,9 @@
+## 0.2.235-SNAPSHOT
+
+- Close `TOOL001-F2D3B1B2C — immutable package -> physical-directory binding` and parent `TOOL001-F2D3B1B2 — exact member-location directory binding`. Compose the closed B1B1 project/package index with the closed B1B2B confined canonical traversal into one immutable host index whose records pair each detached workspace PackageNode with its exact physical real directory.
+- Bind root `location = ""` exactly to the anchored real project root and every non-root location only through B1B2B; index those immutable bindings by exact opaque PackageId and exact canonical location without basename fallback, recursive search, case folding, normalization, or source-file lookup. Missing/unbindable members fail closed before a resolver can use the plan.
+- Add focused Java host-integration tests for root/member binding, exact PackageId/location lookup, root-only workspaces and missing physical members. No logical module parsing, `.protos` lookup, ModuleKey construction, `self:`/`dep:`/`std:` routing, CLI behavior, Protos-observable import semantics or native boundary changes occur. `TOOL001-F2D3B1B3` becomes READY.
+
 ## 0.2.234-SNAPSHOT
 
 - Close `I023-C3 — cooperative cancellation / ensure composition` without a production change. Add Protos Future conformance that self-requests cancellation inside the first reached while body, completes that body, reaches the second condition and second body, and only then hits an ordinary `Future.value()` cancellation-observation boundary. Exact observer result `22110` proves `while` adds no per-iteration cancellation poll, the second callback pair is reached after the request, code after the actual observation boundary does not execute, and outer `ensure` cleanup runs exactly once during unchanged cancellation unwind. `I023-C4` becomes READY. No runtime, specification, implementation-version, native-boundary, or license-term change.

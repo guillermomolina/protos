@@ -874,16 +874,16 @@ forward.
 | TOOL001-F2D2 | pure workspace execution-state + plan construction | CLOSED | `SAME_COMMIT` | ResolutionRoot single-pass execution state + RuntimeNames + canonical non-stale workspace lock reconciliation produce fresh inert PackageExecutionPlanV1. |
 | TOOL001-F2D3 | mechanical host resolver handoff + command-scoped workspace preflight | IN_PROGRESS | TOOL001-F2D3A published | Decomposed after implementation audit: A detach CLOSED, B resolver READY, C command/authority boundary dependency-gated. |
 | TOOL001-F2D3A | immutable host DTO + defensive plan detach | CLOSED | `SAME_COMMIT` | Mechanical ABI boundary only: exact shape/domain/location/edge validation and recursive immutable copy. |
-| TOOL001-F2D3B | exact workspace package-backed module resolver | IN_PROGRESS | TOOL001-F2D3B1A/F2D3B1B1 published | Canonical key + selected-root/package index CLOSED; B1B2 exact member-directory binding READY. |
-| TOOL001-F2D3B1 | package identity + source mechanism | IN_PROGRESS | TOOL001-F2D3B1A/F2D3B1B1 published | Key identity + root/index CLOSED; member and source binding remain. |
+| TOOL001-F2D3B | exact workspace package-backed module resolver | IN_PROGRESS | TOOL001-F2D3B1A/F2D3B1B2 published | Canonical key + exact package-directory binding CLOSED; B1B3 logical source lookup READY. |
+| TOOL001-F2D3B1 | package identity + source mechanism | IN_PROGRESS | TOOL001-F2D3B1A/F2D3B1B2 published | Key identity + exact package-directory binding CLOSED; logical source-file mapping remains. |
 | TOOL001-F2D3B1A | canonical workspace ModuleKey codec | CLOSED | `SAME_COMMIT` | Workspace-domain canonical ModuleKey codec over exact PackageId + internal logical module; host-only and filesystem-free. |
-| TOOL001-F2D3B1B | physical source mechanism | IN_PROGRESS | TOOL001-F2D3B1B1 published | Further decomposed to keep root/index separate from member traversal and source lookup. |
+| TOOL001-F2D3B1B | physical source mechanism | IN_PROGRESS | TOOL001-F2D3B1B1/F2D3B1B2 published | Project root/index + exact member-directory binding CLOSED; B1B3 source-file lookup READY. |
 | TOOL001-F2D3B1B1 | selected project-root anchor + detached package index | CLOSED | `SAME_COMMIT` | Host-only representation step; no non-root filesystem traversal. |
-| TOOL001-F2D3B1B2 | exact member-location directory binding | IN_PROGRESS | TOOL001-F2D3B1B2A/F2D3B1B2B published | Exact one-component lookup + confined canonical traversal CLOSED; final immutable package-directory binding remains. |
+| TOOL001-F2D3B1B2 | exact member-location directory binding | CLOSED | `SAME_COMMIT` | Exact child lookup + confined traversal + immutable package-directory binding closed across B1B2A/B/C. |
 | TOOL001-F2D3B1B2A | exact direct-child directory lookup | CLOSED | `SAME_COMMIT` | Host-only one-component exact stored-name + directory-type primitive; no multi-component path traversal. |
 | TOOL001-F2D3B1B2B | confined canonical member-location traversal | CLOSED | `SAME_COMMIT` | Canonical multi-component traversal; every selected real directory must remain under the real project root, so only in-root symlinks survive. |
-| TOOL001-F2D3B1B2C | immutable package -> physical-directory binding | READY | — | Bind each detached package/location to its exact confined physical directory. |
-| TOOL001-F2D3B1B3 | logical module -> exact regular `.protos` source | BLOCKED_BY_DEPENDENCIES | TOOL001-F2D3B1B2C | Source-file mapping begins only after member roots are independently bound. |
+| TOOL001-F2D3B1B2C | immutable package -> physical-directory binding | CLOSED | `SAME_COMMIT` | Immutable exact PackageId/location -> PackageNode + real-directory bindings over the closed B1B1/B1B2B mechanics. |
+| TOOL001-F2D3B1B3 | logical module -> exact regular `.protos` source | READY | — | Map validated internal logical module segments beneath an already-bound package directory to one exact regular confined `.protos` source. |
 | TOOL001-F2D3B2 | resolver routing | BLOCKED_BY_DEPENDENCIES | TOOL001-F2D3B1 | Parent for self/dep/std routing after source mechanism. |
 | TOOL001-F2D3B2A | self: routing | BLOCKED_BY_DEPENDENCIES | TOOL001-F2D3B1B3 | First observable import routing slice; behavior belongs primarily in Protos source tests. |
 | TOOL001-F2D3B2B | dep: edge/export routing | BLOCKED_BY_DEPENDENCIES | TOOL001-F2D3B2A | Exact dependency edge and export visibility. |

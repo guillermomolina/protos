@@ -1,6 +1,6 @@
 # TOOL001-F2D — Workspace Execution Preflight and PackageExecutionPlan
 
-Status: **IN_PROGRESS through CLOSED F2D3B1B2B confined member-location traversal**
+Status: **IN_PROGRESS through CLOSED F2D3B1B2C immutable package-directory binding**
 Nature: non-normative Package Tool / host-integration design
 Design checkpoint: 2026-09-07
 
@@ -40,11 +40,11 @@ F2D3B1    package identity + source mechanism                     IN_PROGRESS
 F2D3B1A   canonical workspace ModuleKey codec                     CLOSED
 F2D3B1B   physical source mechanism parent                        IN_PROGRESS
 F2D3B1B1   selected project-root anchor + detached package index  CLOSED
-F2D3B1B2   exact member-location directory binding                IN_PROGRESS
+F2D3B1B2   exact member-location directory binding                CLOSED
 F2D3B1B2A  exact direct-child directory lookup                    CLOSED
 F2D3B1B2B  confined canonical member-location traversal           CLOSED
-F2D3B1B2C  immutable package -> physical-directory binding        READY
-F2D3B1B3   logical module -> exact regular .protos source         BLOCKED_BY_DEPENDENCIES
+F2D3B1B2C  immutable package -> physical-directory binding        CLOSED
+F2D3B1B3   logical module -> exact regular .protos source         READY
 F2D3B2    resolver routing                                        BLOCKED_BY_DEPENDENCIES
 F2D3B2A  self: routing                                            BLOCKED_BY_DEPENDENCIES
 F2D3B2B  dep: edge/export routing                                 BLOCKED_BY_DEPENDENCIES
@@ -678,4 +678,40 @@ TOOL001-F2D3B1B2B CLOSED: YES
 TOOL001-F2D3B1B2C READY: YES
 TOOL001-F2D3B1B2 CLOSED: NO
 TOOL001-F2D3B1B3 BLOCKED_BY_DEPENDENCIES: TOOL001-F2D3B1B2C
+```
+
+## F2D3B1B2C closure — immutable package-directory binding
+
+B1B2C composes the already-closed host boundaries instead of adding new path
+semantics. It consumes one `ProtosWorkspacePackageProjectIndex`, iterates only
+the detached plan packages already indexed by B1B1, binds root `location = ""`
+exactly to the anchored real project root, and sends every non-root canonical
+location through B1B2B.
+
+The resulting host records pair the exact detached `PackageNode` with its real
+physical directory and are indexed immutably by exact opaque PackageId and exact
+canonical location. There is no basename inference, recursive search, ambient
+workspace discovery, case folding, Unicode normalization, or fallback path. If
+any indexed non-root member cannot be bound by B1B2B, construction fails before
+a package-backed resolver can use the plan.
+
+B1B2C still does not inspect logical module names, append `.protos`, read source,
+construct ModuleKeys, implement `self:`/`dep:`/`std:` routing, or touch CLI/
+application authority. B1B3 now owns the distinct logical-module -> exact source
+file mapping boundary.
+
+The focal remains Java because this is host Path + detached DTO integration.
+Observable Protos import conformance remains deferred to B2 routing.
+
+After publication:
+
+```text
+TOOL001-F2D3B1B2A CLOSED: YES
+TOOL001-F2D3B1B2B CLOSED: YES
+TOOL001-F2D3B1B2C CLOSED: YES
+TOOL001-F2D3B1B2  CLOSED: YES
+TOOL001-F2D3B1B3  READY: YES
+TOOL001-F2D3B1B    CLOSED: NO
+TOOL001-F2D3B1     CLOSED: NO
+TOOL001-F2D3B      CLOSED: NO
 ```
