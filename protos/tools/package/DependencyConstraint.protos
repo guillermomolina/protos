@@ -31,6 +31,25 @@ isSeparator: (octet) => {
     result
 }
 
+hasPrerelease: (version) => {
+    result: true
+    (version.prerelease === null).ifTrue(() => {
+        result = false
+    })
+    result
+}
+
+sameCore: (left, right) => {
+    result: left.major == right.major
+    result.ifTrue(() => {
+        result = left.minor == right.minor
+    })
+    result.ifTrue(() => {
+        result = left.patch == right.patch
+    })
+    result
+}
+
 coreVersion: (major, minor, patch) => {
     {
         major: major
@@ -267,27 +286,70 @@ comparisonSatisfied: (comparison, candidate) => {
     result
 }
 
-satisfies: (constraint, candidate) => {
-    result: false
-    known: false
+prereleaseAdmitted: (constraint, candidate) => {
+    admitted: false
 
-    (constraint.kind === "exact").ifTrue(() => {
-        known = true
-        result = Version.compare(constraint.version, candidate) == 0
+    hasPrerelease(candidate).ifFalse(() => {
+        admitted = true
     })
 
-    (constraint.kind === "caret").ifTrue(() => {
-        known = true
-
-        (constraint.lower.prerelease === null).ifFalse(() => {
-            fail()
-        })
-        (candidate.prerelease === null).ifFalse(() => {
-            fail()
+    hasPrerelease(candidate).ifTrue(() => {
+        (constraint.kind === "exact").ifTrue(() => {
+            hasPrerelease(constraint.version).ifTrue(() => {
+                admitted = sameCore(constraint.version, candidate)
+            })
         })
 
+        (constraint.kind === "caret").ifTrue(() => {
+            hasPrerelease(constraint.lower).ifTrue(() => {
+                admitted = sameCore(constraint.lower, candidate)
+            })
+        })
+
+        (constraint.kind === "interval").ifTrue(() => {
+            hasPrerelease(constraint.lower.version).ifTrue(() => {
+                admitted = sameCore(constraint.lower.version, candidate)
+            })
+
+            admitted.ifFalse(() => {
+                hasPrerelease(constraint.upper.version).ifTrue(() => {
+                    admitted = sameCore(constraint.upper.version, candidate)
+                })
+            })
+        })
+    })
+
+    admitted
+}
+
+caretSatisfied: (constraint, candidate) => {
+    result: false
+
+    prereleaseAdmitted(constraint, candidate).ifTrue(() => {
         constraint.exactZero.ifTrue(() => {
-            result = Version.compare(constraint.lower, candidate) == 0
+            hasPrerelease(constraint.lower).ifFalse(() => {
+                result = Version.compare(constraint.lower, candidate) == 0
+            })
+
+            hasPrerelease(constraint.lower).ifTrue(() => {
+                lowerOrder: Version.compare(constraint.lower, candidate)
+                upperOrder: Version.compare(candidate, coreVersion(0, 0, 0))
+
+                lowerOk: lowerOrder == -1
+                (lowerOrder == 0).ifTrue(() => {
+                    lowerOk = true
+                })
+
+                upperOk: upperOrder == -1
+                (upperOrder == 0).ifTrue(() => {
+                    upperOk = true
+                })
+
+                result = lowerOk
+                result.ifTrue(() => {
+                    result = upperOk
+                })
+            })
         })
 
         constraint.exactZero.ifFalse(() => {
@@ -306,25 +368,39 @@ satisfies: (constraint, candidate) => {
         })
     })
 
-    (constraint.kind === "interval").ifTrue(() => {
-        known = true
+    result
+}
 
-        // D2C owns interval syntax/stable satisfaction only.
-        // Cross-form prerelease admission remains D2D.
-        (constraint.lower.version.prerelease === null).ifFalse(() => {
-            fail()
-        })
-        (constraint.upper.version.prerelease === null).ifFalse(() => {
-            fail()
-        })
-        (candidate.prerelease === null).ifFalse(() => {
-            fail()
-        })
+intervalSatisfied: (constraint, candidate) => {
+    result: false
 
+    prereleaseAdmitted(constraint, candidate).ifTrue(() => {
         result = comparisonSatisfied(constraint.lower, candidate)
         result.ifTrue(() => {
             result = comparisonSatisfied(constraint.upper, candidate)
         })
+    })
+
+    result
+}
+
+satisfies: (constraint, candidate) => {
+    result: false
+    known: false
+
+    (constraint.kind === "exact").ifTrue(() => {
+        known = true
+        result = Version.compare(constraint.version, candidate) == 0
+    })
+
+    (constraint.kind === "caret").ifTrue(() => {
+        known = true
+        result = caretSatisfied(constraint, candidate)
+    })
+
+    (constraint.kind === "interval").ifTrue(() => {
+        known = true
+        result = intervalSatisfied(constraint, candidate)
     })
 
     known.ifFalse(() => {

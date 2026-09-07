@@ -718,7 +718,7 @@ record distributable Standard Library functionality.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | Bootstrap/manifest foundations CLOSED; TOOL001-D is IN_PROGRESS with D1 CLOSED and D2 exact/caret/interval D2A-D2C CLOSED, D2D prerelease/final closure READY. |
+| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | Bootstrap/manifest foundations and pure version/constraint value policy TOOL001-D are CLOSED; resolver/lock/workspace/store/registry work remains separately scoped future TOOL001 work. |
 | TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C CLOSED; TOOL002-D IN_PROGRESS with D1/D2 CLOSED and D3 IN_PROGRESS; D3A/D3B CLOSED and D3C IN_PROGRESS with D3C1 float-nan CLOSED at `0.2.201-SNAPSHOT`, D3C2 float-bits READY. |
 
 ### TOOL001 — Package Tool
@@ -749,13 +749,13 @@ forward.
 | TOOL001-C6 | package-tool manifest Slice 3D | CLOSED | `SAME_COMMIT` | Ordinary-Protos ManifestCommand reads exactly `protos.toml` through confined Filesystem authority, consumes complete UTF-8 TextReader chunks, invokes closed schema v1 and emits read-vs-schema diagnostics; the host only selects exact bundled `ManifestMain` for the public manifest command while historical bare Main stays unchanged. |
 | TOOL001-C7 | package-tool manifest Slice 3 closure | CLOSED | `SAME_COMMIT` | Documentation/governance-only final cross-slice validation and architecture/status reconciliation; no executable or implementation-version change. |
 | TOOL001-C | legacy package-tool manifest Slice 3 parent | CLOSED | `SAME_COMMIT` | C1-C7 complete the bounded manifest surface: TOML, schema-v1 structural model, confined project-manifest read/diagnostics and final reconciliation. Later package-resolution concerns are separately scoped. |
-| TOOL001-D | release-version / dependency-constraint value policy | IN_PROGRESS | TOOL001-D1 published | D1 strict ReleaseVersion value/precedence CLOSED; D2 constraint language v1 READY; resolver and lock concerns remain outside this parent. |
+| TOOL001-D | release-version / dependency-constraint value policy | CLOSED | `SAME_COMMIT` | D1 ReleaseVersion and D2A-D2D complete strict version parsing/precedence plus exact/caret/bounded/same-core-prerelease constraint v1 policy in bundled Protos. |
 | TOOL001-D1 | strict ReleaseVersion value + precedence | CLOSED | `SAME_COMMIT` | Ordinary bundled-Protos parser/model/ordering for strict SemVer-derived ReleaseVersion, with no build metadata or dependency-selection policy. |
-| TOOL001-D2 | dependency constraint language v1 | IN_PROGRESS | TOOL001-D2A/D2B/D2C published | Exact, caret and bounded interval forms CLOSED; D2D prerelease admission/final closure READY. |
+| TOOL001-D2 | dependency constraint language v1 | CLOSED | `SAME_COMMIT` | Exact, caret, bounded interval and explicit same-core prerelease-admission behavior are complete with cross-form Protos conformance. |
 | TOOL001-D2A | exact dependency constraints | CLOSED | `SAME_COMMIT` | Bare full ReleaseVersion parse + exact satisfaction in ordinary bundled Protos; no range/candidate/lock policy. |
 | TOOL001-D2B | caret dependency constraints | CLOSED | `SAME_COMMIT` | Caret bounds and stable-candidate satisfaction, including zero-major rules; prerelease admission deferred to D2D. |
 | TOOL001-D2C | explicit bounded intervals | CLOSED | `SAME_COMMIT` | Two-comparison bounded interval parsing and stable-candidate satisfaction; prerelease admission deferred to D2D. |
-| TOOL001-D2D | prerelease admission + D2 closure | READY | — | Same-tuple prerelease admission across exact/caret/interval forms plus final D2 conformance/reconciliation. |
+| TOOL001-D2D | prerelease admission + D2 closure | CLOSED | `SAME_COMMIT` | Final prerelease admission + cross-form conformance closes D2 and parent D; resolver/lock policy remains outside this parent. |
 
 
 Detailed migration and continuation rules live in

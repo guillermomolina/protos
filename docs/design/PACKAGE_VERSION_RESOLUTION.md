@@ -21,14 +21,21 @@ single-version constraint.
 
 ## TOOL001 implementation checkpoint
 
-`TOOL001-D1` closes the strict ReleaseVersion parser/value/precedence prerequisite
-used by this audit. `TOOL001-D2` is READY for the separately selected constraint
-language v1 surface (exact, caret and explicit bounded intervals plus prerelease
-admission).
+`TOOL001-D` is CLOSED. D1 implements the strict ReleaseVersion
+parser/value/precedence prerequisite, and D2A-D2D implement dependency constraint
+v1 as ordinary bundled Protos: exact requirements, caret bounds, explicit bounded
+intervals, and explicit same-core prerelease admission.
 
-The broader candidate-eligibility, lock-preservation, update and graph-resolution
-material in this exploratory record remains unimplemented and is not made current
-policy merely by D1.
+The prerelease boundary follows this audit's selected intent rule: a stable
+requirement does not admit prerelease candidates; a prerelease candidate becomes
+eligible only when the same constraint explicitly names a prerelease for that
+candidate's MAJOR.MINOR.PATCH tuple, after which ordinary exact/range precedence
+still applies.
+
+The broader candidate-eligibility, fresh-selection preference, yank handling,
+lock-preservation, update and graph-resolution material in this exploratory record
+remains unimplemented and is not made current policy by closing the pure-value D
+parent.
 
 ## Design goals
 

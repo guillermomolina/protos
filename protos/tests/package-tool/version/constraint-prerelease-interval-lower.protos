@@ -15,5 +15,8 @@
 
 Constraint: import("self:DependencyConstraint")
 ok: true
-Constraint.satisfiesText("^1.4.2", "1.5.0-beta.1").ifTrue(() => { ok = false })
+Constraint.satisfiesText(">=2.0.0-rc.1 <2.0.0", "2.0.0-rc.1").ifFalse(() => { ok = false })
+Constraint.satisfiesText(">=2.0.0-rc.1 <2.0.0", "2.0.0-rc.2").ifFalse(() => { ok = false })
+Constraint.satisfiesText(">=2.0.0-rc.1 <2.0.0", "2.0.0-rc.0").ifTrue(() => { ok = false })
+Constraint.satisfiesText(">=2.0.0-rc.1 <2.0.0", "2.0.0").ifTrue(() => { ok = false })
 ok

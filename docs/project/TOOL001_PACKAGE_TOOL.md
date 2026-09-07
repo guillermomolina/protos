@@ -64,13 +64,13 @@ its relation to any legacy Slice 3 terminology that remains useful for continuit
 | TOOL001-C6 | package-tool manifest Slice 3D | CLOSED | `SAME_COMMIT` | `self:ManifestCommand` reads exactly `protos.toml` through the provisioned confined Filesystem, consumes complete UTF-8 text across progress chunks, invokes the closed ManifestV1 parser and owns read/schema diagnostics; the host driver mechanically selects exact bundled `ManifestMain` only for `protos package manifest`, leaving package policy in Protos and the historical bare `Main` entry unchanged. |
 | TOOL001-C7 | package-tool manifest Slice 3 closure | CLOSED | `SAME_COMMIT` | Final cross-slice validation plus architecture/status reconciliation closes the bounded legacy manifest Slice 3 surface without new executable behavior or implementation-version increment. |
 | TOOL001-C | historical manifest Slice 3 parent | CLOSED | `SAME_COMMIT` | C1-C7 are published: canonical TOML, schema-v1 structural model, confined project-manifest read/diagnostics and final cross-slice reconciliation are complete. Later version/lock/resolution/workspace/store/registry work is outside this bounded Slice 3 parent. |
-| TOOL001-D | release-version / dependency-constraint value policy | IN_PROGRESS | TOOL001-D1 published | Pure bundled-Protos package value semantics after closed structural manifest parsing; D1 ReleaseVersion is closed, D2 dependency constraint v1 is READY, later resolver/lock work remains separate. |
+| TOOL001-D | release-version / dependency-constraint value policy | CLOSED | `SAME_COMMIT` | D1 ReleaseVersion plus D2A-D2D dependency constraint v1 are published: exact/caret/bounded interval syntax, precedence satisfaction and explicit same-core prerelease admission are complete pure bundled-Protos value policy. Resolver/lock work remains separate. |
 | TOOL001-D1 | strict ReleaseVersion value + precedence | CLOSED | `SAME_COMMIT` | `self:ReleaseVersion.parse/compare/compareText` implements the selected SemVer-derived package release value: exact three-component core, optional validated prerelease, no build metadata, arbitrary-size Integer components and SemVer precedence. |
-| TOOL001-D2 | dependency constraint language v1 | IN_PROGRESS | TOOL001-D2A/D2B/D2C published | Exact, caret and explicit bounded intervals CLOSED; D2D prerelease admission/cross-form closure READY. |
+| TOOL001-D2 | dependency constraint language v1 | CLOSED | `SAME_COMMIT` | D2A exact, D2B caret, D2C bounded intervals and D2D same-core prerelease admission/cross-form conformance are complete. |
 | TOOL001-D2A | exact dependency constraints | CLOSED | `SAME_COMMIT` | `self:DependencyConstraint.parse/satisfies/satisfiesText` accepts only one bare full ReleaseVersion and matches it by exact D1 precedence equality; exact prereleases are supported only when named literally. |
 | TOOL001-D2B | caret dependency constraints | CLOSED | `SAME_COMMIT` | Caret bound construction plus stable-candidate satisfaction over D1 ReleaseVersion; zero-major rules are explicit and prerelease satisfaction remains fail-closed until D2D. |
 | TOOL001-D2C | explicit bounded intervals | CLOSED | `SAME_COMMIT` | Exactly two whitespace-joined primitive comparisons with one lower and one upper bound; stable-candidate satisfaction honors inclusive/exclusive endpoints and prerelease satisfaction remains fail-closed until D2D. |
-| TOOL001-D2D | prerelease admission + D2 closure | READY | — | Compose exact/caret/interval forms with selected same-tuple prerelease-admission rules, cross-form conformance and final D2 reconciliation. |
+| TOOL001-D2D | prerelease admission + D2 closure | CLOSED | `SAME_COMMIT` | Stable constraints reject prerelease candidates by default; prereleases are admitted only when a constraint explicitly names a prerelease for the same core tuple, then ordinary exact/range precedence applies. Final cross-form conformance closes D2 and parent D. |
 
 
 B006's normative prerequisite path through I021 remains historical evidence; it
@@ -78,15 +78,15 @@ is not reopened by this tracking migration.
 
 ## Current continuation boundary
 
-The historical manifest Slice 3 surface is closed through `TOOL001-C7`.
-`TOOL001-D` is the current bounded continuation for pure release-version and
-dependency-constraint value policy. `TOOL001-D1` is CLOSED and `TOOL001-D2` is IN_PROGRESS through closed D2A/D2B/D2C;
-D2D prerelease admission and final D2 reconciliation are READY.
+The historical manifest Slice 3 surface is CLOSED through `TOOL001-C7`.
+`TOOL001-D` is also CLOSED: D1 provides strict ReleaseVersion values/precedence,
+and D2A-D2D complete dependency constraint v1 across exact, caret, bounded
+interval and explicit same-core prerelease admission.
 
-D2 remains pure/local and is explicitly subdivided: D2A exact, D2B caret and D2C
-bounded intervals are CLOSED; D2D prerelease admission/final closure is READY. Candidate selection, lock preservation, lockfile
-serialization, workspace policy, package store and registry/network behavior
-remain later separately scoped Package Tool work.
+Further Package Tool progress must use a separately scoped post-D slice.
+Candidate selection, graph resolution, lock preservation/serialization,
+workspace/store behavior, registry/network/authority/yank policy and update
+operations are not implied by D closure and remain future work.
 
 ## Manifest Slice 3 final closure
 

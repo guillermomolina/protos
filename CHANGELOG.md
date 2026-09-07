@@ -1,3 +1,9 @@
+## 0.2.204-SNAPSHOT
+
+- Close `TOOL001-D2D — prerelease admission + D2 closure` and parent `TOOL001-D`. Complete ordinary bundled-Protos dependency-constraint v1 so stable requirements never admit prerelease candidates implicitly; a prerelease candidate is eligible only when the exact/caret/interval constraint explicitly names a prerelease with the same MAJOR.MINOR.PATCH tuple, after which ordinary exact/range precedence still decides satisfaction.
+- Preserve the selected intent boundary across forms: `^2.0.0-rc.1` admits later `2.0.0` prereleases, final `2.0.0`, and later stable releases within the caret range but rejects unrelated future-tuple prereleases; `>=2.0.0-rc.1 <2.0.0` admits the named tuple's later prereleases while still excluding final `2.0.0`; explicit prerelease upper bounds likewise admit only that bound tuple. `^0.0.0-rc.1` admits its release-candidate train and final `0.0.0` while retaining the D2B exact-zero stable boundary.
+- Promote the four D2B/D2C deferred prerelease fixtures into final boolean conformance, add cross-form Protos regressions, reconcile the version-resolution implementation checkpoint and close `TOOL001-D2`/`TOOL001-D`. Candidate selection, graph resolution, lock preservation/serialization, workspace/store, registry/network, yank and update policy remain outside this closed pure-value parent.
+
 ## 0.2.203-SNAPSHOT
 
 - Start the subdivided `LIB004-A — Files.readAllBytes` implementation with `LIB004-A1`. Publish exact-case `std:io/Files` as ordinary Protos Standard Library source with only `readAllBytes(filesystem, path)` in this slice: explicit authority, one retained open Future, `ensure`-owned File custody/close, finite 16×65536 read windows, one fresh open whole-result Bytes, and no filesystem snapshot/reopen/probe semantics.
