@@ -1,3 +1,8 @@
+## 0.2.201-SNAPSHOT
+
+- Publish `TOOL002-D3C1`: bundled Protos now owns retained `float-nan` expectation policy. The expected payload must be exactly `-`; the Test Tool constructs the Core semantic Float NaN with ordinary `0.0 / 0.0` arithmetic and compares the detached completed value by primitive `===`, preserving Float-family membership while remaining independent of host NaN payload/sign representation.
+- Add Protos-owned policy, mismatch, detached fresh-Process and sequential-runner focal coverage. Finite/infinite Floats and non-Float values do not match; malformed payload fails closed. `float-bits` remains skipped before source access and is isolated as TOOL002-D3C2, which becomes READY. No runtime/D1 boundary or normative specification change.
+
 ## 0.2.200-SNAPSHOT
 
 - Close `TOOL001-D2B — caret dependency constraints`. Extend ordinary bundled-Protos `self:DependencyConstraint` with caret parsing/bound construction and stable-candidate satisfaction: `^1.4.2` is `>=1.4.2 <2.0.0`, `^0.4.2` is `<0.5.0`, `^0.0.7` is `<0.0.8`, and `^0.0.0` is exact.

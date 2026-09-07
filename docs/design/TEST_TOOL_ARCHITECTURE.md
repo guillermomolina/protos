@@ -495,6 +495,41 @@ D3B2B changes no Filesystem, Process, scheduling, reporting, result shape,
 detached-value mechanics, or Java-owned Test taxonomy. D3B is CLOSED after D3B1
 and D3B2B; D3C owns the remaining `float-bits` and `float-nan` policy.
 
+### TOOL002-D3C1 semantic Float NaN expectation boundary
+
+D3C is split because semantic NaN matching and exact raw-binary64 reconstruction
+have different implementation risk. D3C1 owns only retained `float-nan`;
+D3C2 remains responsible for `float-bits`.
+
+Core v0.1 defines one semantic NaN value in the Float family even though an
+implementation may use different IEEE NaN payload/sign representations. The
+bundled Test Tool therefore constructs an expected semantic NaN through ordinary
+standard Float arithmetic:
+
+```text
+0.0 / 0.0
+```
+
+and matches the detached case result with primitive semantic identity:
+
+```text
+observation.value === expectedNaN
+```
+
+This simultaneously requires the Float semantic family and the semantic NaN
+value. An Integer, finite/infinite Float, or arbitrary identity-bearing object
+cannot satisfy the expectation. D3C1 does not inspect host `double` bits, expose
+NaN payload/sign state, add reflection, or extend the D1 detached observation.
+
+The retained payload for `float-nan` must be exactly `-`; any other payload is
+malformed Test Tool policy and fails closed. A valid case also requires a
+COMPLETED observation with null Error.
+
+D3C1 changes no Filesystem, Process, scheduling, result shape, reporting, runtime
+numeric protocol, or Java-owned Test taxonomy. D3C2 remains the sole owner of
+`float-bits` and must preserve exact binary64 including signed zero without
+turning host raw-bit representation into a new general Core reflection surface.
+
 ## Isolation audit
 
 The normal isolation boundary should be **one fresh Protos Process per test

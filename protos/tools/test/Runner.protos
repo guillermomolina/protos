@@ -83,6 +83,7 @@ isSimpleExpectation: (spec) => {
     (kind === "null").ifTrue(() => { supported = true })
     (kind === "integer").ifTrue(() => { supported = true })
     (kind === "fixed-integer").ifTrue(() => { supported = true })
+    (kind === "float-nan").ifTrue(() => { supported = true })
     (kind === "error-parent").ifTrue(() => { supported = true })
     (kind === "error").ifTrue(() => { supported = true })
     supported
@@ -352,6 +353,23 @@ evaluateSimple: (spec, source, executor) => {
         })
         passed.ifTrue(() => {
             passed = observation.value === expectedValue
+        })
+    })
+
+    (kind === "float-nan").ifTrue(() => {
+        (expected === "-").ifFalse(() => { policyError() })
+
+        // Core v0.1 has one semantic Float NaN value even when host payload/sign
+        // representations differ. Construct it through ordinary Float arithmetic
+        // and use primitive semantic identity so non-Float values cannot match.
+        expectedNaN: 0.0 / 0.0
+
+        passed = observation.state === "completed"
+        passed.ifTrue(() => {
+            passed = observation.error === null
+        })
+        passed.ifTrue(() => {
+            passed = observation.value === expectedNaN
         })
     })
 
