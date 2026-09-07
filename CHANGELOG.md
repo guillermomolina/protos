@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.188-SNAPSHOT
+
+- Continue the cost-aware `TOOL001-C5` schema-v1 work with `TOOL001-C5B — manifest base schema`. Add ordinary-Protos `self:ManifestSchemaV1.parseBase(text)` / `baseFromTable(root)` over the closed C1-C4 parser and C5A scale prerequisite. This helper validates only the stable mandatory envelope: the complete schema-v1 root-name allowlist, required Integer `manifest-version` exactly `1`, and required `[package]` table with non-empty String `id`/`version` plus optional non-empty String `locator`.
+- Keep the slice boundary explicit rather than publishing a temporary half-validator: the four known optional root sections are permitted by the base root allowlist but deliberately remain structurally unvalidated by `parseBase`; the final full-schema `parse/fromTable` API is not published in C5B. The base result exposes only the ordinary-Protos package model and performs no SemVer, PackageId lexical, locator, compatibility, export, dependency, path, URL or resolution-policy validation.
+- Add 12 Protos-owned focused fixtures covering minimal/locator success, future optional-section deferral, unknown root fields, missing/wrong/unsupported manifest generation, required package/table shape, package unknown fields and non-empty package strings. Close C5B and make C5C compatibility/exports/workspace READY; C5D and C6 remain dependency-gated.
+
 ## 0.2.187-SNAPSHOT
 
 - Close I022-E2 by integrating cooperative cancellation with D043 `ensure` for the synchronous-cleanup slice. `EnsureExitKind` gains `CANCELLATION`; an observed request with an active ensure frame remains in Task `UNWINDING` instead of publishing a terminal cancelled Future; each crossed ensure records and propagates the exact cancellation transfer after running cleanup in ordinary LIFO order.

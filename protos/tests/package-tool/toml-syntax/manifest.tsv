@@ -57,3 +57,15 @@ document-table-array-of-tables-nested-array-to-table-conflict-error.protos	error
 document-table-array-of-tables-nested-table-to-array-conflict-error.protos	error
 document-table-array-of-tables-inline-parent-conflict-error.protos	error
 document-table-long-flat-stack-regression.protos	true
+manifest-schema-base-empty-id-error.protos	error
+manifest-schema-base-empty-locator-error.protos	error
+manifest-schema-base-empty-version-error.protos	error
+manifest-schema-base-locator-and-known-optional.protos	true
+manifest-schema-base-manifest-version-type-error.protos	error
+manifest-schema-base-minimal.protos	true
+manifest-schema-base-missing-manifest-version-error.protos	error
+manifest-schema-base-missing-package-error.protos	error
+manifest-schema-base-package-not-table-error.protos	error
+manifest-schema-base-package-unknown-field-error.protos	error
+manifest-schema-base-unknown-root-error.protos	error
+manifest-schema-base-unsupported-generation-error.protos	error

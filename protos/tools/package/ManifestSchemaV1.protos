@@ -1,0 +1,100 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+baseFromTable: (root) => {
+    fail: () => {
+        Error().signal()
+    }
+
+    tableEntries: (node) => {
+        (node.kind == "table").ifFalse(() => {
+            fail()
+        })
+        node.value
+    }
+
+    requiredNode: (entries, name) => {
+        entries.containsKey(name).ifFalse(() => {
+            fail()
+        })
+        entries.at(name)
+    }
+
+    nonEmptyString: (node) => {
+        (node.kind == "string").ifFalse(() => {
+            fail()
+        })
+        value: node.value
+        (value == "").ifTrue(() => {
+            fail()
+        })
+        value
+    }
+
+    checkAllowed: (entries, allowed) => {
+        entries.each((name, valueNode) => {
+            allowed.containsKey(name).ifFalse(() => {
+                fail()
+            })
+        })
+    }
+
+    rootAllowed: Map()
+    rootAllowed.atPut("manifest-version", true)
+    rootAllowed.atPut("package", true)
+    rootAllowed.atPut("compatibility", true)
+    rootAllowed.atPut("exports", true)
+    rootAllowed.atPut("dependencies", true)
+    rootAllowed.atPut("workspace", true)
+
+    rootEntries: tableEntries(root)
+    checkAllowed(rootEntries, rootAllowed)
+
+    manifestVersion: requiredNode(rootEntries, "manifest-version")
+    (manifestVersion.kind == "integer").ifFalse(() => {
+        fail()
+    })
+    (manifestVersion.value == 1).ifFalse(() => {
+        fail()
+    })
+
+    packageNode: requiredNode(rootEntries, "package")
+    packageEntries: tableEntries(packageNode)
+    packageAllowed: Map()
+    packageAllowed.atPut("id", true)
+    packageAllowed.atPut("version", true)
+    packageAllowed.atPut("locator", true)
+    checkAllowed(packageEntries, packageAllowed)
+
+    packageId: nonEmptyString(requiredNode(packageEntries, "id"))
+    packageVersion: nonEmptyString(requiredNode(packageEntries, "version"))
+    packageLocator: null
+    packageEntries.containsKey("locator").ifTrue(() => {
+        packageLocator = nonEmptyString(packageEntries.at("locator"))
+    })
+
+    {
+        package: {
+            id: packageId
+            version: packageVersion
+            locator: packageLocator
+        }
+    }
+}
+
+parseBase: (text) => {
+    Document: import("self:TomlDocument")
+    baseFromTable(Document.table(text))
+}
