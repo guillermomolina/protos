@@ -55,11 +55,11 @@ an item.
 | I020 | Post-Ixxx implementation audit reconciliation | CLOSED | `SAME_COMMIT` | I020-A/B/C/D complete; D040 missing-`methodHome` `InvalidSuper` implemented; B005 closed |
 | I021 | Filesystem namespace replacement/removal | CLOSED | `SAME_COMMIT` | I021-A/B/C complete; D042 / spec `0.1.379`; production confined namespace backend and Protos-visible integrated conformance published; B006 CLOSED by package-tool Filesystem Slice 2B metadata publication integration |
 | I022 | Dynamic Error handlers / unwind-safe cleanup | CLOSED | `SAME_COMMIT` | I022-A/B/C/D/E/F complete; D043 / spec `0.1.380`; replay-stable Error handlers, unwind-safe `ensure`, suspension, later-transfer precedence, cooperative cancellation, structured lifetime and task/Actor isolation have final adversarial closure evidence |
-| I023 | Standard `while` protocol | READY | — | D044 / spec `0.1.381` satisfies B007; I023-A/B/C/D planned for synchronous protocol, control transfer, suspension/cancellation replay, and final closure |
+| I023 | Standard `while` protocol | IN_PROGRESS | I023-A published | D044 / spec `0.1.381` satisfies B007; I023-A/B/C/D planned for synchronous protocol, control transfer, suspension/cancellation replay, and final closure |
 
 ### I023 — Standard `while` protocol
 
-Status: READY
+Status: IN_PROGRESS
 
 Purpose: Implement D044 / specification revision `0.1.381` faithfully as the
 standard Closure-specific `while(body)` protocol and close B007 without adding
@@ -83,8 +83,8 @@ Planned slices:
 
 | Slice | Status | Version | Closure evidence | Scope / unblock condition |
 |---|---|---|---|---|
-| I023-A | READY | — | — | Publish the standard `Object.while` selector with Closure receiver/body validation, exact one-argument contract, zero-argument pre-test condition/body activation, strict true/false loop decision, ignored body values, canonical `null` normal completion, zero/multiple-iteration Protos conformance, and no implementation-version-independent semantic additions. |
-| I023-B | BLOCKED_BY_DEPENDENCIES | — | — | After A, adversarial synchronous control closure: non-Boolean condition Error timing/freshness, body/condition arity failures at actual activation, Error and non-local-return propagation, exact no-extra-activation/effect behavior, and Future-as-condition/body normal-value boundaries. |
+| I023-A | CLOSED | `0.2.210-SNAPSHOT` | `SAME_COMMIT` | Publish the standard `Object.while` selector with Closure receiver/body validation, exact one-argument contract, zero-argument pre-test condition/body activation, strict true/false loop decision, ignored body values, canonical `null` normal completion, zero/multiple-iteration Protos conformance, and no implementation-version-independent semantic additions. |
+| I023-B | READY | — | — | After A, adversarial synchronous control closure: non-Boolean condition Error timing/freshness, body/condition arity failures at actual activation, Error and non-local-return propagation, exact no-extra-activation/effect behavior, and Future-as-condition/body normal-value boundaries. |
 | I023-C | BLOCKED_BY_DEPENDENCIES | — | — | After B, suspension/replay and cooperative cancellation: condition/body `Future.value()` suspension resumes the same logical iteration without duplicate effects; no hidden loop checkpoint; cancellation/unwind/`ensure`/structured-child interactions match D044 and existing I022/I009 machinery. |
 | I023-D | BLOCKED_BY_DEPENDENCIES | — | — | After C, final cross-slice Protos conformance, architecture/native-boundary audit, status/guide dependency reconciliation, complete required publication validation, close I023 and transition B007 `READY -> CLOSED`; DOC001-E may then be re-audited for READY work. |
 

@@ -1,5 +1,21 @@
 # Core Native Boundary
 
+
+## I023-A — standard `while` control boundary
+
+I023-A adds exactly one reviewed native Closure-construction site to the existing
+`ProtosStandardObjectProtocol` provider. `Object.while` is host-irreducible control
+machinery rather than source-expressible derived behavior: D044 requires eager semantic
+Closure validation before the first condition activation, direct Closure activation
+without a second polymorphic callback model, strict canonical Boolean branching, and
+replay-safe continuation across a suspended condition/body without duplicating completed
+callback effects. The implementation reuses the task-local replay tape and dynamic-control
+identity already established by I022; it creates no public runtime type, scheduler boundary,
+Future, handler, cleanup scope, or syntax category.
+
+The audited Core boundary after I023-A is **111 native Closure construction sites across
+30 providers**; `ProtosStandardObjectProtocol.java` accounts for five sites.
+
 Status: non-normative implementation architecture inventory.
 
 This document records the Java-backed standard-behavior boundary after I018 Core
@@ -40,7 +56,7 @@ the standard native boundary.
 
 | Provider | Native Closure sites | Classification | Audited reason for remaining native |
 |---|---:|---|---|
-| `ProtosStandardObjectProtocol.java` | 4 | host-irreducible / representation bridge | Generic polymorphic `call` performs Closure invocation or ordinary instance construction; `identityHash` exposes semantic identity without dynamic-dispatch substitution; `ensure` establishes the D043 Closure-only protected dynamic extent and executes unwind cleanup before normal/return/Error propagation; inherited `parent` projects the exact immutable semantic delegation parent across ordinary and opaque represented values and signals for the unique root because no structural parent exists. |
+| `ProtosStandardObjectProtocol.java` | 5 | host-irreducible / representation bridge | Generic polymorphic `call` performs Closure invocation or ordinary instance construction; `identityHash` exposes semantic identity without dynamic-dispatch substitution; `ensure` establishes the D043 Closure-only protected dynamic extent and executes unwind cleanup before normal/return/Error propagation; inherited `parent` projects the exact immutable semantic delegation parent across ordinary and opaque represented values and signals for the unique root because no structural parent exists. |
 | `ProtosStandardBooleanProtocol.java` | 1 | host-irreducible | `ifTrue`/`ifFalse`/`and`/`or` are the primitive selective-control surface used to express branching itself, including path-sensitive callback validation. |
 | `ProtosStandardHashSupport.java` | 3 | representation bridge | Object identity hashing and Number/String hashing depend on semantic identity or exact represented values and must not be redefined through overrideable message sends. |
 | `ProtosStandardNumberEqualityProtocol.java` | 1 | representation bridge | Exact cross-family Number equality needs Integer/fixed/binary64 representation knowledge, including NaN and exact-integral Float handling. |

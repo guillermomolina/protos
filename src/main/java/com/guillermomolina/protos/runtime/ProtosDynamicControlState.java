@@ -25,7 +25,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Task-local dynamic control state used by the I022 handler/cleanup substrate.
+ * Task-local dynamic control state used by replay-stable standard control primitives.
  *
  * <p>This is internal runtime machinery, not a Protos value. It is deliberately owned by one
  * {@link ProtosTask}: synchronous activations attached to that task share the state, while a
@@ -38,12 +38,18 @@ import java.util.Optional;
 public final class ProtosDynamicControlState {
     public enum FrameKind {
         HANDLER,
-        ENSURE
+        ENSURE,
+        WHILE
     }
 
     public enum EnsurePhase {
         BODY,
         CLEANUP
+    }
+
+    public enum WhilePhase {
+        CONDITION,
+        BODY
     }
 
     public enum EnsureExitKind {
@@ -59,7 +65,7 @@ public final class ProtosDynamicControlState {
         CANCELLATION
     }
 
-    /** Opaque internal identity for one dynamic handler/ensure installation. */
+    /** Opaque internal identity for one replay-stable dynamic control installation. */
     public static final class Frame {
         private final long id;
         private final FrameKind kind;
@@ -70,12 +76,16 @@ public final class ProtosDynamicControlState {
         private EnsureExitKind ensureExitKind;
         private Object ensureOutcome;
         private int ensureBodyReplayCursor = -1;
+        private WhilePhase whilePhase;
+        private int whileCompletedInvocations;
+        private int whileReplayCursor = -1;
 
         private Frame(long id, FrameKind kind, Object invocationIdentity) {
             this.id = id;
             this.kind = Objects.requireNonNull(kind, "kind");
             this.invocationIdentity = Objects.requireNonNull(invocationIdentity, "invocationIdentity");
             this.ensurePhase = kind == FrameKind.ENSURE ? EnsurePhase.BODY : null;
+            this.whilePhase = kind == FrameKind.WHILE ? WhilePhase.CONDITION : null;
         }
 
         public long id() {
@@ -121,6 +131,21 @@ public final class ProtosDynamicControlState {
             return ensureBodyReplayCursor;
         }
 
+        public WhilePhase whilePhase() {
+            requireWhileFrame();
+            return whilePhase;
+        }
+
+        public int whileCompletedInvocations() {
+            requireWhileFrame();
+            return whileCompletedInvocations;
+        }
+
+        public int whileReplayCursor() {
+            requireWhileFrame();
+            return whileReplayCursor;
+        }
+
         private void bindHandlerMatchPrototype(ProtosObjectValue matchPrototype) {
             Objects.requireNonNull(matchPrototype, "matchPrototype");
             if (handlerMatchPrototype != null && handlerMatchPrototype != matchPrototype) {
@@ -147,9 +172,30 @@ public final class ProtosDynamicControlState {
             ensurePhase = EnsurePhase.CLEANUP;
         }
 
+        private void completeWhileInvocation(
+                WhilePhase expectedPhase, WhilePhase nextPhase, int replayCursor) {
+            requireWhileFrame();
+            if (whilePhase != expectedPhase) {
+                throw new IllegalStateException(
+                        "while invocation completed in unexpected phase " + whilePhase);
+            }
+            if (replayCursor < -1) {
+                throw new IllegalArgumentException("invalid while replay cursor");
+            }
+            whileCompletedInvocations = Math.addExact(whileCompletedInvocations, 1);
+            whileReplayCursor = replayCursor;
+            whilePhase = nextPhase;
+        }
+
         private void requireEnsureFrame() {
             if (kind != FrameKind.ENSURE) {
-                throw new IllegalStateException("handler frame has no ensure phase");
+                throw new IllegalStateException("non-ensure frame has no ensure phase");
+            }
+        }
+
+        private void requireWhileFrame() {
+            if (kind != FrameKind.WHILE) {
+                throw new IllegalStateException("non-while frame has no while phase");
             }
         }
 
@@ -254,6 +300,16 @@ public final class ProtosDynamicControlState {
             int bodyReplayCursor) {
         requirePresent(frame);
         frame.beginEnsureCleanup(exitKind, outcome, bodyReplayCursor);
+    }
+
+    public void completeWhileCondition(Frame frame, int replayCursor) {
+        requirePresent(frame);
+        frame.completeWhileInvocation(WhilePhase.CONDITION, WhilePhase.BODY, replayCursor);
+    }
+
+    public void completeWhileBody(Frame frame, int replayCursor) {
+        requirePresent(frame);
+        frame.completeWhileInvocation(WhilePhase.BODY, WhilePhase.CONDITION, replayCursor);
     }
 
     public boolean hasActiveEnsureFrames() {

@@ -1,0 +1,6 @@
+i: 0
+condition: () => { i < 4 }
+condition.while() {
+    i = i + 1
+}
+i

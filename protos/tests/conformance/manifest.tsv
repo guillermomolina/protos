@@ -599,3 +599,9 @@ reflection/parent-number-string.protos	boolean	true
 reflection/parent-singletons.protos	boolean	true
 reflection/root-parent.protos	error	-
 reflection/parent-arity.protos	error	-
+control/while-zero-iterations-null.protos	null	-
+control/while-multiple-iterations.protos	integer	4
+control/while-body-result-ignored.protos	boolean	true
+control/while-eager-body-validation.protos	error	-
+control/while-invalid-receiver.protos	error	-
+control/while-arity-error.protos	error	-

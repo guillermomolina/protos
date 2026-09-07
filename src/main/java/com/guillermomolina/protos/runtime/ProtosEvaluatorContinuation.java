@@ -111,8 +111,23 @@ public final class ProtosEvaluatorContinuation {
      * control primitive.
      */
     public void skipInvocationReplayTo(int targetCursor) {
+        skipInvocationReplayPrefixTo(1, targetCursor);
+    }
+
+    /**
+     * Re-enters a native control primitive after a prefix of direct Closure invocations has
+     * already completed semantically in an earlier segment.
+     *
+     * <p>Each skipped invocation still consumes its parent-event invocation ordinal, while one
+     * cursor jump skips the complete evaluator-event prefix. This keeps replay cost constant for
+     * iterative control primitives whose completed callback count can grow across iterations.
+     */
+    public void skipInvocationReplayPrefixTo(int invocationCount, int targetCursor) {
         if (!segmentActive) {
             throw new IllegalStateException("no evaluator segment active");
+        }
+        if (invocationCount <= 0) {
+            throw new IllegalArgumentException("invocation replay prefix must be positive");
         }
         Active current = active.peek();
         if (current == null) {
@@ -122,7 +137,7 @@ public final class ProtosEvaluatorContinuation {
             throw new IllegalStateException(
                     "invalid replay cursor jump from " + cursor + " to " + targetCursor);
         }
-        current.invocationOrdinal++;
+        current.invocationOrdinal = Math.addExact(current.invocationOrdinal, invocationCount);
         cursor = targetCursor;
     }
 

@@ -1,0 +1,6 @@
+i: 0
+result: (() => { i < 1 }).while() {
+    i = i + 1
+    99
+}
+(result === null).and() { i == 1 }

@@ -1,3 +1,9 @@
+## 0.2.210-SNAPSHOT
+
+- Publish `I023-A` for D044 standard `Object.while`: add the ordinary Closure-specific selector with eager semantic Closure receiver/body validation, exact one-argument contract, zero-argument pre-test condition/body activation, strict canonical `true`/`false` decisions, ignored body results, and canonical `null` normal completion. Zero and repeated iterations are covered by Protos-source conformance; invalid receiver/body/arity cases fail through the standard generic Error path.
+- Reuse the I022 replay-stable task-local control substrate for iterative callback replay. A `WHILE` frame records only the next semantic phase plus the completed direct-invocation prefix/cursor, and the evaluator tape can skip that prefix in O(1) on resume. This prevents completed condition/body callbacks from being invoked again merely to reconstruct the host stack, without adding a language-visible frame, scheduler checkpoint, Future, cleanup scope, truthiness rule, or alternate invocation model.
+- Reconcile the audited Core native boundary for the one host-irreducible control primitive: `ProtosStandardObjectProtocol` grows from four to five native Closure construction sites and the Core total from 110 to 111 across the same 30 providers. `I023-A` closes, `I023-B` becomes READY, while B007 remains READY until final I023 closure.
+
 ## 0.2.209-SNAPSHOT
 
 - Close `TOOL001-F1B3 — external node blocks + dependency edges + F1B closure` and parent `TOOL001-F1B`. Freeze lock-format-1 external records as flat single-line `registry-node` and `git-node` records over the typed F1B1 node references. Immutable registry nodes carry diagnostic/retrieval-stable `locator`, opaque `AuthorityIdentity`, and mandatory `ContentIdentity`; Git nodes carry credential-free portable `fetch` provenance and mandatory `ContentIdentity`. PackageId/version/revision are not duplicated because they already live in the exact typed node reference.

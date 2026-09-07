@@ -18,11 +18,13 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosDynamicControlState;
 import com.guillermomolina.protos.runtime.ProtosEvaluatorContinuation;
 import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
+import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTask;
@@ -86,6 +88,85 @@ public final class ProtosStandardObjectProtocol {
                     "ensure",
                     ProtosClosureValue.nativeClosure(ProtosStandardObjectProtocol::ensure));
         }
+        if (!object.hasLocalSlot("while")) {
+            object.createLocalSlot(
+                    "while",
+                    ProtosClosureValue.nativeClosure(ProtosStandardObjectProtocol::whileLoop));
+        }
+    }
+
+    private static Object whileLoop(ProtosActivation activation, List<?> supplied) {
+        Object receiver = activation.receiver();
+        if (!(receiver instanceof ProtosClosureValue condition)) {
+            throw invalid(activation);
+        }
+        if (supplied.size() != 1) {
+            throw invalid(activation);
+        }
+        Object bodyValue = supplied.get(0);
+        if (!(bodyValue instanceof ProtosClosureValue body)) {
+            throw invalid(activation);
+        }
+
+        ProtosDynamicControlState state = activation.dynamicControlState();
+        ProtosDynamicControlState.Frame frame =
+                state.enterFrame(activation, ProtosDynamicControlState.FrameKind.WHILE);
+        resumeWhileReplayPrefix(frame, activation);
+
+        while (true) {
+            if (frame.whilePhase() == ProtosDynamicControlState.WhilePhase.CONDITION) {
+                Object conditionResult;
+                try {
+                    conditionResult = ProtosClosureInvoker.invoke(condition, List.of(), activation);
+                } catch (ProtosEvaluatorSuspension suspension) {
+                    throw suspension;
+                } catch (RuntimeException transfer) {
+                    state.leaveFrame(frame);
+                    throw transfer;
+                }
+
+                if (conditionResult == ProtosBooleanValue.FALSE) {
+                    state.leaveFrame(frame);
+                    return ProtosNullValue.INSTANCE;
+                }
+                if (conditionResult != ProtosBooleanValue.TRUE) {
+                    state.leaveFrame(frame);
+                    throw invalid(activation);
+                }
+                state.completeWhileCondition(frame, replayCursor(activation));
+            }
+
+            try {
+                ProtosClosureInvoker.invoke(body, List.of(), activation);
+            } catch (ProtosEvaluatorSuspension suspension) {
+                throw suspension;
+            } catch (RuntimeException transfer) {
+                state.leaveFrame(frame);
+                throw transfer;
+            }
+            state.completeWhileBody(frame, replayCursor(activation));
+        }
+    }
+
+    private static void resumeWhileReplayPrefix(
+            ProtosDynamicControlState.Frame frame, ProtosActivation activation) {
+        int completed = frame.whileCompletedInvocations();
+        if (completed == 0) {
+            return;
+        }
+        int targetCursor = frame.whileReplayCursor();
+        if (targetCursor < 0) {
+            throw new IllegalStateException(
+                    "suspended while replay requires a replay cursor checkpoint");
+        }
+        ProtosEvaluatorContinuation continuation =
+                activation.task()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "suspended while replay requires a task"))
+                        .evaluatorContinuation();
+        continuation.skipInvocationReplayPrefixTo(completed, targetCursor);
     }
 
     private static Object ensure(ProtosActivation activation, List<?> supplied) {
