@@ -23,7 +23,15 @@ constraint-exact-stable-match.protos	true
 constraint-exact-stable-mismatch.protos	true
 constraint-exact-prerelease-match.protos	true
 constraint-exact-prerelease-distinct.protos	true
-constraint-caret-deferred-error.protos	error
+constraint-caret-deferred-error.protos	true
 constraint-interval-deferred-error.protos	error
 constraint-partial-rejected-error.protos	error
 constraint-wildcard-rejected-error.protos	error
+constraint-caret-major.protos	true
+constraint-caret-zero-minor.protos	true
+constraint-caret-zero-patch.protos	true
+constraint-caret-zero-zero.protos	true
+constraint-caret-prerelease-parse.protos	true
+constraint-caret-prerelease-satisfaction-deferred-error.protos	error
+constraint-caret-candidate-prerelease-deferred-error.protos	error
+constraint-caret-empty-error.protos	error

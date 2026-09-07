@@ -19,19 +19,132 @@ fail: () => {
     Error().signal()
 }
 
-parse: (text) => {
+coreVersion: (major, minor, patch) => {
     {
-        kind: "exact"
-        version: Version.parse(text)
+        major: major
+        minor: minor
+        patch: patch
+        prerelease: null
+        text: null
+    }
+}
+
+caretConstraint: (text, lower) => {
+    upper: null
+    exactZero: false
+
+    (lower.major > 0).ifTrue(() => {
+        upper = coreVersion(lower.major + 1, 0, 0)
+    })
+
+    (lower.major == 0).ifTrue(() => {
+        (lower.minor > 0).ifTrue(() => {
+            upper = coreVersion(0, lower.minor + 1, 0)
+        })
+
+        (lower.minor == 0).ifTrue(() => {
+            (lower.patch > 0).ifTrue(() => {
+                upper = coreVersion(0, 0, lower.patch + 1)
+            })
+
+            (lower.patch == 0).ifTrue(() => {
+                exactZero = true
+            })
+        })
+    })
+
+    {
+        kind: "caret"
+        lower: lower
+        upper: upper
+        exactZero: exactZero
         text: text
     }
 }
 
+parse: (text) => {
+    source: Encoding.UTF8.encode(text)
+
+    caret: false
+    (source.size() > 0).ifTrue(() => {
+        (source.at(0) == 94).ifTrue(() => {
+            caret = true
+        })
+    })
+
+    result: null
+
+    caret.ifTrue(() => {
+        versionBytes: Encoding.UTF8.encode("")
+        index: 0
+        source.each((octet) => {
+            (index > 0).ifTrue(() => {
+                versionBytes.add(octet)
+            })
+            index = index + 1
+        })
+
+        lower: Version.parse(Encoding.UTF8.decode(versionBytes))
+        result = caretConstraint(text, lower)
+    })
+
+    caret.ifFalse(() => {
+        result = {
+            kind: "exact"
+            version: Version.parse(text)
+            text: text
+        }
+    })
+
+    result
+}
+
 satisfies: (constraint, candidate) => {
-    (constraint.kind === "exact").ifFalse(() => {
+    result: false
+    known: false
+
+    (constraint.kind === "exact").ifTrue(() => {
+        known = true
+        result = Version.compare(constraint.version, candidate) == 0
+    })
+
+    (constraint.kind === "caret").ifTrue(() => {
+        known = true
+
+        // D2B owns caret bounds and stable-candidate satisfaction.
+        // General prerelease admission remains D2D.
+        (constraint.lower.prerelease === null).ifFalse(() => {
+            fail()
+        })
+        (candidate.prerelease === null).ifFalse(() => {
+            fail()
+        })
+
+        constraint.exactZero.ifTrue(() => {
+            result = Version.compare(constraint.lower, candidate) == 0
+        })
+
+        constraint.exactZero.ifFalse(() => {
+            lowerOrder: Version.compare(constraint.lower, candidate)
+            upperOrder: Version.compare(candidate, constraint.upper)
+
+            lowerOk: lowerOrder == -1
+            (lowerOrder == 0).ifTrue(() => {
+                lowerOk = true
+            })
+
+            result = lowerOk
+            result.ifTrue(() => {
+                result = upperOrder == -1
+            })
+        })
+    })
+
+    known.ifFalse(() => {
         fail()
     })
-    Version.compare(constraint.version, candidate) == 0
+
+    result
 }
 
 satisfiesText: (constraintText, candidateText) => {

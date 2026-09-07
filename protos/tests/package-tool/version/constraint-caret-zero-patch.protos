@@ -14,5 +14,8 @@
 // the specific language governing rights and limitations under the License.
 
 Constraint: import("self:DependencyConstraint")
-Constraint.parse("^1.4.2")
-true
+ok: true
+Constraint.satisfiesText("^0.0.7", "0.0.7").ifFalse(() => { ok = false })
+Constraint.satisfiesText("^0.0.7", "0.0.8").ifTrue(() => { ok = false })
+Constraint.satisfiesText("^0.0.7", "0.0.6").ifTrue(() => { ok = false })
+ok

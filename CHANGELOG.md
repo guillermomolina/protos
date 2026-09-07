@@ -1,3 +1,9 @@
+## 0.2.200-SNAPSHOT
+
+- Close `TOOL001-D2B — caret dependency constraints`. Extend ordinary bundled-Protos `self:DependencyConstraint` with caret parsing/bound construction and stable-candidate satisfaction: `^1.4.2` is `>=1.4.2 <2.0.0`, `^0.4.2` is `<0.5.0`, `^0.0.7` is `<0.0.8`, and `^0.0.0` is exact.
+- Preserve the deliberate D2 subdivision: D2B may parse a prerelease lower bound but satisfaction involving prerelease constraints/candidates fails closed until D2D owns the cross-form prerelease-admission rule. Explicit bounded intervals remain D2C; candidate selection/resolver/lockfile/network/store policy remains outside D2.
+- Extend the existing Protos-owned package-version corpus with caret major/zero-major bounds, lower-inclusive/upper-exclusive stable satisfaction, exact-zero behavior, prerelease-bound parsing and fail-closed deferred prerelease satisfaction. `TOOL001-D2B` closes and `TOOL001-D2C` becomes READY.
+
 ## 0.2.199-SNAPSHOT
 
 - Close `TOOL002-D3B2B` and parent `TOOL002-D3B`: bundled `Runner.evaluateSimple` now owns retained `error-parent` expectations entirely in Protos, resolving only the closed Core v0.1 standard Error prototype taxonomy and requiring FAILED state, canonical null value, a detached Error, and primitive-identity equality between `observation.error.parent()` and the named expected prototype.

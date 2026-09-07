@@ -14,5 +14,9 @@
 // the specific language governing rights and limitations under the License.
 
 Constraint: import("self:DependencyConstraint")
-Constraint.parse("^1.4.2")
-true
+c: Constraint.parse("^2.0.0-rc.1")
+ok: true
+(c.kind === "caret").ifFalse(() => { ok = false })
+(c.lower.prerelease.size() == 2).ifFalse(() => { ok = false })
+(c.upper.major == 3).ifFalse(() => { ok = false })
+ok
