@@ -225,9 +225,17 @@ or GitHub Releases, and their presence does not authorize public release
 publication.
 
 `DIST001-D2` owns observed closure: D does not close merely because the workflow
-definition exists. A real run must complete successfully for the exact published
-D1-or-later revision and expose the expected snapshot artifact/checksum before
-the parent slice is closed.
+definition exists. The first D1 run (`34100296135`, source
+`dc64fb8c4103b44020cd1b718d6850028f08b3a5`) completed successfully and uploaded
+the expected artifact, but D2 inspection found that the external `.sha256`
+recorded the runner's absolute archive path. The digest value was correct, but
+`sha256sum -c` therefore failed after download on another machine.
+
+`DIST001-D2A` corrects artifact portability by generating the checksum from the
+archive directory so the checksum records only the portable ZIP basename, and
+the workflow verifies that file with `sha256sum -c` before upload.
+`DIST001-D2B` must then observe a real D2A-or-later green run and downloaded
+artifact before parent D2/D can close.
 
 ## DIST001 boundary
 

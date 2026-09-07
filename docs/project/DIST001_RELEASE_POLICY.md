@@ -201,9 +201,16 @@ observed artifact publication:
   on `main` pushes and explicit manual dispatch, pins GraalVM Community JDK
   22.0.0, runs the full suite and the complete B5 gate, writes an outer ZIP
   checksum, and uploads a 14-day `protos-snapshot-<source-sha>` Actions artifact.
-- `DIST001-D2` — inspect a real D1-or-later workflow run and require green job
-  completion plus an uploaded artifact for that exact source revision before
-  closing D.
+- `DIST001-D2` — observed CI snapshot artifact closure — IN_PROGRESS after the
+  first D1 run exposed a portability defect in the external checksum filename:
+  - `DIST001-D2A` — portable external checksum repair — CLOSED when the workflow
+    writes only the ZIP basename into `.sha256` and verifies it with
+    `sha256sum -c` before upload;
+  - `DIST001-D2B` — observed repaired artifact closure — READY; inspect a real
+    D2A-or-later workflow run and downloaded artifact, require green job
+    completion, matching source revision, expected snapshot artifact, portable
+    ZIP + `.sha256` contents, and successful checksum verification before
+    closing D2/D.
 
 Neither slice creates or authorizes a Git tag or GitHub Release.
 
