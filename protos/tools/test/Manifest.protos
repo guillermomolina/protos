@@ -135,6 +135,7 @@ packageTomlCaseSpec: (fields) => {
     })
     (retainedExpectation == "error").ifTrue(() => {
         expectation = "error"
+        expected = "-"
         known = true
     })
     known.ifFalse(() => {

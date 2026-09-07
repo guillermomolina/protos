@@ -1,3 +1,8 @@
+## 0.2.224-SNAPSHOT
+
+- Publish `TOOL002-E2B1 — Package/TOML generic-error CaseSpec normalization`. Retained Package/TOML `error` rows now map to the D3A2 canonical generic-error CaseSpec representation with `expectation == "error"` and `expected == "-"`, matching `Runner.evaluateSimple` and the selected Test Tool architecture. This corrects the E1A planning-only placeholder discovered when E2B began composing that plan with the D-owned runner; no Package/TOML fixture execution is added here.
+- Update the existing Protos planning fixture to assert the canonical `-` sentinel. No language semantics, resolver behavior, Filesystem authority, Runner policy, Java corpus ownership or specification text changes. E2B2 becomes READY for full retained Package/TOML plan execution and full-corpus Protos-owned evidence.
+
 ## 0.2.223-SNAPSHOT
 
 - Close `DIST001-B3 — outside-checkout CWD and Package Tool smoke`. Add a bounded POSIX smoke that extracts the B2-validated ZIP outside the repository, creates a separate caller project, executes a relative `.protos` source, and validates caller-local `protos.toml` through public `protos package manifest`. When the validation host is outside the selected GraalVM Community JDK 22 contract, disable optimizer JARs only in the disposable extracted copy and use the documented unsupported-runtime override so B3 tests relocation/CWD through fallback Truffle rather than an unsupported optimizer/JDK pairing. Captured launcher stdout/stderr is now emitted on smoke failure. `DIST001-B4` becomes READY. No Git tag, GitHub Release, normative specification, implementation-version, or license-term change.

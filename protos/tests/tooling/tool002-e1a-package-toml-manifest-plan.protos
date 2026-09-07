@@ -46,7 +46,7 @@ passed.ifTrue(() => {
     passed = Manifest.caseExpectation(second) == "error"
 })
 passed.ifTrue(() => {
-    passed = Manifest.caseExpected(second) == ""
+    passed = Manifest.caseExpected(second) == "-"
 })
 
 unknownRejected: false
