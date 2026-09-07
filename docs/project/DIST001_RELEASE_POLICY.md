@@ -334,8 +334,14 @@ publication:
       branch/tag/remote-tracking ref; future tag `v0.2.236` remains available and
       publication remains unauthorized.
   - `DIST001-E4C` — candidate archive/envelope/audit preparation — IN_PROGRESS:
-    - `DIST001-E4C1` — public-prerelease portable ZIP build — READY.
-    - `DIST001-E4C2` — archive identity + SOURCE/RUNTIME verification — `BLOCKED_BY_DEPENDENCIES` on E4C1.
+    - `DIST001-E4C1` — public-prerelease portable ZIP build — CLOSED.
+      Candidate `957b1e16793a682de1d6406e37b5734c44d32d19` produced `protos-0.2.236-posix-jvm.zip` with SHA-256
+      `b1a58ba445d082156bd4eb637ee6df70c046abdee600d468c0fac29be065e296` through the already-published explicit release-mode
+      builder. Build identity is persisted without claiming independent archive
+      identity verification.
+    - `DIST001-E4C2` — archive identity + SOURCE/RUNTIME verification — READY.
+      Independently verify the exact persisted archive bytes and release
+      identity/provenance/runtime surfaces before release-note claims.
     - `DIST001-E4C3` — release-note claims selection — `BLOCKED_BY_DEPENDENCIES` on E4C2.
     - `DIST001-E4C4` — deterministic release-envelope generation — `BLOCKED_BY_DEPENDENCIES` on E4C3.
     - `DIST001-E4C5` — candidate-audit materialization — `BLOCKED_BY_DEPENDENCIES` on E4C4.

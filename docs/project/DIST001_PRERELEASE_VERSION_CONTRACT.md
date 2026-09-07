@@ -461,3 +461,28 @@ remote-tracking ref naming it. The future public tag remains absent.
 
 This closes candidate materialization, not release publication. E4C is the next
 parent and remains entirely preparatory.
+
+## E4C1 public-prerelease archive build checkpoint
+
+The exact persisted candidate has produced its first real public-prerelease
+portable archive:
+
+```text
+release_baseline_revision=3c23eaaccecbdcc7c2bcd86bc30c445403cfb047
+candidate_source_revision=957b1e16793a682de1d6406e37b5734c44d32d19
+release_version=0.2.236
+archive_name=protos-0.2.236-posix-jvm.zip
+archive_sha256=b1a58ba445d082156bd4eb637ee6df70c046abdee600d468c0fac29be065e296
+```
+
+The archive is generated from the clean detached candidate through the already
+published release mode:
+
+```text
+python3 dist/build_portable.py   --public-prerelease   --release-baseline 3c23eaaccecbdcc7c2bcd86bc30c445403cfb047
+```
+
+E4C1 records only build identity. The builder's own archive/layout/source/runtime
+checks must pass, but E4C2 deliberately owns the independent archive identity and
+`SOURCE.txt` / `RUNTIME.txt` verification. E4C1 does not create the E3B release
+envelope, candidate audit, Git tag, GitHub Release, or release assets.
