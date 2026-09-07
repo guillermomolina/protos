@@ -44,9 +44,10 @@ public final class ProtosTask {
      *
      * <p>This is runtime machinery, not a Protos-visible state model. REQUESTED means the
      * request still awaits a portable observation boundary. UNWINDING means that request has
-     * already been observed and is draining existing structured cancellation work. TERMINAL
-     * means the recorded request can no longer be observed again because the task has reached
-     * a terminal outcome.
+     * already been observed and is running applicable ensure cleanup and/or draining structured
+     * cancellation work. SUPERSEDED means a later cleanup transfer permanently replaced that
+     * cancellation. TERMINAL means the recorded request can no longer be observed again because
+     * the task has reached a terminal outcome.
      */
     public enum CancellationPhase {
         NONE,
@@ -123,8 +124,9 @@ public final class ProtosTask {
     /**
      * Whether the recorded cancellation request still awaits portable observation.
      *
-     * <p>Once observation begins, the same request is no longer pending. I022-E2/E3 may extend
-     * the UNWINDING interval with ensure cleanup without changing this invariant.
+     * <p>Once observation begins, the same request is no longer pending. Suspension reached
+     * while that same cancellation is unwinding through ensure cleanup therefore does not
+     * re-deliver it; a genuinely later independent request would require a distinct task.
      */
     public synchronized boolean cancellationRequested() {
         return cancellationPhase == CancellationPhase.REQUESTED;
@@ -381,13 +383,14 @@ public final class ProtosTask {
             boolean hasEnsureCleanup =
                     dynamicControlState != null
                             && dynamicControlState.hasActiveEnsureFrames();
-            if (!cancelChildren.isEmpty()) {
+            if (hasEnsureCleanup) {
+                // Cleanup owns the running task first. Existing structured children still receive
+                // cancellation below, but they must not force the parent into childDrain before
+                // crossed ensure cleanup has had a chance to run or suspend.
+                terminalNow = false;
+            } else if (!cancelChildren.isEmpty()) {
                 state = State.SUSPENDED;
                 waitDependency = childDrain;
-                terminalNow = false;
-            } else if (hasEnsureCleanup) {
-                // The cancellation request has been delivered but the task-backed Future must
-                // not become terminal before the active ensure extents run their cleanup.
                 terminalNow = false;
             } else {
                 cancellationPhase = CancellationPhase.TERMINAL;
@@ -407,13 +410,14 @@ public final class ProtosTask {
     }
 
     /**
-     * Completes an already-delivered cancellation after synchronous ensure cleanup.
+     * Completes an already-delivered cancellation after all crossed ensure cleanup has finished.
      *
-     * <p>If existing structured children are still draining, the E1 child-drain continuation
-     * remains the terminalization owner. E3 will extend this method for cleanup suspension and
-     * cleanup-created structured children.
+     * <p>Any structured children still owned at this cutover, including children created while
+     * ensure cleanup runs, receive cancellation and are drained before the parent publishes its
+     * terminal cancelled Future. Children that cleanup explicitly awaited may already be gone.
      */
     public boolean finishCancellationUnwind() {
+        java.util.Set<ProtosTask> cancelChildren = Set.of();
         boolean terminalNow = false;
         synchronized (this) {
             if (cancellationPhase != CancellationPhase.UNWINDING || isTerminal()) {
@@ -421,20 +425,25 @@ public final class ProtosTask {
             }
 
             if (state == State.RUNNING) {
-                if (!children.isEmpty()) {
+                cancelChildren = Set.copyOf(children);
+                if (!cancelChildren.isEmpty()) {
                     state = State.SUSPENDED;
                     waitDependency = childDrain;
-                    return true;
+                } else {
+                    cancellationPhase = CancellationPhase.TERMINAL;
+                    state = State.CANCELLED;
+                    terminalNow = true;
                 }
-                cancellationPhase = CancellationPhase.TERMINAL;
-                state = State.CANCELLED;
-                terminalNow = true;
             } else if (state == State.SUSPENDED && waitDependency == childDrain) {
                 return true;
             } else {
                 throw new IllegalStateException(
                         "finish cancellation unwind requires running cleanup or child drain");
             }
+        }
+
+        for (ProtosTask child : cancelChildren) {
+            child.requestCancellation();
         }
 
         if (terminalNow) {
@@ -464,11 +473,10 @@ public final class ProtosTask {
     }
 
     /**
-     * Completes the existing structured-child part of cancellation unwind.
+     * Completes the final structured-child drain of a cancellation unwind.
      *
-     * <p>I022-E1 deliberately owns no ensure cleanup yet. This method only makes the already
-     * normative child-drain interval explicit so I022-E2/E3 can later extend UNWINDING without
-     * reinterpreting a still-pending request.
+     * <p>At this point applicable ensure cleanup has finished normally and every child that
+     * remained owned at the post-cleanup cutover has already received a cancellation request.
      */
     private void finishCancellationAfterChildDrain() {
         synchronized (this) {

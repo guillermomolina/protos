@@ -149,6 +149,63 @@ class ProtosStandardFutureProtocolTest {
         assertFalse(domain.dispatchOne());
     }
 
+    // Deliberately Java-side: language conformance validates E3 outcomes, while this
+    // test inspects the runtime-only intermediate state at the exact cleanup suspension point.
+    @Test
+    void cancellationFutureRemainsPendingWhileEnsureCleanupIsSuspended() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+        ProtosActivation activation =
+                prelude.newModuleActivation(
+                        new ProtosActorModuleState(),
+                        null,
+                        prelude.newExecutionContext(),
+                        domain);
+
+        ProtosFutureValue cleanupGate =
+                new ProtosFutureValue(prelude.futurePrototype(), domain);
+        activation.context().createLocalSlot("cleanupGate", cleanupGate);
+
+        ProtosFutureValue future =
+                (ProtosFutureValue)
+                        eval(
+                                prelude,
+                                activation,
+                                "future: (() => {\n"
+                                        + "    bodyDependency: Future.all().then((values) => 7).detach()\n"
+                                        + "    (() => {\n"
+                                        + "        future.cancel()\n"
+                                        + "        bodyDependency.value()\n"
+                                        + "        41\n"
+                                        + "    }).ensure(() => {\n"
+                                        + "        cleanupGate.value()\n"
+                                        + "        null\n"
+                                        + "    })\n"
+                                        + "}).future()\n"
+                                        + "future");
+
+        ProtosTask producer = future.producerTask().orElseThrow();
+
+        assertTrue(domain.dispatchOne());
+        assertEquals(ProtosFutureValue.State.PENDING, future.state());
+        assertEquals(ProtosTask.State.SUSPENDED, producer.state());
+        assertEquals(
+                ProtosTask.CancellationPhase.UNWINDING,
+                producer.cancellationPhase());
+        assertFalse(
+                producer.cancellationRequested(),
+                "already-honored cancellation must be shielded during cleanup suspension");
+
+        cleanupGate.resolve(ProtosNullValue.INSTANCE, activation);
+        domain.dispatchUntilIdle();
+
+        assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
+        assertEquals(ProtosTask.State.CANCELLED, producer.state());
+        assertEquals(
+                ProtosTask.CancellationPhase.TERMINAL,
+                producer.cancellationPhase());
+    }
+
     // Success ordering and empty-input behavior already have executable Protos
     // conformance. Retain only deterministic failure-frontier and exact Error identity.
     @Test

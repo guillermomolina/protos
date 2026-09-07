@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.191-SNAPSHOT
+
+- Close I022-E3 and the parent I022-E cancellation-unwind slice. Preserve the E1 invariant that only `REQUESTED` is pending for observation: once cancellation reaches `UNWINDING`, `ensure` cleanup can use ordinary Future suspension/replay without the same request being delivered again, and the task-backed producer Future remains PENDING until cleanup and required structured drain finish.
+- Make cleanup precede structured cancellation drain when cancellation is first observed inside an active ensure extent. Pre-existing children still receive cancellation, but their presence no longer moves the parent to child-drain suspension before cleanup can run. At successful post-cleanup cutover, cancel every child still structurally owned, including cleanup-created unawaited children, and publish terminal CANCELLED only after that drain. Cleanup-created children explicitly awaited by cleanup may run to ordinary completion while the already-honored parent request stays shielded.
+- Add Protos-source conformance for suspended cleanup exact-once progress under a repeated `cancel()` call, suspended cleanup Error supersession with exact identity, awaited cleanup-created child progress, unawaited cleanup-created child cancellation/drain, and pre-existing-child ordering. Add one Java-side focal only for the runtime-internal intermediate assertion that the producer Future is still PENDING while cancellation cleanup is suspended. No specification or native-Closure boundary change. I022-E is CLOSED and I022-F becomes READY for final adversarial cross-feature closure.
+
 ## 0.2.190-SNAPSHOT
 
 - Close `TOOL001-C5C — optional manifest schema sections` (legacy manifest Slice 3C2). Extend ordinary-Protos `self:ManifestSchemaV1` with `sectionsFromTable(root)` / `parseSections(text)` over the published C5B mandatory base. The partial schema model now validates and materializes optional `compatibility`, `exports`, and `workspace` data while deliberately leaving `dependencies` uninterpreted for C5D.
