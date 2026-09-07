@@ -1,3 +1,8 @@
+## 0.2.220-SNAPSHOT
+
+- Publish `TOOL002-E2A2A — detached cross-Prelude standard Error taxonomy`. Add an explicit source-Prelude form of the existing test-neutral detached execution-value boundary. Source `Error` and every closed standard Error prototype are mapped by the existing Core taxonomy name to the corresponding destination-Prelude prototype before ordinary graph copying. Fresh Error occurrences retain fresh destination identity; no source Prelude prototype is shared into the destination.
+- Subdivide `TOOL002-E2A2` into E2A2A mechanism, E2A2B one real Package failed-fixture integration, and E2A2C closure/reconciliation. E2A2A does not change `packageExecution`, execute a Package/TOML fixture, activate TestPlan expectation policy, or retire Java runner ownership. No normative specification change.
+
 ## 0.2.219-SNAPSHOT
 
 - Open bounded Standard Library prerequisite `LIB006 — deterministic hashing` and close documentation/design slice `LIB006-A` without changing the implementation version. Freeze `std:crypto/SHA256.digest(Bytes) -> Bytes` as a stateless one-shot SHA-256 operation returning fresh 32-octet digest values, with no entropy, keyed crypto, password/KDF, cipher/signature/TLS surface, streaming state, Core value family or native/JVM crypto boundary.

@@ -23,6 +23,7 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.Objects;
 
 /**
  * Forms a detached, authority-free observation snapshot of a completed Protos value.
@@ -33,19 +34,43 @@ import java.util.Set;
  * The initial supported data families are ordinary scalar values plus authority-free ordinary
  * Object/Array/Bytes graphs whose complete reachable graph satisfies the same restriction.
  *
- * <p>Frozen standard prelude objects are shared because they carry no instance authority and are
- * already part of both executions' selected Core prelude. Every other copied identity-bearing
- * object receives a fresh destination identity.
+ * <p>When source and destination use the same Core Prelude, frozen standard prelude objects may be
+ * shared because they carry no instance authority. When the Preludes differ, the explicit
+ * cross-Prelude entry point rematerializes the closed standard Error taxonomy to the corresponding
+ * destination prototypes before ordinary detached graph copying proceeds. It never shares a
+ * source-Prelude Error prototype into the destination.
  */
 public final class ProtosDetachedExecutionValue {
     private ProtosDetachedExecutionValue() {}
 
     public static Object snapshot(Object value, ProtosActivation destination) {
-        return new Copier(destination).copy(value);
+        ProtosPrelude destinationPrelude =
+                Objects.requireNonNull(destination, "destination")
+                        .prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "detached execution snapshot requires Core prelude"));
+        return new Copier(destinationPrelude, destination).copy(value);
+    }
+
+    /**
+     * Forms a detached snapshot when source and destination executions use distinct Core Preludes.
+     *
+     * <p>The source Prelude is descriptive only: it identifies standard Error taxonomy objects that
+     * must be rematerialized to the corresponding destination taxonomy. It grants no authority and
+     * is never exposed to the destination value graph.
+     */
+    public static Object snapshot(
+            Object value,
+            ProtosPrelude sourcePrelude,
+            ProtosActivation destination) {
+        return new Copier(sourcePrelude, destination).copy(value);
     }
 
     private static final class Copier {
         private final ProtosActivation destination;
+        private final ProtosPrelude sourcePrelude;
         private final ProtosPrelude prelude;
         private final IdentityHashMap<Object, Object> memo = new IdentityHashMap<>();
         private final Set<Object> populating =
@@ -53,9 +78,11 @@ public final class ProtosDetachedExecutionValue {
         private final Set<Object> populated =
                 Collections.newSetFromMap(new IdentityHashMap<>());
 
-        private Copier(ProtosActivation destination) {
-            this.destination =
-                    java.util.Objects.requireNonNull(destination, "destination");
+        private Copier(
+                ProtosPrelude sourcePrelude,
+                ProtosActivation destination) {
+            this.destination = Objects.requireNonNull(destination, "destination");
+            this.sourcePrelude = Objects.requireNonNull(sourcePrelude, "sourcePrelude");
             this.prelude =
                     destination
                             .prelude()
@@ -106,6 +133,13 @@ public final class ProtosDetachedExecutionValue {
             if (!(value instanceof ProtosObjectValue object)) {
                 throw nonTransferable();
             }
+
+            ProtosObjectValue remappedStandardError =
+                    remappedStandardErrorPrototype(object);
+            if (remappedStandardError != null) {
+                return remember(value, remappedStandardError);
+            }
+
             if (isSharedStandardObject(object)) {
                 return remember(value, value);
             }
@@ -197,6 +231,39 @@ public final class ProtosDetachedExecutionValue {
             } finally {
                 populating.remove(value);
             }
+        }
+
+        private ProtosObjectValue remappedStandardErrorPrototype(
+                ProtosObjectValue object) {
+            for (ProtosCoreErrors.StandardError standardError :
+                    ProtosCoreErrors.StandardError.values()) {
+                Object sourcePrototype =
+                        sourcePrelude
+                                .bindings()
+                                .readLocalSlot(standardError.prototypeName())
+                                .orElse(null);
+                if (sourcePrototype != object) {
+                    continue;
+                }
+
+                Object destinationPrototype =
+                        prelude
+                                .bindings()
+                                .readLocalSlot(standardError.prototypeName())
+                                .orElseThrow(
+                                        () ->
+                                                new IllegalStateException(
+                                                        "destination Core Prelude is missing standard "
+                                                                + standardError.prototypeName()));
+                if (!(destinationPrototype instanceof ProtosObjectValue destinationObject)) {
+                    throw new IllegalStateException(
+                            "destination standard "
+                                    + standardError.prototypeName()
+                                    + " binding is not an ordinary object");
+                }
+                return destinationObject;
+            }
+            return null;
         }
 
         private boolean isSharedStandardObject(ProtosObjectValue object) {
