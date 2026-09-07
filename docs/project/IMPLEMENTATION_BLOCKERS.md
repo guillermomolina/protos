@@ -351,7 +351,7 @@ validation, and publication.
 
 ## B008 — Structured ownership when a task-backed Future escapes an activation
 
-Status: READY
+Status: CLOSED
 
 Implementation area:
 I023-B2D2 structured-ownership/cross-B2 closure and any implementation/conformance
@@ -405,10 +405,17 @@ and ordering without escape analysis or API-specific inference:
 5. D044 `while` adds no loop-specific ownership/scheduling behavior.
 
 Current consequence:
-I023-B2D2 is READY again. B2D1 remains valid evidence for the D044 result boundary.
-B008 remains READY rather than CLOSED until B2D2 publishes the required
-implementation/conformance reconciliation or demonstrates that no implementation
-change is necessary and closes on validation evidence.
+Closed by I023-B2D2 conformance after D045. The reference runtime already used
+the task-scoped ownership model selected by D045, so no production/runtime
+ownership change was required. A `while` body can return a newly-created
+task-backed Future and the synchronous body/loop continues without draining that
+child; the surrounding asynchronous task still retains the child and does not
+become terminal until every non-detached child is terminal. The retained
+Future-shaped JSON overlap conformance also remains green, guarding against the
+rejected per-synchronous-activation drain interpretation.
+
+I023-B2D2, B2D, B2 and B are CLOSED. I023-C is READY. B007 remains READY until
+final I023-D closure.
 
 History:
 B008 was created after an unpublished activation-drain experiment broke the
@@ -418,6 +425,6 @@ already-composable task-scoped model explicit rather than adding Future-return
 escape transfer, implicit detach, or per-result ownership heuristics.
 
 Independent work:
-Unrelated implementation work remains independent. I023-C and I023-D stay
-dependency-blocked until B2D2 closes B2D/B2/B. B007 remains READY until final I023
-implementation closure.
+B008 no longer blocks implementation work. I023-C may proceed; unrelated work
+remains independent. B007 remains READY until final I023-D implementation
+closure.
