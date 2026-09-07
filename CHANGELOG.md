@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.194-SNAPSHOT
+
+- Close `TOOL001-C5 — manifest schema v1` with `TOOL001-C5D` (legacy manifest Slice 3C3). Complete ordinary-Protos `self:ManifestSchemaV1` with `fromTable(root)` / `parse(text)`, preserving the published C5B mandatory base and C5C optional-section helpers while adding the final `dependencies` Map to the ordinary ManifestV1 data shape.
+- Validate each dependency alias declaration as exactly one schema-v1 source form: registry requires non-empty String `authority`/`package`/`version`; Git requires non-empty String `git`/`rev`; path requires one non-empty String `path`. Mixed, incomplete, empty, non-table, array-of-tables and unknown-field declarations fail closed. Alias spelling and all decoded Strings are preserved exactly; no alias grammar, URL/revision validation, version/constraint semantics, path interpretation, network, resolution or lock policy is introduced.
+- Add Protos-owned final-schema conformance for absent/empty dependencies, all three expanded forms, inline-table equivalence, malformed/mixed/incomplete declarations and cross-section failure propagation. `TOOL001-C5D` and parent C5 close; `TOOL001-C6` becomes READY for the separate confined `protos.toml` read/UTF-8/diagnostic integration.
+
 ## 0.2.193-SNAPSHOT
 
 - Subdivide `TOOL002-D3B` into D3B1 fixed-width policy and D3B2 Error-parent policy, and close only D3B1. `Runner.evaluateSimple` now accepts `fixed-integer`, parses retained `FAMILY:value` syntax in Protos, selects one of the eight Core fixed-width factories, and matches through primitive `===` so numeric family and exact value are both preserved.

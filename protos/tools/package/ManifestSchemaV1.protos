@@ -200,3 +200,134 @@ parseSections: (text) => {
     Document: import("self:TomlDocument")
     sectionsFromTable(Document.table(text))
 }
+
+fromTable: (root) => {
+    fail: () => {
+        Error().signal()
+    }
+
+    tableEntries: (node) => {
+        (node.kind == "table").ifFalse(() => {
+            fail()
+        })
+        node.value
+    }
+
+    nonEmptyString: (node) => {
+        (node.kind == "string").ifFalse(() => {
+            fail()
+        })
+        value: node.value
+        (value == "").ifTrue(() => {
+            fail()
+        })
+        value
+    }
+
+    checkAllowed: (entries, allowed) => {
+        entries.each((name, valueNode) => {
+            allowed.containsKey(name).ifFalse(() => {
+                fail()
+            })
+        })
+    }
+
+    sections: sectionsFromTable(root)
+    rootEntries: tableEntries(root)
+    dependencies: Map()
+
+    rootEntries.containsKey("dependencies").ifTrue(() => {
+        dependencyEntries: tableEntries(rootEntries.at("dependencies"))
+
+        dependencyEntries.each((alias, declarationNode) => {
+            declarationEntries: tableEntries(declarationNode)
+            declarationAllowed: Map()
+            declarationAllowed.atPut("authority", true)
+            declarationAllowed.atPut("package", true)
+            declarationAllowed.atPut("version", true)
+            declarationAllowed.atPut("git", true)
+            declarationAllowed.atPut("rev", true)
+            declarationAllowed.atPut("path", true)
+            checkAllowed(declarationEntries, declarationAllowed)
+
+            hasAuthority: declarationEntries.containsKey("authority")
+            hasPackage: declarationEntries.containsKey("package")
+            hasVersion: declarationEntries.containsKey("version")
+            hasGit: declarationEntries.containsKey("git")
+            hasRev: declarationEntries.containsKey("rev")
+            hasPath: declarationEntries.containsKey("path")
+
+            registryTouched: hasAuthority
+            hasPackage.ifTrue(() => { registryTouched = true })
+            hasVersion.ifTrue(() => { registryTouched = true })
+
+            registryComplete: hasAuthority
+            hasPackage.ifFalse(() => { registryComplete = false })
+            hasVersion.ifFalse(() => { registryComplete = false })
+
+            gitTouched: hasGit
+            hasRev.ifTrue(() => { gitTouched = true })
+
+            gitComplete: hasGit
+            hasRev.ifFalse(() => { gitComplete = false })
+
+            registryValid: registryComplete
+            gitTouched.ifTrue(() => { registryValid = false })
+            hasPath.ifTrue(() => { registryValid = false })
+
+            gitValid: gitComplete
+            registryTouched.ifTrue(() => { gitValid = false })
+            hasPath.ifTrue(() => { gitValid = false })
+
+            pathValid: hasPath
+            registryTouched.ifTrue(() => { pathValid = false })
+            gitTouched.ifTrue(() => { pathValid = false })
+
+            dependency: null
+            valid: false
+
+            registryValid.ifTrue(() => {
+                dependency = {
+                    authority: nonEmptyString(declarationEntries.at("authority"))
+                    package: nonEmptyString(declarationEntries.at("package"))
+                    version: nonEmptyString(declarationEntries.at("version"))
+                }
+                valid = true
+            })
+
+            gitValid.ifTrue(() => {
+                dependency = {
+                    git: nonEmptyString(declarationEntries.at("git"))
+                    rev: nonEmptyString(declarationEntries.at("rev"))
+                }
+                valid = true
+            })
+
+            pathValid.ifTrue(() => {
+                dependency = {
+                    path: nonEmptyString(declarationEntries.at("path"))
+                }
+                valid = true
+            })
+
+            valid.ifFalse(() => {
+                fail()
+            })
+
+            dependencies.atPut(alias, dependency)
+        })
+    })
+
+    {
+        package: sections.package
+        compatibility: sections.compatibility
+        exports: sections.exports
+        dependencies: dependencies
+        workspace: sections.workspace
+    }
+}
+
+parse: (text) => {
+    Document: import("self:TomlDocument")
+    fromTable(Document.table(text))
+}
