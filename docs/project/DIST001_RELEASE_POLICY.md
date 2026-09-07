@@ -304,11 +304,13 @@ publication:
       checkout; HEAD/version/cleanliness/detachment and unchanged branch refs are
       verified. No real candidate mutation occurs in B1.
     - `DIST001-E4B2` — exact POM `0.2.236-SNAPSHOT` -> `0.2.236`
-      transition — READY. Materialize the selected detached worktree through B1
-      and change only the root project version in `pom.xml`; no commit yet.
-    - `DIST001-E4B3` — candidate commit creation — `BLOCKED_BY_DEPENDENCIES` on
-      E4B2. Commit only the validated release-version transition in detached
-      candidate state without a branch/tag/remote publication.
+      transition — CLOSED. Publish/test the fail-closed mutation primitive over
+      an E4B1 detached baseline worktree. Only the root Protos project-version
+      token may change; the resulting worktree must remain detached, unstaged
+      and uncommitted with exactly `pom.xml` modified.
+    - `DIST001-E4B3` — candidate commit creation — READY. Commit only the
+      validated E4B2 release-version transition in detached candidate state
+      without a branch/tag/remote publication.
     - `DIST001-E4B4` — release-only lineage verification —
       `BLOCKED_BY_DEPENDENCIES` on E4B3. Prove baseline -> candidate changes only
       the exact release-owned transition and then close E4B.

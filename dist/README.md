@@ -505,6 +505,33 @@ POM transition.
 The helper never creates or pushes a branch, creates a tag, changes the selected
 baseline, authorizes publication, or publishes a GitHub Release/asset.
 
+
+## Exact candidate POM version transition
+
+`DIST001-E4B2` owns only the mechanical project-version mutation after E4B1 has
+created an exact clean detached worktree at the selected baseline.
+
+Generic use:
+
+```sh
+python3 dist/transition_release_candidate_version.py     --selection docs/project/DIST001_E4_SELECTION.txt     --candidate /path/to/detached-candidate-worktree
+```
+
+The helper requires the candidate to remain a registered detached worktree whose
+`HEAD` is the exact selected baseline and whose worktree is clean. It then
+changes only the root Protos Maven project version from the selected
+`V-SNAPSHOT` to public `V`.
+
+The resulting `pom.xml` must be byte-for-byte equal to the selected baseline
+`pom.xml` except for that one exact project-version token. `git diff --name-only`
+must contain only `pom.xml`, nothing is staged, `HEAD` remains the selected
+baseline, and detached state is preserved.
+
+E4B2 does not create the real candidate worktree during publication, does not
+stage or commit the transition, and does not create a branch, tag, remote
+candidate ref, GitHub Release, or release asset. E4B3 owns the first candidate
+commit.
+
 ## DIST001 boundary
 
 DIST001-A proves that the distribution can be constructed and that its archive

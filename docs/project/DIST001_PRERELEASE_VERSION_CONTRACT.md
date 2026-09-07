@@ -325,3 +325,32 @@ The real candidate source revision therefore remains `UNMATERIALIZED` at E4B1
 closure. E4B2 is the first slice allowed to mutate the selected-baseline
 worktree, and only for the exact project POM transition `0.2.236-SNAPSHOT` ->
 `0.2.236`.
+
+## E4B2 exact POM transition checkpoint
+
+E4B2 closes the mutation boundary between the selected detached baseline
+worktree and the future candidate commit.
+
+For the selected first pre-release:
+
+```text
+release_baseline_revision=3c23eaaccecbdcc7c2bcd86bc30c445403cfb047
+release_baseline_version=0.2.236-SNAPSHOT
+release_version=0.2.236
+release_tag=v0.2.236
+```
+
+the only E4B2 change permitted in the candidate worktree is the root Maven
+project-version token:
+
+```text
+0.2.236-SNAPSHOT -> 0.2.236
+```
+
+No dependency/plugin/property version that merely contains the same text may be
+changed. The post-transition worktree remains detached and uncommitted with
+exactly `pom.xml` modified. E4B3 owns staging and creation of the candidate
+commit; E4B4 owns independent release-only lineage proof.
+
+E4B2 itself materializes no real release worktree or candidate commit during
+publication and keeps release publication unauthorized.
