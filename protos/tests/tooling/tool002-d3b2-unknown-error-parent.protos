@@ -16,34 +16,17 @@
 Manifest: import("self:Manifest")
 Runner: import("self:Runner")
 
-fixed: Manifest.parseLine("fixed.protos\tfixed-integer\tUInt16:7")
-notYet: Manifest.parseLine(
-    "not-yet.protos\tfloat-bits\t3ff0000000000000"
+spec: Manifest.parseLine(
+    "unknown.protos\terror-parent\tNotAStandardError"
 )
-plan: Manifest.frozenTuple(Manifest.frozenTuple(fixed, notYet))
-
-loads: 0
-executions: 0
-
-sourceLoader: (spec) => {
-    loads = loads + 1
-    "UInt16(7)"
-}
-
-executor: (source) => {
-    executions = executions + 1
-    {
-        state: "completed"
-        value: UInt16(7)
-        error: null
+Runner.evaluateSimple(
+    spec,
+    "",
+    (source) => {
+        {
+            state: "failed"
+            value: null
+            error: Error {}
+        }
     }
-}
-
-run: Runner.runSimpleWithLoader(plan, sourceLoader, executor)
-
-(Runner.runSelectedCount(run) == 1) &&
-(Runner.runPassedCount(run) == 1) &&
-(Runner.runSkippedCount(run) == 1) &&
-Runner.runAllPassed(run) &&
-(loads == 1) &&
-(executions == 1)
+)

@@ -461,6 +461,40 @@ D3B2A is a Core prerequisite, not Test semantics. D1 remains unchanged and
 authority-free. D3B2B remains responsible for the retained immediate-parent
 expectation and will not be published until D3B2A is available on `origin/main`.
 
+### TOOL002-D3B2B error-parent expectation boundary
+
+D3B2B consumes D3B2A through ordinary language semantics only. The retained
+`error-parent` expected payload resolves against the closed Core v0.1 standard
+Error prototype taxonomy. The bundled Test Tool introduces no host Error tag,
+class lookup, hidden ancestry channel, or extension to the D1 detached
+observation.
+
+For one valid case, `evaluateSimple` requires:
+
+```text
+observation.state === "failed"
+observation.value === null
+observation.error !== null
+observation.error.parent() === expectedStandardErrorPrototype
+```
+
+The final comparison is primitive semantic identity. It intentionally checks the
+Error occurrence's **immediate** delegation parent, matching the retained
+manifest contract and the normative standard-failure construction rule. Broader
+delegation ancestry is not accepted: an occurrence parented by `EncodingError`
+does not satisfy expected `IOError`.
+
+A category mismatch is ordinary test evidence (`passed=false`) and therefore
+does not abort the D3A3 sequential chain. An unknown expected standard Error
+prototype is malformed Test Tool policy and signals fail-closed. D1 remains
+authority-free: it reconstructs the Error occurrence while retaining frozen
+standard Prelude prototype identity, and D3B2B observes that result through the
+ordinary `parent()` reflection published by D3B2A.
+
+D3B2B changes no Filesystem, Process, scheduling, reporting, result shape,
+detached-value mechanics, or Java-owned Test taxonomy. D3B is CLOSED after D3B1
+and D3B2B; D3C owns the remaining `float-bits` and `float-nan` policy.
+
 ## Isolation audit
 
 The normal isolation boundary should be **one fresh Protos Process per test

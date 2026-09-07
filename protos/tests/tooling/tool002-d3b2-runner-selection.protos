@@ -16,26 +16,30 @@
 Manifest: import("self:Manifest")
 Runner: import("self:Runner")
 
-fixed: Manifest.parseLine("fixed.protos\tfixed-integer\tUInt16:7")
-notYet: Manifest.parseLine(
-    "not-yet.protos\tfloat-bits\t3ff0000000000000"
+errorParent: Manifest.parseLine(
+    "error-parent.protos\terror-parent\tSlotNotFound"
 )
-plan: Manifest.frozenTuple(Manifest.frozenTuple(fixed, notYet))
+floatNotYet: Manifest.parseLine(
+    "float.protos\tfloat-bits\t3ff0000000000000"
+)
+plan: Manifest.frozenTuple(
+    Manifest.frozenTuple(errorParent, floatNotYet)
+)
 
 loads: 0
 executions: 0
 
 sourceLoader: (spec) => {
     loads = loads + 1
-    "UInt16(7)"
+    "ignored"
 }
 
 executor: (source) => {
     executions = executions + 1
     {
-        state: "completed"
-        value: UInt16(7)
-        error: null
+        state: "failed"
+        value: null
+        error: SlotNotFound {}
     }
 }
 

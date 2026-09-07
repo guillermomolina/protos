@@ -716,7 +716,7 @@ record distributable Standard Library functionality.
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
 | TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | Bootstrap, confined Filesystem, metadata publication and manifest Slice 3 are CLOSED; TOOL001-D is IN_PROGRESS with D1 CLOSED and D2 IN_PROGRESS through exact-constraint D2A, with D2B caret READY. |
-| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C CLOSED; TOOL002-D IN_PROGRESS with D1/D2 CLOSED and D3 IN_PROGRESS; D3A CLOSED, D3B1 CLOSED, D3B2 IN_PROGRESS with D3B2A general `Object.parent()` Core prerequisite CLOSED at `0.2.196-SNAPSHOT` and D3B2B `error-parent` policy READY. |
+| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C CLOSED; TOOL002-D IN_PROGRESS with D1/D2 CLOSED and D3 IN_PROGRESS; D3A and D3B CLOSED through D3B2B at `0.2.199-SNAPSHOT`; D3C float policy READY. |
 
 ### TOOL001 — Package Tool
 
@@ -772,7 +772,7 @@ the initial TOOL002 closure.
 | TOOL002-A | CLOSED | `0.2.168-SNAPSHOT` / `SAME_COMMIT`; exact bundled `protos test` dispatch plus a tiny ordinary-Protos entry, with no corpus migration or test policy. |
 | TOOL002-B | CLOSED | `0.2.169-SNAPSHOT` / `SAME_COMMIT`; local test-neutral fresh-Process exact-entry executor, shared RootActor cooperative terminal dispatch, inert COMPLETED/FAILED/CANCELLED outcome, explicit bootstrap authority and Process termination before return; no test policy. |
 | TOOL002-C | CLOSED | `0.2.171-SNAPSHOT` / `SAME_COMMIT`; one exact compiled entry executes through TOOL002-B in a fresh Process with private stdin/stdout/stderr and detached captured output; no manifest/expectation/scheduler/result-transfer policy. |
-| TOOL002-D | IN_PROGRESS | D1/D2 CLOSED; D3 IN_PROGRESS: D3A and D3B1 CLOSED; D3B2A closes the general normative `Object.parent()` prerequisite at `0.2.196-SNAPSHOT`, D3B2B error-parent READY, D3C still dependent, D4 remains after D3, and `future-*` remains TOOL002-F. |
+| TOOL002-D | IN_PROGRESS | D1/D2 CLOSED; D3 IN_PROGRESS with D3A and D3B CLOSED through D3B2B at `0.2.199-SNAPSHOT`; D3C float policy READY, D4 remains after D3, and `future-*` remains TOOL002-F. |
 | TOOL002-E | BLOCKED_BY_DEPENDENCIES | TOOL002-D; migrate package-tool/TOML fixtures away from Java-owned runner policy. |
 | TOOL002-F | BLOCKED_BY_DEPENDENCIES | TOOL002-E; preserve async/Future pending-work and terminal-outcome coverage through production semantics. |
 | TOOL002-G | BLOCKED_BY_DEPENDENCIES | TOOL002-F; migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |

@@ -83,6 +83,7 @@ isSimpleExpectation: (spec) => {
     (kind === "null").ifTrue(() => { supported = true })
     (kind === "integer").ifTrue(() => { supported = true })
     (kind === "fixed-integer").ifTrue(() => { supported = true })
+    (kind === "error-parent").ifTrue(() => { supported = true })
     (kind === "error").ifTrue(() => { supported = true })
     supported
 }
@@ -199,6 +200,99 @@ parseExpectedFixedInteger: (text) => {
     family(parseExpectedInteger(valueText))
 }
 
+standardErrorPrototype: (name) => {
+    result: null
+    known: false
+
+    (name === "Error").ifTrue(() => {
+        result = Error
+        known = true
+    })
+    (name === "SlotNotFound").ifTrue(() => {
+        result = SlotNotFound
+        known = true
+    })
+    (name === "InvalidSuper").ifTrue(() => {
+        result = InvalidSuper
+        known = true
+    })
+    (name === "InvalidReturn").ifTrue(() => {
+        result = InvalidReturn
+        known = true
+    })
+    (name === "Cancelled").ifTrue(() => {
+        result = Cancelled
+        known = true
+    })
+    (name === "FutureResolutionCycle").ifTrue(() => {
+        result = FutureResolutionCycle
+        known = true
+    })
+    (name === "RequestOutcomeUncertain").ifTrue(() => {
+        result = RequestOutcomeUncertain
+        known = true
+    })
+    (name === "NonTransferableValue").ifTrue(() => {
+        result = NonTransferableValue
+        known = true
+    })
+    (name === "NonParallelValue").ifTrue(() => {
+        result = NonParallelValue
+        known = true
+    })
+    (name === "InvalidPredicateResult").ifTrue(() => {
+        result = InvalidPredicateResult
+        known = true
+    })
+    (name === "InvalidComparatorResult").ifTrue(() => {
+        result = InvalidComparatorResult
+        known = true
+    })
+    (name === "InvalidComparatorOrder").ifTrue(() => {
+        result = InvalidComparatorOrder
+        known = true
+    })
+    (name === "ParallelRegionOverlap").ifTrue(() => {
+        result = ParallelRegionOverlap
+        known = true
+    })
+    (name === "ParallelRegionInUse").ifTrue(() => {
+        result = ParallelRegionInUse
+        known = true
+    })
+    (name === "ParallelRegionOutsideP").ifTrue(() => {
+        result = ParallelRegionOutsideP
+        known = true
+    })
+    (name === "IOError").ifTrue(() => {
+        result = IOError
+        known = true
+    })
+    (name === "InvalidIOArgument").ifTrue(() => {
+        result = InvalidIOArgument
+        known = true
+    })
+    (name === "IOLifecycleError").ifTrue(() => {
+        result = IOLifecycleError
+        known = true
+    })
+    (name === "IOCapacityExhausted").ifTrue(() => {
+        result = IOCapacityExhausted
+        known = true
+    })
+    (name === "EncodingError").ifTrue(() => {
+        result = EncodingError
+        known = true
+    })
+    (name === "LineTooLong").ifTrue(() => {
+        result = LineTooLong
+        known = true
+    })
+
+    known.ifFalse(() => { policyError() })
+    result
+}
+
 evaluateSimple: (spec, source, executor) => {
     isSimpleExpectation(spec).ifFalse(() => { policyError() })
 
@@ -258,6 +352,23 @@ evaluateSimple: (spec, source, executor) => {
         })
         passed.ifTrue(() => {
             passed = observation.value === expectedValue
+        })
+    })
+
+    (kind === "error-parent").ifTrue(() => {
+        expectedParent: standardErrorPrototype(expected)
+
+        passed = observation.state === "failed"
+        passed.ifTrue(() => {
+            passed = observation.value === null
+        })
+        passed.ifTrue(() => {
+            (observation.error === null).ifTrue(() => {
+                passed = false
+            })
+        })
+        passed.ifTrue(() => {
+            passed = observation.error.parent() === expectedParent
         })
     })
 

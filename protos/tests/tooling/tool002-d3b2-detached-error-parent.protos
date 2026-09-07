@@ -16,34 +16,20 @@
 Manifest: import("self:Manifest")
 Runner: import("self:Runner")
 
-fixed: Manifest.parseLine("fixed.protos\tfixed-integer\tUInt16:7")
-notYet: Manifest.parseLine(
-    "not-yet.protos\tfloat-bits\t3ff0000000000000"
+slot: Runner.evaluateSimple(
+    Manifest.parseLine("slot.protos\terror-parent\tSlotNotFound"),
+    "1.definitelyMissing()",
+    execution
 )
-plan: Manifest.frozenTuple(Manifest.frozenTuple(fixed, notYet))
+generic: Runner.evaluateSimple(
+    Manifest.parseLine("generic.protos\terror-parent\tError"),
+    "Object.parent()",
+    execution
+)
 
-loads: 0
-executions: 0
-
-sourceLoader: (spec) => {
-    loads = loads + 1
-    "UInt16(7)"
-}
-
-executor: (source) => {
-    executions = executions + 1
-    {
-        state: "completed"
-        value: UInt16(7)
-        error: null
-    }
-}
-
-run: Runner.runSimpleWithLoader(plan, sourceLoader, executor)
-
-(Runner.runSelectedCount(run) == 1) &&
-(Runner.runPassedCount(run) == 1) &&
-(Runner.runSkippedCount(run) == 1) &&
-Runner.runAllPassed(run) &&
-(loads == 1) &&
-(executions == 1)
+Runner.resultPassed(slot) &&
+Runner.resultPassed(generic) &&
+(Runner.resultObservation(slot).state === "failed") &&
+(Runner.resultObservation(generic).state === "failed") &&
+(Runner.resultObservation(slot).error.parent() === SlotNotFound) &&
+(Runner.resultObservation(generic).error.parent() === Error)

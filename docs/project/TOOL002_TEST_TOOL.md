@@ -63,7 +63,7 @@ freeze those decisions unless their own audited scope requires and resolves them
 | TOOL002-A | CLOSED | Exact bundled `protos test` dispatch and tiny ordinary-Protos entry published in the same commit at implementation version `0.2.168-SNAPSHOT`; no corpus migration or test policy. |
 | TOOL002-B | CLOSED | Publish the local, test-neutral `ProtosFreshProcessExecutor` over `ProtosStandaloneProcessBootstrap`, shared RootActor cooperative terminal dispatch through `ProtosRootTaskExecution`, and inert `ProtosExecutionOutcome`; every invocation uses a fresh semantic Process and terminates it before returning. No TestPlan/scheduler/worker/remote/test policy. Implementation version `0.2.169-SNAPSHOT`. |
 | TOOL002-C | CLOSED | Publish test-neutral sequential private-stream capture over `ProtosFreshProcessExecutor`: one exact compiled entry gets private stdin/stdout/stderr, a fresh semantic Process and an inert outcome plus detached captured bytes. No manifest/expectation/scheduler/result-transfer policy. Implementation version `0.2.171-SNAPSHOT`. |
-| TOOL002-D | IN_PROGRESS | D1 safe detached execution observation and D2 confined corpus + Protos-owned inert TestPlan/stable path CaseId are CLOSED; D3 ordinary expectation migration is READY, D4 remains dependent, and `future-*` remains TOOL002-F. |
+| TOOL002-D | IN_PROGRESS | D1/D2 are CLOSED; D3 is IN_PROGRESS with D3A and D3B CLOSED and D3C float policy READY; D4 remains dependent, and `future-*` remains TOOL002-F. |
 | TOOL002-E | BLOCKED_BY_DEPENDENCIES | After D, migrate Package Tool/TOML fixtures away from Java-owned runner policy. |
 | TOOL002-F | BLOCKED_BY_DEPENDENCIES | After E, preserve async/Future pending-work and terminal-outcome test coverage through production execution semantics. |
 | TOOL002-G | BLOCKED_BY_DEPENDENCIES | After F, migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |
@@ -209,7 +209,7 @@ TOOL002-D therefore uses these publishable sub-slices:
 |---|---|---|
 | TOOL002-D1 | CLOSED | Bootstrap-local general `execution(source)` facility for the Test Tool over TOOL002-C, returning a caller-local observation through a strict authority-free detached-value boundary. No manifest/test policy. Implementation version `0.2.174-SNAPSHOT`. |
 | TOOL002-D2 | CLOSED | Grant the Test Tool one read-only tree-confined standard Filesystem rooted at the conformance corpus; bundled `Manifest.protos` uses bounded ordered readLine/Future.all windows to parse retained TSV rows into frozen CaseSpec/TestPlan tuples with named Protos accessors and validated path-based stable CaseIds. No case execution/expectation policy. Implementation version `0.2.182-SNAPSHOT`. |
-| TOOL002-D3 | IN_PROGRESS | D3A1/A2/A3 are CLOSED; D3B is IN_PROGRESS with D3B1 fixed-integer CLOSED and D3B2 error-parent READY; D3C float policy remains dependent. |
+| TOOL002-D3 | IN_PROGRESS | D3A1/A2/A3 and D3B are CLOSED; D3C float policy is READY. |
 | TOOL002-D4 | BLOCKED_BY_DEPENDENCIES | After D3, preserve the remaining non-Future `closure-error-parent-fresh` identity-sensitive expectations without leaking Closure authority; reconcile Java ownership for the D-migrated cases and close TOOL002-D. |
 
 The `future-*` families (`future-integer`, `future-null`, `future-boolean`,
@@ -268,8 +268,8 @@ Float families:
 | TOOL002-D3A1 | CLOSED | Bundled `Runner.readSource(spec, filesystem)` loads one complete UTF-8 case source through the D2 confined standard Filesystem/File surface. Ordered File reads are issued in bounded 16-read windows, exact bytes are accumulated before one UTF-8 decode, and the File is explicitly closed. No case execution or expectation policy. Implementation version `0.2.186-SNAPSHOT`. |
 | TOOL002-D3A2 | CLOSED | `Runner.evaluateSimple(spec, source, executor)` interprets `boolean`, `null`, `integer`, and generic `error` entirely in bundled Protos. Normal mismatches return frozen `passed + observation` evidence; malformed/unsupported policy signals. Integer matching uses signed-decimal Protos parsing plus primitive `===` to preserve exact numeric family. Implementation version `0.2.189-SNAPSHOT`. |
 | TOOL002-D3A3 | CLOSED | Compose TestPlan + source loader + simple evaluator through an ordered `Future.then` dependency chain built without suspending inside `Array.each`; skip unsupported kinds before source access, aggregate ordered frozen CaseRun evidence with balanced chunks, and integrate the supported subset into `Main.protos`. No reporting/parallel/exit-status policy. Implementation version `0.2.192-SNAPSHOT`. |
-| TOOL002-D3B | IN_PROGRESS | D3B1 fixed-integer is CLOSED; D3B2 is IN_PROGRESS after audit subdivision into D3B2A general `Object.parent()` reflection prerequisite and D3B2B `error-parent` policy. |
-| TOOL002-D3C | BLOCKED_BY_DEPENDENCIES | After D3B, migrate `float-bits` and `float-nan` with exact binary64 requirements preserved. |
+| TOOL002-D3B | CLOSED | D3B1 fixed-integer and D3B2A/B error-parent prerequisite/policy are published. The sequential runner owns both retained families without changing D1/D3A evidence boundaries. Implementation version `0.2.199-SNAPSHOT`. |
+| TOOL002-D3C | READY | D3B is closed; migrate `float-bits` and `float-nan` with exact binary64 requirements preserved. |
 
 D3A1 deliberately does not modify `Main.protos`: ordinary `protos test`
 continues to construct the inert D2 TestPlan but does not execute it yet.
@@ -315,7 +315,7 @@ split again:
 | Slice | Status | Outcome |
 |---|---|---|
 | TOOL002-D3B1 | CLOSED | `fixed-integer` parses `FAMILY:value`, accepts exactly the eight Core fixed-width families, constructs the expected semantic value with the selected standard numeric factory, and matches through primitive `===`. Implementation version `0.2.193-SNAPSHOT`. |
-| TOOL002-D3B2 | IN_PROGRESS | First policy validation exposed the missing already-normative `Object.parent()` implementation. D3B2A closes that general Core prerequisite; D3B2B remains READY to migrate `error-parent`. |
+| TOOL002-D3B2 | CLOSED | D3B2A published the general `Object.parent()`/prelude prerequisite and D3B2B publishes retained immediate-parent Error expectation policy in bundled Protos. Implementation version `0.2.199-SNAPSHOT`. |
 
 D3B1 preserves the D3A3 result and sequencing contract. `error-parent` remains
 skipped before source acquisition until D3B2B.
@@ -325,12 +325,12 @@ skipped before source acquisition until D3B2B.
 | Slice | Status | Outcome |
 |---|---|---|
 | TOOL002-D3B2A | CLOSED | Implement the already-normative inherited `Object.parent()` reflection selector as one audited general Core representation bridge shared by ordinary lookup/reflection, restore the normative prelude `Object` binding through a temporary non-leaking root bootstrap seed, and cover ordinary/custom-parent, Error-taxonomy, represented values, root failure, and arity in Protos conformance. Implementation version `0.2.196-SNAPSHOT`. |
-| TOOL002-D3B2B | READY | Migrate retained `error-parent` policy using ordinary `observation.error.parent()` plus the standard Error prototype taxonomy. No D1/result-boundary change. |
+| TOOL002-D3B2B | CLOSED | Bundled Protos resolves the closed standard Error prototype taxonomy and matches a FAILED detached observation by exact immediate `error.parent() === expectedPrototype`; normal mismatch is inert evidence and malformed taxonomy policy fails closed. Implementation version `0.2.199-SNAPSHOT`. |
 
 The failed pre-D3B2A policy attempt is not closure evidence. It demonstrated the
 missing Core prerequisite and cleaned all patch-owned residue before publication.
 
-TOOL002-D3B2B is READY.
+TOOL002-D3B2B is CLOSED. D3B2 and D3B are CLOSED. TOOL002-D3C is READY.
 
 ## Closure rule
 

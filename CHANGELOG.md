@@ -1,3 +1,8 @@
+## 0.2.199-SNAPSHOT
+
+- Close `TOOL002-D3B2B` and parent `TOOL002-D3B`: bundled `Runner.evaluateSimple` now owns retained `error-parent` expectations entirely in Protos, resolving only the closed Core v0.1 standard Error prototype taxonomy and requiring FAILED state, canonical null value, a detached Error, and primitive-identity equality between `observation.error.parent()` and the named expected prototype.
+- Preserve immediate-parent semantics rather than ancestry: an Error occurrence parented by `EncodingError` does not satisfy expected `IOError`. Normal category mismatches remain inert `passed=false` evidence, while an unknown expected Error prototype fails closed as Test Tool policy. Real D1 fresh-Process focal cases prove detached `SlotNotFound` and generic root-`Object.parent()` failures retain their standard immediate parent. The sequential runner now selects `error-parent`; the old D3B1 skip fixture moves to `float-bits`, which remains D3C-owned. D3C becomes READY.
+
 ## 0.2.198-SNAPSHOT
 
 - Start the subdivided `TOOL001-D2 — dependency constraint language v1` with `TOOL001-D2A — exact constraints`. Add ordinary bundled-Protos `self:DependencyConstraint` with only bare full `ReleaseVersion` parsing and exact satisfaction; a bare `1.4.2` means exactly `1.4.2`, and an explicitly named prerelease means exactly that prerelease.
