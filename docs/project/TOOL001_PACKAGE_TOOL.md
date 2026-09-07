@@ -74,12 +74,13 @@ its relation to any legacy Slice 3 terminology that remains useful for continuit
 | TOOL001-E | local/offline version selection policy | CLOSED | `SAME_COMMIT` | E1 fresh highest-satisfying selection plus E2 retained exact-version preference are published as pure local version policy over already-known candidates. Discovery, full eligibility, graph resolution and physical lock work remain separate. |
 | TOOL001-E1 | fresh highest-satisfying ReleaseVersion selection | CLOSED | `SAME_COMMIT` | `self:FreshVersionSelection.select/selectText` filters already-known ReleaseVersion candidates through closed D2 constraint semantics and selects the highest satisfying candidate by D1 precedence; no-match fails closed. |
 | TOOL001-E2 | retained exact-version preference | CLOSED | `SAME_COMMIT` | `self:RetainedVersionSelection.select/selectText` preserves an available exact retained ReleaseVersion while it still satisfies D2; otherwise it delegates to E1 fresh selection. No physical lockfile or package-identity policy is implied. |
-| TOOL001-F | canonical physical lockfile v1 | IN_PROGRESS | TOOL001-F1A published | Physical `protos.lock` format work after closed pure selection E; F1A header grammar CLOSED, F1B body node/edge grammar READY. Parser/writer and graph integration remain later slices. |
+| TOOL001-F | canonical physical lockfile v1 | IN_PROGRESS | TOOL001-F1A/F1B published | F1A header and complete F1B canonical body grammar CLOSED; F1C in-memory canonical parser/writer + round-trip conformance READY. Filesystem/graph integration remain later slices. |
 | TOOL001-F1A | canonical lock header grammar | CLOSED | `SAME_COMMIT` | Exact three-line v1 header grammar and canonical lexical rules are frozen without implementing a parser/writer or choosing body node/edge syntax. |
-| TOOL001-F1B | canonical lock body node/edge grammar | IN_PROGRESS | TOOL001-F1B1/F1B2 published | F1B1 scalar/reference grammar and F1B2 root/workspace representation CLOSED; F1B3 external blocks/fields/edges/final closure READY. |
+| TOOL001-F1B | canonical lock body node/edge grammar | CLOSED | `SAME_COMMIT` | F1B1 scalar/reference, F1B2 root/workspace and F1B3 external-node/dependency/final ordering decisions freeze the complete canonical body grammar for lock-format 1. |
 | TOOL001-F1B1 | canonical scalar strings + typed node references | CLOSED | `SAME_COMMIT` | Body variable values use one deterministic quoted UTF-8 scalar encoding; node references are source-kind-tagged tuples over quoted identity components, avoiding delimiter-composed PackageId keys while PackageId textual encoding remains open. |
 | TOOL001-F1B2 | root/workspace representation | CLOSED | `SAME_COMMIT` | Exactly one root workspace-ref identifies the root manifest package; additional workspace member declarations map their exact manifest string to a workspace-ref in canonical order, without introducing virtual-workspace identity or path semantics. |
-| TOOL001-F1B3 | external node blocks + dependency edges + F1B closure | READY | — | Freeze registry/git blocks, provenance/content fields, dependency edges, remaining body ordering/separation and diagnostic/artifact decisions, then close F1B. |
+| TOOL001-F1B3 | external node blocks + dependency edges + F1B closure | CLOSED | `SAME_COMMIT` | Flat registry/git external records, mandatory ContentIdentity, registry locator+authority, Git fetch provenance, exact alias->target edges, total body ordering/separation and omission of ArtifactDigest close F1B. |
+| TOOL001-F1C | canonical lock parser/writer + round-trip conformance | READY | — | Implement ordinary bundled-Protos in-memory parser/model/writer/canonicalizer over the closed F1A/F1B grammar. Require canonical input, structural uniqueness/reference validation and byte-identical parse/write round trips. No Filesystem I/O, resolution, content-tree hashing, network/store or update behavior. |
 
 
 
@@ -93,14 +94,13 @@ The historical manifest Slice 3, pure version/constraint parent `TOOL001-D`, and
 local/offline version-selection parent `TOOL001-E` are CLOSED.
 
 `TOOL001-F` is the current bounded continuation for the canonical physical
-`protos.lock` v1 format. `TOOL001-F1A` is CLOSED. `TOOL001-F1B` is IN_PROGRESS
-through closed F1B1/F1B2: scalar/reference grammar and root/workspace
-representation are frozen; F1B3 external node blocks/fields/edges/final closure
-is READY.
+`protos.lock` v1 format. `TOOL001-F1A` and `TOOL001-F1B` are CLOSED: the complete
+canonical header/body grammar is frozen through F1B1/F1B2/F1B3.
 
-F1A/F1B1/F1B2 do not implement a parser/writer. F1B3 still owns the remaining
-external-node body structure, dependency edges and final canonical separation/
-ordering. Complete candidate eligibility, graph resolution, workspace/store,
+`TOOL001-F1C` is READY for the pure in-memory bundled-Protos parser/writer/
+canonicalizer and round-trip conformance. F1C does not own Filesystem I/O,
+resolution or ContentIdentity tree hashing. Complete candidate eligibility,
+graph resolution, workspace/store,
 registry/network and update operations remain separately scoped work.
 
 A separate non-committing note in `docs/design/PACKAGE_TOOL_ARCHITECTURE.md`

@@ -352,40 +352,212 @@ F1B2 does not decide:
 
 Those are F1B3 decisions.
 
+## Lock-format 1 external nodes, edges, and complete body — selected by TOOL001-F1B3
 
-## Illustrative canonical body shape
+F1B3 closes the body grammar using the F1B1 lexical primitives and F1B2
+root/workspace prefix. The v1 body remains deliberately flat and line-oriented;
+there are no indentation-sensitive blocks.
 
-The F1A header punctuation above is exact. The body punctuation below remains
-illustrative pending F1B, while its target data shape is approximately:
+### ContentIdentity field
+
+Immutable external nodes carry one mandatory logical content identity:
+
+```text
+content-id =
+    method-token SP digest
+```
+
+where `method-token` and `digest` reuse the F1A lexical productions. This format
+records the versioned content-tree canonicalization method and the
+algorithm-tagged lowercase digest without selecting the implementation of the
+tree canonicalizer itself.
+
+The current conceptual spelling remains, for example:
+
+```text
+protos-package-tree-v1 sha256:<lowercase-hex>
+```
+
+Lock-format 1 does not infer a bare hash algorithm or reinterpret an old method
+under a newer canonicalization generation.
+
+### Registry node record
+
+```text
+registry-node-record =
+    "registry-node" SP registry-ref
+    SP "locator" SP qstring
+    SP "authority" SP qstring
+    SP "content" SP content-id
+    LF
+```
+
+Example:
+
+```text
+registry-node registry "<PackageId>" "1.4.2" locator "community/parser" authority "protos-public" content protos-package-tree-v1 sha256:<digest>
+```
+
+Semantics:
+
+- the `registry-ref` owns immutable node identity: PackageId + ReleaseVersion;
+- `locator` is the human PackageLocator known when the node was resolved; it is
+  diagnostic/retrieval metadata, never node identity;
+- an older locator may remain in a valid lock after a registry rename when the
+  authority preserves the required permanent alias/tombstone relation;
+- `authority` is opaque AuthorityIdentity text, not an endpoint, mirror, CDN or
+  credential-bearing URL;
+- `content` is mandatory ContentIdentity;
+- PackageId and ReleaseVersion are not duplicated as scalar fields.
+
+No registry mirror/endpoint is serialized in the core graph.
+
+### Git node record
+
+```text
+git-node-record =
+    "git-node" SP git-ref
+    SP "fetch" SP qstring
+    SP "content" SP content-id
+    LF
+```
+
+Example:
+
+```text
+git-node git "<PackageId>" "<exact-revision>" fetch "https://example.invalid/repo.git" content protos-package-tree-v1 sha256:<digest>
+```
+
+Semantics:
+
+- `git-ref` owns immutable node identity: PackageId + exact immutable revision;
+- the exact revision is therefore not redundantly emitted again;
+- `fetch` is the portable retrieval/provenance locator required to materialize
+  the exact revision on a cold machine;
+- `fetch` is not PackageId and not content identity;
+- credentials, user-home paths, local cache paths and mutable branch/tag names
+  are forbidden semantic inputs to the locked fetch/revision relation;
+- `content` is mandatory ContentIdentity.
+
+### ArtifactDigest decision
+
+Core lock-format 1 **omits ArtifactDigest records**.
+
+ArtifactDigest verifies one concrete transport encoding, while ContentIdentity
+owns the logical package tree. Registry/store metadata may carry ZIP/TAR/etc.
+transport digests and validate them before materialization without making archive
+choice part of the authoritative dependency graph.
+
+A future lock-format generation may add an explicitly non-identifying transport
+section if a demonstrated workflow requires committed artifact digests.
+
+### Dependency edge record
+
+Every exact dependency edge is a flat record:
+
+```text
+dependency-record =
+    "dependency" SP node-ref
+    SP "alias" SP qstring
+    SP "target" SP node-ref
+    LF
+```
+
+Example:
+
+```text
+dependency workspace "<root-PackageId>" alias "parser" target registry "<parser-PackageId>" "1.4.2"
+```
+
+The first node-ref is the declaring package instance. The qstring is the resolved
+local dependency alias. The final node-ref is the exact target node.
+
+The physical qstring representation does not define or widen the dependency alias
+grammar. Resolver/schema policy still owns which aliases are semantically valid.
+For one declaring node, one alias identifies at most one exact target.
+
+Workspace refs used by dependency records must correspond to the F1B2 root or an
+explicit workspace-member mapping. Registry/Git refs used by dependency records
+must correspond to exactly one external node record. Duplicate node records,
+duplicate `(declaring-ref, alias)` edges and dangling references are structurally
+invalid lock graphs.
+
+### Complete body grammar and separation
+
+The complete lock-format-1 body is:
+
+```text
+body =
+    root-record
+    *workspace-member-record
+    *registry-node-record
+    *git-node-record
+    *dependency-record
+```
+
+There are **no blank lines inside the body**. F1A's one empty line between header
+and body is the only blank line in canonical lock-format 1.
+
+The document ends with the LF terminating the final body record; there is exactly
+one final newline and no extra empty record.
+
+### Canonical total order
+
+Writers emit records in this exact class order:
+
+1. the one root record;
+2. workspace-member records;
+3. registry-node records;
+4. git-node records;
+5. dependency records.
+
+Within classes:
+
+- workspace-member ordering is the F1B2 rule;
+- registry nodes sort by PackageId qstring bytes, then by ascending D1
+  ReleaseVersion precedence;
+- Git nodes sort by PackageId qstring bytes, then exact-revision qstring bytes;
+- dependency records sort by declaring node reference, then alias qstring bytes,
+  then target node reference as a defensive final tie-breaker.
+
+For dependency declaring/target reference comparison, source-kind rank is:
+
+```text
+workspace < registry < git
+```
+
+Within a source kind, compare tuple components in their F1B1 order using canonical
+qstring bytes, except registry ReleaseVersion uses ascending D1 precedence after
+PackageId.
+
+No map/hash traversal order may affect output.
+
+### Complete canonical example
 
 ```text
 lock-format 1
 resolver-version 1
 resolution-input protos-resolution-input-v1 sha256:<digest>
 
-root pkg:<PackageId>
-
-package pkg:<PackageId>@1.4.2
-  locator community/parser
-  authority registry:<AuthorityId>
-  content protos-package-tree-v1 sha256:<digest>
-  dependency json -> pkg:<OtherPackageId>@2.3.1
-  dependency util -> git:<PackageId>@<revision>
-
-package pkg:<OtherPackageId>@2.3.1
-  locator community/json
-  authority registry:<AuthorityId>
-  content protos-package-tree-v1 sha256:<digest>
-
-package git:<PackageId>@<revision>
-  package-id <PackageId>
-  fetch https://example.invalid/repo.git
-  revision <full-revision>
-  content protos-package-tree-v1 sha256:<digest>
+root workspace "<root-PackageId>"
+workspace-member "parser" workspace "<workspace-parser-PackageId>"
+registry-node registry "<json-PackageId>" "2.3.1" locator "community/json" authority "protos-public" content protos-package-tree-v1 sha256:<digest>
+git-node git "<util-PackageId>" "0123456789abcdef" fetch "https://example.invalid/util.git" content protos-package-tree-v1 sha256:<digest>
+dependency workspace "<root-PackageId>" alias "json" target registry "<json-PackageId>" "2.3.1"
+dependency workspace "<root-PackageId>" alias "util" target git "<util-PackageId>" "0123456789abcdef"
 ```
 
-This example is illustrative only. The durable decisions are the semantic fields,
-canonical ordering, explicit source kinds, and stable references.
+The example uses placeholders for still-separately-owned PackageId,
+AuthorityIdentity and ContentIdentity generation policies. F1B3 freezes their
+placement/encoding in lock-format 1, not those semantic generators.
+
+
+## Complete canonical body shape
+
+The exact lock-format-1 header/body grammar is now selected by F1A and
+F1B1/F1B2/F1B3. The complete example and productions above supersede the earlier
+illustrative `pkg:<id>@version` notation. Typed node references are the actual v1
+syntax.
 
 ## Header
 
@@ -534,13 +706,14 @@ dependency edges:
     local dependency alias -> exact locked node
 ```
 
-A current human `PackageLocator` may be included for diagnostics and useful Git
-diffs, but it is not node identity.
+F1B3 includes the current human `PackageLocator` in each registry-node record for
+diagnostics/retrieval review, but it is not node identity.
 
 If the locator changes while `PackageId`, release, content, and edges do not, an
 explicit metadata refresh may update only the diagnostic locator. Normal
 execution need not rewrite the lock merely because a registry renamed the
-package.
+package; the identity design requires old published locators to remain safely
+bound to the same PackageId.
 
 The lock must not contain a current mirror/CDN endpoint as release identity.
 
@@ -670,8 +843,8 @@ If artifact digests are persisted in `protos.lock` for early download validation
 they must live in an explicitly non-identifying transport section and must not
 make archive-format changes require dependency re-resolution.
 
-The initial recommendation is to omit them from the core lock graph and let the
-registry/store metadata own transport alternatives.
+F1B3 selects that recommendation for lock-format 1: core lock records omit
+ArtifactDigest and leave transport alternatives to registry/store metadata.
 
 ## Git policy
 
@@ -1009,57 +1182,44 @@ normal execution never rewrites lock
 merge conflicts resolved from manifests + deterministic regeneration
 ```
 
-Deliberately replaceable details:
+F1A/F1B now freeze the lock-format-1 punctuation, scalar escaping, typed
+references, root/workspace representation, external-node fields, dependency
+records, PackageLocator inclusion for registry nodes, ArtifactDigest omission and
+total record ordering.
+
+Deliberately replaceable in future format generations:
 
 ```text
-exact root/workspace/external-node/edge punctuation after F1B1 lexical primitives
-exact body block separation/ordering
-whether diagnostic PackageLocator is always emitted
-whether artifact transport digests are included
 future compact lock-format generations
+new source-kind record forms
+optional non-identifying transport sections if a demonstrated need appears
 ```
 
-## Deferred package-tool architecture audit
+Those future changes require a new `lock-format`; they do not reinterpret
+lock-format 1.
 
-A separate future audit is intentionally queued for the package-management tool
-itself, including:
+## TOOL001 implementation checkpoint after F1B3
 
-- whether the package manager is implemented primarily in Protos;
-- the minimum irreducible host/bootstrap responsibilities;
-- how bundled Protos tools are located and launched without project dependency
-  resolution;
-- capability injection for filesystem/network/crypto/process operations;
-- separation of package policy from host mechanisms;
-- whether TOML/lock parsing and resolver logic can live in bundled Protos modules;
-- a single `protos` CLI frontend dispatching to bundled tools;
-- versioning/updating of bundled tooling without reintroducing bootstrap cycles.
+The Package Tool architecture audit is no longer deferred: TOOL001 already
+publishes the bundled-tool bootstrap, TOML/manifest stack, ReleaseVersion/
+constraint policy and pure version selection.
 
-This lockfile audit does not prejudge those implementation decisions.
+F1A plus F1B1/F1B2/F1B3 now freeze the complete canonical physical grammar for
+lock-format 1. The next bounded slice is `TOOL001-F1C`: an ordinary bundled-Protos
+**in-memory** parser/model/writer/canonicalizer with canonical rejection and
+byte-identical round-trip conformance.
 
-## Recommendation before implementation
+F1C must not silently absorb work still owned elsewhere:
 
-After this audit, the package-system design stack is:
+- reading/writing `protos.lock` through Filesystem capabilities;
+- manifest/workspace path interpretation;
+- candidate discovery or registry metadata acquisition;
+- graph resolution/update operations;
+- PackageId generation or public textual validation;
+- AuthorityIdentity authentication;
+- ContentIdentity package-tree canonicalization/hashing;
+- package store/archive/network behavior.
 
-```text
-distribution model
-    defined
-
-manifest model/encoding
-    TOML 1.0 + strict Protos schema selected exploratorily
-
-package identity/version/content/authority
-    separated
-
-constraint + resolver semantics
-    defined exploratorily
-
-lock graph + canonical physical-format direction
-    defined exploratorily
-
-package-tool self-hosting/bootstrap architecture
-    deferred as next focused architecture audit before major tooling work
-```
-
-A first local/no-network package-system implementation should not begin until the
-package-tool architecture audit has fixed which parts belong in the host versus
-bundled Protos tooling.
+Those remain separate focused slices/design owners. Closing the physical grammar
+is a prerequisite for implementation, not evidence that the whole Package Tool
+or dependency resolver is complete.
