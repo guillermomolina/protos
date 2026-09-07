@@ -1,6 +1,18 @@
 # Core Native Boundary
 
 
+## I023-D — final standard `while` closure
+
+I023-D re-audits the complete production native boundary after every standard
+`while` implementation/conformance slice is closed. I023-B/C/D add zero
+production `nativeClosure` construction sites after the single I023-A
+`Object.while` site. The executable architecture guard, provider table and
+selector-surface audit agree on the current boundary: **111 native Closure
+construction sites across 30 Core providers**. `ProtosStandardObjectProtocol`
+remains at five construction sites and `while` remains one ordinary inherited
+standard selector rather than a new runtime object, scheduler boundary or syntax
+category.
+
 ## I023-B1 — bounded `while` replay retention
 
 The post-I023-A longevity audit found that replaying a later suspended callback was
@@ -72,7 +84,7 @@ the standard native boundary.
 
 | Provider | Native Closure sites | Classification | Audited reason for remaining native |
 |---|---:|---|---|
-| `ProtosStandardObjectProtocol.java` | 5 | host-irreducible / representation bridge | Generic polymorphic `call` performs Closure invocation or ordinary instance construction; `identityHash` exposes semantic identity without dynamic-dispatch substitution; `ensure` establishes the D043 Closure-only protected dynamic extent and executes unwind cleanup before normal/return/Error propagation; inherited `parent` projects the exact immutable semantic delegation parent across ordinary and opaque represented values and signals for the unique root because no structural parent exists. |
+| `ProtosStandardObjectProtocol.java` | 5 | host-irreducible / representation bridge | Generic polymorphic `call` performs Closure invocation or ordinary instance construction; `identityHash` exposes semantic identity without dynamic-dispatch substitution; `ensure` establishes the D043 Closure-only protected dynamic extent and executes unwind cleanup before normal/return/Error propagation; inherited `parent` projects the exact immutable semantic delegation parent across ordinary and opaque represented values and signals for the unique root because no structural parent exists; `while` establishes the D044 Closure-only iterative control boundary while reusing ordinary Closure invocation, replay, suspension, cancellation and task ownership machinery. |
 | `ProtosStandardBooleanProtocol.java` | 1 | host-irreducible | `ifTrue`/`ifFalse`/`and`/`or` are the primitive selective-control surface used to express branching itself, including path-sensitive callback validation. |
 | `ProtosStandardHashSupport.java` | 3 | representation bridge | Object identity hashing and Number/String hashing depend on semantic identity or exact represented values and must not be redefined through overrideable message sends. |
 | `ProtosStandardNumberEqualityProtocol.java` | 1 | representation bridge | Exact cross-family Number equality needs Integer/fixed/binary64 representation knowledge, including NaN and exact-integral Float handling. |
@@ -103,16 +115,16 @@ the standard native boundary.
 | `ProtosStandardFileProtocol.java` | 10 | resource/capability bridge | File objects are acquired resource capabilities whose exact local surface depends on backend-provided authority and whose operations own cursor/append/sync/close/commitment state. |
 | `ProtosStandardFilesystemProtocol.java` | 1 | resource/capability bridge | Host-provisioned Filesystem authority exposes standard `open`, `replace`, and `remove` through one shared audited operation-Closure construction helper. Open retains confined/race-free acquisition and File materialization; D041 namespace mutation uses an independent host-neutral effect/commit cutover and backend-provided confined atomic transition. |
 
-Total audited Core production construction sites: **110 across 30 providers**.
+Total audited Core production construction sites: **111 across 30 providers**.
 
 CLI/launcher-owned host conveniences are not Core standard behavior and therefore
-do not change that 30-provider / 109-site Core boundary. They are nevertheless
+do not change that 30-provider / 111-site Core boundary. They are nevertheless
 kept explicit rather than allowed to accumulate invisibly:
 
 | Non-Core provider | Native Closure sites | Boundary | Reason |
 |---|---:|---|---|
 | `ProtosCliPrintFacility.java` | 1 | standalone CLI host/display bridge | Installs one ordinary initial-context `print` Closure only for normal standalone CLI sessions. General value rendering is CLI policy; output is delegated through a borrowing standard `TextWriter` over the already-provisioned Process stdout capability and Encoding. Bundled tools, Core bootstrap, imported modules and non-root Actor bootstrap do not receive this binding. |
-| `ProtosExactExecutionFacility.java` | 1 | bundled-tool bootstrap execution bridge | Installs one ordinary initial-context `execution` Closure only when the host explicitly grants the Test Tool execution capability. It delegates to the general fresh-Process/private-capture machinery and returns only detached authority-free observation data. It is not a Core/prelude binding and therefore does not widen the 30-provider / 109-site Core standard native boundary. |
+| `ProtosExactExecutionFacility.java` | 1 | bundled-tool bootstrap execution bridge | Installs one ordinary initial-context `execution` Closure only when the host explicitly grants the Test Tool execution capability. It delegates to the general fresh-Process/private-capture machinery and returns only detached authority-free observation data. It is not a Core/prelude binding and therefore does not widen the 30-provider / 111-site Core standard native boundary. |
 
 
 ### TOOL002-D3B2A Object.parent reflection prerequisite
@@ -142,9 +154,10 @@ provider, syntax, capability, scheduler, or Test-only runtime surface is introdu
 
 I022-F re-audits the complete Core native boundary after `Error.handle`,
 `Object.ensure`, replay-stable cleanup, and cooperative cancellation unwind are
-all published. The executable architecture guard and the provider table above
-agree on the definitive current boundary: **109 production construction sites
-across 30 Core providers**.
+all published. At the I022-F publication cutover, the audited boundary was **109 production
+construction sites across 30 Core providers**. That figure is historical: later
+published Core work added reviewed sites and the current boundary is owned by the
+provider table and executable architecture guard above.
 
 The two I022 additions were already reviewed at their publication cutovers:
 I022-B added one host-irreducible `Error.handle` construction site and I022-C
@@ -157,7 +170,7 @@ audited selectors rather than a new Protos-visible primitive family.
 The numerical entries below are retained as chronological audit history at the
 named slices. Lower historical counts in that progression are not current
 boundary claims; the table above plus the executable architecture guard own the
-current 109-site / 30-provider inventory.
+current 111-site / 30-provider inventory.
 I018-L closed with the 90-site/22-provider baseline. I016-D1 was an explicitly
 reviewed post-I018 resource/capability extension adding exactly one
 `Filesystem.open` native-Closure construction site.

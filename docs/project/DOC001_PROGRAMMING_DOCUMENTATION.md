@@ -66,7 +66,7 @@ Closure evidence:
 | DOC001-B | CLOSED | Bindings, execution contexts, lexical state, and receiver state | Published at `bd3cd38218cfccdca8de529f4d6c26fede7ad771`. |
 | DOC001-C | CLOSED | Objects, delegation, composition, structural state, reflection | Published at `8ab9463b8466974fc5f23f0c7304faeacb3db641`. |
 | DOC001-D | CLOSED | Closures, methods, receivers, extraction, `super`, return homes | Published at `01470dca9df787ed216b2c19faaead965fb18cc8`. |
-| DOC001-E | BLOCKED_BY_DEPENDENCIES | Control flow through ordinary protocols | D044 defines the complete standard `while` protocol; I023 must publish implementation/conformance before this guide slice proceeds. |
+| DOC001-E | READY | Control flow through ordinary protocols | I023 and B007 are CLOSED; fresh I023-D audit confirms the standard `while` protocol is runnable current behavior. The documentation slice itself remains unpublished. |
 | DOC001-F | READY | Values, identity, equality, and collections | Independent of DOC001-E. |
 | DOC001-G | READY | Modules and imports | Independent of DOC001-E. |
 | DOC001-H | READY | Errors, handlers, `ensure`, and resource lifetime | Independent of DOC001-E. |
@@ -80,20 +80,22 @@ Closure evidence:
 ## B007 / I023 relationship
 
 `B007 — Standard while protocol semantics` was discovered while preparing
-DOC001-E. D044 / specification revision `0.1.381` now satisfies that normative
-unblock condition and transitions B007 from `BLOCKED` to `READY`.
+DOC001-E. D044 / specification revision `0.1.381` resolved the normative
+ambiguity, and D045 / specification revision `0.1.382` later clarified the
+task-scoped Future-ownership interaction exposed during I023.
 
-The reference implementation is deliberately separate. The fresh current-main
-audit performed when D044 was allocated found `I023` unused, so
-`I023 — Standard while protocol` now owns implementation/conformance closure.
-DOC001-E therefore remains `BLOCKED_BY_DEPENDENCIES` until I023 is CLOSED: the
-guide may explain only runnable current behavior and must not present a
-specified-but-unimplemented selector as available.
+I023 is now CLOSED after A/B/C/D implementation and conformance publication, and
+B007 is CLOSED with it. The fresh I023-D current-main audit confirms that the
+standard inherited `Object.while` behavior is runnable reference-implementation
+behavior rather than merely specified future behavior.
 
-B007/I023 do not block DOC001 as a whole. Unrelated documentation slices whose
-semantics and implementation are already defined may continue independently.
-After I023 closes, DOC001-E must still perform its own fresh current-main audit
-before moving to READY/IN_PROGRESS.
+DOC001-E is therefore READY. It is not CLOSED: the control-flow guide chapter
+still has to be written, cross-linked and validated as its own documentation
+slice. The guide must explain the published behavior faithfully rather than
+copying project-ledger prose or redefining the language.
+
+B007/I023 no longer gate DOC001. Other READY documentation slices remain
+independent and retain their own current-main audit requirement when started.
 
 ## Completion rule
 

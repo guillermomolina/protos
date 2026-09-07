@@ -55,11 +55,11 @@ an item.
 | I020 | Post-Ixxx implementation audit reconciliation | CLOSED | `SAME_COMMIT` | I020-A/B/C/D complete; D040 missing-`methodHome` `InvalidSuper` implemented; B005 closed |
 | I021 | Filesystem namespace replacement/removal | CLOSED | `SAME_COMMIT` | I021-A/B/C complete; D042 / spec `0.1.379`; production confined namespace backend and Protos-visible integrated conformance published; B006 CLOSED by package-tool Filesystem Slice 2B metadata publication integration |
 | I022 | Dynamic Error handlers / unwind-safe cleanup | CLOSED | `SAME_COMMIT` | I022-A/B/C/D/E/F complete; D043 / spec `0.1.380`; replay-stable Error handlers, unwind-safe `ensure`, suspension, later-transfer precedence, cooperative cancellation, structured lifetime and task/Actor isolation have final adversarial closure evidence |
-| I023 | Standard `while` protocol | IN_PROGRESS | I023-A + I023-B + I023-C published | D044 / spec `0.1.381` + D045 / spec `0.1.382`; A/B/C closed, I023-D READY |
+| I023 | Standard `while` protocol | CLOSED | `SAME_COMMIT` | D044 / spec `0.1.381` + D045 / spec `0.1.382`; I023-A/B/C/D complete; B007 CLOSED; DOC001-E re-audited READY. |
 
 ### I023 — Standard `while` protocol
 
-Status: IN_PROGRESS
+Status: CLOSED
 
 Purpose: Implement D044 / specification revision `0.1.381` faithfully as the
 standard Closure-specific `while(body)` protocol and close B007 without adding
@@ -100,7 +100,7 @@ Planned slices:
 | I023-C2 | CLOSED | — | `SAME_COMMIT` | Protos-source conformance makes both reached body activations create distinct child Futures and suspend at value(). Exact result `322223` proves 3 condition activations, 2 pre-suspend body effects, 2 post-resume effects, 2 body activations, 2 child executions and observed values 1+2. Replay and completed-iteration compaction neither duplicate nor skip body work. No runtime/spec/version/native-boundary/license-term change. |
 | I023-C3 | CLOSED | — | `SAME_COMMIT` | Protos-source conformance self-requests cancellation in the first body, then proves while adds no cancellation poll by reaching the second condition and second body before ordinary Future.value() observes the request. Cancellation then unwinds through while, ensure cleanup runs exactly once, and code after the observation boundary does not run. Exact observer result `22110`. No runtime/spec/version/native-boundary/license-term change. |
 | I023-C4 | CLOSED | — | `SAME_COMMIT` | Protos conformance forces four condition suspensions and three body suspensions with exact-once counters/child executions/result `443343016`. Java mechanism evidence compares the same in-condition suspension point after 8 vs 1024 completed suspending iterations and requires identical bounded retained event/activation counts. No runtime/spec/version/native-boundary/license-term change. |
-| I023-D | READY | — | — | A/B/C are closed. Perform final cross-slice conformance, architecture/native-boundary audit, B007/status/docs dependency reconciliation, full validation, and close I023/B007. |
+| I023-D | CLOSED | — | `SAME_COMMIT` | Final cross-slice manifest/conformance validation, replay-retention and native-boundary architecture guards, full suite, B007 closure, native-inventory reconciliation, and DOC001-E dependency re-audit published. No production/runtime/spec/version/native-boundary/license-term change. |
 
 Dependencies:
 - D044 / specification revision `0.1.381` — normative loop contract;
@@ -109,8 +109,16 @@ Dependencies:
 - I022 dynamic handlers / unwind-safe cleanup — CLOSED.
 - B008 returned-Future structured-ownership boundary — CLOSED via D045 / spec `0.1.382` plus published I023-B2D2 conformance; no runtime ownership change was required.
 
-B007 remains READY until I023-D closes the implementation/conformance boundary.
+B007 is CLOSED by I023-D: the D044/D045 implementation and conformance boundary is fully published.
 D044 itself does not publish runnable `while` behavior.
+
+Final I023 closure boundary:
+- the standard behavior remains one ordinary inherited `Object.while` Closure-specific selector;
+- D044 validation order, strict canonical Boolean decision, pre-test ordering, ignored body result and canonical `null` completion are implemented and covered by retained Protos conformance;
+- synchronous Error/non-local-return transfer, returned-Future non-adoption, D045 task-scoped ownership, condition/body suspension replay and cooperative cancellation/ensure composition all pass together;
+- replay retention remains bounded across both normal and repeatedly suspending iterations;
+- the Core native boundary remains 111 production `nativeClosure` construction sites across 30 providers, with `ProtosStandardObjectProtocol` at five sites and no post-I023-A expansion;
+- B007 and I023 are CLOSED; DOC001-E is dependency-unblocked and re-audited READY for its own documentation slice.
 
 ### I022 — Dynamic Error handlers and unwind-safe cleanup
 
@@ -776,7 +784,7 @@ documentation tooling.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| DOC001 | Protos Programming Documentation | IN_PROGRESS | `docs/project/DOC001_PROGRAMMING_DOCUMENTATION.md` | A/B/C/D CLOSED retrospectively; D044 resolves B007 semantics; E BLOCKED_BY_DEPENDENCIES on I023; F-L READY independently; M toolchain-gated; N final closure. |
+| DOC001 | Protos Programming Documentation | IN_PROGRESS | `docs/project/DOC001_PROGRAMMING_DOCUMENTATION.md` | A/B/C/D CLOSED retrospectively; I023/B007 CLOSED and E re-audited READY; F-L READY independently; M toolchain-gated; N final closure. |
 
 ### DOC001 — Protos Programming Documentation
 
@@ -802,9 +810,10 @@ Status: IN_PROGRESS
 Owning record:
 `docs/project/DOC001_PROGRAMMING_DOCUMENTATION.md`.
 
-DOC001 is intentionally not blocked as a whole by I023. D044 has resolved
-B007's normative ambiguity; only DOC001-E is implementation-gated on I023, while
-independent READY slices may proceed after their own fresh current-main audit.
+DOC001 remains IN_PROGRESS as a whole. I023-D closes B007 and removes
+DOC001-E's implementation dependency; the fresh I023-D current-main audit makes
+DOC001-E READY. Independent READY slices remain unaffected and still perform
+their own current-main audit when started.
 
 ## Toolchain tools
 

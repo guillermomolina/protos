@@ -280,74 +280,65 @@ not allocate a `LIBxxx` item.
 
 ## B007 — Standard `while` protocol semantics
 
-Status: READY
+Status: CLOSED
 
 Implementation area:
-The Core standard `while` operation defined by D044 / specification revision
-`0.1.381`, together with I023 reference implementation, conformance, executable
-tutorial/example material, and programming-guide text that presents the operation
-as runnable current behavior.
+Standard Closure-specific `Object.while(body)` protocol, including validation,
+ordinary Closure activation, strict Boolean decision, synchronous control
+transfer, Future/task ownership composition, suspension/replay, cooperative
+cancellation and bounded retained execution state.
 
 Normative dependency:
-Satisfied by specification revision `0.1.381` / D044.
-
-`spec/semantics/EXECUTION_AND_CONTROL.md` §17 now defines the complete standard
-Closure `while(body)` behavior: Closure-only receiver and body domain, exact
-arity, validation timing, zero-argument condition/body activation order, strict
-canonical Boolean condition results, fresh Error on every other normal condition
-result, ignored body results, canonical `null` normal result, and exact
-Error/non-local-return/suspension/replay/cancellation/Future composition.
-
-`spec/semantics/CALLABLES.md` fixes `while` as an ordinary local Closure-valued
-`Object` slot with standard semantic-Closure receiver-domain behavior, ordinary
-reflection/extraction/shadowing, and no `Closure` prototype. The grammar owner
-confirms that `condition.while() { ... }` is only ordinary call plus trailing
-Closure and adds no `while` keyword or dedicated loop syntax.
+Satisfied by D044 / specification revision `0.1.381`. During implementation,
+B008 exposed one independent structured-ownership ambiguity; D045 /
+specification revision `0.1.382` clarified that structured ownership is scoped to
+the enclosing asynchronous task execution rather than every synchronous
+activation.
 
 Specification authority:
-- `spec/semantics/EXECUTION_AND_CONTROL.md` §17 `Iteration and Loops` — primary
-  owner of standard loop execution semantics;
-- `spec/semantics/CALLABLES.md` — standard `Object.while` placement, Closure
-  receiver domain, extraction/shadowing and ordinary Closure activation rules;
-- `spec/semantics/VALUES_AND_COLLECTIONS.md` — canonical `true` / `false` domain;
-- `spec/semantics/ERRORS.md` — fresh Error occurrences and Error unwind;
-- `spec/concurrency/FUTURES_AND_TASKS.md` — suspension, cancellation and
-  structured task behavior composed by the loop;
-- `spec/PROTOS_GRAMMAR.md` — unchanged ordinary call/trailing-Closure syntax.
+- `spec/semantics/EXECUTION_AND_CONTROL.md` §17 `Iteration and Loops`;
+- `spec/semantics/CALLABLES.md` for ordinary `Object.while` placement,
+  Closure-family receiver domain, lookup/extraction/shadowing and activation;
+- `spec/semantics/VALUES_AND_COLLECTIONS.md` for canonical Booleans;
+- `spec/semantics/ERRORS.md` for Error/control transfer;
+- `spec/concurrency/FUTURES_AND_TASKS.md` for suspension, cancellation and
+  D045 task-scoped structured ownership;
+- `spec/PROTOS_GRAMMAR.md` for the unchanged ordinary call/trailing-Closure
+  syntax.
 
 Unblock condition:
-Satisfied by specification revision `0.1.381` / D044. Two independent
-implementers can derive the same selector location and receiver domain, argument
-domain/validation order, exact callback activation count/order and argument
-vectors, accepted condition values/failure behavior, body-result treatment,
-normal result, and Error/control-transfer/suspension/cancellation/Future behavior
-without selecting new observable semantics.
+Satisfied by D044. Independent implementations can determine receiver/body
+validation and order, exact callback activation timing, strict `true`/`false`
+decision, canonical completion, control-transfer behavior, Future-result
+composition, suspension/replay and cancellation composition without inventing a
+loop-specific scheduling or ownership rule.
 
 Current consequence:
-B007 is `READY`, not `CLOSED`. `I023 — Standard while protocol` is allocated and
-READY for implementation. No reference implementation selector is published by
-D044 itself.
+Implemented and published by I023-A/B/C/D. The reference runtime exposes the
+ordinary inherited `Object.while` selector, retained Protos conformance covers
+the complete synchronous and asynchronous interaction surface, replay state is
+bounded across completed and repeatedly suspending iterations, and the final
+Core native-boundary audit remains 111 construction sites across 30 providers.
+B008 is also CLOSED under D045.
 
-The Programming Guide control-flow slice DOC001-E remains
-`BLOCKED_BY_DEPENDENCIES` on I023. D044 makes the semantics explainable, but the
-guide must not present the standard `while` form as runnable current behavior
-until I023 implementation/conformance is published.
+The Programming Guide control-flow slice DOC001-E has been freshly re-audited
+after I023 closure and is now READY. It remains separate documentation work and
+does not become CLOSED merely because the implementation dependency is gone.
 
 Independent work:
-Existing `ifTrue` / `ifFalse` / `and` / `or`, trailing-Closure syntax, collection
-`each`, and all unrelated already-defined work remain independent. I023 may now
-proceed in its recorded slices without another language-design decision unless
-implementation audit exposes a genuine contradiction in D044.
+No implementation blocker remains for the standard `while` protocol. Future
+library/documentation work may rely on the published behavior, subject to its
+own dependency and current-main audits.
 
 History:
-B007 was discovered while auditing the planned Programming Guide control-flow
-chapter after chapters 01-03 were published. The initial normative text named a
-Closure-based shape but left selector placement, callback domains/order,
-Boolean/result rules and control/concurrency composition implementation-selectable,
-so documentation stopped rather than inventing semantics. D044 / specification
-revision `0.1.381` closes that normative gap and transitions B007
-`BLOCKED -> READY`; final `READY -> CLOSED` requires I023 implementation,
-validation, and publication.
+B007 began BLOCKED because the old language description did not uniquely define
+a portable standard loop protocol. D044 resolved that ambiguity and moved B007
+to READY. I023-A published the selector/runtime cutover; B/C then closed replay,
+validation/control-transfer, Future ownership, suspension and cancellation
+composition. The unpublished per-synchronous-activation ownership experiment was
+rejected after it broke ordinary Future-shaped APIs; B008/D045 resolved that
+general ambiguity instead. I023-D performs the final cross-slice and architecture
+audit and closes B007.
 
 ## B008 — Structured ownership when a task-backed Future escapes an activation
 
