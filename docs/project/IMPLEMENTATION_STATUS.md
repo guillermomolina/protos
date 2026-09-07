@@ -707,6 +707,45 @@ New Language Maturity work MUST allocate and persist its `LMxxx` identifier in
 the repository at publication time rather than relying on chat/prompt history.
 
 
+## Documentation work
+
+The `DOCxxx` family records substantial documentation initiatives whose primary
+deliverable has an independently meaningful lifecycle. It does not own language
+semantics, implementation behavior, executable conformance policy, or bundled
+documentation tooling.
+
+| Item | Description | Status | Closure evidence | Dependencies / notes |
+|---|---|---|---|---|
+| DOC001 | Protos Programming Documentation | IN_PROGRESS | `docs/project/DOC001_PROGRAMMING_DOCUMENTATION.md` | A/B/C/D CLOSED retrospectively from published documentation commits; E BLOCKED by B007; F-L READY independently; M toolchain-gated; N final closure. |
+
+### DOC001 — Protos Programming Documentation
+
+Status: IN_PROGRESS
+
+| Slice | Status | Closure evidence | Scope / dependency |
+|---|---|---|---|
+| DOC001-A | CLOSED | `bd3cd38218cfccdca8de529f4d6c26fede7ad771` | README positioning, documentation architecture, learning navigation, and current-status correction. |
+| DOC001-B | CLOSED | `bd3cd38218cfccdca8de529f4d6c26fede7ad771` | Guide 01: bindings, execution contexts, lexical lookup, and receiver state. |
+| DOC001-C | CLOSED | `8ab9463b8466974fc5f23f0c7304faeacb3db641` | Guide 02: objects, delegation, composition, structural state, and reflection. |
+| DOC001-D | CLOSED | `01470dca9df787ed216b2c19faaead965fb18cc8` | Guide 03: Closures, methods, receivers, extraction, `this`, `context`, `super`, and non-local return. |
+| DOC001-E | BLOCKED | — | Control flow through ordinary protocols; blocked by B007 until the complete observable standard `while` protocol is normatively defined. |
+| DOC001-F | READY | — | Values, identity, equality, numeric/value families, and collections. Independent of DOC001-E. |
+| DOC001-G | READY | — | Modules, imports, module contexts, and resolution boundaries. Independent of DOC001-E. |
+| DOC001-H | READY | — | Errors, dynamic handlers, `ensure`, unwind behavior, and resource-lifetime mental models. Independent of DOC001-E. |
+| DOC001-I | READY | — | Futures and structured concurrency. Independent of DOC001-E. |
+| DOC001-J | READY | — | Isolated parallel execution. Independent of DOC001-E. |
+| DOC001-K | READY | — | Actors, ActorRefs, Groups/GroupRefs, messaging, isolation, ownership, and lifecycle. Independent of DOC001-E. |
+| DOC001-L | READY | — | Process, byte/text I/O, Filesystem/File capabilities, Path, authority, and resource boundaries. Independent of DOC001-E. |
+| DOC001-M | BLOCKED_BY_DEPENDENCIES | — | Packages, testing, and bundled toolchain; final closure requires TOOL001 and TOOL002 CLOSED. |
+| DOC001-N | BLOCKED_BY_DEPENDENCIES | — | Final navigation, stale-status/link audit, cross-document consistency, and DOC001 closure after E-M. |
+
+Owning record:
+`docs/project/DOC001_PROGRAMMING_DOCUMENTATION.md`.
+
+DOC001 is intentionally not blocked as a whole by B007. Only DOC001-E is
+normatively blocked; independent READY slices may proceed after their own fresh
+current-main audit.
+
 ## Toolchain tools
 
 The `TOOLxxx` family records official toolchain-bundled developer tools whose

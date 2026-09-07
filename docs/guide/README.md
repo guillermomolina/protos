@@ -24,6 +24,15 @@ Three complementary resources are maintained:
 Where practical, guide chapters point to executable tutorial programs rather
 than duplicating large source examples that can drift independently.
 
+## Tracked documentation work
+
+The Programming Guide is part of
+[`DOC001 — Protos Programming Documentation`](../project/DOC001_PROGRAMMING_DOCUMENTATION.md).
+
+DOC001 tracks this guide as one documentation initiative with independently
+auditable slices. A blocker on one chapter does not automatically block unrelated
+documentation areas whose semantics and implementation are already closed.
+
 ## Current chapters
 
 1. [Bindings, contexts, and object state](01-bindings-contexts-and-state.md)
@@ -43,6 +52,10 @@ reference implementation also exposes no standard `while` selector.
 records the normative blocker. This guide sequence stops at chapter 03 until
 B007's unblock condition is satisfied; it must not fill the gap by guessing
 loop semantics or present the specified shape as current runnable behavior.
+
+The affected documentation slice is `DOC001-E`. B007 blocks that control-flow
+chapter only; other DOC001 slices may proceed independently when their own
+normative and implementation prerequisites are satisfied.
 
 ## Planned progression
 

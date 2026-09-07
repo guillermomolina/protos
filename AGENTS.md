@@ -675,6 +675,43 @@ remains tracked by the applicable Core implementation item rather than becoming
 
 
 
+### Documentation work
+
+Substantial documentation initiatives with an independently meaningful project
+lifecycle use the `DOCxxx` family.
+
+`DOCxxx` is for documentation whose primary deliverable is public or project
+explanation, learning material, navigation, conceptual guidance, or another
+maintained documentation surface that is useful to track independently from an
+implementation item.
+
+Do not use `DOCxxx` merely because a change edits Markdown. Documentation that is
+part of closing an `Ixxx`, `LIBxxx`, `TOOLxxx`, `CLIxxx`, `LMxxx`, `PERFxxx`, or
+other already-owned work item remains part of that owning family.
+
+Keep these boundaries explicit:
+
+- `spec/` remains the normative authority for Protos language semantics;
+  `DOCxxx` MUST NOT create, complete, or reinterpret missing normative behavior;
+- implementation status remains owned by the applicable implementation family;
+- executable conformance/tutorial dogfooding whose primary purpose is maturity
+  coverage remains `LMxxx`;
+- a future bundled documentation generator/tool is `TOOLxxx`, not `DOCxxx`;
+  `DOCxxx` owns documentation content/lifecycle, not toolchain orchestration.
+
+When documentation discovers a genuine normative ambiguity, record the applicable
+normative blocker and mark only the affected `DOCxxx` slice blocked. Do not block
+independent documentation work that can proceed from already-defined semantics.
+
+New independently tracked documentation work uses the next unused `DOCxxx`
+identifier and records it in `docs/project/IMPLEMENTATION_STATUS.md` plus an
+owning project record when formally introduced. Operational `DOCxxx` identifiers
+MUST NOT exist only in prompts or chat history.
+
+The first tracked documentation initiative is `DOC001 — Protos Programming
+Documentation`, owned by
+`docs/project/DOC001_PROGRAMMING_DOCUMENTATION.md`.
+
 ### Toolchain tool work
 
 Official toolchain-bundled developer tools use the `TOOLxxx` family once they
