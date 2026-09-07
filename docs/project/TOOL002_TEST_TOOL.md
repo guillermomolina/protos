@@ -269,7 +269,7 @@ Float families:
 | TOOL002-D3A2 | CLOSED | `Runner.evaluateSimple(spec, source, executor)` interprets `boolean`, `null`, `integer`, and generic `error` entirely in bundled Protos. Normal mismatches return frozen `passed + observation` evidence; malformed/unsupported policy signals. Integer matching uses signed-decimal Protos parsing plus primitive `===` to preserve exact numeric family. Implementation version `0.2.189-SNAPSHOT`. |
 | TOOL002-D3A3 | CLOSED | Compose TestPlan + source loader + simple evaluator through an ordered `Future.then` dependency chain built without suspending inside `Array.each`; skip unsupported kinds before source access, aggregate ordered frozen CaseRun evidence with balanced chunks, and integrate the supported subset into `Main.protos`. No reporting/parallel/exit-status policy. Implementation version `0.2.192-SNAPSHOT`. |
 | TOOL002-D3B | CLOSED | D3B1 fixed-integer and D3B2A/B error-parent prerequisite/policy are published. The sequential runner owns both retained families without changing D1/D3A evidence boundaries. Implementation version `0.2.199-SNAPSHOT`. |
-| TOOL002-D3C | IN_PROGRESS | D3C1 float-nan is CLOSED at `0.2.201-SNAPSHOT`; D3C2 exact float-bits policy is READY. |
+| TOOL002-D3C | IN_PROGRESS | D3C1 float-nan is CLOSED; D3C2 is IN_PROGRESS with D3C2A parser CLOSED at `0.2.205-SNAPSHOT`, D3C2B exact binary64 mechanism READY, and D3C2C integration dependent. |
 
 D3A1 deliberately does not modify `Main.protos`: ordinary `protos test`
 continues to construct the inert D2 TestPlan but does not execute it yet.
@@ -345,6 +345,18 @@ D3C1 deliberately leaves `float-bits` unsupported and unread by the sequential
 runner. D3C remains IN_PROGRESS until D3C2 is published.
 
 TOOL002-D3C2 is READY.
+
+### TOOL002-D3C2 decomposition
+
+The exact binary64 work is split into three independently publishable steps:
+
+| Slice | Status | Outcome |
+|---|---|---|
+| TOOL002-D3C2A | CLOSED | Parse exactly 16 hex digits to an unbounded Integer raw pattern in bundled Protos; `float-bits` remains unsupported by the runner. Implementation version `0.2.205-SNAPSHOT`. |
+| TOOL002-D3C2B | READY | Establish exact binary64 construction/comparison for finite, subnormal, signed-zero and infinity patterns without exposing non-portable NaN payload/sign state. |
+| TOOL002-D3C2C | BLOCKED_BY_DEPENDENCIES | Activate `float-bits` in the sequential Test Tool, migrate integration coverage, and close D3C2/D3C/D3. |
+
+TOOL002-D3C2B is READY.
 
 ## Closure rule
 

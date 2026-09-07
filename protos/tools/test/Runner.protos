@@ -129,6 +129,36 @@ parseExpectedInteger: (text) => {
     value
 }
 
+parseExpectedFloatBits: (text) => {
+    source: Encoding.UTF8.encode(text)
+    (source.size() == 16).ifFalse(() => { policyError() })
+
+    value: 0
+    source.each((octet) => {
+        digit: -1
+
+        decimal: (octet >= 48) && (octet <= 57)
+        decimal.ifTrue(() => {
+            digit = octet - 48
+        })
+
+        lower: (octet >= 97) && (octet <= 102)
+        lower.ifTrue(() => {
+            digit = octet - 87
+        })
+
+        upper: (octet >= 65) && (octet <= 70)
+        upper.ifTrue(() => {
+            digit = octet - 55
+        })
+
+        (digit < 0).ifTrue(() => { policyError() })
+        value = value * 16 + digit
+    })
+
+    value
+}
+
 fixedIntegerFamilyPrototype: (name) => {
     result: null
     known: false

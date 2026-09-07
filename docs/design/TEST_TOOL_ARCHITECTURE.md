@@ -530,6 +530,24 @@ numeric protocol, or Java-owned Test taxonomy. D3C2 remains the sole owner of
 `float-bits` and must preserve exact binary64 including signed zero without
 turning host raw-bit representation into a new general Core reflection surface.
 
+### TOOL002-D3C2A exact float-bits payload parser
+
+D3C2 is decomposed before any binary64 construction mechanism is selected.
+
+D3C2A owns only the retained `float-bits` payload grammar already exercised by
+the Java conformance harness: exactly sixteen hexadecimal digits representing one
+unsigned 64-bit binary64 bit pattern. Bundled Protos parses those digits to an
+ordinary unbounded Integer in the inclusive range `0..2^64-1`.
+
+The parser accepts `0-9`, `a-f`, and `A-F`, rejects every other octet, and rejects
+any payload whose encoded length is not exactly sixteen octets. Because each
+accepted character is ASCII, octet count and character count coincide.
+
+D3C2A deliberately does **not** add `float-bits` to `isSimpleExpectation` and
+does not execute a `float-bits` case. It therefore commits no representation,
+construction, comparison, reflection, runtime, or detached-observation decision
+for binary64 values. D3C2B owns that next mechanism audit.
+
 ## Isolation audit
 
 The normal isolation boundary should be **one fresh Protos Process per test

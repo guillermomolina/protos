@@ -1,3 +1,8 @@
+## 0.2.205-SNAPSHOT
+
+- Publish `TOOL002-D3C2A`: bundled Protos now parses retained `float-bits` payloads as exactly sixteen hexadecimal digits into an exact unbounded Integer raw pattern in `0..2^64-1`. Both upper- and lower-case hex digits are accepted; wrong length or any non-hex octet fails closed as Test Tool policy.
+- This slice deliberately does not activate `float-bits` in `isSimpleExpectation`, execute such cases, construct Floats, compare binary64 values, or change runtime/D1. D3C2B owns the exact binary64 construction/comparison mechanism; D3C2C owns final runner integration.
+
 ## 0.2.204-SNAPSHOT
 
 - Close `TOOL001-D2D — prerelease admission + D2 closure` and parent `TOOL001-D`. Complete ordinary bundled-Protos dependency-constraint v1 so stable requirements never admit prerelease candidates implicitly; a prerelease candidate is eligible only when the exact/caret/interval constraint explicitly names a prerelease with the same MAJOR.MINOR.PATCH tuple, after which ordinary exact/range precedence still decides satisfaction.
