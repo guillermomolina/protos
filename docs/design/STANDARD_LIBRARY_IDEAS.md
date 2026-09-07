@@ -420,3 +420,27 @@ DESIGN SEPARATELY BEFORE COMMITTING
     Bits / wrapping
     Random / entropy
 ```
+
+## Promoted hashing prerequisite — LIB006
+
+The earlier portfolio listed `crypto` among domains needing careful boundary
+review. `TOOL001-F2B3` has now produced a concrete, narrow requirement that can
+be satisfied without entropy or a native secret-bearing cryptographic boundary.
+
+`LIB006` is therefore assigned to **deterministic hashing** with an intentionally
+bounded initial surface:
+
+```text
+std:crypto/SHA256.digest(Bytes) -> Bytes
+```
+
+`LIB006-A` closes the API/security/implementation-boundary design.
+`LIB006-B` is the pure-Protos SHA-256 implementation slice.
+
+The initial implementation uses ordinary exact Integer arithmetic plus `div` /
+`mod` for private fixed-32-bit word helpers. It does not expose a general Bits
+API and does not add Core bitwise/wrapping semantics.
+
+This promotion does not approve HMAC, password hashing, entropy, ciphers,
+signatures, TLS, a crypto registry, or host/JVM crypto bridges. Those remain
+separate future designs.

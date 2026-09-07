@@ -86,7 +86,7 @@ its relation to any legacy Slice 3 terminology that remains useful for continuit
 | TOOL001-F2B | semantic resolution-input + stale detection | IN_PROGRESS | TOOL001-F2B1/F2B2 published | Per-manifest projection and complete resolution-root/workspace/path/compatibility semantic model CLOSED; F2B3 digest/stale comparison blocked on hashing capability. |
 | TOOL001-F2B1 | per-manifest semantic resolution-input projection design | CLOSED | `SAME_COMMIT` | Freeze resolver-affecting manifest inclusion/exclusion, D2 semantic constraint normalization, deterministic scalar/order owners and fail-closed unresolved-owner rule. No digest implementation. |
 | TOOL001-F2B2 | resolution-root/workspace semantic assembly design | CLOSED | `SAME_COMMIT` | Root-only workspace expansion, canonical member paths, confined in-root path-dependency targeting, exact LanguageCompatibilityId and deterministic root/member assembly frozen. |
-| TOOL001-F2B3 | resolution-input digest + stale comparison | BLOCKED_BY_DEPENDENCIES | — | Semantic input model is now complete; executable digest/stale work waits for an explicit suitable hashing capability/owner rather than a Package-Tool-only host crypto shortcut. |
+| TOOL001-F2B3 | resolution-input digest + stale comparison | BLOCKED_BY_DEPENDENCIES | LIB006-B | Semantic input model is complete; executable digest/stale work waits specifically for reusable `std:crypto/SHA256` from LIB006-B. |
 
 
 | TOOL001-F1C1 | lock lexical/header/qstring/node-ref primitives | CLOSED | `SAME_COMMIT` | `self:LockSyntax` owns strict canonical line tokens, qstring parse/render, lock-format-1 header parse/render and typed workspace/registry/git node refs; registry versions reuse D1 ReleaseVersion. |
@@ -128,12 +128,14 @@ member paths, in-root path-dependency targeting, exact language-compatibility
 identity and deterministic root/member assembly now complete the semantic
 resolution-input model.
 
-`TOOL001-F2B3` remains BLOCKED_BY_DEPENDENCIES only on an explicitly owned
-hashing capability suitable for canonical digest computation. The Package Tool
-must not bypass that dependency with a private JVM/host hashing shortcut. F2
-still does not own package resolution, ContentIdentity tree hashing,
-registry/network/store behavior, normal-execution lock consumption or update
-command policy.
+`TOOL001-F2B3` remains BLOCKED_BY_DEPENDENCIES on `LIB006-B`. LIB006-A has
+now frozen the reusable `std:crypto/SHA256.digest(Bytes)` owner; LIB006-B is
+READY to implement it in ordinary Protos without a private JVM/host hashing
+shortcut.
+
+After LIB006-B publishes, F2B3 may transition to READY. F2 still does not own
+package resolution, ContentIdentity tree hashing, registry/network/store
+behavior, normal-execution lock consumption or update command policy.
 
 A separate non-committing note in `docs/design/PACKAGE_TOOL_ARCHITECTURE.md`
 records future reusable-library extraction opportunities for the schema-neutral

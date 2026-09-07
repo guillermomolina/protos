@@ -451,6 +451,10 @@ work may proceed without waiting for an earlier-numbered roadmap item.
 | LIB003 | JSON | CLOSED | `SAME_COMMIT` | LIB003-A/B/C/D/E closed; the bounded initial strict JSON tree, exact-decimal parser/encoder, JSON-specific event streaming, explicit TextReader/TextWriter composition, final stress/Actor-transfer evidence, and architecture audit are fully published without a generic serialization or object-persistence boundary. |
 | LIB004 | Filesystem / process conveniences | IN_PROGRESS | — | LIB004-0 design CLOSED; LIB004-A implementation IN_PROGRESS through subdivided A1/A2/A3, with A1 published in ordinary `std:io/Files`; LIB004-D remains independently READY. |
 | LIB005 | Networking | OPEN | — | Roadmap item only; `spec/io/IO_CORE.md` currently leaves network authority acquisition, socket APIs, DNS/name resolution, and transport configuration outside its standardized scope. Re-audit and establish prerequisites before implementation. |
+| LIB006 | Deterministic hashing | IN_PROGRESS | LIB006-A published | Bounded initial SHA-256 Standard Library work: design CLOSED, pure-Protos one-shot `std:crypto/SHA256.digest(Bytes)` implementation READY. |
+| LIB006-A | SHA-256 API/security/boundary design | CLOSED | `SAME_COMMIT` | Freeze one-shot Bytes->fresh 32-byte SHA-256, pure-Protos initial implementation, no entropy/keyed crypto/native bridge, and conformance boundary. |
+| LIB006-B | pure-Protos SHA-256 implementation | READY | — | Implement `std:crypto/SHA256.digest(Bytes)` with private exact-Integer 32-bit arithmetic and Protos-owned standard vectors; close bounded LIB006 and unblock TOOL001-F2B3. |
+
 
 ### LIB001 — Collections
 
@@ -859,7 +863,7 @@ forward.
 | TOOL001-F2B | semantic resolution-input + stale detection | IN_PROGRESS | TOOL001-F2B1/F2B2 published | Projection + root/workspace/path/compatibility semantic assembly CLOSED; F2B3 hashing/stale comparison blocked. |
 | TOOL001-F2B1 | per-manifest semantic resolution-input projection design | CLOSED | `SAME_COMMIT` | Resolver-affecting field matrix, semantic normalization ownership, deterministic ordering and fail-closed unresolved-owner rule frozen. |
 | TOOL001-F2B2 | resolution-root/workspace semantic assembly design | CLOSED | `SAME_COMMIT` | Canonical root/member/path/compatibility assembly frozen without raw-source/host-path fallback. |
-| TOOL001-F2B3 | resolution-input digest + stale comparison | BLOCKED_BY_DEPENDENCIES | — | Semantic input is complete; requires an explicit suitable hashing capability/owner before executable digest/stale comparison. |
+| TOOL001-F2B3 | resolution-input digest + stale comparison | BLOCKED_BY_DEPENDENCIES | LIB006-B | Semantic input is complete; waits specifically for reusable `std:crypto/SHA256` from LIB006-B before executable digest/stale comparison. |
 
 
 | TOOL001-F1C1 | lock lexical/header/qstring/node-ref primitives | CLOSED | `SAME_COMMIT` | Bundled-Protos LockSyntax plus Protos-owned conformance; no body graph parsing or I/O. |
