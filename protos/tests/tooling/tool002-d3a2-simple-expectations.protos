@@ -1,0 +1,62 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Manifest: import("self:Manifest")
+Runner: import("self:Runner")
+
+booleanTrue: Manifest.parseLine("synthetic/boolean-true.protos\tboolean\ttrue")
+booleanFalse: Manifest.parseLine("synthetic/boolean-false.protos\tboolean\tfalse")
+nullCase: Manifest.parseLine("synthetic/null.protos\tnull\t-")
+integerCase: Manifest.parseLine(
+    "synthetic/integer.protos\tinteger\t999999999999999999999998000000000000000000000001"
+)
+negativeIntegerCase: Manifest.parseLine("synthetic/negative.protos\tinteger\t-123")
+errorCase: Manifest.parseLine("synthetic/error.protos\terror\t-")
+
+trueResult: Runner.evaluateSimple(booleanTrue, "true", execution)
+falseResult: Runner.evaluateSimple(booleanFalse, "false", execution)
+nullResult: Runner.evaluateSimple(nullCase, "null", execution)
+integerResult: Runner.evaluateSimple(
+    integerCase,
+    "999999999999999999999998000000000000000000000001",
+    execution
+)
+negativeResult: Runner.evaluateSimple(negativeIntegerCase, "-123", execution)
+errorResult: Runner.evaluateSimple(errorCase, "1.definitelyMissing()", execution)
+
+booleanMismatch: Runner.evaluateSimple(booleanTrue, "false", execution)
+nullMismatch: Runner.evaluateSimple(nullCase, "0", execution)
+integerMismatch: Runner.evaluateSimple(negativeIntegerCase, "-122", execution)
+integerFamilyMismatch: Runner.evaluateSimple(
+    Manifest.parseLine("synthetic/fixed.protos\tinteger\t42"),
+    "UInt8(42)",
+    execution
+)
+errorMismatch: Runner.evaluateSimple(errorCase, "42", execution)
+
+Runner.resultPassed(trueResult) &&
+Runner.resultPassed(falseResult) &&
+Runner.resultPassed(nullResult) &&
+Runner.resultPassed(integerResult) &&
+Runner.resultPassed(negativeResult) &&
+Runner.resultPassed(errorResult) &&
+(Runner.resultPassed(booleanMismatch) === false) &&
+(Runner.resultPassed(nullMismatch) === false) &&
+(Runner.resultPassed(integerMismatch) === false) &&
+(Runner.resultPassed(integerFamilyMismatch) === false) &&
+(Runner.resultPassed(errorMismatch) === false) &&
+(Runner.resultObservation(trueResult).state === "completed") &&
+(Runner.resultObservation(errorResult).state === "failed") &&
+(Runner.resultObservation(errorResult).error === null) == false

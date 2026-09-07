@@ -209,7 +209,7 @@ TOOL002-D therefore uses these publishable sub-slices:
 |---|---|---|
 | TOOL002-D1 | CLOSED | Bootstrap-local general `execution(source)` facility for the Test Tool over TOOL002-C, returning a caller-local observation through a strict authority-free detached-value boundary. No manifest/test policy. Implementation version `0.2.174-SNAPSHOT`. |
 | TOOL002-D2 | CLOSED | Grant the Test Tool one read-only tree-confined standard Filesystem rooted at the conformance corpus; bundled `Manifest.protos` uses bounded ordered readLine/Future.all windows to parse retained TSV rows into frozen CaseSpec/TestPlan tuples with named Protos accessors and validated path-based stable CaseIds. No case execution/expectation policy. Implementation version `0.2.182-SNAPSHOT`. |
-| TOOL002-D3 | IN_PROGRESS | Subdivided after D2: D3A1 complete-source loading is CLOSED; D3A2 single-case simple expectation interpretation is READY; D3A3 sequential TestPlan integration, D3B fixed/error-parent and D3C float policy remain dependent. |
+| TOOL002-D3 | IN_PROGRESS | D3A1 complete-source loading and D3A2 single-case simple expectation interpretation are CLOSED; D3A3 sequential TestPlan integration is READY; D3B fixed/error-parent and D3C float policy remain dependent. |
 | TOOL002-D4 | BLOCKED_BY_DEPENDENCIES | After D3, preserve the remaining non-Future `closure-error-parent-fresh` identity-sensitive expectations without leaking Closure authority; reconcile Java ownership for the D-migrated cases and close TOOL002-D. |
 
 The `future-*` families (`future-integer`, `future-null`, `future-boolean`,
@@ -266,8 +266,8 @@ Float families:
 | Slice | Status | Outcome |
 |---|---|---|
 | TOOL002-D3A1 | CLOSED | Bundled `Runner.readSource(spec, filesystem)` loads one complete UTF-8 case source through the D2 confined standard Filesystem/File surface. Ordered File reads are issued in bounded 16-read windows, exact bytes are accumulated before one UTF-8 decode, and the File is explicitly closed. No case execution or expectation policy. Implementation version `0.2.186-SNAPSHOT`. |
-| TOOL002-D3A2 | READY | Interpret one already-supplied source/CaseSpec for only `boolean`, `null`, `integer`, and `error` through the D1 `execution(source)` observation boundary. No TestPlan traversal or Filesystem ownership. |
-| TOOL002-D3A3 | BLOCKED_BY_DEPENDENCIES | After A2, compose D2 CaseSpecs + A1 source loading + A2 expectation policy into the initial sequential supported-case runner without one recursive Protos frame per case. |
+| TOOL002-D3A2 | CLOSED | `Runner.evaluateSimple(spec, source, executor)` interprets `boolean`, `null`, `integer`, and generic `error` entirely in bundled Protos. Normal mismatches return frozen `passed + observation` evidence; malformed/unsupported policy signals. Integer matching uses signed-decimal Protos parsing plus primitive `===` to preserve exact numeric family. Implementation version `0.2.189-SNAPSHOT`. |
+| TOOL002-D3A3 | READY | A1 source loading and A2 simple single-case policy are closed; compose D2 CaseSpecs + A1 + A2 into the initial sequential supported-case runner without one recursive Protos frame per case. |
 | TOOL002-D3B | BLOCKED_BY_DEPENDENCIES | After D3A, migrate `fixed-integer` and `error-parent` policy. |
 | TOOL002-D3C | BLOCKED_BY_DEPENDENCIES | After D3B, migrate `float-bits` and `float-nan` with exact binary64 requirements preserved. |
 
@@ -282,7 +282,16 @@ independently, so a multi-byte UTF-8 scalar may cross a File.read boundary
 without becoming an artificial codec error. File ordering supplies the byte
 sequence; the tool does not introduce a second source resolver.
 
-TOOL002-D3A2 is READY.
+TOOL002-D3A2 is CLOSED.
+
+D3A2 adds no Filesystem or TestPlan traversal. One already-supplied CaseSpec and
+source are executed exactly once through the explicitly supplied D1 execution
+capability. The bundled policy returns frozen inert evidence containing canonical
+`passed` plus the complete detached observation. Synthetic Protos fixtures cover
+all four supported kinds, normal mismatches, cross-family Integer rejection,
+unsupported-kind fail-closed behavior and malformed expected-Integer policy.
+
+TOOL002-D3A3 is READY.
 
 ## Closure rule
 

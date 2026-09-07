@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.189-SNAPSHOT
+
+- Close `TOOL002-D3A2`: bundled `Runner.evaluateSimple(spec, source, executor)` now owns single-case `boolean`, `null`, `integer`, and generic `error` expectation interpretation over the D1 detached observation boundary. Normal expectation mismatches are inert results rather than Test Tool Errors; malformed/unsupported policy still fails closed.
+- Preserve exact numeric family semantics for ordinary `integer` expectations by parsing the manifest decimal in Protos and comparing with primitive semantic identity `===`; equal-magnitude Float/fixed-width values therefore do not satisfy an Integer expectation. Each result is a frozen tuple retaining both canonical `passed` and the complete D1 observation for later reporting/aggregation. `TOOL002-D3A3` becomes READY; no Filesystem/TestPlan traversal or `Main.protos` integration is added in A2.
+
 ## 0.2.188-SNAPSHOT
 
 - Continue the cost-aware `TOOL001-C5` schema-v1 work with `TOOL001-C5B — manifest base schema`. Add ordinary-Protos `self:ManifestSchemaV1.parseBase(text)` / `baseFromTable(root)` over the closed C1-C4 parser and C5A scale prerequisite. This helper validates only the stable mandatory envelope: the complete schema-v1 root-name allowlist, required Integer `manifest-version` exactly `1`, and required `[package]` table with non-empty String `id`/`version` plus optional non-empty String `locator`.

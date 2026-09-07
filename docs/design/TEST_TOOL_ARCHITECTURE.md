@@ -344,6 +344,37 @@ inert TestPlan with stable case identity rather than dispatching directly from
 manifest parsing. Future discovery may coexist, but it must produce the same
 planning shape instead of creating another executor path.
 
+### TOOL002-D3A2 simple expectation result boundary
+
+D3A2 selects the first single-case expectation-policy result shape without
+introducing Java-owned test semantics. `Runner.evaluateSimple(spec, source,
+executor)` supports exactly `boolean`, `null`, `integer`, and generic `error`.
+
+A normal semantic mismatch is data, not a Test Tool control failure. A2 returns
+a frozen ordinary-Protos tuple consumed through named accessors:
+
+```text
+SimpleCaseResult
+    passed       canonical Boolean
+    observation  exact D1 detached observation
+```
+
+The retained observation keeps terminal state, detached value/Error and captured
+stdout/stderr available to later aggregation/reporting. Unsupported expectation
+kinds and malformed expected-value syntax remain Test Tool policy errors and
+signal rather than being mislabeled as test failures.
+
+The `integer` policy parses the manifest's signed decimal in Protos and compares
+the detached result with primitive `===`. Numeric semantic identity includes the
+numeric family, so an equal-magnitude Float or fixed-width integer does not
+satisfy an ordinary unbounded Integer expectation. This preserves the Java
+harness's former `ProtosIntegerValue` family check without moving that family
+policy into a new Java Test abstraction.
+
+D3A2 owns no Filesystem access, source acquisition, TestPlan traversal,
+scheduling, reporting or `Main.protos` integration. D3A3 composes those already
+separated boundaries.
+
 ## Isolation audit
 
 The normal isolation boundary should be **one fresh Protos Process per test

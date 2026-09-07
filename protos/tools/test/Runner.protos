@@ -64,3 +64,131 @@ readSource: (spec, filesystem) => {
     // File.read results is not treated as two independent codec inputs.
     Encoding.UTF8.decode(bytes)
 }
+
+resultTuple: (...items) => {
+    items
+}
+
+resultPassed: (result) => {
+    result.at(0)
+}
+
+resultObservation: (result) => {
+    result.at(1)
+}
+
+isSimpleExpectation: (spec) => {
+    kind: Manifest.caseExpectation(spec)
+    supported: kind === "boolean"
+    (kind === "null").ifTrue(() => { supported = true })
+    (kind === "integer").ifTrue(() => { supported = true })
+    (kind === "error").ifTrue(() => { supported = true })
+    supported
+}
+
+policyError: () => {
+    Error().signal()
+}
+
+parseExpectedInteger: (text) => {
+    source: Encoding.UTF8.encode(text)
+    (source.size() == 0).ifTrue(() => { policyError() })
+
+    value: 0
+    negative: false
+    digits: 0
+    first: true
+
+    source.each((octet) => {
+        sign: false
+        first.ifTrue(() => {
+            (octet == 45).ifTrue(() => {
+                negative = true
+                sign = true
+            })
+            (octet == 43).ifTrue(() => {
+                sign = true
+            })
+        })
+
+        sign.ifFalse(() => {
+            invalid: octet < 48
+            (octet > 57).ifTrue(() => { invalid = true })
+            invalid.ifTrue(() => { policyError() })
+            value = value * 10 + (octet - 48)
+            digits = digits + 1
+        })
+        first = false
+    })
+
+    (digits == 0).ifTrue(() => { policyError() })
+    negative.ifTrue(() => { value = 0 - value })
+    value
+}
+
+evaluateSimple: (spec, source, executor) => {
+    isSimpleExpectation(spec).ifFalse(() => { policyError() })
+
+    kind: Manifest.caseExpectation(spec)
+    expected: Manifest.caseExpected(spec)
+    observation: executor(source)
+    passed: false
+
+    (kind === "boolean").ifTrue(() => {
+        expectedKnown: expected === "true"
+        expectedValue: true
+        (expected === "false").ifTrue(() => {
+            expectedKnown = true
+            expectedValue = false
+        })
+        expectedKnown.ifFalse(() => { policyError() })
+
+        passed = observation.state === "completed"
+        passed.ifTrue(() => {
+            passed = observation.error === null
+        })
+        passed.ifTrue(() => {
+            passed = observation.value === expectedValue
+        })
+    })
+
+    (kind === "null").ifTrue(() => {
+        (expected === "-").ifFalse(() => { policyError() })
+
+        passed = observation.state === "completed"
+        passed.ifTrue(() => {
+            passed = observation.error === null
+        })
+        passed.ifTrue(() => {
+            passed = observation.value === null
+        })
+    })
+
+    (kind === "integer").ifTrue(() => {
+        expectedValue: parseExpectedInteger(expected)
+
+        passed = observation.state === "completed"
+        passed.ifTrue(() => {
+            passed = observation.error === null
+        })
+        passed.ifTrue(() => {
+            passed = observation.value === expectedValue
+        })
+    })
+
+    (kind === "error").ifTrue(() => {
+        (expected === "-").ifFalse(() => { policyError() })
+
+        passed = observation.state === "failed"
+        passed.ifTrue(() => {
+            passed = observation.value === null
+        })
+        passed.ifTrue(() => {
+            (observation.error === null).ifTrue(() => {
+                passed = false
+            })
+        })
+    })
+
+    resultTuple(passed, observation)
+}
