@@ -1,0 +1,73 @@
+name: Bug report
+description: Report a reproducible problem in Protos or its bundled tools
+title: "[Bug] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a problem. For open-ended questions or design ideas,
+        please use GitHub Discussions instead.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Problem
+      description: What went wrong?
+      placeholder: Describe the observable problem concisely.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Provide the smallest Protos source, command sequence, or repository steps that reproduce the problem.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include the relevant error/output. Remove credentials and private data.
+    validations:
+      required: true
+
+  - type: input
+    id: revision
+    attributes:
+      label: Protos version or commit
+      description: Version, commit SHA, or other revision identifier if known.
+      placeholder: e.g. main at <commit>, or 0.x.y
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: OS, JDK/GraalVM, architecture, and other details that may matter.
+      placeholder: Linux x86_64, Temurin JDK 21, ...
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional context
+      description: Links, traces, suspected specification sections, or other useful evidence.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing Issues and Discussions for the same problem.
+          required: true
+        - label: I removed credentials, secrets, and private data from the report.
+          required: true

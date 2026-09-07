@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions, ideas, and design discussion
+    url: https://github.com/guillermomolina/protos/discussions
+    about: Ask questions, explore ideas, discuss language design, or show what you are building.
+  - name: Security policy
+    url: https://github.com/guillermomolina/protos/security/policy
+    about: Read the security reporting policy before sharing vulnerability information.

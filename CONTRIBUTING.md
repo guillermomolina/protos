@@ -29,6 +29,23 @@ Before making a substantive implementation or language change:
 If the desired behavior is genuinely unspecified or contradictory, surface the
 design question rather than encoding an arbitrary answer in the implementation.
 
+## Where to discuss a change
+
+Use [GitHub Discussions](https://github.com/guillermomolina/protos/discussions)
+for questions, exploratory proposals, design discussion, contributor help, and
+ideas that are not yet concrete work.
+
+Use [GitHub Issues](https://github.com/guillermomolina/protos/issues) for
+reproducible bugs, concrete documentation problems, and sufficiently scoped
+actionable work. If you are unsure which applies, start in Discussions.
+
+Security-sensitive information must not be posted in an ordinary public issue;
+follow [SECURITY.md](SECURITY.md).
+
+Project participation is governed by
+[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and general support routing is
+documented in [SUPPORT.md](SUPPORT.md).
+
 ## AI-assisted development
 
 **AI-assisted and fully AI-generated contributions are welcome in Protos.**

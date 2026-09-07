@@ -465,6 +465,21 @@ review, and validation evidence rather than by who or what typed the code.
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow, review
 expectations, and the project's AI-assisted development policy.
 
+## Community
+
+-   [GitHub Discussions](https://github.com/guillermomolina/protos/discussions) —
+    questions, ideas, design exploration, introductions, and show-and-tell.
+-   [GitHub Issues](https://github.com/guillermomolina/protos/issues) —
+    reproducible bugs and scoped actionable work.
+-   [Roadmap](ROADMAP.md) — a short, human-facing `Now / Next / Later` view of
+    project direction.
+-   [Support](SUPPORT.md) — where to ask for help and what information is useful.
+-   [Code of Conduct](CODE_OF_CONDUCT.md) — expectations for project spaces.
+-   [Security policy](SECURITY.md) — how to report security-sensitive problems.
+
+If you are not sure whether something is a bug, proposal, or question, start in
+Discussions.
+
 ## Current specification
 
 The normative Core v0.1 specification is modular. `PROTOS_GRAMMAR.md` owns

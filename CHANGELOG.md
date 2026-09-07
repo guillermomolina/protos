@@ -1,5 +1,6 @@
 ## 0.2.214-SNAPSHOT
 
+- Add community entry points for adoption and external contribution: a human-facing roadmap, Code of Conduct, support and security policies, GitHub Issue Forms, and a pull-request template. Route questions, exploratory ideas, and design discussion to the now-enabled GitHub Discussions space, while keeping Issues focused on reproducible bugs and scoped actionable work. No specification, implementation-version, or license-term change.
 - Close `I023-B2A` with adversarial Protos-source conformance for representative normal non-Boolean D044 condition results: `null`, Integer, ordinary `Object`, and Future all signal a fresh generic standard Error before any body activation. Two independent invalid-null failures prove fresh Error identity and direct `Error` parentage; the Future case proves `while` does not await or adopt a Future condition result.
 - Subdivide the remaining synchronous I023-B2 evidence into B2B callback-activation timing, B2C Error/non-local-return transfer, and B2D body-Future/structured-ownership closure. This slice changes conformance/project state only: no runtime, normative specification, native boundary, license terms, or implementation version changes.
 
