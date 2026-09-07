@@ -234,8 +234,31 @@ recorded the runner's absolute archive path. The digest value was correct, but
 `DIST001-D2A` corrects artifact portability by generating the checksum from the
 archive directory so the checksum records only the portable ZIP basename, and
 the workflow verifies that file with `sha256sum -c` before upload.
-`DIST001-D2B` must then observe a real D2A-or-later green run and downloaded
-artifact before parent D2/D can close.
+
+`DIST001-D2B` closes the observed-artifact boundary with real CI evidence. The
+`Distribution snapshot` run `34101588533` for source `994429173b6ec0fc086f307f4a49815f219c6523` completed
+successfully, including the full Maven suite, portable build, complete B5 gate,
+checksum preparation, and artifact upload. GitHub published artifact
+`protos-snapshot-994429173b6ec0fc086f307f4a49815f219c6523` (artifact id `10010752033`, Actions digest
+`sha256:ada6593e40efee2e78981d0d0881817b5061250db6dbbd8946ad93b786e049f4`).
+
+Independent downloaded-artifact inspection found exactly:
+
+```text
+protos-0.2.230-SNAPSHOT-posix-jvm.zip
+protos-0.2.230-SNAPSHOT-posix-jvm.zip.sha256
+```
+
+The external checksum records only the portable basename:
+
+```text
+f66f011ba9a7c579f81b5aad7098bd4ec421ebc8117b3c4c8954374441e94337  protos-0.2.230-SNAPSHOT-posix-jvm.zip
+```
+
+and `sha256sum -c protos-0.2.230-SNAPSHOT-posix-jvm.zip.sha256` succeeds after download outside the
+runner workspace. DIST001-D2 and parent DIST001-D are therefore closed. This CI
+artifact remains a transient development snapshot, not a Git tag or GitHub
+Release.
 
 ## DIST001 boundary
 

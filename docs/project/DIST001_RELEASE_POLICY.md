@@ -201,16 +201,21 @@ observed artifact publication:
   on `main` pushes and explicit manual dispatch, pins GraalVM Community JDK
   22.0.0, runs the full suite and the complete B5 gate, writes an outer ZIP
   checksum, and uploads a 14-day `protos-snapshot-<source-sha>` Actions artifact.
-- `DIST001-D2` — observed CI snapshot artifact closure — IN_PROGRESS after the
-  first D1 run exposed a portability defect in the external checksum filename:
-  - `DIST001-D2A` — portable external checksum repair — CLOSED when the workflow
+- `DIST001-D2` — observed CI snapshot artifact closure — CLOSED:
+  - `DIST001-D2A` — portable external checksum repair — CLOSED; the workflow
     writes only the ZIP basename into `.sha256` and verifies it with
     `sha256sum -c` before upload;
-  - `DIST001-D2B` — observed repaired artifact closure — READY; inspect a real
-    D2A-or-later workflow run and downloaded artifact, require green job
-    completion, matching source revision, expected snapshot artifact, portable
-    ZIP + `.sha256` contents, and successful checksum verification before
-    closing D2/D.
+  - `DIST001-D2B` — observed repaired artifact closure — CLOSED from real run
+    `34101588533` for exact source `994429173b6ec0fc086f307f4a49815f219c6523`. The run completed green and
+    uploaded `protos-snapshot-994429173b6ec0fc086f307f4a49815f219c6523` (artifact id `10010752033`). Downloaded-artifact
+    inspection found `protos-0.2.230-SNAPSHOT-posix-jvm.zip` plus its `.sha256`; the checksum contained
+    only the ZIP basename, matched SHA-256 `f66f011ba9a7c579f81b5aad7098bd4ec421ebc8117b3c4c8954374441e94337`, and passed
+    `sha256sum -c` outside the runner workspace.
+
+DIST001-D is CLOSED. CI now continuously produces validated transient snapshot
+artifacts without creating tags or GitHub Releases. DIST001-E may be audited as
+READY work, but public prerelease publication still requires an explicit release
+decision for an exact candidate revision.
 
 Neither slice creates or authorizes a Git tag or GitHub Release.
 
