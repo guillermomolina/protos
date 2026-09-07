@@ -1,3 +1,9 @@
+## 0.2.213-SNAPSHOT
+
+- Start the executable `TOOL001-F1C — canonical lock parser/writer + round-trip conformance` parent with `TOOL001-F1C1 — lock lexical primitives`. Add ordinary bundled-Protos `self:LockSyntax` implementing the already-frozen lock-format-1 in-memory lexical layer: strict one-space line tokenization, canonical F1B1 qstring parse/render, canonical F1A header parse/render, and typed workspace/registry/git node-reference parse/render. Registry refs delegate ReleaseVersion validation to the closed D1 owner; opaque PackageId/Git revision text is not redefined here.
+- Keep F1C1 bounded below body graph semantics. It does not parse root/workspace/external/dependency records, validate graph references/uniqueness, sort whole documents, access Filesystem, resolve dependencies, discover packages, authenticate authorities, hash package content, or use registry/network/store capabilities. Formalize F1C2 for body record/model/structural validation and F1C3 for total writer/canonical rejection/round-trip closure.
+- Add a minimal Java execution harness only for provisioning the existing bundled Package Tool module resolver; all lexical/header/reference expectations and error cases live in Protos fixtures. The lexer is state-machine based over Bytes iteration with a per-octet state snapshot, preventing a state transition from being reinterpreted by another branch during the same octet; it avoids recursive one-call-per-octet scanning.
+
 ## 0.2.212-SNAPSHOT
 
 - Add a non-normative licensing rationale explaining why APL-1.0 was chosen, with emphasis on welcoming open-source, commercial and proprietary applications, independent extensions and private internal use while preserving reciprocity for the Protos Licensed Work. Link the rationale from the README. No license terms, specification semantics or implementation version change.

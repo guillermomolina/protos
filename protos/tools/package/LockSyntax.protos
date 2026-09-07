@@ -1,0 +1,690 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Version: import("self:ReleaseVersion")
+
+fail: () => {
+    Error().signal()
+}
+
+emptyBytes: () => {
+    Encoding.UTF8.encode("")
+}
+
+isDigit: (octet) => {
+    result: octet >= 48
+    (octet > 57).ifTrue(() => {
+        result = false
+    })
+    result
+}
+
+isLowerAlpha: (octet) => {
+    result: octet >= 97
+    (octet > 122).ifTrue(() => {
+        result = false
+    })
+    result
+}
+
+lowerHexValue: (octet) => {
+    result: -1
+
+    isDigit(octet).ifTrue(() => {
+        result = octet - 48
+    })
+
+    (result < 0).ifTrue(() => {
+        (octet >= 97).ifTrue(() => {
+            (octet <= 102).ifTrue(() => {
+                result = octet - 87
+            })
+        })
+    })
+
+    result
+}
+
+hexOctet: (value) => {
+    result: 48 + value
+    (value > 9).ifTrue(() => {
+        result = 87 + value
+    })
+    result
+}
+
+appendToken: (tokens, bytes, quoted) => {
+    Array(
+        ...tokens,
+        {
+            quoted: quoted
+            text: Encoding.UTF8.decode(bytes)
+        }
+    )
+}
+
+lineTokens: (text) => {
+    ignoredStringValidation: text + ""
+    source: Encoding.UTF8.encode(text)
+
+    // States:
+    // 0 = expecting token
+    // 1 = bare token
+    // 2 = quoted token
+    // 3 = quoted escape
+    // 4 = quoted \u00xx digits
+    // 5 = immediately after quoted token
+    state: 0
+    tokens: Array()
+    current: emptyBytes()
+    unicodeRemaining: 0
+    unicodeValue: 0
+
+    source.each((octet) => {
+        before: state
+
+        (before == 0).ifTrue(() => {
+            (octet == 32).ifTrue(() => {
+                fail()
+            })
+            (octet < 33).ifTrue(() => {
+                fail()
+            })
+
+            (octet == 34).ifTrue(() => {
+                state = 2
+            })
+            (octet == 34).ifFalse(() => {
+                (octet > 126).ifTrue(() => {
+                    fail()
+                })
+                current.add(octet)
+                state = 1
+            })
+        })
+
+        (before == 1).ifTrue(() => {
+            (octet == 32).ifTrue(() => {
+                tokens = appendToken(tokens, current, false)
+                current = emptyBytes()
+                state = 0
+            })
+
+            (octet == 32).ifFalse(() => {
+                (octet < 33).ifTrue(() => {
+                    fail()
+                })
+                (octet > 126).ifTrue(() => {
+                    fail()
+                })
+                (octet == 34).ifTrue(() => {
+                    fail()
+                })
+                current.add(octet)
+            })
+        })
+
+        (before == 2).ifTrue(() => {
+            (octet == 34).ifTrue(() => {
+                tokens = appendToken(tokens, current, true)
+                current = emptyBytes()
+                state = 5
+            })
+
+            (octet == 34).ifFalse(() => {
+                (octet == 92).ifTrue(() => {
+                    state = 3
+                })
+
+                (octet == 92).ifFalse(() => {
+                    invalidControl: octet < 32
+                    (octet == 127).ifTrue(() => {
+                        invalidControl = true
+                    })
+                    invalidControl.ifTrue(() => {
+                        fail()
+                    })
+                    current.add(octet)
+                })
+            })
+        })
+
+        (before == 3).ifTrue(() => {
+            (octet == 34).ifTrue(() => {
+                current.add(34)
+                state = 2
+            })
+
+            (octet == 34).ifFalse(() => {
+                (octet == 92).ifTrue(() => {
+                    current.add(92)
+                    state = 2
+                })
+
+                (octet == 92).ifFalse(() => {
+                    (octet == 117).ifTrue(() => {
+                        unicodeRemaining = 4
+                        unicodeValue = 0
+                        state = 4
+                    })
+
+                    (octet == 117).ifFalse(() => {
+                        fail()
+                    })
+                })
+            })
+        })
+
+        (before == 4).ifTrue(() => {
+            digit: lowerHexValue(octet)
+            (digit < 0).ifTrue(() => {
+                fail()
+            })
+
+            unicodeValue = unicodeValue * 16 + digit
+            unicodeRemaining = unicodeRemaining - 1
+
+            (unicodeRemaining == 0).ifTrue(() => {
+                canonicalControl: unicodeValue < 32
+                (unicodeValue == 127).ifTrue(() => {
+                    canonicalControl = true
+                })
+                canonicalControl.ifFalse(() => {
+                    fail()
+                })
+                current.add(unicodeValue)
+                state = 2
+            })
+        })
+
+        (before == 5).ifTrue(() => {
+            (octet == 32).ifFalse(() => {
+                fail()
+            })
+            state = 0
+        })
+    })
+
+    (state == 1).ifTrue(() => {
+        tokens = appendToken(tokens, current, false)
+        state = 6
+    })
+
+    (state == 5).ifTrue(() => {
+        state = 6
+    })
+
+    (state == 0).ifTrue(() => {
+        (source.size() > 0).ifTrue(() => {
+            fail()
+        })
+        state = 6
+    })
+
+    (state == 6).ifFalse(() => {
+        fail()
+    })
+
+    tokens
+}
+
+parseQstring: (text) => {
+    tokens: lineTokens(text)
+    (tokens.size() == 1).ifFalse(() => {
+        fail()
+    })
+
+    token: tokens.at(0)
+    token.quoted.ifFalse(() => {
+        fail()
+    })
+
+    token.text
+}
+
+renderQstring: (text) => {
+    source: Encoding.UTF8.encode(text)
+    result: emptyBytes()
+    result.add(34)
+
+    source.each((octet) => {
+        (octet == 34).ifTrue(() => {
+            result.add(92)
+            result.add(34)
+        })
+
+        (octet == 34).ifFalse(() => {
+            (octet == 92).ifTrue(() => {
+                result.add(92)
+                result.add(92)
+            })
+
+            (octet == 92).ifFalse(() => {
+                control: octet < 32
+                (octet == 127).ifTrue(() => {
+                    control = true
+                })
+
+                control.ifTrue(() => {
+                    result.add(92)
+                    result.add(117)
+                    result.add(48)
+                    result.add(48)
+                    result.add(hexOctet(octet.div(16)))
+                    result.add(hexOctet(octet.mod(16)))
+                })
+
+                control.ifFalse(() => {
+                    result.add(octet)
+                })
+            })
+        })
+    })
+
+    result.add(34)
+    Encoding.UTF8.decode(result)
+}
+
+parseDecimalToken: (token) => {
+    token.quoted.ifTrue(() => {
+        fail()
+    })
+
+    source: Encoding.UTF8.encode(token.text)
+    (source.size() == 0).ifTrue(() => {
+        fail()
+    })
+
+    (source.size() > 1).ifTrue(() => {
+        (source.at(0) == 48).ifTrue(() => {
+            fail()
+        })
+    })
+
+    value: 0
+    source.each((octet) => {
+        isDigit(octet).ifFalse(() => {
+            fail()
+        })
+        value = value * 10 + (octet - 48)
+    })
+
+    {
+        value: value
+        text: token.text
+    }
+}
+
+validateMethodText: (text) => {
+    source: Encoding.UTF8.encode(text)
+    (source.size() == 0).ifTrue(() => {
+        fail()
+    })
+
+    index: 0
+    source.each((octet) => {
+        valid: isLowerAlpha(octet)
+
+        (index > 0).ifTrue(() => {
+            isDigit(octet).ifTrue(() => {
+                valid = true
+            })
+            (octet == 45).ifTrue(() => {
+                valid = true
+            })
+        })
+
+        valid.ifFalse(() => {
+            fail()
+        })
+
+        index = index + 1
+    })
+
+    text
+}
+
+parseMethodToken: (token) => {
+    token.quoted.ifTrue(() => {
+        fail()
+    })
+    validateMethodText(token.text)
+}
+
+parseDigestToken: (token) => {
+    token.quoted.ifTrue(() => {
+        fail()
+    })
+
+    source: Encoding.UTF8.encode(token.text)
+    algorithmBytes: emptyBytes()
+    hexBytes: emptyBytes()
+    inHex: false
+
+    source.each((octet) => {
+        (octet == 58).ifTrue(() => {
+            inHex.ifTrue(() => {
+                fail()
+            })
+            inHex = true
+        })
+
+        (octet == 58).ifFalse(() => {
+            inHex.ifTrue(() => {
+                (lowerHexValue(octet) < 0).ifTrue(() => {
+                    fail()
+                })
+                hexBytes.add(octet)
+            })
+
+            inHex.ifFalse(() => {
+                algorithmBytes.add(octet)
+            })
+        })
+    })
+
+    inHex.ifFalse(() => {
+        fail()
+    })
+    (algorithmBytes.size() == 0).ifTrue(() => {
+        fail()
+    })
+    (hexBytes.size() == 0).ifTrue(() => {
+        fail()
+    })
+
+    algorithm: Encoding.UTF8.decode(algorithmBytes)
+    validateMethodText(algorithm)
+
+    {
+        algorithm: algorithm
+        hex: Encoding.UTF8.decode(hexBytes)
+        text: token.text
+    }
+}
+
+bareEquals: (token, expected) => {
+    result: false
+    token.quoted.ifFalse(() => {
+        result = token.text == expected
+    })
+    result
+}
+
+headerLines: (text) => {
+    source: Encoding.UTF8.encode(text)
+    lines: Array()
+    current: emptyBytes()
+
+    source.each((octet) => {
+        (octet == 10).ifTrue(() => {
+            line: ""
+            (current.size() > 0).ifTrue(() => {
+                line = Encoding.UTF8.decode(current)
+            })
+            lines = Array(...lines, line)
+            current = emptyBytes()
+        })
+
+        (octet == 10).ifFalse(() => {
+            (octet == 13).ifTrue(() => {
+                fail()
+            })
+            current.add(octet)
+        })
+    })
+
+    (current.size() == 0).ifFalse(() => {
+        fail()
+    })
+
+    (lines.size() == 4).ifFalse(() => {
+        fail()
+    })
+
+    (lines.at(3) == "").ifFalse(() => {
+        fail()
+    })
+
+    lines
+}
+
+parseLockFormatLine: (text) => {
+    tokens: lineTokens(text)
+
+    (tokens.size() == 2).ifFalse(() => {
+        fail()
+    })
+
+    keyword: tokens.at(0)
+    keyword.quoted.ifTrue(() => {
+        fail()
+    })
+    (keyword.text == "lock-format").ifFalse(() => {
+        fail()
+    })
+
+    parsed: parseDecimalToken(tokens.at(1))
+    (parsed.value == 1).ifFalse(() => {
+        fail()
+    })
+
+    parsed
+}
+
+parseResolverVersionLine: (text) => {
+    tokens: lineTokens(text)
+
+    (tokens.size() == 2).ifFalse(() => {
+        fail()
+    })
+
+    keyword: tokens.at(0)
+    keyword.quoted.ifTrue(() => {
+        fail()
+    })
+    (keyword.text == "resolver-version").ifFalse(() => {
+        fail()
+    })
+
+    parseDecimalToken(tokens.at(1))
+}
+
+parseResolutionInputLine: (text) => {
+    tokens: lineTokens(text)
+
+    (tokens.size() == 3).ifFalse(() => {
+        fail()
+    })
+
+    keyword: tokens.at(0)
+    keyword.quoted.ifTrue(() => {
+        fail()
+    })
+    (keyword.text == "resolution-input").ifFalse(() => {
+        fail()
+    })
+
+    parsedMethod: parseMethodToken(tokens.at(1))
+    parsedDigest: parseDigestToken(tokens.at(2))
+
+    {
+        method: parsedMethod
+        algorithm: parsedDigest.algorithm
+        hex: parsedDigest.hex
+    }
+}
+
+parseHeader: (text) => {
+    lines: headerLines(text)
+
+    lockFormatRecord: parseLockFormatLine(lines.at(0))
+    resolverVersionRecord: parseResolverVersionLine(lines.at(1))
+    resolutionInputRecord: parseResolutionInputLine(lines.at(2))
+
+    lockFormatValue: lockFormatRecord.value
+    lockFormatTextValue: lockFormatRecord.text
+    resolverVersionValue: resolverVersionRecord.value
+    resolverVersionTextValue: resolverVersionRecord.text
+    resolutionMethodValue: resolutionInputRecord.method
+    digestAlgorithmValue: resolutionInputRecord.algorithm
+    digestHexValue: resolutionInputRecord.hex
+
+    {
+        lockFormat: lockFormatValue
+        lockFormatText: lockFormatTextValue
+        resolverVersion: resolverVersionValue
+        resolverVersionText: resolverVersionTextValue
+        resolutionMethod: resolutionMethodValue
+        digestAlgorithm: digestAlgorithmValue
+        digestHex: digestHexValue
+    }
+}
+
+renderHeader: (header) => {
+    "lock-format " + header.lockFormatText + "\n" +
+    "resolver-version " + header.resolverVersionText + "\n" +
+    "resolution-input " + header.resolutionMethod + " " +
+    header.digestAlgorithm + ":" + header.digestHex + "\n\n"
+}
+
+nodeRefAt: (tokens, start) => {
+    (start >= tokens.size()).ifTrue(() => {
+        fail()
+    })
+
+    kindToken: tokens.at(start)
+    kindToken.quoted.ifTrue(() => {
+        fail()
+    })
+
+    result: null
+
+    (kindToken.text == "workspace").ifTrue(() => {
+        ((start + 1) >= tokens.size()).ifTrue(() => {
+            fail()
+        })
+
+        packageToken: tokens.at(start + 1)
+        packageToken.quoted.ifFalse(() => {
+            fail()
+        })
+
+        result = {
+            ref: {
+                kind: "workspace"
+                packageId: packageToken.text
+            }
+            next: start + 2
+        }
+    })
+
+    (kindToken.text == "registry").ifTrue(() => {
+        ((start + 2) >= tokens.size()).ifTrue(() => {
+            fail()
+        })
+
+        packageToken: tokens.at(start + 1)
+        versionToken: tokens.at(start + 2)
+
+        packageToken.quoted.ifFalse(() => {
+            fail()
+        })
+        versionToken.quoted.ifFalse(() => {
+            fail()
+        })
+
+        version: Version.parse(versionToken.text)
+
+        result = {
+            ref: {
+                kind: "registry"
+                packageId: packageToken.text
+                version: version
+            }
+            next: start + 3
+        }
+    })
+
+    (kindToken.text == "git").ifTrue(() => {
+        ((start + 2) >= tokens.size()).ifTrue(() => {
+            fail()
+        })
+
+        packageToken: tokens.at(start + 1)
+        revisionToken: tokens.at(start + 2)
+
+        packageToken.quoted.ifFalse(() => {
+            fail()
+        })
+        revisionToken.quoted.ifFalse(() => {
+            fail()
+        })
+
+        result = {
+            ref: {
+                kind: "git"
+                packageId: packageToken.text
+                revision: revisionToken.text
+            }
+            next: start + 3
+        }
+    })
+
+    (result === null).ifTrue(() => {
+        fail()
+    })
+
+    result
+}
+
+parseNodeRef: (text) => {
+    tokens: lineTokens(text)
+    parsed: nodeRefAt(tokens, 0)
+
+    (parsed.next == tokens.size()).ifFalse(() => {
+        fail()
+    })
+
+    parsed.ref
+}
+
+renderNodeRef: (ref) => {
+    result: null
+
+    (ref.kind == "workspace").ifTrue(() => {
+        result = "workspace " + renderQstring(ref.packageId)
+    })
+
+    (ref.kind == "registry").ifTrue(() => {
+        result =
+            "registry " +
+            renderQstring(ref.packageId) + " " +
+            renderQstring(ref.version.text)
+    })
+
+    (ref.kind == "git").ifTrue(() => {
+        result =
+            "git " +
+            renderQstring(ref.packageId) + " " +
+            renderQstring(ref.revision)
+    })
+
+    (result === null).ifTrue(() => {
+        fail()
+    })
+
+    result
+}

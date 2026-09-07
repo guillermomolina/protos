@@ -1,0 +1,49 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Syntax: import("self:LockSyntax")
+valueBytes: Encoding.UTF8.encode("A")
+valueBytes.add(10)
+valueBytes.add(34)
+valueBytes.add(92)
+valueBytes.add(127)
+value: Encoding.UTF8.decode(valueBytes)
+
+expectedBytes: Encoding.UTF8.encode("")
+expectedBytes.add(34)
+expectedBytes.add(65)
+expectedBytes.add(92)
+expectedBytes.add(117)
+expectedBytes.add(48)
+expectedBytes.add(48)
+expectedBytes.add(48)
+expectedBytes.add(97)
+expectedBytes.add(92)
+expectedBytes.add(34)
+expectedBytes.add(92)
+expectedBytes.add(92)
+expectedBytes.add(92)
+expectedBytes.add(117)
+expectedBytes.add(48)
+expectedBytes.add(48)
+expectedBytes.add(55)
+expectedBytes.add(102)
+expectedBytes.add(34)
+expected: Encoding.UTF8.decode(expectedBytes)
+
+rendered: Syntax.renderQstring(value)
+ok: rendered == expected
+(Syntax.parseQstring(rendered) == value).ifFalse(() => { ok = false })
+ok
