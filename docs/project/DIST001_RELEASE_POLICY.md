@@ -271,7 +271,9 @@ does not depend on one large all-or-nothing launcher:
   source plus `package manifest` resolve from a distinct caller project CWD; on
   a validation JDK outside the selected JDK22 contract, B3 disables optimizer
   JARs only in the disposable extracted copy and exercises fallback Truffle;
-- `DIST001-B4` — bundled Test Tool and exact optimizing-runtime probe — READY;
+- `DIST001-B4` — bundled Test Tool and exact optimizing-runtime probe — IN_PROGRESS:
+  - `DIST001-B4A` — extracted bundled Test Tool smoke — CLOSED;
+  - `DIST001-B4B` — intact optimizer classpath + exact runtime probe — READY;
 - `DIST001-B5` — cross-slice closure and DIST001-D readiness.
 
 A does not claim that the archive has passed outside-checkout execution merely

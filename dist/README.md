@@ -128,6 +128,32 @@ This isolation is intentional: B3 owns relocation/CWD behavior, while
 for the selected optimizing-runtime contract. The smoke prints captured launcher
 stdout/stderr before failing so a runtime or command failure is diagnosable.
 
+
+## Bundled Test Tool smoke
+
+`DIST001-B4A` validates that the Test Tool bundled in the extracted distribution
+can bootstrap and execute its current bundled plan:
+
+```sh
+python3 dist/build_portable.py
+python3 dist/verify_portable.py --require-clean-source
+sh dist/smoke_test_tool.sh
+```
+
+The smoke extracts a disposable toolchain outside the checkout and invokes public
+`protos test` from a separate temporary project directory. It requires the
+current public Test Tool bootstrap marker and argument marker after successful
+execution.
+
+If the validation JDK does not match the selected GraalVM Community JDK 22
+contract, B4A applies the same disposable-copy optimizer isolation established by
+B3 and exercises fallback Truffle. That proves bundled Test Tool portability
+without treating the host runtime as supported.
+
+Exact optimizing-runtime validation is deliberately separate:
+`DIST001-B4B` owns the intact optimizer classpath and exact
+`com.oracle.truffle.runtime.hotspot.HotSpotTruffleRuntime` proof.
+
 ## DIST001 boundary
 
 DIST001-A proves that the distribution can be constructed and that its archive
