@@ -1,0 +1,23 @@
+manifest-version = 1
+
+[package]
+id = "root"
+version = "3.0.0"
+
+[compatibility]
+language = "0.1"
+
+[workspace]
+members = ["libs/a"]
+
+[dependencies.registry]
+authority = "public"
+package = "json"
+version = "<2.0.0	>=1.0.0"
+
+[dependencies.gitdep]
+git = "https://example.invalid/repo.git"
+rev = "abc123"
+
+[dependencies.local]
+path = "libs/./a"

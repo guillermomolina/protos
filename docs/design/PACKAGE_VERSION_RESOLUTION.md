@@ -1287,3 +1287,64 @@ Missing/unreadable/non-canonical lockfiles continue to fail through ordinary
 F2A load behavior. F2B3 does not reinterpret those failures as `stale`.
 
 F2B3 performs no dependency resolution and never rewrites `protos.lock`.
+
+## TOOL001-F2C implementation closure — physical resolution-root assembly
+
+F2C closes the missing composition between schema-v1 physical manifests and the
+semantic `ResolutionRootV1` consumed by closed F2B.
+
+`self:ResolutionRoot.assemble(projectTreeFilesystem)` now:
+
+1. reads exactly root `protos.toml`;
+2. parses it through closed `ManifestSchemaV1`;
+3. interprets only the root manifest's `workspace.members`;
+4. validates each member declaration as the F2B2 canonical `/`-separated
+   root-relative location;
+5. reads exactly `<member-location>/protos.toml` through the supplied confined
+   read-only tree Filesystem;
+6. rejects duplicate root/member PackageIds;
+7. parses package ReleaseVersions and registry DependencyConstraints through D1/D2;
+8. projects registry/Git dependency requirements;
+9. resolves path dependency source spellings relative to the declaring package,
+   accepting `.`/`..` navigation but rejecting escape above the resolution root;
+10. requires every normalized path dependency target to be the root or an
+    explicitly declared member and records its canonical location + PackageId;
+11. returns the complete `ResolutionRootV1` with active
+    `LanguageCompatibilityId = "0.1"`.
+
+A member's own `[workspace]` remains inactive while it participates under the
+enclosing root and is therefore never recursively traversed.
+
+The implementation performs no directory enumeration, globbing, parent search,
+ambient manifest discovery, lock read/write, dependency version selection,
+registry/store access, source-tree hashing or network access.
+
+### Authority boundary
+
+F2C does not invent a new Filesystem backend. The repository already publishes
+general `ProtosNioReadOnlyTreeFilesystemBackend`, which walks only relative
+normal Path components through pinned `SecureDirectoryStream` handles with
+`NOFOLLOW_LINKS` and fails closed when secure confinement is unavailable.
+
+The assembler receives that ordinary Filesystem capability explicitly as
+`projectTreeFilesystem`. It does not acquire it through Process, import, global
+state or a host path String.
+
+F2C intentionally does not yet change `ProtosCli` to provision project-tree
+authority during every package command. That would violate the command-scoped
+least-authority direction. A later run-preflight/execution-plan integration slice
+may provision this read authority only for the operation that needs physical
+root assembly.
+
+### Continuation
+
+With F2C closed, the Package Tool can construct the semantic model required by
+`ResolutionInput.digest` and `LockFile.isStale` from real root/member manifests
+whenever a confined tree Filesystem is explicitly supplied.
+
+`TOOL001-F2` remains IN_PROGRESS. The next integration boundary is no longer
+manifest assembly; it is preflight consumption of the canonical lock and
+construction/handoff of an exact `PackageExecutionPlan`. Explicit
+resolve/update remains a separate path because candidate discovery,
+ContentIdentity/materialization and registry/store capabilities are not yet
+complete.

@@ -1,0 +1,49 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Root: import("self:ResolutionRoot")
+Input: import("self:ResolutionInput")
+model: Root.assemble(projectTreeFilesystem)
+
+root: model.root
+ok: root.dependencies.size() == 3
+
+registry: null
+git: null
+path: null
+root.dependencies.each((dependency) => {
+    (dependency.kind == "registry").ifTrue(() => { registry = dependency })
+    (dependency.kind == "git").ifTrue(() => { git = dependency })
+    (dependency.kind == "path").ifTrue(() => { path = dependency })
+})
+
+(registry === null).ifTrue(() => { ok = false })
+(git === null).ifTrue(() => { ok = false })
+(path === null).ifTrue(() => { ok = false })
+
+(registry.alias == "registry").ifFalse(() => { ok = false })
+(registry.constraint.kind == "interval").ifFalse(() => { ok = false })
+(registry.constraint.lower.version.text == "1.0.0").ifFalse(() => { ok = false })
+(registry.constraint.upper.version.text == "2.0.0").ifFalse(() => { ok = false })
+
+(git.repository == "https://example.invalid/repo.git").ifFalse(() => { ok = false })
+(git.revision == "abc123").ifFalse(() => { ok = false })
+
+(path.targetLocation == "libs/a").ifFalse(() => { ok = false })
+(path.targetPackageId == "a-pkg").ifFalse(() => { ok = false })
+
+canonical: Input.text(model)
+(canonical.size() > 0).ifFalse(() => { ok = false })
+ok

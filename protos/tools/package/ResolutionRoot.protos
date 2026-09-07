@@ -1,0 +1,403 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Schema: import("self:ManifestSchemaV1")
+Version: import("self:ReleaseVersion")
+Constraint: import("self:DependencyConstraint")
+
+fail: () => {
+    Error().signal()
+}
+
+readTextAt: (projectTreeFilesystem, path) => {
+    file: projectTreeFilesystem.open(path).value()
+    reader: TextReader.owning(file, Encoding.UTF8)
+    text: ""
+
+    readNext: null
+    readNext = () => {
+        chunk: reader.readText().value()
+        (chunk === null).ifFalse(() => {
+            text = text + chunk
+            readNext()
+        })
+    }
+
+    Error.handle(() => {
+        readNext()
+    }, (error) => {
+        reader.close().value()
+        error.signal()
+    })
+
+    reader.close().value()
+    text
+}
+
+splitPath: (text, allowNavigation) => {
+    source: Encoding.UTF8.encode(text)
+    (source.size() == 0).ifTrue(() => {
+        fail()
+    })
+
+    result: Array()
+    current: Encoding.UTF8.encode("")
+
+    appendCurrent: () => {
+        (current.size() == 0).ifTrue(() => {
+            fail()
+        })
+
+        component: Encoding.UTF8.decode(current)
+
+        allowNavigation.ifFalse(() => {
+            (component == ".").ifTrue(() => {
+                fail()
+            })
+            (component == "..").ifTrue(() => {
+                fail()
+            })
+        })
+
+        result = Array(...result, component)
+        current = Encoding.UTF8.encode("")
+    }
+
+    source.each((octet) => {
+        (octet == 47).ifTrue(() => {
+            appendCurrent()
+        })
+
+        (octet == 47).ifFalse(() => {
+            current.add(octet)
+        })
+    })
+
+    appendCurrent()
+    result
+}
+
+joinComponents: (components) => {
+    result: ""
+    index: 0
+
+    components.each((component) => {
+        (index > 0).ifTrue(() => {
+            result = result + "/"
+        })
+        result = result + component
+        index = index + 1
+    })
+
+    result
+}
+
+popComponent: (components) => {
+    (components.size() == 0).ifTrue(() => {
+        fail()
+    })
+
+    result: Array()
+    index: 0
+    limit: components.size() - 1
+
+    components.each((component) => {
+        (index < limit).ifTrue(() => {
+            result = Array(...result, component)
+        })
+        index = index + 1
+    })
+
+    result
+}
+
+canonicalMemberLocation: (text) => {
+    joinComponents(splitPath(text, false))
+}
+
+memberManifestPath: (location) => {
+    path: Path.relative()
+
+    splitPath(location, false).each((component) => {
+        path = path.child(component)
+    })
+
+    path.child("protos.toml")
+}
+
+rootManifestPath: () => {
+    Path.relative().child("protos.toml")
+}
+
+baseLocationComponents: (declaringLocation) => {
+    result: Array()
+
+    (declaringLocation == "").ifFalse(() => {
+        result = splitPath(declaringLocation, false)
+    })
+
+    result
+}
+
+resolvePathDependency: (
+    declaringLocation,
+    sourceText,
+    rootPackageId,
+    memberPackageIds
+) => {
+    components: baseLocationComponents(declaringLocation)
+
+    splitPath(sourceText, true).each((component) => {
+        (component == ".").ifFalse(() => {
+            (component == "..").ifTrue(() => {
+                components = popComponent(components)
+            })
+
+            (component == "..").ifFalse(() => {
+                components = Array(...components, component)
+            })
+        })
+    })
+
+    targetLocation: joinComponents(components)
+    targetPackageId: null
+
+    (targetLocation == "").ifTrue(() => {
+        targetPackageId = rootPackageId
+    })
+
+    (targetLocation == "").ifFalse(() => {
+        memberPackageIds.containsKey(targetLocation).ifFalse(() => {
+            fail()
+        })
+        targetPackageId = memberPackageIds.at(targetLocation)
+    })
+
+    {
+        kind: "path"
+        targetLocation: targetLocation
+        targetPackageId: targetPackageId
+    }
+}
+
+dependencyKind: (declaration) => {
+    result: null
+
+    Error.handle(() => {
+        ignoredAuthority: declaration.authority
+        ignoredPackage: declaration.package
+        ignoredVersion: declaration.version
+        result = "registry"
+    }, (error) => {
+        null
+    })
+
+    (result === null).ifTrue(() => {
+        Error.handle(() => {
+            ignoredGit: declaration.git
+            ignoredRevision: declaration.rev
+            result = "git"
+        }, (error) => {
+            null
+        })
+    })
+
+    (result === null).ifTrue(() => {
+        Error.handle(() => {
+            ignoredPath: declaration.path
+            result = "path"
+        }, (error) => {
+            null
+        })
+    })
+
+    (result === null).ifTrue(() => {
+        fail()
+    })
+
+    result
+}
+
+projectDependencies: (
+    manifest,
+    declaringLocation,
+    rootPackageId,
+    memberPackageIds
+) => {
+    result: Array()
+
+    manifest.dependencies.each((alias, declaration) => {
+        kind: dependencyKind(declaration)
+        projected: null
+
+        (kind == "registry").ifTrue(() => {
+            projected = {
+                alias: alias
+                kind: "registry"
+                authority: declaration.authority
+                packageId: declaration.package
+                constraint: Constraint.parse(declaration.version)
+            }
+        })
+
+        (kind == "git").ifTrue(() => {
+            projected = {
+                alias: alias
+                kind: "git"
+                repository: declaration.git
+                revision: declaration.rev
+            }
+        })
+
+        (kind == "path").ifTrue(() => {
+            pathTarget:
+                resolvePathDependency(
+                    declaringLocation,
+                    declaration.path,
+                    rootPackageId,
+                    memberPackageIds
+                )
+
+            projected = {
+                alias: alias
+                kind: "path"
+                targetLocation: pathTarget.targetLocation
+                targetPackageId: pathTarget.targetPackageId
+            }
+        })
+
+        (projected === null).ifTrue(() => {
+            fail()
+        })
+
+        result = Array(...result, projected)
+    })
+
+    result
+}
+
+projectManifest: (
+    manifest,
+    declaringLocation,
+    rootPackageId,
+    memberPackageIds
+) => {
+    compatibility: null
+    (manifest.compatibility === null).ifFalse(() => {
+        compatibility = manifest.compatibility.language
+    })
+
+    {
+        packageId: manifest.package.id
+        version: Version.parse(manifest.package.version)
+        compatibility: compatibility
+        dependencies:
+            projectDependencies(
+                manifest,
+                declaringLocation,
+                rootPackageId,
+                memberPackageIds
+            )
+    }
+}
+
+assemble: (projectTreeFilesystem) => {
+    rootManifest:
+        Schema.parse(
+            readTextAt(projectTreeFilesystem, rootManifestPath())
+        )
+
+    rootPackageId: rootManifest.package.id
+    rawMembers: Array()
+    seenLocations: Map()
+    seenPackageIds: Map()
+    memberPackageIds: Map()
+    seenPackageIds.atPut(rootPackageId, true)
+
+    (rootManifest.workspace === null).ifFalse(() => {
+        rootManifest.workspace.members.each((declaration) => {
+            location: canonicalMemberLocation(declaration)
+
+            // F2B2 chooses rejection rather than alternate-spelling
+            // normalization for workspace declarations.
+            (location == declaration).ifFalse(() => {
+                fail()
+            })
+
+            seenLocations.containsKey(location).ifTrue(() => {
+                fail()
+            })
+            seenLocations.atPut(location, true)
+
+            memberManifest:
+                Schema.parse(
+                    readTextAt(
+                        projectTreeFilesystem,
+                        memberManifestPath(location)
+                    )
+                )
+
+            packageId: memberManifest.package.id
+            seenPackageIds.containsKey(packageId).ifTrue(() => {
+                fail()
+            })
+            seenPackageIds.atPut(packageId, true)
+            memberPackageIds.atPut(location, packageId)
+
+            rawMembers =
+                Array(
+                    ...rawMembers,
+                    {
+                        location: location
+                        packageId: packageId
+                        manifest: memberManifest
+                    }
+                )
+        })
+    })
+
+    projectedRoot:
+        projectManifest(
+            rootManifest,
+            "",
+            rootPackageId,
+            memberPackageIds
+        )
+
+    projectedMembers: Array()
+    rawMembers.each((member) => {
+        projectedMembers =
+            Array(
+                ...projectedMembers,
+                {
+                    location: member.location
+                    packageId: member.packageId
+                    manifest:
+                        projectManifest(
+                            member.manifest,
+                            member.location,
+                            rootPackageId,
+                            memberPackageIds
+                        )
+                }
+            )
+    })
+
+    {
+        languageCompatibility: "0.1"
+        root: projectedRoot
+        members: projectedMembers
+    }
+}

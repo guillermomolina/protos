@@ -1,0 +1,11 @@
+manifest-version = 1
+
+[package]
+id = "b-pkg"
+version = "2.0.0"
+
+[compatibility]
+language = "0.1"
+
+[dependencies.sibling]
+path = "../a"

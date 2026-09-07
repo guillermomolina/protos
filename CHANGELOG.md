@@ -1,3 +1,9 @@
+## 0.2.225-SNAPSHOT
+
+- Close `TOOL001-F2C — physical resolution-root assembly`. Add ordinary bundled-Protos `self:ResolutionRoot.assemble(projectTreeFilesystem)`, reading the physical root `protos.toml` plus exactly the root-declared workspace member manifests through an explicitly supplied confined read-only tree Filesystem, then projecting schema-v1 values into the already-frozen F2B `ResolutionRootV1`.
+- Implement F2B2 path/workspace semantics at the physical boundary: canonical root-relative workspace member declarations, root-only workspace expansion, unique root/member PackageIds, D1 ReleaseVersion + D2 registry-constraint parsing, registry/Git dependency projection, and path-dependency `.`/`..` normalization relative to the declaring package with fail-closed root escape and target restriction to the root or an explicit member. Member-local workspace declarations are not recursively expanded.
+- Reuse the already-general `ProtosNioReadOnlyTreeFilesystemBackend` only as the focal host capability; no Core/Filesystem/native API changes and no CLI-wide project-tree grant are introduced. Protos fixtures own root-only/workspace/dependency behavior plus invalid member path, duplicate PackageId, missing member, undeclared path target and root-escape failures. F2 remains open for command-scoped run-preflight, exact PackageExecutionPlan construction/handoff and later resolve/update work.
+
 ## 0.2.224-SNAPSHOT
 
 - Publish `TOOL002-E2B1 — Package/TOML generic-error CaseSpec normalization`. Retained Package/TOML `error` rows now map to the D3A2 canonical generic-error CaseSpec representation with `expectation == "error"` and `expected == "-"`, matching `Runner.evaluateSimple` and the selected Test Tool architecture. This corrects the E1A planning-only placeholder discovered when E2B began composing that plan with the D-owned runner; no Package/TOML fixture execution is added here.

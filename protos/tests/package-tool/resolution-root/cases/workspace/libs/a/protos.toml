@@ -1,0 +1,11 @@
+manifest-version = 1
+
+[package]
+id = "a-pkg"
+version = "0.1.0"
+
+[workspace]
+members = ["nested/ignored"]
+
+[dependencies.rootdep]
+path = "../.."

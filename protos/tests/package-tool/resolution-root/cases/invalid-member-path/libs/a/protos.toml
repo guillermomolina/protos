@@ -1,0 +1,5 @@
+manifest-version = 1
+
+[package]
+id = "a-pkg"
+version = "1.0.0"
