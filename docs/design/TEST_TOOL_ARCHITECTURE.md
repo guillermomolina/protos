@@ -548,6 +548,44 @@ does not execute a `float-bits` case. It therefore commits no representation,
 construction, comparison, reflection, runtime, or detached-observation decision
 for binary64 values. D3C2B owns that next mechanism audit.
 
+### TOOL002-D3C2B exact binary64 construction/comparison mechanism
+
+D3C2B consumes the exact unsigned 64-bit Integer pattern produced by D3C2A but
+still does not activate `float-bits` as a runner expectation. The mechanism is
+implemented entirely in bundled Protos and adds no host bit-reflection primitive.
+
+For a non-NaN binary64 pattern, bundled Protos decomposes the Integer pattern
+arithmetically into sign, exponent and fraction fields using exact Integer
+`div`/`mod`. It then reconstructs the semantic Float as follows:
+
+- exponent `2047`, zero fraction -> positive infinity before sign application;
+- exponent `0` -> fraction times `2^-1074`, including both signed zeros and all
+  subnormals;
+- exponent `1..2046` -> `(2^52 + fraction) * 2^(exponent - 1075)`.
+
+The significand is at most `2^53-1`, so the standard `Float(Integer)` conversion
+is exact before power-of-two scaling. Powers of two are constructed with
+logarithmic exponentiation-by-squaring over ordinary Float arithmetic. Every
+factor is itself exactly representable, the exponent range is bounded to
+`-1074..971`, and the final product is exactly the encoded binary64 value. This
+avoids one recursive frame per exponent step and introduces no raw-host-bit
+surface.
+
+The sign is applied through ordinary `Float.negated()`, preserving the existing
+semantic distinction between `+0.0` and `-0.0`. Comparison uses primitive `===`.
+For non-NaN Floats Core semantic identity is exact raw-binary64 identity, so the
+same rule distinguishes signed zero and adjacent finite values while rejecting a
+non-Float family.
+
+Patterns with exponent `2047` and nonzero fraction are rejected as malformed
+`float-bits` policy. Core deliberately collapses all semantic Float NaNs and does
+not expose payload/sign bits; retained NaN cases belong to `float-nan`.
+
+D3C2B changes no D1 detached observation, runtime numeric protocol, Filesystem,
+Process, sequencing, result shape or reporting. D3C2C remains solely responsible
+for adding `float-bits` to `isSimpleExpectation`, whole-plan selection and final
+D3C/D3 closure.
+
 ## Isolation audit
 
 The normal isolation boundary should be **one fresh Protos Process per test

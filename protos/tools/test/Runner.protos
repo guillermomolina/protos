@@ -159,6 +159,95 @@ parseExpectedFloatBits: (text) => {
     value
 }
 
+binary64PowerOfTwo: (exponent) => {
+    invalid: exponent < -1074
+    (exponent > 971).ifTrue(() => { invalid = true })
+    invalid.ifTrue(() => { policyError() })
+
+    remaining: exponent
+    base: 2.0
+    (remaining < 0).ifTrue(() => {
+        remaining = 0 - remaining
+        base = 0.5
+    })
+
+    result: 1.0
+    factor: base
+
+    step: null
+    step = () => {
+        (remaining > 0).ifTrue(() => {
+            (remaining.mod(2) == 1).ifTrue(() => {
+                result = result * factor
+            })
+
+            remaining = remaining.div(2)
+            (remaining > 0).ifTrue(() => {
+                factor = factor * factor
+            })
+            step()
+        })
+    }
+
+    step()
+    result
+}
+
+floatFromExpectedBits: (rawBits) => {
+    // Enforce the D3C2A domain: one ordinary unbounded Integer raw pattern.
+    rawBits.div(1)
+    (rawBits < 0).ifTrue(() => { policyError() })
+    (rawBits > 18446744073709551615).ifTrue(() => { policyError() })
+
+    signBit: 9223372036854775808
+    fractionUnit: 4503599627370496
+
+    negative: rawBits >= signBit
+    magnitude: rawBits
+    negative.ifTrue(() => {
+        magnitude = rawBits - signBit
+    })
+
+    exponentBits: magnitude.div(fractionUnit)
+    fractionBits: magnitude.mod(fractionUnit)
+
+    special: exponentBits == 2047
+    result: 0.0
+
+    special.ifTrue(() => {
+        // NaN payload/sign bits are not portable Protos semantics. Retained
+        // NaN expectations belong to float-nan, never float-bits.
+        (fractionBits == 0).ifFalse(() => { policyError() })
+        result = 1.0 / 0.0
+    })
+
+    special.ifFalse(() => {
+        significand: fractionBits
+        binaryExponent: -1074
+
+        (exponentBits > 0).ifTrue(() => {
+            significand = fractionUnit + fractionBits
+            binaryExponent = exponentBits - 1075
+        })
+
+        // significand is <= 2^53-1, so Float(Integer) is exact. The final
+        // product is the encoded binary64 value itself and therefore exact.
+        result =
+            Float(significand) *
+            binary64PowerOfTwo(binaryExponent)
+    })
+
+    negative.ifTrue(() => {
+        result = result.negated()
+    })
+
+    result
+}
+
+matchesExpectedFloatBits: (rawBits, value) => {
+    value === floatFromExpectedBits(rawBits)
+}
+
 fixedIntegerFamilyPrototype: (name) => {
     result: null
     known: false

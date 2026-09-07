@@ -1,3 +1,8 @@
+## 0.2.208-SNAPSHOT
+
+- Publish `TOOL002-D3C2B`: establish exact portable binary64 reconstruction/comparison entirely in bundled Protos on top of the D3C2A 16-hex parser. Sign/exponent/fraction are decomposed with exact Integer arithmetic; finite/subnormal/zero values use an exact at-most-53-bit `Float(Integer)` significand scaled by a logarithmically constructed exact power of two, infinities use ordinary IEEE division, and sign is applied through source-backed `Float.negated()`.
+- Match reconstructed non-NaN values through primitive `===`, which preserves exact Float raw-binary64 identity including `+0.0` versus `-0.0`. Reject exponent-all-ones/nonzero-fraction raw patterns so NaN payload/sign bits remain non-portable and owned by `float-nan`. D3C2B deliberately leaves `float-bits` unsupported by the sequential runner; D3C2C becomes READY. No runtime/D1 or normative change.
+
 ## 0.2.207-SNAPSHOT
 
 - Close `TOOL001-E2 — retained exact-version preference` and parent `TOOL001-E — local/offline version selection policy`. Add ordinary bundled-Protos `self:RetainedVersionSelection`: when an exact retained ReleaseVersion remains present among the already-known candidates and still satisfies the current closed D2 constraint/prerelease policy, preserve it even if E1 could choose a newer satisfying version; otherwise fall back to E1 fresh highest-satisfying selection.
