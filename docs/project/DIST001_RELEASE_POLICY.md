@@ -265,10 +265,18 @@ publication:
   Candidate preparation derives a release commit from the selected baseline
   without converting active `main` to a non-SNAPSHOT version. No concrete
   baseline/version/candidate is selected by E2.
-- `DIST001-E3` — release metadata/assets/validation preparation — READY. Implement
-  generic release-mode metadata, baseline/candidate provenance, release notes,
-  checksums/asset manifest, version-transition guards, and a candidate validation
-  entry point without creating a tag or GitHub Release.
+- `DIST001-E3` — release metadata/assets/validation preparation — IN_PROGRESS:
+  - `DIST001-E3A` — release-mode builder + provenance/version guards — CLOSED.
+    Preserve development build behavior while adding explicit fail-closed public
+    prerelease metadata bound to public `V`, exact `V-SNAPSHOT` baseline, exact
+    candidate source revision, and baseline ancestry. No candidate is selected.
+  - `DIST001-E3B` — release notes + asset/checksum manifest envelope — READY.
+    Prepare deterministic generic release-note/asset metadata from an explicit
+    candidate context without creating a tag or GitHub Release.
+  - `DIST001-E3C` — candidate validation entry point + E3 closure —
+    `BLOCKED_BY_DEPENDENCIES` on E3B. Compose release-mode archive identity,
+    complete extracted-distribution validation, notes/assets/checksums, release
+    guards, and transition E4 to candidate-selection readiness.
 - `DIST001-E4` — exact candidate selection and validation —
   `BLOCKED_BY_DEPENDENCIES` on E2/E3 and additionally requires an explicit user
   decision selecting the exact source revision/public version. E4 validates and

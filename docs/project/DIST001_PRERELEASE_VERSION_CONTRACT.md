@@ -192,3 +192,20 @@ an exact development baseline and authorizes the mechanically derived public
 version/candidate procedure defined here.
 
 E5 remains the first slice allowed to create the public tag or GitHub Release.
+
+## E3A implementation checkpoint
+
+E3A implements the generic build-time half of this contract.
+
+`dist/build_portable.py` retains development mode as its default and adds only an
+explicit `--public-prerelease --release-baseline <sha>` path. The release path
+requires a clean candidate, public `V`, exact baseline SHA, baseline project
+version `V-SNAPSHOT`, and baseline ancestry. `SOURCE.txt` then records candidate
+and baseline provenance separately together with `public_release=true`,
+`artifact_kind=public-prerelease`, `release_version=V`, and `release_tag=vV`.
+
+`dist/release_identity.py` owns those mechanical guards so E3/E4 validation does
+not reconstruct version/provenance rules independently.
+
+E3A still selects no concrete baseline, candidate, or public version. The first
+real release-mode archive remains an E4 candidate-specific validation event.

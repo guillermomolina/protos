@@ -260,6 +260,55 @@ runner workspace. DIST001-D2 and parent DIST001-D are therefore closed. This CI
 artifact remains a transient development snapshot, not a Git tag or GitHub
 Release.
 
+
+## Public pre-release candidate build mode
+
+`DIST001-E3A` adds a release-candidate metadata path without changing the default
+development build.
+
+Normal development remains:
+
+```sh
+python3 dist/build_portable.py
+```
+
+and requires the project version to retain canonical
+`MAJOR.MINOR.PATCH-SNAPSHOT`; its `SOURCE.txt` remains
+`artifact_kind=development-distribution` and `public_release=false`.
+
+A future E4 candidate whose checked-out project version is public `V` is built
+explicitly with:
+
+```sh
+python3 dist/build_portable.py \
+    --public-prerelease \
+    --release-baseline <exact-40-hex-baseline-sha>
+```
+
+The release mode fails closed unless:
+
+- the candidate worktree is clean;
+- the project version is canonical `MAJOR.MINOR.PATCH` with no `-SNAPSHOT`;
+- the baseline is an exact 40-hex commit;
+- the baseline `pom.xml` version is exactly `V-SNAPSHOT`; and
+- the baseline is an ancestor of the candidate source revision.
+
+Release-mode `SOURCE.txt` records both identities and the selected E2 mapping:
+
+```text
+artifact_kind=public-prerelease
+public_release=true
+release_baseline_revision=<baseline-sha>
+release_baseline_version=V-SNAPSHOT
+release_version=V
+release_tag=vV
+source_revision=<candidate-sha>
+```
+
+This mechanism does not select a baseline/candidate/version. E3A unit fixtures
+exercise the version/provenance rules generically; E4 owns the first real
+candidate build and complete end-to-end release validation.
+
 ## DIST001 boundary
 
 DIST001-A proves that the distribution can be constructed and that its archive

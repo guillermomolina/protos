@@ -28,6 +28,8 @@ import tempfile
 import xml.etree.ElementTree as ET
 import zipfile
 
+from release_identity import build_source_metadata
+
 DIST_FORMAT = "protos-portable-posix-jvm-v1"
 SUPPORTED_JAVA_FEATURE = "22"
 SUPPORTED_VENDOR_TOKEN = "GraalVM"
@@ -167,6 +169,7 @@ def verify_archive(
     version: str,
     source_revision: str,
     source_dirty: bool,
+    source_metadata: dict[str, str],
 ) -> None:
     if not archive_path.is_file():
         fail(f"archive was not created: {archive_path}")
@@ -215,13 +218,8 @@ def verify_archive(
                 fail(f"build/VCS state leaked into archive: {name}")
 
         source = archive.read(f"{root_name}/SOURCE.txt").decode("utf-8")
-        expected_dirty = "true" if source_dirty else "false"
-        for needle in [
-            f"implementation_version={version}",
-            f"source_revision={source_revision}",
-            f"source_dirty={expected_dirty}",
-            "source_repository=https://github.com/guillermomolina/protos",
-        ]:
+        for key, value in source_metadata.items():
+            needle = f"{key}={value}"
             if needle not in source:
                 fail(f"SOURCE.txt is missing {needle!r}")
 
@@ -267,6 +265,17 @@ def build(args: argparse.Namespace) -> Path:
         fail("worktree is dirty; pass --allow-dirty only for pre-commit validation")
 
     source_revision = git(root, "rev-parse", "HEAD")
+    try:
+        source_metadata = build_source_metadata(
+            root,
+            version=version,
+            source_revision=source_revision,
+            source_dirty=source_dirty,
+            public_prerelease=args.public_prerelease,
+            release_baseline=args.release_baseline,
+        )
+    except ValueError as exc:
+        fail(str(exc))
     if not args.skip_project_build:
         print("phase=dist01 build shaded Protos jar")
         run(["mvn", "-DskipTests", "package"], cwd=root)
@@ -325,17 +334,7 @@ def build(args: argparse.Namespace) -> Path:
     runtime_jars = sorted(path.name for path in runtime_dir.glob("*.jar"))
     write_text(
         bundle / "SOURCE.txt",
-        "\n".join(
-            [
-                f"implementation_version={version}",
-                f"source_revision={source_revision}",
-                f"source_dirty={'true' if source_dirty else 'false'}",
-                "source_repository=https://github.com/guillermomolina/protos",
-                "source_path=/tree/" + source_revision,
-                "artifact_kind=development-distribution",
-                "public_release=false",
-            ]
-        ),
+        "\n".join(f"{key}={value}" for key, value in source_metadata.items()),
     )
     write_text(
         bundle / "RUNTIME.txt",
@@ -382,15 +381,17 @@ def build(args: argparse.Namespace) -> Path:
         version=version,
         source_revision=source_revision,
         source_dirty=source_dirty,
+        source_metadata=source_metadata,
     )
     print(f"DIST_ARCHIVE: {archive_path}")
+    print("DIST_ARTIFACT_KIND: " + source_metadata["artifact_kind"])
     print("DIST_BUILD: PASS")
     return archive_path
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="Build the DIST001 portable POSIX/JVM Protos development distribution."
+        description="Build the DIST001 portable POSIX/JVM Protos distribution."
     )
     parser.add_argument(
         "--allow-dirty",
@@ -401,6 +402,21 @@ def main() -> int:
         "--skip-project-build",
         action="store_true",
         help="reuse the already-built shaded project jar",
+    )
+    parser.add_argument(
+        "--public-prerelease",
+        action="store_true",
+        help=(
+            "build explicit public-prerelease metadata; requires a clean "
+            "non-SNAPSHOT project version and --release-baseline"
+        ),
+    )
+    parser.add_argument(
+        "--release-baseline",
+        help=(
+            "exact 40-hex main baseline SHA whose project version is the "
+            "candidate public version plus -SNAPSHOT"
+        ),
     )
     args = parser.parse_args()
     build(args)
