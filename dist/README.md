@@ -309,6 +309,47 @@ This mechanism does not select a baseline/candidate/version. E3A unit fixtures
 exercise the version/provenance rules generically; E4 owns the first real
 candidate build and complete end-to-end release validation.
 
+
+## Release notes and asset envelope
+
+`DIST001-E3B` prepares deterministic user-facing metadata for an already-built
+public-prerelease candidate archive. It does not select or build a real
+candidate.
+
+Generic use:
+
+```sh
+python3 dist/prepare_release_metadata.py \
+    --archive /path/to/protos-V-posix-jvm.zip \
+    --spec-revision X.Y.Z \
+    --capability "Important capability claim" \
+    --limitation "Important limitation claim" \
+    --output-dir /path/to/release-envelope
+```
+
+The generator reads candidate identity and runtime facts from the ZIP's own
+`SOURCE.txt` and `RUNTIME.txt`; those are not retyped as command-line claims. It
+fails closed unless the bundle is clean `artifact_kind=public-prerelease`,
+`public_release=true`, has coherent release version/tag/baseline/candidate
+provenance, and carries the runtime fields needed for release notes.
+
+Capabilities and limitations are always explicit inputs. The generator does not
+infer product claims from open/closed ledger rows, source files, or test names.
+
+For identical archive bytes and identical ordered claim inputs, output is
+byte-for-byte deterministic:
+
+```text
+RELEASE_NOTES.md
+RELEASE_MANIFEST.txt
+protos-V-posix-jvm.zip.sha256
+```
+
+The checksum records only the portable ZIP basename and is suitable for
+`sha256sum -c` after download. The manifest records release/source/baseline/spec
+identity, runtime identity, archive SHA-256, checksum SHA-256, and notes SHA-256.
+E3C owns end-to-end validation of this envelope against the candidate archive.
+
 ## DIST001 boundary
 
 DIST001-A proves that the distribution can be constructed and that its archive

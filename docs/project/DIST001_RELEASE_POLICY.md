@@ -270,13 +270,15 @@ publication:
     Preserve development build behavior while adding explicit fail-closed public
     prerelease metadata bound to public `V`, exact `V-SNAPSHOT` baseline, exact
     candidate source revision, and baseline ancestry. No candidate is selected.
-  - `DIST001-E3B` — release notes + asset/checksum manifest envelope — READY.
-    Prepare deterministic generic release-note/asset metadata from an explicit
-    candidate context without creating a tag or GitHub Release.
-  - `DIST001-E3C` — candidate validation entry point + E3 closure —
-    `BLOCKED_BY_DEPENDENCIES` on E3B. Compose release-mode archive identity,
-    complete extracted-distribution validation, notes/assets/checksums, release
-    guards, and transition E4 to candidate-selection readiness.
+  - `DIST001-E3B` — release notes + asset/checksum manifest envelope — CLOSED.
+    Deterministically derive release identity/runtime facts from an explicit
+    public-prerelease archive, require explicit specification/capability/
+    limitation context, and emit release notes, asset manifest and portable
+    outer archive checksum. No candidate is selected or published.
+  - `DIST001-E3C` — candidate validation entry point + E3 closure — READY.
+    Compose release-mode archive identity, complete extracted-distribution
+    validation, notes/assets/checksums, release-claim guards, and transition E4
+    to candidate-selection readiness without creating a tag or GitHub Release.
 - `DIST001-E4` — exact candidate selection and validation —
   `BLOCKED_BY_DEPENDENCIES` on E2/E3 and additionally requires an explicit user
   decision selecting the exact source revision/public version. E4 validates and

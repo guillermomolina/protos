@@ -209,3 +209,19 @@ not reconstruct version/provenance rules independently.
 
 E3A still selects no concrete baseline, candidate, or public version. The first
 real release-mode archive remains an E4 candidate-specific validation event.
+
+## E3B implementation checkpoint
+
+E3B adds deterministic release-note and release-asset metadata generation for an
+already-built public-prerelease archive. Candidate identity and runtime facts
+come from the archive's own `SOURCE.txt`/`RUNTIME.txt`; the user/maintainer must
+supply the candidate-specific specification revision plus explicit capability
+and limitation claims.
+
+This separation is intentional: identity/runtime facts are machine-verifiable,
+while release claims are editorial assertions that must be consciously selected
+and then checked by E3C/E4 against blockers and the exact candidate.
+
+The output envelope contains `RELEASE_NOTES.md`, `RELEASE_MANIFEST.txt`, and a
+portable `<archive>.sha256`. E3B still selects no concrete baseline, candidate,
+or public version and publishes no Git tag, GitHub Release, or release asset.
