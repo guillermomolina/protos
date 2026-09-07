@@ -799,7 +799,7 @@ record distributable Standard Library functionality.
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
 | TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | Foundations D/E are CLOSED; TOOL001-F physical lockfile v1 has closed F1A/F1B canonical grammar and F1C in-memory parser/writer + round-trip conformance READY. |
-| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C CLOSED; TOOL002-D IN_PROGRESS with D1/D2/D3 CLOSED through D3C2C at `0.2.209-SNAPSHOT`; D4 identity-sensitive remainder/Java ownership reconciliation READY. |
+| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D CLOSED; TOOL002-D closes through D4 at `0.2.211-SNAPSHOT`; TOOL002-E Package/TOML fixture migration READY, later F-J remain dependency-ordered. |
 
 ### TOOL001 — Package Tool
 
@@ -867,8 +867,8 @@ the initial TOOL002 closure.
 | TOOL002-A | CLOSED | `0.2.168-SNAPSHOT` / `SAME_COMMIT`; exact bundled `protos test` dispatch plus a tiny ordinary-Protos entry, with no corpus migration or test policy. |
 | TOOL002-B | CLOSED | `0.2.169-SNAPSHOT` / `SAME_COMMIT`; local test-neutral fresh-Process exact-entry executor, shared RootActor cooperative terminal dispatch, inert COMPLETED/FAILED/CANCELLED outcome, explicit bootstrap authority and Process termination before return; no test policy. |
 | TOOL002-C | CLOSED | `0.2.171-SNAPSHOT` / `SAME_COMMIT`; one exact compiled entry executes through TOOL002-B in a fresh Process with private stdin/stdout/stderr and detached captured output; no manifest/expectation/scheduler/result-transfer policy. |
-| TOOL002-D | IN_PROGRESS | D1/D2/D3 CLOSED through D3C2C at `0.2.209-SNAPSHOT`; D4 READY for `closure-error-parent-fresh` plus Java ownership reconciliation; `future-*` remains TOOL002-F. |
-| TOOL002-E | BLOCKED_BY_DEPENDENCIES | TOOL002-D; migrate package-tool/TOML fixtures away from Java-owned runner policy. |
+| TOOL002-D | CLOSED | D1-D4 complete through `0.2.211-SNAPSHOT`: bundled Protos owns all retained non-Future main-manifest expectation families, including child-local Closure/Error freshness; direct Java conformance ownership remains only for `future-*` pending TOOL002-F. |
+| TOOL002-E | READY | TOOL002-D is closed; migrate Package Tool/TOML fixtures away from Java-owned runner policy. |
 | TOOL002-F | BLOCKED_BY_DEPENDENCIES | TOOL002-E; preserve async/Future pending-work and terminal-outcome coverage through production semantics. |
 | TOOL002-G | BLOCKED_BY_DEPENDENCIES | TOOL002-F; migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |
 | TOOL002-H | BLOCKED_BY_DEPENDENCIES | TOOL002-G; bounded parallel scheduling of independent fresh Processes with independent output capture and deterministic reporting. |

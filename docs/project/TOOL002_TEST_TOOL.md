@@ -63,8 +63,8 @@ freeze those decisions unless their own audited scope requires and resolves them
 | TOOL002-A | CLOSED | Exact bundled `protos test` dispatch and tiny ordinary-Protos entry published in the same commit at implementation version `0.2.168-SNAPSHOT`; no corpus migration or test policy. |
 | TOOL002-B | CLOSED | Publish the local, test-neutral `ProtosFreshProcessExecutor` over `ProtosStandaloneProcessBootstrap`, shared RootActor cooperative terminal dispatch through `ProtosRootTaskExecution`, and inert `ProtosExecutionOutcome`; every invocation uses a fresh semantic Process and terminates it before returning. No TestPlan/scheduler/worker/remote/test policy. Implementation version `0.2.169-SNAPSHOT`. |
 | TOOL002-C | CLOSED | Publish test-neutral sequential private-stream capture over `ProtosFreshProcessExecutor`: one exact compiled entry gets private stdin/stdout/stderr, a fresh semantic Process and an inert outcome plus detached captured bytes. No manifest/expectation/scheduler/result-transfer policy. Implementation version `0.2.171-SNAPSHOT`. |
-| TOOL002-D | IN_PROGRESS | D1/D2 are CLOSED; D3 is IN_PROGRESS with D3A and D3B CLOSED and D3C float policy READY; D4 remains dependent, and `future-*` remains TOOL002-F. |
-| TOOL002-E | BLOCKED_BY_DEPENDENCIES | After D, migrate Package Tool/TOML fixtures away from Java-owned runner policy. |
+| TOOL002-D | CLOSED | D1-D4 are published; all retained non-Future main-manifest expectation policy is owned by bundled Protos. D4 closes at `0.2.211-SNAPSHOT`; `future-*` remains TOOL002-F. |
+| TOOL002-E | READY | TOOL002-D is closed; migrate Package Tool/TOML fixtures away from Java-owned runner policy. |
 | TOOL002-F | BLOCKED_BY_DEPENDENCIES | After E, preserve async/Future pending-work and terminal-outcome test coverage through production execution semantics. |
 | TOOL002-G | BLOCKED_BY_DEPENDENCIES | After F, migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |
 | TOOL002-H | BLOCKED_BY_DEPENDENCIES | After G, add bounded parallel scheduling of independent fresh Processes, private output capture, and deterministic reporting. |
@@ -210,7 +210,7 @@ TOOL002-D therefore uses these publishable sub-slices:
 | TOOL002-D1 | CLOSED | Bootstrap-local general `execution(source)` facility for the Test Tool over TOOL002-C, returning a caller-local observation through a strict authority-free detached-value boundary. No manifest/test policy. Implementation version `0.2.174-SNAPSHOT`. |
 | TOOL002-D2 | CLOSED | Grant the Test Tool one read-only tree-confined standard Filesystem rooted at the conformance corpus; bundled `Manifest.protos` uses bounded ordered readLine/Future.all windows to parse retained TSV rows into frozen CaseSpec/TestPlan tuples with named Protos accessors and validated path-based stable CaseIds. No case execution/expectation policy. Implementation version `0.2.182-SNAPSHOT`. |
 | TOOL002-D3 | CLOSED | D3A, D3B and D3C are CLOSED; ordinary non-Future expectation migration is complete through D3C2C at `0.2.209-SNAPSHOT`. |
-| TOOL002-D4 | READY | D3 is closed; preserve the remaining non-Future `closure-error-parent-fresh` identity-sensitive expectations without leaking Closure authority, reconcile Java ownership for D-migrated cases, and close TOOL002-D. |
+| TOOL002-D4 | CLOSED | `closure-error-parent-fresh` stays entirely inside one fresh child Process for two exact Closure invocations and fresh Error identity checking; Java direct conformance ownership is reduced to `future-*`. Implementation version `0.2.211-SNAPSHOT`. |
 
 The `future-*` families (`future-integer`, `future-null`, `future-boolean`,
 `future-error`, `future-error-parent`, `future-observation-error-identity`,
@@ -357,6 +357,31 @@ The exact binary64 work is split into three independently publishable steps:
 | TOOL002-D3C2C | CLOSED | Activate `float-bits` in bundled Runner policy, evaluate exact portable non-NaN binary64 through D3C2A/B, migrate all historical unsupported sentinels to TOOL002-F `future-integer`, and preserve D3C2A/B mechanism coverage after activation. Implementation version `0.2.209-SNAPSHOT`. |
 
 TOOL002-D3C2B and D3C2C are CLOSED. D3C2, D3C and D3 are CLOSED. TOOL002-D4 is READY.
+
+### TOOL002-D4 closure
+
+D4 closes the final non-Future identity-sensitive migration and the parent
+TOOL002-D boundary:
+
+- `closure-error-parent-fresh` is selected by the bundled runner without adding
+  Closure transfer to D1;
+- the retained source is evaluated once inside a private child-Process envelope;
+- that exact candidate is invoked twice through ordinary `Error.handle`;
+- both Error occurrences remain in the child identity domain while immediate
+  standard parent and distinct identity are checked;
+- only canonical Boolean evidence crosses the detached observation boundary;
+- malformed expected Error prototype policy fails closed before source-name
+  emission;
+- a corpus-level Protos ownership fixture executes every D-owned main-manifest
+  row and proves that only the deferred `future-*` families remain skipped;
+- the legacy Java conformance harness directly executes only those `future-*`
+  rows, eliminating duplicate Java ownership for D-migrated expectation policy.
+
+Implementation version: `0.2.211-SNAPSHOT`.
+
+TOOL002-D is CLOSED.
+
+TOOL002-E is READY.
 
 ## Closure rule
 

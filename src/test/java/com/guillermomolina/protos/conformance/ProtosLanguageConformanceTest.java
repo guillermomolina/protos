@@ -28,9 +28,7 @@ import com.guillermomolina.protos.execution.ProtosStandardLibraryModuleResolver;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
-import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
-import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -63,6 +61,9 @@ final class ProtosLanguageConformanceTest {
                         .toList();
 
         return cases.stream()
+                // TOOL002-D owns every non-Future manifest family after D4.
+                // Java remains the temporary direct owner only for TOOL002-F.
+                .filter(testCase -> testCase.expectation().startsWith("future-"))
                 .map(testCase ->
                         DynamicTest.dynamicTest(
                                 testCase.path().toString(),
@@ -80,64 +81,6 @@ final class ProtosLanguageConformanceTest {
         Path source = ROOT.resolve(testCase.path());
 
         switch (testCase.expectation()) {
-            case "boolean" -> {
-                Object result =
-                        loader.load(source).call(prelude.newModuleActivation());
-                ProtosBooleanValue expected =
-                        switch (testCase.expectedValue()) {
-                            case "true" -> ProtosBooleanValue.TRUE;
-                            case "false" -> ProtosBooleanValue.FALSE;
-                            default -> throw new IllegalArgumentException(
-                                    "boolean expectation must be true or false");
-                        };
-                assertEquals(expected, result);
-            }
-            case "null" -> {
-                Object result =
-                        loader.load(source).call(prelude.newModuleActivation());
-                assertEquals(ProtosNullValue.INSTANCE, result);
-            }
-            case "integer" -> {
-                Object result =
-                        loader.load(source).call(prelude.newModuleActivation());
-                ProtosIntegerValue integer =
-                        assertInstanceOf(ProtosIntegerValue.class, result);
-                assertEquals(new BigInteger(testCase.expectedValue()), integer.value());
-            }
-            case "float-bits" -> {
-                Object result =
-                        loader.load(source).call(prelude.newModuleActivation());
-                ProtosFloatValue floating =
-                        assertInstanceOf(ProtosFloatValue.class, result);
-                long expectedBits =
-                        Long.parseUnsignedLong(testCase.expectedValue(), 16);
-                assertEquals(
-                        expectedBits,
-                        Double.doubleToRawLongBits(floating.value()));
-            }
-            case "fixed-integer" -> {
-                Object result =
-                        loader.load(source).call(prelude.newModuleActivation());
-                ProtosFixedIntegerValue fixed =
-                        assertInstanceOf(ProtosFixedIntegerValue.class, result);
-                String[] expected = testCase.expectedValue().split(":", 2);
-                if (expected.length != 2) {
-                    throw new IllegalArgumentException(
-                            "fixed-integer expectation must be FAMILY:value");
-                }
-                assertEquals(
-                        ProtosFixedIntegerValue.Family.fromPrototypeName(expected[0]),
-                        fixed.family());
-                assertEquals(new BigInteger(expected[1]), fixed.value());
-            }
-            case "float-nan" -> {
-                Object result =
-                        loader.load(source).call(prelude.newModuleActivation());
-                ProtosFloatValue floating =
-                        assertInstanceOf(ProtosFloatValue.class, result);
-                org.junit.jupiter.api.Assertions.assertTrue(
-                        Double.isNaN(floating.value()));
-            }
             case "future-integer" -> {
                 ProtosActivation activation = prelude.newModuleActivation();
                 ProtosFutureValue future =
@@ -270,50 +213,6 @@ final class ProtosLanguageConformanceTest {
                 awaitTerminal(future, activation);
                 assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
             }
-            case "closure-error-parent-fresh" -> {
-                ProtosClosureValue closure =
-                        assertInstanceOf(
-                                ProtosClosureValue.class,
-                                loader.load(source)
-                                        .call(prelude.newModuleActivation()));
-                ProtosSignalException first =
-                        assertThrows(
-                                ProtosSignalException.class,
-                                () -> ProtosClosureInvoker.invoke(closure, List.of()));
-                ProtosSignalException second =
-                        assertThrows(
-                                ProtosSignalException.class,
-                                () -> ProtosClosureInvoker.invoke(closure, List.of()));
-                Object expectedParent =
-                        prelude.bindings()
-                                .readLocalSlot(testCase.expectedValue())
-                                .orElseThrow();
-                org.junit.jupiter.api.Assertions.assertSame(
-                        expectedParent,
-                        first.error().parent().orElseThrow());
-                org.junit.jupiter.api.Assertions.assertSame(
-                        expectedParent,
-                        second.error().parent().orElseThrow());
-                org.junit.jupiter.api.Assertions.assertNotSame(
-                        first.error(), second.error());
-            }
-            case "error-parent" -> {
-                ProtosSignalException signal =
-                        assertThrows(
-                                ProtosSignalException.class,
-                                () ->
-                                        loader.load(source)
-                                                .call(prelude.newModuleActivation()));
-                org.junit.jupiter.api.Assertions.assertSame(
-                        prelude.bindings().readLocalSlot(testCase.expectedValue()).orElseThrow(),
-                        signal.error().parent().orElseThrow());
-            }
-            case "error" ->
-                    assertThrows(
-                            ProtosSignalException.class,
-                            () ->
-                                    loader.load(source)
-                                            .call(prelude.newModuleActivation()));
             default ->
                     throw new IllegalArgumentException(
                             "unsupported conformance expectation: "

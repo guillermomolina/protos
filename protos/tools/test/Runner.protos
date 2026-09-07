@@ -90,6 +90,18 @@ isSimpleExpectation: (spec) => {
     supported
 }
 
+isClosureErrorParentFreshExpectation: (spec) => {
+    Manifest.caseExpectation(spec) === "closure-error-parent-fresh"
+}
+
+isDExpectation: (spec) => {
+    supported: isSimpleExpectation(spec)
+    isClosureErrorParentFreshExpectation(spec).ifTrue(() => {
+        supported = true
+    })
+    supported
+}
+
 policyError: () => {
     Error().signal()
 }
@@ -414,6 +426,79 @@ standardErrorPrototype: (name) => {
     result
 }
 
+closureErrorParentFreshWrapperSource: (source, expected) => {
+    // Validate before using the retained prototype name as a source identifier.
+    standardErrorPrototype(expected)
+
+    prefix:
+        "((candidate, expectedParent) => {\n" +
+        "    first: null\n" +
+        "    second: null\n" +
+        "    firstCaught: false\n" +
+        "    secondCaught: false\n" +
+        "\n" +
+        "    Error.handle(\n" +
+        "        candidate,\n" +
+        "        (error) => {\n" +
+        "            first = error\n" +
+        "            firstCaught = true\n" +
+        "            null\n" +
+        "        }\n" +
+        "    )\n" +
+        "\n" +
+        "    Error.handle(\n" +
+        "        candidate,\n" +
+        "        (error) => {\n" +
+        "            second = error\n" +
+        "            secondCaught = true\n" +
+        "            null\n" +
+        "        }\n" +
+        "    )\n" +
+        "\n" +
+        "    passed: firstCaught && secondCaught\n" +
+        "    passed.ifTrue(() => {\n" +
+        "        passed = first.parent() === expectedParent\n" +
+        "    })\n" +
+        "    passed.ifTrue(() => {\n" +
+        "        passed = second.parent() === expectedParent\n" +
+        "    })\n" +
+        "    passed.ifTrue(() => {\n" +
+        "        passed = (first === second) === false\n" +
+        "    })\n" +
+        "    passed\n" +
+        "})((() => {\n"
+
+    suffix:
+        "\n})(), " +
+        expected +
+        ")\n"
+
+    prefix + source + suffix
+}
+
+evaluateClosureErrorParentFresh: (spec, source, executor) => {
+    isClosureErrorParentFreshExpectation(spec).ifFalse(() => {
+        policyError()
+    })
+
+    expected: Manifest.caseExpected(spec)
+    wrappedSource: closureErrorParentFreshWrapperSource(
+        source,
+        expected
+    )
+    observation: executor(wrappedSource)
+
+    passed: observation.state === "completed"
+    passed.ifTrue(() => {
+        passed = observation.error === null
+    })
+    passed.ifTrue(() => {
+        passed = observation.value === true
+    })
+
+    resultTuple(passed, observation)
+}
+
 evaluateSimple: (spec, source, executor) => {
     isSimpleExpectation(spec).ifFalse(() => { policyError() })
 
@@ -539,6 +624,24 @@ evaluateSimple: (spec, source, executor) => {
     resultTuple(passed, observation)
 }
 
+evaluateDCase: (spec, source, executor) => {
+    closureFresh: isClosureErrorParentFreshExpectation(spec)
+    evaluation: null
+
+    closureFresh.ifTrue(() => {
+        evaluation = evaluateClosureErrorParentFresh(
+            spec,
+            source,
+            executor
+        )
+    })
+    closureFresh.ifFalse(() => {
+        evaluation = evaluateSimple(spec, source, executor)
+    })
+
+    evaluation
+}
+
 caseRunTuple: (...items) => {
     items
 }
@@ -617,12 +720,12 @@ runSimpleWithLoader: (plan, sourceLoader, executor) => {
     chain: Future.all()
 
     cases.each((spec) => {
-        supported: isSimpleExpectation(spec)
+        supported: isDExpectation(spec)
         supported.ifTrue(() => {
             previous: chain
             chain = previous.then((ignored) => {
                 source: sourceLoader(spec)
-                evaluation: evaluateSimple(spec, source, executor)
+                evaluation: evaluateDCase(spec, source, executor)
                 carryChunk(Array(caseRunTuple(spec, evaluation)), 0)
                 null
             })
@@ -641,7 +744,7 @@ runSimpleWithLoader: (plan, sourceLoader, executor) => {
 
     skippedCount: 0
     cases.each((spec) => {
-        isSimpleExpectation(spec).ifFalse(() => {
+        isDExpectation(spec).ifFalse(() => {
             skippedCount = skippedCount + 1
         })
     })

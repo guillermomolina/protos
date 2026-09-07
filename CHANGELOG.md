@@ -1,3 +1,8 @@
+## 0.2.211-SNAPSHOT
+
+- Close `TOOL002-D4` and parent `TOOL002-D`. Migrate retained `closure-error-parent-fresh` without transferring Closure authority: bundled Protos evaluates the retained source once inside one fresh child Process, invokes that exact candidate twice through ordinary `Error.handle`, checks both immediate Error parents plus distinct Error identity in the child identity domain, and returns only canonical Boolean evidence through the existing D1 detached observation.
+- Complete the D ownership cutover. A full-corpus Protos fixture now requires every non-Future main-manifest row to be selected and pass through the bundled Test Tool and requires every skipped row to be one of the explicitly deferred `future-*` families. The legacy `ProtosLanguageConformanceTest` removes direct policy for boolean/null/integer/fixed/Float/Error/closure-fresh families and now executes only `future-*` pending TOOL002-F. TOOL002-E becomes READY. No runtime/D1 boundary or normative specification change.
+
 ## 0.2.210-SNAPSHOT
 
 - Publish `I023-A` for D044 standard `Object.while`: add the ordinary Closure-specific selector with eager semantic Closure receiver/body validation, exact one-argument contract, zero-argument pre-test condition/body activation, strict canonical `true`/`false` decisions, ignored body results, and canonical `null` normal completion. Zero and repeated iterations are covered by Protos-source conformance; invalid receiver/body/arity cases fail through the standard generic Error path.

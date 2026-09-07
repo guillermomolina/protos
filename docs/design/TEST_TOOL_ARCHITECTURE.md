@@ -611,6 +611,56 @@ or CLI exit-policy surface changes. D3C2, D3C and D3 close here. D4 becomes
 READY for the remaining non-Future identity-sensitive
 `closure-error-parent-fresh` expectation and Java ownership reconciliation.
 
+### TOOL002-D4 closure-local identity policy and ownership cutover
+
+D4 closes TOOL002-D without weakening the D1 detached-value boundary.
+
+`closure-error-parent-fresh` cannot execute the target source directly through
+`execution(source)`, because successful evaluation returns a live Closure and
+D1 correctly rejects Closure transfer as `NonTransferableValue`. D4 therefore
+keeps the identity-sensitive observation in the same fresh child Process.
+
+The bundled runner builds an expectation-private evaluation envelope:
+
+```text
+exact retained source
+    -> evaluate once to one candidate value in the child Process
+    -> Error.handle(candidate, handler) twice
+    -> retain both exact signaled Error occurrences child-locally
+    -> check both immediate parents against the expected standard prototype
+    -> check first !== second in that same identity domain
+    -> return only canonical Boolean evidence through D1
+```
+
+The candidate expression is evaluated before the envelope's private local
+bindings are established: the retained source is placed in a separate
+immediately-invoked Closure used as the argument expression. It therefore does
+not gain lexical access to Test Tool bookkeeping names. The same resulting
+candidate value is passed to both `Error.handle` calls, whose Closure-only body
+validation preserves the retained requirement that the case produce an
+invokable semantic Closure. Any source failure, non-Closure result, normally
+returning candidate, wrong Error category, or reused Error occurrence becomes
+ordinary `passed=false` evidence (or a child FAILED observation when validation
+cannot enter the handler extent).
+
+The expected prototype name is first validated against the already-closed
+standard Error taxonomy before it is emitted as one standard-prelude identifier
+inside the child envelope. No arbitrary manifest text is treated as source.
+
+Error freshness is checked before boundary crossing. D1 transfers only the final
+Boolean child result and ordinary observation metadata; no Closure, handler
+frame, source-domain Error identity, continuation, activation or Process
+authority crosses into the Test Tool Process.
+
+D4 also performs the ownership cutover for the retained main conformance
+manifest. The bundled Test Tool now owns every non-Future expectation family
+migrated by D1-D4. A corpus-level Protos fixture requires all such rows to be
+selected and passed and requires every skipped row to be one of the explicitly
+deferred `future-*` families. `ProtosLanguageConformanceTest` therefore retains
+direct Java policy only for those Future families until TOOL002-F.
+
+TOOL002-D is CLOSED after D4. TOOL002-E becomes READY.
+
 ## Isolation audit
 
 The normal isolation boundary should be **one fresh Protos Process per test

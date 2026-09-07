@@ -3,9 +3,11 @@
 This tree contains executable Protos programs that verify observable language
 behavior independently from the Java implementation test layout.
 
-The Java/JUnit harness currently lives under `src/test/java` only as the runner
-for the reference implementation. The Protos programs themselves live here so a
-future implementation can execute the same conformance corpus.
+The bundled TOOL002 Test Tool owns the retained non-Future main-manifest
+expectation families through D4. The direct Java/JUnit conformance harness under
+`src/test/java` now executes only the deferred `future-*` families pending
+TOOL002-F; Java remains appropriate for host/runtime mechanics. The Protos
+programs themselves remain implementation-independent corpus sources.
 
 `manifest.tsv` contains exactly three tab-separated fields:
 
