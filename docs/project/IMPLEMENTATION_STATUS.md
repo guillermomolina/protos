@@ -805,7 +805,7 @@ record distributable Standard Library functionality.
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
 | TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | D/E and F1A/F1B/F1C are CLOSED; canonical lock-format-1 grammar and pure in-memory parser/model/writer are complete. TOOL001-F remains open for later physical integration after fresh audit. |
-| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D CLOSED; TOOL002-D closes through D4 at `0.2.211-SNAPSHOT`; TOOL002-E Package/TOML fixture migration READY, later F-J remain dependency-ordered. |
+| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D CLOSED; TOOL002-E is IN_PROGRESS with E1A Package/TOML manifest planning CLOSED at `0.2.216-SNAPSHOT` and E1B confined corpus authority READY; E2A-E4 and later F-J remain dependency-ordered. |
 
 ### TOOL001 — Package Tool
 

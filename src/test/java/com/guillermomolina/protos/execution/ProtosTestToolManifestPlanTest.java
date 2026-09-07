@@ -49,6 +49,12 @@ final class ProtosTestToolManifestPlanTest {
                     "tests",
                     "tooling",
                     "tool002-d2-manifest-plan.protos");
+    private static final Path PACKAGE_TOML_FIXTURE =
+            Path.of(
+                    "protos",
+                    "tests",
+                    "tooling",
+                    "tool002-e1a-package-toml-manifest-plan.protos");
 
     @Test
     void bundledManifestModuleCompilesBeforeAnyFilesystemPolicyRuns()
@@ -170,6 +176,37 @@ final class ProtosTestToolManifestPlanTest {
                                     .compile(
                                             Files.readString(
                                                     FIXTURE,
+                                                    StandardCharsets.UTF_8)),
+                            fixture.activation());
+
+            assertSame(ProtosBooleanValue.TRUE, result);
+        }
+    }
+
+    @Test
+    void packageTomlManifestPlanningIsOwnedByBundledProtos(
+            @TempDir Path corpusRoot) throws Exception {
+        Files.writeString(
+                corpusRoot.resolve("manifest.tsv"),
+                "# path\texpectation\n"
+                        + "key-bare-dotted.protos\ttrue\n"
+                        + "invalid-key-error.protos\terror\n",
+                StandardCharsets.UTF_8);
+
+        Fixture fixture = fixture();
+        try (ProtosNioReadOnlyTreeFilesystemBackend backend =
+                new ProtosNioReadOnlyTreeFilesystemBackend(corpusRoot)) {
+            assumeTrue(
+                    backend.secureConfinementAvailable(),
+                    "host provider has no SecureDirectoryStream");
+            installFilesystem(fixture.prelude(), fixture.activation(), backend);
+
+            Object result =
+                    completed(
+                            new ProtosSourceCompiler()
+                                    .compile(
+                                            Files.readString(
+                                                    PACKAGE_TOML_FIXTURE,
                                                     StandardCharsets.UTF_8)),
                             fixture.activation());
 

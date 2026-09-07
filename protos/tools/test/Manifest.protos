@@ -25,7 +25,7 @@ frozenTuple: (...items) => {
     items
 }
 
-fieldArray: (line) => {
+splitFields: (line) => {
     source: Encoding.UTF8.encode(line)
     fields: Array()
     field: Encoding.UTF8.encode("")
@@ -40,8 +40,20 @@ fieldArray: (line) => {
         })
     })
 
-    fields = Array(...fields, Encoding.UTF8.decode(field))
+    Array(...fields, Encoding.UTF8.decode(field))
+}
+
+fieldArray: (line) => {
+    fields: splitFields(line)
     (fields.size() == 3).ifFalse(() => {
+        fail()
+    })
+    fields
+}
+
+packageTomlFieldArray: (line) => {
+    fields: splitFields(line)
+    (fields.size() == 2).ifFalse(() => {
         fail()
     })
     fields
@@ -107,6 +119,32 @@ caseSpec: (fields) => {
     frozenTuple(path, path, expectation, expected)
 }
 
+packageTomlCaseSpec: (fields) => {
+    path: fields.at(0)
+    ignoredCanonicalValidation: pathValue(path)
+    retainedExpectation: fields.at(1)
+
+    expectation: ""
+    expected: ""
+    known: false
+
+    (retainedExpectation == "true").ifTrue(() => {
+        expectation = "boolean"
+        expected = "true"
+        known = true
+    })
+    (retainedExpectation == "error").ifTrue(() => {
+        expectation = "error"
+        known = true
+    })
+    known.ifFalse(() => {
+        fail()
+    })
+
+    caseId: "package-tool/toml-syntax/" + path
+    frozenTuple(caseId, path, expectation, expected)
+}
+
 caseId: (spec) => {
     spec.at(0)
 }
@@ -139,11 +177,27 @@ parseLine: (line) => {
     result
 }
 
+parsePackageTomlLine: (line) => {
+    bytes: Encoding.UTF8.encode(line)
+    ignore: bytes.size() == 0
+    ignore.ifFalse(() => {
+        (bytes.at(0) == 35).ifTrue(() => {
+            ignore = true
+        })
+    })
+
+    result: null
+    ignore.ifFalse(() => {
+        result = packageTomlCaseSpec(packageTomlFieldArray(line))
+    })
+    result
+}
+
 planCases: (plan) => {
     plan.at(0)
 }
 
-load: (filesystem) => {
+loadWithParser: (filesystem, parser) => {
     file: filesystem.open(Path.relative().child("manifest.tsv")).value()
     reader: TextReader.owning(file, Encoding.UTF8)
 
@@ -212,7 +266,7 @@ load: (filesystem) => {
                     done = true
                 })
                 (line === null).ifFalse(() => {
-                    parsed: parseLine(line)
+                    parsed: parser(line)
                     (parsed === null).ifFalse(() => {
                         carryChunk(Array(parsed), 0)
                     })
@@ -230,4 +284,12 @@ load: (filesystem) => {
 
     cases: frozenTuple(...collectChunks(maxChunkLevel, Array()))
     frozenTuple(cases)
+}
+
+load: (filesystem) => {
+    loadWithParser(filesystem, parseLine)
+}
+
+loadPackageToml: (filesystem) => {
+    loadWithParser(filesystem, parsePackageTomlLine)
 }

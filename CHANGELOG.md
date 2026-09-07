@@ -1,3 +1,8 @@
+## 0.2.216-SNAPSHOT
+
+- Close `TOOL002-E1A — Package/TOML manifest planning`. Bundled `Manifest.protos` now consumes the retained two-column Package Tool TOML manifest shape as inert planning policy: safe relative fixture paths receive stable `package-tool/toml-syntax/...` CaseIds, retained `true` rows normalize to the already-owned `boolean`/`true` CaseSpec form, and retained `error` rows normalize to generic `error` without executing a fixture. Unknown expectations, wrong column counts and unsafe paths fail closed in Protos policy.
+- Factor the manifest reader into one parser-parameterized bounded loader while preserving the existing three-column conformance `load(filesystem)` contract exactly. Add a Protos-owned planning fixture with Java used only to provision a temporary confined read-only Filesystem and execute the fixture harness. Formalize E1B/E2A/E2B/E3/E4 as dependency-ordered follow-up slices; E1A adds no Package Tool resolver, no second corpus authority to the public Test Tool, no test execution/cutover, and no normative specification change.
+
 ## 0.2.215-SNAPSHOT
 
 - Close `TOOL001-F1C3 — total writer + canonical rejection + F1C closure` and parent `TOOL001-F1C`. Extend pure bundled-Protos `self:LockDocument` with the F1B3 canonical total ordering and writer: workspace members by canonical qstring bytes then PackageId qstring bytes; registry nodes by PackageId qstring bytes then D1 ReleaseVersion precedence; Git nodes by PackageId/revision qstring bytes; and dependency records by source-kind-ranked declaring ref (`workspace < registry < git`), alias qstring bytes and target ref.
