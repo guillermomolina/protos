@@ -21,21 +21,24 @@ single-version constraint.
 
 ## TOOL001 implementation checkpoint
 
-`TOOL001-D` is CLOSED. D1 implements the strict ReleaseVersion
-parser/value/precedence prerequisite, and D2A-D2D implement dependency constraint
-v1 as ordinary bundled Protos: exact requirements, caret bounds, explicit bounded
-intervals, and explicit same-core prerelease admission.
+`TOOL001-D` is CLOSED. D1 implements strict ReleaseVersion parsing/precedence and
+D2A-D2D implement dependency constraint v1, including explicit same-core
+prerelease admission.
 
-The prerelease boundary follows this audit's selected intent rule: a stable
-requirement does not admit prerelease candidates; a prerelease candidate becomes
-eligible only when the same constraint explicitly names a prerelease for that
-candidate's MAJOR.MINOR.PATCH tuple, after which ordinary exact/range precedence
-still applies.
+`TOOL001-E1` now implements the narrow fresh **version** selection core from this
+audit: given an already-known collection of ReleaseVersion values, apply the
+closed D2 constraint semantics and choose the highest satisfying candidate by D1
+precedence. No-match fails closed. This is intentionally below complete registry
+candidate eligibility: E1 does not discover releases or decide yank, trust,
+content identity, language compatibility or transitive-closure validity.
 
-The broader candidate-eligibility, fresh-selection preference, yank handling,
-lock-preservation, update and graph-resolution material in this exploratory record
-remains unimplemented and is not made current policy by closing the pure-value D
-parent.
+`TOOL001-E2` is READY for the separate version-level retained-selection rule:
+preserve a previously selected exact ReleaseVersion when it remains present and
+satisfies the current constraint; otherwise fall back to E1 fresh selection.
+
+The broader non-version eligibility, physical lockfile, update and graph-resolution
+material in this exploratory record remains unimplemented and is not made current
+policy by E1.
 
 ## Design goals
 

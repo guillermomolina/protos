@@ -1,3 +1,9 @@
+## 0.2.206-SNAPSHOT
+
+- Start `TOOL001-E — local/offline version selection policy` with the bounded `TOOL001-E1 — fresh version selection` slice. Add ordinary bundled-Protos `self:FreshVersionSelection`, which receives already-known ReleaseVersion candidates, filters them only through the closed D2 DependencyConstraint policy and chooses the highest satisfying candidate by D1 SemVer precedence.
+- Keep E1 intentionally below full resolver/candidate eligibility. It does not discover candidates, interpret PackageId/authority metadata, consult yank/trust/language compatibility, fetch registry/network data, inspect transitive dependency closure, preserve a lock selection, serialize `protos.lock`, or perform workspace/store/update operations. An empty/no-match candidate set fails closed so later resolver layers can own contextual dependency-path diagnostics instead of silently manufacturing absence.
+- Extend the existing Protos-owned package-version corpus with exact/caret/interval selection, explicit-prerelease admission, order independence and fail-closed empty/no-match/invalid-candidate cases. `TOOL001-E1` closes and `TOOL001-E2` retained exact-version preference becomes READY.
+
 ## 0.2.205-SNAPSHOT
 
 - Publish `TOOL002-D3C2A`: bundled Protos now parses retained `float-bits` payloads as exactly sixteen hexadecimal digits into an exact unbounded Integer raw pattern in `0..2^64-1`. Both upper- and lower-case hex digits are accepted; wrong length or any non-hex octet fails closed as Test Tool policy.

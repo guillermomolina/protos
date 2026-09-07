@@ -71,6 +71,10 @@ its relation to any legacy Slice 3 terminology that remains useful for continuit
 | TOOL001-D2B | caret dependency constraints | CLOSED | `SAME_COMMIT` | Caret bound construction plus stable-candidate satisfaction over D1 ReleaseVersion; zero-major rules are explicit and prerelease satisfaction remains fail-closed until D2D. |
 | TOOL001-D2C | explicit bounded intervals | CLOSED | `SAME_COMMIT` | Exactly two whitespace-joined primitive comparisons with one lower and one upper bound; stable-candidate satisfaction honors inclusive/exclusive endpoints and prerelease satisfaction remains fail-closed until D2D. |
 | TOOL001-D2D | prerelease admission + D2 closure | CLOSED | `SAME_COMMIT` | Stable constraints reject prerelease candidates by default; prereleases are admitted only when a constraint explicitly names a prerelease for the same core tuple, then ordinary exact/range precedence applies. Final cross-form conformance closes D2 and parent D. |
+| TOOL001-E | local/offline version selection policy | IN_PROGRESS | TOOL001-E1 published | E1 fresh highest-satisfying ReleaseVersion selection CLOSED; E2 retained exact-version preference READY. Discovery, non-version eligibility, graph resolution, lockfile serialization and remote/store behavior remain outside E1. |
+| TOOL001-E1 | fresh highest-satisfying ReleaseVersion selection | CLOSED | `SAME_COMMIT` | `self:FreshVersionSelection.select/selectText` filters already-known ReleaseVersion candidates through closed D2 constraint semantics and selects the highest satisfying candidate by D1 precedence; no-match fails closed. |
+| TOOL001-E2 | retained exact-version preference | READY | — | Add pure version-level retained-selection preference: preserve a previously selected exact ReleaseVersion when it remains present and satisfies the current constraint; otherwise fall back to E1 fresh selection. No lockfile parsing/identity/trust policy. |
+
 
 
 B006's normative prerequisite path through I021 remains historical evidence; it
@@ -78,15 +82,19 @@ is not reopened by this tracking migration.
 
 ## Current continuation boundary
 
-The historical manifest Slice 3 surface is CLOSED through `TOOL001-C7`.
-`TOOL001-D` is also CLOSED: D1 provides strict ReleaseVersion values/precedence,
-and D2A-D2D complete dependency constraint v1 across exact, caret, bounded
-interval and explicit same-core prerelease admission.
+The historical manifest Slice 3 surface and pure version/constraint value parent
+`TOOL001-D` are CLOSED.
 
-Further Package Tool progress must use a separately scoped post-D slice.
-Candidate selection, graph resolution, lock preservation/serialization,
-workspace/store behavior, registry/network/authority/yank policy and update
-operations are not implied by D closure and remain future work.
+`TOOL001-E` is now the current bounded continuation for local/offline version
+selection policy. `TOOL001-E1` is CLOSED: among already-known ReleaseVersion
+candidates it applies closed D2 constraint/prerelease semantics and chooses the
+highest satisfying D1 version. `TOOL001-E2` retained exact-version preference is
+READY.
+
+E1/E2 do not discover candidates and do not claim complete candidate eligibility.
+PackageId/authority identity, yank/trust/language compatibility, transitive graph
+resolution, physical lockfile parsing/serialization, workspace/store,
+registry/network and update operations remain separately scoped later work.
 
 ## Manifest Slice 3 final closure
 

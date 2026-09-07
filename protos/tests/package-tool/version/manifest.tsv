@@ -55,3 +55,12 @@ constraint-prerelease-interval-lower.protos	true
 constraint-prerelease-interval-upper.protos	true
 constraint-prerelease-interval-stable-after-lower.protos	true
 constraint-prerelease-exact-remains-exact.protos	true
+selection-exact.protos	true
+selection-caret-highest.protos	true
+selection-interval-highest.protos	true
+selection-prerelease-explicit-stable-wins.protos	true
+selection-prerelease-only.protos	true
+selection-order-independent.protos	true
+selection-no-match-error.protos	error
+selection-empty-error.protos	error
+selection-invalid-candidate-error.protos	error
