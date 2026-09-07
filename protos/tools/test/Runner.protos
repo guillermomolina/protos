@@ -192,3 +192,126 @@ evaluateSimple: (spec, source, executor) => {
 
     resultTuple(passed, observation)
 }
+
+caseRunTuple: (...items) => {
+    items
+}
+
+caseRunSpec: (caseRun) => {
+    caseRun.at(0)
+}
+
+caseRunEvaluation: (caseRun) => {
+    caseRun.at(1)
+}
+
+runTuple: (...items) => {
+    items
+}
+
+runCaseResults: (run) => {
+    run.at(0)
+}
+
+runSelectedCount: (run) => {
+    run.at(1)
+}
+
+runPassedCount: (run) => {
+    run.at(2)
+}
+
+runSkippedCount: (run) => {
+    run.at(3)
+}
+
+runAllPassed: (run) => {
+    runPassedCount(run) == runSelectedCount(run)
+}
+
+runSimpleWithLoader: (plan, sourceLoader, executor) => {
+    cases: Manifest.planCases(plan)
+
+    resultChunks: Map()
+    maxChunkLevel: -1
+
+    carryChunk: null
+    carryChunk = (chunk, level) => {
+        present: resultChunks.containsKey(level)
+        present.ifTrue(() => {
+            left: resultChunks.at(level)
+            resultChunks.remove(level)
+            carryChunk(Array(...left, ...chunk), level + 1)
+        })
+        present.ifFalse(() => {
+            resultChunks.atPut(level, chunk)
+            (level > maxChunkLevel).ifTrue(() => {
+                maxChunkLevel = level
+            })
+        })
+    }
+
+    collectChunks: null
+    collectChunks = (level, result) => {
+        finalResult: result
+        (level >= 0).ifTrue(() => {
+            nextResult: result
+            resultChunks.containsKey(level).ifTrue(() => {
+                nextResult = Array(...result, ...resultChunks.at(level))
+            })
+            finalResult = collectChunks(level - 1, nextResult)
+        })
+        finalResult
+    }
+
+    // Future.all() supplies one already-resolved seed Future. Array.each itself
+    // never suspends: it only attaches the next continuation to the prior Future.
+    // The dependency chain therefore preserves manifest order without retaining
+    // one recursive Protos call frame per selected case.
+    chain: Future.all()
+
+    cases.each((spec) => {
+        supported: isSimpleExpectation(spec)
+        supported.ifTrue(() => {
+            previous: chain
+            chain = previous.then((ignored) => {
+                source: sourceLoader(spec)
+                evaluation: evaluateSimple(spec, source, executor)
+                carryChunk(Array(caseRunTuple(spec, evaluation)), 0)
+                null
+            })
+        })
+    })
+
+    chain.value()
+
+    caseResults: resultTuple(...collectChunks(maxChunkLevel, Array()))
+    passedCount: 0
+    caseResults.each((caseRun) => {
+        resultPassed(caseRunEvaluation(caseRun)).ifTrue(() => {
+            passedCount = passedCount + 1
+        })
+    })
+
+    skippedCount: 0
+    cases.each((spec) => {
+        isSimpleExpectation(spec).ifFalse(() => {
+            skippedCount = skippedCount + 1
+        })
+    })
+
+    runTuple(
+        caseResults,
+        caseResults.size(),
+        passedCount,
+        skippedCount
+    )
+}
+
+runSimple: (plan, filesystem, executor) => {
+    runSimpleWithLoader(
+        plan,
+        (spec) => { readSource(spec, filesystem) },
+        executor
+    )
+}

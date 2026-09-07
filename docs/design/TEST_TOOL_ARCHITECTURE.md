@@ -375,6 +375,50 @@ D3A2 owns no Filesystem access, source acquisition, TestPlan traversal,
 scheduling, reporting or `Main.protos` integration. D3A3 composes those already
 separated boundaries.
 
+### TOOL002-D3A3 sequential supported-case composition
+
+D3A3 composes the already-separated D2 TestPlan, D3A1 source acquisition and
+D3A2 simple expectation policy without introducing a second runner universe.
+
+`Runner.runSimpleWithLoader(plan, sourceLoader, executor)` iterates the inert
+CaseSpec Array only to build a dependency chain. An already-resolved
+`Future.all()` result seeds that chain. For each CaseSpec whose expectation is
+owned by D3A2, one `Future.then` continuation is attached to the prior selected
+case. The continuation loads exactly that case source, performs exactly one D1
+execution through D3A2 and records the resulting evidence. Therefore:
+
+- selected cases begin in TestPlan order;
+- a later selected case cannot start before the prior selected case resolves;
+- `Array.each` does not suspend inside its callback;
+- the number of live Protos call frames does not grow linearly with case count;
+- each actual test still runs in the fresh semantic Process supplied by D1/B/C.
+
+Unsupported expectation kinds are skipped before source acquisition. D3A3 does
+not reinterpret, preflight or partially execute them; D3B, D3C, D4 and F retain
+their ownership. Normal D3A2 mismatches are appended as inert `passed=false`
+evidence and do not stop later cases. A source/policy/control failure fails the
+Future chain and therefore fails closed instead of becoming a test mismatch.
+
+Per-case run evidence is an ordered frozen Array of frozen tuples:
+
+```text
+CaseRun
+    CaseSpec
+    SimpleCaseResult
+```
+
+The final frozen run tuple exposes named accessors for ordered case results,
+selected count, passed count and skipped count. Result accumulation uses the same
+balanced-chunk strategy established by D2, avoiding repeated whole-result Array
+copying.
+
+`Main.protos` now invokes `Runner.runSimple(plan, filesystem, execution)` so the
+public `protos test` command executes the currently supported D3A subset. It
+retains the existing bootstrap stdout. D3A3 deliberately does not add per-case
+reporting, failure rendering, CLI filtering, exit-status-on-mismatch policy or
+parallel scheduling. Those remain later Test Tool responsibilities; TOOL002-H
+still owns bounded outer parallel execution and deterministic reporting.
+
 ## Isolation audit
 
 The normal isolation boundary should be **one fresh Protos Process per test

@@ -209,7 +209,7 @@ TOOL002-D therefore uses these publishable sub-slices:
 |---|---|---|
 | TOOL002-D1 | CLOSED | Bootstrap-local general `execution(source)` facility for the Test Tool over TOOL002-C, returning a caller-local observation through a strict authority-free detached-value boundary. No manifest/test policy. Implementation version `0.2.174-SNAPSHOT`. |
 | TOOL002-D2 | CLOSED | Grant the Test Tool one read-only tree-confined standard Filesystem rooted at the conformance corpus; bundled `Manifest.protos` uses bounded ordered readLine/Future.all windows to parse retained TSV rows into frozen CaseSpec/TestPlan tuples with named Protos accessors and validated path-based stable CaseIds. No case execution/expectation policy. Implementation version `0.2.182-SNAPSHOT`. |
-| TOOL002-D3 | IN_PROGRESS | D3A1 complete-source loading and D3A2 single-case simple expectation interpretation are CLOSED; D3A3 sequential TestPlan integration is READY; D3B fixed/error-parent and D3C float policy remain dependent. |
+| TOOL002-D3 | IN_PROGRESS | D3A1 source loading, D3A2 simple single-case expectation policy and D3A3 sequential supported-case/TestPlan composition are CLOSED; D3B fixed-integer/error-parent policy is READY and D3C float policy remains dependent. |
 | TOOL002-D4 | BLOCKED_BY_DEPENDENCIES | After D3, preserve the remaining non-Future `closure-error-parent-fresh` identity-sensitive expectations without leaking Closure authority; reconcile Java ownership for the D-migrated cases and close TOOL002-D. |
 
 The `future-*` families (`future-integer`, `future-null`, `future-boolean`,
@@ -267,8 +267,8 @@ Float families:
 |---|---|---|
 | TOOL002-D3A1 | CLOSED | Bundled `Runner.readSource(spec, filesystem)` loads one complete UTF-8 case source through the D2 confined standard Filesystem/File surface. Ordered File reads are issued in bounded 16-read windows, exact bytes are accumulated before one UTF-8 decode, and the File is explicitly closed. No case execution or expectation policy. Implementation version `0.2.186-SNAPSHOT`. |
 | TOOL002-D3A2 | CLOSED | `Runner.evaluateSimple(spec, source, executor)` interprets `boolean`, `null`, `integer`, and generic `error` entirely in bundled Protos. Normal mismatches return frozen `passed + observation` evidence; malformed/unsupported policy signals. Integer matching uses signed-decimal Protos parsing plus primitive `===` to preserve exact numeric family. Implementation version `0.2.189-SNAPSHOT`. |
-| TOOL002-D3A3 | READY | A1 source loading and A2 simple single-case policy are closed; compose D2 CaseSpecs + A1 + A2 into the initial sequential supported-case runner without one recursive Protos frame per case. |
-| TOOL002-D3B | BLOCKED_BY_DEPENDENCIES | After D3A, migrate `fixed-integer` and `error-parent` policy. |
+| TOOL002-D3A3 | CLOSED | Compose TestPlan + source loader + simple evaluator through an ordered `Future.then` dependency chain built without suspending inside `Array.each`; skip unsupported kinds before source access, aggregate ordered frozen CaseRun evidence with balanced chunks, and integrate the supported subset into `Main.protos`. No reporting/parallel/exit-status policy. Implementation version `0.2.192-SNAPSHOT`. |
+| TOOL002-D3B | READY | D3A is closed through A3; migrate `fixed-integer` and `error-parent` single-case policy while preserving D3A3 runner/result boundaries. |
 | TOOL002-D3C | BLOCKED_BY_DEPENDENCIES | After D3B, migrate `float-bits` and `float-nan` with exact binary64 requirements preserved. |
 
 D3A1 deliberately does not modify `Main.protos`: ordinary `protos test`
@@ -291,7 +291,21 @@ capability. The bundled policy returns frozen inert evidence containing canonica
 all four supported kinds, normal mismatches, cross-family Integer rejection,
 unsupported-kind fail-closed behavior and malformed expected-Integer policy.
 
-TOOL002-D3A3 is READY.
+TOOL002-D3A3 is CLOSED.
+
+D3A3 is the first whole-plan execution composition. It runs only expectation
+kinds already owned by D3A2, keeps unsupported rows inert and unread, preserves
+manifest order through a Future dependency chain, and returns ordered frozen
+CaseRun evidence. A 1024-case Protos stress fixture verifies exact-once ordered
+stack-bounded traversal with no host Test runner policy. A second Protos fixture
+uses the real confined Filesystem plus D1 fresh-Process execution and proves an
+unsupported row is not read.
+
+`Main.protos` now executes this supported subset through the same composition but
+does not yet report individual cases or turn an inert mismatch into CLI exit
+policy.
+
+TOOL002-D3B is READY.
 
 ## Closure rule
 

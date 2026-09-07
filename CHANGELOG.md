@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.192-SNAPSHOT
+
+- Close `TOOL002-D3A3`: compose the D2 TestPlan, D3A1 complete source loading and D3A2 simple expectation policy into the initial sequential bundled-Protos runner. `Array.each` only constructs a dependency chain; each selected case runs in a `Future.then` continuation after the previous selected case resolves, avoiding one recursive Protos frame per case while retaining manifest order and fresh-Process-per-case execution through D1.
+- Skip expectation kinds not yet owned by D3A without reading or executing their source, aggregate each selected CaseSpec plus its complete D3A2 evidence into frozen ordered run results, and preserve normal mismatches as data so later cases still run. Tool/source-policy failures still fail the chain closed. `Main.protos` now runs the supported subset while preserving its existing bootstrap stdout; reporting/exit-status policy remains later TOOL002 work. D3B becomes READY.
+
 ## 0.2.191-SNAPSHOT
 
 - Close I022-E3 and the parent I022-E cancellation-unwind slice. Preserve the E1 invariant that only `REQUESTED` is pending for observation: once cancellation reaches `UNWINDING`, `ensure` cleanup can use ordinary Future suspension/replay without the same request being delivered again, and the task-backed producer Future remains PENDING until cleanup and required structured drain finish.

@@ -16,11 +16,28 @@
 Manifest: import("self:Manifest")
 Runner: import("self:Runner")
 
-plan: Manifest.load(filesystem)
+integerCase: Manifest.parseLine("one.protos\tinteger\t42")
+unsupported: Manifest.parseLine(
+    "missing.protos\tfloat-bits\t3ff0000000000000"
+)
+errorCase: Manifest.parseLine("error.protos\terror\t-")
+
+plan: Manifest.frozenTuple(
+    Manifest.frozenTuple(integerCase, unsupported, errorCase)
+)
+
 run: Runner.runSimple(plan, filesystem, execution)
+results: Runner.runCaseResults(run)
 
-writer: TextWriter(process.stdout(), process.stdoutEncoding())
-writer.writeLine("Protos test tool bootstrap")
-writer.writeLine(process.args().at(0))
+firstEvaluation: Runner.caseRunEvaluation(results.at(0))
+secondEvaluation: Runner.caseRunEvaluation(results.at(1))
 
-run
+(Runner.runSelectedCount(run) == 2) &&
+(Runner.runPassedCount(run) == 2) &&
+(Runner.runSkippedCount(run) == 1) &&
+Runner.runAllPassed(run) &&
+(results.size() == 2) &&
+(Manifest.caseId(Runner.caseRunSpec(results.at(0))) == "one.protos") &&
+(Manifest.caseId(Runner.caseRunSpec(results.at(1))) == "error.protos") &&
+(Runner.resultObservation(firstEvaluation).state === "completed") &&
+(Runner.resultObservation(secondEvaluation).state === "failed")
