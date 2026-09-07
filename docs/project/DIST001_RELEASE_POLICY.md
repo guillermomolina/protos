@@ -308,12 +308,20 @@ publication:
       an E4B1 detached baseline worktree. Only the root Protos project-version
       token may change; the resulting worktree must remain detached, unstaged
       and uncommitted with exactly `pom.xml` modified.
-    - `DIST001-E4B3` — candidate commit creation — READY. Commit only the
-      validated E4B2 release-version transition in detached candidate state
-      without a branch/tag/remote publication.
+    - `DIST001-E4B3` — candidate commit creation — IN_PROGRESS:
+      - `DIST001-E4B3A` — candidate-commit primitive + guards — CLOSED.
+        Publish/test exact detached commit creation over the validated E4B2
+        `pom.xml` transition. The primitive stages only `pom.xml`, creates one
+        single-parent detached commit, verifies release-only diff/cleanliness,
+        and leaves branch/tag refs unchanged. Fixture candidates only.
+      - `DIST001-E4B3B` — real detached candidate materialization — READY.
+        Compose B1+B2+B3A against the frozen E4A selection, create the first real
+        candidate commit, and persist its exact SHA without branch/tag/remote
+        release publication.
     - `DIST001-E4B4` — release-only lineage verification —
-      `BLOCKED_BY_DEPENDENCIES` on E4B3. Prove baseline -> candidate changes only
-      the exact release-owned transition and then close E4B.
+      `BLOCKED_BY_DEPENDENCIES` on E4B3. Independently prove selected baseline ->
+      real candidate changes only the exact release-owned transition and then
+      close E4B.
   - `DIST001-E4C` — candidate archive/envelope/audit preparation —
     `BLOCKED_BY_DEPENDENCIES` on E4B.
   - `DIST001-E4D` — immutable full candidate validation and E4 closure —

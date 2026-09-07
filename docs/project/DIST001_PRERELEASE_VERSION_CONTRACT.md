@@ -354,3 +354,31 @@ commit; E4B4 owns independent release-only lineage proof.
 
 E4B2 itself materializes no real release worktree or candidate commit during
 publication and keeps release publication unauthorized.
+
+## E4B3A candidate commit checkpoint
+
+E4B3 is subdivided so commit mechanics and the first real candidate identity are
+not conflated:
+
+```text
+DIST001-E4B3A  candidate-commit primitive + guards
+DIST001-E4B3B  real detached candidate materialization
+```
+
+E4B3A binds the commit primitive to the frozen selection:
+
+```text
+release_baseline_revision=3c23eaaccecbdcc7c2bcd86bc30c445403cfb047
+release_baseline_version=0.2.236-SNAPSHOT
+release_version=0.2.236
+release_tag=v0.2.236
+```
+
+The primitive accepts only the exact uncommitted E4B2 `pom.xml` transition,
+stages only that file and creates one detached commit whose parent is exactly the
+selected baseline. It must not create or move branch/tag refs and must not push.
+
+E4B3A publishes/tests this mechanism only. `candidate_source_revision` therefore
+remains `UNMATERIALIZED` in the E4A selection record. E4B3B owns creation and
+capture of the real candidate SHA; release publication remains separately
+unauthorized.

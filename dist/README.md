@@ -532,6 +532,38 @@ stage or commit the transition, and does not create a branch, tag, remote
 candidate ref, GitHub Release, or release asset. E4B3 owns the first candidate
 commit.
 
+
+## Detached candidate commit primitive
+
+`DIST001-E4B3A` publishes and tests the commit primitive that will later be used
+by E4B3B to materialize the real selected candidate.
+
+Generic use after E4B1 + E4B2:
+
+```sh
+python3 dist/commit_release_candidate.py     --selection docs/project/DIST001_E4_SELECTION.txt     --candidate /path/to/detached-candidate-worktree
+```
+
+The helper requires exactly one unstaged `pom.xml` change whose bytes equal the
+E4B2 `V-SNAPSHOT -> V` transition. It rejects extra dirty/untracked paths,
+pre-staged input, attached HEAD, the wrong baseline, or altered POM bytes.
+
+Before staging it verifies local Git author/committer identity. It stages only
+`pom.xml`, suppresses local hooks and commit signing for this mechanical
+candidate commit, commits with the deterministic message
+`release: materialize Protos V candidate`, then verifies:
+
+- the new detached HEAD has the selected baseline as its single parent;
+- baseline -> candidate changes only `pom.xml`;
+- committed POM bytes equal the exact E4B2 transition;
+- the worktree is clean;
+- HEAD remains detached; and
+- local branch and tag refs are unchanged.
+
+The primitive performs no push, branch creation, tag creation, GitHub Release,
+or release-asset publication. E4B3A itself uses only isolated fixture candidates;
+E4B3B owns the first real candidate commit and exact SHA capture.
+
 ## DIST001 boundary
 
 DIST001-A proves that the distribution can be constructed and that its archive
