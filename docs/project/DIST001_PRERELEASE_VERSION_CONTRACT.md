@@ -276,3 +276,29 @@ A green E4 candidate gate therefore does not authorize E5 publication.
 
 At E3 closure no concrete baseline, candidate, or public version has been
 selected and no tag, GitHub Release, or release asset has been created.
+
+## E4A exact selection checkpoint
+
+After I023 and blocker B007 closed, the user explicitly authorized continuing
+with the deterministic first-post-closure `origin/main` selection procedure.
+E4A therefore freezes this exact candidate basis:
+
+```text
+release_baseline_revision=3c23eaaccecbdcc7c2bcd86bc30c445403cfb047
+release_baseline_version=0.2.236-SNAPSHOT
+release_version=0.2.236
+release_tag=v0.2.236
+specification_revision=0.1.382
+candidate_source_revision=UNMATERIALIZED
+release_publication_authorized=false
+```
+
+At the selected baseline, I023 is CLOSED and B007 is CLOSED. Subsequent movement
+of `main` does not change this selection: E4B must derive the candidate from the
+exact selected baseline or fail closed. If an implementation fix is required,
+this selection is abandoned and a new baseline must be explicitly selected.
+
+E4 is further decomposed into E4A selection freeze, E4B detached candidate
+materialization, E4C archive/envelope/audit preparation, and E4D immutable full
+validation. E4A creates no candidate commit, tag, GitHub Release, or release
+asset.

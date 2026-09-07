@@ -291,13 +291,21 @@ publication:
       origin tag-availability guards. The audit requires publication authorization
       to remain false. No candidate is selected and no tag/GitHub Release is
       created by E3.
-- `DIST001-E4` — exact candidate selection and validation — READY for an
-  explicit user selection decision. E2/E3 dependencies are closed, but no
-  candidate-specific mutation or audit may begin until the user selects the exact
-  development baseline/public version (or explicitly authorizes an unambiguous
-  procedure resolving both). E4 validates and freezes that candidate; its audit
-  must record `release_publication_authorized=false` and it does not publish the
-  GitHub Release.
+- `DIST001-E4` — exact candidate selection and validation — IN_PROGRESS:
+  - `DIST001-E4A` — exact selection freeze — CLOSED. Persist the explicitly
+    authorized baseline `3c23eaaccecbdcc7c2bcd86bc30c445403cfb047` / `0.2.236-SNAPSHOT` -> `0.2.236`,
+    future tag `v0.2.236`, current specification revision `0.1.382`, and the
+    candidate-time I023/B007 closure checkpoint. Release publication remains
+    explicitly unauthorized and no candidate commit is materialized.
+  - `DIST001-E4B` — detached candidate materialization — READY. Derive the
+    local candidate from the exact selected baseline with only the mechanical
+    project-version transition `0.2.236-SNAPSHOT` -> `0.2.236`; preserve
+    `main` as SNAPSHOT development and create no tag, remote branch, or release.
+  - `DIST001-E4C` — candidate archive/envelope/audit preparation —
+    `BLOCKED_BY_DEPENDENCIES` on E4B.
+  - `DIST001-E4D` — immutable full candidate validation and E4 closure —
+    `BLOCKED_BY_DEPENDENCIES` on E4C. Freeze the exact validated candidate SHA
+    and assets for E5 while keeping release publication separately unauthorized.
 - `DIST001-E5` — first GitHub pre-release publication —
   `BLOCKED_BY_DEPENDENCIES` on the explicitly selected, fully validated E4
   candidate. This is the first slice allowed to create the public tag, GitHub
