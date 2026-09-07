@@ -421,6 +421,59 @@ re-prepared and revalidated.
 E3C2 still does not decide whether the editorial claims are truthful for a real
 candidate. That candidate-specific blocker/claim audit belongs to E3C3/E4.
 
+
+## Composed public pre-release candidate gate
+
+`DIST001-E3C3` composes the generic first-pre-release validation machinery into
+one candidate gate:
+
+```sh
+PROTOS_DIST001_B4B_JAVA_HOME=/path/to/graalvm-community-jdk-22.0.0 \
+    python3 dist/validate_release_candidate.py \
+        --archive /path/to/protos-V-posix-jvm.zip \
+        --envelope-dir /path/to/release-envelope \
+        --candidate-audit /path/to/RELEASE_CANDIDATE_AUDIT.txt
+```
+
+The candidate audit is candidate-specific E4 input. Its exact v1 form is:
+
+```text
+release_candidate_audit_format=protos-release-candidate-audit-v1
+candidate_selection_authorized=true
+selection_authorization_basis=explicit-user-decision
+release_publication_authorized=false
+source_revision=<candidate-sha>
+release_baseline_revision=<selected-main-baseline-sha>
+release_version=V
+release_tag=vV
+specification_revision=X.Y.Z
+capabilities_review=PASS
+limitations_review=PASS
+known_blockers_review=PASS
+```
+
+The composed gate fails closed unless:
+
+- candidate `SOURCE.txt` identifies the clean checkout `HEAD`;
+- candidate lineage from the selected baseline changes exactly `pom.xml`,
+  and that file differs only by the exact `V-SNAPSHOT -> V` project-version
+  transition;
+- E3C2 independently validates the E3B envelope and its specification revision
+  equals the current candidate checkout specification revision;
+- the audit exactly matches candidate/baseline/version/tag/current specification;
+- capability, limitation, and known-blocker review are all explicit `PASS`;
+- candidate selection records an explicit user decision while release publication
+  remains explicitly unauthorized;
+- `vV` is absent both locally and on `origin`; and
+- the same ZIP passes the E3C1 release-aware complete B5 gate.
+
+The tag checks are availability guards only. The script contains no tag creation,
+GitHub Release creation, asset upload, or push operation.
+
+E3C3 closes generic DIST001-E3 preparation. The first real candidate audit and
+candidate execution remain E4 work after an explicit exact baseline/public-version
+selection.
+
 ## DIST001 boundary
 
 DIST001-A proves that the distribution can be constructed and that its archive

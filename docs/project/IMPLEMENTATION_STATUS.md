@@ -1058,7 +1058,7 @@ repository when formally introduced rather than relying on chat/prompt history.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| DIST001 | End-user distribution and release engineering | IN_PROGRESS | DIST001-A/B/C/D + DIST001-E1/E2 + DIST001-E3A/E3B/E3C1/E3C2 published | DIST001-E3C3 is READY. Baseline/candidate/version remain unselected; no tag, GitHub Release, or release asset is authorized. |
+| DIST001 | End-user distribution and release engineering | IN_PROGRESS | DIST001-A/B/C/D + DIST001-E1/E2/E3 published | DIST001-E4 is READY for an explicit exact baseline/public-version selection decision. No candidate, tag, GitHub Release, or release asset is currently selected/authorized. |
 | DIST001-A | Relocatable portable distribution layout and runtime contract | CLOSED | `SAME_COMMIT` | Constructible POSIX/JVM ZIP; shared checkout/distribution launcher preserves caller CWD through `PROTOS_HOME`; exact source/runtime metadata and checksums; initial supported optimizing stack is GraalVM Community JDK 22 + external `truffle-runtime:24.0.0`; no tag/release. |
 | DIST001-B | Extracted-distribution smoke/conformance | CLOSED | DIST001-B1/B2/B3/B4A/B4B/B5 published | One exact clean-source ZIP passes archive/checksum identity, outside-checkout caller-CWD + Package Tool, bundled Test Tool, and exact GraalVM Community JDK22/Truffle24 `HotSpotTruffleRuntime` evidence through the composed B5 gate. |
 | DIST001-B1 | Validation hygiene and bounded smoke decomposition | CLOSED | `SAME_COMMIT` | Ignore Python bytecode/cache outputs and persist the bounded B1..B5 validation plan; no executable distribution behavior changes. |
@@ -1074,25 +1074,26 @@ repository when formally introduced rather than relying on chat/prompt history.
 | DIST001-D2 | Observed CI snapshot artifact closure | CLOSED | DIST001-D2A + DIST001-D2B published | Repaired run 34101588533 for exact source 994429173b6ec0fc086f307f4a49815f219c6523 completed green; artifact 10010752033 contained the expected portable ZIP and basename-only `.sha256`, which passed independent `sha256sum -c` after download. |
 | DIST001-D2A | Portable external snapshot checksum repair | CLOSED | `SAME_COMMIT` | Generate `.sha256` from the archive directory so it records only the ZIP basename; require `sha256sum -c` to pass in CI before upload. The first D1 artifact digest value itself was correct; only its absolute runner pathname was non-portable. |
 | DIST001-D2B | Observed repaired CI snapshot artifact closure | CLOSED | `SAME_COMMIT` | Run 34101588533; source `994429173b6ec0fc086f307f4a49815f219c6523`; artifact `protos-snapshot-994429173b6ec0fc086f307f4a49815f219c6523` / id `10010752033`; `protos-0.2.230-SNAPSHOT-posix-jvm.zip` SHA-256 `f66f011ba9a7c579f81b5aad7098bd4ec421ebc8117b3c4c8954374441e94337`; downloaded basename-only checksum verified successfully outside the runner workspace. |
-| DIST001-E | First selected GitHub pre-release | IN_PROGRESS | DIST001-E1/E2 + DIST001-E3A/E3B/E3C1/E3C2 published | E3C1/E3C2 are closed; E3C3 is READY for final generic candidate-gate composition. Candidate-specific E4 still requires E3 closure plus explicit user selection. |
+| DIST001-E | First selected GitHub pre-release | IN_PROGRESS | DIST001-E1/E2/E3 published | Generic release preparation is closed. E4 is READY for explicit candidate selection/validation; E5 remains dependency-blocked and separately requires publication authorization. |
 | DIST001-E1 | First pre-release readiness and candidate envelope | CLOSED | `SAME_COMMIT` | A-D readiness is sufficient to begin bounded preparation; persist candidate eligibility, current limitation/claim boundary, E1-E6 decomposition, and explicit approval boundary. No candidate/version selected and no tag/release/assets published. |
 | DIST001-E2 | Coherent public pre-release version contract | CLOSED | `SAME_COMMIT` | Selected generic mapping: development `V-SNAPSHOT` -> public `V`; tag `vV`; title `Protos V`; GitHub `prerelease=true`; candidate commit derives from selected baseline without converting active `main`; no concrete candidate/version selected. |
-| DIST001-E3 | Release metadata, assets and validation preparation | IN_PROGRESS | DIST001-E3A/E3B + DIST001-E3C1/E3C2 published | Release-aware B5 and independent envelope verification are closed; E3C3 is READY for composition and E3 closure. No candidate/tag/Release selected. |
+| DIST001-E3 | Release metadata, assets and validation preparation | CLOSED | DIST001-E3A/E3B/E3C published | Release-mode builder/provenance, deterministic metadata envelope, release-aware B5, independent envelope verification, and composed candidate gate are published; no concrete candidate/tag/Release selected. |
 | DIST001-E3A | Release-mode builder and provenance/version guards | CLOSED | `SAME_COMMIT` | Default builder remains development-only `V-SNAPSHOT`; explicit public-prerelease mode requires clean public `V`, exact baseline SHA with `V-SNAPSHOT`, baseline ancestry, and emits baseline/candidate SOURCE provenance plus `public_release=true`. Generic fixtures only; no candidate selected. |
 | DIST001-E3B | Release notes and asset/checksum manifest envelope | CLOSED | `SAME_COMMIT` | Generic public-prerelease ZIP metadata is rendered deterministically into RELEASE_NOTES.md, RELEASE_MANIFEST.txt and a basename-only archive `.sha256`; specification/capability/limitation claims are explicit inputs; no candidate selected. |
-| DIST001-E3C | Candidate validation entry point and E3 closure | IN_PROGRESS | DIST001-E3C1/E3C2 published | C1 release-aware B5 and C2 independent envelope verification are closed; C3 composition/closure is READY. |
+| DIST001-E3C | Candidate validation entry point and E3 closure | CLOSED | DIST001-E3C1/E3C2/E3C3 published | Release-aware B5, independent envelope verifier, and composed candidate/tag/claim-audit guards are complete. |
 | DIST001-E3C1 | Release-aware B2/B5 identity and conformance plumbing | CLOSED | `SAME_COMMIT` | Development `V-SNAPSHOT` remains default; explicit public-prerelease verification requires clean public `V`, exact candidate HEAD and `V-SNAPSHOT` baseline provenance before the unchanged B3/B4A/B4B checks run against the same ZIP. Generic fixtures only; no candidate selected. |
 | DIST001-E3C2 | Independent release-envelope verifier | CLOSED | `SAME_COMMIT` | Verify exact E3B envelope file set, manifest identity/schema, SOURCE/RUNTIME provenance, archive/checksum/notes digests, basename-only checksum content and populated capability/limitation sections; generic corruption fixtures only, no candidate/publication. |
-| DIST001-E3C3 | Candidate gate composition and E3 closure | READY | — | Compose release-aware B5 + independent envelope verifier + candidate/tag/claim guards; close E3 and make E4 ready for explicit candidate selection. |
-| DIST001-E4 | Exact candidate selection and immutable validation | BLOCKED_BY_DEPENDENCIES | — | Depends on E2/E3 and an explicit user decision selecting the exact source revision/public version; validate/freeze that candidate only, with no GitHub Release publication. |
+| DIST001-E3C3 | Candidate gate composition and E3 closure | CLOSED | `SAME_COMMIT` | Compose candidate checkout identity, E3C2 envelope verification, explicit user-selection/claim audit, current spec revision, local/origin tag availability and E3C1 B5; candidate audit must keep release publication unauthorized. |
+| DIST001-E4 | Exact candidate selection and immutable validation | READY | — | E2/E3 dependencies are closed. Execution remains gated on an explicit user decision selecting the exact development baseline/public version; E4 validates/freezes only and records release_publication_authorized=false. |
 | DIST001-E5 | First GitHub pre-release publication | BLOCKED_BY_DEPENDENCIES | — | Depends on the explicitly selected, fully validated E4 candidate; first slice allowed to create the public tag, GitHub pre-release and release assets. |
 | DIST001-E6 | Published pre-release verification and DIST001 closure | BLOCKED_BY_DEPENDENCIES | — | Depends on E5; independently verify tag/source identity, pre-release metadata, downloadable assets/checksums and runtime/source disclosures, then close DIST001. |
 
-DIST001-A/B/C/D and DIST001-E1/E2 are closed. DIST001-E3 is IN_PROGRESS:
-E3A/E3B and E3C1/E3C2 are closed; E3C3 is READY. Release-aware B5 validation and
-independent E3B envelope verification are both available for final generic
-candidate-gate composition. No concrete release baseline, candidate, public
-version, tag, GitHub Release, or release asset is selected or authorized.
+DIST001-A/B/C/D and DIST001-E1/E2/E3 are closed. DIST001-E4 is READY for an
+explicit exact development-baseline/public-version selection decision. The
+generic candidate gate composes release-aware B5, independent envelope
+verification, explicit candidate/claims audit, current specification identity
+and tag-availability guards. No concrete baseline, candidate, public version,
+tag, GitHub Release, or release asset is currently selected or authorized.
 
 ## P-label classification
 

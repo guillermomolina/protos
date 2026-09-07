@@ -265,7 +265,7 @@ publication:
   Candidate preparation derives a release commit from the selected baseline
   without converting active `main` to a non-SNAPSHOT version. No concrete
   baseline/version/candidate is selected by E2.
-- `DIST001-E3` — release metadata/assets/validation preparation — IN_PROGRESS:
+- `DIST001-E3` — release metadata/assets/validation preparation — CLOSED:
   - `DIST001-E3A` — release-mode builder + provenance/version guards — CLOSED.
     Preserve development build behavior while adding explicit fail-closed public
     prerelease metadata bound to public `V`, exact `V-SNAPSHOT` baseline, exact
@@ -275,7 +275,7 @@ publication:
     public-prerelease archive, require explicit specification/capability/
     limitation context, and emit release notes, asset manifest and portable
     outer archive checksum. No candidate is selected or published.
-  - `DIST001-E3C` — candidate validation entry point + E3 closure — IN_PROGRESS:
+  - `DIST001-E3C` — candidate validation entry point + E3 closure — CLOSED:
     - `DIST001-E3C1` — release-aware B2/B5 identity/conformance plumbing —
       CLOSED. Preserve development mode as default while allowing an explicit
       clean public-prerelease candidate/baseline identity to enter the same B5
@@ -285,14 +285,19 @@ publication:
       facts, archive/checksum/notes digests, portable checksum content and
       release-note identity/claim-section structure without regenerating data or
       publishing anything.
-    - `DIST001-E3C3` — candidate gate composition + E3 closure — READY. Compose
-      C1+C2 with candidate/tag/claim guards, close E3, and transition E4 to
-      explicit candidate-selection readiness without selecting a candidate or
-      creating a tag/GitHub Release.
-- `DIST001-E4` — exact candidate selection and validation —
-  `BLOCKED_BY_DEPENDENCIES` on E2/E3 and additionally requires an explicit user
-  decision selecting the exact source revision/public version. E4 validates and
-  freezes that candidate but does not publish the GitHub Release.
+    - `DIST001-E3C3` — candidate gate composition + E3 closure — CLOSED.
+      `dist/validate_release_candidate.py` composes C1+C2 with exact checkout,
+      current-specification, explicit candidate-selection/claim-audit, local and
+      origin tag-availability guards. The audit requires publication authorization
+      to remain false. No candidate is selected and no tag/GitHub Release is
+      created by E3.
+- `DIST001-E4` — exact candidate selection and validation — READY for an
+  explicit user selection decision. E2/E3 dependencies are closed, but no
+  candidate-specific mutation or audit may begin until the user selects the exact
+  development baseline/public version (or explicitly authorizes an unambiguous
+  procedure resolving both). E4 validates and freezes that candidate; its audit
+  must record `release_publication_authorized=false` and it does not publish the
+  GitHub Release.
 - `DIST001-E5` — first GitHub pre-release publication —
   `BLOCKED_BY_DEPENDENCIES` on the explicitly selected, fully validated E4
   candidate. This is the first slice allowed to create the public tag, GitHub

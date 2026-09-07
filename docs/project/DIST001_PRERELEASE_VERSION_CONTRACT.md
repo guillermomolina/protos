@@ -253,3 +253,26 @@ claim/blocker audit.
 
 E3C2 selects no concrete baseline, candidate, or public version and creates no
 tag, GitHub Release, or release asset.
+
+## E3C3 implementation checkpoint
+
+E3C3 closes the generic release-preparation mechanism by composing E3C1
+release-aware B5 validation and E3C2 independent envelope verification with
+candidate checkout identity, release-only baseline lineage, current specification
+identity, local/remote tag
+availability, and an explicit candidate audit.
+
+The audit deliberately distinguishes two decisions:
+
+```text
+candidate_selection_authorized=true
+selection_authorization_basis=explicit-user-decision
+release_publication_authorized=false
+```
+
+E4 may create that audit only after the user explicitly selects the exact
+development baseline/public version and the resulting candidate is reviewed.
+A green E4 candidate gate therefore does not authorize E5 publication.
+
+At E3 closure no concrete baseline, candidate, or public version has been
+selected and no tag, GitHub Release, or release asset has been created.
