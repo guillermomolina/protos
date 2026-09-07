@@ -74,21 +74,21 @@ its relation to any legacy Slice 3 terminology that remains useful for continuit
 | TOOL001-E | local/offline version selection policy | CLOSED | `SAME_COMMIT` | E1 fresh highest-satisfying selection plus E2 retained exact-version preference are published as pure local version policy over already-known candidates. Discovery, full eligibility, graph resolution and physical lock work remain separate. |
 | TOOL001-E1 | fresh highest-satisfying ReleaseVersion selection | CLOSED | `SAME_COMMIT` | `self:FreshVersionSelection.select/selectText` filters already-known ReleaseVersion candidates through closed D2 constraint semantics and selects the highest satisfying candidate by D1 precedence; no-match fails closed. |
 | TOOL001-E2 | retained exact-version preference | CLOSED | `SAME_COMMIT` | `self:RetainedVersionSelection.select/selectText` preserves an available exact retained ReleaseVersion while it still satisfies D2; otherwise it delegates to E1 fresh selection. No physical lockfile or package-identity policy is implied. |
-| TOOL001-F | canonical physical lockfile v1 | IN_PROGRESS | TOOL001-F1/F2A/F2B/F2C/F2D1 published | Format/I/O/stale/root assembly CLOSED; workspace execution-plan integration IN_PROGRESS with F2D2 READY. |
+| TOOL001-F | canonical physical lockfile v1 | IN_PROGRESS | TOOL001-F1/F2A/F2B/F2C/F2D1/F2D2 published | Workspace plan contract + pure builder CLOSED; F2D3 host handoff READY. |
 | TOOL001-F1A | canonical lock header grammar | CLOSED | `SAME_COMMIT` | Exact three-line v1 header grammar and canonical lexical rules are frozen without implementing a parser/writer or choosing body node/edge syntax. |
 | TOOL001-F1B | canonical lock body node/edge grammar | CLOSED | `SAME_COMMIT` | F1B1 scalar/reference, F1B2 root/workspace and F1B3 external-node/dependency/final ordering decisions freeze the complete canonical body grammar for lock-format 1. |
 | TOOL001-F1B1 | canonical scalar strings + typed node references | CLOSED | `SAME_COMMIT` | Body variable values use one deterministic quoted UTF-8 scalar encoding; node references are source-kind-tagged tuples over quoted identity components, avoiding delimiter-composed PackageId keys while PackageId textual encoding remains open. |
 | TOOL001-F1B2 | root/workspace representation | CLOSED | `SAME_COMMIT` | Exactly one root workspace-ref identifies the root manifest package; additional workspace member declarations map their exact manifest string to a workspace-ref in canonical order, without introducing virtual-workspace identity or path semantics. |
 | TOOL001-F1B3 | external node blocks + dependency edges + F1B closure | CLOSED | `SAME_COMMIT` | Flat registry/git external records, mandatory ContentIdentity, registry locator+authority, Git fetch provenance, exact alias->target edges, total body ordering/separation and omission of ArtifactDigest close F1B. |
 | TOOL001-F1C | canonical lock parser/writer + round-trip conformance | CLOSED | `SAME_COMMIT` | F1C1 lexical primitives, F1C2 structural body model and F1C3 canonical total writer/rejection/round-trip conformance complete the pure in-memory lock-format-1 parser/writer boundary. |
-| TOOL001-F2 | physical lock integration | IN_PROGRESS | TOOL001-F2A/F2B/F2C/F2D1 published | Physical root + stale validation CLOSED; F2D workspace-only execution preflight IN_PROGRESS through closed plan contract, F2D2 READY. |
+| TOOL001-F2 | physical lock integration | IN_PROGRESS | TOOL001-F2A/F2B/F2C/F2D1/F2D2 published | Confined validation and workspace PackageExecutionPlan construction CLOSED; F2D3 command preflight/resolver handoff READY. |
 | TOOL001-F2A | confined `protos.lock` read/publish substrate | CLOSED | `SAME_COMMIT` | `self:LockFile.load` reads canonical `protos.lock`; `publish` validates/canonicalizes before `.protos.lock.stage -> protos.lock` MetadataPublication. No resolver/stale/CLI behavior. |
 | TOOL001-F2B | semantic resolution-input + stale detection | CLOSED | `SAME_COMMIT` | F2B1/F2B2 semantic model plus F2B3 canonical byte serialization, SHA-256 digest/header identity and read-only stale comparison complete F2B. |
 | TOOL001-F2C | physical resolution-root assembly | CLOSED | `SAME_COMMIT` | Pure Protos reads root + explicit member protos.toml through supplied confined tree Filesystem and returns the F2B semantic root with normalized registry/Git/path dependency projections. |
-| TOOL001-F2D | workspace-only normal-execution preflight + PackageExecutionPlan | IN_PROGRESS | TOOL001-F2D1 published | Bounded first execution subset: contract/runtime naming CLOSED; F2D2 pure plan builder READY; F2D3 host handoff dependency-gated. External registry/Git nodes fail closed until later materialization/integrity work. |
+| TOOL001-F2D | workspace-only normal-execution preflight + PackageExecutionPlan | IN_PROGRESS | TOOL001-F2D1/F2D2 published | Plan ABI/runtime policy + pure workspace builder CLOSED; F2D3 mechanical host resolver/preflight READY. External nodes remain fail-closed. |
 | TOOL001-F2D1 | PackageExecutionPlan ABI + runtime-name/preflight contract | CLOSED | `SAME_COMMIT` | Freeze workspace-only lock reconciliation, alias/export/module portable-name policy, inert plan shape, authority separation, defensive detach boundary and explicit external-node rejection. |
-| TOOL001-F2D2 | pure workspace execution-state + plan construction | READY | — | Preserve full ManifestV1 beside ResolutionRootV1; validate runtime names, canonical non-stale lock/root/member/path edges and exports; return inert PackageExecutionPlanV1; no CLI/host resolver. |
-| TOOL001-F2D3 | mechanical host resolver handoff + command-scoped workspace preflight | BLOCKED_BY_DEPENDENCIES | TOOL001-F2D2 | After D2, defensively detach plan into host DTO, install exact self:/dep: resolver and provision preflight read authority without transferring tool authority to application execution. |
+| TOOL001-F2D2 | pure workspace execution-state + plan construction | CLOSED | `SAME_COMMIT` | Single-pass full ManifestV1 + ResolutionRootV1 state, runtime-name validation, exact lock/body reconciliation and inert plan projection implemented in Protos. |
+| TOOL001-F2D3 | mechanical host resolver handoff + command-scoped workspace preflight | READY | — | F2D2 supplies validated inert plan; remaining work is defensive immutable DTO detach + exact package resolver + command-scoped tool/application authority split. |
 
 
 | TOOL001-F2B1 | per-manifest semantic resolution-input projection design | CLOSED | `SAME_COMMIT` | Freeze resolver-affecting manifest inclusion/exclusion, D2 semantic constraint normalization, deterministic scalar/order owners and fail-closed unresolved-owner rule. No digest implementation. |
@@ -143,16 +143,16 @@ header identity and read-only canonical-lock stale comparison.
 input from physical root/member manifests through explicit confined read-only
 project-tree authority.
 
-`TOOL001-F2D — workspace-only normal-execution preflight + PackageExecutionPlan`
-is IN_PROGRESS through closed F2D1. The plan/runtime-name/preflight contract is
-frozen and F2D2 is READY to construct the inert workspace-only plan entirely in
-Protos. F2D3 host resolver handoff remains dependency-gated on F2D2.
+`TOOL001-F2D` is IN_PROGRESS through CLOSED F2D2. Pure Protos now owns the
+complete workspace preflight policy up to an inert PackageExecutionPlanV1:
+single-pass physical ManifestV1/ResolutionRootV1 state, canonical non-stale lock
+validation, root/member/path-edge reconciliation, runtime-name/export validation
+and plan projection.
 
-F2D deliberately fails closed on registry/Git nodes. Exact external execution
-still requires materialized source roots plus mandatory ContentIdentity
-verification; no cache scan, fetch provenance or same-PackageId workspace
-substitution may bypass that future boundary. Explicit resolve/update remains
-separate from normal execution.
+`TOOL001-F2D3` is READY. It is mechanically limited to defensive plan detach,
+exact package-backed module resolution and command-scoped preflight/application
+authority separation. F2D continues to fail closed on registry/Git nodes until
+external materialization + ContentIdentity verification is implemented.
 
 A separate non-committing note in `docs/design/PACKAGE_TOOL_ARCHITECTURE.md`
 records future reusable-library extraction opportunities for the schema-neutral

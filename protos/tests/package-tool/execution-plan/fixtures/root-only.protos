@@ -1,0 +1,29 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Plan: import("self:ExecutionPlan")
+plan: Plan.build(projectTreeFilesystem)
+
+ok: plan.generation == 1
+(plan.root.kind == "workspace").ifFalse(() => { ok = false })
+(plan.root.packageId == "root").ifFalse(() => { ok = false })
+(plan.packages.size() == 1).ifFalse(() => { ok = false })
+(plan.dependencies.size() == 0).ifFalse(() => { ok = false })
+
+package: plan.packages.at(0)
+(package.location == "").ifFalse(() => { ok = false })
+(package.exports.at("Main") == "app/Main").ifFalse(() => { ok = false })
+(package.exports.at("Alias") == "app/Main").ifFalse(() => { ok = false })
+ok

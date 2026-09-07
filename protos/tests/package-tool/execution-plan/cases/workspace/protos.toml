@@ -1,0 +1,14 @@
+manifest-version = 1
+
+[package]
+id = "root"
+version = "1.0.0"
+
+[exports]
+Main = "Main"
+
+[dependencies.local]
+path = "libs/a"
+
+[workspace]
+members = ["libs/a"]

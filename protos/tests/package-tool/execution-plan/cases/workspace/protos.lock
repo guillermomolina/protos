@@ -1,0 +1,8 @@
+lock-format 1
+resolver-version 1
+resolution-input protos-resolution-input-v1 sha256:e9cd0ec4a4c1e5b7b9a207d602abb7672ae245b499ee296d74f867ce3ca192a7
+
+root workspace "root"
+workspace-member "libs/a" workspace "a-pkg"
+dependency workspace "a-pkg" alias "rootdep" target workspace "root"
+dependency workspace "root" alias "local" target workspace "a-pkg"

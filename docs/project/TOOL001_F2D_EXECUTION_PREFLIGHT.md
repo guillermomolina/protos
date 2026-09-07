@@ -1,6 +1,6 @@
 # TOOL001-F2D — Workspace Execution Preflight and PackageExecutionPlan
 
-Status: **IN_PROGRESS through CLOSED F2D1 design**
+Status: **IN_PROGRESS through CLOSED F2D2 implementation**
 Nature: non-normative Package Tool / host-integration design
 Design checkpoint: 2026-09-07
 
@@ -451,3 +451,34 @@ capability/policy, but it never resolves a new version.
 F2D1 does not allocate that continuation prematurely. It records the dependency
 so a future slice cannot make external nodes executable by weakening plan
 validation.
+
+## F2D2 implementation closure
+
+F2D2 is CLOSED.
+
+Published bundled-Protos surfaces:
+
+```text
+self:ResolutionRoot.assembleState(projectTreeFilesystem)
+self:RuntimeNames
+self:ExecutionPlan.build(projectTreeFilesystem)
+```
+
+`assembleState` performs the same single physical root/member parse as the
+existing `assemble`, but returns both the unchanged F2B `resolutionRoot` and
+full parsed ManifestV1 package records. `assemble` remains the compatibility
+projection returning only `resolutionRoot`.
+
+`ExecutionPlan.build` loads one canonical lock through the same explicit
+read-only tree Filesystem, validates the F2B3 header against the assembled root,
+rejects registry/Git nodes, reconciles the exact root/member mapping and every
+workspace path dependency alias/target, validates/copies exports through the
+F2D1 portable runtime-name contract and returns a fresh ordinary
+PackageExecutionPlanV1.
+
+The builder performs no lock mutation, version selection, external
+materialization, cache scanning, fetch, CLI dispatch or host resolver
+installation.
+
+`TOOL001-F2D3` is now READY for the mechanical host detach/resolver +
+command-scoped preflight boundary.

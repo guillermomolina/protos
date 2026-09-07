@@ -1,0 +1,6 @@
+lock-format 1
+resolver-version 1
+resolution-input protos-resolution-input-v1 sha256:2e33681ade58b9badf5cc1d7dec012f36a7c47b5d2ddea698640dc9c63075ea4
+
+root workspace "root"
+workspace-member "libs/a" workspace "a-pkg"

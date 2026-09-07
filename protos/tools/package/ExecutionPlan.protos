@@ -1,0 +1,261 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Root: import("self:ResolutionRoot")
+LockFile: import("self:LockFile")
+Input: import("self:ResolutionInput")
+Names: import("self:RuntimeNames")
+
+fail: () => {
+    Error().signal()
+}
+
+workspaceRef: (packageId) => {
+    {
+        kind: "workspace"
+        packageId: packageId
+    }
+}
+
+workspaceRefMatches: (ref, packageId) => {
+    matches: ref.kind == "workspace"
+    matches.ifTrue(() => {
+        matches = ref.packageId == packageId
+    })
+    matches
+}
+
+packageAt: (packages, location) => {
+    found: null
+
+    packages.each((package) => {
+        (package.location == location).ifTrue(() => {
+            found = package
+        })
+    })
+
+    (found === null).ifTrue(() => {
+        fail()
+    })
+
+    found
+}
+
+copyExports: (manifest) => {
+    result: Map()
+
+    manifest.exports.each((publicName, internalName) => {
+        Names.requireLogicalName(publicName)
+        Names.requireLogicalName(internalName)
+        result.atPut(publicName, internalName)
+    })
+
+    result
+}
+
+lockMemberAt: (lock, declaration) => {
+    found: null
+
+    lock.workspaceMembers.each((member) => {
+        (member.declaration == declaration).ifTrue(() => {
+            found = member
+        })
+    })
+
+    found
+}
+
+lockDependencyAt: (lock, declaringPackageId, alias) => {
+    found: null
+
+    lock.dependencies.each((dependency) => {
+        workspaceRefMatches(
+            dependency.declaring,
+            declaringPackageId
+        ).ifTrue(() => {
+            (dependency.alias == alias).ifTrue(() => {
+                found = dependency
+            })
+        })
+    })
+
+    found
+}
+
+countLockDependencies: (lock, declaringPackageId) => {
+    count: 0
+
+    lock.dependencies.each((dependency) => {
+        workspaceRefMatches(
+            dependency.declaring,
+            declaringPackageId
+        ).ifTrue(() => {
+            count = count + 1
+        })
+    })
+
+    count
+}
+
+validatePackageDependencies: (lock, package) => {
+    currentDependencies: package.projected.dependencies
+
+    (countLockDependencies(lock, package.packageId) == currentDependencies.size()).ifFalse(() => {
+        fail()
+    })
+
+    planDependencies: Array()
+
+    currentDependencies.each((dependency) => {
+        Names.requireAlias(dependency.alias)
+
+        (dependency.kind == "path").ifFalse(() => {
+            fail()
+        })
+
+        locked:
+            lockDependencyAt(
+                lock,
+                package.packageId,
+                dependency.alias
+            )
+
+        (locked === null).ifTrue(() => {
+            fail()
+        })
+
+        workspaceRefMatches(
+            locked.target,
+            dependency.targetPackageId
+        ).ifFalse(() => {
+            fail()
+        })
+
+        planDependencies =
+            Array(
+                ...planDependencies,
+                {
+                    declaring: workspaceRef(package.packageId)
+                    alias: dependency.alias
+                    target: workspaceRef(dependency.targetPackageId)
+                }
+            )
+    })
+
+    planDependencies
+}
+
+build: (projectTreeFilesystem) => {
+    state: Root.assembleState(projectTreeFilesystem)
+    resolutionRoot: state.resolutionRoot
+    lock: LockFile.load(projectTreeFilesystem)
+
+    Input.matchesHeader(resolutionRoot, lock.header).ifFalse(() => {
+        fail()
+    })
+
+    (lock.registryNodes.size() == 0).ifFalse(() => {
+        fail()
+    })
+    (lock.gitNodes.size() == 0).ifFalse(() => {
+        fail()
+    })
+
+    workspaceRefMatches(
+        lock.root,
+        resolutionRoot.root.packageId
+    ).ifFalse(() => {
+        fail()
+    })
+
+    (lock.workspaceMembers.size() == resolutionRoot.members.size()).ifFalse(() => {
+        fail()
+    })
+
+    resolutionRoot.members.each((member) => {
+        locked: lockMemberAt(lock, member.location)
+
+        (locked === null).ifTrue(() => {
+            fail()
+        })
+
+        workspaceRefMatches(
+            locked.ref,
+            member.packageId
+        ).ifFalse(() => {
+            fail()
+        })
+    })
+
+    rootPackage: packageAt(state.packages, "")
+    planPackages:
+        Array(
+            {
+                ref: workspaceRef(rootPackage.packageId)
+                location: ""
+                exports: copyExports(rootPackage.manifest)
+            }
+        )
+
+    lock.workspaceMembers.each((lockedMember) => {
+        package:
+            packageAt(
+                state.packages,
+                lockedMember.declaration
+            )
+
+        (package.packageId == lockedMember.ref.packageId).ifFalse(() => {
+            fail()
+        })
+
+        planPackages =
+            Array(
+                ...planPackages,
+                {
+                    ref: workspaceRef(package.packageId)
+                    location: package.location
+                    exports: copyExports(package.manifest)
+                }
+            )
+    })
+
+    planDependencies: Array()
+    state.packages.each((package) => {
+        packageDependencies:
+            validatePackageDependencies(
+                lock,
+                package
+            )
+
+        packageDependencies.each((dependency) => {
+            planDependencies =
+                Array(
+                    ...planDependencies,
+                    dependency
+                )
+        })
+    })
+
+    (planDependencies.size() == lock.dependencies.size()).ifFalse(() => {
+        fail()
+    })
+
+    {
+        generation: 1
+        root: workspaceRef(resolutionRoot.root.packageId)
+        packages: planPackages
+        dependencies: planDependencies
+    }
+}

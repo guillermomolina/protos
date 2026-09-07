@@ -313,7 +313,7 @@ projectManifest: (
     }
 }
 
-assemble: (projectTreeFilesystem) => {
+assembleState: (projectTreeFilesystem) => {
     rootManifest:
         Schema.parse(
             readTextAt(projectTreeFilesystem, rootManifestPath())
@@ -395,9 +395,52 @@ assemble: (projectTreeFilesystem) => {
             )
     })
 
-    {
+    resolutionRoot: {
         languageCompatibility: "0.1"
         root: projectedRoot
         members: projectedMembers
     }
+
+    packages:
+        Array(
+            {
+                location: ""
+                packageId: rootPackageId
+                manifest: rootManifest
+                projected: projectedRoot
+            }
+        )
+
+    rawMembers.each((member) => {
+        projected: null
+        projectedMembers.each((candidate) => {
+            (candidate.location == member.location).ifTrue(() => {
+                projected = candidate.manifest
+            })
+        })
+
+        (projected === null).ifTrue(() => {
+            fail()
+        })
+
+        packages =
+            Array(
+                ...packages,
+                {
+                    location: member.location
+                    packageId: member.packageId
+                    manifest: member.manifest
+                    projected: projected
+                }
+            )
+    })
+
+    {
+        resolutionRoot: resolutionRoot
+        packages: packages
+    }
+}
+
+assemble: (projectTreeFilesystem) => {
+    assembleState(projectTreeFilesystem).resolutionRoot
 }

@@ -1,0 +1,8 @@
+root-only	root-only.protos	true
+workspace	workspace.protos	true
+stale	stale-error.protos	error
+invalid-export	invalid-export-error.protos	error
+member-mismatch	member-mismatch-error.protos	error
+external-node	external-node-error.protos	error
+missing-edge	missing-edge-error.protos	error
+registry-dependency	registry-dependency-error.protos	error
