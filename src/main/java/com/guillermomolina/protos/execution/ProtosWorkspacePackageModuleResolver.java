@@ -31,13 +31,20 @@ import java.util.Optional;
 public final class ProtosWorkspacePackageModuleResolver implements ProtosModuleResolver {
     private static final String SELF_PREFIX = "self:";
     private static final String DEP_PREFIX = "dep:";
+    private static final String STD_PREFIX = "std:";
 
     private final ProtosWorkspacePackageDirectoryIndex directoryIndex;
     private final ProtosWorkspacePackageSourceLookup sourceLookup;
     private final Map<String, Map<String, String>> dependencyTargetsByDeclaringPackageId;
+    private final ProtosModuleResolver standardLibraryResolver;
 
     public ProtosWorkspacePackageModuleResolver(
             Path projectRoot, ProtosPackageExecutionPlan plan) throws IOException {
+        this(projectRoot, plan, ProtosModuleResolver.rejecting());
+    }
+
+    public ProtosWorkspacePackageModuleResolver(
+            Path projectRoot, ProtosPackageExecutionPlan plan, ProtosModuleResolver standardLibraryResolver) throws IOException {
         Objects.requireNonNull(projectRoot, "projectRoot");
         Objects.requireNonNull(plan, "plan");
 
@@ -46,6 +53,7 @@ public final class ProtosWorkspacePackageModuleResolver implements ProtosModuleR
         this.directoryIndex = ProtosWorkspacePackageDirectoryIndex.bind(projectIndex);
         this.sourceLookup = ProtosWorkspacePackageSourceLookup.bind(directoryIndex);
         this.dependencyTargetsByDeclaringPackageId = indexDependencies(plan);
+        this.standardLibraryResolver = Objects.requireNonNull(standardLibraryResolver, "standardLibraryResolver");
     }
 
     /** Returns the exact root-package entry identity without inventing an ambient self import. */
@@ -69,16 +77,34 @@ public final class ProtosWorkspacePackageModuleResolver implements ProtosModuleR
         if (exactSpecifier.startsWith(DEP_PREFIX)) {
             return resolveDependency(exactSpecifier, importingModule);
         }
+        if (exactSpecifier.startsWith(STD_PREFIX)) {
+            return resolveStandard(exactSpecifier, importingModule);
+        }
         throw new IOException("unsupported workspace package module specifier");
     }
 
     @Override
     public String loadSource(ProtosModuleKey key) throws IOException {
         Objects.requireNonNull(key, "key");
+        if (key.canonicalId().startsWith(STD_PREFIX)) {
+            try { return standardLibraryResolver.loadSource(key); }
+            catch (IOException e) { throw e; }
+            catch (Exception e) { throw new IOException("standard-library source loading failed", e); }
+        }
         ProtosWorkspacePackageModuleKey.Address address =
                 ProtosWorkspacePackageModuleKey.decode(key);
         Path source = sourceLookup.requireSource(address.packageId(), address.logicalModule());
         return Files.readString(source, StandardCharsets.UTF_8);
+    }
+
+    private ProtosModuleKey resolveStandard(
+            String exactSpecifier, Optional<ProtosModuleKey> importingModule) throws IOException {
+        try {
+            ProtosModuleKey key = Objects.requireNonNull(standardLibraryResolver.resolve(exactSpecifier, importingModule), "standard-library resolver returned null ModuleKey");
+            if (!key.canonicalId().startsWith(STD_PREFIX)) throw new IOException("standard-library resolver returned a foreign ModuleKey");
+            return key;
+        } catch (IOException e) { throw e; }
+        catch (Exception e) { throw new IOException("standard-library resolution failed", e); }
     }
 
     private ProtosModuleKey resolveSelf(

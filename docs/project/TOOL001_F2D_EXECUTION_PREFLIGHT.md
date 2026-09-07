@@ -1,6 +1,6 @@
 # TOOL001-F2D — Workspace Execution Preflight and PackageExecutionPlan
 
-Status: **IN_PROGRESS through CLOSED F2D3B2B dep: edge/export routing**
+Status: **IN_PROGRESS through CLOSED F2D3B exact workspace package-backed resolver**
 Nature: non-normative Package Tool / host-integration design
 Design checkpoint: 2026-09-07
 
@@ -35,7 +35,7 @@ F2D1     plan ABI + runtime-name/preflight contract               CLOSED
 F2D2     pure workspace execution-state + plan construction       CLOSED
 F2D3     mechanical host handoff + workspace run parent           IN_PROGRESS
 F2D3A    immutable host DTO + defensive plan detach               CLOSED
-F2D3B    exact workspace package-backed module resolver           IN_PROGRESS
+F2D3B    exact workspace package-backed module resolver           CLOSED
 F2D3B1    package identity + source mechanism                     CLOSED
 F2D3B1A   canonical workspace ModuleKey codec                     CLOSED
 F2D3B1B   physical source mechanism parent                        CLOSED
@@ -45,11 +45,11 @@ F2D3B1B2A  exact direct-child directory lookup                    CLOSED
 F2D3B1B2B  confined canonical member-location traversal           CLOSED
 F2D3B1B2C  immutable package -> physical-directory binding        CLOSED
 F2D3B1B3   logical module -> exact regular .protos source         CLOSED
-F2D3B2    resolver routing                                        IN_PROGRESS
+F2D3B2    resolver routing                                        CLOSED
 F2D3B2A  self: routing                                            CLOSED
 F2D3B2B  dep: edge/export routing                                 CLOSED
-F2D3B2C  std: delegation + resolver closure                       READY
-F2D3C    command preflight + tool/application authority split     BLOCKED_BY_DEPENDENCIES
+F2D3B2C  std: delegation + resolver closure                       CLOSED
+F2D3C    command preflight + tool/application authority split     READY
 ```
 
 F2D is bounded to workspace-only execution. Closing it will not claim external
@@ -860,4 +860,21 @@ TOOL001-F2D3B2B  CLOSED: YES
 TOOL001-F2D3B2C  READY: YES
 TOOL001-F2D3B     CLOSED: NO
 TOOL001-F2D3C     CLOSED: NO
+```
+
+## F2D3B2C closure — Standard Library delegation and resolver closure
+
+B2C completes the workspace resolver without absorbing Standard Library policy. Exact `std:` specifiers are delegated unchanged, with the importing ModuleKey context, to one explicitly selected Standard Library resolver. Successful delegated keys must remain in the `std:` domain and source loading for those keys delegates back to the same resolver.
+
+Workspace keys remain owned by B1A/B1B3. Bare/other specifiers and foreign keys fail closed. The two-argument constructor remains package-only with a rejecting Standard Library delegate; F2D3C owns selection/installation of the complete three-argument resolver during command-scoped preflight.
+
+After publication:
+
+```text
+TOOL001-F2D3B2   CLOSED: YES
+TOOL001-F2D3B2C  CLOSED: YES
+TOOL001-F2D3B     CLOSED: YES
+TOOL001-F2D3C     READY: YES
+TOOL001-F2D3      CLOSED: NO
+TOOL001-F2D       CLOSED: NO
 ```

@@ -1,3 +1,8 @@
+## 0.2.239-SNAPSHOT
+
+- Close `TOOL001-F2D3B2C — std: delegation + resolver closure`, parent B2 and parent F2D3B. Exact `std:` specifiers and `std:` ModuleKeys delegate to one explicitly selected Standard Library resolver; workspace keys remain PackageId + internal logical-module identities and bare/foreign spellings fail closed.
+- Keep the two-argument resolver constructor package-only with a rejecting standard delegate so B2C does not silently select distribution authority before F2D3C. Add real-Protos std-import focal coverage plus B2A/B2B/B1B3 regressions. No normative specification, native-boundary or CLI/application-authority change. `TOOL001-F2D3C` becomes READY.
+
 ## 0.2.238-SNAPSHOT
 
 - Close `DIST001-E4A — exact first-prerelease selection freeze`. After the published I023/B007 closure, persist the explicitly authorized exact release basis `3c23eaaccecbdcc7c2bcd86bc30c445403cfb047` / `0.2.236-SNAPSHOT` -> `0.2.236`, future tag `v0.2.236`, and specification revision `0.1.382` in a machine-readable E4 selection record. Further decompose E4 into E4A selection, E4B detached candidate materialization, E4C archive/envelope/audit preparation, and E4D immutable full validation. E4B becomes READY. Candidate source revision remains unmaterialized and release publication remains explicitly unauthorized; no implementation, normative specification, implementation version, runtime contract, workflow, license term, Git tag, GitHub Release, or release asset changes.

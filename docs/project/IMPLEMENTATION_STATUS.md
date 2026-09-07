@@ -883,7 +883,7 @@ forward.
 | TOOL001-F2D2 | pure workspace execution-state + plan construction | CLOSED | `SAME_COMMIT` | ResolutionRoot single-pass execution state + RuntimeNames + canonical non-stale workspace lock reconciliation produce fresh inert PackageExecutionPlanV1. |
 | TOOL001-F2D3 | mechanical host resolver handoff + command-scoped workspace preflight | IN_PROGRESS | TOOL001-F2D3A published | Decomposed after implementation audit: A detach CLOSED, B resolver READY, C command/authority boundary dependency-gated. |
 | TOOL001-F2D3A | immutable host DTO + defensive plan detach | CLOSED | `SAME_COMMIT` | Mechanical ABI boundary only: exact shape/domain/location/edge validation and recursive immutable copy. |
-| TOOL001-F2D3B | exact workspace package-backed module resolver | IN_PROGRESS | TOOL001-F2D3B1/F2D3B2A/F2D3B2B published | Package identity/source + self:/dep: routing CLOSED; std: delegation/final resolver closure READY. |
+| TOOL001-F2D3B | exact workspace package-backed module resolver | CLOSED | `SAME_COMMIT` | B1 identity/source plus B2 self:/dep:/std: routing complete the workspace resolver. |
 | TOOL001-F2D3B1 | package identity + source mechanism | CLOSED | `SAME_COMMIT` | Canonical workspace ModuleKey identity plus exact package-directory and confined logical-source mapping complete B1. |
 | TOOL001-F2D3B1A | canonical workspace ModuleKey codec | CLOSED | `SAME_COMMIT` | Workspace-domain canonical ModuleKey codec over exact PackageId + internal logical module; host-only and filesystem-free. |
 | TOOL001-F2D3B1B | physical source mechanism | CLOSED | `SAME_COMMIT` | Root/index, exact member-directory binding and logical-module -> exact regular confined `.protos` mapping complete B1B. |
@@ -893,11 +893,11 @@ forward.
 | TOOL001-F2D3B1B2B | confined canonical member-location traversal | CLOSED | `SAME_COMMIT` | Canonical multi-component traversal; every selected real directory must remain under the real project root, so only in-root symlinks survive. |
 | TOOL001-F2D3B1B2C | immutable package -> physical-directory binding | CLOSED | `SAME_COMMIT` | Immutable exact PackageId/location -> PackageNode + real-directory bindings over the closed B1B1/B1B2B mechanics. |
 | TOOL001-F2D3B1B3 | logical module -> exact regular `.protos` source | CLOSED | `SAME_COMMIT` | Portable logical names map by exact spelling to one case-unambiguous regular real `.protos` source confined beneath the selected package root. |
-| TOOL001-F2D3B2 | resolver routing | IN_PROGRESS | TOOL001-F2D3B2A/F2D3B2B published | self: and exact dependency edge/export routing CLOSED; std: delegation + final closure READY. |
+| TOOL001-F2D3B2 | resolver routing | CLOSED | `SAME_COMMIT` | self:/dep:/std: routing complete; unsupported spellings fail closed. |
 | TOOL001-F2D3B2A | self: routing | CLOSED | `SAME_COMMIT` | Explicit root entry key plus importer-relative self: resolution over exact plan PackageId and B1B3 source; Protos-source import execution covered. |
 | TOOL001-F2D3B2B | dep: edge/export routing | CLOSED | `SAME_COMMIT` | Importer PackageId + exact alias selects one detached target edge; exact target export selects the internal logical module, with no physical/internal-name bypass. |
-| TOOL001-F2D3B2C | std: delegation + resolver closure | READY | — | Delegate std: unchanged, reject unsupported spellings and close B2/B only after self:/dep: remain intact. |
-| TOOL001-F2D3C | command-scoped workspace preflight + authority separation | BLOCKED_BY_DEPENDENCIES | TOOL001-F2D3B | Wire workspace run only after resolver is independently closed. |
+| TOOL001-F2D3B2C | std: delegation + resolver closure | CLOSED | `SAME_COMMIT` | Exact std: resolution/source loading delegates to the explicitly selected Standard Library resolver. |
+| TOOL001-F2D3C | command-scoped workspace preflight + authority separation | READY | — | Resolver is closed; command preflight + tool/application authority separation may now wire it. |
 
 
 | TOOL001-F2B1 | per-manifest semantic resolution-input projection design | CLOSED | `SAME_COMMIT` | Resolver-affecting field matrix, semantic normalization ownership, deterministic ordering and fail-closed unresolved-owner rule frozen. |
