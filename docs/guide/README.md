@@ -28,12 +28,12 @@ than duplicating large source examples that can drift independently.
 
 1. [Bindings, contexts, and object state](01-bindings-contexts-and-state.md)
 2. [Objects, delegation, and composition](02-objects-delegation-and-composition.md)
+3. [Closures, methods, and receivers](03-closures-methods-and-receivers.md)
 
 ## Planned progression
 
 Future chapters should cover, as the guide grows:
 
-- Closures, methods, `this`, `context`, and `super`;
 - control flow through ordinary protocols;
 - values, identity, equality, and collections;
 - modules and imports;
