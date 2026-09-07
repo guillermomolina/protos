@@ -1,0 +1,96 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Version: import("self:ReleaseVersion")
+Constraint: import("self:DependencyConstraint")
+Input: import("self:ResolutionInput")
+
+manifest: (packageId, versionText, compatibility, dependencies) => {
+    {
+        packageId: packageId
+        version: Version.parse(versionText)
+        compatibility: compatibility
+        dependencies: dependencies
+    }
+}
+
+member: (location, packageId, manifestValue) => {
+    {
+        location: location
+        packageId: packageId
+        manifest: manifestValue
+    }
+}
+
+registryConstraint: Constraint.parse("<2.0.0\t>=1.0.0")
+
+rootDependencies: Array(
+    {
+        alias: "reg"
+        kind: "registry"
+        authority: "public"
+        packageId: "pkg"
+        constraint: registryConstraint
+    },
+    {
+        alias: "git"
+        kind: "git"
+        repository: "https://example.invalid/repo.git"
+        revision: "abc123"
+    }
+)
+
+aDependencies: Array(
+    {
+        alias: "rootdep"
+        kind: "path"
+        targetLocation: ""
+        targetPackageId: "root"
+    }
+)
+
+root:
+    {
+        languageCompatibility: "0.1"
+        root: manifest("root", "1.2.3", "0.1", rootDependencies)
+        members: Array(
+            member(
+                "libs/z",
+                "z-pkg",
+                manifest("z-pkg", "3.0.0", "0.1", Array())
+            ),
+            member(
+                "libs/a",
+                "a-pkg",
+                manifest("a-pkg", "0.1.0", null, aDependencies)
+            )
+        )
+    }
+
+expected:
+    "protos-resolution-input-v1\n" +
+    "language \"0.1\"\n" +
+    "manifest root \"root\" \"1.2.3\" compatibility \"0.1\"\n" +
+    "dependency root \"git\" git \"https://example.invalid/repo.git\" \"abc123\"\n" +
+    "dependency root \"reg\" registry \"public\" \"pkg\" constraint interval >= \"1.0.0\" < \"2.0.0\"\n" +
+    "manifest member \"libs/a\" \"a-pkg\" \"0.1.0\" compatibility none\n" +
+    "dependency member \"libs/a\" \"rootdep\" path root \"root\"\n" +
+    "manifest member \"libs/z\" \"z-pkg\" \"3.0.0\" compatibility \"0.1\"\n"
+
+digest: Input.digest(root)
+ok: Input.text(root) == expected
+(digest.hex == "71131b4e01d5c5fe6e4a7c8f8ecca39f90f323e0d060f8bddc08662edc96802b").ifFalse(() => { ok = false })
+(Encoding.UTF8.decode(Input.bytes(root)) == expected).ifFalse(() => { ok = false })
+ok

@@ -74,19 +74,19 @@ its relation to any legacy Slice 3 terminology that remains useful for continuit
 | TOOL001-E | local/offline version selection policy | CLOSED | `SAME_COMMIT` | E1 fresh highest-satisfying selection plus E2 retained exact-version preference are published as pure local version policy over already-known candidates. Discovery, full eligibility, graph resolution and physical lock work remain separate. |
 | TOOL001-E1 | fresh highest-satisfying ReleaseVersion selection | CLOSED | `SAME_COMMIT` | `self:FreshVersionSelection.select/selectText` filters already-known ReleaseVersion candidates through closed D2 constraint semantics and selects the highest satisfying candidate by D1 precedence; no-match fails closed. |
 | TOOL001-E2 | retained exact-version preference | CLOSED | `SAME_COMMIT` | `self:RetainedVersionSelection.select/selectText` preserves an available exact retained ReleaseVersion while it still satisfies D2; otherwise it delegates to E1 fresh selection. No physical lockfile or package-identity policy is implied. |
-| TOOL001-F | canonical physical lockfile v1 | IN_PROGRESS | TOOL001-F1/F2A/F2B1/F2B2 + LIB006 published | Format/I/O/semantic input CLOSED; reusable SHA-256 prerequisite satisfied and F2B3 digest/stale comparison READY. |
+| TOOL001-F | canonical physical lockfile v1 | IN_PROGRESS | TOOL001-F1/F2A/F2B published | Format/parser/writer, physical I/O and semantic resolution-input/stale detection CLOSED; later lock consumption/update integration requires fresh audit. |
 | TOOL001-F1A | canonical lock header grammar | CLOSED | `SAME_COMMIT` | Exact three-line v1 header grammar and canonical lexical rules are frozen without implementing a parser/writer or choosing body node/edge syntax. |
 | TOOL001-F1B | canonical lock body node/edge grammar | CLOSED | `SAME_COMMIT` | F1B1 scalar/reference, F1B2 root/workspace and F1B3 external-node/dependency/final ordering decisions freeze the complete canonical body grammar for lock-format 1. |
 | TOOL001-F1B1 | canonical scalar strings + typed node references | CLOSED | `SAME_COMMIT` | Body variable values use one deterministic quoted UTF-8 scalar encoding; node references are source-kind-tagged tuples over quoted identity components, avoiding delimiter-composed PackageId keys while PackageId textual encoding remains open. |
 | TOOL001-F1B2 | root/workspace representation | CLOSED | `SAME_COMMIT` | Exactly one root workspace-ref identifies the root manifest package; additional workspace member declarations map their exact manifest string to a workspace-ref in canonical order, without introducing virtual-workspace identity or path semantics. |
 | TOOL001-F1B3 | external node blocks + dependency edges + F1B closure | CLOSED | `SAME_COMMIT` | Flat registry/git external records, mandatory ContentIdentity, registry locator+authority, Git fetch provenance, exact alias->target edges, total body ordering/separation and omission of ArtifactDigest close F1B. |
 | TOOL001-F1C | canonical lock parser/writer + round-trip conformance | CLOSED | `SAME_COMMIT` | F1C1 lexical primitives, F1C2 structural body model and F1C3 canonical total writer/rejection/round-trip conformance complete the pure in-memory lock-format-1 parser/writer boundary. |
-| TOOL001-F2 | physical lock integration | IN_PROGRESS | TOOL001-F2A/F2B1/F2B2 + LIB006 published | Confined I/O and complete semantic root-input model CLOSED; F2B3 digest/stale comparison READY. |
+| TOOL001-F2 | physical lock integration | IN_PROGRESS | TOOL001-F2A/F2B published | Confined I/O and semantic digest/stale comparison CLOSED; later normal-execution consumption and resolve/update policy are not allocated by F2B3. |
 | TOOL001-F2A | confined `protos.lock` read/publish substrate | CLOSED | `SAME_COMMIT` | `self:LockFile.load` reads canonical `protos.lock`; `publish` validates/canonicalizes before `.protos.lock.stage -> protos.lock` MetadataPublication. No resolver/stale/CLI behavior. |
-| TOOL001-F2B | semantic resolution-input + stale detection | IN_PROGRESS | TOOL001-F2B1/F2B2 + LIB006 published | Projection/root semantic model CLOSED; `std:crypto/SHA256` prerequisite satisfied; F2B3 READY. |
+| TOOL001-F2B | semantic resolution-input + stale detection | CLOSED | `SAME_COMMIT` | F2B1/F2B2 semantic model plus F2B3 canonical byte serialization, SHA-256 digest/header identity and read-only stale comparison complete F2B. |
 | TOOL001-F2B1 | per-manifest semantic resolution-input projection design | CLOSED | `SAME_COMMIT` | Freeze resolver-affecting manifest inclusion/exclusion, D2 semantic constraint normalization, deterministic scalar/order owners and fail-closed unresolved-owner rule. No digest implementation. |
 | TOOL001-F2B2 | resolution-root/workspace semantic assembly design | CLOSED | `SAME_COMMIT` | Root-only workspace expansion, canonical member paths, confined in-root path-dependency targeting, exact LanguageCompatibilityId and deterministic root/member assembly frozen. |
-| TOOL001-F2B3 | resolution-input digest + stale comparison | READY | — | `std:crypto/SHA256` is now reusable; implement canonical resolution-input bytes, digest/header value and stale comparison only. |
+| TOOL001-F2B3 | resolution-input digest + stale comparison | CLOSED | `SAME_COMMIT` | Canonical ResolutionRootV1 bytes + std:crypto/SHA256 + lowercase hex + header match and LockFile.isStale, with no resolver/update side effects. |
 
 
 | TOOL001-F1C1 | lock lexical/header/qstring/node-ref primitives | CLOSED | `SAME_COMMIT` | `self:LockSyntax` owns strict canonical line tokens, qstring parse/render, lock-format-1 header parse/render and typed workspace/registry/git node refs; registry versions reuse D1 ReleaseVersion. |
@@ -128,14 +128,15 @@ member paths, in-root path-dependency targeting, exact language-compatibility
 identity and deterministic root/member assembly now complete the semantic
 resolution-input model.
 
-`LIB006-B` is CLOSED and publishes reusable
-`std:crypto/SHA256.digest(Bytes)` in ordinary Protos. `TOOL001-F2B3` is therefore
-READY for canonical semantic-input serialization, digest/header construction
-and stale comparison.
+`TOOL001-F2B` is CLOSED. F2B1/F2B2 define the semantic input and F2B3 now
+publishes canonical `protos-resolution-input-v1` bytes, SHA-256/lowercase-hex
+header identity and read-only canonical-lock stale comparison.
 
-F2B3 remains a stale-input comparison slice only. F2 still does not own package
-resolution, ContentIdentity tree hashing, registry/network/store behavior,
-normal-execution lock consumption or update command policy.
+`TOOL001-F2` remains IN_PROGRESS. F2B3 deliberately does not allocate the next
+slice: normal-execution lock consumption and explicit resolve/update behavior
+require a fresh post-F2B audit. F2 still does not own package candidate
+discovery/resolution, ContentIdentity tree hashing or registry/network/store
+behavior.
 
 A separate non-committing note in `docs/design/PACKAGE_TOOL_ARCHITECTURE.md`
 records future reusable-library extraction opportunities for the schema-neutral

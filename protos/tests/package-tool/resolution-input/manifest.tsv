@@ -1,0 +1,12 @@
+canonical-root.protos	true
+canonical-complete.protos	true
+constraint-equivalence.protos	true
+compatibility-affects-digest.protos	true
+path-member-target.protos	true
+matches-header.protos	true
+duplicate-member-path-error.protos	error
+duplicate-package-id-error.protos	error
+compatibility-mismatch-error.protos	error
+duplicate-dependency-alias-error.protos	error
+undeclared-path-target-error.protos	error
+invalid-member-location-error.protos	error

@@ -1150,3 +1150,140 @@ source fallback. It does not select a cryptographic implementation.
 comparison, but executable hashing remains dependency-gated until the repository
 has an explicit suitable hashing capability/owner. Package Tool code must not
 silently acquire host/JVM hashing authority merely to finish F2.
+
+## TOOL001-F2B3 — canonical resolution-input bytes and stale comparison
+
+F2B3 closes the digest layer over the semantic `ResolutionRootV1` frozen by
+F2B1/F2B2. It does not discover or assemble that model from the filesystem; a
+later integration layer supplies an already-semantic root.
+
+The executable semantic model consumed by `self:ResolutionInput` is:
+
+```text
+{
+    languageCompatibility: String
+
+    root: {
+        packageId: PackageId
+        version: ReleaseVersion
+        compatibility: null | LanguageCompatibilityId
+        dependencies: Array(DependencyProjection)
+    }
+
+    members: Array({
+        location: canonical root-relative member String
+        packageId: PackageId
+        manifest: {
+            packageId: same PackageId
+            version: ReleaseVersion
+            compatibility: null | LanguageCompatibilityId
+            dependencies: Array(DependencyProjection)
+        }
+    })
+}
+```
+
+DependencyProjection is one of:
+
+```text
+registry:
+{
+    alias
+    kind = "registry"
+    authority
+    packageId
+    constraint = parsed D2 DependencyConstraint
+}
+
+git:
+{
+    alias
+    kind = "git"
+    repository
+    revision
+}
+
+path:
+{
+    alias
+    kind = "path"
+    targetLocation = "" | canonical member location
+    targetPackageId
+}
+```
+
+Path dependency source spelling is already gone at this layer; target location
+and PackageId are the normalized F2B2 semantic relation.
+
+### Canonical byte stream
+
+The digest domain is an exact UTF-8 text stream with LF line endings and exactly
+one final LF. There is no BOM and no final blank line.
+
+Variable Strings use F1B1 canonical qstring encoding. Records are:
+
+```text
+protos-resolution-input-v1
+language <qstring LanguageCompatibilityId>
+manifest root <qstring PackageId> <qstring ReleaseVersion> compatibility <none|qstring>
+dependency root <qstring alias> registry <qstring authority> <qstring PackageId> constraint <constraint>
+dependency root <qstring alias> git <qstring repository> <qstring revision>
+dependency root <qstring alias> path root <qstring target-PackageId>
+dependency root <qstring alias> path member <qstring member-location> <qstring target-PackageId>
+manifest member <qstring member-location> <qstring PackageId> <qstring ReleaseVersion> compatibility <none|qstring>
+dependency member <qstring declaring-location> ...
+```
+
+Root is emitted first. Root dependencies are ordered by canonical alias qstring
+UTF-8 bytes. Members are ordered by canonical member-location qstring UTF-8
+bytes, PackageId qstring as defensive tie-break; each member record is
+immediately followed by its dependencies ordered by alias.
+
+Constraint encoding uses D2 semantic fields, never `constraint.text`:
+
+```text
+exact <qstring version>
+caret <qstring lower-version>
+interval <">"|">="> <qstring lower-version> <"<"|"<="> <qstring upper-version>
+```
+
+Interval source comparison order and accepted separator spelling therefore do not
+affect bytes.
+
+The stream includes the active language compatibility context, package
+PackageIds/versions, package compatibility presence/value, root member
+location/PackageId relation, and all normalized dependency requirements. It
+excludes raw TOML, exports, package locator, source ordering, host paths,
+filesystem traversal, lock output, timestamps and caches as frozen by F2B1/F2B2.
+
+### Digest and freshness
+
+`self:ResolutionInput.digest(root)` returns:
+
+```text
+{
+    method: "protos-resolution-input-v1"
+    algorithm: "sha256"
+    hex: <64 lowercase hex digits>
+}
+```
+
+over `std:crypto/SHA256.digest(ResolutionInput.bytes(root))`.
+
+`matchesHeader(root, header)` requires:
+
+```text
+lock-format == 1
+resolver-version == 1
+resolution method == protos-resolution-input-v1
+digest algorithm == sha256
+digest hex == current digest hex
+```
+
+`self:LockFile.isStale(filesystem, root)` loads the canonical `protos.lock` via
+the existing F2A path and returns the Boolean negation of `matchesHeader`.
+
+Missing/unreadable/non-canonical lockfiles continue to fail through ordinary
+F2A load behavior. F2B3 does not reinterpret those failures as `stale`.
+
+F2B3 performs no dependency resolution and never rewrites `protos.lock`.

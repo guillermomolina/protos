@@ -1279,3 +1279,24 @@ The semantic model is now closed, but executable digest computation remains
 blocked on an explicitly owned hashing capability. F2B3 must define canonical
 projection bytes and stale comparison without introducing a Package-Tool-only
 host/JVM crypto shortcut.
+
+## TOOL001-F2B3 implementation closure — resolution-input digest
+
+F2B3 publishes the canonical `protos-resolution-input-v1` byte stream defined in
+`PACKAGE_VERSION_RESOLUTION.md`, hashes it through reusable
+`std:crypto/SHA256`, lowercase-hex encodes the 32 digest bytes and compares that
+value with the canonical lock header.
+
+The physical helper is intentionally read-only:
+
+```text
+LockFile.isStale(filesystem, semanticResolutionRoot) -> Boolean
+```
+
+It loads the existing canonical lock and compares only the resolver/header input
+identity. It does not resolve, discover candidates, fetch, update, publish or
+repair a stale/missing lock.
+
+`TOOL001-F2B` closes with this slice. `TOOL001-F2` remains open because normal
+execution lock consumption and explicit resolve/update policy are separate
+integration concerns and require a fresh continuation audit.

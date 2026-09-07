@@ -1,0 +1,478 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Syntax: import("self:LockSyntax")
+Version: import("self:ReleaseVersion")
+Arrays: import("std:collections/Array")
+SHA256: import("std:crypto/SHA256")
+
+fail: () => {
+    Error().signal()
+}
+
+nonEmptyString: (text) => {
+    encoded: Encoding.UTF8.encode(text)
+    (encoded.size() == 0).ifTrue(() => {
+        fail()
+    })
+    text
+}
+
+bytesLess: (left, right) => {
+    index: 0
+    decided: false
+    result: false
+    rightSize: right.size()
+
+    left.each((leftOctet) => {
+        decided.ifFalse(() => {
+            (index < rightSize).ifTrue(() => {
+                rightOctet: right.at(index)
+
+                (leftOctet < rightOctet).ifTrue(() => {
+                    result = true
+                    decided = true
+                })
+
+                decided.ifFalse(() => {
+                    (leftOctet > rightOctet).ifTrue(() => {
+                        result = false
+                        decided = true
+                    })
+                })
+            })
+        })
+
+        index = index + 1
+    })
+
+    decided.ifFalse(() => {
+        result = left.size() < right.size()
+    })
+
+    result
+}
+
+qstringLess: (left, right) => {
+    bytesLess(
+        Encoding.UTF8.encode(Syntax.renderQstring(left)),
+        Encoding.UTF8.encode(Syntax.renderQstring(right))
+    )
+}
+
+versionText: (version) => {
+    text: version.text
+    canonical: Version.parse(text)
+
+    (Version.compare(canonical, version) == 0).ifFalse(() => {
+        fail()
+    })
+
+    text
+}
+
+validateMemberLocation: (location) => {
+    source: Encoding.UTF8.encode(location)
+    (source.size() == 0).ifTrue(() => {
+        fail()
+    })
+
+    component: Encoding.UTF8.encode("")
+
+    validateComponent: () => {
+        (component.size() == 0).ifTrue(() => {
+            fail()
+        })
+
+        text: Encoding.UTF8.decode(component)
+        (text == ".").ifTrue(() => {
+            fail()
+        })
+        (text == "..").ifTrue(() => {
+            fail()
+        })
+    }
+
+    source.each((octet) => {
+        (octet == 47).ifTrue(() => {
+            validateComponent()
+            component = Encoding.UTF8.encode("")
+        })
+
+        (octet == 47).ifFalse(() => {
+            component.add(octet)
+        })
+    })
+
+    validateComponent()
+    location
+}
+
+compatibilityText: (compatibility, active) => {
+    result: "none"
+
+    (compatibility === null).ifFalse(() => {
+        value: nonEmptyString(compatibility)
+        (value == active).ifFalse(() => {
+            fail()
+        })
+        result = Syntax.renderQstring(value)
+    })
+
+    result
+}
+
+memberLess: (left, right) => {
+    result: false
+    decided: false
+
+    (left.location == right.location).ifFalse(() => {
+        result = qstringLess(left.location, right.location)
+        decided = true
+    })
+
+    decided.ifFalse(() => {
+        (left.packageId == right.packageId).ifFalse(() => {
+            result = qstringLess(left.packageId, right.packageId)
+        })
+    })
+
+    result
+}
+
+dependencyLess: (left, right) => {
+    qstringLess(left.alias, right.alias)
+}
+
+constraintText: (constraint) => {
+    result: null
+
+    (constraint.kind == "exact").ifTrue(() => {
+        result =
+            "exact " +
+            Syntax.renderQstring(versionText(constraint.version))
+    })
+
+    (constraint.kind == "caret").ifTrue(() => {
+        result =
+            "caret " +
+            Syntax.renderQstring(versionText(constraint.lower))
+    })
+
+    (constraint.kind == "interval").ifTrue(() => {
+        constraint.lower.lower.ifFalse(() => {
+            fail()
+        })
+        constraint.upper.lower.ifTrue(() => {
+            fail()
+        })
+
+        lowerOperator: ">"
+        constraint.lower.inclusive.ifTrue(() => {
+            lowerOperator = ">="
+        })
+
+        upperOperator: "<"
+        constraint.upper.inclusive.ifTrue(() => {
+            upperOperator = "<="
+        })
+
+        result =
+            "interval " +
+            lowerOperator + " " +
+            Syntax.renderQstring(versionText(constraint.lower.version)) + " " +
+            upperOperator + " " +
+            Syntax.renderQstring(versionText(constraint.upper.version))
+    })
+
+    (result === null).ifTrue(() => {
+        fail()
+    })
+
+    result
+}
+
+renderDependency: (
+    declaringKind,
+    declaringLocation,
+    dependency,
+    rootPackageId,
+    memberPackageIds
+) => {
+    alias: dependency.alias
+    // qstring validation is also the exact scalar encoding owner.
+    aliasText: Syntax.renderQstring(alias)
+
+    prefix: "dependency root " + aliasText + " "
+    (declaringKind == "member").ifTrue(() => {
+        prefix =
+            "dependency member " +
+            Syntax.renderQstring(declaringLocation) + " " +
+            aliasText + " "
+    })
+
+    result: null
+
+    (dependency.kind == "registry").ifTrue(() => {
+        authority: nonEmptyString(dependency.authority)
+        packageId: nonEmptyString(dependency.packageId)
+
+        result =
+            prefix +
+            "registry " +
+            Syntax.renderQstring(authority) + " " +
+            Syntax.renderQstring(packageId) + " constraint " +
+            constraintText(dependency.constraint) + "\n"
+    })
+
+    (dependency.kind == "git").ifTrue(() => {
+        repository: nonEmptyString(dependency.repository)
+        revision: nonEmptyString(dependency.revision)
+
+        result =
+            prefix +
+            "git " +
+            Syntax.renderQstring(repository) + " " +
+            Syntax.renderQstring(revision) + "\n"
+    })
+
+    (dependency.kind == "path").ifTrue(() => {
+        targetLocation: dependency.targetLocation
+        targetPackageId: nonEmptyString(dependency.targetPackageId)
+
+        (targetLocation == "").ifTrue(() => {
+            (targetPackageId == rootPackageId).ifFalse(() => {
+                fail()
+            })
+
+            result =
+                prefix +
+                "path root " +
+                Syntax.renderQstring(targetPackageId) + "\n"
+        })
+
+        (targetLocation == "").ifFalse(() => {
+            validateMemberLocation(targetLocation)
+            memberPackageIds.containsKey(targetLocation).ifFalse(() => {
+                fail()
+            })
+            (memberPackageIds.at(targetLocation) == targetPackageId).ifFalse(() => {
+                fail()
+            })
+
+            result =
+                prefix +
+                "path member " +
+                Syntax.renderQstring(targetLocation) + " " +
+                Syntax.renderQstring(targetPackageId) + "\n"
+        })
+    })
+
+    (result === null).ifTrue(() => {
+        fail()
+    })
+
+    result
+}
+
+renderDependencies: (
+    declaringKind,
+    declaringLocation,
+    dependencies,
+    rootPackageId,
+    memberPackageIds
+) => {
+    seenAliases: Map()
+
+    dependencies.each((dependency) => {
+        alias: dependency.alias
+        ignoredAliasValidation: Syntax.renderQstring(alias)
+
+        seenAliases.containsKey(alias).ifTrue(() => {
+            fail()
+        })
+        seenAliases.atPut(alias, true)
+    })
+
+    ordered: Arrays.sort(dependencies, dependencyLess)
+    result: ""
+
+    ordered.each((dependency) => {
+        result =
+            result +
+            renderDependency(
+                declaringKind,
+                declaringLocation,
+                dependency,
+                rootPackageId,
+                memberPackageIds
+            )
+    })
+
+    result
+}
+
+manifestLine: (kind, location, manifest, activeCompatibility) => {
+    packageId: nonEmptyString(manifest.packageId)
+    release: versionText(manifest.version)
+    compatibility:
+        compatibilityText(manifest.compatibility, activeCompatibility)
+
+    result:
+        "manifest root " +
+        Syntax.renderQstring(packageId) + " " +
+        Syntax.renderQstring(release) +
+        " compatibility " + compatibility + "\n"
+
+    (kind == "member").ifTrue(() => {
+        result =
+            "manifest member " +
+            Syntax.renderQstring(location) + " " +
+            Syntax.renderQstring(packageId) + " " +
+            Syntax.renderQstring(release) +
+            " compatibility " + compatibility + "\n"
+    })
+
+    result
+}
+
+text: (resolutionRoot) => {
+    activeCompatibility:
+        nonEmptyString(resolutionRoot.languageCompatibility)
+
+    rootManifest: resolutionRoot.root
+    rootPackageId: nonEmptyString(rootManifest.packageId)
+
+    members: resolutionRoot.members
+    seenLocations: Map()
+    seenPackageIds: Map()
+    seenPackageIds.atPut(rootPackageId, true)
+    memberPackageIds: Map()
+
+    members.each((member) => {
+        location: validateMemberLocation(member.location)
+        packageId: nonEmptyString(member.packageId)
+
+        (member.manifest.packageId == packageId).ifFalse(() => {
+            fail()
+        })
+
+        seenLocations.containsKey(location).ifTrue(() => {
+            fail()
+        })
+        seenLocations.atPut(location, true)
+
+        seenPackageIds.containsKey(packageId).ifTrue(() => {
+            fail()
+        })
+        seenPackageIds.atPut(packageId, true)
+
+        memberPackageIds.atPut(location, packageId)
+    })
+
+    orderedMembers: Arrays.sort(members, memberLess)
+
+    result:
+        "protos-resolution-input-v1\n" +
+        "language " +
+        Syntax.renderQstring(activeCompatibility) + "\n" +
+        manifestLine("root", "", rootManifest, activeCompatibility)
+
+    result =
+        result +
+        renderDependencies(
+            "root",
+            "",
+            rootManifest.dependencies,
+            rootPackageId,
+            memberPackageIds
+        )
+
+    orderedMembers.each((member) => {
+        result =
+            result +
+            manifestLine(
+                "member",
+                member.location,
+                member.manifest,
+                activeCompatibility
+            )
+
+        result =
+            result +
+            renderDependencies(
+                "member",
+                member.location,
+                member.manifest.dependencies,
+                rootPackageId,
+                memberPackageIds
+            )
+    })
+
+    result
+}
+
+bytes: (resolutionRoot) => {
+    Encoding.UTF8.encode(text(resolutionRoot))
+}
+
+lowerHex: (digestBytes) => {
+    digits: Array(
+        "0", "1", "2", "3",
+        "4", "5", "6", "7",
+        "8", "9", "a", "b",
+        "c", "d", "e", "f"
+    )
+
+    result: ""
+    digestBytes.each((octet) => {
+        result =
+            result +
+            digits.at(octet.div(16)) +
+            digits.at(octet.mod(16))
+    })
+
+    result
+}
+
+digest: (resolutionRoot) => {
+    digestBytes: SHA256.digest(bytes(resolutionRoot))
+
+    {
+        method: "protos-resolution-input-v1"
+        algorithm: "sha256"
+        hex: lowerHex(digestBytes)
+    }
+}
+
+matchesHeader: (resolutionRoot, header) => {
+    current: digest(resolutionRoot)
+    matches: header.lockFormat == 1
+
+    matches.ifTrue(() => {
+        matches = header.resolverVersion == 1
+    })
+    matches.ifTrue(() => {
+        matches = header.resolutionMethod == current.method
+    })
+    matches.ifTrue(() => {
+        matches = header.digestAlgorithm == current.algorithm
+    })
+    matches.ifTrue(() => {
+        matches = header.digestHex == current.hex
+    })
+
+    matches
+}

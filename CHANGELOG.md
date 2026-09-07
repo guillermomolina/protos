@@ -1,3 +1,9 @@
+## 0.2.223-SNAPSHOT
+
+- Close `TOOL001-F2B3 — resolution-input digest + stale comparison` and parent `TOOL001-F2B`. Publish ordinary bundled-Protos `self:ResolutionInput` over the F2B1/F2B2 semantic `ResolutionRootV1`: exact UTF-8/LF domain-separated canonical bytes, F1B1 qstring scalar encoding, root-first/member-location ordering, alias-ordered dependency projections, D2 semantic constraint normalization and validated root/member/path/compatibility invariants. Raw TOML, source ordering, host paths, exports, package locator, caches and lock output remain excluded.
+- Hash canonical semantic bytes only through closed reusable `std:crypto/SHA256`, render exactly 64 lowercase hexadecimal digits and expose the lock-header identity `protos-resolution-input-v1 sha256:<digest>`. `matchesHeader` also requires lock-format 1 and resolver-version 1. Extend F2A `self:LockFile` with read-only `isStale(filesystem, semanticRoot)`: canonical load failures remain ordinary failures; a successfully loaded but mismatching resolver/header input returns stale. No resolve/discovery/fetch/update/publication side effect occurs.
+- Add Protos-owned conformance for exact canonical bytes/digest, member/dependency ordering, D2 interval spelling equivalence, compatibility participation, normalized path-target identity, header match/mismatch and fail-closed duplicate/member/path/compatibility invariants, plus a confined-Filesystem stale/fresh integration harness. `TOOL001-F2` and parent F remain open for later normal-execution lock consumption and explicit resolve/update policy after fresh audit.
+
 ## 0.2.222-SNAPSHOT
 
 - Publish `TOOL002-E2A2B — real Package/TOML failed-fixture integration`. The exact-source facility now supplies its selected execution Prelude to the E2A2A detached snapshot for completed and failed observations.

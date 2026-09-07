@@ -15,6 +15,7 @@
 
 Document: import("self:LockDocument")
 Publication: import("self:MetadataPublication")
+Input: import("self:ResolutionInput")
 
 readText: (projectFilesystem) => {
     file: projectFilesystem.open(Path.relative().child("protos.lock")).value()
@@ -56,4 +57,15 @@ publish: (projectFilesystem, model) => {
     )
 
     model
+}
+
+isStale: (projectFilesystem, resolutionRoot) => {
+    lock: load(projectFilesystem)
+    stale: true
+
+    Input.matchesHeader(resolutionRoot, lock.header).ifTrue(() => {
+        stale = false
+    })
+
+    stale
 }
