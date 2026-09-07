@@ -1,0 +1,26 @@
+bodyCalls: 0
+first: Error.handle(
+    () => {
+        (() => null).while(() => {
+            bodyCalls = bodyCalls + 1
+        })
+        null
+    },
+    (caught) => caught
+)
+second: Error.handle(
+    () => {
+        (() => null).while(() => {
+            bodyCalls = bodyCalls + 1
+        })
+        null
+    },
+    (caught) => caught
+)
+(first.parent() === Error).and() {
+    (second.parent() === Error).and() {
+        (first !== second).and() {
+            bodyCalls == 0
+        }
+    }
+}

@@ -605,3 +605,7 @@ control/while-body-result-ignored.protos	boolean	true
 control/while-eager-body-validation.protos	error	-
 control/while-invalid-receiver.protos	error	-
 control/while-arity-error.protos	error	-
+control/while-invalid-condition-null.protos	boolean	true
+control/while-invalid-condition-integer.protos	boolean	true
+control/while-invalid-condition-object.protos	boolean	true
+control/while-invalid-condition-future.protos	boolean	true

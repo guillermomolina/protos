@@ -1,0 +1,17 @@
+bodyCalls: 0
+handled: false
+Error.handle(
+    () => {
+        (() => 42).while(() => {
+            bodyCalls = bodyCalls + 1
+        })
+        null
+    },
+    (caught) => {
+        handled = caught.parent() === Error
+        null
+    }
+)
+handled.and() {
+    bodyCalls == 0
+}
