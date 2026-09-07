@@ -811,7 +811,7 @@ record distributable Standard Library functionality.
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
 | TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | D/E/F1 CLOSED; F2 now includes lock I/O, stale/root assembly and F2D1 workspace execution-plan contract. F2D2 pure plan construction READY. |
-| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D/E CLOSED; TOOL002-F IN_PROGRESS through F1, F2 READY, then F3/F4 and G-J dependency-ordered. |
+| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D/E CLOSED; TOOL002-F IN_PROGRESS through F2, F3 READY, then F4 and G-J dependency-ordered. |
 
 ### TOOL001 — Package Tool
 
@@ -911,10 +911,10 @@ the initial TOOL002 closure.
 | TOOL002-E2B2 | CLOSED | `0.2.226-SNAPSHOT` / `SAME_COMMIT`; public `Main.protos` executes the full retained Package/TOML plan through generic `Runner` + `packageExecution`; Protos evidence requires selected==plan cases, skipped==0, passed==plan cases and complete result cardinality. |
 | TOOL002-E3 | CLOSED | Legacy Java TOML corpus owner removed: no JUnit path parses the retained manifest, interprets its `true`/`error` expectations or directly executes every fixture. Existing Java tests retain host-mechanical coverage only; no implementation-version change. |
 | TOOL002-E4 | CLOSED | Documentation/governance-only final E reconciliation; no executable, normative or implementation-version change. Parent TOOL002-E is CLOSED and TOOL002-F is READY. |
-| TOOL002-F | IN_PROGRESS | F1 child-local resolved Future mechanism CLOSED; F2 failed/cancelled mechanism READY; F3 observation identity and F4 activation/Java cutover remain dependency-ordered. |
+| TOOL002-F | IN_PROGRESS | F1 resolved-value + F2 failed/cancelled child-local Future mechanisms CLOSED; F3 observation-error identity READY; F4 activation/Java cutover dependency-gated. |
 | TOOL002-F1 | CLOSED | `0.2.228-SNAPSHOT` / `SAME_COMMIT`; bundled Protos can evaluate `future-integer/null/boolean` wholly inside one fresh child Process through ordinary `Future.value()` suspension/resume and return only Boolean evidence. Public `runSimple` selection is unchanged. |
-| TOOL002-F2 | READY | Add exact child-local failed/cancelled terminal semantics for `future-error`, `future-error-parent`, and `future-cancelled`; distinguish stored failed Error identity from fresh cancellation-observation Errors without host state inspection. |
-| TOOL002-F3 | BLOCKED_BY_DEPENDENCIES | TOOL002-F2; migrate `future-observation-error-identity` with exact local-slot, stored/fresh identity and Error-parent behavior entirely inside the child Process. |
+| TOOL002-F2 | CLOSED | `0.2.229-SNAPSHOT` / `SAME_COMMIT`; repeated child-local `Future.value()` observations distinguish FAILED stored-Error identity from CANCELLED fresh `Cancelled` occurrences and preserve exact immediate Error-parent policy; not yet selected by `runSimple`. |
+| TOOL002-F3 | READY | F1/F2 CLOSED; migrate retained `future-observation-error-identity` child-locally with exact object-slot contract, stored/fresh Error identity and immediate parent behavior. |
 | TOOL002-F4 | BLOCKED_BY_DEPENDENCIES | TOOL002-F3; activate all `future-*` expectations in generic `runSimple`, prove complete main-manifest ownership, retire Java Future expectation policy and close F; make G READY. |
 | TOOL002-G | BLOCKED_BY_DEPENDENCIES | TOOL002-F; migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |
 | TOOL002-H | BLOCKED_BY_DEPENDENCIES | TOOL002-G; bounded parallel scheduling of independent fresh Processes with independent output capture and deterministic reporting. |

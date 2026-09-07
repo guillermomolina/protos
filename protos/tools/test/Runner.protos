@@ -102,6 +102,14 @@ isFutureResolvedExpectation: (spec) => {
     supported
 }
 
+isFutureTerminalExpectation: (spec) => {
+    kind: Manifest.caseExpectation(spec)
+    supported: kind === "future-error"
+    (kind === "future-error-parent").ifTrue(() => { supported = true })
+    (kind === "future-cancelled").ifTrue(() => { supported = true })
+    supported
+}
+
 isDExpectation: (spec) => {
     supported: isSimpleExpectation(spec)
     isClosureErrorParentFreshExpectation(spec).ifTrue(() => {
@@ -521,6 +529,148 @@ evaluateFutureResolved: (spec, source, executor) => {
     })
 
     wrappedSource: futureResolvedWrapperSource(
+        source,
+        Manifest.caseExpectation(spec),
+        Manifest.caseExpected(spec)
+    )
+    observation: executor(wrappedSource)
+
+    passed: observation.state === "completed"
+    passed.ifTrue(() => {
+        passed = observation.error === null
+    })
+    passed.ifTrue(() => {
+        passed = observation.value === true
+    })
+
+    resultTuple(passed, observation)
+}
+
+
+futureTerminalWrapperSource: (source, kind, expected) => {
+    modeText: ""
+    expectedParentExpression: "Error"
+
+    (kind === "future-error").ifTrue(() => {
+        (expected === "-").ifFalse(() => { policyError() })
+        modeText = "0"
+    })
+
+    (kind === "future-error-parent").ifTrue(() => {
+        // Validate before using the retained prototype name as source text.
+        standardErrorPrototype(expected)
+        expectedParentExpression = expected
+        modeText = "1"
+    })
+
+    (kind === "future-cancelled").ifTrue(() => {
+        (expected === "-").ifFalse(() => { policyError() })
+        expectedParentExpression = "Cancelled"
+        modeText = "2"
+    })
+
+    (modeText == "").ifTrue(() => { policyError() })
+
+    // Core Future semantics make repeated value() observations sufficient to
+    // distinguish terminal FAILED from CANCELLED without any Test-only state
+    // reflection. FAILED re-signals the exact stored Error object; CANCELLED
+    // creates a fresh standard Cancelled occurrence for each observation.
+    prefix:
+        "((candidate, mode, expectedParent) => {\n" +
+        "    futureCandidate: false\n" +
+        "    Error.handle(\n" +
+        "        () => {\n" +
+        "            futureCandidate = candidate.parent() === Future\n" +
+        "            null\n" +
+        "        },\n" +
+        "        (error) => {\n" +
+        "            futureCandidate = false\n" +
+        "            null\n" +
+        "        }\n" +
+        "    )\n" +
+        "\n" +
+        "    first: null\n" +
+        "    second: null\n" +
+        "    firstCaught: false\n" +
+        "    secondCaught: false\n" +
+        "\n" +
+        "    futureCandidate.ifTrue(() => {\n" +
+        "        Error.handle(\n" +
+        "            () => {\n" +
+        "                candidate.value()\n" +
+        "                null\n" +
+        "            },\n" +
+        "            (error) => {\n" +
+        "                first = error\n" +
+        "                firstCaught = true\n" +
+        "                null\n" +
+        "            }\n" +
+        "        )\n" +
+        "\n" +
+        "        Error.handle(\n" +
+        "            () => {\n" +
+        "                candidate.value()\n" +
+        "                null\n" +
+        "            },\n" +
+        "            (error) => {\n" +
+        "                second = error\n" +
+        "                secondCaught = true\n" +
+        "                null\n" +
+        "            }\n" +
+        "        )\n" +
+        "    })\n" +
+        "\n" +
+        "    passed: futureCandidate && firstCaught && secondCaught\n" +
+        "\n" +
+        "    (mode == 0).ifTrue(() => {\n" +
+        "        passed.ifTrue(() => {\n" +
+        "            passed = first === second\n" +
+        "        })\n" +
+        "    })\n" +
+        "\n" +
+        "    (mode == 1).ifTrue(() => {\n" +
+        "        passed.ifTrue(() => {\n" +
+        "            passed = first === second\n" +
+        "        })\n" +
+        "        passed.ifTrue(() => {\n" +
+        "            passed = first.parent() === expectedParent\n" +
+        "        })\n" +
+        "        passed.ifTrue(() => {\n" +
+        "            passed = second.parent() === expectedParent\n" +
+        "        })\n" +
+        "    })\n" +
+        "\n" +
+        "    (mode == 2).ifTrue(() => {\n" +
+        "        passed.ifTrue(() => {\n" +
+        "            passed = (first === second) === false\n" +
+        "        })\n" +
+        "        passed.ifTrue(() => {\n" +
+        "            passed = first.parent() === expectedParent\n" +
+        "        })\n" +
+        "        passed.ifTrue(() => {\n" +
+        "            passed = second.parent() === expectedParent\n" +
+        "        })\n" +
+        "    })\n" +
+        "\n" +
+        "    passed\n" +
+        "})((() => {\n"
+
+    suffix:
+        "\n})(), " +
+        modeText +
+        ", " +
+        expectedParentExpression +
+        ")\n"
+
+    prefix + source + suffix
+}
+
+evaluateFutureTerminal: (spec, source, executor) => {
+    isFutureTerminalExpectation(spec).ifFalse(() => {
+        policyError()
+    })
+
+    wrappedSource: futureTerminalWrapperSource(
         source,
         Manifest.caseExpectation(spec),
         Manifest.caseExpected(spec)
