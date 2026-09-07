@@ -934,3 +934,15 @@ TOOL001-F2D3C3  BLOCKED_BY_DEPENDENCIES: TOOL001-F2D3C2
 TOOL001-F2D3     CLOSED: NO
 TOOL001-F2D      CLOSED: NO
 ```
+
+## F2D3C2 decomposition refinement and F2D3C2A closure
+
+C2 is further decomposed because canonical initial-module semantics, Process authority provisioning and end-to-end Package Tool/application isolation are independently testable boundaries:
+
+```text
+F2D3C2A  canonical initial-module execution primitive             CLOSED
+F2D3C2B  detached plan -> fresh application Process wiring        READY
+F2D3C2C  C1->C2 authority-isolation integration + C2 closure      BLOCKED_BY_DEPENDENCIES
+```
+
+C2A adds `ProtosCanonicalInitialModuleExecution`, a package-neutral mechanism over an already-created RootActor initial bootstrap activation. It caches that bootstrap module context under the exact canonical ModuleKey before source execution and runs it through `ProtosRootTaskExecution`. Normal completion marks READY; failure/cancellation removes the exact record. C2A does not create/terminate a Process, select packages, provision authority or touch CLI.

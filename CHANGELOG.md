@@ -1,3 +1,8 @@
+## 0.2.243-SNAPSHOT
+
+- Subdivide `TOOL001-F2D3C2` into C2A canonical initial-module execution, C2B detached-plan application Process wiring, and C2C C1->C2 authority-isolation integration/closure; close C2A only.
+- Add package-neutral `ProtosCanonicalInitialModuleExecution` with cache-before-execute canonical identity, RootTask execution, READY transition and failed/cancelled cache eviction. No normative specification or native-boundary change.
+
 ## 0.2.242-SNAPSHOT
 
 - Publish `TOOL002-F3C1B1 — stored observation expectation recognition`. Bundled `Runner.protos` adds only `isFutureStoredObservationExpectation(spec)`, recognizing exactly `future-observation-error-identity / stored:Error`. A Protos-owned fixture proves exact recognition and rejection of `fresh:Cancelled`, a wrong expected token, and another Future kind.

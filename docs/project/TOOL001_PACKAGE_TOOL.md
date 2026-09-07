@@ -106,7 +106,10 @@ its relation to any legacy Slice 3 terminology that remains useful for continuit
 | TOOL001-F2D3B2C | std: delegation + resolver closure | CLOSED | `SAME_COMMIT` | Exact std: resolution/source loading delegates to the explicitly selected Standard Library resolver. |
 | TOOL001-F2D3C | command-scoped workspace preflight + authority separation | IN_PROGRESS | — | Subdivided into C1 read-only Package Tool preflight, C2 separately-authorized application Process execution, and C3 public workspace-run wiring/closure. |
 | TOOL001-F2D3C1 | read-only Package Tool preflight -> detached plan | CLOSED | `SAME_COMMIT` | Fresh tool Process receives only confined read-only projectTreeFilesystem; ExecutionPlan.build result is detached before tool Process termination. |
-| TOOL001-F2D3C2 | detached plan -> separately-authorized application Process | READY | — | Consume C1 DTO plus closed F2D3B resolver; application Process must receive no Package Tool Filesystem/activation authority. |
+| TOOL001-F2D3C2 | detached plan -> separately-authorized application Process | IN_PROGRESS | — | Subdivided into C2A canonical initial-module execution, C2B detached-plan application Process wiring, and C2C C1->C2 authority-isolation integration/closure. |
+| TOOL001-F2D3C2A | TOOL001 F2D3 application execution: canonical initial-module execution primitive | CLOSED | `SAME_COMMIT` | Cache the supplied RootActor bootstrap module context under one canonical ModuleKey before task execution; mark READY on completion and remove on failure/cancellation. No package/workspace/Process lifecycle policy. |
+| TOOL001-F2D3C2B | TOOL001 F2D3 application execution: detached plan -> fresh application Process wiring | READY | — | Compose C2A with the closed workspace resolver and explicit application bootstrap authority. |
+| TOOL001-F2D3C2C | TOOL001 F2D3 application execution: C1->C2 authority-isolation integration + closure | BLOCKED_BY_DEPENDENCIES | — | Depends on C2B; prove end-to-end Process separation/authority non-leak and close C2. |
 | TOOL001-F2D3C3 | public workspace-run wiring + F2D3/F2D closure | BLOCKED_BY_DEPENDENCIES | TOOL001-F2D3C2 | Wire the public driver only after the application execution boundary is independently closed. |
 
 
