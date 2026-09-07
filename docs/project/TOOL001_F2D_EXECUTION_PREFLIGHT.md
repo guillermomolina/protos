@@ -986,3 +986,42 @@ TOOL001-F2D3C2B  CLOSED
 TOOL001-F2D3C2C  READY
 TOOL001-F2D3C3   BLOCKED_BY_DEPENDENCIES: TOOL001-F2D3C2
 ```
+
+## F2D3C2C closure — C1 to C2 authority-isolation integration
+
+C2C adds no production mechanism. It closes C2 by composing the already-closed C1
+preflight and C2B application execution paths in one physical workspace.
+
+The successful focal first runs C1 against a confined copy of the published
+workspace execution-plan fixture and obtains only the detached
+`ProtosPackageExecutionPlan`. It then passes that DTO, the selected project root
+and independently supplied application bootstrap inputs to C2B. Real package
+source crosses the locked `dep:local/Public` route and returns the member's value,
+proving that application resolution is reconstructed from the detached plan rather
+than from a surviving Package Tool object.
+
+The observed Package Tool Process and application Process are distinct
+incarnations and are both TERMINATED when their respective boundaries return.
+Neither owns a default Filesystem. A second real application entry evaluates the
+name `projectTreeFilesystem`; it fails because that C1-only read-only capability
+was an activation-local authority of the Package Tool and never crosses the
+detachment boundary.
+
+C2C therefore closes `TOOL001-F2D3C2`. It does not add driver syntax, select a
+project from the current working directory, choose an application entry
+convention, add diagnostics or change production source. C3 remains the sole
+owner of public workspace-run wiring and final F2D3/F2D closure.
+
+After publication:
+
+```text
+TOOL001-F2D3C1   CLOSED
+TOOL001-F2D3C2   CLOSED
+TOOL001-F2D3C2A  CLOSED
+TOOL001-F2D3C2B  CLOSED
+TOOL001-F2D3C2C  CLOSED
+TOOL001-F2D3C3   READY
+TOOL001-F2D3C     IN_PROGRESS
+TOOL001-F2D3      CLOSED: NO
+TOOL001-F2D        CLOSED: NO
+```
