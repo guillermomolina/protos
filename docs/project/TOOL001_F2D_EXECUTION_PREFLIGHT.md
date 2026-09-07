@@ -1,6 +1,6 @@
 # TOOL001-F2D — Workspace Execution Preflight and PackageExecutionPlan
 
-Status: **IN_PROGRESS through CLOSED F2D3B2A self: routing**
+Status: **IN_PROGRESS through CLOSED F2D3B2B dep: edge/export routing**
 Nature: non-normative Package Tool / host-integration design
 Design checkpoint: 2026-09-07
 
@@ -47,8 +47,8 @@ F2D3B1B2C  immutable package -> physical-directory binding        CLOSED
 F2D3B1B3   logical module -> exact regular .protos source         CLOSED
 F2D3B2    resolver routing                                        IN_PROGRESS
 F2D3B2A  self: routing                                            CLOSED
-F2D3B2B  dep: edge/export routing                                 READY
-F2D3B2C  std: delegation + resolver closure                       BLOCKED_BY_DEPENDENCIES
+F2D3B2B  dep: edge/export routing                                 CLOSED
+F2D3B2C  std: delegation + resolver closure                       READY
 F2D3C    command preflight + tool/application authority split     BLOCKED_BY_DEPENDENCIES
 ```
 
@@ -802,6 +802,62 @@ TOOL001-F2D3B2   IN_PROGRESS
 TOOL001-F2D3B2A  CLOSED: YES
 TOOL001-F2D3B2B  READY: YES
 TOOL001-F2D3B2C  BLOCKED_BY_DEPENDENCIES: TOOL001-F2D3B2B
+TOOL001-F2D3B     CLOSED: NO
+TOOL001-F2D3C     CLOSED: NO
+```
+
+## F2D3B2B closure — exact dependency edge/export routing
+
+B2B extends the same B2A package resolver; it does not introduce a parallel
+resolver or re-read package metadata. Construction indexes only the detached
+`PackageExecutionPlan.dependencies` relation after confirming every declaring
+and target PackageId belongs to the already-bound workspace package index. The
+index key is the exact pair `(declaring PackageId, alias)`. Duplicate aliases for
+one declaring package and targets outside the installed plan fail closed even
+when a host caller manually constructs the DTO instead of using the normal F2D3A
+adapter.
+
+For an executing workspace package module N,
+`dep:<alias>/<public-export-name>` first requires N's canonical B1A ModuleKey and
+therefore its exact PackageId. The first `/` separates the one-segment dependency
+alias from the public export logical name; the remaining public export may itself
+contain portable `/`-separated segments. Both are revalidated through the frozen
+runtime-name ABI.
+
+The resolver then follows exactly N's detached alias edge to target package T,
+looks up the public export String exactly in T's detached exports map, obtains
+that export's internal logical module name, revalidates it defensively, and asks
+B1B3 for that exact target-package source. The returned identity is exactly
+`T PackageId + internal logical module`. Dependency aliases, public export names,
+workspace locations and physical paths therefore remain lookup relations and do
+not enter ModuleKey identity.
+
+There is no fallback from a missing export to a physical/internal module name.
+Consequently even an existing `Hidden.protos` in T is unreachable through
+`dep:<alias>/Hidden` unless T explicitly exports the public name `Hidden`.
+Wrong-case aliases/exports, missing edges, malformed routes and attempts by a
+package to reuse another declaring package's alias fail closed. Once dependency
+resolution enters T, later `self:` imports naturally remain relative to T because
+the canonical returned ModuleKey carries T's PackageId.
+
+The focal is Protos-source behavior executed through Core import/module runtime.
+It proves a root dependency import through a public facade, target-local `self:`
+continuation, canonical identity convergence across different alias/export
+relations, export-bypass rejection and declaring-package edge ownership. Java
+remains only the host fixture/negative-boundary harness.
+
+B2B still does not delegate `std:` or close the resolver. B2C owns standard
+resolver composition, rejection of all remaining unsupported spellings and final
+B2/B closure.
+
+After publication:
+
+```text
+TOOL001-F2D3B1   CLOSED: YES
+TOOL001-F2D3B2   IN_PROGRESS
+TOOL001-F2D3B2A  CLOSED: YES
+TOOL001-F2D3B2B  CLOSED: YES
+TOOL001-F2D3B2C  READY: YES
 TOOL001-F2D3B     CLOSED: NO
 TOOL001-F2D3C     CLOSED: NO
 ```

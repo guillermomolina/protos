@@ -22,15 +22,19 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-/** Exact workspace package resolver, initially closed over importer-relative {@code self:}. */
+/** Exact workspace package resolver over the detached workspace execution plan. */
 public final class ProtosWorkspacePackageModuleResolver implements ProtosModuleResolver {
     private static final String SELF_PREFIX = "self:";
+    private static final String DEP_PREFIX = "dep:";
 
     private final ProtosWorkspacePackageDirectoryIndex directoryIndex;
     private final ProtosWorkspacePackageSourceLookup sourceLookup;
+    private final Map<String, Map<String, String>> dependencyTargetsByDeclaringPackageId;
 
     public ProtosWorkspacePackageModuleResolver(
             Path projectRoot, ProtosPackageExecutionPlan plan) throws IOException {
@@ -41,6 +45,7 @@ public final class ProtosWorkspacePackageModuleResolver implements ProtosModuleR
                 ProtosWorkspacePackageProjectIndex.bind(projectRoot, plan);
         this.directoryIndex = ProtosWorkspacePackageDirectoryIndex.bind(projectIndex);
         this.sourceLookup = ProtosWorkspacePackageSourceLookup.bind(directoryIndex);
+        this.dependencyTargetsByDeclaringPackageId = indexDependencies(plan);
     }
 
     /** Returns the exact root-package entry identity without inventing an ambient self import. */
@@ -58,20 +63,13 @@ public final class ProtosWorkspacePackageModuleResolver implements ProtosModuleR
         Objects.requireNonNull(exactSpecifier, "exactSpecifier");
         Objects.requireNonNull(importingModule, "importingModule");
 
-        if (!exactSpecifier.startsWith(SELF_PREFIX)) {
-            throw new IOException("unsupported workspace package module specifier");
+        if (exactSpecifier.startsWith(SELF_PREFIX)) {
+            return resolveSelf(exactSpecifier, importingModule);
         }
-        ProtosModuleKey importer =
-                importingModule.orElseThrow(
-                        () -> new IOException("self import requires an importing package module"));
-        ProtosWorkspacePackageModuleKey.Address importerAddress =
-                ProtosWorkspacePackageModuleKey.decode(importer);
-        directoryIndex.requirePackage(importerAddress.packageId());
-
-        String logicalModule = exactSpecifier.substring(SELF_PREFIX.length());
-        sourceLookup.requireSource(importerAddress.packageId(), logicalModule);
-        return ProtosWorkspacePackageModuleKey.encode(
-                importerAddress.packageId(), logicalModule);
+        if (exactSpecifier.startsWith(DEP_PREFIX)) {
+            return resolveDependency(exactSpecifier, importingModule);
+        }
+        throw new IOException("unsupported workspace package module specifier");
     }
 
     @Override
@@ -81,5 +79,91 @@ public final class ProtosWorkspacePackageModuleResolver implements ProtosModuleR
                 ProtosWorkspacePackageModuleKey.decode(key);
         Path source = sourceLookup.requireSource(address.packageId(), address.logicalModule());
         return Files.readString(source, StandardCharsets.UTF_8);
+    }
+
+    private ProtosModuleKey resolveSelf(
+            String exactSpecifier, Optional<ProtosModuleKey> importingModule)
+            throws IOException {
+        ProtosWorkspacePackageModuleKey.Address importer =
+                requireOwnedImporter(importingModule, "self import");
+        String logicalModule = exactSpecifier.substring(SELF_PREFIX.length());
+        sourceLookup.requireSource(importer.packageId(), logicalModule);
+        return ProtosWorkspacePackageModuleKey.encode(importer.packageId(), logicalModule);
+    }
+
+    private ProtosModuleKey resolveDependency(
+            String exactSpecifier, Optional<ProtosModuleKey> importingModule)
+            throws IOException {
+        ProtosWorkspacePackageModuleKey.Address importer =
+                requireOwnedImporter(importingModule, "dependency import");
+
+        String route = exactSpecifier.substring(DEP_PREFIX.length());
+        int separator = route.indexOf('/');
+        if (separator <= 0 || separator == route.length() - 1) {
+            throw new IOException("invalid workspace dependency module specifier");
+        }
+
+        String alias = ProtosPackageRuntimeNames.requireAlias(route.substring(0, separator));
+        String publicExport =
+                ProtosPackageRuntimeNames.requireLogicalName(route.substring(separator + 1));
+
+        Map<String, String> aliases =
+                dependencyTargetsByDeclaringPackageId.get(importer.packageId());
+        String targetPackageId = aliases == null ? null : aliases.get(alias);
+        if (targetPackageId == null) {
+            throw new IOException("workspace dependency alias is outside execution plan");
+        }
+
+        ProtosWorkspacePackageDirectoryIndex.PackageDirectory target =
+                directoryIndex.requirePackage(targetPackageId);
+        String internalLogicalModule = target.packageNode().exports().get(publicExport);
+        if (internalLogicalModule == null) {
+            throw new IOException("workspace dependency export is not visible");
+        }
+        internalLogicalModule =
+                ProtosPackageRuntimeNames.requireLogicalName(internalLogicalModule);
+
+        sourceLookup.requireSource(targetPackageId, internalLogicalModule);
+        return ProtosWorkspacePackageModuleKey.encode(
+                targetPackageId, internalLogicalModule);
+    }
+
+    private ProtosWorkspacePackageModuleKey.Address requireOwnedImporter(
+            Optional<ProtosModuleKey> importingModule, String operation)
+            throws IOException {
+        ProtosModuleKey importer =
+                importingModule.orElseThrow(
+                        () -> new IOException(operation + " requires an importing package module"));
+        ProtosWorkspacePackageModuleKey.Address address =
+                ProtosWorkspacePackageModuleKey.decode(importer);
+        directoryIndex.requirePackage(address.packageId());
+        return address;
+    }
+
+    private Map<String, Map<String, String>> indexDependencies(
+            ProtosPackageExecutionPlan plan) throws IOException {
+        LinkedHashMap<String, LinkedHashMap<String, String>> mutable =
+                new LinkedHashMap<>();
+
+        for (ProtosPackageExecutionPlan.DependencyEdge edge : plan.dependencies()) {
+            String declaringPackageId = edge.declaring().packageId();
+            String targetPackageId = edge.target().packageId();
+            directoryIndex.requirePackage(declaringPackageId);
+            directoryIndex.requirePackage(targetPackageId);
+            String alias = ProtosPackageRuntimeNames.requireAlias(edge.alias());
+
+            LinkedHashMap<String, String> aliases =
+                    mutable.computeIfAbsent(
+                            declaringPackageId, ignored -> new LinkedHashMap<>());
+            if (aliases.putIfAbsent(alias, targetPackageId) != null) {
+                throw new IOException("duplicate workspace dependency alias");
+            }
+        }
+
+        LinkedHashMap<String, Map<String, String>> immutable = new LinkedHashMap<>();
+        for (Map.Entry<String, LinkedHashMap<String, String>> entry : mutable.entrySet()) {
+            immutable.put(entry.getKey(), Map.copyOf(entry.getValue()));
+        }
+        return Map.copyOf(immutable);
     }
 }

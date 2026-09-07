@@ -90,7 +90,7 @@ its relation to any legacy Slice 3 terminology that remains useful for continuit
 | TOOL001-F2D2 | pure workspace execution-state + plan construction | CLOSED | `SAME_COMMIT` | Single-pass full ManifestV1 + ResolutionRootV1 state, runtime-name validation, exact lock/body reconciliation and inert plan projection implemented in Protos. |
 | TOOL001-F2D3 | mechanical host resolver handoff + command-scoped workspace preflight | IN_PROGRESS | TOOL001-F2D3A published | Host handoff split into DTO/detach, resolver, then command authority boundary. |
 | TOOL001-F2D3A | immutable host DTO + defensive plan detach | CLOSED | `SAME_COMMIT` | Validate exact generation-1 workspace plan shape and recursively detach ordinary Protos data into immutable host records/Lists/Maps; no resolver or CLI integration. |
-| TOOL001-F2D3B | exact workspace package-backed module resolver | IN_PROGRESS | TOOL001-F2D3B1/F2D3B2A published | Package identity/source + importer-relative self: routing CLOSED; dep: routing READY. |
+| TOOL001-F2D3B | exact workspace package-backed module resolver | IN_PROGRESS | TOOL001-F2D3B1/F2D3B2A/F2D3B2B published | Package identity/source + self:/dep: routing CLOSED; std:/resolver closure READY. |
 | TOOL001-F2D3B1 | package identity + source mechanism | CLOSED | `SAME_COMMIT` | Canonical workspace ModuleKey identity plus exact package-directory and confined logical-source mapping complete B1. |
 | TOOL001-F2D3B1A | canonical workspace ModuleKey codec | CLOSED | `SAME_COMMIT` | Host-only key identity = exact workspace PackageId + portable internal logical module, serialized in a workspace-specific canonical base64url domain with no paths/aliases/exports. |
 | TOOL001-F2D3B1B | physical source mechanism | CLOSED | `SAME_COMMIT` | Root/index, exact member-directory binding and exact regular confined `.protos` lookup complete B1B. |
@@ -100,10 +100,10 @@ its relation to any legacy Slice 3 terminology that remains useful for continuit
 | TOOL001-F2D3B1B2B | confined canonical member-location traversal | CLOSED | `SAME_COMMIT` | Split canonical non-root locations on `/`, traverse each exact child, resolve each selected directory, permit only in-root symlinks and return the final real directory. |
 | TOOL001-F2D3B1B2C | immutable package -> physical-directory binding | CLOSED | `SAME_COMMIT` | Apply B1B2B to every detached B1B1 package and index immutable PackageNode + real-directory bindings by exact PackageId/location. |
 | TOOL001-F2D3B1B3 | logical module -> exact regular `.protos` source | CLOSED | `SAME_COMMIT` | Validate portable logical names and map them by exact case-unambiguous spelling to one regular real `.protos` source confined to the package root. |
-| TOOL001-F2D3B2 | resolver routing | IN_PROGRESS | TOOL001-F2D3B2A published | self: routing CLOSED; dep: edge/export routing READY, std:/closure dependency-gated. |
+| TOOL001-F2D3B2 | resolver routing | IN_PROGRESS | TOOL001-F2D3B2A/F2D3B2B published | self: + exact dep edge/export routing CLOSED; std:/closure READY. |
 | TOOL001-F2D3B2A | self: routing | CLOSED | `SAME_COMMIT` | Root entry identity is explicit; self: resolves relative to the importing workspace PackageId, bypasses exports and uses exact B1B3 source. |
-| TOOL001-F2D3B2B | dep: edge/export routing | READY | — | Follow exact detached edge then target export without allowing direct target-internal module spelling. |
-| TOOL001-F2D3B2C | std: delegation + resolver closure | BLOCKED_BY_DEPENDENCIES | TOOL001-F2D3B2B | Delegate std: unchanged, reject other spellings and close F2D3B. |
+| TOOL001-F2D3B2B | dep: edge/export routing | CLOSED | `SAME_COMMIT` | Resolve only the importing package's exact detached alias edge, then the target's exact public export -> internal logical module; aliases/exports never enter ModuleKey identity. |
+| TOOL001-F2D3B2C | std: delegation + resolver closure | READY | — | Delegate std: to the selected standard resolver, preserve workspace-key loading and reject every other spelling before closing B2/B. |
 | TOOL001-F2D3C | command-scoped workspace preflight + authority separation | BLOCKED_BY_DEPENDENCIES | TOOL001-F2D3B | Invoke bundled Protos plan builder with read-only project authority, terminate tool domain after detach, then launch application with exact resolver and no leaked tool Filesystem. |
 
 
