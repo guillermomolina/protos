@@ -1,6 +1,6 @@
 # TOOL001-F2D — Workspace Execution Preflight and PackageExecutionPlan
 
-Status: **IN_PROGRESS through CLOSED F2D3B1B3 exact package source lookup**
+Status: **IN_PROGRESS through CLOSED F2D3B2A self: routing**
 Nature: non-normative Package Tool / host-integration design
 Design checkpoint: 2026-09-07
 
@@ -45,9 +45,9 @@ F2D3B1B2A  exact direct-child directory lookup                    CLOSED
 F2D3B1B2B  confined canonical member-location traversal           CLOSED
 F2D3B1B2C  immutable package -> physical-directory binding        CLOSED
 F2D3B1B3   logical module -> exact regular .protos source         CLOSED
-F2D3B2    resolver routing                                        READY
-F2D3B2A  self: routing                                            READY
-F2D3B2B  dep: edge/export routing                                 BLOCKED_BY_DEPENDENCIES
+F2D3B2    resolver routing                                        IN_PROGRESS
+F2D3B2A  self: routing                                            CLOSED
+F2D3B2B  dep: edge/export routing                                 READY
 F2D3B2C  std: delegation + resolver closure                       BLOCKED_BY_DEPENDENCIES
 F2D3C    command preflight + tool/application authority split     BLOCKED_BY_DEPENDENCIES
 ```
@@ -757,6 +757,50 @@ TOOL001-F2D3B1   CLOSED: YES
 TOOL001-F2D3B2   READY: YES
 TOOL001-F2D3B2A  READY: YES
 TOOL001-F2D3B2B  BLOCKED_BY_DEPENDENCIES: TOOL001-F2D3B2A
+TOOL001-F2D3B2C  BLOCKED_BY_DEPENDENCIES: TOOL001-F2D3B2B
+TOOL001-F2D3B     CLOSED: NO
+TOOL001-F2D3C     CLOSED: NO
+```
+
+## F2D3B2A closure — importer-relative `self:` routing
+
+B2A introduces the first package-backed `ProtosModuleResolver` behavior over the
+already-closed B1 representation/source mechanism. Construction consumes only
+the selected project root plus the already-detached immutable
+`ProtosPackageExecutionPlan`; it composes B1B1/B1B2/B1B3 mechanically and does
+not re-read manifests, lockfiles or package policy.
+
+Application bootstrap does not resolve an ambient `self:` with no package
+context. Instead `entryModule(logicalModule)` explicitly selects the plan root
+PackageId, validates that exact root-package source through B1B3 and emits the
+closed B1A canonical ModuleKey. This keeps root-entry selection distinct from
+ordinary importer-relative routing.
+
+For an executing package module N, `self:<logical-module>` requires the
+importing ModuleKey to decode in the workspace B1A domain and its exact PackageId
+to belong to the installed plan. The target logical name is then located only in
+that same PackageId through B1B3 and encoded with the same PackageId. The
+package's exports map is deliberately not consulted: F2D1 defines `self:` as
+direct access inside N.
+
+An absent importing ModuleKey, a foreign ModuleKey, or a workspace ModuleKey for
+a PackageId outside the installed plan fails closed. B2A also keeps `dep:`,
+`std:` and bare/other spellings unsupported; B2B and B2C own those later routing
+steps. `loadSource` accepts only canonical workspace keys belonging to the plan
+and reads the exact B1B3-confined source as UTF-8.
+
+The focal now uses real Protos source modules executed through the Core import
+and module-runtime path. It proves root and member `self:` imports, PackageId
+preservation and direct access to a non-exported internal member module. Java is
+only the host harness and negative-boundary assertion layer.
+
+After publication:
+
+```text
+TOOL001-F2D3B1   CLOSED: YES
+TOOL001-F2D3B2   IN_PROGRESS
+TOOL001-F2D3B2A  CLOSED: YES
+TOOL001-F2D3B2B  READY: YES
 TOOL001-F2D3B2C  BLOCKED_BY_DEPENDENCIES: TOOL001-F2D3B2B
 TOOL001-F2D3B     CLOSED: NO
 TOOL001-F2D3C     CLOSED: NO
