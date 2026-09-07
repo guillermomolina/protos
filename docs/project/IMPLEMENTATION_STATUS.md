@@ -672,7 +672,7 @@ record distributable Standard Library functionality.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | Bootstrap, confined Filesystem, metadata publication and canonical TOML C1-C4 are published; C5A/C5B are CLOSED and C5C compatibility/exports/workspace is READY. |
+| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | Bootstrap, confined Filesystem, metadata publication and canonical TOML C1-C4 are published; C5A/C5B/C5C are CLOSED and C5D dependencies/final schema-v1 closure is READY. |
 | TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C CLOSED; TOOL002-D IN_PROGRESS with D1/D2 CLOSED and D3 IN_PROGRESS; D3A1 source loading and D3A2 simple single-case expectation policy CLOSED at `0.2.189-SNAPSHOT`; D3A3 sequential integration READY. |
 
 ### TOOL001 — Package Tool
@@ -695,14 +695,14 @@ forward.
 | TOOL001-C4 | package-tool manifest Slice 3B2-B | CLOSED | `SAME_COMMIT` | Canonical TOML table model complete: ordinary headers/dotted/inline tables plus arrays-of-tables and ownership/conflict invariants. |
 | TOOL001-C4A | package-tool manifest Slice 3B2-B1 | CLOSED | `SAME_COMMIT` | Ordinary-Protos canonical table assembly for headers, dotted keys and inline-table equivalence with TOML duplicate/redefinition ownership checks. |
 | TOOL001-C4B | package-tool manifest Slice 3B2-B2 | CLOSED | `SAME_COMMIT` | TOML 1.0 arrays-of-tables, latest-element nesting and final table-model conformance. |
-| TOOL001-C5 | package-tool manifest Slice 3C | IN_PROGRESS | TOOL001-C5A/C5B published | Cost-aware schema-v1 parent: parser-scale prerequisite and mandatory root/package base CLOSED; C5C optional sections READY; C5D final dependencies/schema closure blocked by C5C. |
+| TOOL001-C5 | package-tool manifest Slice 3C | IN_PROGRESS | TOOL001-C5A/C5B/C5C published | Cost-aware schema-v1 parent: parser-scale prerequisite, mandatory root/package base and optional compatibility/exports/workspace sections CLOSED; C5D final dependencies/schema closure READY. |
 | TOOL001-C5A | package-tool manifest Slice 3C prerequisite | CLOSED | `SAME_COMMIT` | Remove manifest-scale linear stack growth from C3/C4 document traversal without changing TOML semantics; one long Protos regression. |
 | TOOL001-C5B | package-tool manifest Slice 3C1 | CLOSED | `SAME_COMMIT` | Stable base helper validates root names, exact manifest generation 1 and required package identity/version/optional locator using ordinary Protos data. |
-| TOOL001-C5C | package-tool manifest Slice 3C2 | READY | — | Compatibility, exports and workspace structural model over C5B. |
-| TOOL001-C5D | package-tool manifest Slice 3C3 | BLOCKED_BY_DEPENDENCIES | — | Dependency declaration forms and final schema-v1 closure after C5C. |
+| TOOL001-C5C | package-tool manifest Slice 3C2 | CLOSED | `SAME_COMMIT` | Optional compatibility, exports and workspace structural model over C5B, including fail-closed owned fields and duplicate-free workspace members; dependency declarations remain C5D. |
+| TOOL001-C5D | package-tool manifest Slice 3C3 | READY | — | Dependency declaration forms, complete ManifestV1 construction and final schema-v1 closure. |
 | TOOL001-C6 | package-tool manifest Slice 3D | BLOCKED_BY_DEPENDENCIES | — | Confined `protos.toml` read, UTF-8 decode, parse/validation and diagnostics after C5. |
 | TOOL001-C7 | package-tool manifest Slice 3 closure | BLOCKED_BY_DEPENDENCIES | — | Final cross-slice conformance and project/architecture closure after C6. |
-| TOOL001-C | legacy package-tool manifest Slice 3 parent | IN_PROGRESS | TOOL001-C1/C2/C3/C4/C5A/C5B published | C5C optional schema sections are READY; C5D, C6 project metadata read/diagnostics and C7 final closure remain dependency-ordered. |
+| TOOL001-C | legacy package-tool manifest Slice 3 parent | IN_PROGRESS | TOOL001-C1/C2/C3/C4/C5A/C5B/C5C published | C5D dependency/final schema work is READY; C6 project metadata read/diagnostics and C7 final closure remain dependency-ordered. |
 
 Detailed migration and continuation rules live in
 `docs/project/TOOL001_PACKAGE_TOOL.md`.

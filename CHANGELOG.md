@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.190-SNAPSHOT
+
+- Close `TOOL001-C5C — optional manifest schema sections` (legacy manifest Slice 3C2). Extend ordinary-Protos `self:ManifestSchemaV1` with `sectionsFromTable(root)` / `parseSections(text)` over the published C5B mandatory base. The partial schema model now validates and materializes optional `compatibility`, `exports`, and `workspace` data while deliberately leaving `dependencies` uninterpreted for C5D.
+- Enforce schema-v1 structural rules only: `[compatibility]` owns exactly required non-empty String `language`; `[exports]` is an optional user-keyed table whose values are non-empty Strings and whose empty table is valid; `[workspace]` owns exactly required Array `members`, every member is a non-empty String, duplicates are rejected, and an empty member Array is valid. Exact decoded Strings and source order are preserved; no compatibility grammar, module-name normalization, path interpretation, globbing, environment expansion, or dependency policy is introduced.
+- Add Protos-owned conformance for absent/complete/empty optional sections and fail-closed table/field/value/member shapes. `TOOL001-C5C` closes, `TOOL001-C5D` becomes READY for dependency declaration forms plus final schema-v1 closure, and C6 remains dependency-blocked until C5 closes.
+
 ## 0.2.189-SNAPSHOT
 
 - Close `TOOL002-D3A2`: bundled `Runner.evaluateSimple(spec, source, executor)` now owns single-case `boolean`, `null`, `integer`, and generic `error` expectation interpretation over the D1 detached observation boundary. Normal expectation mismatches are inert results rather than Test Tool Errors; malformed/unsupported policy still fails closed.

@@ -98,3 +98,105 @@ parseBase: (text) => {
     Document: import("self:TomlDocument")
     baseFromTable(Document.table(text))
 }
+
+sectionsFromTable: (root) => {
+    fail: () => {
+        Error().signal()
+    }
+
+    tableEntries: (node) => {
+        (node.kind == "table").ifFalse(() => {
+            fail()
+        })
+        node.value
+    }
+
+    requiredNode: (entries, name) => {
+        entries.containsKey(name).ifFalse(() => {
+            fail()
+        })
+        entries.at(name)
+    }
+
+    nonEmptyString: (node) => {
+        (node.kind == "string").ifFalse(() => {
+            fail()
+        })
+        value: node.value
+        (value == "").ifTrue(() => {
+            fail()
+        })
+        value
+    }
+
+    checkAllowed: (entries, allowed) => {
+        entries.each((name, valueNode) => {
+            allowed.containsKey(name).ifFalse(() => {
+                fail()
+            })
+        })
+    }
+
+    base: baseFromTable(root)
+    rootEntries: tableEntries(root)
+
+    compatibility: null
+    rootEntries.containsKey("compatibility").ifTrue(() => {
+        compatibilityEntries: tableEntries(rootEntries.at("compatibility"))
+        compatibilityAllowed: Map()
+        compatibilityAllowed.atPut("language", true)
+        checkAllowed(compatibilityEntries, compatibilityAllowed)
+        language: nonEmptyString(requiredNode(compatibilityEntries, "language"))
+        compatibility = {
+            language: language
+        }
+    })
+
+    exports: Map()
+    rootEntries.containsKey("exports").ifTrue(() => {
+        exportEntries: tableEntries(rootEntries.at("exports"))
+        exportEntries.each((name, valueNode) => {
+            exports.atPut(name, nonEmptyString(valueNode))
+        })
+    })
+
+    workspace: null
+    rootEntries.containsKey("workspace").ifTrue(() => {
+        workspaceEntries: tableEntries(rootEntries.at("workspace"))
+        workspaceAllowed: Map()
+        workspaceAllowed.atPut("members", true)
+        checkAllowed(workspaceEntries, workspaceAllowed)
+
+        membersNode: requiredNode(workspaceEntries, "members")
+        (membersNode.kind == "array").ifFalse(() => {
+            fail()
+        })
+
+        members: Array()
+        seenMembers: Map()
+        membersNode.value.each((memberNode) => {
+            member: nonEmptyString(memberNode)
+            seenMembers.containsKey(member).ifTrue(() => {
+                fail()
+            })
+            seenMembers.atPut(member, true)
+            members = Array(...members, member)
+        })
+
+        workspace = {
+            members: members
+        }
+    })
+
+    {
+        package: base.package
+        compatibility: compatibility
+        exports: exports
+        workspace: workspace
+    }
+}
+
+parseSections: (text) => {
+    Document: import("self:TomlDocument")
+    sectionsFromTable(Document.table(text))
+}
