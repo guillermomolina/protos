@@ -1,3 +1,8 @@
+## 0.2.212-SNAPSHOT
+
+- Close `I023-B1` after the post-I023-A longevity audit exposed iteration-proportional replay retention. Replace the accumulated completed-callback prefix with one stable per-`while` callback checkpoint: every normally completed condition/body callback commits and discards its evaluator child suffix plus completed callback activation keys, then reuses the same callback ordinal while retaining the enclosing native `while` activation. A callback that suspends remains uncommitted and replayable, so D044 observable semantics are unchanged while retained state becomes independent of completed iteration count.
+- Remove `whileCompletedInvocations` and the resulting host-`int` overflow path from the dynamic frame. Add a Java runtime-invariant regression (Java intentionally, because it measures private evaluator retention rather than Protos language behavior) comparing replay event/activation counts after 8 versus 4096 completed iterations before a forced suspension. Subdivide I023-B into closed B1 and READY B2; the Core native boundary remains unchanged.
+
 ## 0.2.211-SNAPSHOT
 
 - Close `TOOL002-D4` and parent `TOOL002-D`. Migrate retained `closure-error-parent-fresh` without transferring Closure authority: bundled Protos evaluates the retained source once inside one fresh child Process, invokes that exact candidate twice through ordinary `Error.handle`, checks both immediate Error parents plus distinct Error identity in the child identity domain, and returns only canonical Boolean evidence through the existing D1 detached observation.

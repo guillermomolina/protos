@@ -111,7 +111,8 @@ public final class ProtosStandardObjectProtocol {
         ProtosDynamicControlState state = activation.dynamicControlState();
         ProtosDynamicControlState.Frame frame =
                 state.enterFrame(activation, ProtosDynamicControlState.FrameKind.WHILE);
-        resumeWhileReplayPrefix(frame, activation);
+        int callbackCheckpoint =
+                state.bindWhileCallbackCheckpoint(frame, replayCursor(activation));
 
         while (true) {
             if (frame.whilePhase() == ProtosDynamicControlState.WhilePhase.CONDITION) {
@@ -125,6 +126,7 @@ public final class ProtosStandardObjectProtocol {
                     throw transfer;
                 }
 
+                compactCompletedWhileCallback(activation, callbackCheckpoint);
                 if (conditionResult == ProtosBooleanValue.FALSE) {
                     state.leaveFrame(frame);
                     return ProtosNullValue.INSTANCE;
@@ -133,7 +135,7 @@ public final class ProtosStandardObjectProtocol {
                     state.leaveFrame(frame);
                     throw invalid(activation);
                 }
-                state.completeWhileCondition(frame, replayCursor(activation));
+                state.completeWhileCondition(frame);
             }
 
             try {
@@ -144,29 +146,25 @@ public final class ProtosStandardObjectProtocol {
                 state.leaveFrame(frame);
                 throw transfer;
             }
-            state.completeWhileBody(frame, replayCursor(activation));
+            compactCompletedWhileCallback(activation, callbackCheckpoint);
+            state.completeWhileBody(frame);
         }
     }
 
-    private static void resumeWhileReplayPrefix(
-            ProtosDynamicControlState.Frame frame, ProtosActivation activation) {
-        int completed = frame.whileCompletedInvocations();
-        if (completed == 0) {
+    private static void compactCompletedWhileCallback(
+            ProtosActivation activation, int callbackCheckpoint) {
+        if (callbackCheckpoint < 0) {
             return;
-        }
-        int targetCursor = frame.whileReplayCursor();
-        if (targetCursor < 0) {
-            throw new IllegalStateException(
-                    "suspended while replay requires a replay cursor checkpoint");
         }
         ProtosEvaluatorContinuation continuation =
                 activation.task()
                         .orElseThrow(
                                 () ->
                                         new IllegalStateException(
-                                                "suspended while replay requires a task"))
+                                                "while callback compaction requires a task"))
                         .evaluatorContinuation();
-        continuation.skipInvocationReplayPrefixTo(completed, targetCursor);
+        // Ordinal zero belongs to the enclosing native Object.while activation itself.
+        continuation.compactCompletedChildExecution(callbackCheckpoint, 1);
     }
 
     private static Object ensure(ProtosActivation activation, List<?> supplied) {

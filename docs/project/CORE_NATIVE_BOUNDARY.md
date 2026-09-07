@@ -1,6 +1,22 @@
 # Core Native Boundary
 
 
+## I023-B1 — bounded `while` replay retention
+
+The post-I023-A longevity audit found that replaying a later suspended callback was
+constant-time but retained the completed callback event/activation prefix for every prior
+iteration. I023-B1 changes only internal continuation bookkeeping: after each condition or
+body callback completes normally, its child evaluator suffix is committed and truncated back
+to one stable callback checkpoint, completed callback activation keys are discarded, and the
+next callback reuses the same parent-event ordinal. A callback that actually suspends remains
+uncommitted and therefore retains exactly the replay state needed to resume that callback.
+
+This makes retained `while` replay state depend on the currently active callback trace rather
+than the number of completed iterations and removes the former monotonic `int` callback-count
+limit. D044 semantics, selector placement, scheduling/cancellation boundaries, and the audited
+native Closure construction-site/provider counts are unchanged.
+
+
 ## I023-A — standard `while` control boundary
 
 I023-A adds exactly one reviewed native Closure-construction site to the existing

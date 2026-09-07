@@ -111,23 +111,8 @@ public final class ProtosEvaluatorContinuation {
      * control primitive.
      */
     public void skipInvocationReplayTo(int targetCursor) {
-        skipInvocationReplayPrefixTo(1, targetCursor);
-    }
-
-    /**
-     * Re-enters a native control primitive after a prefix of direct Closure invocations has
-     * already completed semantically in an earlier segment.
-     *
-     * <p>Each skipped invocation still consumes its parent-event invocation ordinal, while one
-     * cursor jump skips the complete evaluator-event prefix. This keeps replay cost constant for
-     * iterative control primitives whose completed callback count can grow across iterations.
-     */
-    public void skipInvocationReplayPrefixTo(int invocationCount, int targetCursor) {
         if (!segmentActive) {
             throw new IllegalStateException("no evaluator segment active");
-        }
-        if (invocationCount <= 0) {
-            throw new IllegalArgumentException("invocation replay prefix must be positive");
         }
         Active current = active.peek();
         if (current == null) {
@@ -137,8 +122,72 @@ public final class ProtosEvaluatorContinuation {
             throw new IllegalStateException(
                     "invalid replay cursor jump from " + cursor + " to " + targetCursor);
         }
-        current.invocationOrdinal = Math.addExact(current.invocationOrdinal, invocationCount);
+        current.invocationOrdinal = Math.addExact(current.invocationOrdinal, 1);
         cursor = targetCursor;
+    }
+
+    /**
+     * Commits one normally completed child execution nested in the current active event.
+     *
+     * <p>The child event suffix and its invocation activations are no longer needed once the
+     * child has completed normally: future replay may resume only at a later semantic point.
+     * Truncating the suffix back to a stable checkpoint lets iterative native control reuse the
+     * same tape positions instead of retaining history proportional to completed iterations.
+     * The caller states how many invocation ordinals on the current parent event belong to the
+     * enclosing control primitive itself and therefore must survive the compaction.
+     */
+    public void compactCompletedChildExecution(
+            int checkpointCursor, int retainedParentInvocationOrdinals) {
+        if (!segmentActive) {
+            throw new IllegalStateException("no evaluator segment active");
+        }
+        if (retainedParentInvocationOrdinals < 0) {
+            throw new IllegalArgumentException("retained invocation prefix must be non-negative");
+        }
+        Active current = active.peek();
+        if (current == null) {
+            throw new IllegalStateException("no active evaluator event for child compaction");
+        }
+        if (checkpointCursor <= current.eventIndex
+                || checkpointCursor > cursor
+                || cursor > events.size()) {
+            throw new IllegalStateException(
+                    "invalid completed-child checkpoint "
+                            + checkpointCursor
+                            + " for parent event "
+                            + current.eventIndex
+                            + " at cursor "
+                            + cursor
+                            + " / "
+                            + events.size());
+        }
+        if (current.invocationOrdinal < retainedParentInvocationOrdinals) {
+            throw new IllegalStateException(
+                    "parent invocation ordinal is before retained control prefix");
+        }
+        for (Active retained : active) {
+            if (retained.eventIndex >= checkpointCursor) {
+                throw new IllegalStateException(
+                        "cannot compact an evaluator suffix containing an active child event");
+            }
+        }
+
+        int parentEventIndex = current.eventIndex;
+        invocationActivations.keySet().removeIf(
+                key -> key.eventIndex() >= checkpointCursor
+                        || (key.eventIndex() == parentEventIndex
+                                && key.ordinal() >= retainedParentInvocationOrdinals));
+        events.subList(checkpointCursor, events.size()).clear();
+        cursor = checkpointCursor;
+        current.invocationOrdinal = retainedParentInvocationOrdinals;
+    }
+
+    int retainedEventCount() {
+        return events.size();
+    }
+
+    int retainedInvocationActivationCount() {
+        return invocationActivations.size();
     }
 
     /**

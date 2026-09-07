@@ -77,8 +77,8 @@ public final class ProtosDynamicControlState {
         private Object ensureOutcome;
         private int ensureBodyReplayCursor = -1;
         private WhilePhase whilePhase;
-        private int whileCompletedInvocations;
-        private int whileReplayCursor = -1;
+        private boolean whileCallbackCheckpointBound;
+        private int whileCallbackCheckpoint = -1;
 
         private Frame(long id, FrameKind kind, Object invocationIdentity) {
             this.id = id;
@@ -136,14 +136,22 @@ public final class ProtosDynamicControlState {
             return whilePhase;
         }
 
-        public int whileCompletedInvocations() {
+        private int bindWhileCallbackCheckpoint(int replayCursor) {
             requireWhileFrame();
-            return whileCompletedInvocations;
-        }
-
-        public int whileReplayCursor() {
-            requireWhileFrame();
-            return whileReplayCursor;
+            if (replayCursor < -1) {
+                throw new IllegalArgumentException("invalid while callback replay cursor");
+            }
+            if (!whileCallbackCheckpointBound) {
+                whileCallbackCheckpoint = replayCursor;
+                whileCallbackCheckpointBound = true;
+            } else if (whileCallbackCheckpoint != replayCursor) {
+                throw new IllegalStateException(
+                        "while callback replay checkpoint changed from "
+                                + whileCallbackCheckpoint
+                                + " to "
+                                + replayCursor);
+            }
+            return whileCallbackCheckpoint;
         }
 
         private void bindHandlerMatchPrototype(ProtosObjectValue matchPrototype) {
@@ -173,17 +181,12 @@ public final class ProtosDynamicControlState {
         }
 
         private void completeWhileInvocation(
-                WhilePhase expectedPhase, WhilePhase nextPhase, int replayCursor) {
+                WhilePhase expectedPhase, WhilePhase nextPhase) {
             requireWhileFrame();
             if (whilePhase != expectedPhase) {
                 throw new IllegalStateException(
                         "while invocation completed in unexpected phase " + whilePhase);
             }
-            if (replayCursor < -1) {
-                throw new IllegalArgumentException("invalid while replay cursor");
-            }
-            whileCompletedInvocations = Math.addExact(whileCompletedInvocations, 1);
-            whileReplayCursor = replayCursor;
             whilePhase = nextPhase;
         }
 
@@ -302,14 +305,19 @@ public final class ProtosDynamicControlState {
         frame.beginEnsureCleanup(exitKind, outcome, bodyReplayCursor);
     }
 
-    public void completeWhileCondition(Frame frame, int replayCursor) {
+    public int bindWhileCallbackCheckpoint(Frame frame, int replayCursor) {
         requirePresent(frame);
-        frame.completeWhileInvocation(WhilePhase.CONDITION, WhilePhase.BODY, replayCursor);
+        return frame.bindWhileCallbackCheckpoint(replayCursor);
     }
 
-    public void completeWhileBody(Frame frame, int replayCursor) {
+    public void completeWhileCondition(Frame frame) {
         requirePresent(frame);
-        frame.completeWhileInvocation(WhilePhase.BODY, WhilePhase.CONDITION, replayCursor);
+        frame.completeWhileInvocation(WhilePhase.CONDITION, WhilePhase.BODY);
+    }
+
+    public void completeWhileBody(Frame frame) {
+        requirePresent(frame);
+        frame.completeWhileInvocation(WhilePhase.BODY, WhilePhase.CONDITION);
     }
 
     public boolean hasActiveEnsureFrames() {
