@@ -26,6 +26,15 @@ There are no `async` functions and no `await` keyword.
 
 An ordinary function may simply return a Future.
 
+Returning a Future from an ordinary synchronous invocation does not itself create,
+close, transfer, detach, re-parent, or wait a structured-concurrency ownership
+scope. Structured ownership is task-scoped as defined in §24: synchronous Closure
+and method activations executing within one asynchronous computation remain in
+that computation's current structured execution scope. A pending Future can
+therefore cross an ordinary synchronous return immediately while its task-backed
+producer, when any, remains owned by the same surrounding structured execution
+scope unless explicitly detached.
+
 ### Future result identity
 
 Unless the normative contract of a Core-standard operation expressly says that
@@ -437,10 +446,12 @@ validation is eager and independent of the source Future's state: a pending,
 resolved, failed, or cancelled source does not defer, suppress, or replace it.
 
 Only after successful validation does the call create a distinct continuation
-task and a destination Future. The continuation is asynchronous work created by
-the activation that calls `then`, and therefore belongs to that activation under
-the ordinary structured-concurrency rule unless the destination Future is
-detached.
+task and a destination Future. The continuation is asynchronous child work
+created in the current task-scoped structured execution scope, and therefore
+belongs to that scope under the ordinary structured-concurrency rule unless the
+destination Future is detached. An ordinary synchronous activation that merely
+calls `then()` does not become a new structured owner solely because that call
+occurred inside it.
 
 Completion of the source Future only makes the continuation runnable. It does not
 execute `transform` inline, reentrantly, or inside the task or Actor turn that
@@ -603,15 +614,36 @@ cancellation unwind, cleanup, task-backed versus non-task-backed detachment, and
 
 The existing structured-concurrency semantics for Futures remain.
 
-Asynchronous child work created inside an execution context is owned by
-that context by default unless explicitly detached.
+Structured ownership is scoped to asynchronous task execution, not to every
+ordinary synchronous invocation frame. Each task-backed asynchronous computation
+has one structured execution scope. Ordinary Closure calls, method calls,
+`while` condition/body activations, `ensure` body/cleanup activations, and other
+synchronous nested invocations performed by that computation execute inside the
+same current structured execution scope unless they themselves start a distinct
+asynchronous computation. Core exposes no public Task or scope object merely to
+represent this relationship.
+
+Task-backed asynchronous child work created while a structured execution scope is
+current is owned by that scope by default unless explicitly detached. Starting a
+distinct child task creates a new structured execution scope for work that child
+itself later creates, so the ownership relation remains recursively structured
+without making synchronous call-stack depth part of the concurrency tree.
+
+An ordinary synchronous invocation can therefore return while task-backed work it
+created remains pending. Returning the Future itself, storing it, wrapping it in
+another ordinary value, or otherwise letting it escape that invocation does not
+transfer, re-parent, detach, duplicate, or remove its ownership edge. No escape
+analysis or result-shape inspection participates in ownership. The edge remains
+attached to the same surrounding structured execution scope until the child is
+terminal or explicitly detached.
 
 Structured ownership bounds child lifetime but does not implicitly observe child
-results. When an owner reaches otherwise normal completion, it waits for every
-non-detached child to become terminal. A child's failed or cancelled terminal
-state does not by itself fail or cancel that normally completing owner. Failure
-or cancellation becomes observable to owner code only through the ordinary
-Future observation operations, such as `value()`.
+results. When the owning asynchronous computation itself reaches otherwise normal
+terminal completion, its structured execution scope waits for every non-detached
+child to become terminal. A child's failed or cancelled terminal state does not by
+itself fail or cancel that normally completing owner. Failure or cancellation
+becomes observable to owner code only through the ordinary Future observation
+operations, such as `value()`.
 
 This deliberately avoids hidden "unobserved failure" or "failure consumed" state:
 whether an owner completes normally cannot depend on whether some previous read of
@@ -629,11 +661,12 @@ completes, cancellation continues and the Future becomes cancelled only after
 cleanup is complete. This rule does not create a general user-visible
 cancellation-mask facility.
 
-Detachment removes a task from the structured lifetime of its creating
-activation only. `Future.detach()` always returns the same Future object and is
-idempotent. On a still-pending task-backed Future that is not already detached,
-it removes that task's activation-ownership edge. Repeated detachment is a
-state-preserving no-op.
+Detachment removes a task from the structured lifetime of its current owning
+structured execution scope only. `Future.detach()` always returns the same Future
+object and is idempotent. On a still-pending task-backed Future that is not already
+detached, it removes that task's structured-ownership edge. Repeated detachment is
+a state-preserving no-op. Detachment is not implied by returning or otherwise
+exposing the Future from an ordinary synchronous invocation.
 
 A non-task-backed Future, including one produced directly by an I/O facility,
 has no structured task ownership edge to remove; `detach()` on such a Future is

@@ -351,89 +351,73 @@ validation, and publication.
 
 ## B008 — Structured ownership when a task-backed Future escapes an activation
 
-Status: BLOCKED
+Status: READY
 
 Implementation area:
-I023-B2D2 structured-ownership/cross-B2 closure and any runtime change that
-would make an ordinary synchronous Closure activation wait for, transfer,
-re-parent, or otherwise alter ownership of a task-backed Future merely because
-that Future was produced inside the activation or returned as its exact normal
-result.
+I023-B2D2 structured-ownership/cross-B2 closure and any implementation/conformance
+work that depends on the lifetime rule for task-backed Future-producing work
+created inside an ordinary synchronous activation.
 
 Normative dependency:
-The current normative sources do not uniquely determine the lifetime boundary
-for this case. `spec/concurrency/FUTURES_AND_TASKS.md` states both that an
-ordinary function may return a Future and that asynchronous child work is owned
-by its creating execution context by default, while §24 says an owner reaching
-otherwise normal completion waits for every non-detached child. The same section
-defines `detach()` as removing a task from the structured lifetime of its
-creating activation. Separately, `spec/concurrency/PARALLEL_EXECUTION.md`
-requires P to create and return a normal Future owned under the ordinary
-structured-concurrency rules of the creating activation, with successful return
-itself being a normative cutover point.
+Satisfied by D045 / specification revision `0.1.382`.
 
-D044 composes those existing rules without adding a loop-specific answer:
-`spec/semantics/EXECUTION_AND_CONTROL.md` requires a normal Future returned by a
-`while` body to be ignored exactly like any other body result, with no implicit
-await/adoption/flatten/cancellation, while work created during the callback
-continues to use the ordinary structured-ownership rules.
+`spec/concurrency/FUTURES_AND_TASKS.md` now defines structured ownership at the
+current asynchronous task execution scope rather than at every synchronous
+Closure/method invocation. Synchronous nested activations do not create implicit
+concurrency scopes. A task-backed Future may therefore be returned pending from an
+ordinary synchronous invocation without waiting, detaching, transferring,
+re-parenting, or otherwise changing its ownership edge. The edge remains owned by
+the same surrounding task-scoped execution context until terminality or explicit
+`Future.detach()`.
 
-The specification does not currently say, for a task-backed Future produced by
-`future()`, `then()`, P, or equivalent ordinary work and returned from the same
-synchronous activation, whether normal return:
+A distinct asynchronous child task establishes the scope that owns work created by
+that child. When an owning asynchronous computation itself reaches otherwise
+normal terminal completion, it waits for all remaining non-detached task-backed
+children to become terminal without implicitly observing their result. Adoption
+continues to transfer outcome only and never ownership. P and `Future.then()` use
+the same general rule.
 
-- waits for that Future to become terminal before the invocation can return;
-- transfers/re-parents the ownership edge to a caller or enclosing structured
-  execution context;
-- permits the activation to finish while retaining an ownership edge whose
-  lifetime is defined elsewhere; or
-- follows another explicit general rule.
-
-Those choices are observably different and cannot be selected as implementation
-machinery.
+D044 therefore composes without a loop special case: a `while` condition/body
+activation is synchronous and does not establish a structured scope. A normal
+Future body result is ignored, the next loop step is not delayed merely by that
+returned Future, and `while` does not await/adopt/flatten/cancel/detach/re-parent
+it. Any task-backed child remains owned by the enclosing task-scoped execution
+context under the ordinary rule.
 
 Specification authority:
-- `spec/concurrency/FUTURES_AND_TASKS.md` §§27, 30 and 24;
-- `spec/concurrency/PARALLEL_EXECUTION.md` for P result-Future creation/return
-  and ordinary structured ownership;
-- `spec/semantics/EXECUTION_AND_CONTROL.md` standard Closure `while` operation;
-- `spec/semantics/CALLABLES.md` for ordinary synchronous Closure activation and
-  normal result semantics.
+- `spec/concurrency/FUTURES_AND_TASKS.md` §§27, Future `then()`, 23 and 24;
+- `spec/concurrency/PARALLEL_EXECUTION.md` for P result-Future composition;
+- `spec/semantics/EXECUTION_AND_CONTROL.md` for D043/D044 `ensure`/`while`
+  composition;
+- `spec/semantics/CALLABLES.md` for ordinary synchronous Closure activation.
 
 Unblock condition:
-The current normative specification must explicitly and uniquely define the
-structured-lifetime rule for a task-backed Future that escapes as the exact
-normal result of the activation that created it, including at least:
+Satisfied. Two independent implementations can now determine the same ownership
+and ordering without escape analysis or API-specific inference:
 
-1. the precise owner/lifetime boundary before and after the activation returns;
-2. whether ownership is waited, transferred/re-parented, retained, or removed;
-3. how the rule composes with `Future.then`, P, `Future.detach()`, adoption and
-   ordinary functions that intentionally expose pending Future-shaped APIs;
-4. whether task-backed work created but not returned follows a different rule;
-5. the ordering consequence for D044 `while`: ignoring a body Future result must
-   not secretly introduce a loop-specific await, adoption, cancellation, or
-   scheduler boundary.
-
-Two independent implementations must be able to implement the same observable
-ordering and lifetime without inferring programmer intent from escape analysis,
-API naming, library conventions, or current runtime behavior.
+1. the structured owner is the current asynchronous task execution scope, not each
+   nested synchronous activation;
+2. synchronous return neither waits nor changes the ownership edge;
+3. `then`, P, `detach`, adoption and Future-shaped library APIs compose under one
+   general rule;
+4. task-backed work is treated identically whether or not its Future is returned,
+   stored or wrapped;
+5. D044 `while` adds no loop-specific ownership/scheduling behavior.
 
 Current consequence:
-I023-B2D2 is BLOCKED. B2D1 remains valid evidence for D044's result boundary:
-`while` itself neither awaits/adopts/flattens/cancels a body Future result. The
-remaining structured-ownership closure cannot be claimed until B008 is resolved.
-No activation-scoped ownership experiment produced while investigating B2D2 was
-published to `main`.
+I023-B2D2 is READY again. B2D1 remains valid evidence for the D044 result boundary.
+B008 remains READY rather than CLOSED until B2D2 publishes the required
+implementation/conformance reconciliation or demonstrates that no implementation
+change is necessary and closes on validation evidence.
 
-Diagnostic evidence that exposed the ambiguity is intentionally non-normative:
-an activation-drain experiment made the existing Future-shaped
-`JSON.readEvents(...).read()` overlap conformance stop observing an outstanding
-operation, because the first call could not return while its newly-created
-continuation remained pending. That result demonstrates observability of the
-choice; it does not choose the language rule.
+History:
+B008 was created after an unpublished activation-drain experiment broke the
+existing Future-shaped JSON overlap contract, proving that per-synchronous-
+activation draining was observable. D045 resolves the ambiguity by making the
+already-composable task-scoped model explicit rather than adding Future-return
+escape transfer, implicit detach, or per-result ownership heuristics.
 
 Independent work:
-Unrelated implementation work may continue. I023-C and I023-D remain dependency
-blocked through I023-B/B2/B2D. B007 remains READY because D044 itself is already
-normatively resolved; B008 is a separate structured-concurrency ambiguity
-exposed while completing D044 conformance.
+Unrelated implementation work remains independent. I023-C and I023-D stay
+dependency-blocked until B2D2 closes B2D/B2/B. B007 remains READY until final I023
+implementation closure.

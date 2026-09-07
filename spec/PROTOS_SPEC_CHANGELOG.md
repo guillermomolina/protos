@@ -9,6 +9,40 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.382] - 2026-09-07
+
+### Task-scoped structured Future ownership (D045)
+- Resolves B008 by defining the structured owner of task-backed Future-producing
+  child work as the current asynchronous task execution scope, not every ordinary
+  synchronous Closure/method activation nested inside that task. No public Task or
+  scope object is introduced.
+- Ordinary synchronous invocation may return a pending Future immediately. Returning,
+  storing, wrapping, or otherwise exposing that Future does not wait, detach,
+  transfer, re-parent, duplicate, or remove its ownership edge, and implementations
+  must not use escape analysis or result-shape inspection to infer ownership.
+- A distinct asynchronous child task has its own structured execution scope for its
+  descendants. The enclosing owning asynchronous computation waits for its
+  non-detached task-backed children only when that owning computation itself reaches
+  terminal completion; child failure/cancellation remains unobserved unless ordinary
+  Future observation exposes it.
+- `Future.detach()` removes only the existing task-scoped ownership edge. Future
+  adoption still transfers only eventual outcome and does not transfer ownership.
+  `Future.then()` continuations and isolated P work use the same task-scoped rule.
+- Reconciles D043/D044 composition wording: synchronous `ensure` body/cleanup and
+  `while` condition/body activations are not implicit concurrency scopes. A Future
+  returned by a `while` body remains an ignored result with no loop-specific await,
+  adoption, flattening, cancellation, detachment, re-parenting, or scheduler point.
+
+### Compatibility and implementation state
+- This closes the specification contradiction without requiring a new runtime model:
+  ordinary Future-shaped library APIs remain capable of returning pending Futures,
+  while the existing enclosing asynchronous computation retains structured lifetime.
+- B008 moves `BLOCKED -> READY`; I023-B2D2 returns to `READY` for conformance and
+  cross-B2 closure. B008 becomes `CLOSED` only when that implementation/conformance
+  work is published or made obsolete.
+- No syntax, Future identity/state, adoption outcome, Actor/P isolation, I/O producer
+  ownership, implementation version, or license term changes.
+
 ## [0.1.381] - 2026-09-07
 
 ### Standard Closure `while` protocol (D044)

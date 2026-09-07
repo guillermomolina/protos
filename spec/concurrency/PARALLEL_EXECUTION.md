@@ -130,8 +130,8 @@ Protos-visible difference.
 
 Structured concurrency does not require a public Task object. Ownership,
 detachment, cancellation, waiting, failure propagation, and Actor/P lifetime
-rules are defined semantically through activations, Futures, and execution
-domains. An implementation may track richer internal parent/child task state as
+rules are defined semantically through task-scoped structured execution,
+Futures, and execution domains. An implementation may track richer internal parent/child task state as
 needed to realize those rules.
 
 This boundary also prevents accidental identity from leaking out of
@@ -1459,8 +1459,8 @@ standard `NonParallelValue` error, which delegates directly to `Error`. No resul
 Future is returned and no partial P computation becomes eligible.
 
 Once input formation succeeds, the operation creates and returns a normal Future
-owned under the ordinary structured-concurrency rules of the creating
-activation. The successful return is the normative input snapshot point.
+owned under the ordinary structured-concurrency rules of the current
+task-scoped structured execution context. The successful return is the normative input snapshot point.
 
 ### 71.14 P value graph and Closure projection
 

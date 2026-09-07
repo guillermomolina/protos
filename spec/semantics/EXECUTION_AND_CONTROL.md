@@ -433,8 +433,10 @@ returns a Future, that object is a non-Boolean condition result and the standard
 invalid-result `Error` above is signaled; `while` does not await, adopt, flatten,
 or cancel it. If `body` normally returns a Future, that result is ignored exactly
 like any other body result; `while` does not implicitly observe, adopt, flatten,
-or cancel it. Existing structured-ownership rules for work created while either
-Closure activation executes remain owned by `../concurrency/FUTURES_AND_TASKS.md`.
+or cancel it. Existing structured-ownership rules for work created while either Closure
+activation executes remain owned by `../concurrency/FUTURES_AND_TASKS.md`. Those
+synchronous callback activations do not establish new structured execution scopes
+of their own merely by being invoked by `while`.
 
 ### Control transfer, suspension, and cancellation
 
@@ -517,9 +519,13 @@ After successful validation, one protected dynamic extent is established and
 The protected extent belongs to the executing dynamic flow. Merely creating a
 distinct asynchronous child task does not copy the `ensure` frame into that
 child's dynamic control state. Existing structured-ownership rules in
-`../concurrency/FUTURES_AND_TASKS.md` still apply: non-detached child work may
-delay the protected body's otherwise-normal completion, while detached work does
-not extend the `ensure` scope merely by remaining alive.
+`../concurrency/FUTURES_AND_TASKS.md` still apply at the current task-scoped
+structured execution boundary. The protected body's ordinary synchronous
+activation does not become a separate structured scope merely because `ensure`
+invoked it: a task-backed Future created there may remain pending after the body
+invocation returns. Non-detached child work can still delay terminal completion of
+the enclosing owning asynchronous computation, while detached work does not extend
+that structured lifetime.
 
 ### Suspension is not scope exit
 

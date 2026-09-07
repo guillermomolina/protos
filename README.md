@@ -513,7 +513,7 @@ Version 0.1 remains a draft, but the major semantic decisions currently tracked 
 
 ## Recent Design Decisions
 
-- Structured concurrency is strict by default: an activation waits for non-detached child tasks on normal completion, and cancels then waits for them during error/cancellation unwind.
+- Structured concurrency is strict by default at task-scoped asynchronous execution boundaries: ordinary synchronous activations do not create nested concurrency scopes, while an owning asynchronous computation waits for non-detached child tasks on terminal completion and cancels then drains them during error/cancellation unwind.
 - `Future.then` is part of the standard Core v0.1 Future protocol and flattens nested Futures.
 - Bracket access is ordinary `at` / `atPut` protocol sugar.
 - Invocation arguments support defaults, rest capture, spread, and reflective `args`.
