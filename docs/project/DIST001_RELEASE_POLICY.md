@@ -297,10 +297,21 @@ publication:
     future tag `v0.2.236`, current specification revision `0.1.382`, and the
     candidate-time I023/B007 closure checkpoint. Release publication remains
     explicitly unauthorized and no candidate commit is materialized.
-  - `DIST001-E4B` — detached candidate materialization — READY. Derive the
-    local candidate from the exact selected baseline with only the mechanical
-    project-version transition `0.2.236-SNAPSHOT` -> `0.2.236`; preserve
-    `main` as SNAPSHOT development and create no tag, remote branch, or release.
+  - `DIST001-E4B` — detached candidate materialization — IN_PROGRESS:
+    - `DIST001-E4B1` — selected-baseline detached-worktree guard — CLOSED.
+      Publish/test the fail-closed `git worktree add --detach` primitive bound to
+      the exact E4A selection. Destination must be new and outside the main
+      checkout; HEAD/version/cleanliness/detachment and unchanged branch refs are
+      verified. No real candidate mutation occurs in B1.
+    - `DIST001-E4B2` — exact POM `0.2.236-SNAPSHOT` -> `0.2.236`
+      transition — READY. Materialize the selected detached worktree through B1
+      and change only the root project version in `pom.xml`; no commit yet.
+    - `DIST001-E4B3` — candidate commit creation — `BLOCKED_BY_DEPENDENCIES` on
+      E4B2. Commit only the validated release-version transition in detached
+      candidate state without a branch/tag/remote publication.
+    - `DIST001-E4B4` — release-only lineage verification —
+      `BLOCKED_BY_DEPENDENCIES` on E4B3. Prove baseline -> candidate changes only
+      the exact release-owned transition and then close E4B.
   - `DIST001-E4C` — candidate archive/envelope/audit preparation —
     `BLOCKED_BY_DEPENDENCIES` on E4B.
   - `DIST001-E4D` — immutable full candidate validation and E4 closure —

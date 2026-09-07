@@ -474,6 +474,37 @@ E3C3 closes generic DIST001-E3 preparation. The first real candidate audit and
 candidate execution remain E4 work after an explicit exact baseline/public-version
 selection.
 
+
+## Detached selected-baseline candidate worktree
+
+`DIST001-E4B1` provides the only supported local worktree preparation primitive
+for the selected first-pre-release baseline:
+
+```sh
+python3 dist/prepare_release_candidate_worktree.py \
+    --selection docs/project/DIST001_E4_SELECTION.txt \
+    --destination /absolute/path/outside/the/main/checkout
+```
+
+The selected baseline remains `3c23eaaccecbdcc7c2bcd86bc30c445403cfb047` / `0.2.236-SNAPSHOT` and the derived
+public version remains `0.2.236`. The helper validates the complete E4A
+selection record, requires the selected commit to remain an ancestor of
+`origin/main`, verifies the baseline POM version, refuses an existing or in-repo
+destination, and creates the checkout only with `git worktree add --detach`.
+
+After creation it proves that the new worktree is clean, detached, at the exact
+selected baseline, still reports `0.2.236-SNAPSHOT`, and did not create or move any
+local branch ref. If a post-creation invariant fails, it removes only the
+worktree that the current invocation created before failing.
+
+E4B1 itself does not create the real release candidate worktree. It publishes
+and tests this primitive with isolated temporary Git fixtures. E4B2 owns the
+first candidate-specific use plus the exact `0.2.236-SNAPSHOT -> 0.2.236`
+POM transition.
+
+The helper never creates or pushes a branch, creates a tag, changes the selected
+baseline, authorizes publication, or publishes a GitHub Release/asset.
+
 ## DIST001 boundary
 
 DIST001-A proves that the distribution can be constructed and that its archive

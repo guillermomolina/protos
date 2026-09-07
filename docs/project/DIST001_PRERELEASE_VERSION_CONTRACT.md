@@ -302,3 +302,26 @@ E4 is further decomposed into E4A selection freeze, E4B detached candidate
 materialization, E4C archive/envelope/audit preparation, and E4D immutable full
 validation. E4A creates no candidate commit, tag, GitHub Release, or release
 asset.
+
+
+## E4B1 detached-worktree checkpoint
+
+E4B is subdivided before candidate mutation:
+
+```text
+E4B1  selected-baseline detached-worktree guard
+E4B2  exact POM V-SNAPSHOT -> V transition
+E4B3  candidate commit creation
+E4B4  release-only lineage verification
+```
+
+E4B1 publishes a fail-closed local worktree primitive. It consumes the frozen
+E4A selection, verifies exact baseline `3c23eaaccecbdcc7c2bcd86bc30c445403cfb047` and `0.2.236-SNAPSHOT`, and may
+create only a clean detached worktree outside the main checkout. Branch refs
+must remain unchanged. The primitive performs no candidate mutation and no
+publication operation.
+
+The real candidate source revision therefore remains `UNMATERIALIZED` at E4B1
+closure. E4B2 is the first slice allowed to mutate the selected-baseline
+worktree, and only for the exact project POM transition `0.2.236-SNAPSHOT` ->
+`0.2.236`.
