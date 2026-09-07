@@ -1,3 +1,9 @@
+## 0.2.207-SNAPSHOT
+
+- Close `TOOL001-E2 — retained exact-version preference` and parent `TOOL001-E — local/offline version selection policy`. Add ordinary bundled-Protos `self:RetainedVersionSelection`: when an exact retained ReleaseVersion remains present among the already-known candidates and still satisfies the current closed D2 constraint/prerelease policy, preserve it even if E1 could choose a newer satisfying version; otherwise fall back to E1 fresh highest-satisfying selection.
+- Keep E2 intentionally version-level and lockfile-independent. `null` means no retained version and immediately delegates to E1. A retained version that disappeared or became ineligible does not block progress; fresh selection applies. Invalid retained/candidate text fails through the existing strict ReleaseVersion parser, and no-match still fails through E1. E2 does not parse `protos.lock`, validate package/content identity, decide yank/trust/language compatibility, resolve graph closure, discover candidates or perform registry/network/store/workspace/update operations.
+- Extend the existing Protos-owned package-version corpus with retained-version dominance over newer releases, missing/ineligible fallback, null-retention fresh selection, retained prerelease preservation, prerelease invalidation, exact constraints and fail-closed invalid/no-fallback cases. Final E reconciliation closes the bounded pure local version-selection parent while TOOL001 remains open for separately scoped resolver/lock work.
+
 ## 0.2.206-SNAPSHOT
 
 - Start `TOOL001-E — local/offline version selection policy` with the bounded `TOOL001-E1 — fresh version selection` slice. Add ordinary bundled-Protos `self:FreshVersionSelection`, which receives already-known ReleaseVersion candidates, filters them only through the closed D2 DependencyConstraint policy and chooses the highest satisfying candidate by D1 SemVer precedence.

@@ -71,9 +71,9 @@ its relation to any legacy Slice 3 terminology that remains useful for continuit
 | TOOL001-D2B | caret dependency constraints | CLOSED | `SAME_COMMIT` | Caret bound construction plus stable-candidate satisfaction over D1 ReleaseVersion; zero-major rules are explicit and prerelease satisfaction remains fail-closed until D2D. |
 | TOOL001-D2C | explicit bounded intervals | CLOSED | `SAME_COMMIT` | Exactly two whitespace-joined primitive comparisons with one lower and one upper bound; stable-candidate satisfaction honors inclusive/exclusive endpoints and prerelease satisfaction remains fail-closed until D2D. |
 | TOOL001-D2D | prerelease admission + D2 closure | CLOSED | `SAME_COMMIT` | Stable constraints reject prerelease candidates by default; prereleases are admitted only when a constraint explicitly names a prerelease for the same core tuple, then ordinary exact/range precedence applies. Final cross-form conformance closes D2 and parent D. |
-| TOOL001-E | local/offline version selection policy | IN_PROGRESS | TOOL001-E1 published | E1 fresh highest-satisfying ReleaseVersion selection CLOSED; E2 retained exact-version preference READY. Discovery, non-version eligibility, graph resolution, lockfile serialization and remote/store behavior remain outside E1. |
+| TOOL001-E | local/offline version selection policy | CLOSED | `SAME_COMMIT` | E1 fresh highest-satisfying selection plus E2 retained exact-version preference are published as pure local version policy over already-known candidates. Discovery, full eligibility, graph resolution and physical lock work remain separate. |
 | TOOL001-E1 | fresh highest-satisfying ReleaseVersion selection | CLOSED | `SAME_COMMIT` | `self:FreshVersionSelection.select/selectText` filters already-known ReleaseVersion candidates through closed D2 constraint semantics and selects the highest satisfying candidate by D1 precedence; no-match fails closed. |
-| TOOL001-E2 | retained exact-version preference | READY | — | Add pure version-level retained-selection preference: preserve a previously selected exact ReleaseVersion when it remains present and satisfies the current constraint; otherwise fall back to E1 fresh selection. No lockfile parsing/identity/trust policy. |
+| TOOL001-E2 | retained exact-version preference | CLOSED | `SAME_COMMIT` | `self:RetainedVersionSelection.select/selectText` preserves an available exact retained ReleaseVersion while it still satisfies D2; otherwise it delegates to E1 fresh selection. No physical lockfile or package-identity policy is implied. |
 
 
 
@@ -82,19 +82,18 @@ is not reopened by this tracking migration.
 
 ## Current continuation boundary
 
-The historical manifest Slice 3 surface and pure version/constraint value parent
-`TOOL001-D` are CLOSED.
+The historical manifest Slice 3, pure version/constraint parent `TOOL001-D`, and
+local/offline version-selection parent `TOOL001-E` are CLOSED.
 
-`TOOL001-E` is now the current bounded continuation for local/offline version
-selection policy. `TOOL001-E1` is CLOSED: among already-known ReleaseVersion
-candidates it applies closed D2 constraint/prerelease semantics and chooses the
-highest satisfying D1 version. `TOOL001-E2` retained exact-version preference is
-READY.
+E1 chooses the highest satisfying ReleaseVersion among already-known candidates.
+E2 preserves an available exact retained ReleaseVersion while it remains valid
+under D2 and otherwise delegates to E1.
 
-E1/E2 do not discover candidates and do not claim complete candidate eligibility.
-PackageId/authority identity, yank/trust/language compatibility, transitive graph
-resolution, physical lockfile parsing/serialization, workspace/store,
-registry/network and update operations remain separately scoped later work.
+Further Package Tool progress requires a separately scoped post-E slice.
+Candidate discovery and complete eligibility (PackageId/authority, yank, trust,
+content identity, language compatibility, transitive closure), physical
+`protos.lock` parsing/serialization, graph resolution, workspace/store,
+registry/network and update operations are not implied by E closure.
 
 ## Manifest Slice 3 final closure
 

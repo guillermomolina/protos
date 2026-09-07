@@ -25,20 +25,19 @@ single-version constraint.
 D2A-D2D implement dependency constraint v1, including explicit same-core
 prerelease admission.
 
-`TOOL001-E1` now implements the narrow fresh **version** selection core from this
-audit: given an already-known collection of ReleaseVersion values, apply the
-closed D2 constraint semantics and choose the highest satisfying candidate by D1
-precedence. No-match fails closed. This is intentionally below complete registry
-candidate eligibility: E1 does not discover releases or decide yank, trust,
-content identity, language compatibility or transitive-closure validity.
+`TOOL001-E` is also CLOSED as a deliberately pure/local version-selection layer.
+E1 chooses the highest satisfying ReleaseVersion from already-known candidates.
+E2 implements the version-level retained-selection rule: preserve a previously
+selected exact ReleaseVersion when that exact value remains present and satisfies
+D2; otherwise fall back to E1. This realizes the version-preference ordering from
+this audit without pretending that an in-memory retained ReleaseVersion is a
+parsed or validated physical lock edge.
 
-`TOOL001-E2` is READY for the separate version-level retained-selection rule:
-preserve a previously selected exact ReleaseVersion when it remains present and
-satisfies the current constraint; otherwise fall back to E1 fresh selection.
-
-The broader non-version eligibility, physical lockfile, update and graph-resolution
-material in this exploratory record remains unimplemented and is not made current
-policy by E1.
+Complete candidate eligibility and physical resolution remain unimplemented:
+release discovery, PackageId/authority matching, yank/trust/content identity,
+language compatibility, transitive dependency closure, `protos.lock`
+parsing/serialization, update operations and graph diagnostics are not made
+current policy merely by closing E.
 
 ## Design goals
 

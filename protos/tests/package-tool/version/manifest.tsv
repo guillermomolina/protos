@@ -64,3 +64,12 @@ selection-order-independent.protos	true
 selection-no-match-error.protos	error
 selection-empty-error.protos	error
 selection-invalid-candidate-error.protos	error
+selection-retained-present-wins.protos	true
+selection-retained-missing-falls-back.protos	true
+selection-retained-ineligible-falls-back.protos	true
+selection-retained-null-fresh.protos	true
+selection-retained-prerelease-preserved.protos	true
+selection-retained-prerelease-no-longer-admitted.protos	true
+selection-retained-exact-still-exact.protos	true
+selection-retained-no-fallback-error.protos	error
+selection-retained-invalid-error.protos	error
