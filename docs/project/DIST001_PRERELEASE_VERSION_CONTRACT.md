@@ -238,3 +238,18 @@ same immutable archive.
 No candidate is selected by this implementation. E3C2 owns independent E3B
 envelope verification; E3C3 then composes both validation surfaces into the
 candidate-specific entry point used by E4.
+
+## E3C2 implementation checkpoint
+
+E3C2 independently verifies the E3B release envelope against one exact
+public-prerelease ZIP. The verifier binds archive bytes, SOURCE/RUNTIME identity,
+baseline provenance, release version/tag, specification revision, outer checksum,
+release notes, and their manifest digests without regenerating the envelope.
+
+The verifier also requires both capability and limitation sections to remain
+explicitly populated, but it intentionally does not infer whether those claims
+are true from implementation status. E3C3/E4 own the candidate-specific
+claim/blocker audit.
+
+E3C2 selects no concrete baseline, candidate, or public version and creates no
+tag, GitHub Release, or release asset.

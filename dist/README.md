@@ -388,6 +388,39 @@ E3C1 does not select or build a real candidate. It only makes the already-proven
 B5 machinery capable of validating one once E4 supplies an explicitly approved
 candidate.
 
+
+## Independent release-envelope verification
+
+`DIST001-E3C2` adds an independent verifier for the metadata produced by E3B:
+
+```sh
+python3 dist/verify_release_metadata.py \
+    --archive /path/to/protos-V-posix-jvm.zip \
+    --envelope-dir /path/to/release-envelope
+```
+
+The verifier does not regenerate the expected files. It reads the candidate ZIP
+and checks the already-produced envelope against it:
+
+- the envelope contains exactly `RELEASE_NOTES.md`, `RELEASE_MANIFEST.txt`, and
+  the basename-only `<archive>.sha256`;
+- the manifest has the exact v1 key set and matches candidate SOURCE/RUNTIME
+  identity, baseline provenance, public version/tag, runtime, archive name and
+  SHA-256;
+- the external checksum content is exactly `<archive-sha256>  <archive-basename>`;
+- manifest digests for the checksum and release notes match their actual bytes;
+- release notes repeat the exact candidate/baseline/spec/runtime/archive
+  identity from the machine-verifiable metadata; and
+- both Important capabilities and Important limitations contain at least one
+  explicit claim.
+
+Changing the archive, checksum, notes, manifest, or envelope file set after E3B
+therefore invalidates the envelope unless all dependent metadata is deliberately
+re-prepared and revalidated.
+
+E3C2 still does not decide whether the editorial claims are truthful for a real
+candidate. That candidate-specific blocker/claim audit belongs to E3C3/E4.
+
 ## DIST001 boundary
 
 DIST001-A proves that the distribution can be constructed and that its archive
