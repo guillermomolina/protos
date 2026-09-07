@@ -1025,3 +1025,41 @@ TOOL001-F2D3C     IN_PROGRESS
 TOOL001-F2D3      CLOSED: NO
 TOOL001-F2D        CLOSED: NO
 ```
+
+## F2D3C3 decomposition refinement and F2D3C3A closure
+
+C3 is decomposed because mechanical C1->C2 driver composition and public CLI
+policy are distinct ownership boundaries:
+
+```text
+F2D3C3A  CLI-neutral workspace-run driver                          CLOSED
+F2D3C3B  public protos run wiring + final F2D3/F2D closure        READY
+```
+
+C3A adds `ProtosWorkspaceRunDriver`. Its request explicitly supplies the selected
+Core root, bundled Package Tool root, project root, Standard Library resolver,
+root-package logical entry and all application bootstrap data. The driver first
+runs the closed C1 read-only preflight to obtain only the detached
+`ProtosPackageExecutionPlan`, then passes that DTO into the closed C2B
+application Process boundary.
+
+C3A owns no CLI spelling, current-working-directory selection, implicit project
+discovery, default entry convention, diagnostic wording or exit-status policy.
+The focal executes a real workspace plan through the new driver and proves that
+`protos.toml` and `protos.lock` remain byte-identical.
+
+C3B is now the only remaining workspace-only F2D closure slice. It owns the
+public `protos run` command contract, project-root/entry convention and final
+driver diagnostics. F2D3/F2D remain open until that public boundary is published.
+
+After publication:
+
+```text
+TOOL001-F2D3C2   CLOSED
+TOOL001-F2D3C3   IN_PROGRESS
+TOOL001-F2D3C3A  CLOSED
+TOOL001-F2D3C3B  READY
+TOOL001-F2D3C     IN_PROGRESS
+TOOL001-F2D3      CLOSED: NO
+TOOL001-F2D        CLOSED: NO
+```

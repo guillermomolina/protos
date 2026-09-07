@@ -1,3 +1,9 @@
+## 0.2.245-SNAPSHOT
+
+- Subdivide `TOOL001-F2D3C3` into C3A CLI-neutral workspace-run driver composition and C3B public `protos run` policy/wiring plus final F2D3/F2D closure; close C3A only.
+- Add `ProtosWorkspaceRunDriver`, a host-only mechanical composition boundary whose explicit request supplies selected Core/Package-Tool/project roots, Standard Library resolver, root-package logical entry, and application bootstrap authority. It executes the closed C1 read-only preflight, passes only the detached `ProtosPackageExecutionPlan` into the closed C2B application boundary, and returns only `ProtosExecutionOutcome`.
+- Add focused real-workspace coverage proving exact dependency-backed execution through the new driver while `protos.toml` and `protos.lock` remain byte-identical. No CLI syntax/current-directory/default-entry policy, normative specification or native boundary changes occur; C3B becomes READY.
+
 ## 0.2.244-SNAPSHOT
 
 - Close `DIST001-E4B4 — release-only candidate lineage verification` and parent E4B. Add an independent Git-object verifier and fixture coverage that reconstruct `3c23eaaccecbdcc7c2bcd86bc30c445403cfb047` -> `957b1e16793a682de1d6406e37b5734c44d32d19` without using materialization helpers: exactly one parent, only modified `pom.xml`, byte-exact root `0.2.236-SNAPSHOT` -> `0.2.236` transition, one clean detached registered candidate worktree, no local/remote candidate refs, future tag `v0.2.236` absent locally and on origin, and release-publication flags still false. Decompose E4C into C1-C5 and make only E4C1 READY. No release archive, envelope, tag, GitHub Release or asset is created by this slice.
