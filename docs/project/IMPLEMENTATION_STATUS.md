@@ -805,7 +805,7 @@ record distributable Standard Library functionality.
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
 | TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | D/E and F1 are CLOSED; F2 physical lock integration IN_PROGRESS through F2A confined read/publish. Stale/resolution-input and resolver/execution/update work remain open. |
-| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D CLOSED; TOOL002-E is IN_PROGRESS with E1A Package/TOML manifest planning CLOSED at `0.2.216-SNAPSHOT` and E1B confined corpus authority READY; E2A-E4 and later F-J remain dependency-ordered. |
+| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D CLOSED; TOOL002-E is IN_PROGRESS with E1A Package/TOML manifest planning CLOSED at `0.2.216-SNAPSHOT` and E1B confined corpus authority CLOSED at `0.2.218-SNAPSHOT`; E2A is READY and E2B-E4 plus later F-J remain dependency-ordered. |
 
 ### TOOL001 — Package Tool
 
@@ -881,7 +881,7 @@ the initial TOOL002 closure.
 | TOOL002-B | CLOSED | `0.2.169-SNAPSHOT` / `SAME_COMMIT`; local test-neutral fresh-Process exact-entry executor, shared RootActor cooperative terminal dispatch, inert COMPLETED/FAILED/CANCELLED outcome, explicit bootstrap authority and Process termination before return; no test policy. |
 | TOOL002-C | CLOSED | `0.2.171-SNAPSHOT` / `SAME_COMMIT`; one exact compiled entry executes through TOOL002-B in a fresh Process with private stdin/stdout/stderr and detached captured output; no manifest/expectation/scheduler/result-transfer policy. |
 | TOOL002-D | CLOSED | D1-D4 complete through `0.2.211-SNAPSHOT`: bundled Protos owns all retained non-Future main-manifest expectation families, including child-local Closure/Error freshness; direct Java conformance ownership remains only for `future-*` pending TOOL002-F. |
-| TOOL002-E | READY | TOOL002-D is closed; migrate Package Tool/TOML fixtures away from Java-owned runner policy. |
+| TOOL002-E | IN_PROGRESS | E1A manifest planning and E1B confined corpus authority are CLOSED; E2A Package Tool execution environment is READY, followed by E2B execution, E3 Java ownership cutover and E4 closure. |
 | TOOL002-F | BLOCKED_BY_DEPENDENCIES | TOOL002-E; preserve async/Future pending-work and terminal-outcome coverage through production semantics. |
 | TOOL002-G | BLOCKED_BY_DEPENDENCIES | TOOL002-F; migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |
 | TOOL002-H | BLOCKED_BY_DEPENDENCIES | TOOL002-G; bounded parallel scheduling of independent fresh Processes with independent output capture and deterministic reporting. |

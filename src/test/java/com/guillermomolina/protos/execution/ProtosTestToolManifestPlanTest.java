@@ -43,6 +43,8 @@ final class ProtosTestToolManifestPlanTest {
     private static final Path MANIFEST_MODULE = TOOL_ROOT.resolve("Manifest.protos");
     private static final Path CORPUS_ROOT =
             Path.of("protos", "tests", "conformance");
+    private static final Path PACKAGE_TOML_CORPUS_ROOT =
+            Path.of("protos", "tests", "package-tool", "toml-syntax");
     private static final Path FIXTURE =
             Path.of(
                     "protos",
@@ -55,6 +57,12 @@ final class ProtosTestToolManifestPlanTest {
                     "tests",
                     "tooling",
                     "tool002-e1a-package-toml-manifest-plan.protos");
+    private static final Path PACKAGE_TOML_FILESYSTEM_FIXTURE =
+            Path.of(
+                    "protos",
+                    "tests",
+                    "tooling",
+                    "tool002-e1b-package-toml-filesystem.protos");
 
     @Test
     void bundledManifestModuleCompilesBeforeAnyFilesystemPolicyRuns()
@@ -214,6 +222,44 @@ final class ProtosTestToolManifestPlanTest {
         }
     }
 
+    @Test
+    void separatePackageTomlFilesystemLoadsRealCorpusWithoutExecutingFixtures()
+            throws Exception {
+        Fixture fixture = fixture();
+
+        try (ProtosNioReadOnlyTreeFilesystemBackend conformanceBackend =
+                        new ProtosNioReadOnlyTreeFilesystemBackend(CORPUS_ROOT);
+                ProtosNioReadOnlyTreeFilesystemBackend packageTomlBackend =
+                        new ProtosNioReadOnlyTreeFilesystemBackend(PACKAGE_TOML_CORPUS_ROOT)) {
+            assumeTrue(
+                    conformanceBackend.secureConfinementAvailable()
+                            && packageTomlBackend.secureConfinementAvailable(),
+                    "host provider has no SecureDirectoryStream");
+
+            installFilesystem(
+                    fixture.prelude(),
+                    fixture.activation(),
+                    "filesystem",
+                    conformanceBackend);
+            installFilesystem(
+                    fixture.prelude(),
+                    fixture.activation(),
+                    "packageTomlFilesystem",
+                    packageTomlBackend);
+
+            Object result =
+                    completed(
+                            new ProtosSourceCompiler()
+                                    .compile(
+                                            Files.readString(
+                                                    PACKAGE_TOML_FILESYSTEM_FIXTURE,
+                                                    StandardCharsets.UTF_8)),
+                            fixture.activation());
+
+            assertSame(ProtosBooleanValue.TRUE, result);
+        }
+    }
+
     private static Fixture fixture() throws Exception {
         ProtosBundledToolModuleResolver resolver =
                 new ProtosBundledToolModuleResolver(
@@ -230,6 +276,14 @@ final class ProtosTestToolManifestPlanTest {
             ProtosPrelude prelude,
             ProtosActivation activation,
             ProtosStandardFilesystemProtocol.Backend backend) {
+        installFilesystem(prelude, activation, "filesystem", backend);
+    }
+
+    private static void installFilesystem(
+            ProtosPrelude prelude,
+            ProtosActivation activation,
+            String slotName,
+            ProtosStandardFilesystemProtocol.Backend backend) {
         ProtosObjectValue rawFilesystem =
                 ProtosStandardFilesystemProtocol.createCapability(
                         prelude.bytesPrototypeForRuntime(),
@@ -239,7 +293,7 @@ final class ProtosTestToolManifestPlanTest {
                 assertInstanceOf(
                         ProtosFilesystemValue.class,
                         rawFilesystem);
-        activation.context().createLocalSlot("filesystem", filesystem);
+        activation.context().createLocalSlot(slotName, filesystem);
     }
 
     private static Object completed(

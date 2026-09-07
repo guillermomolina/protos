@@ -64,7 +64,7 @@ freeze those decisions unless their own audited scope requires and resolves them
 | TOOL002-B | CLOSED | Publish the local, test-neutral `ProtosFreshProcessExecutor` over `ProtosStandaloneProcessBootstrap`, shared RootActor cooperative terminal dispatch through `ProtosRootTaskExecution`, and inert `ProtosExecutionOutcome`; every invocation uses a fresh semantic Process and terminates it before returning. No TestPlan/scheduler/worker/remote/test policy. Implementation version `0.2.169-SNAPSHOT`. |
 | TOOL002-C | CLOSED | Publish test-neutral sequential private-stream capture over `ProtosFreshProcessExecutor`: one exact compiled entry gets private stdin/stdout/stderr, a fresh semantic Process and an inert outcome plus detached captured bytes. No manifest/expectation/scheduler/result-transfer policy. Implementation version `0.2.171-SNAPSHOT`. |
 | TOOL002-D | CLOSED | D1-D4 are published; all retained non-Future main-manifest expectation policy is owned by bundled Protos. D4 closes at `0.2.211-SNAPSHOT`; `future-*` remains TOOL002-F. |
-| TOOL002-E | IN_PROGRESS | Subdivided after audit; E1A package/TOML manifest planning is CLOSED, E1B confined corpus authority is READY, and execution/cutover slices remain dependency-ordered. |
+| TOOL002-E | IN_PROGRESS | Subdivided after audit; E1A package/TOML manifest planning and E1B confined corpus authority are CLOSED, E2A Package Tool execution environment is READY, and later execution/cutover slices remain dependency-ordered. |
 | TOOL002-F | BLOCKED_BY_DEPENDENCIES | After E, preserve async/Future pending-work and terminal-outcome test coverage through production execution semantics. |
 | TOOL002-G | BLOCKED_BY_DEPENDENCIES | After F, migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |
 | TOOL002-H | BLOCKED_BY_DEPENDENCIES | After G, add bounded parallel scheduling of independent fresh Processes, private output capture, and deterministic reporting. |
@@ -81,8 +81,8 @@ reviewable and publishable.
 | Slice | Status | Outcome |
 |---|---|---|
 | TOOL002-E1A | CLOSED | Bundled `Manifest.protos` accepts the retained two-column Package/TOML manifest as planning input, validates safe relative paths, assigns stable `package-tool/toml-syntax/...` CaseIds, and normalizes retained `true`/`error` rows into the already-owned canonical `boolean true` / generic `error` CaseSpec representation. The loader is parser-parameterized without changing the existing three-column conformance manifest contract. No Package Tool fixture executes in E1A. Implementation version `0.2.216-SNAPSHOT`. |
-| TOOL002-E1B | READY | Provision a separate read-only authority confined exactly to the Package/TOML corpus and compose `loadPackageToml`; do not broaden the existing conformance Filesystem or execute fixtures yet. |
-| TOOL002-E2A | BLOCKED_BY_DEPENDENCIES | After E1B, provide one fresh-Process execution environment using the existing bundled Package Tool module-resolution boundary so fixture `self:*` imports resolve as Package Tool modules, without creating a Test-specific resolver. |
+| TOOL002-E1B | CLOSED | Provision two independent bootstrap-local read-only tree-confined authorities: existing `filesystem` remains rooted at `protos/tests/conformance`, while `packageTomlFilesystem` is rooted exactly at `protos/tests/package-tool/toml-syntax`. `Main.protos` constructs the E1A Package/TOML plan through the second capability but does not execute it. Implementation version `0.2.218-SNAPSHOT`. |
+| TOOL002-E2A | READY | E1B is closed; provide one fresh-Process execution environment using the existing bundled Package Tool module-resolution boundary so fixture `self:*` imports resolve as Package Tool modules, without creating a Test-specific resolver. |
 | TOOL002-E2B | BLOCKED_BY_DEPENDENCIES | After E2A, execute the TOML plan through the existing bundled Test Tool runner and D-owned Boolean/Error expectation policy; require full-corpus Protos-owned evidence. |
 | TOOL002-E3 | BLOCKED_BY_DEPENDENCIES | After E2B, retire Java ownership of TOML manifest parsing, expectation interpretation and direct fixture execution, retaining Java only for genuinely host-side mechanisms if any remain. |
 | TOOL002-E4 | BLOCKED_BY_DEPENDENCIES | Final ownership/conformance/status reconciliation; close TOOL002-E and transition TOOL002-F to READY. |
@@ -90,6 +90,30 @@ reviewable and publishable.
 E1A deliberately grants no new Filesystem authority and invokes no Package Tool
 module. Its only executable change is inert planning policy in the bundled Test
 Tool plus a Java provisioning harness whose assertions live in Protos source.
+
+## TOOL002-E1B closure
+
+E1B provisions the second corpus capability without merging authority domains:
+
+- existing `filesystem` remains a read-only tree capability rooted exactly at
+  `protos/tests/conformance`;
+- new bootstrap-local `packageTomlFilesystem` is a separate read-only tree
+  capability rooted exactly at `protos/tests/package-tool/toml-syntax`;
+- imported `Manifest.protos` receives neither capability implicitly; `Main.protos`
+  passes each capability explicitly to the applicable loader;
+- `Main.protos` now constructs `packageTomlPlan` from the E1A loader, but only the
+  original conformance plan is passed to `Runner.runSimple`;
+- the existing tree-confined backend and standard Filesystem bridge are reused;
+  no broader root, ambient path authority, new public Filesystem constructor or
+  Package-specific Filesystem primitive is introduced.
+
+A Protos-owned fixture loads both real manifests through the two independent
+capabilities and checks their distinct stable CaseIds/planning fields. The Java
+harness only provisions those host capabilities. No Package Tool module or TOML
+fixture is executed in E1B, so Package Tool `self:*` resolution remains exactly
+the next mechanical boundary owned by TOOL002-E2A.
+
+TOOL002-E2A is READY.
 
 The hard-timeout / amortized OS-worker audit remains deferred. It is not part of
 TOOL002-A and is not silently made a blocker for the useful initial Test Tool.

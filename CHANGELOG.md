@@ -1,3 +1,8 @@
+## 0.2.218-SNAPSHOT
+
+- Close `TOOL002-E1B — confined Package/TOML corpus authority`. The bundled Test Tool now receives two independent bootstrap-local standard `Filesystem` capabilities: existing `filesystem` remains rooted exactly at `protos/tests/conformance`, while `packageTomlFilesystem` is rooted exactly at `protos/tests/package-tool/toml-syntax`. `Main.protos` constructs the E1A Package/TOML TestPlan through `Manifest.loadPackageToml(packageTomlFilesystem)` but deliberately does not execute that plan.
+- Keep the host boundary mechanical: `ProtosCli` generalizes bundled-tool Filesystem installation to an explicit bootstrap slot name and provisions the existing read-only tree-confined backend twice. A Protos-owned fixture proves that the same relative `manifest.tsv` path resolves independently through the two capabilities and yields the expected distinct canonical plans. No Package Tool `self:*` fixture resolution, Package fixture execution, expectation-policy change, new Filesystem constructor, or normative language change is introduced; `TOOL002-E2A` becomes READY.
+
 ## 0.2.217-SNAPSHOT
 
 - Start `TOOL001-F2 — physical lock integration` with `TOOL001-F2A — confined protos.lock read/publish substrate`. Add ordinary bundled-Protos `self:LockFile`: `load(filesystem)` reads exactly `protos.lock` through the already-provisioned confined Filesystem, decodes the complete UTF-8 stream and delegates canonical validation/model construction to closed F1C `LockDocument.parse`; `publish(filesystem, model)` first canonicalizes/structurally validates through `LockDocument.write`, then publishes through the closed B2 `MetadataPublication` transaction using `.protos.lock.stage -> protos.lock`.

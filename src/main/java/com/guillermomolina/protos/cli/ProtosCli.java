@@ -109,10 +109,14 @@ public final class ProtosCli {
             PrintStream out,
             PrintStream err)
             throws Exception {
-        Path corpusRoot =
-                core().getParent().getParent().resolve("tests").resolve("conformance");
+        Path testsRoot = core().getParent().getParent().resolve("tests");
+        Path conformanceRoot = testsRoot.resolve("conformance");
+        Path packageTomlRoot =
+                testsRoot.resolve("package-tool").resolve("toml-syntax");
         try (ProtosNioReadOnlyTreeFilesystemBackend filesystemBackend =
-                new ProtosNioReadOnlyTreeFilesystemBackend(corpusRoot)) {
+                        new ProtosNioReadOnlyTreeFilesystemBackend(conformanceRoot);
+                ProtosNioReadOnlyTreeFilesystemBackend packageTomlFilesystemBackend =
+                        new ProtosNioReadOnlyTreeFilesystemBackend(packageTomlRoot)) {
             return runBundledTool(
                     "test",
                     "Test",
@@ -122,7 +126,12 @@ public final class ProtosCli {
                     err,
                     session -> {
                         ProtosExactExecutionFacility.install(session.activation);
-                        installBundledToolFilesystem(session, filesystemBackend);
+                        installBundledToolFilesystem(
+                                session, "filesystem", filesystemBackend);
+                        installBundledToolFilesystem(
+                                session,
+                                "packageTomlFilesystem",
+                                packageTomlFilesystemBackend);
                     });
         }
     }
@@ -151,7 +160,9 @@ public final class ProtosCli {
                     in,
                     out,
                     err,
-                    session -> installBundledToolFilesystem(session, filesystemBackend));
+                    session ->
+                            installBundledToolFilesystem(
+                                    session, "filesystem", filesystemBackend));
         }
     }
 
@@ -233,6 +244,7 @@ public final class ProtosCli {
 
     private static void installBundledToolFilesystem(
             Session session,
+            String slotName,
             ProtosStandardFilesystemProtocol.Backend filesystemBackend) {
         ProtosObjectValue rawFilesystem =
                 ProtosStandardFilesystemProtocol.createCapability(
@@ -246,11 +258,11 @@ public final class ProtosCli {
             throw new IllegalStateException(
                     "standard Filesystem bridge returned the wrong value family");
         }
-        if (session.activation.context().hasLocalSlot("filesystem")) {
+        if (session.activation.context().hasLocalSlot(slotName)) {
             throw new IllegalStateException(
-                    "bundled tool Filesystem bootstrap slot already exists");
+                    "bundled tool Filesystem bootstrap slot already exists: " + slotName);
         }
-        session.activation.context().createLocalSlot("filesystem", filesystem);
+        session.activation.context().createLocalSlot(slotName, filesystem);
     }
 
     @FunctionalInterface

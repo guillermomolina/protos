@@ -14,14 +14,31 @@
 // the specific language governing rights and limitations under the License.
 
 Manifest: import("self:Manifest")
-Runner: import("self:Runner")
 
-plan: Manifest.load(filesystem)
-packageTomlPlan: Manifest.loadPackageToml(packageTomlFilesystem)
-run: Runner.runSimple(plan, filesystem, execution)
+conformanceCases: Manifest.planCases(Manifest.load(filesystem))
+packageTomlCases: Manifest.planCases(
+    Manifest.loadPackageToml(packageTomlFilesystem)
+)
 
-writer: TextWriter(process.stdout(), process.stdoutEncoding())
-writer.writeLine("Protos test tool bootstrap")
-writer.writeLine(process.args().at(0))
+conformanceFirst: conformanceCases.at(0)
+packageTomlFirst: packageTomlCases.at(0)
 
-run
+passed: conformanceCases.size() > 0
+passed = passed && (packageTomlCases.size() > 0)
+
+passed = passed &&
+    (Manifest.caseId(conformanceFirst) == "integer/add-small.protos")
+passed = passed &&
+    (Manifest.casePath(conformanceFirst) == "integer/add-small.protos")
+
+passed = passed &&
+    (Manifest.caseId(packageTomlFirst) ==
+        "package-tool/toml-syntax/key-bare-dotted.protos")
+passed = passed &&
+    (Manifest.casePath(packageTomlFirst) == "key-bare-dotted.protos")
+passed = passed &&
+    (Manifest.caseExpectation(packageTomlFirst) == "boolean")
+passed = passed &&
+    (Manifest.caseExpected(packageTomlFirst) == "true")
+
+passed
