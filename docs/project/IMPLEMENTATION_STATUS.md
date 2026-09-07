@@ -926,6 +926,7 @@ Identifier shape alone is insufficient: incidental IDs from design ideas, tests,
 | B004 | Public Group/GroupRef acquisition and discovery API | CLOSED | D039 defines and I011-21 implements the exact Core v0.1 `Actor.group(...) -> GroupRef` acquisition surface; portable service discovery remains outside Core v0.1. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
 | B005 | `super` without a physical methodHome | CLOSED | D040 defines missing-`methodHome` `InvalidSuper` semantics and I020-D implements them. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
 | B006 | Atomic package metadata replacement | CLOSED | D042 + closed I021 provide the general semantics/backend; package-tool Filesystem Slice 2B provisions confined staging-write/mutation authority and publishes metadata through standard File/Filesystem operations. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
+| B007 | Standard `while` protocol semantics | BLOCKED | The normative loop owner fixes a reevaluated Closure-condition shape but does not yet uniquely define the complete observable standard `while` protocol; implementation and the guide chapter must not guess the missing semantics. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
 
 ### D family
 

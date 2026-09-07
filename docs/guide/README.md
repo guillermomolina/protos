@@ -30,6 +30,20 @@ than duplicating large source examples that can drift independently.
 2. [Objects, delegation, and composition](02-objects-delegation-and-composition.md)
 3. [Closures, methods, and receivers](03-closures-methods-and-receivers.md)
 
+## Current guide blocker
+
+The planned control-flow chapter is intentionally not published yet.
+
+While auditing that chapter, the current normative execution owner was found to
+name a Closure-based `while` shape without uniquely defining the complete
+observable standard protocol needed by independent implementations. The current
+reference implementation also exposes no standard `while` selector.
+
+[`B007`](../project/IMPLEMENTATION_BLOCKERS.md#b007--standard-while-protocol-semantics)
+records the normative blocker. This guide sequence stops at chapter 03 until
+B007's unblock condition is satisfied; it must not fill the gap by guessing
+loop semantics or present the specified shape as current runnable behavior.
+
 ## Planned progression
 
 Future chapters should cover, as the guide grows:
