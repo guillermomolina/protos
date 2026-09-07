@@ -617,3 +617,5 @@ control/while-condition-error-transfer-preserves-identity.protos	boolean	true
 control/while-body-error-transfer-preserves-identity.protos	boolean	true
 control/while-condition-nonlocal-return-propagates.protos	boolean	true
 control/while-body-nonlocal-return-propagates.protos	boolean	true
+control/while-body-failed-future-not-awaited.protos	boolean	true
+control/while-body-future-not-cancelled.protos	boolean	true
