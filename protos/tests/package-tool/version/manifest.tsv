@@ -1,0 +1,20 @@
+# path	expectation
+release-version-parse-core.protos	true
+release-version-parse-prerelease.protos	true
+release-version-large-core.protos	true
+release-version-semver-precedence.protos	true
+release-version-core-precedence.protos	true
+release-version-prerelease-ascii.protos	true
+release-version-leading-zero-major-error.protos	error
+release-version-leading-zero-minor-error.protos	error
+release-version-leading-zero-patch-error.protos	error
+release-version-missing-patch-error.protos	error
+release-version-v-prefix-error.protos	error
+release-version-build-metadata-error.protos	error
+release-version-empty-prerelease-error.protos	error
+release-version-empty-prerelease-id-error.protos	error
+release-version-leading-zero-prerelease-error.protos	error
+release-version-invalid-prerelease-char-error.protos	error
+release-version-extra-core-error.protos	error
+release-version-whitespace-error.protos	error
+release-version-nonascii-prerelease-error.protos	error

@@ -715,7 +715,7 @@ record distributable Standard Library functionality.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | Bootstrap, confined Filesystem, metadata publication and the bounded historical manifest Slice 3 (TOOL001-C1 through C7) are CLOSED; later resolution/version/lock/workspace/store/registry work requires separately scoped continuation. |
+| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | Bootstrap, confined Filesystem, metadata publication and historical manifest Slice 3 are CLOSED; TOOL001-D release-version/constraint value policy is IN_PROGRESS with D1 CLOSED and D2 READY. |
 | TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C CLOSED; TOOL002-D IN_PROGRESS with D1/D2 CLOSED and D3 IN_PROGRESS; D3A CLOSED, D3B1 CLOSED, D3B2 IN_PROGRESS with D3B2A general `Object.parent()` Core prerequisite CLOSED at `0.2.196-SNAPSHOT` and D3B2B `error-parent` policy READY. |
 
 ### TOOL001 — Package Tool
@@ -746,6 +746,10 @@ forward.
 | TOOL001-C6 | package-tool manifest Slice 3D | CLOSED | `SAME_COMMIT` | Ordinary-Protos ManifestCommand reads exactly `protos.toml` through confined Filesystem authority, consumes complete UTF-8 TextReader chunks, invokes closed schema v1 and emits read-vs-schema diagnostics; the host only selects exact bundled `ManifestMain` for the public manifest command while historical bare Main stays unchanged. |
 | TOOL001-C7 | package-tool manifest Slice 3 closure | CLOSED | `SAME_COMMIT` | Documentation/governance-only final cross-slice validation and architecture/status reconciliation; no executable or implementation-version change. |
 | TOOL001-C | legacy package-tool manifest Slice 3 parent | CLOSED | `SAME_COMMIT` | C1-C7 complete the bounded manifest surface: TOML, schema-v1 structural model, confined project-manifest read/diagnostics and final reconciliation. Later package-resolution concerns are separately scoped. |
+| TOOL001-D | release-version / dependency-constraint value policy | IN_PROGRESS | TOOL001-D1 published | D1 strict ReleaseVersion value/precedence CLOSED; D2 constraint language v1 READY; resolver and lock concerns remain outside this parent. |
+| TOOL001-D1 | strict ReleaseVersion value + precedence | CLOSED | `SAME_COMMIT` | Ordinary bundled-Protos parser/model/ordering for strict SemVer-derived ReleaseVersion, with no build metadata or dependency-selection policy. |
+| TOOL001-D2 | dependency constraint language v1 | READY | — | Exact/caret/bounded interval parsing and satisfaction plus prerelease admission over D1 ReleaseVersion values. |
+
 
 Detailed migration and continuation rules live in
 `docs/project/TOOL001_PACKAGE_TOOL.md`.

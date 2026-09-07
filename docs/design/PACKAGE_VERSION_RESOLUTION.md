@@ -19,6 +19,17 @@ design already permits multiple versions to coexist. That lets the initial
 resolver solve version pressure structurally instead of manufacturing a global
 single-version constraint.
 
+## TOOL001 implementation checkpoint
+
+`TOOL001-D1` closes the strict ReleaseVersion parser/value/precedence prerequisite
+used by this audit. `TOOL001-D2` is READY for the separately selected constraint
+language v1 surface (exact, caret and explicit bounded intervals plus prerelease
+admission).
+
+The broader candidate-eligibility, lock-preservation, update and graph-resolution
+material in this exploratory record remains unimplemented and is not made current
+policy merely by D1.
+
 ## Design goals
 
 The initial resolver should:

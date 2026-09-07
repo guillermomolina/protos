@@ -1,0 +1,368 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+fail: () => {
+    Error().signal()
+}
+
+emptyBytes: () => {
+    Encoding.UTF8.encode("")
+}
+
+isDigit: (octet) => {
+    result: octet >= 48
+    (octet > 57).ifTrue(() => {
+        result = false
+    })
+    result
+}
+
+isAsciiLetter: (octet) => {
+    result: octet >= 65
+    (octet > 90).ifTrue(() => {
+        result = false
+    })
+
+    result.ifFalse(() => {
+        result = octet >= 97
+        (octet > 122).ifTrue(() => {
+            result = false
+        })
+    })
+
+    result
+}
+
+isPrereleaseOctet: (octet) => {
+    result: isDigit(octet)
+    result.ifFalse(() => {
+        result = isAsciiLetter(octet)
+    })
+    result.ifFalse(() => {
+        result = octet == 45
+    })
+    result
+}
+
+parseDecimal: (bytes) => {
+    (bytes.size() == 0).ifTrue(() => {
+        fail()
+    })
+
+    (bytes.size() > 1).ifTrue(() => {
+        (bytes.at(0) == 48).ifTrue(() => {
+            fail()
+        })
+    })
+
+    value: 0
+    bytes.each((octet) => {
+        isDigit(octet).ifFalse(() => {
+            fail()
+        })
+        value = value * 10 + (octet - 48)
+    })
+    value
+}
+
+parsePrereleaseIdentifier: (bytes) => {
+    (bytes.size() == 0).ifTrue(() => {
+        fail()
+    })
+
+    numeric: true
+    bytes.each((octet) => {
+        isPrereleaseOctet(octet).ifFalse(() => {
+            fail()
+        })
+        isDigit(octet).ifFalse(() => {
+            numeric = false
+        })
+    })
+
+    text: Encoding.UTF8.decode(bytes)
+    number: null
+
+    numeric.ifTrue(() => {
+        (bytes.size() > 1).ifTrue(() => {
+            (bytes.at(0) == 48).ifTrue(() => {
+                fail()
+            })
+        })
+        number = parseDecimal(bytes)
+    })
+
+    {
+        numeric: numeric
+        number: number
+        text: text
+    }
+}
+
+parse: (text) => {
+    source: Encoding.UTF8.encode(text)
+
+    major: null
+    minor: null
+    patch: null
+    prerelease: null
+
+    coreIndex: 0
+    inPrerelease: false
+    current: emptyBytes()
+
+    storeCore: (bytes) => {
+        value: parseDecimal(bytes)
+
+        (coreIndex == 0).ifTrue(() => {
+            major = value
+        })
+        (coreIndex == 1).ifTrue(() => {
+            minor = value
+        })
+        (coreIndex == 2).ifTrue(() => {
+            patch = value
+        })
+
+        (coreIndex > 2).ifTrue(() => {
+            fail()
+        })
+    }
+
+    appendPrerelease: (bytes) => {
+        identifier: parsePrereleaseIdentifier(bytes)
+        (prerelease === null).ifTrue(() => {
+            prerelease = Array()
+        })
+        prerelease = Array(...prerelease, identifier)
+    }
+
+    source.each((octet) => {
+        handled: false
+
+        inPrerelease.ifTrue(() => {
+            (octet == 46).ifTrue(() => {
+                appendPrerelease(current)
+                current = emptyBytes()
+                handled = true
+            })
+
+            handled.ifFalse(() => {
+                isPrereleaseOctet(octet).ifFalse(() => {
+                    fail()
+                })
+                current.add(octet)
+            })
+        })
+
+        inPrerelease.ifFalse(() => {
+            (octet == 46).ifTrue(() => {
+                (coreIndex >= 2).ifTrue(() => {
+                    fail()
+                })
+                storeCore(current)
+                coreIndex = coreIndex + 1
+                current = emptyBytes()
+                handled = true
+            })
+
+            handled.ifFalse(() => {
+                (octet == 45).ifTrue(() => {
+                    (coreIndex == 2).ifFalse(() => {
+                        fail()
+                    })
+                    storeCore(current)
+                    current = emptyBytes()
+                    inPrerelease = true
+                    handled = true
+                })
+            })
+
+            handled.ifFalse(() => {
+                isDigit(octet).ifFalse(() => {
+                    fail()
+                })
+                current.add(octet)
+            })
+        })
+    })
+
+    inPrerelease.ifTrue(() => {
+        appendPrerelease(current)
+    })
+
+    inPrerelease.ifFalse(() => {
+        (coreIndex == 2).ifFalse(() => {
+            fail()
+        })
+        storeCore(current)
+    })
+
+    {
+        major: major
+        minor: minor
+        patch: patch
+        prerelease: prerelease
+        text: text
+    }
+}
+
+compareAsciiText: (leftText, rightText) => {
+    left: Encoding.UTF8.encode(leftText)
+    right: Encoding.UTF8.encode(rightText)
+
+    limit: left.size()
+    (right.size() < limit).ifTrue(() => {
+        limit = right.size()
+    })
+
+    result: 0
+    index: 0
+    left.each((octet) => {
+        (index < limit).ifTrue(() => {
+            (result == 0).ifTrue(() => {
+                other: right.at(index)
+                (octet < other).ifTrue(() => {
+                    result = -1
+                })
+                (octet > other).ifTrue(() => {
+                    result = 1
+                })
+            })
+        })
+        index = index + 1
+    })
+
+    (result == 0).ifTrue(() => {
+        (left.size() < right.size()).ifTrue(() => {
+            result = -1
+        })
+        (left.size() > right.size()).ifTrue(() => {
+            result = 1
+        })
+    })
+
+    result
+}
+
+compareIdentifier: (left, right) => {
+    result: 0
+
+    left.numeric.ifTrue(() => {
+        right.numeric.ifTrue(() => {
+            (left.number < right.number).ifTrue(() => {
+                result = -1
+            })
+            (left.number > right.number).ifTrue(() => {
+                result = 1
+            })
+        })
+        right.numeric.ifFalse(() => {
+            result = -1
+        })
+    })
+
+    left.numeric.ifFalse(() => {
+        right.numeric.ifTrue(() => {
+            result = 1
+        })
+        right.numeric.ifFalse(() => {
+            result = compareAsciiText(left.text, right.text)
+        })
+    })
+
+    result
+}
+
+compare: (left, right) => {
+    result: 0
+
+    (left.major < right.major).ifTrue(() => {
+        result = -1
+    })
+    (left.major > right.major).ifTrue(() => {
+        result = 1
+    })
+
+    (result == 0).ifTrue(() => {
+        (left.minor < right.minor).ifTrue(() => {
+            result = -1
+        })
+        (left.minor > right.minor).ifTrue(() => {
+            result = 1
+        })
+    })
+
+    (result == 0).ifTrue(() => {
+        (left.patch < right.patch).ifTrue(() => {
+            result = -1
+        })
+        (left.patch > right.patch).ifTrue(() => {
+            result = 1
+        })
+    })
+
+    (result == 0).ifTrue(() => {
+        leftStable: left.prerelease === null
+        rightStable: right.prerelease === null
+
+        leftStable.ifTrue(() => {
+            rightStable.ifFalse(() => {
+                result = 1
+            })
+        })
+
+        leftStable.ifFalse(() => {
+            rightStable.ifTrue(() => {
+                result = -1
+            })
+
+            rightStable.ifFalse(() => {
+                limit: left.prerelease.size()
+                (right.prerelease.size() < limit).ifTrue(() => {
+                    limit = right.prerelease.size()
+                })
+
+                index: 0
+                left.prerelease.each((identifier) => {
+                    (index < limit).ifTrue(() => {
+                        (result == 0).ifTrue(() => {
+                            result = compareIdentifier(
+                                identifier,
+                                right.prerelease.at(index)
+                            )
+                        })
+                    })
+                    index = index + 1
+                })
+
+                (result == 0).ifTrue(() => {
+                    (left.prerelease.size() < right.prerelease.size()).ifTrue(() => {
+                        result = -1
+                    })
+                    (left.prerelease.size() > right.prerelease.size()).ifTrue(() => {
+                        result = 1
+                    })
+                })
+            })
+        })
+    })
+
+    result
+}
+
+compareText: (leftText, rightText) => {
+    compare(parse(leftText), parse(rightText))
+}

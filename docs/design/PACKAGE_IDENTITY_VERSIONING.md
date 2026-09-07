@@ -210,6 +210,17 @@ from the previous authority or another separately designed trust mechanism.
 Until then, changing authority is an explicit dependency-source change even when
 the package retains its logical `PackageId`.
 
+## ReleaseVersion implementation checkpoint
+
+`TOOL001-D1` implements only the precise `ReleaseVersion` value contract selected
+below: strict `MAJOR.MINOR.PATCH[-PRERELEASE]`, no build metadata, and SemVer 2.0.0
+precedence. The implementation is ordinary bundled Protos code and uses arbitrary-
+size Core Integer values for numeric components.
+
+This checkpoint does not promote the document's still-open PackageId generation,
+locator grammar, authority authentication, ContentIdentity canonicalization,
+registry or publication questions into implementation contracts.
+
 ## Release identity and versioning
 
 ### Release relation

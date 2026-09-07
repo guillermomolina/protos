@@ -1,3 +1,9 @@
+## 0.2.197-SNAPSHOT
+
+- Start `TOOL001-D — release-version and dependency-constraint value policy` with the bounded `TOOL001-D1 — ReleaseVersion` slice. Add ordinary bundled-Protos `self:ReleaseVersion` with strict `MAJOR.MINOR.PATCH[-PRERELEASE]` parsing, no build metadata, canonical decimal core identifiers, SemVer prerelease identifier validation and exact precedence comparison.
+- Preserve the package architecture boundary: D1 implements only the already-selected `ReleaseVersion` value/ordering contract. It does not parse dependency constraints, apply caret/interval/prerelease eligibility, choose candidates, read/write `protos.lock`, resolve dependencies, interpret PackageId/locator/authority strings, access network/store state or change Core semantics.
+- Add Protos-owned conformance for core/prerelease structure, arbitrary-size Integer components, the canonical SemVer precedence chain, ASCII/numeric prerelease ordering and strict rejection of prefixes, missing components, leading zeroes, build metadata, malformed prerelease identifiers, whitespace and non-ASCII prerelease syntax. `TOOL001-D1` closes and `TOOL001-D2` becomes READY.
+
 ## 0.2.196-SNAPSHOT
 
 - Close `TOOL001-C7` and the bounded historical package-tool manifest Slice 3 parent `TOOL001-C` as documentation/governance-only final reconciliation over the already-published C1-C6 implementation. Final cross-slice validation re-runs the bundled-tool/bootstrap, metadata publication, TOML/schema and manifest-command focal suites plus the complete Maven suite; no production, test, Protos source, normative specification or implementation-version change is introduced.
