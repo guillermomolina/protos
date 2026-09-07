@@ -1,6 +1,6 @@
 # TOOL001-F2D — Workspace Execution Preflight and PackageExecutionPlan
 
-Status: **IN_PROGRESS through CLOSED F2D3B1B1 project-root/index implementation**
+Status: **IN_PROGRESS through CLOSED F2D3B1B2A exact direct-child directory lookup**
 Nature: non-normative Package Tool / host-integration design
 Design checkpoint: 2026-09-07
 
@@ -39,9 +39,12 @@ F2D3B    exact workspace package-backed module resolver           IN_PROGRESS
 F2D3B1    package identity + source mechanism                     IN_PROGRESS
 F2D3B1A   canonical workspace ModuleKey codec                     CLOSED
 F2D3B1B   physical source mechanism parent                        IN_PROGRESS
-F2D3B1B1  selected project-root anchor + detached package index   CLOSED
-F2D3B1B2  exact member-location directory binding                 READY
-F2D3B1B3  logical module -> exact regular .protos source          BLOCKED_BY_DEPENDENCIES
+F2D3B1B1   selected project-root anchor + detached package index  CLOSED
+F2D3B1B2   exact member-location directory binding                IN_PROGRESS
+F2D3B1B2A  exact direct-child directory lookup                    CLOSED
+F2D3B1B2B  confined canonical member-location traversal           READY
+F2D3B1B2C  immutable package -> physical-directory binding        BLOCKED_BY_DEPENDENCIES
+F2D3B1B3   logical module -> exact regular .protos source         BLOCKED_BY_DEPENDENCIES
 F2D3B2    resolver routing                                        BLOCKED_BY_DEPENDENCIES
 F2D3B2A  self: routing                                            BLOCKED_BY_DEPENDENCIES
 F2D3B2B  dep: edge/export routing                                 BLOCKED_BY_DEPENDENCIES
@@ -630,3 +633,29 @@ dispatch.
 Its focal is Java intentionally: this is host Path/DTO indexing mechanics, not
 observable Protos `import(String)` behavior. Protos-owned conformance resumes
 when routing becomes observable in B2.
+
+## F2D3B1B2 refinement and F2D3B1B2A closure
+
+B1B2 is split before traversal into:
+
+```text
+F2D3B1B2A  exact direct-child directory lookup             CLOSED
+F2D3B1B2B  confined canonical member-location traversal    READY
+F2D3B1B2C  immutable package -> physical-directory binding dependency-gated
+```
+
+B1B2A receives one already-separated workspace location component and enumerates the already-selected parent directory. It compares the stored child filename String exactly; it does not pass that semantic component to host path parsing, case-fold it, Unicode-normalize it, search recursively, or infer a package from a basename. Empty String, `.`, `..`, and `/` are rejected at this one-component boundary.
+
+This slice deliberately does not call `toRealPath()` on the child and does not decide whether a directory symlink remains inside the selected project root. B1B2B owns multi-component traversal plus complete real-path/symlink confinement. B1B2C later applies that closed traversal to the detached B1B1 package index.
+
+The focal remains Java because this is host `Path` mechanics only. No Protos-observable import behavior begins here.
+
+After publication:
+
+```text
+TOOL001-F2D3B1B2A CLOSED: YES
+TOOL001-F2D3B1B2B READY: YES
+TOOL001-F2D3B1B2C BLOCKED_BY_DEPENDENCIES: TOOL001-F2D3B1B2B
+TOOL001-F2D3B1B2 CLOSED: NO
+TOOL001-F2D3B1B3 BLOCKED_BY_DEPENDENCIES: TOOL001-F2D3B1B2C
+```
