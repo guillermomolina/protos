@@ -811,7 +811,7 @@ record distributable Standard Library functionality.
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
 | TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | D/E/F1 CLOSED; F2 physical integration IN_PROGRESS with F2A I/O and F2B semantic resolution-input/stale detection CLOSED. Later execution/update integration remains open. |
-| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D CLOSED; TOOL002-E is IN_PROGRESS with E1A/E1B/E2A1/E2A2A/E2A2B CLOSED; E2A2C READY, while E2A2/E2A and E2B-E4 plus later F-J remain dependency-ordered. |
+| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D CLOSED; TOOL002-E remains IN_PROGRESS with E1A/E1B/E2A CLOSED and E2B READY; E3/E4 and later F-J remain dependency-ordered. |
 
 ### TOOL001 — Package Tool
 
@@ -892,13 +892,14 @@ the initial TOOL002 closure.
 | TOOL002-B | CLOSED | `0.2.169-SNAPSHOT` / `SAME_COMMIT`; local test-neutral fresh-Process exact-entry executor, shared RootActor cooperative terminal dispatch, inert COMPLETED/FAILED/CANCELLED outcome, explicit bootstrap authority and Process termination before return; no test policy. |
 | TOOL002-C | CLOSED | `0.2.171-SNAPSHOT` / `SAME_COMMIT`; one exact compiled entry executes through TOOL002-B in a fresh Process with private stdin/stdout/stderr and detached captured output; no manifest/expectation/scheduler/result-transfer policy. |
 | TOOL002-D | CLOSED | D1-D4 complete through `0.2.211-SNAPSHOT`: bundled Protos owns all retained non-Future main-manifest expectation families, including child-local Closure/Error freshness; direct Java conformance ownership remains only for `future-*` pending TOOL002-F. |
-| TOOL002-E | IN_PROGRESS | E1A/E1B/E2A1/E2A2A/E2A2B CLOSED; E2A2C READY before E2A2/E2A closure and E2B. |
-| TOOL002-E2A | IN_PROGRESS | E2A1 selected resolver/fresh-Process normal execution CLOSED at `0.2.219-SNAPSHOT`; E2A2 remains IN_PROGRESS through closed E2A2B; parent closes after E2A2C. |
+| TOOL002-E | IN_PROGRESS | E1A/E1B/E2A CLOSED; E2B READY, followed by E3 Java ownership cutover and E4 final closure. |
+| TOOL002-E2A | CLOSED | E2A1 selected resolver/fresh-Process normal execution plus E2A2 cross-Prelude failed/Error observation complete through `0.2.222-SNAPSHOT`; E2A2C closes the cross-slice ownership/confinement boundary without executable changes. |
 | TOOL002-E2A1 | CLOSED | `0.2.219-SNAPSHOT` / `SAME_COMMIT`; named exact-source facility over an already-selected Prelude plus bootstrap-local `packageExecution` using the existing bundled Package Tool resolver; one real `self:TomlSyntax` fixture completes normally in a fresh Process. |
-| TOOL002-E2A2 | IN_PROGRESS | E2A2A/E2A2B CLOSED; E2A2C READY. |
+| TOOL002-E2A2 | CLOSED | E2A2A/E2A2B executable work is complete through `0.2.222-SNAPSHOT`; E2A2C closes the documentation/governance reconciliation with no implementation-version change. |
 | TOOL002-E2A2A | CLOSED | `0.2.220-SNAPSHOT` / `SAME_COMMIT`; source/destination Prelude-aware detached standard Error taxonomy rematerialization; no Package integration. |
 | TOOL002-E2A2B | CLOSED | `0.2.222-SNAPSHOT` / `SAME_COMMIT`; selected Package Prelude feeds detached observation and one retained failed TOML fixture is rematerialized as a fresh Test Tool-domain Error. |
-| TOOL002-E2A2C | READY | Focused validation and closure of E2A2/E2A; make E2B READY without adding execution policy. |
+| TOOL002-E2A2C | CLOSED | Documentation/governance-only cross-slice validation confirms Package resolver selection, fresh-Process/private-capture execution, separate confined caller corpus authority, caller-domain Error rematerialization and absence of E2B expectation/TestPlan policy; no implementation-version change. |
+| TOOL002-E2B | READY | Parent E2A is CLOSED; execute the retained Package/TOML plan through bundled Protos `Runner` using already-owned Boolean/Error expectation policy and require full-corpus Protos-owned evidence. |
 | TOOL002-F | BLOCKED_BY_DEPENDENCIES | TOOL002-E; preserve async/Future pending-work and terminal-outcome coverage through production semantics. |
 | TOOL002-G | BLOCKED_BY_DEPENDENCIES | TOOL002-F; migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |
 | TOOL002-H | BLOCKED_BY_DEPENDENCIES | TOOL002-G; bounded parallel scheduling of independent fresh Processes with independent output capture and deterministic reporting. |

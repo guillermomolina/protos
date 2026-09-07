@@ -64,7 +64,7 @@ freeze those decisions unless their own audited scope requires and resolves them
 | TOOL002-B | CLOSED | Publish the local, test-neutral `ProtosFreshProcessExecutor` over `ProtosStandaloneProcessBootstrap`, shared RootActor cooperative terminal dispatch through `ProtosRootTaskExecution`, and inert `ProtosExecutionOutcome`; every invocation uses a fresh semantic Process and terminates it before returning. No TestPlan/scheduler/worker/remote/test policy. Implementation version `0.2.169-SNAPSHOT`. |
 | TOOL002-C | CLOSED | Publish test-neutral sequential private-stream capture over `ProtosFreshProcessExecutor`: one exact compiled entry gets private stdin/stdout/stderr, a fresh semantic Process and an inert outcome plus detached captured bytes. No manifest/expectation/scheduler/result-transfer policy. Implementation version `0.2.171-SNAPSHOT`. |
 | TOOL002-D | CLOSED | D1-D4 are published; all retained non-Future main-manifest expectation policy is owned by bundled Protos. D4 closes at `0.2.211-SNAPSHOT`; `future-*` remains TOOL002-F. |
-| TOOL002-E | IN_PROGRESS | E1A/E1B/E2A1 and E2A2A/E2A2B are CLOSED; E2A2C focused closure is READY; E2A2/E2A remain IN_PROGRESS and E2B-E4 dependency-ordered. |
+| TOOL002-E | IN_PROGRESS | E1A/E1B and parent E2A are CLOSED; E2B Package/TOML plan execution is READY, followed by E3 Java ownership cutover and E4 final E closure. |
 | TOOL002-F | BLOCKED_BY_DEPENDENCIES | After E, preserve async/Future pending-work and terminal-outcome test coverage through production execution semantics. |
 | TOOL002-G | BLOCKED_BY_DEPENDENCIES | After F, migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |
 | TOOL002-H | BLOCKED_BY_DEPENDENCIES | After G, add bounded parallel scheduling of independent fresh Processes, private output capture, and deterministic reporting. |
@@ -82,13 +82,13 @@ reviewable and publishable.
 |---|---|---|
 | TOOL002-E1A | CLOSED | Bundled `Manifest.protos` accepts the retained two-column Package/TOML manifest as planning input, validates safe relative paths, assigns stable `package-tool/toml-syntax/...` CaseIds, and normalizes retained `true`/`error` rows into the already-owned canonical `boolean true` / generic `error` CaseSpec representation. The loader is parser-parameterized without changing the existing three-column conformance manifest contract. No Package Tool fixture executes in E1A. Implementation version `0.2.216-SNAPSHOT`. |
 | TOOL002-E1B | CLOSED | Provision two independent bootstrap-local read-only tree-confined authorities: existing `filesystem` remains rooted at `protos/tests/conformance`, while `packageTomlFilesystem` is rooted exactly at `protos/tests/package-tool/toml-syntax`. `Main.protos` constructs the E1A Package/TOML plan through the second capability but does not execute it. Implementation version `0.2.218-SNAPSHOT`. |
-| TOOL002-E2A | IN_PROGRESS | Subdivided after the distinct-Prelude observation audit: E2A1 selected Package resolver / fresh-Process normal completion is CLOSED; E2A2 safe failed/Error observation across the Package Prelude is READY. Parent E2A closes only after E2A2. |
+| TOOL002-E2A | CLOSED | E2A1 proves exact bundled Package resolver execution with fresh-Process normal completion; E2A2A/E2A2B prove safe cross-Prelude failed/Error observation and one retained real failed Package/TOML fixture. E2A adds no Test-specific resolver, expectation policy, child Filesystem authority or Java-runner cutover. |
 | TOOL002-E2A1 | CLOSED | Generalize the existing exact-source facility to an explicit already-selected Prelude and named bootstrap slot; provision `packageExecution` with the existing bundled Package Tool resolver; one real TOML fixture resolves `self:TomlSyntax` and completes as canonical `true` in a fresh Process. No plan execution policy. Implementation version `0.2.219-SNAPSHOT`. |
-| TOOL002-E2A2 | IN_PROGRESS | E2A2A detached Error-taxonomy rematerialization and E2A2B real failed-fixture integration are CLOSED; E2A2C focused closure/reconciliation is READY. |
+| TOOL002-E2A2 | CLOSED | E2A2A rematerializes the closed standard Error taxonomy across distinct Preludes without sharing source-domain prototypes; E2A2B proves the mechanism through retained `invalid-key-error.protos`. E2A2C reconciles ownership/confinement and closes the parent. |
 | TOOL002-E2A2A | CLOSED | General source/destination Prelude-aware detached standard Error taxonomy rematerialization. No `packageExecution` wiring or Package fixture execution. Implementation version `0.2.220-SNAPSHOT`. |
 | TOOL002-E2A2B | CLOSED | `packageExecution` supplies its selected Package Prelude to the E2A2A snapshot boundary; one retained `invalid-key-error.protos` fixture proves a fresh failed Error is rematerialized under the Test Tool `Error` prototype. Implementation version `0.2.222-SNAPSHOT`. |
-| TOOL002-E2A2C | READY | Focused ownership/confinement validation and closure of E2A2 + parent E2A; make E2B READY without adding execution policy. |
-| TOOL002-E2B | BLOCKED_BY_DEPENDENCIES | After parent E2A closes, execute the TOML plan through the existing bundled Test Tool runner and D-owned Boolean/Error expectation policy; require full-corpus Protos-owned evidence. |
+| TOOL002-E2A2C | CLOSED | Documentation/governance-only cross-slice reconciliation confirms the E2A execution boundary: selected existing Package resolver, one fresh semantic Process per execution, private capture, no child Filesystem authority, caller-domain detached Error rematerialization, and no expectation/TestPlan policy. No implementation-version change. |
+| TOOL002-E2B | READY | Parent E2A is closed; execute the retained Package/TOML plan through the existing bundled Test Tool runner and D-owned Boolean/Error expectation policy, with full-corpus Protos-owned evidence. |
 | TOOL002-E3 | BLOCKED_BY_DEPENDENCIES | After E2B, retire Java ownership of TOML manifest parsing, expectation interpretation and direct fixture execution, retaining Java only for genuinely host-side mechanisms if any remain. |
 | TOOL002-E4 | BLOCKED_BY_DEPENDENCIES | Final ownership/conformance/status reconciliation; close TOOL002-E and transition TOOL002-F to READY. |
 
@@ -118,7 +118,7 @@ harness only provisions those host capabilities. No Package Tool module or TOML
 fixture is executed in E1B, so Package Tool `self:*` resolution remains exactly
 the next mechanical boundary owned by TOOL002-E2A.
 
-TOOL002-E2A is IN_PROGRESS; TOOL002-E2A2 is READY.
+TOOL002-E2A is CLOSED; TOOL002-E2B is READY.
 
 The hard-timeout / amortized OS-worker audit remains deferred. It is not part of
 TOOL002-A and is not silently made a blocker for the useful initial Test Tool.
@@ -192,7 +192,33 @@ identity, immediate destination `Error` parent and empty private output.
 
 No Package/TOML TestPlan traversal or expectation-policy cutover occurs.
 
-TOOL002-E2A2C is READY. Parent E2A2 and E2A remain IN_PROGRESS.
+### TOOL002-E2A2C closure
+
+E2A2C adds no executable behavior. Its focused cross-slice reconciliation closes
+the host-mechanical Package execution environment established by E2A:
+
+- E2A1 selects the already-existing bundled Package Tool resolver and executes
+  exact source through the existing captured fresh-Process path; the child gets
+  empty args/environment, private streams and no default Filesystem authority;
+- E2A2A keeps detached observation test-neutral and rematerializes only the
+  closed standard Error taxonomy from an explicitly identified source Prelude to
+  the corresponding destination Prelude; source prototypes and executable or
+  authority-bearing state are not shared;
+- E2A2B supplies the selected Package Prelude as source-domain metadata and proves
+  one retained real failing TOML fixture arrives as a fresh Test Tool-domain
+  Error under the Test Tool's own `Error` prototype;
+- E1B corpus authority remains a separate bootstrap-local read-only Filesystem
+  rooted exactly at the Package/TOML corpus and is used by the Test Tool caller
+  to read source; it is not delegated into the fresh child Process.
+
+Together, the normal and failed paths establish the complete E2A execution
+environment needed by E2B without owning any Package/TOML expectation or
+TestPlan traversal policy. `Runner.protos` remains unchanged by E2A, and the
+legacy Java corpus runner remains intentionally present until E3.
+
+TOOL002-E2A2 is CLOSED.
+TOOL002-E2A is CLOSED.
+TOOL002-E2B is READY.
 
 ## TOOL002-A closure
 
