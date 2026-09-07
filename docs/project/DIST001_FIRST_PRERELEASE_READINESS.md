@@ -130,3 +130,26 @@ has explicitly authorized a procedure that resolves both unambiguously).
 E5 must never reinterpret a green build, a passing E4 gate, an implementation
 version bump, or passage of time as release authorization. Public release
 publication is a separate action tied to the explicitly selected candidate.
+
+## E2 version-contract result
+
+DIST001-E2 closes the generic public-version decision without selecting a
+candidate. For a future selected development baseline whose project version is
+exactly `V-SNAPSHOT`, the first public pre-release identity is `V`; its Git tag
+is `vV`, its GitHub Release title is `Protos V`, and the GitHub Release is marked
+as a pre-release.
+
+Release preparation uses a candidate commit derived from the explicitly selected
+development baseline rather than converting active `main` to a non-SNAPSHOT
+version. The exact mechanical contract and immutability rules are recorded in
+`docs/project/DIST001_PRERELEASE_VERSION_CONTRACT.md`.
+
+The candidate/version state remains:
+
+```text
+release baseline revision:         UNSELECTED
+release candidate source revision: UNSELECTED
+public release version:            UNSELECTED
+Git tag:                            NOT CREATED
+GitHub Release:                     NOT CREATED
+```

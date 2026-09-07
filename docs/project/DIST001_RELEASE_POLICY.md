@@ -259,14 +259,16 @@ publication:
   release-claim constraint rather than an automatic blanket ban: any limitation
   that remains must be disclosed, and any blocker that makes an advertised
   capability materially false blocks publication.
-- `DIST001-E2` — coherent public pre-release version contract — READY. Define how
-  the internal Maven `0.2.N-SNAPSHOT` development identity transitions to one
-  coherent public pre-release identity across tool output, tag, release metadata,
-  and asset names. This slice does not select a candidate.
-- `DIST001-E3` — release metadata/assets/validation preparation —
-  `BLOCKED_BY_DEPENDENCIES` on E2. Prepare release-note metadata, checksums,
-  asset manifest, and a candidate validation entry point without creating a tag
-  or GitHub Release.
+- `DIST001-E2` — coherent public pre-release version contract — CLOSED. For an
+  explicitly selected `V-SNAPSHOT` development baseline, the public version is
+  exactly `V`, tag `vV`, title `Protos V`, with GitHub `prerelease=true`.
+  Candidate preparation derives a release commit from the selected baseline
+  without converting active `main` to a non-SNAPSHOT version. No concrete
+  baseline/version/candidate is selected by E2.
+- `DIST001-E3` — release metadata/assets/validation preparation — READY. Implement
+  generic release-mode metadata, baseline/candidate provenance, release notes,
+  checksums/asset manifest, version-transition guards, and a candidate validation
+  entry point without creating a tag or GitHub Release.
 - `DIST001-E4` — exact candidate selection and validation —
   `BLOCKED_BY_DEPENDENCIES` on E2/E3 and additionally requires an explicit user
   decision selecting the exact source revision/public version. E4 validates and
@@ -281,6 +283,9 @@ publication:
 
 The detailed E1 readiness envelope is recorded in
 `docs/project/DIST001_FIRST_PRERELEASE_READINESS.md`.
+
+The E2 public-version and candidate-commit contract is recorded in
+`docs/project/DIST001_PRERELEASE_VERSION_CONTRACT.md`.
 
 No E1-E3 result authorizes release publication. A candidate must remain
 explicitly unselected until the user makes the exact-candidate decision required

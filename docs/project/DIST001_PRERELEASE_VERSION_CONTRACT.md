@@ -1,0 +1,194 @@
+# DIST001-E2 — Public pre-release version contract
+
+Status: CLOSED when this document and its ledger transitions are published.
+
+This document is project/release-engineering state. It does not select a release
+candidate, create a release-candidate commit, create a tag, publish a GitHub
+Release, or publish release assets.
+
+## Selected version mapping
+
+Protos keeps its existing internal implementation trace points:
+
+```text
+0.2.N-SNAPSHOT
+```
+
+For the first selected public GitHub pre-release, the public version is derived
+from the selected development baseline by removing exactly the terminal
+`-SNAPSHOT` suffix:
+
+```text
+development baseline version: 0.2.N-SNAPSHOT
+public release version:        0.2.N
+Git tag:                       v0.2.N
+GitHub Release title:          Protos 0.2.N
+GitHub prerelease flag:        true
+```
+
+Example only:
+
+```text
+0.2.230-SNAPSHOT -> 0.2.230
+```
+
+The example is not a candidate selection. The actual `N`, baseline SHA, candidate
+SHA, tag, and release remain unselected until the E4/E5 approval boundaries.
+
+The GitHub `prerelease=true` state carries the current release-channel status.
+DIST001 does not introduce a second `alpha`, `beta`, or `rc` counter merely to
+repeat the same state in the version string. A later project decision may adopt
+different release channels, but the first-release contract does not pre-commit
+future releases to them.
+
+## Coherent public identity
+
+For a public version `V`, every user-visible release identity must agree:
+
+```text
+pom.xml project version:                 V
+JAR Implementation-Version:              V
+protos --version:                        Protos V
+distribution root directory:             protos-V/
+portable archive:                        protos-V-posix-jvm.zip
+external checksum file:                  protos-V-posix-jvm.zip.sha256
+Git tag:                                 vV
+GitHub Release title:                    Protos V
+GitHub Release prerelease flag:          true
+SOURCE.txt implementation_version:       V
+SOURCE.txt public_release:                true
+SOURCE.txt artifact_kind:                 public-prerelease
+```
+
+A public bundle must not retain `-SNAPSHOT` in any of those public identity
+positions.
+
+The tag prefix `v` is tag syntax only. The project/tool/archive version remains
+`V`, never `vV`.
+
+## Development baseline versus release candidate
+
+Release preparation must not force active development on `main` to stop or
+temporarily convert `main` to a non-SNAPSHOT version.
+
+E2 therefore distinguishes:
+
+```text
+development baseline
+    an explicitly selected immutable commit from main whose project version is
+    exactly V-SNAPSHOT
+
+release candidate commit
+    one immutable commit derived from that selected baseline by the E3/E4
+    release-preparation mechanism, with public project/tool/distribution version V
+    and candidate/release metadata
+```
+
+The candidate commit is the source revision ultimately identified by
+`SOURCE.txt`, the tag, and the GitHub Release.
+
+The selected development baseline remains separately recorded as provenance.
+E3 must define a release metadata field for this relationship, conceptually:
+
+```text
+release_baseline_revision=<selected-main-sha>
+source_revision=<candidate-commit-sha>
+```
+
+The candidate commit is not merged into `main` merely to publish the release.
+`main` continues on the ordinary `0.2.N-SNAPSHOT`, `0.2.(N+1)-SNAPSHOT`, ...
+development sequence as concurrent implementation work requires.
+
+Before E5, the candidate commit may exist only as validated local release state
+or another explicitly temporary preparation reference. E5 makes the accepted
+candidate permanently reachable through the public `vV` tag.
+
+## Candidate transition scope
+
+E3 must make the transition mechanically reproducible. E4 may not hand-edit an
+arbitrary tree until it happens to report `V`.
+
+The release-candidate transition is allowed to change only release-owned
+identity/metadata surfaces defined by E3. It must not silently incorporate
+unrelated implementation work after the selected baseline.
+
+At minimum E3 must own and validate:
+
+- the exact `V-SNAPSHOT -> V` project-version transition;
+- release-mode distribution metadata (`public_release=true`,
+  `artifact_kind=public-prerelease`);
+- baseline/candidate source provenance;
+- release asset naming;
+- release notes/manifest generation; and
+- a guard proving the candidate's code/content lineage is the selected baseline
+  plus only the declared release-preparation changes.
+
+If an executable fix is required after baseline selection, that fix belongs on
+normal development `main`, receives its ordinary implementation version
+treatment, and requires a new explicit release baseline selection. It is not
+smuggled into the candidate commit.
+
+## Version derivation rules
+
+Given a selected baseline project version `S`, E4 may derive a public version only
+when all of these hold:
+
+1. `S` matches exact numeric `MAJOR.MINOR.PATCH-SNAPSHOT`;
+2. `MAJOR`, `MINOR`, and `PATCH` contain canonical decimal integers;
+3. public `V` is exactly `S` with the final `-SNAPSHOT` removed;
+4. `vV` does not already exist as a Git tag;
+5. no GitHub Release already uses `vV`;
+6. candidate tool output, POM/JAR metadata, distribution names, and release
+   metadata all resolve to exactly `V`; and
+7. the selected baseline SHA and candidate SHA are both recorded explicitly.
+
+No implementation counter is renumbered merely for presentation. Public releases
+may therefore skip numeric values naturally when intermediate implementation
+snapshots are never selected as milestones.
+
+## Immutability and retry rules
+
+Once `vV` has been publicly created, `V` is immutable and must never be reused
+for different candidate bytes or a different source revision.
+
+A candidate rejected before E5 has no public release identity. A later attempt
+may reuse the same derived `V` only if no public tag/Release exists and E4
+revalidates a newly authorized candidate procedure from the selected baseline.
+If the underlying implementation must change, select a new development baseline
+instead.
+
+E5 must fail closed if the tag or GitHub Release already exists.
+
+## Relationship to package ReleaseVersion
+
+The Package Tool has a separate `ReleaseVersion` value model. DIST001-E2 does not
+make compiler/tool releases into package-registry releases and does not couple
+toolchain version policy to package identity.
+
+The chosen `MAJOR.MINOR.PATCH` public toolchain version is nevertheless a
+canonical version shape and does not require introducing a parallel package
+version syntax.
+
+## Approval boundary remains unchanged
+
+E2 selects only the mechanical mapping. It does not select `N`, a baseline SHA,
+a candidate SHA, or a public release.
+
+At E2 closure:
+
+```text
+release baseline revision:        UNSELECTED
+release candidate source revision: UNSELECTED
+public release version:            UNSELECTED
+Git tag:                           NOT CREATED
+GitHub Release:                    NOT CREATED
+release assets:                    NOT PUBLISHED
+```
+
+E3 may implement release preparation and validation machinery generically.
+
+E4 remains candidate-specific and cannot begin until the user explicitly selects
+an exact development baseline and authorizes the mechanically derived public
+version/candidate procedure defined here.
+
+E5 remains the first slice allowed to create the public tag or GitHub Release.
