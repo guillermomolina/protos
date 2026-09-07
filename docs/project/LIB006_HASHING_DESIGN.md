@@ -268,3 +268,30 @@ F2B3 may then:
 4. compare the current digest with the canonical lock header.
 
 LIB006 does not own any of those Package Tool projection/stale policies.
+
+## LIB006-B implementation closure
+
+The bounded initial implementation is CLOSED.
+
+Published surface:
+
+```text
+std:crypto/SHA256.digest(Bytes) -> fresh Bytes[32]
+```
+
+The production module contains no module-global mutable state and no public
+helper API beyond `digest`. Its fixed-32-bit operations are private
+per-invocation closures over exact Integer `div`/`mod`; its message schedule and
+working hash state are fresh local Arrays; message padding operates on a fresh
+Bytes copy.
+
+Known-answer behavior is owned by executable Protos fixtures. The Java focal
+class only bootstraps the ordinary Standard Library resolver and reports fixture
+results; it does not call a host crypto API or manufacture expected digests.
+
+The initial exclusions from LIB006-A remain exclusions. Further algorithms,
+streaming state, secret-bearing cryptography or acceleration require fresh
+design.
+
+This closure satisfies the reusable hashing prerequisite of `TOOL001-F2B3`,
+which is now READY.

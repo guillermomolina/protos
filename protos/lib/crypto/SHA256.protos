@@ -1,0 +1,387 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+digest: (bytes) => {
+    mod32: 4294967296
+    maxBytes: 2305843009213693951
+
+    originalSize: bytes.size()
+    (originalSize > maxBytes).ifTrue(() => {
+        Error().signal()
+    })
+
+    // Bytes is deliberately not a required public Prelude binding. Latin1
+    // accepts every octet sequence, so this performs exact standard-Bytes
+    // argument validation without changing the digest input or result.
+    ignoredBytesDomainValidation: Encoding.Latin1.decode(bytes)
+
+    powers: Array(
+        1,
+        2,
+        4,
+        8,
+        16,
+        32,
+        64,
+        128,
+        256,
+        512,
+        1024,
+        2048,
+        4096,
+        8192,
+        16384,
+        32768,
+        65536,
+        131072,
+        262144,
+        524288,
+        1048576,
+        2097152,
+        4194304,
+        8388608,
+        16777216,
+        33554432,
+        67108864,
+        134217728,
+        268435456,
+        536870912,
+        1073741824,
+        2147483648,
+        4294967296
+    )
+
+    word32: (value) => {
+        value.mod(mod32)
+    }
+
+    logicalShiftRight: (value, count) => {
+        word32(value).div(powers.at(count))
+    }
+
+    rotateRight: (value, count) => {
+        source: word32(value)
+        lowPower: powers.at(count)
+        wrapPower: powers.at(32 - count)
+
+        word32(
+            source.div(lowPower) +
+            source.mod(lowPower) * wrapPower
+        )
+    }
+
+    bitwise3: (left, middle, right, selector) => {
+        a: word32(left)
+        b: word32(middle)
+        c: word32(right)
+        place: 1
+        result: 0
+
+        consume: null
+        consume = (remaining) => {
+            (remaining > 0).ifTrue(() => {
+                aBit: a.mod(2)
+                bBit: b.mod(2)
+                cBit: c.mod(2)
+
+                result = result + selector(aBit, bBit, cBit) * place
+                a = a.div(2)
+                b = b.div(2)
+                c = c.div(2)
+                place = place * 2
+
+                consume(remaining - 1)
+            })
+        }
+
+        consume(32)
+        result
+    }
+
+    xor3: (left, middle, right) => {
+        bitwise3(left, middle, right, (aBit, bBit, cBit) => {
+            (aBit + bBit + cBit).mod(2)
+        })
+    }
+
+    choose: (x, y, z) => {
+        bitwise3(x, y, z, (xBit, yBit, zBit) => {
+            selected: zBit
+            (xBit == 1).ifTrue(() => {
+                selected = yBit
+            })
+            selected
+        })
+    }
+
+    majority: (x, y, z) => {
+        bitwise3(x, y, z, (xBit, yBit, zBit) => {
+            selected: 0
+            ((xBit + yBit + zBit) >= 2).ifTrue(() => {
+                selected = 1
+            })
+            selected
+        })
+    }
+
+    upperSigma0: (value) => {
+        xor3(
+            rotateRight(value, 2),
+            rotateRight(value, 13),
+            rotateRight(value, 22)
+        )
+    }
+
+    upperSigma1: (value) => {
+        xor3(
+            rotateRight(value, 6),
+            rotateRight(value, 11),
+            rotateRight(value, 25)
+        )
+    }
+
+    lowerSigma0: (value) => {
+        xor3(
+            rotateRight(value, 7),
+            rotateRight(value, 18),
+            logicalShiftRight(value, 3)
+        )
+    }
+
+    lowerSigma1: (value) => {
+        xor3(
+            rotateRight(value, 17),
+            rotateRight(value, 19),
+            logicalShiftRight(value, 10)
+        )
+    }
+
+    roundConstants: Array(
+        1116352408,
+        1899447441,
+        3049323471,
+        3921009573,
+        961987163,
+        1508970993,
+        2453635748,
+        2870763221,
+        3624381080,
+        310598401,
+        607225278,
+        1426881987,
+        1925078388,
+        2162078206,
+        2614888103,
+        3248222580,
+        3835390401,
+        4022224774,
+        264347078,
+        604807628,
+        770255983,
+        1249150122,
+        1555081692,
+        1996064986,
+        2554220882,
+        2821834349,
+        2952996808,
+        3210313671,
+        3336571891,
+        3584528711,
+        113926993,
+        338241895,
+        666307205,
+        773529912,
+        1294757372,
+        1396182291,
+        1695183700,
+        1986661051,
+        2177026350,
+        2456956037,
+        2730485921,
+        2820302411,
+        3259730800,
+        3345764771,
+        3516065817,
+        3600352804,
+        4094571909,
+        275423344,
+        430227734,
+        506948616,
+        659060556,
+        883997877,
+        958139571,
+        1322822218,
+        1537002063,
+        1747873779,
+        1955562222,
+        2024104815,
+        2227730452,
+        2361852424,
+        2428436474,
+        2756734187,
+        3204031479,
+        3329325298
+    )
+
+    state: Array(
+        1779033703,
+        3144134277,
+        1013904242,
+        2773480762,
+        1359893119,
+        2600822924,
+        528734635,
+        1541459225
+    )
+
+    message: Encoding.UTF8.encode("")
+    bytes.each((octet) => {
+        message.add(octet)
+    })
+
+    message.add(128)
+
+    remainder: message.size().mod(64)
+    zeroCount: 56 - remainder
+    (zeroCount < 0).ifTrue(() => {
+        zeroCount = zeroCount + 64
+    })
+
+    appendZeros: null
+    appendZeros = (remaining) => {
+        (remaining > 0).ifTrue(() => {
+            message.add(0)
+            appendZeros(remaining - 1)
+        })
+    }
+    appendZeros(zeroCount)
+
+    bitLength: originalSize * 8
+    lengthDivisors: Array(
+        72057594037927936,
+        281474976710656,
+        1099511627776,
+        4294967296,
+        16777216,
+        65536,
+        256,
+        1
+    )
+    lengthDivisors.each((divisor) => {
+        message.add(bitLength.div(divisor).mod(256))
+    })
+
+    processBlock: (blockOffset) => {
+        schedule: Array(...roundConstants)
+        scheduleIndex: 0
+
+        roundConstants.each((ignoredConstant) => {
+            (scheduleIndex < 16).ifTrue(() => {
+                offset: blockOffset + scheduleIndex * 4
+                value:
+                    message.at(offset) * 16777216 +
+                    message.at(offset + 1) * 65536 +
+                    message.at(offset + 2) * 256 +
+                    message.at(offset + 3)
+
+                schedule.atPut(scheduleIndex, value)
+            })
+
+            (scheduleIndex >= 16).ifTrue(() => {
+                value:
+                    schedule.at(scheduleIndex - 16) +
+                    lowerSigma0(schedule.at(scheduleIndex - 15)) +
+                    schedule.at(scheduleIndex - 7) +
+                    lowerSigma1(schedule.at(scheduleIndex - 2))
+
+                schedule.atPut(scheduleIndex, word32(value))
+            })
+
+            scheduleIndex = scheduleIndex + 1
+        })
+
+        a: state.at(0)
+        b: state.at(1)
+        c: state.at(2)
+        d: state.at(3)
+        e: state.at(4)
+        f: state.at(5)
+        g: state.at(6)
+        h: state.at(7)
+
+        roundIndex: 0
+        roundConstants.each((constant) => {
+            temporary1: word32(
+                h +
+                upperSigma1(e) +
+                choose(e, f, g) +
+                constant +
+                schedule.at(roundIndex)
+            )
+
+            temporary2: word32(
+                upperSigma0(a) +
+                majority(a, b, c)
+            )
+
+            h = g
+            g = f
+            f = e
+            e = word32(d + temporary1)
+            d = c
+            c = b
+            b = a
+            a = word32(temporary1 + temporary2)
+
+            roundIndex = roundIndex + 1
+        })
+
+        state.atPut(0, word32(state.at(0) + a))
+        state.atPut(1, word32(state.at(1) + b))
+        state.atPut(2, word32(state.at(2) + c))
+        state.atPut(3, word32(state.at(3) + d))
+        state.atPut(4, word32(state.at(4) + e))
+        state.atPut(5, word32(state.at(5) + f))
+        state.atPut(6, word32(state.at(6) + g))
+        state.atPut(7, word32(state.at(7) + h))
+    }
+
+    processBlocks: null
+    processBlocks = (start, end) => {
+        length: end - start
+
+        (length == 1).ifTrue(() => {
+            processBlock(start * 64)
+        })
+
+        (length > 1).ifTrue(() => {
+            middle: start + length.div(2)
+            processBlocks(start, middle)
+            processBlocks(middle, end)
+        })
+    }
+
+    processBlocks(0, message.size().div(64))
+
+    result: Encoding.UTF8.encode("")
+    state.each((value) => {
+        result.add(value.div(16777216).mod(256))
+        result.add(value.div(65536).mod(256))
+        result.add(value.div(256).mod(256))
+        result.add(value.mod(256))
+    })
+
+    result
+}

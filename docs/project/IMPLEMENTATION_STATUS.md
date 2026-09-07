@@ -451,9 +451,9 @@ work may proceed without waiting for an earlier-numbered roadmap item.
 | LIB003 | JSON | CLOSED | `SAME_COMMIT` | LIB003-A/B/C/D/E closed; the bounded initial strict JSON tree, exact-decimal parser/encoder, JSON-specific event streaming, explicit TextReader/TextWriter composition, final stress/Actor-transfer evidence, and architecture audit are fully published without a generic serialization or object-persistence boundary. |
 | LIB004 | Filesystem / process conveniences | IN_PROGRESS | — | LIB004-0 design CLOSED; LIB004-A implementation IN_PROGRESS through subdivided A1/A2/A3, with A1 published in ordinary `std:io/Files`; LIB004-D remains independently READY. |
 | LIB005 | Networking | OPEN | — | Roadmap item only; `spec/io/IO_CORE.md` currently leaves network authority acquisition, socket APIs, DNS/name resolution, and transport configuration outside its standardized scope. Re-audit and establish prerequisites before implementation. |
-| LIB006 | Deterministic hashing | IN_PROGRESS | LIB006-A published | Bounded initial SHA-256 Standard Library work: design CLOSED, pure-Protos one-shot `std:crypto/SHA256.digest(Bytes)` implementation READY. |
+| LIB006 | Deterministic hashing | CLOSED | `SAME_COMMIT` | LIB006-A design + LIB006-B pure-Protos SHA-256 implementation complete the bounded initial one-shot hashing surface. |
 | LIB006-A | SHA-256 API/security/boundary design | CLOSED | `SAME_COMMIT` | Freeze one-shot Bytes->fresh 32-byte SHA-256, pure-Protos initial implementation, no entropy/keyed crypto/native bridge, and conformance boundary. |
-| LIB006-B | pure-Protos SHA-256 implementation | READY | — | Implement `std:crypto/SHA256.digest(Bytes)` with private exact-Integer 32-bit arithmetic and Protos-owned standard vectors; close bounded LIB006 and unblock TOOL001-F2B3. |
+| LIB006-B | pure-Protos SHA-256 implementation | CLOSED | `SAME_COMMIT` | `std:crypto/SHA256.digest(Bytes)` implements standard SHA-256 in ordinary Protos with fixed known-answer conformance and no native/host crypto boundary. |
 
 
 ### LIB001 — Collections
@@ -851,19 +851,19 @@ forward.
 | TOOL001-E | local/offline version selection policy | CLOSED | `SAME_COMMIT` | E1 fresh highest-satisfying selection and E2 retained exact-version preference complete pure selection over already-known ReleaseVersion candidates. |
 | TOOL001-E1 | fresh highest-satisfying ReleaseVersion selection | CLOSED | `SAME_COMMIT` | Pure bundled-Protos selection over already-known candidates using closed D2 satisfaction and D1 precedence; no-match fails closed. |
 | TOOL001-E2 | retained exact-version preference | CLOSED | `SAME_COMMIT` | Preserve an available exact retained version while it satisfies D2; otherwise fall back to E1. No physical lockfile/identity/discovery behavior. |
-| TOOL001-F | canonical physical lockfile v1 | IN_PROGRESS | TOOL001-F1/F2A/F2B1/F2B2 published | Format/I/O + complete semantic resolution-root input design CLOSED; F2B3 hash/stale work dependency-blocked. |
+| TOOL001-F | canonical physical lockfile v1 | IN_PROGRESS | TOOL001-F1/F2A/F2B1/F2B2 + LIB006 published | Canonical format/I/O/semantic input CLOSED; reusable SHA-256 published and F2B3 stale-digest implementation READY. |
 | TOOL001-F1A | canonical lock header grammar | CLOSED | `SAME_COMMIT` | Design/governance-only freeze of exact header keywords, separators, canonical decimals/tokens/digest spelling and one blank line before body records. |
 | TOOL001-F1B | canonical lock body node/edge grammar | CLOSED | `SAME_COMMIT` | F1B1/F1B2/F1B3 freeze scalar/reference, root/workspace, external node, dependency and total canonical body grammar. |
 | TOOL001-F1B1 | canonical scalar strings + typed node references | CLOSED | `SAME_COMMIT` | Deterministic quoted UTF-8 body scalars and typed registry/git/workspace identity tuples; does not freeze PackageId's public textual encoding. |
 | TOOL001-F1B2 | root/workspace representation | CLOSED | `SAME_COMMIT` | One root workspace-ref plus canonically ordered mappings from explicit workspace.members strings to member workspace refs; no virtual root or path semantics. |
 | TOOL001-F1B3 | external node blocks + dependency edges + F1B closure | CLOSED | `SAME_COMMIT` | Registry/git external records, ContentIdentity/provenance, dependency edges and final ordering/separation close F1B. |
 | TOOL001-F1C | canonical lock parser/writer + round-trip conformance | CLOSED | `SAME_COMMIT` | F1C1/F1C2/F1C3 complete lexical, structural and canonical writer/round-trip behavior. |
-| TOOL001-F2 | physical lock integration | IN_PROGRESS | TOOL001-F2A/F2B1/F2B2 published | Confined I/O and semantic root-input model CLOSED; digest/stale comparison blocked on hashing capability. |
+| TOOL001-F2 | physical lock integration | IN_PROGRESS | TOOL001-F2A/F2B1/F2B2 + LIB006 published | Physical I/O + semantic stale-input model CLOSED; F2B3 digest/stale comparison READY. |
 | TOOL001-F2A | confined `protos.lock` read/publish substrate | CLOSED | `SAME_COMMIT` | Canonical load plus validation-before-staging atomic lock publication through existing confined Filesystem authority. |
-| TOOL001-F2B | semantic resolution-input + stale detection | IN_PROGRESS | TOOL001-F2B1/F2B2 published | Projection + root/workspace/path/compatibility semantic assembly CLOSED; F2B3 hashing/stale comparison blocked. |
+| TOOL001-F2B | semantic resolution-input + stale detection | IN_PROGRESS | TOOL001-F2B1/F2B2 + LIB006 published | Semantic model CLOSED and SHA-256 prerequisite satisfied; F2B3 digest/stale comparison READY. |
 | TOOL001-F2B1 | per-manifest semantic resolution-input projection design | CLOSED | `SAME_COMMIT` | Resolver-affecting field matrix, semantic normalization ownership, deterministic ordering and fail-closed unresolved-owner rule frozen. |
 | TOOL001-F2B2 | resolution-root/workspace semantic assembly design | CLOSED | `SAME_COMMIT` | Canonical root/member/path/compatibility assembly frozen without raw-source/host-path fallback. |
-| TOOL001-F2B3 | resolution-input digest + stale comparison | BLOCKED_BY_DEPENDENCIES | LIB006-B | Semantic input is complete; waits specifically for reusable `std:crypto/SHA256` from LIB006-B before executable digest/stale comparison. |
+| TOOL001-F2B3 | resolution-input digest + stale comparison | READY | — | Reusable `std:crypto/SHA256` is published; implement canonical semantic-input bytes, SHA-256 digest/lowercase-hex header value and stale comparison without resolving or rewriting. |
 
 
 | TOOL001-F1C1 | lock lexical/header/qstring/node-ref primitives | CLOSED | `SAME_COMMIT` | Bundled-Protos LockSyntax plus Protos-owned conformance; no body graph parsing or I/O. |
