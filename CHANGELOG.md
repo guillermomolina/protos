@@ -1,3 +1,9 @@
+## 0.2.217-SNAPSHOT
+
+- Start `TOOL001-F2 — physical lock integration` with `TOOL001-F2A — confined protos.lock read/publish substrate`. Add ordinary bundled-Protos `self:LockFile`: `load(filesystem)` reads exactly `protos.lock` through the already-provisioned confined Filesystem, decodes the complete UTF-8 stream and delegates canonical validation/model construction to closed F1C `LockDocument.parse`; `publish(filesystem, model)` first canonicalizes/structurally validates through `LockDocument.write`, then publishes through the closed B2 `MetadataPublication` transaction using `.protos.lock.stage -> protos.lock`.
+- Preserve capability and update boundaries: F2A adds no host privilege, no new CLI command/dispatch, no resolver/candidate discovery, no workspace traversal, no PackageId generation, no ContentIdentity hashing, no registry/network/store behavior and no normal-execution rewrite. It also does not claim stale detection: exact `protos-resolution-input-v1` semantic digest construction remains a separate design/implementation prerequisite.
+- Add Protos-owned lock-file fixtures plus a Java host-boundary harness for the confined Filesystem only. Conformance covers canonical load, non-canonical rejection, ordinary missing-file IOError, canonical publication, validation before stage creation and createNew stage-collision preservation.
+
 ## 0.2.216-SNAPSHOT
 
 - Close `I023-B2B` with Protos-source conformance for D044 callback-activation timing. The condition and body are activated with an empty supplied-argument vector only when their semantic step is reached; ordinary left-to-right parameter binding therefore runs defaults at activation time, preserves an earlier default effect before a later missing-required failure, and never inspects or binds an unreachable body. A reached invalid body fails only after the true condition, while default-only condition/body closures execute normally under the same zero-argument activation path.
