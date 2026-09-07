@@ -43,6 +43,25 @@ final class ProtosWhileReplayCompactionTest {
         assertTrue(longRun.activationCount() < 64, "while invocation replay state must remain bounded");
     }
 
+    @Test
+    void suspendingConditionAndBodyIterationsDoNotGrowRetainedReplayState() throws Exception {
+        RetainedState shortRun = suspendInsideConditionAfterSuspendingIterations(8);
+        RetainedState longRun = suspendInsideConditionAfterSuspendingIterations(1024);
+
+        assertEquals(
+                shortRun.eventCount(),
+                longRun.eventCount(),
+                "retained evaluator events must be independent of completed suspending iteration count");
+        assertEquals(
+                shortRun.activationCount(),
+                longRun.activationCount(),
+                "retained invocation activations must be independent of completed suspending iteration count");
+        assertTrue(longRun.eventCount() < 256, "suspending while replay tape must remain bounded");
+        assertTrue(
+                longRun.activationCount() < 64,
+                "suspending while invocation replay state must remain bounded");
+    }
+
     private static RetainedState suspendAfterCompletedLoop(int iterations) throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
         ProtosActivation activation = prelude.newModuleActivation();
@@ -80,6 +99,63 @@ final class ProtosWhileReplayCompactionTest {
                         task.evaluatorContinuation().retainedInvocationActivationCount());
 
         dependency.complete(task);
+        assertTrue(domain.dispatchOne());
+        assertEquals(ProtosTask.State.COMPLETED, task.state());
+        ProtosIntegerValue result =
+                assertInstanceOf(ProtosIntegerValue.class, task.result().orElseThrow());
+        assertEquals(BigInteger.valueOf(iterations), result.value());
+        return retained;
+    }
+
+    private static RetainedState suspendInsideConditionAfterSuspendingIterations(int iterations)
+            throws Exception {
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
+        ProtosActivation activation = prelude.newModuleActivation();
+        ControlledDependency dependency = new ControlledDependency();
+        activation.context().createLocalSlot(
+                "pause",
+                ProtosClosureValue.nativeClosure(
+                        (callActivation, supplied) -> {
+                            assertTrue(supplied.isEmpty());
+                            ProtosEvaluatorBridge.await(callActivation, dependency);
+                            return ProtosNullValue.INSTANCE;
+                        }));
+
+        String source =
+                "i: 0\n"
+                        + "(() => {\n"
+                        + "    pause()\n"
+                        + "    i < "
+                        + iterations
+                        + "\n"
+                        + "}).while() {\n"
+                        + "    pause()\n"
+                        + "    i = i + 1\n"
+                        + "}\n"
+                        + "i";
+        CallTarget target = new ProtosSourceCompiler().compile(source);
+        ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+        ProtosTask task =
+                domain.createTask(
+                        null,
+                        current -> current.executeProtos(target, activation));
+
+        int suspensionCount = iterations * 2 + 1;
+        RetainedState retained = null;
+        for (int suspension = 0; suspension < suspensionCount; suspension++) {
+            assertTrue(domain.dispatchOne());
+            assertEquals(ProtosTask.State.SUSPENDED, task.state());
+
+            if (suspension == suspensionCount - 1) {
+                retained =
+                        new RetainedState(
+                                task.evaluatorContinuation().retainedEventCount(),
+                                task.evaluatorContinuation().retainedInvocationActivationCount());
+            }
+
+            dependency.complete(task);
+        }
+
         assertTrue(domain.dispatchOne());
         assertEquals(ProtosTask.State.COMPLETED, task.state());
         ProtosIntegerValue result =
