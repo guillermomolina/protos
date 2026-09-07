@@ -1,34 +1,58 @@
 # Protos
 
-## Name
+> **Core language:** v0.1 draft specification\
+> **Reference implementation:** active development
 
-The language is named **Protos**.
+Protos is an experimental object-oriented programming language built from a
+small set of composable mechanisms: **objects, slots, delegation, messages,
+execution contexts, closures, Futures, and Actors**.
 
-The name reflects its prototype-based object model and derives naturally from the root associated with *prototype*: the first, original, or archetypal object from which behavior can be derived through delegation.
+There are **no classes**. Objects delegate directly to other objects, and
+`Object` is the unique root of the delegation hierarchy. The language is
+designed from first principles rather than by adding prototype syntax to a
+class-based model.
 
-Canonical project documentation uses the `PROTOS_` filename prefix.
+The name **Protos** reflects this prototype-based model: objects can serve as
+prototypes for other objects through delegation without belonging to a separate
+prototype value category.
 
-> **Status:** Early language design / specification draft\
-> **Language version:** 0.1
+The Core v0.1 specification remains a draft, while a working reference
+implementation and command-line interface are under active development. See
+[`pom.xml`](pom.xml) for the current implementation version and
+[`docs/project/IMPLEMENTATION_STATUS.md`](docs/project/IMPLEMENTATION_STATUS.md)
+for the canonical implementation-progress view.
 
-An experimental object-oriented programming language built around
-**prototypes, delegation, objects, messages, and closures**.
+## Why Protos?
 
-The language is being designed from first principles rather than as a
-class-based language with prototypes added on top. There are **no
-classes**: objects delegate directly to other objects, and `Object` is
-the unique root of the delegation hierarchy.
+Protos tries to minimize the number of **independent semantic rules** a
+programmer must learn, not merely the number of keywords.
 
-The project is currently in the language-design phase. The
-specification, grammar, and runtime semantics are being developed before
-committing to a full implementation.
+-   **One object-and-slot model.** Ordinary object state, module bindings, and
+    lexical bindings all use slots rather than unrelated storage concepts.
+-   **Creation and modification are different operations.** `:` creates a slot;
+    `=` modifies an existing slot. The runtime does not guess which one was
+    intended.
+-   **Lexical state is explicit in the model.** What programmers commonly call
+    local variables are slots of execution-context objects, and closures capture
+    those contexts by reference.
+-   **Closures are the single executable value.** A method is an invocation role
+    of a Closure, not a second callable value kind.
+-   **Scale by composition.** Futures, structured tasks, isolated parallel
+    execution, and Actors extend the same object/message/Closure universe rather
+    than replacing it with an unrelated concurrency model.
+-   **Predictable mutation and lookup.** Member reads may delegate; writes never
+    silently modify an ancestor prototype.
+
+For the broader rationale behind these choices, see
+[`docs/design/PROTOS_DESIGN_PHILOSOPHY.md`](docs/design/PROTOS_DESIGN_PHILOSOPHY.md).
 
 ## Design goals
 
 -   **Everything is an object.**
 -   **Prototype-based delegation only.** No classes or class hierarchy.
 -   **Single, immutable delegation parent.**
--   **Reads delegate; writes do not delegate.**
+-   **Member reads may delegate; writes do not delegate.** Lexical bindings use
+    a separate execution-context chain.
 -   **Uniform execution contexts.** Parameters, temporaries, and
     top-level bindings are slots of context objects.
 -   **Closures are the single executable value.** A method is a role a
@@ -108,6 +132,32 @@ dog.alive = true   // OK
 
 This prevents a descendant from accidentally mutating an ancestor
 prototype.
+
+## Bindings are slots of execution contexts
+
+Protos has no separate semantic category for a local variable. Parameters,
+temporary bindings, and other lexical locals are slots of the current execution
+context, and execution contexts are themselves objects.
+
+That does **not** mean lexical state and receiver state are the same thing.
+They use the same slot mechanism but participate in different lookup relations:
+
+``` text
+bare lexical binding        execution-context chain
+object state                receiver + delegation chain
+```
+
+For a bare name, creation, modification, and reading are deliberately different
+operations:
+
+``` js
+x: 10   // create x in the current execution context
+x = 20  // modify the nearest existing eligible binding
+x       // read through lexical lookup, then receiver lookup when applicable
+```
+
+This model is explained step by step in
+[`docs/guide/01-bindings-contexts-and-state.md`](docs/guide/01-bindings-contexts-and-state.md).
 
 ## Delegation
 
@@ -368,6 +418,44 @@ Some familiar syntax may eventually exist as syntactic sugar, but it
 should lower to the smaller semantic core rather than introduce parallel
 mechanisms.
 
+## Getting started
+
+Build the current reference implementation:
+
+``` sh
+mvn package
+```
+
+Then run the executable hello-world example:
+
+``` sh
+bin/protos protos/examples/hello-world.protos
+```
+
+With no arguments, `bin/protos` starts the REPL. Source can also be evaluated
+directly:
+
+``` sh
+bin/protos -e 'print("Hello, Protos!")'
+```
+
+Bundled developer tools such as the Package Tool and Test Tool are under active
+development; their exact implementation state is recorded in
+[`docs/project/IMPLEMENTATION_STATUS.md`](docs/project/IMPLEMENTATION_STATUS.md).
+
+## Learn Protos
+
+-   [Programming guide](docs/guide/README.md) — conceptual explanations and the
+    mental model behind Protos.
+-   [Executable tutorials](protos/tutorials/README.md) — small progressive
+    `.protos` programs that are exercised by CLI regression coverage where
+    applicable.
+-   [Examples](protos/examples/README.md) — task-oriented cookbook programs.
+-   [Design philosophy](docs/design/PROTOS_DESIGN_PHILOSOPHY.md) — the
+    non-normative principles behind language and architecture choices.
+-   [Implementation status](docs/project/IMPLEMENTATION_STATUS.md) — the
+    canonical repository-level implementation-progress view.
+
 ## Current specification
 
 The normative Core v0.1 specification is modular. `PROTOS_GRAMMAR.md` owns
@@ -488,7 +576,8 @@ UInt8(1) === 1          // false
 Int32(1) === UInt32(1)  // false
 ```
 
-Float special cases such as NaN and signed zero are still being specified.
+Float NaN and signed-zero equality/identity behavior is defined explicitly
+below.
 
 ## Float NaN Semantics
 
@@ -562,17 +651,23 @@ Additional encodings belong to the standard library or optional modules. Endian-
 
 ## Dynamic Error Handling
 
-Core v0.1 installs dynamic handlers through the standard closure protocol:
+Core v0.1 installs dynamic handlers through the standard Error protocol:
 
 ```js
-(() => {
-    riskyOperation()
-}).handle(IOError, (error) => {
-    recover(error)
-})
+IOError.handle(
+    () => {
+        riskyOperation()
+    },
+    (error) => {
+        recover(error)
+    }
+)
 ```
 
-`handle` uses the existing prototype-chain matching and unwinding semantics. The expression evaluates to the protected result on success or the handler result when a matching error is handled.
+The receiver selects the Error prototype to match. `handle` uses ordinary
+prototype-chain matching and unwinding semantics; the expression evaluates to
+the protected result on success or the handler result when a matching Error is
+handled.
 
 ## Futures and Concurrency
 

@@ -6,6 +6,16 @@ standard-library semantics live under `spec/`.
 The documentation tree is organized by purpose rather than by when a document
 was created.
 
+## `guide/`
+
+Non-normative programming guidance for people learning and using Protos.
+
+The guide explains mental models, relates familiar programming concepts to
+Protos, and points to executable material under `protos/tutorials/` and
+`protos/examples/`. It should explain *how to think and program in Protos*
+without becoming a second language specification. When guide prose and `spec/`
+disagree, the applicable normative specification wins.
+
 ## `design/`
 
 Non-normative language and architecture design material.
