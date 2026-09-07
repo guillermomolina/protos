@@ -63,10 +63,87 @@ Reasons:
 This crosses from zero to one custom lock grammar, so the grammar must remain very
 small and data-only. It must not become a second package-manifest language.
 
-## Illustrative canonical shape
+## Lock-format 1 header grammar — selected by TOOL001-F1A
 
-The exact punctuation remains for implementation design, but the target data
-shape is approximately:
+`TOOL001-F1A` freezes the **header only**. Body record syntax remains a separate
+design slice.
+
+Every lock-format-1 document begins with exactly:
+
+```text
+lock-format <decimal>
+resolver-version <decimal>
+resolution-input <method-token> <algorithm-token>:<lowercase-hex>
+
+```
+
+The fourth line above is empty. Body records, when present, begin immediately
+after that one empty line.
+
+The header lexical grammar is:
+
+```text
+header =
+    "lock-format" SP decimal LF
+    "resolver-version" SP decimal LF
+    "resolution-input" SP method-token SP digest LF
+    LF
+
+decimal =
+    "0"
+    | nonzero-digit *digit
+
+method-token =
+    lower-alpha *(lower-alpha | digit | "-")
+
+algorithm-token =
+    lower-alpha *(lower-alpha | digit | "-")
+
+digest =
+    algorithm-token ":" 1*lowercase-hex
+
+SP = one ASCII space (0x20)
+LF = one line-feed octet (0x0a)
+```
+
+Canonical header rules:
+
+- the three keywords above are exact and case-sensitive;
+- header lines appear exactly once and in the order shown;
+- fields are separated by exactly one ASCII space;
+- tabs, carriage returns, leading/trailing whitespace and blank lines inside the
+  three header records are invalid;
+- canonical decimals have no leading zero except the value `0`;
+- method and algorithm tokens are non-empty lowercase ASCII kebab tokens;
+- digest text uses lowercase hexadecimal only;
+- header records never wrap;
+- there is exactly one empty line between the third header record and the first
+  body record;
+- UTF-8 BOM remains forbidden by the existing canonical-text rule.
+
+The current lock writer generation is expected to emit:
+
+```text
+lock-format 1
+resolver-version 1
+resolution-input protos-resolution-input-v1 sha256:<64-lowercase-hex>
+
+```
+
+F1A deliberately separates **grammar** from later support policy. The lexical
+shape can represent other canonical decimal generations/tokens, while a reader
+or operation may separately reject an unsupported `lock-format`,
+`resolver-version`, resolution-input method, hash algorithm, or digest length.
+
+F1A does not decide body punctuation/keywords, node-key serialization, scalar
+escaping, line wrapping for body fields, diagnostic locator emission, artifact
+transport digest emission, or source-kind-specific records.
+
+
+## Illustrative canonical body shape
+
+The F1A header punctuation above is exact. The body punctuation below remains
+illustrative pending F1B, while its target data shape is approximately:
 
 ```text
 lock-format 1
@@ -725,8 +802,8 @@ merge conflicts resolved from manifests + deterministic regeneration
 Deliberately replaceable details:
 
 ```text
-exact punctuation/keywords of lock-format 1
-exact line wrapping
+exact body punctuation/keywords after the F1A header
+exact body line wrapping
 whether diagnostic PackageLocator is always emitted
 whether artifact transport digests are included
 exact canonical escaping syntax

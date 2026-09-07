@@ -74,6 +74,10 @@ its relation to any legacy Slice 3 terminology that remains useful for continuit
 | TOOL001-E | local/offline version selection policy | CLOSED | `SAME_COMMIT` | E1 fresh highest-satisfying selection plus E2 retained exact-version preference are published as pure local version policy over already-known candidates. Discovery, full eligibility, graph resolution and physical lock work remain separate. |
 | TOOL001-E1 | fresh highest-satisfying ReleaseVersion selection | CLOSED | `SAME_COMMIT` | `self:FreshVersionSelection.select/selectText` filters already-known ReleaseVersion candidates through closed D2 constraint semantics and selects the highest satisfying candidate by D1 precedence; no-match fails closed. |
 | TOOL001-E2 | retained exact-version preference | CLOSED | `SAME_COMMIT` | `self:RetainedVersionSelection.select/selectText` preserves an available exact retained ReleaseVersion while it still satisfies D2; otherwise it delegates to E1 fresh selection. No physical lockfile or package-identity policy is implied. |
+| TOOL001-F | canonical physical lockfile v1 | IN_PROGRESS | TOOL001-F1A published | Physical `protos.lock` format work after closed pure selection E; F1A header grammar CLOSED, F1B body node/edge grammar READY. Parser/writer and graph integration remain later slices. |
+| TOOL001-F1A | canonical lock header grammar | CLOSED | `SAME_COMMIT` | Exact three-line v1 header grammar and canonical lexical rules are frozen without implementing a parser/writer or choosing body node/edge syntax. |
+| TOOL001-F1B | canonical lock body node/edge grammar | READY | — | Freeze exact root/package/VCS/workspace/dependency record keywords, punctuation, ordering and references while preserving the already-selected stable-key graph model; escaping and remaining body questions must be resolved explicitly within the bounded design slice. |
+
 
 
 
@@ -85,15 +89,14 @@ is not reopened by this tracking migration.
 The historical manifest Slice 3, pure version/constraint parent `TOOL001-D`, and
 local/offline version-selection parent `TOOL001-E` are CLOSED.
 
-E1 chooses the highest satisfying ReleaseVersion among already-known candidates.
-E2 preserves an available exact retained ReleaseVersion while it remains valid
-under D2 and otherwise delegates to E1.
+`TOOL001-F` is the current bounded continuation for the canonical physical
+`protos.lock` v1 format. `TOOL001-F1A` is CLOSED and freezes only the exact
+three-line header grammar plus its canonical lexical rules. `TOOL001-F1B` is
+READY for the body node/edge grammar.
 
-Further Package Tool progress requires a separately scoped post-E slice.
-Candidate discovery and complete eligibility (PackageId/authority, yank, trust,
-content identity, language compatibility, transitive closure), physical
-`protos.lock` parsing/serialization, graph resolution, workspace/store,
-registry/network and update operations are not implied by E closure.
+F1A does not implement a parser/writer and does not choose body record syntax.
+Complete candidate eligibility, graph resolution, workspace/store,
+registry/network and update operations remain separately scoped work.
 
 ## Manifest Slice 3 final closure
 

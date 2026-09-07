@@ -757,7 +757,7 @@ record distributable Standard Library functionality.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | Bootstrap/manifest foundations, pure version/constraint TOOL001-D and local version-selection TOOL001-E are CLOSED; complete eligibility, graph/lock/workspace/store/registry work remains separately scoped. |
+| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | Bootstrap/manifest foundations, version/constraint D and local version selection E are CLOSED; TOOL001-F canonical physical lockfile v1 is IN_PROGRESS with F1A header grammar CLOSED and F1B body grammar READY. |
 | TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C CLOSED; TOOL002-D IN_PROGRESS with D1/D2 CLOSED and D3 IN_PROGRESS; D3A/D3B/D3C1 CLOSED, D3C2A parser and D3C2B exact binary64 mechanism CLOSED through `0.2.208-SNAPSHOT`, D3C2C integration READY. |
 
 ### TOOL001 — Package Tool
@@ -798,6 +798,10 @@ forward.
 | TOOL001-E | local/offline version selection policy | CLOSED | `SAME_COMMIT` | E1 fresh highest-satisfying selection and E2 retained exact-version preference complete pure selection over already-known ReleaseVersion candidates. |
 | TOOL001-E1 | fresh highest-satisfying ReleaseVersion selection | CLOSED | `SAME_COMMIT` | Pure bundled-Protos selection over already-known candidates using closed D2 satisfaction and D1 precedence; no-match fails closed. |
 | TOOL001-E2 | retained exact-version preference | CLOSED | `SAME_COMMIT` | Preserve an available exact retained version while it satisfies D2; otherwise fall back to E1. No physical lockfile/identity/discovery behavior. |
+| TOOL001-F | canonical physical lockfile v1 | IN_PROGRESS | TOOL001-F1A published | F1A exact canonical header grammar CLOSED; F1B body node/edge grammar READY; parser/writer and graph integration remain later slices. |
+| TOOL001-F1A | canonical lock header grammar | CLOSED | `SAME_COMMIT` | Design/governance-only freeze of exact header keywords, separators, canonical decimals/tokens/digest spelling and one blank line before body records. |
+| TOOL001-F1B | canonical lock body node/edge grammar | READY | — | Freeze exact root/node/edge serialization and remaining body lexical/escaping choices before parser/writer implementation. |
+
 
 
 
