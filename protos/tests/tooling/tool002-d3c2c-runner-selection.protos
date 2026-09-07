@@ -16,7 +16,38 @@
 Manifest: import("self:Manifest")
 Runner: import("self:Runner")
 
-unsupported: Manifest.parseLine(
-    "synthetic/future.protos\tfuture-integer\t42"
+bits: Manifest.parseLine(
+    "bits.protos\tfloat-bits\t3ff0000000000000"
 )
-Runner.evaluateSimple(unsupported, "42", execution)
+futureNotYet: Manifest.parseLine(
+    "future.protos\tfuture-integer\t42"
+)
+plan: Manifest.frozenTuple(
+    Manifest.frozenTuple(bits, futureNotYet)
+)
+
+loads: 0
+executions: 0
+
+sourceLoader: (spec) => {
+    loads = loads + 1
+    "1.0"
+}
+
+executor: (source) => {
+    executions = executions + 1
+    {
+        state: "completed"
+        value: 1.0
+        error: null
+    }
+}
+
+run: Runner.runSimpleWithLoader(plan, sourceLoader, executor)
+
+(Runner.runSelectedCount(run) == 1) &&
+(Runner.runPassedCount(run) == 1) &&
+(Runner.runSkippedCount(run) == 1) &&
+Runner.runAllPassed(run) &&
+(loads == 1) &&
+(executions == 1)

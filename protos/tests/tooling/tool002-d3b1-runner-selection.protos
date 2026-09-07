@@ -18,7 +18,7 @@ Runner: import("self:Runner")
 
 fixed: Manifest.parseLine("fixed.protos\tfixed-integer\tUInt16:7")
 notYet: Manifest.parseLine(
-    "not-yet.protos\tfloat-bits\t3ff0000000000000"
+    "not-yet.protos\tfuture-integer\t42"
 )
 plan: Manifest.frozenTuple(Manifest.frozenTuple(fixed, notYet))
 

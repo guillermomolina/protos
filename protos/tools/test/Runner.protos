@@ -83,6 +83,7 @@ isSimpleExpectation: (spec) => {
     (kind === "null").ifTrue(() => { supported = true })
     (kind === "integer").ifTrue(() => { supported = true })
     (kind === "fixed-integer").ifTrue(() => { supported = true })
+    (kind === "float-bits").ifTrue(() => { supported = true })
     (kind === "float-nan").ifTrue(() => { supported = true })
     (kind === "error-parent").ifTrue(() => { supported = true })
     (kind === "error").ifTrue(() => { supported = true })
@@ -472,6 +473,18 @@ evaluateSimple: (spec, source, executor) => {
         })
         passed.ifTrue(() => {
             passed = observation.value === expectedValue
+        })
+    })
+
+    (kind === "float-bits").ifTrue(() => {
+        rawBits: parseExpectedFloatBits(expected)
+
+        passed = observation.state === "completed"
+        passed.ifTrue(() => {
+            passed = observation.error === null
+        })
+        passed.ifTrue(() => {
+            passed = matchesExpectedFloatBits(rawBits, observation.value)
         })
     })
 

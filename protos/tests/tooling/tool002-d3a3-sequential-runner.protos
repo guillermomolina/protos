@@ -18,7 +18,7 @@ Runner: import("self:Runner")
 
 first: Manifest.parseLine("synthetic/first.protos\tinteger\t1")
 unsupported: Manifest.parseLine(
-    "synthetic/float.protos\tfloat-bits\t3ff0000000000000"
+    "synthetic/future.protos\tfuture-integer\t42"
 )
 second: Manifest.parseLine("synthetic/second.protos\tinteger\t2")
 third: Manifest.parseLine("synthetic/third.protos\tinteger\t3")

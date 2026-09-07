@@ -20,5 +20,5 @@ spec: Manifest.parseLine(
     "bits.protos\tfloat-bits\t3ff0000000000000"
 )
 
-(Runner.isSimpleExpectation(spec) === false) &&
+Runner.isSimpleExpectation(spec) &&
 (Runner.parseExpectedFloatBits(Manifest.caseExpected(spec)) == 4607182418800017408)

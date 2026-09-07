@@ -209,8 +209,8 @@ TOOL002-D therefore uses these publishable sub-slices:
 |---|---|---|
 | TOOL002-D1 | CLOSED | Bootstrap-local general `execution(source)` facility for the Test Tool over TOOL002-C, returning a caller-local observation through a strict authority-free detached-value boundary. No manifest/test policy. Implementation version `0.2.174-SNAPSHOT`. |
 | TOOL002-D2 | CLOSED | Grant the Test Tool one read-only tree-confined standard Filesystem rooted at the conformance corpus; bundled `Manifest.protos` uses bounded ordered readLine/Future.all windows to parse retained TSV rows into frozen CaseSpec/TestPlan tuples with named Protos accessors and validated path-based stable CaseIds. No case execution/expectation policy. Implementation version `0.2.182-SNAPSHOT`. |
-| TOOL002-D3 | IN_PROGRESS | D3A1/A2/A3 and D3B are CLOSED; D3C is IN_PROGRESS with D3C1 CLOSED and D3C2A/B CLOSED; D3C2C runner integration is READY. |
-| TOOL002-D4 | BLOCKED_BY_DEPENDENCIES | After D3, preserve the remaining non-Future `closure-error-parent-fresh` identity-sensitive expectations without leaking Closure authority; reconcile Java ownership for the D-migrated cases and close TOOL002-D. |
+| TOOL002-D3 | CLOSED | D3A, D3B and D3C are CLOSED; ordinary non-Future expectation migration is complete through D3C2C at `0.2.209-SNAPSHOT`. |
+| TOOL002-D4 | READY | D3 is closed; preserve the remaining non-Future `closure-error-parent-fresh` identity-sensitive expectations without leaking Closure authority, reconcile Java ownership for D-migrated cases, and close TOOL002-D. |
 
 The `future-*` families (`future-integer`, `future-null`, `future-boolean`,
 `future-error`, `future-error-parent`, `future-observation-error-identity`,
@@ -269,7 +269,7 @@ Float families:
 | TOOL002-D3A2 | CLOSED | `Runner.evaluateSimple(spec, source, executor)` interprets `boolean`, `null`, `integer`, and generic `error` entirely in bundled Protos. Normal mismatches return frozen `passed + observation` evidence; malformed/unsupported policy signals. Integer matching uses signed-decimal Protos parsing plus primitive `===` to preserve exact numeric family. Implementation version `0.2.189-SNAPSHOT`. |
 | TOOL002-D3A3 | CLOSED | Compose TestPlan + source loader + simple evaluator through an ordered `Future.then` dependency chain built without suspending inside `Array.each`; skip unsupported kinds before source access, aggregate ordered frozen CaseRun evidence with balanced chunks, and integrate the supported subset into `Main.protos`. No reporting/parallel/exit-status policy. Implementation version `0.2.192-SNAPSHOT`. |
 | TOOL002-D3B | CLOSED | D3B1 fixed-integer and D3B2A/B error-parent prerequisite/policy are published. The sequential runner owns both retained families without changing D1/D3A evidence boundaries. Implementation version `0.2.199-SNAPSHOT`. |
-| TOOL002-D3C | IN_PROGRESS | D3C1 is CLOSED; D3C2A parser and D3C2B exact binary64 mechanism are CLOSED through `0.2.208-SNAPSHOT`; D3C2C integration is READY. |
+| TOOL002-D3C | CLOSED | D3C1 float-nan and D3C2 exact float-bits are published; final D3C2C sequential integration closes D3C at `0.2.209-SNAPSHOT`. |
 
 D3A1 deliberately does not modify `Main.protos`: ordinary `protos test`
 continues to construct the inert D2 TestPlan but does not execute it yet.
@@ -339,7 +339,7 @@ The D3C audit separates semantic NaN from exact raw-binary64 expectations:
 | Slice | Status | Outcome |
 |---|---|---|
 | TOOL002-D3C1 | CLOSED | `float-nan` is matched entirely in bundled Protos by constructing the semantic Float NaN through ordinary `0.0 / 0.0` arithmetic and comparing the detached value through primitive `===`; payload must be `-`. Implementation version `0.2.201-SNAPSHOT`. |
-| TOOL002-D3C2 | READY | Migrate `float-bits` while preserving exact finite/infinity/signed-zero binary64 semantics without exposing NaN payload/sign bits or weakening to numeric equality. |
+| TOOL002-D3C2 | CLOSED | D3C2A parser, D3C2B exact binary64 mechanism and D3C2C sequential activation are published through `0.2.209-SNAPSHOT`. |
 
 D3C1 deliberately leaves `float-bits` unsupported and unread by the sequential
 runner. D3C remains IN_PROGRESS until D3C2 is published.
@@ -354,9 +354,9 @@ The exact binary64 work is split into three independently publishable steps:
 |---|---|---|
 | TOOL002-D3C2A | CLOSED | Parse exactly 16 hex digits to an unbounded Integer raw pattern in bundled Protos; `float-bits` remains unsupported by the runner. Implementation version `0.2.205-SNAPSHOT`. |
 | TOOL002-D3C2B | CLOSED | Bundled Protos reconstructs every portable non-NaN binary64 pattern exactly from D3C2A raw Integer fields using exact Float(Integer) significands plus bounded power-of-two scaling, applies sign through ordinary Float.negated(), and compares with primitive `===`. NaN raw patterns fail closed. Implementation version `0.2.208-SNAPSHOT`. |
-| TOOL002-D3C2C | READY | Activate `float-bits` in the sequential Test Tool, migrate the existing unsupported-boundary fixtures, and close D3C2/D3C/D3. |
+| TOOL002-D3C2C | CLOSED | Activate `float-bits` in bundled Runner policy, evaluate exact portable non-NaN binary64 through D3C2A/B, migrate all historical unsupported sentinels to TOOL002-F `future-integer`, and preserve D3C2A/B mechanism coverage after activation. Implementation version `0.2.209-SNAPSHOT`. |
 
-TOOL002-D3C2B is CLOSED. TOOL002-D3C2C is READY.
+TOOL002-D3C2B and D3C2C are CLOSED. D3C2, D3C and D3 are CLOSED. TOOL002-D4 is READY.
 
 ## Closure rule
 

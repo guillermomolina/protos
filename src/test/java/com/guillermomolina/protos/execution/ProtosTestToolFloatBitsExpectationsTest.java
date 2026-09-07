@@ -27,61 +27,50 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
 
-final class ProtosTestToolExactBinary64Test {
+final class ProtosTestToolFloatBitsExpectationsTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path TOOL_ROOT = Path.of("protos", "tools", "test");
 
     @Test
-    void exactBinary64ConstructionAndSemanticIdentityAreOwnedByProtos()
+    void exactFloatBitsPolicyAndNormalMismatchesAreOwnedByProtos()
             throws Exception {
         ProtosExecutionOutcome outcome =
-                execute("tool002-d3c2b-exact-binary64.protos");
+                execute("tool002-d3c2c-float-bits.protos", false);
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
     }
 
     @Test
-    void positiveNanRawPatternFailsClosed()
-            throws Exception {
-        assertFailed("tool002-d3c2b-positive-nan-bits-rejected.protos");
-    }
-
-    @Test
-    void negativeNanRawPatternFailsClosed()
-            throws Exception {
-        assertFailed("tool002-d3c2b-negative-nan-bits-rejected.protos");
-    }
-
-    @Test
-    void rawPatternBelowUnsigned64DomainFailsClosed()
-            throws Exception {
-        assertFailed("tool002-d3c2b-negative-raw-bits-rejected.protos");
-    }
-
-    @Test
-    void rawPatternAboveUnsigned64DomainFailsClosed()
-            throws Exception {
-        assertFailed("tool002-d3c2b-overflow-raw-bits-rejected.protos");
-    }
-
-    @Test
-    void mechanismRemainsAvailableAfterFloatBitsActivation()
+    void detachedFreshProcessPreservesExactFloatBitsIncludingSignedZero()
             throws Exception {
         ProtosExecutionOutcome outcome =
-                execute("tool002-d3c2b-still-unsupported.protos");
+                execute("tool002-d3c2c-detached-float-bits.protos", true);
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         assertSame(ProtosBooleanValue.TRUE, outcome.value());
     }
 
-    private static void assertFailed(String file)
+    @Test
+    void rawNanPatternFailsClosedBecauseNanUsesFloatNanPolicy()
             throws Exception {
         assertEquals(
                 ProtosExecutionOutcome.State.FAILED,
-                execute(file).state());
+                execute("tool002-d3c2c-nan-raw-rejected.protos", false)
+                        .state());
     }
 
-    private static ProtosExecutionOutcome execute(String file)
+    @Test
+    void sequentialRunnerSelectsFloatBitsButStillSkipsFuturePolicy()
+            throws Exception {
+        ProtosExecutionOutcome outcome =
+                execute("tool002-d3c2c-runner-selection.protos", false);
+        assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
+        assertSame(ProtosBooleanValue.TRUE, outcome.value());
+    }
+
+    private static ProtosExecutionOutcome execute(
+            String file,
+            boolean withExecution)
             throws Exception {
         ProtosBundledToolModuleResolver resolver =
                 new ProtosBundledToolModuleResolver(
@@ -92,6 +81,9 @@ final class ProtosTestToolExactBinary64Test {
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation activation = prelude.newModuleActivation();
+        if (withExecution) {
+            ProtosExactExecutionFacility.install(activation);
+        }
 
         Path fixture = Path.of("protos", "tests", "tooling", file);
         return ProtosRootTaskExecution.execute(

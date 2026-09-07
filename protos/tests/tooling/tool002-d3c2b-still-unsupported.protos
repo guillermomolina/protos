@@ -23,5 +23,5 @@ raw: Runner.parseExpectedFloatBits(
     Manifest.caseExpected(spec)
 )
 
-(Runner.isSimpleExpectation(spec) === false) &&
+Runner.isSimpleExpectation(spec) &&
 Runner.matchesExpectedFloatBits(raw, 1.0)

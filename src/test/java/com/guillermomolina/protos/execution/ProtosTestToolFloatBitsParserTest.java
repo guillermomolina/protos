@@ -58,7 +58,7 @@ final class ProtosTestToolFloatBitsParserTest {
     }
 
     @Test
-    void parserPublicationDoesNotActivateFloatBitsExpectation()
+    void parserRemainsAvailableAfterFloatBitsActivation()
             throws Exception {
         ProtosExecutionOutcome outcome =
                 execute("tool002-d3c2a-float-bits-still-unsupported.protos");

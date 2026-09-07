@@ -586,6 +586,31 @@ Process, sequencing, result shape or reporting. D3C2C remains solely responsible
 for adding `float-bits` to `isSimpleExpectation`, whole-plan selection and final
 D3C/D3 closure.
 
+### TOOL002-D3C2C float-bits sequential integration
+
+D3C2C is the final D3 ordinary-expectation integration slice. It activates
+`float-bits` in `Runner.isSimpleExpectation` and evaluates one completed
+observation by parsing the retained 16-hex payload through D3C2A, reconstructing
+the portable non-NaN binary64 value through D3C2B, and comparing the detached
+value by primitive semantic identity.
+
+The policy requires a COMPLETED observation with null Error. Exact identity
+therefore preserves the Float semantic family and all portable non-NaN binary64
+distinctions, including positive versus negative zero. A raw NaN payload remains
+invalid under `float-bits`; semantic NaN expectations continue to use
+`float-nan` and expose no payload/sign bits.
+
+Activating the final D3 family invalidates historical tests that used
+`float-bits` merely as a convenient unsupported sentinel. D3C2C migrates those
+sentinels to `future-integer`, which remains owned by TOOL002-F, while the D3C2A
+parser and D3C2B reconstruction tests are updated to assert that their mechanisms
+remain available after activation.
+
+No runtime, D1 detached-observation, Filesystem, Process, scheduling, reporting,
+or CLI exit-policy surface changes. D3C2, D3C and D3 close here. D4 becomes
+READY for the remaining non-Future identity-sensitive
+`closure-error-parent-fresh` expectation and Java ownership reconciliation.
+
 ## Isolation audit
 
 The normal isolation boundary should be **one fresh Protos Process per test

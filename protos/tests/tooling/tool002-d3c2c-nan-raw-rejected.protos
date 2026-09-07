@@ -16,7 +16,14 @@
 Manifest: import("self:Manifest")
 Runner: import("self:Runner")
 
-unsupported: Manifest.parseLine(
-    "synthetic/future.protos\tfuture-integer\t42"
+Runner.evaluateSimple(
+    Manifest.parseLine("nan-bits.protos\tfloat-bits\t7ff8000000000000"),
+    "",
+    (source) => {
+        {
+            state: "completed"
+            value: 0.0 / 0.0
+            error: null
+        }
+    }
 )
-Runner.evaluateSimple(unsupported, "42", execution)

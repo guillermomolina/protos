@@ -1,3 +1,8 @@
+## 0.2.209-SNAPSHOT
+
+- Close `TOOL002-D3C2C`, D3C2, D3C and D3: activate retained `float-bits` expectations in the bundled sequential Test Tool. D3C2A parses the exact 16-hex raw pattern, D3C2B reconstructs its portable non-NaN binary64 Float, and D3C2C requires a completed/null-error observation whose detached value matches that Float by primitive `===`, preserving signed zero and Float-family identity.
+- Migrate every historical D3 test that used `float-bits` solely as an unsupported sentinel to TOOL002-F-owned `future-integer`. Reconcile the D3C2A parser and D3C2B mechanism regression tests so they assert those mechanisms remain available after activation rather than incorrectly requiring `float-bits` to stay unsupported. Add Protos-owned exact/mismatch, detached signed-zero/one-third, raw-NaN rejection and sequential selection coverage. D4 becomes READY; no runtime/D1 or normative change.
+
 ## 0.2.208-SNAPSHOT
 
 - Close `TOOL001-F1B2 — root/workspace representation`. Lock-format 1 now represents the resolution root with exactly one `root workspace <PackageId>` record using the F1B1 typed workspace reference. A manifest-v1 workspace does not acquire a second virtual identity: the root remains the package described by the root manifest, and each additional `workspace.members` declaration is recorded as `workspace-member <declared-member-string> workspace <PackageId>`. The member string is preserved as an opaque F1B1 qstring; path interpretation and membership validation remain workspace-policy concerns.

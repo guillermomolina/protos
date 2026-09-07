@@ -18,7 +18,7 @@ Runner: import("self:Runner")
 
 integerCase: Manifest.parseLine("one.protos\tinteger\t42")
 unsupported: Manifest.parseLine(
-    "missing.protos\tfloat-bits\t3ff0000000000000"
+    "missing.protos\tfuture-integer\t42"
 )
 errorCase: Manifest.parseLine("error.protos\terror\t-")
 
