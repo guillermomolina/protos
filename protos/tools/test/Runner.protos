@@ -110,6 +110,11 @@ isFutureTerminalExpectation: (spec) => {
     supported
 }
 
+isFutureStoredObservationExpectation: (spec) => {
+    (Manifest.caseExpectation(spec) === "future-observation-error-identity") &&
+    (Manifest.caseExpected(spec) === "stored:Error")
+}
+
 isDExpectation: (spec) => {
     supported: isSimpleExpectation(spec)
     isClosureErrorParentFreshExpectation(spec).ifTrue(() => {

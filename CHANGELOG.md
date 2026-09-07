@@ -1,3 +1,8 @@
+## 0.2.242-SNAPSHOT
+
+- Publish `TOOL002-F3C1B1 — stored observation expectation recognition`. Bundled `Runner.protos` adds only `isFutureStoredObservationExpectation(spec)`, recognizing exactly `future-observation-error-identity / stored:Error`. A Protos-owned fixture proves exact recognition and rejection of `fresh:Cancelled`, a wrong expected token, and another Future kind.
+- Keep B1 classification-only: no `executionInspect`, no `observe()` call, no evaluator, no `runSimple` activation, no fresh-mode policy, and no canonical ledger change until B4. No normative specification or host production change.
+
 ## 0.2.241-SNAPSHOT
 
 - Close `DIST001-E4B3B1 — candidate materialization composition + recovery/idempotency guard` and subdivide B3B before creating the real candidate. Add `dist/materialize_release_candidate.py` plus isolated Git fixtures. The helper composes E4B1 -> E4B2 -> E4B3A, safely resumes exact B1/B2 intermediate states, reuses an already-created exact detached candidate, rejects broader dirty/ref states, removes only incomplete worktrees it created itself, and keeps a completed detached worktree registered as temporary commit reachability. E4B3B2 becomes READY for the first real `0.2.236` candidate + SHA persistence. The frozen selection remains UNMATERIALIZED and publication unauthorized; no real candidate, branch, tag, GitHub Release, asset, implementation, specification, runtime, workflow or license-term change occurs in this slice.
