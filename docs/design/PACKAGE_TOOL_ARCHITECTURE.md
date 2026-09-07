@@ -417,10 +417,11 @@ merely for convenience.
 General host capabilities should be designed independently and supplied explicitly
 where needed.
 
-## Current repository reality
+## Repository reality at architecture selection (historical)
 
-The current implementation already has useful pieces, but it also establishes
-real prerequisites.
+The observations in this section describe the repository state at the time this
+architecture was selected. They are retained as design history; the implementation
+reconciliation below records the subsequently published TOOL001 state.
 
 ### Current CLI is host-owned and minimal
 
@@ -552,6 +553,35 @@ A deterministic digest implementation may eventually be:
 
 The package tool consumes that general mechanism; it does not own the language's
 hash-primitive design.
+
+## Published implementation reconciliation through manifest Slice 3
+
+The bounded historical manifest Slice 3 is now CLOSED as `TOOL001-C1` through
+`TOOL001-C7`.
+
+Published reality now includes:
+
+- exact toolchain-bundled package-tool module resolution;
+- a production package-tool bootstrap that provisions explicit confined project
+  metadata Filesystem authority without exposing it to ordinary applications;
+- metadata staging/publication through ordinary File/Filesystem operations;
+- TOML 1.0 parsing and canonical table assembly in bundled Protos source;
+- complete manifest schema-v1 structural validation and ordinary ManifestV1
+  construction in bundled Protos source;
+- `protos package manifest`, mechanically selected by the host as exact bundled
+  `ManifestMain`, which reads exactly `protos.toml`, consumes UTF-8 text to EOF,
+  invokes the schema-v1 parser and owns its user-facing diagnostics in Protos;
+- preservation of the historical bare `Main` entry for `protos package`.
+
+This implementation confirms rather than changes the selected architecture:
+host Java owns irreducible exact-entry selection and capability provisioning;
+package semantics/policy remains bundled Protos code.
+
+Manifest Slice 3 closure does not imply that the broader Package Tool is
+complete. Release-version/constraint semantics, lockfile policy, dependency
+resolution, workspace interpretation, package-store/archive operations,
+registry/network/credential behavior, fetch/update and publication remain
+separately scoped future TOOL001 work with their own prerequisites.
 
 ## Bundled tools are not `std:`
 

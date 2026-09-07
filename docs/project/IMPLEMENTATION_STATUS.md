@@ -690,7 +690,7 @@ record distributable Standard Library functionality.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | Bootstrap, confined Filesystem, metadata publication, canonical TOML C1-C4, schema-v1 C5 and C6 confined `protos.toml` read/diagnostics are published; C7 final manifest-slice reconciliation is READY. |
+| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | Bootstrap, confined Filesystem, metadata publication and the bounded historical manifest Slice 3 (TOOL001-C1 through C7) are CLOSED; later resolution/version/lock/workspace/store/registry work requires separately scoped continuation. |
 | TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C CLOSED; TOOL002-D IN_PROGRESS with D1/D2 CLOSED and D3 IN_PROGRESS; D3A CLOSED, D3B1 CLOSED, D3B2 IN_PROGRESS with D3B2A general `Object.parent()` Core prerequisite CLOSED at `0.2.196-SNAPSHOT` and D3B2B `error-parent` policy READY. |
 
 ### TOOL001 — Package Tool
@@ -719,8 +719,8 @@ forward.
 | TOOL001-C5C | package-tool manifest Slice 3C2 | CLOSED | `SAME_COMMIT` | Optional compatibility, exports and workspace structural model over C5B, including fail-closed owned fields and duplicate-free workspace members; dependency declarations remain C5D. |
 | TOOL001-C5D | package-tool manifest Slice 3C3 | CLOSED | `SAME_COMMIT` | Dependency alias declarations, registry/Git/path exclusivity, complete ordinary ManifestV1 construction and final C5 cross-schema conformance. |
 | TOOL001-C6 | package-tool manifest Slice 3D | CLOSED | `SAME_COMMIT` | Ordinary-Protos ManifestCommand reads exactly `protos.toml` through confined Filesystem authority, consumes complete UTF-8 TextReader chunks, invokes closed schema v1 and emits read-vs-schema diagnostics; the host only selects exact bundled `ManifestMain` for the public manifest command while historical bare Main stays unchanged. |
-| TOOL001-C7 | package-tool manifest Slice 3 closure | READY | — | Final cross-slice conformance and project/architecture closure after published C6. |
-| TOOL001-C | legacy package-tool manifest Slice 3 parent | IN_PROGRESS | TOOL001-C1/C2/C3/C4/C5/C6 published | TOML, schema-v1 and confined manifest read/diagnostics are published; C7 final closure is READY. |
+| TOOL001-C7 | package-tool manifest Slice 3 closure | CLOSED | `SAME_COMMIT` | Documentation/governance-only final cross-slice validation and architecture/status reconciliation; no executable or implementation-version change. |
+| TOOL001-C | legacy package-tool manifest Slice 3 parent | CLOSED | `SAME_COMMIT` | C1-C7 complete the bounded manifest surface: TOML, schema-v1 structural model, confined project-manifest read/diagnostics and final reconciliation. Later package-resolution concerns are separately scoped. |
 
 Detailed migration and continuation rules live in
 `docs/project/TOOL001_PACKAGE_TOOL.md`.

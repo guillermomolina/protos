@@ -630,7 +630,7 @@ to represent this data.
 
 ## Read-only command consequence
 
-Package-tool manifest Slice 3 may provide a read-only command that:
+The published package-tool manifest Slice 3 provides a read-only command that:
 
 1. opens exactly `protos.toml` through its already-provisioned project-read
    Filesystem capability;
@@ -650,6 +650,21 @@ That command:
 - does not perform package-store work.
 
 This remains independent of B006.
+
+## Implementation closure
+
+The structural schema defined here is implemented and closed by
+`TOOL001-C5`. `TOOL001-C6` composes that closed parser with the already
+provisioned confined Filesystem as `protos package manifest`: exactly
+`protos.toml` is read, UTF-8 text is consumed to EOF, `ManifestSchemaV1.parse`
+constructs/validates the ordinary model, and Protos-owned diagnostics distinguish
+read/decoding failure from TOML/schema failure.
+
+`TOOL001-C7` closes the bounded historical manifest Slice 3 after cross-slice
+validation and project/architecture reconciliation. No additional schema field,
+semantic value grammar, resolver rule, lock policy, workspace interpretation,
+network operation, package-store behavior or mutation policy is implied by that
+closure.
 
 ## Relationship to later slices
 

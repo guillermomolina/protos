@@ -62,25 +62,42 @@ its relation to any legacy Slice 3 terminology that remains useful for continuit
 | TOOL001-C5C | package-tool manifest Slice 3C2 | CLOSED | `SAME_COMMIT` | `self:ManifestSchemaV1.sectionsFromTable/parseSections` validates and models optional compatibility, exports and workspace data over C5B, with fail-closed owned fields, exact Strings, empty exports/members support and duplicate-free workspace members; dependencies remain intentionally deferred. |
 | TOOL001-C5D | package-tool manifest Slice 3C3 | CLOSED | `SAME_COMMIT` | `self:ManifestSchemaV1.fromTable/parse` completes the ordinary ManifestV1 model with user-keyed dependencies and exact registry/Git/path structural forms; mixed/incomplete/unknown declarations fail closed and C5 cross-schema conformance is published. |
 | TOOL001-C6 | package-tool manifest Slice 3D | CLOSED | `SAME_COMMIT` | `self:ManifestCommand` reads exactly `protos.toml` through the provisioned confined Filesystem, consumes complete UTF-8 text across progress chunks, invokes the closed ManifestV1 parser and owns read/schema diagnostics; the host driver mechanically selects exact bundled `ManifestMain` only for `protos package manifest`, leaving package policy in Protos and the historical bare `Main` entry unchanged. |
-| TOOL001-C7 | package-tool manifest Slice 3 closure | READY | — | Final cross-slice conformance, architecture/status reconciliation and closure of the bounded legacy manifest Slice 3 surface after published C6. |
-| TOOL001-C | historical manifest Slice 3 parent | IN_PROGRESS | C1/C2/C3/C4/C5/C6 published | Canonical TOML parsing, complete schema-v1 validation/model construction and confined project-manifest read/diagnostics are closed; C7 final legacy Slice 3 reconciliation is READY. |
+| TOOL001-C7 | package-tool manifest Slice 3 closure | CLOSED | `SAME_COMMIT` | Final cross-slice validation plus architecture/status reconciliation closes the bounded legacy manifest Slice 3 surface without new executable behavior or implementation-version increment. |
+| TOOL001-C | historical manifest Slice 3 parent | CLOSED | `SAME_COMMIT` | C1-C7 are published: canonical TOML, schema-v1 structural model, confined project-manifest read/diagnostics and final cross-slice reconciliation are complete. Later version/lock/resolution/workspace/store/registry work is outside this bounded Slice 3 parent. |
 
 B006's normative prerequisite path through I021 remains historical evidence; it
 is not reopened by this tracking migration.
 
 ## Current continuation boundary
 
-The next Package Tool implementation work must start by fetching and auditing the
-then-current `origin/main`. It should continue the open historical manifest Slice
-3 surface from the latest published C1/C2 state rather than recreating bootstrap,
-Filesystem provisioning, metadata publication, or already-closed TOML String
-behavior.
+The historical manifest Slice 3 surface is closed through `TOOL001-C7`.
+Subsequent Package Tool work must begin from the then-current `origin/main`,
+re-audit the package architecture/design prerequisites, and allocate a new
+bounded TOOL001 slice rather than silently extending closed `TOOL001-C`.
 
-The package design records identify remaining manifest concerns including full
-document/table assembly, manifest schema-v1 validation, project Filesystem reads,
-and user-facing diagnostics. Exact subdivision after C2 must be derived from the
-current repository and applicable AGENTS rules; this migration intentionally does
-not manufacture completion evidence for work not yet published.
+## Manifest Slice 3 final closure
+
+`TOOL001-C` is CLOSED. Its bounded outcome is the published composition of:
+
+```text
+C1/C2     TOML lexical/value surface
+C3/C4     canonical TOML document/table model
+C5        schema-v1 structural validation and ordinary ManifestV1 construction
+C6        confined protos.toml read, complete UTF-8 decode and diagnostics
+C7        cross-slice validation plus architecture/status reconciliation
+```
+
+The closure deliberately does not claim package resolution, semantic version or
+constraint validation, lockfile interpretation/generation, workspace path
+policy, package-store/archive behavior, registry/network behavior, credentials,
+fetch, update, or publication. Those concerns remain separate future Package
+Tool work and require a fresh audit/slice definition before implementation.
+
+The published host contribution remains mechanical bootstrap/authority:
+selecting exact bundled entries and provisioning the already-defined confined
+Filesystem capability. TOML/schema/read/diagnostic policy remains in bundled
+Protos source. The historical bare package entry remains distinct from the
+`ManifestMain` entry selected for `protos package manifest`.
 
 ## Family boundaries
 
