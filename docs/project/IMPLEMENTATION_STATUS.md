@@ -827,7 +827,7 @@ record distributable Standard Library functionality.
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
 | TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | D/E/F1 CLOSED; F2 now includes lock I/O, stale/root assembly and F2D1 workspace execution-plan contract. F2D2 pure plan construction READY. |
-| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D/E CLOSED; TOOL002-F IN_PROGRESS, F3A CLOSED after A1/A2/A3, F3B/F3B1 READY, then F3C/D/E/F4 and G-J dependency-ordered. |
+| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D/E CLOSED; TOOL002-F IN_PROGRESS, F3A CLOSED, F3B IN_PROGRESS with B1 CLOSED/B2 READY, then F3C/D/E/F4 and G-J dependency-ordered. |
 
 ### TOOL001 — Package Tool
 
@@ -943,17 +943,17 @@ the initial TOOL002 closure.
 | TOOL002-E2B2 | CLOSED | `0.2.226-SNAPSHOT` / `SAME_COMMIT`; public `Main.protos` executes the full retained Package/TOML plan through generic `Runner` + `packageExecution`; Protos evidence requires selected==plan cases, skipped==0, passed==plan cases and complete result cardinality. |
 | TOOL002-E3 | CLOSED | Legacy Java TOML corpus owner removed: no JUnit path parses the retained manifest, interprets its `true`/`error` expectations or directly executes every fixture. Existing Java tests retain host-mechanical coverage only; no implementation-version change. |
 | TOOL002-E4 | CLOSED | Documentation/governance-only final E reconciliation; no executable, normative or implementation-version change. Parent TOOL002-E is CLOSED and TOOL002-F is READY. |
-| TOOL002-F | IN_PROGRESS | F1/F2 CLOSED; F3 IN_PROGRESS under the finer A/B/C/D/E decomposition. F3A semantic prerequisites/governance are CLOSED; F3B/F3B1 retained fixture-shape validation is READY; F4 remains dependency-gated. |
+| TOOL002-F | IN_PROGRESS | F1/F2 and F3A CLOSED; F3B IN_PROGRESS with F3B1 retained-fixture shape CLOSED and F3B2 READY; later F3/F4 work dependency-gated. |
 | TOOL002-F1 | CLOSED | `0.2.228-SNAPSHOT` / `SAME_COMMIT`; bundled Protos can evaluate `future-integer/null/boolean` wholly inside one fresh child Process through ordinary `Future.value()` suspension/resume and return only Boolean evidence. Public `runSimple` selection is unchanged. |
 | TOOL002-F2 | CLOSED | `0.2.229-SNAPSHOT` / `SAME_COMMIT`; repeated child-local `Future.value()` observations distinguish FAILED stored-Error identity from CANCELLED fresh `Cancelled` occurrences and preserve exact immediate Error-parent policy; not yet selected by `runSimple`. |
-| TOOL002-F3 | IN_PROGRESS | F3A-E isolate same-domain stored semantics, retained fixture shape, Test Tool stored policy, fresh cancellation identity and final integration. F3A CLOSED; F3B READY. |
+| TOOL002-F3 | IN_PROGRESS | F3A CLOSED; F3B shape/observation decomposition active. B1 CLOSED, B2 READY, B3 blocked; C/D/E remain dependency-gated. |
 | TOOL002-F3A | CLOSED | F3A1 `3c23eaaccecbdcc7c2bcd86bc30c445403cfb047` + F3A2 `119c90032088ccf428ace37185187b854966e0cb` + F3A3 `SAME_COMMIT`; base stored-Future Error identity is established independently from Test Tool mechanism. |
 | TOOL002-F3A1 | CLOSED | `3c23eaaccecbdcc7c2bcd86bc30c445403cfb047`; test-impact Protos conformance proves repeated failed-Future observations re-signal one Error identity. |
 | TOOL002-F3A2 | CLOSED | `119c90032088ccf428ace37185187b854966e0cb`; test-impact Protos conformance proves a failed-Future observation is exactly the producer-created same-domain Error. |
 | TOOL002-F3A3 | CLOSED | `SAME_COMMIT`; documentation/governance reconciliation only; persists fine-grained F3 continuation and makes F3B/F3B1 READY. |
-| TOOL002-F3B | READY | F3A CLOSED; validate retained stored observation fixture shape outside Test Tool policy. |
-| TOOL002-F3B1 | READY | Validate exact local `future` / `error` / zero-argument `observe` slots only. |
-| TOOL002-F3B2 | BLOCKED_BY_DEPENDENCIES | TOOL002-F3B1; one post-terminal observe invocation must signal the exact retained local Error. |
+| TOOL002-F3B | IN_PROGRESS | Exact retained stored fixture shape is proven by B1 without observation; B2 one post-terminal observation is READY. |
+| TOOL002-F3B1 | CLOSED | `SAME_COMMIT`; direct execution of the exact retained stored fixture yields exactly local `future`/`error`/`observe`, typed as Future/Object/source Closure, with zero observe parameters. No terminal dispatch or observe invocation. |
+| TOOL002-F3B2 | READY | F3B1 CLOSED; terminalize retained Future without observation, invoke `observe` once, and require exact identity with local `error`. |
 | TOOL002-F3B3 | BLOCKED_BY_DEPENDENCIES | TOOL002-F3B2; second post-terminal observation must satisfy `first === second === error`, closing F3B. |
 | TOOL002-F3C | BLOCKED_BY_DEPENDENCIES | TOOL002-F3B; migrate Test Tool `stored:Error` only. |
 | TOOL002-F3C1 | BLOCKED_BY_DEPENDENCIES | TOOL002-F3B3; minimal positive stored Test Tool mechanism only. |
