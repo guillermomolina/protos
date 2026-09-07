@@ -479,6 +479,10 @@ merely because they are compiled or run using Protos.
 Independent modules or plugins may use separate licenses when they
 qualify as Independent Modules or Larger Work components under the APL.
 
+For the project goals and alternatives considered when choosing the license, see
+[Why Protos uses APL-1.0](docs/project/LICENSING_RATIONALE.md). This explanation
+is non-normative; `LICENSE.TXT` remains the authoritative license text.
+
 ## Specification Status
 
 Version 0.1 remains a draft, but the major semantic decisions currently tracked by the design are specified. The normative specification modules are periodically audited for single ownership and consistency; the informative runtime pseudocode is kept aligned with those normative owners.
