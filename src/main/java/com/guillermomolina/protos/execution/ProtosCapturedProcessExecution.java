@@ -16,12 +16,15 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosByteIoFlow;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.CallTarget;
 import java.io.ByteArrayOutputStream;
 import java.util.Arrays;
@@ -127,6 +130,94 @@ public final class ProtosCapturedProcessExecution {
                 outcome,
                 stdout.snapshot(),
                 stderr.snapshot());
+    }
+
+
+    /**
+     * Executes one exact source directly in a fresh Process, drains its cooperative Actor-domain
+     * work to idle, then invokes one exact inspector Closure with the still-live source result.
+     *
+     * <p>This is a tooling-neutral live-result inspection boundary. The source result never crosses
+     * the detached observation boundary. The source and inspector share the same Process, initial
+     * activation, Actor module state, execution domain and private streams. The inspector is invoked
+     * only after the source domain is idle and has no live tasks. Its own invocation must also leave
+     * no live tasks behind.
+     *
+     * <p>The inspector source must evaluate to a Closure accepting the live result as its single
+     * supplied argument. Only the inspector's terminal value/Error plus captured streams leave this
+     * method. This class owns no manifest, TestPlan, expectation, Future-state, assertion or
+     * reporting policy.
+     */
+    public static Result executeThenInspect(
+            Request request,
+            CallTarget inspector) {
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(inspector, "inspector");
+
+        PrivateReadableBackend stdin = new PrivateReadableBackend(request.stdin());
+        PrivateWritableBackend stdout = new PrivateWritableBackend();
+        PrivateWritableBackend stderr = new PrivateWritableBackend();
+
+        ProtosStandaloneProcessBootstrap.Result bootstrap =
+                ProtosStandaloneProcessBootstrap.create(
+                        request.prelude(),
+                        request.applicationArguments(),
+                        request.environmentNameDomain(),
+                        request.environmentEntries(),
+                        stdin::read,
+                        stdout::write,
+                        stderr::write,
+                        request.stdinEncoding(),
+                        request.stdoutEncoding(),
+                        request.stderrEncoding(),
+                        request.defaultFilesystem());
+
+        try {
+            ProtosActivation activation = bootstrap.activation();
+            Object subject;
+            try {
+                subject = request.entry().call(activation);
+            } catch (ProtosSignalException signal) {
+                return new Result(
+                        ProtosExecutionOutcome.failed(signal.error()),
+                        stdout.snapshot(),
+                        stderr.snapshot());
+            }
+
+            activation.executionDomain().dispatchUntilIdle();
+            if (activation.executionDomain().liveTaskCount() != 0) {
+                throw new IllegalStateException(
+                        "direct inspection source reached cooperative idle with live tasks");
+            }
+
+            ProtosExecutionOutcome outcome;
+            try {
+                Object inspectorValue = inspector.call(activation);
+                if (!(inspectorValue instanceof ProtosClosureValue inspectorClosure)) {
+                    throw new IllegalStateException(
+                            "direct inspection inspector source must evaluate to Closure");
+                }
+                Object inspected =
+                        ProtosClosureInvoker.invoke(
+                                inspectorClosure,
+                                List.of(subject),
+                                activation);
+                if (activation.executionDomain().liveTaskCount() != 0) {
+                    throw new IllegalStateException(
+                            "direct inspection inspector left live tasks");
+                }
+                outcome = ProtosExecutionOutcome.completed(inspected);
+            } catch (ProtosSignalException signal) {
+                outcome = ProtosExecutionOutcome.failed(signal.error());
+            }
+
+            return new Result(
+                    outcome,
+                    stdout.snapshot(),
+                    stderr.snapshot());
+        } finally {
+            bootstrap.process().requestTerminationForRuntime();
+        }
     }
 
     private static final class PrivateReadableBackend {

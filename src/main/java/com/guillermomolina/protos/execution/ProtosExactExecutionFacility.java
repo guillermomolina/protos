@@ -41,6 +41,7 @@ import java.util.Objects;
  */
 public final class ProtosExactExecutionFacility {
     public static final String BOOTSTRAP_SLOT = "execution";
+    public static final String INSPECTION_BOOTSTRAP_SLOT = "executionInspect";
 
     private ProtosExactExecutionFacility() {}
 
@@ -91,6 +92,64 @@ public final class ProtosExactExecutionFacility {
                                                 executionPrelude)));
     }
 
+
+    /**
+     * Installs the test-neutral live-result inspection facility under
+     * {@link #INSPECTION_BOOTSTRAP_SLOT} using the caller's already-selected Prelude.
+     */
+    public static void installInspection(ProtosActivation activation) {
+        Objects.requireNonNull(activation, "activation");
+        ProtosPrelude executionPrelude =
+                activation
+                        .prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "exact inspection facility requires Core prelude"));
+        installInspection(
+                activation,
+                INSPECTION_BOOTSTRAP_SLOT,
+                executionPrelude);
+    }
+
+    /**
+     * Installs one named live-result inspection facility using an already-selected
+     * Prelude/module-resolution environment.
+     *
+     * <p>The callable accepts exactly two Protos Strings: one exact source unit and one exact
+     * inspector source unit. The inspector source must evaluate to a Closure. The source result
+     * remains live inside its fresh Process and is supplied directly to that Closure only after
+     * cooperative source work reaches idle with no live tasks. Only the inspector's terminal
+     * observation crosses the detached boundary.
+     */
+    public static void installInspection(
+            ProtosActivation activation,
+            String slotName,
+            ProtosPrelude executionPrelude) {
+        Objects.requireNonNull(activation, "activation");
+        Objects.requireNonNull(slotName, "slotName");
+        Objects.requireNonNull(executionPrelude, "executionPrelude");
+        if (slotName.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "exact inspection bootstrap slot name must not be empty");
+        }
+        if (activation.context().hasLocalSlot(slotName)) {
+            throw new IllegalStateException(
+                    "exact inspection bootstrap slot already exists: " + slotName);
+        }
+
+        activation
+                .context()
+                .createLocalSlot(
+                        slotName,
+                        ProtosClosureValue.nativeClosure(
+                                (callActivation, arguments) ->
+                                        inspect(
+                                                callActivation,
+                                                arguments,
+                                                executionPrelude)));
+    }
+
     private static Object execute(
             ProtosActivation caller,
             List<?> arguments,
@@ -122,6 +181,48 @@ public final class ProtosExactExecutionFacility {
                                 utf8,
                                 utf8,
                                 null));
+
+        return observation(
+                result,
+                caller,
+                callerPrelude,
+                executionPrelude);
+    }
+
+
+    private static Object inspect(
+            ProtosActivation caller,
+            List<?> arguments,
+            ProtosPrelude executionPrelude) {
+        if (arguments.size() != 2
+                || !(arguments.get(0) instanceof ProtosStringValue source)
+                || !(arguments.get(1) instanceof ProtosStringValue inspector)) {
+            throw ordinaryError(caller);
+        }
+
+        ProtosPrelude callerPrelude =
+                caller
+                        .prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "exact inspection observation requires caller Core prelude"));
+        ProtosEncodingValue utf8 = utf8(executionPrelude);
+
+        ProtosCapturedProcessExecution.Result result =
+                ProtosCapturedProcessExecution.executeThenInspect(
+                        new ProtosCapturedProcessExecution.Request(
+                                executionPrelude,
+                                new ProtosSourceCompiler().compile(source.value()),
+                                List.of(),
+                                exactEnvironmentDomain(),
+                                List.of(),
+                                new byte[0],
+                                utf8,
+                                utf8,
+                                utf8,
+                                null),
+                        new ProtosSourceCompiler().compile(inspector.value()));
 
         return observation(
                 result,

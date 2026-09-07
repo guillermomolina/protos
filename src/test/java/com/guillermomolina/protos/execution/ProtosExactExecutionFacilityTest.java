@@ -111,6 +111,28 @@ final class ProtosExactExecutionFacilityTest {
                 signal.error().parent().orElseThrow());
     }
 
+
+    @Test
+    void inspectionKeepsLiveSourceValueInsideFreshProcessUntilInspector()
+            throws Exception {
+        Fixture fixture = fixture();
+
+        Object result =
+                fixture.compiler
+                        .compile(
+                                "observation: executionInspect("
+                                        + "\"future: (() => { 42 }).future()\\n"
+                                        + "() => { future.value() }\", "
+                                        + "\"(subject) => { subject() }\""
+                                        + ")\n"
+                                        + "(observation.state === \"completed\") && "
+                                        + "(observation.value === 42) && "
+                                        + "(observation.error === null)")
+                        .call(fixture.activation);
+
+        assertSame(ProtosBooleanValue.TRUE, result);
+    }
+
     @Test
     void facilityIsBootstrapLocalAndNotPreludeGlobal() throws Exception {
         Fixture fixture = fixture();
@@ -125,6 +147,16 @@ final class ProtosExactExecutionFacilityTest {
                         .bindings()
                         .hasLocalSlot(
                                 ProtosExactExecutionFacility.BOOTSTRAP_SLOT));
+        assertTrue(
+                fixture.activation
+                        .context()
+                        .hasLocalSlot(
+                                ProtosExactExecutionFacility.INSPECTION_BOOTSTRAP_SLOT));
+        assertFalse(
+                fixture.prelude
+                        .bindings()
+                        .hasLocalSlot(
+                                ProtosExactExecutionFacility.INSPECTION_BOOTSTRAP_SLOT));
     }
 
     private static Fixture fixture() throws Exception {
@@ -136,6 +168,7 @@ final class ProtosExactExecutionFacilityTest {
                                         STANDARD_LIBRARY));
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosExactExecutionFacility.install(activation);
+        ProtosExactExecutionFacility.installInspection(activation);
         return new Fixture(
                 prelude,
                 activation,
