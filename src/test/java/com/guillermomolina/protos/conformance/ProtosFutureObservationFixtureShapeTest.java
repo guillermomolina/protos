@@ -49,6 +49,51 @@ final class ProtosFutureObservationFixtureShapeTest {
                     "failed-value-resignals-recorded-error.protos");
 
     @Test
+    void retainedStoredFixtureSignalsSameLocalErrorTwiceAfterTerminalProgress()
+            throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(
+                                CORE,
+                                new ProtosStandardLibraryModuleResolver(
+                                        STANDARD_LIBRARY));
+        ProtosActivation activation = prelude.newModuleActivation();
+
+        ProtosObjectValue fixture =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        new ProtosSourceFileLoader().load(FIXTURE).call(activation));
+        ProtosFutureValue future =
+                assertInstanceOf(
+                        ProtosFutureValue.class,
+                        fixture.readLocalSlot("future").orElseThrow());
+        ProtosObjectValue error =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        fixture.readLocalSlot("error").orElseThrow());
+        ProtosClosureValue observe =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        fixture.readLocalSlot("observe").orElseThrow());
+
+        awaitTerminal(future, activation);
+        assertEquals(ProtosFutureValue.State.FAILED, future.state());
+
+        ProtosSignalException first =
+                assertThrows(
+                        ProtosSignalException.class,
+                        () -> ProtosClosureInvoker.invoke(observe, List.of(), activation));
+        ProtosSignalException second =
+                assertThrows(
+                        ProtosSignalException.class,
+                        () -> ProtosClosureInvoker.invoke(observe, List.of(), activation));
+
+        assertSame(error, first.error());
+        assertSame(error, second.error());
+        assertSame(first.error(), second.error());
+    }
+
+    @Test
     void retainedStoredFixtureSignalsItsLocalErrorOnceAfterTerminalProgress()
             throws Exception {
         ProtosPrelude prelude =
