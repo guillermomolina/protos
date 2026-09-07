@@ -780,3 +780,48 @@ F2B2 also gives `compatibility.language` its initial semantic value contract:
 an opaque exact `LanguageCompatibilityId`. The current language generation is
 `"0.1"`; absence means no declared restriction and presence requires exact
 equality with the active resolution-context identifier.
+
+## TOOL001-F2D1 runtime-name semantic checkpoint
+
+The schema-v1 parser continues to preserve dependency aliases, export keys and
+export values as decoded Strings. F2D1 now defines the initial runtime validator
+applied when those Strings participate in package-backed module resolution.
+
+A portable segment begins with an ASCII letter and continues with ASCII letters,
+digits or `_`; Windows reserved device-name spellings are rejected
+case-insensitively. A portable logical module name is one or more such segments
+separated by literal `/`.
+
+Runtime requirements:
+
+- dependency alias: exactly one portable segment;
+- `[exports]` key: one portable logical module name;
+- `[exports]` value: one portable logical module name.
+
+This is semantic validation above the structural manifest parser. Schema parsing
+does not need to reject an otherwise structurally valid manifest merely because
+a String is unsuitable for runtime module resolution; execution preflight fails
+when that runtime invariant is required.
+
+For package N:
+
+```text
+self:<logical-module>
+```
+
+selects that internal module directly.
+
+For:
+
+```text
+dep:<alias>/<public-export>
+```
+
+the resolver follows N's exact locked dependency edge for `alias`, then maps
+`public-export` through the target package's `[exports]` table to its internal
+logical module. A dependency consumer cannot bypass `[exports]` by naming an
+unexported source module.
+
+Package-backed naming reuses the portable segment discipline of the standard
+distribution but does not inherit the `std:`-specific first-segment `core`
+reservation.

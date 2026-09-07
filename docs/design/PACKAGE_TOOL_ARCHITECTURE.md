@@ -1427,3 +1427,35 @@ written in Protos, and missing general capabilities discovered while building it
 should be treated as evidence for improving Protos's ordinary tooling/library
 surface rather than as justification for permanent package-specific privileged
 escape hatches.
+
+## TOOL001-F2D1 implementation checkpoint — workspace execution-plan boundary
+
+`TOOL001-F2D1` freezes the first executable `PackageExecutionPlan` boundary
+without pretending that external locked packages are already materializable.
+
+The selected bounded continuation is:
+
+```text
+F2D1  plan/runtime-name/preflight design             CLOSED
+F2D2  pure workspace plan construction               READY
+F2D3  mechanical host resolver + command preflight   dependency-gated
+```
+
+The workspace-only subset is valid because workspace nodes do not carry immutable
+ContentIdentity. A canonical non-stale lock plus exact root/member/edge
+reconciliation can fully identify that local graph.
+
+Registry/Git nodes remain fail-closed until a later materialization layer can
+supply exact source roots and verify the mandatory locked ContentIdentity. The
+host must never substitute cache scanning, locator/Git provenance, or a package
+with a matching textual PackageId.
+
+F2D1 also closes the initial runtime interpretation of schema-v1 aliases/exports:
+`dep:<alias>/<public-export>` resolves one direct locked edge and then the
+target manifest's export map; `self:<logical-module>` addresses an internal
+module of the current package directly. All names use the portable segment
+discipline recorded in the F2D design record.
+
+The plan remains inert Protos data. The host must defensively validate and detach
+it into immutable resolver state before application execution; package-tool
+Filesystem/store/network authority never transfers merely through plan handoff.
