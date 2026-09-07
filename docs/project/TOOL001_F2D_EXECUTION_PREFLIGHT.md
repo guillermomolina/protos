@@ -1,6 +1,6 @@
 # TOOL001-F2D — Workspace Execution Preflight and PackageExecutionPlan
 
-Status: **IN_PROGRESS through CLOSED F2D3A host-detach implementation**
+Status: **IN_PROGRESS through CLOSED F2D3B1A module-identity implementation**
 Nature: non-normative Package Tool / host-integration design
 Design checkpoint: 2026-09-07
 
@@ -31,12 +31,19 @@ external materialization exists, workspace preflight rejects such a graph.
 ## F2D decomposition
 
 ```text
-F2D1   plan ABI + runtime-name/preflight contract             CLOSED
-F2D2   pure workspace execution-state + plan construction     CLOSED
-F2D3   mechanical host handoff + workspace run parent         IN_PROGRESS
-F2D3A  immutable host DTO + defensive plan detach             CLOSED
-F2D3B  exact workspace package-backed module resolver         READY
-F2D3C  command preflight + tool/application authority split   BLOCKED_BY_DEPENDENCIES
+F2D1     plan ABI + runtime-name/preflight contract               CLOSED
+F2D2     pure workspace execution-state + plan construction       CLOSED
+F2D3     mechanical host handoff + workspace run parent           IN_PROGRESS
+F2D3A    immutable host DTO + defensive plan detach               CLOSED
+F2D3B    exact workspace package-backed module resolver           IN_PROGRESS
+F2D3B1   package identity + source mechanism                      IN_PROGRESS
+F2D3B1A  canonical workspace ModuleKey codec                      CLOSED
+F2D3B1B  package-root binding + exact source path                 READY
+F2D3B2   resolver routing                                         BLOCKED_BY_DEPENDENCIES
+F2D3B2A  self: routing                                            BLOCKED_BY_DEPENDENCIES
+F2D3B2B  dep: edge/export routing                                 BLOCKED_BY_DEPENDENCIES
+F2D3B2C  std: delegation + resolver closure                       BLOCKED_BY_DEPENDENCIES
+F2D3C    command preflight + tool/application authority split     BLOCKED_BY_DEPENDENCIES
 ```
 
 F2D is bounded to workspace-only execution. Closing it will not claim external
@@ -524,3 +531,52 @@ CLI dispatch, or create application authority.
 
 F2D3B is READY and consumes only this detached DTO plus the already-selected
 workspace project root and standard-library resolver.
+
+## F2D3B refinement and F2D3B1A closure
+
+The resolver parent is further decomposed before implementation:
+
+```text
+F2D3B
+├── F2D3B1  package identity + source mechanism
+│   ├── F2D3B1A  canonical workspace ModuleKey codec       CLOSED
+│   └── F2D3B1B  package-root binding + exact source path  READY
+└── F2D3B2  resolver routing
+    ├── F2D3B2A  self: routing                             dependency-gated
+    ├── F2D3B2B  dep: edge/export routing                  dependency-gated
+    └── F2D3B2C  std: delegation + resolver closure        dependency-gated
+```
+
+This decomposition keeps identity independent from filesystem lookup and keeps
+source lookup independent from import-specifier routing.
+
+F2D3B1A is CLOSED.
+
+The host-only canonical workspace module key is:
+
+```text
+pkg-workspace:v1:<base64url-no-padding UTF-8 PackageId>:<base64url-no-padding UTF-8 internal-logical-module>
+```
+
+The serialized spelling is an internal implementation detail, not repository or
+package identity. Its invariants are:
+
+- the identity inputs are exactly workspace PackageId and internal logical module;
+- PackageId remains opaque and exact;
+- internal logical module must satisfy the already-frozen F2D1 portable logical
+  module-name contract;
+- dependency aliases, export aliases, workspace locations, project-root paths,
+  checkout/cache locations and Filesystem identity never enter the key;
+- the workspace-specific domain prevents a future external immutable package key
+  from accidentally colliding with this bounded mutable-workspace identity;
+- decoding accepts only the canonical URL-safe base64 spelling without padding
+  and revalidates the logical module name.
+
+`ProtosWorkspacePackageModuleKey` does not implement `ProtosModuleResolver`, load
+source, touch a Filesystem, interpret `self:`/`dep:`/`std:`, inspect the
+PackageExecutionPlan graph, or change CLI behavior.
+
+The focal test is intentionally Java: canonical ModuleKey is normatively an
+internal host/runtime concept and need not be exposed as a Protos object. Protos
+source conformance resumes in the routing slices where `import(String)` behavior
+becomes observable.

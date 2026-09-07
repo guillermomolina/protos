@@ -868,7 +868,14 @@ forward.
 | TOOL001-F2D2 | pure workspace execution-state + plan construction | CLOSED | `SAME_COMMIT` | ResolutionRoot single-pass execution state + RuntimeNames + canonical non-stale workspace lock reconciliation produce fresh inert PackageExecutionPlanV1. |
 | TOOL001-F2D3 | mechanical host resolver handoff + command-scoped workspace preflight | IN_PROGRESS | TOOL001-F2D3A published | Decomposed after implementation audit: A detach CLOSED, B resolver READY, C command/authority boundary dependency-gated. |
 | TOOL001-F2D3A | immutable host DTO + defensive plan detach | CLOSED | `SAME_COMMIT` | Mechanical ABI boundary only: exact shape/domain/location/edge validation and recursive immutable copy. |
-| TOOL001-F2D3B | exact workspace package-backed module resolver | READY | — | Detached plan is available; implement exact canonical module/source mechanism without package policy. |
+| TOOL001-F2D3B | exact workspace package-backed module resolver | IN_PROGRESS | TOOL001-F2D3B1A published | Further decomposed: B1A key codec CLOSED, B1B source binding READY, B2 routing dependency-gated. |
+| TOOL001-F2D3B1 | package identity + source mechanism | IN_PROGRESS | TOOL001-F2D3B1A published | Host package key identity closed; source-root/path mechanism remains. |
+| TOOL001-F2D3B1A | canonical workspace ModuleKey codec | CLOSED | `SAME_COMMIT` | Workspace-domain canonical ModuleKey codec over exact PackageId + internal logical module; host-only and filesystem-free. |
+| TOOL001-F2D3B1B | package-root binding + exact source path | READY | — | Physical source lookup prerequisite only; no self:/dep:/std: routing. |
+| TOOL001-F2D3B2 | resolver routing | BLOCKED_BY_DEPENDENCIES | TOOL001-F2D3B1 | Parent for self/dep/std routing after source mechanism. |
+| TOOL001-F2D3B2A | self: routing | BLOCKED_BY_DEPENDENCIES | TOOL001-F2D3B1B | First observable package import routing slice; prefer Protos-source behavior tests. |
+| TOOL001-F2D3B2B | dep: edge/export routing | BLOCKED_BY_DEPENDENCIES | TOOL001-F2D3B2A | Exact dependency edge and export visibility. |
+| TOOL001-F2D3B2C | std: delegation + resolver closure | BLOCKED_BY_DEPENDENCIES | TOOL001-F2D3B2B | Standard resolver delegation and final resolver rejection/closure. |
 | TOOL001-F2D3C | command-scoped workspace preflight + authority separation | BLOCKED_BY_DEPENDENCIES | TOOL001-F2D3B | Wire workspace run only after resolver is independently closed. |
 
 
