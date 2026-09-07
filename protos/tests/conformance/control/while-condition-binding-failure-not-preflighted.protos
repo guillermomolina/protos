@@ -15,11 +15,17 @@
  * the specific language governing rights and limitations under the License.
  */
 
+defaultCalls: 0
 bodyCalls: 0
 handled: false
+touch: () => {
+    defaultCalls = defaultCalls + 1
+    7
+}
+condition: (first = touch(), required) => false
 Error.handle(
     () => {
-        (() => 42).while(() => {
+        condition.while(() => {
             bodyCalls = bodyCalls + 1
         })
         null
@@ -30,5 +36,7 @@ Error.handle(
     }
 )
 handled.and() {
-    bodyCalls == 0
+    (defaultCalls == 1).and() {
+        bodyCalls == 0
+    }
 }

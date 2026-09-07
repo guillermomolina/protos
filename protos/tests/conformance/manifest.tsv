@@ -609,3 +609,7 @@ control/while-invalid-condition-null.protos	boolean	true
 control/while-invalid-condition-integer.protos	boolean	true
 control/while-invalid-condition-object.protos	boolean	true
 control/while-invalid-condition-future.protos	boolean	true
+control/while-condition-binding-failure-not-preflighted.protos	boolean	true
+control/while-unreachable-body-binding-failure-not-preflighted.protos	boolean	true
+control/while-body-binding-failure-when-reached.protos	boolean	true
+control/while-default-parameter-zero-arg-activation.protos	boolean	true

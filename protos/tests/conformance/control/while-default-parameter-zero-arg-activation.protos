@@ -15,20 +15,25 @@
  * the specific language governing rights and limitations under the License.
  */
 
+conditionCalls: 0
+bodyDefaultCalls: 0
 bodyCalls: 0
-handled: false
-Error.handle(
-    () => {
-        (() => 42).while(() => {
-            bodyCalls = bodyCalls + 1
-        })
-        null
-    },
-    (caught) => {
-        handled = caught.parent() === Error
-        null
+nextCondition: () => {
+    conditionCalls = conditionCalls + 1
+    conditionCalls == 1
+}
+bodyDefault: () => {
+    bodyDefaultCalls = bodyDefaultCalls + 1
+    99
+}
+condition: (value = nextCondition()) => value
+result: condition.while((ignored = bodyDefault()) => {
+    bodyCalls = bodyCalls + 1
+})
+(result === null).and() {
+    (conditionCalls == 2).and() {
+        (bodyDefaultCalls == 1).and() {
+            bodyCalls == 1
+        }
     }
-)
-handled.and() {
-    bodyCalls == 0
 }
