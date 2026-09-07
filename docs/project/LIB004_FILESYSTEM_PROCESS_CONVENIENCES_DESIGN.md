@@ -1,8 +1,10 @@
 # LIB004 Filesystem / Process Conveniences Design Record
 
-Status: **DRAFT — design audit in progress; no implementation surface approved**
+Status: **DESIGN CLOSED — bounded initial implementation surface approved**
 Work item: `LIB004`
 Nature: Project design record; **non-normative**
+Design closed: 2026-09-07
+Closure publication baseline: current `origin/main` at publication; see the closure commit parent
 Draft checkpoint: 2026-09-06
 Historical audit checkpoint: `b2bdbe584531284ec499df1a40be6285bea7c50f`
 
@@ -1122,3 +1124,267 @@ closed. The later audit direction continues to prefer a small byte-I/O /
 filesystem surface over Process text-wrapper caching or mode-string/OpenOptions
 aliases, but final LIB004 slices are assigned only after I022 closes and the
 then-current `origin/main` is re-audited.
+
+<!-- LIB004-0-DESIGN-CLOSURE -->
+## 2026-09-07 LIB004-0 design closure
+
+This section is the authoritative project-design conclusion for the bounded
+initial LIB004 scope. It supersedes every earlier `working recommendation`,
+`candidate`, `open question`, `Draft closure rule`, and historical prerequisite
+checkpoint in this file for implementation planning. Those earlier sections are
+retained as design-history evidence.
+
+This record remains non-normative. Core semantics continue to be owned by the
+applicable specifications under `spec/`, and every implementation slice must
+re-fetch and audit the then-current `origin/main`.
+
+### Closure audit result
+
+LIB004-0 is intentionally publication-state independent. Its launcher closes the
+design against the `origin/main` tip that actually wins publication rather than
+embedding a preselected SHA or absolute native-boundary count in the change.
+
+The closure requirements are:
+
+- I013 Path, I014 Byte I/O, I015 Encoding/Text I/O, I016 Filesystem/File, I017
+  Process I/O/bootstrap, and I022 dynamic Error handlers/unwind-safe cleanup are
+  CLOSED before implementation of this bounded surface begins;
+- no relevant implementation blocker may remain unresolved for the selected
+  surface;
+- `Object.ensure` and `Error.handle` provide the general cleanup/unwind substrate;
+- standard Filesystem authority remains explicit and capability-confined;
+- Process does not imply Filesystem authority;
+- ordinary Protos library code, not a File/Filesystem-specific Java escape hatch,
+  owns the convenience layer;
+- LIB004 implementation must not add production Java/native standard operations:
+  `NATIVE_CLOSURE_BOUNDARY_DELTA: 0`.
+
+The launcher verifies the delta by restricting LIB004-0 itself to the two
+project-document paths. Absolute Core native-boundary inventory is deliberately
+left to the then-current architecture ledger/guard rather than copied into this
+design closure.
+
+### Selected module: `std:io/Files`
+
+The initial filesystem convenience module is canonically:
+
+```text
+std:io/Files
+```
+
+and maps under Standard Library naming policy to:
+
+```text
+protos/lib/io/Files.protos
+```
+
+Its bounded initial public surface is exactly:
+
+```text
+readAllBytes(filesystem, path) -> Future<Bytes>
+writeAllBytes(filesystem, path, bytes) -> Future<Filesystem>
+readAllText(filesystem, path, encoding) -> Future<String>
+writeAllText(filesystem, path, text, encoding) -> Future<Filesystem>
+```
+
+The module receives all authority explicitly. It does not capture or discover a
+bootstrap-local `filesystem`, current Process, current directory, host path, or
+other ambient authority.
+
+#### `readAllBytes`
+
+`readAllBytes(filesystem, path)` opens exactly one File through the equivalent of
+`filesystem.open(path)`, preserving Core's read-existing, preserve-content,
+positioned open policy.
+
+The helper consumes that File's ordered logical byte sequence until standard
+File reading returns `null` for EOF. Its successful result is one fresh open
+Bytes object containing, in order, exactly the octets delivered by those reads.
+The helper does not reopen the Path, perform an existence probe, or claim a
+filesystem snapshot across independently authorized concurrent mutation.
+
+`All` means that the complete successful result is materialized in memory.
+Result storage is therefore proportional to returned content size. That does not
+authorize a second unbounded queue: implementation-controlled outstanding reads,
+unread speculative data, and bookkeeping must remain finitely bounded. Native
+read chunk size and bounded pipeline depth are implementation details.
+
+The returned Future resolves only after EOF has been established and the owned
+File close lifecycle has completed successfully. Open, read, or close failure
+propagates through the existing Core failure/cleanup rules.
+
+#### `writeAllBytes`
+
+`writeAllBytes(filesystem, path, bytes)` uses one fixed explicit open policy:
+
+```text
+{
+    read: false
+    write: true
+    create: true
+    truncate: true
+    append: false
+}
+```
+
+An absent target is created; an existing target is selected and truncated to
+logical size zero under Core's failure-atomic truncate-on-open rule; payload
+placement is positioned from the beginning. This is not atomic replacement and
+does not imply namespace or crash durability.
+
+Because Bytes is mutable and acquisition/output may suspend, the helper captures
+a private logical snapshot of the supplied Bytes during ordinary invocation,
+before starting Filesystem effects attributable to the helper. Later caller
+mutation cannot alter that invocation's payload.
+
+After the pre-I/O snapshot succeeds, output is asynchronous. The helper may split
+the private snapshot into finitely bounded sequential writes. It never
+automatically retries a failed ordinary ByteWritable write because Core permits a
+failed write to have contributed a contiguous prefix.
+
+Successful completion means every snapshot octet has been contributed in order
+and the owned File close lifecycle has completed successfully. The Future then
+resolves to the exact Filesystem argument.
+
+Failure or cancellation does not promise rollback. Once create/truncate or output
+commitment has occurred, the target may remain created, empty, or contain a
+committed payload prefix according to the underlying Core rules.
+
+#### `readAllText`
+
+`readAllText(filesystem, path, encoding)` requires the Encoding descriptor
+explicitly; there is no global or UTF-8 default. It owns one read-only File,
+materializes its complete byte sequence under the `readAllBytes` policy, closes
+the File, and decodes the resulting Bytes once through the supplied Encoding.
+
+Successful completion resolves to the resulting String. Strict/replacement/BOM
+behavior is exactly that of the supplied Encoding. Decoding failure fails the
+helper rather than returning partial text.
+
+#### `writeAllText`
+
+`writeAllText(filesystem, path, text, encoding)` also requires an explicit
+Encoding descriptor. Before starting Filesystem effects, it performs standard
+one-shot `encoding.encode(text)`. The resulting complete Bytes value is the
+private payload used by the same create-or-truncate policy as `writeAllBytes`.
+
+Encoding/argument failure therefore precedes Filesystem effects attributable to
+this helper. After encoding succeeds, the `writeAllBytes` commitment,
+partial-failure, close, and result rules apply.
+
+### Private owned-open custody invariant
+
+LIB004 does not publish `withOpen`, `Resource.use`, a disposable stack, or a new
+resource type. Resource acquisition for whole-file helpers is a private reusable
+module pattern built from standard Future, Error, and `ensure` semantics.
+
+The invariant is:
+
+> Once one helper-owned open can still produce a successful File, exactly one
+> helper cleanup path remains responsible for determining that outcome and for
+> initiating that File's close lifecycle before the helper can terminate.
+
+In particular:
+
+- the helper retains the open Future while acquisition is pending;
+- cancellation may request cancellation of an uncommitted open, but the helper
+  must not abandon a post-commit open outcome merely because its own cancellation
+  has already been observed;
+- if the open Future becomes cancelled, no File is owned by the helper;
+- if open fails, no successful File is transferred to the helper;
+- if open resolves to a File, the File enters helper custody and the protected
+  extent uses `ensure` so normal completion, Error unwind, non-local return, and
+  cooperative cancellation all initiate close;
+- `file.close().value()` may suspend during cleanup; existing I022 replay and
+  shielding semantics own that suspension;
+- a cleanup Error or later cleanup transfer follows existing D043 precedence;
+- no hidden `detach`, generic cancellation mask, or upstream Future-cancellation
+  rule is introduced.
+
+### Selected module: `std:io/ProcessStreams`
+
+The initial Process convenience module is canonically:
+
+```text
+std:io/ProcessStreams
+```
+
+and maps to:
+
+```text
+protos/lib/io/ProcessStreams.protos
+```
+
+Its complete bounded initial public surface is synchronous adapter construction:
+
+```text
+stdinReader(process) -> TextReader
+stdoutWriter(process) -> TextWriter
+stderrWriter(process) -> TextWriter
+```
+
+Each operation is exact ordinary composition:
+
+```text
+TextReader(process.stdin(), process.stdinEncoding())
+TextWriter(process.stdout(), process.stdoutEncoding())
+TextWriter(process.stderr(), process.stderrEncoding())
+```
+
+The Process argument is explicit. The module never discovers a hidden current
+Process and never substitutes UTF-8 or another default for the Process-provided
+Encoding.
+
+Each successful call returns the fresh borrowing wrapper produced by the Core
+factory. No wrapper is cached. Closing the wrapper closes only that wrapper and
+does not close or acquire ownership of the Process standard byte stream.
+
+Fresh wrappers have independent codec state even when they wrap the same logical
+Process byte flow. Programs needing one continuous stateful text session retain
+and reuse the adapter obtained for that session.
+
+### Explicitly excluded from bounded initial LIB004
+
+The following are not implementation slices of this initial item:
+
+- public OpenOptions/mode recipes or mode strings;
+- Path parsing/building/normalization conveniences;
+- public generic `withOpen`, `Resource.use`, or multi-resource scope;
+- capability-to-capability or path-to-path `copy`;
+- staged publication, `atomicWrite`, `publishBytes`, or target replacement
+  helpers;
+- `exists`, `removeIfExists`, mkdir/list/recursive filesystem operations;
+- ambient temporary naming or random/PID/clock-derived staging names;
+- shell, exec, subprocess, OS-process control, or ProcessBuilder-equivalent API;
+- hidden current Filesystem/Process/current-directory/default-Encoding policy;
+- implicit Actor/P/Process I/O authority transfer;
+- hidden Future detachment, generic upstream cancellation, or new cancellation
+  semantics.
+
+Copy and staged publication remain plausible future library work but require
+independent focused designs for target policy, aliasing, partial aftermath,
+cancellation, cleanup, metadata/durability expectations, and resource ownership.
+
+### Formal implementation slices
+
+| Slice | Status after LIB004-0 publication | Scope |
+|---|---|---|
+| `LIB004-0` | CLOSED | Documentation/governance design closure, current-main dependency reconciliation, selected modules/contracts, and slice assignment. No implementation-version or specification-revision change. |
+| `LIB004-A` | READY | Publish `std:io/Files.readAllBytes` plus the private strong owned-open custody pattern and Protos-level normal/failure/cancellation/close conformance. |
+| `LIB004-B` | BLOCKED_BY_DEPENDENCIES | After A, add `writeAllBytes` with invocation-time private Bytes snapshot, fixed create-or-truncate policy, bounded write sequencing, and partial-effect/cancellation conformance. |
+| `LIB004-C` | BLOCKED_BY_DEPENDENCIES | After A/B, add explicit-Encoding `readAllText`/`writeAllText`, one-shot codec composition, and text failure/cleanup conformance. |
+| `LIB004-D` | READY | Independently publish `std:io/ProcessStreams` as exact fresh borrowing Process stream/Encoding adapter composition. |
+| `LIB004-E` | BLOCKED_BY_DEPENDENCIES | After A/B/C/D, run final cross-slice Protos conformance and architecture/native-boundary/status reconciliation and close the bounded parent LIB004 item. |
+
+The parent `LIB004` becomes READY after this design-only slice. It becomes
+IN_PROGRESS when an implementation slice starts/publishes and only LIB004-E may
+close it after every selected slice is published and validated.
+
+### Design closure conclusion
+
+The bounded initial LIB004 design is closed without changing Protos language/Core
+semantics, without adding a runtime value family, and without widening the Core
+native boundary. Explicit whole-file operations and explicit Process text-adapter
+composition solve concrete ergonomics while policy-heavy copy, publication,
+directory, subprocess, and generic resource-scope questions remain independent
+future design work.

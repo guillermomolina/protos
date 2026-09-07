@@ -400,7 +400,7 @@ work may proceed without waiting for an earlier-numbered roadmap item.
 | LIB001 | Collections library | CLOSED | `SAME_COMMIT` | LIB001-A/B/C/D/E closed; initial Set/IdentitySet and eager sequential Array algorithm surfaces are fully published with no new runtime collection family, generic hierarchy, or production Java boundary. |
 | LIB002 | Text / encoding conveniences | CLOSED | `SAME_COMMIT` | LIB002-A published the four audited ordinary portable-Encoding convenience modules with real-`std:` Protos conformance; initial LIB002 scope is closed with no Core, native-boundary, registry/default, or distributed-runtime semantic change. |
 | LIB003 | JSON | CLOSED | `SAME_COMMIT` | LIB003-A/B/C/D/E closed; the bounded initial strict JSON tree, exact-decimal parser/encoder, JSON-specific event streaming, explicit TextReader/TextWriter composition, final stress/Actor-transfer evidence, and architecture audit are fully published without a generic serialization or object-persistence boundary. |
-| LIB004 | Filesystem / process conveniences | READY | — | I016 + I017 closed; begin with a fresh focused convenience-layer design/audit. Any text-oriented convenience that needs I015/LIB002 remains individually dependency-gated and must preserve explicit authority boundaries. |
+| LIB004 | Filesystem / process conveniences | READY | — | LIB004-0 closes the bounded design: `std:io/Files` whole-file bytes/text helpers and `std:io/ProcessStreams` fresh borrowing adapters; A and D are independently READY, later selected slices are dependency-gated; no Core/native-boundary expansion. |
 | LIB005 | Networking | OPEN | — | Roadmap item only; `spec/io/IO_CORE.md` currently leaves network authority acquisition, socket APIs, DNS/name resolution, and transport configuration outside its standardized scope. Re-audit and establish prerequisites before implementation. |
 
 ### LIB001 — Collections
@@ -572,41 +572,66 @@ Dependencies:
 - LIB002 convenience helpers are not required by LIB003-A/B/C core work.
 ### LIB004 — Filesystem / process conveniences
 
-Status: OPEN
+Status: READY
 
 Description: Higher-level filesystem and Process conveniences layered over the
 standard capability-based File/Filesystem and Process I/O surfaces.
 
 Design record:
-- `docs/project/LIB004_FILESYSTEM_PROCESS_CONVENIENCES_DESIGN.md` remains the
-  non-normative draft checkpoint for the ongoing convenience-surface audit;
-- D043 / specification revision `0.1.380` closes the standard Closure
-  `ensure(cleanup)` public protocol needed by the resource-custody design;
-- I022 is CLOSED: the general dynamic handler/unwind-safe cleanup prerequisite
-  is now published, and File/Filesystem-specific Java cleanup primitives remain
-  unnecessary;
-- LIB004 is therefore no longer dependency-blocked, but its persisted design
-  record remains DRAFT and no implementation surface is approved yet. Finalize
-  and persist the convenience-surface design before moving LIB004 to READY.
+- `docs/project/LIB004_FILESYSTEM_PROCESS_CONVENIENCES_DESIGN.md` records the
+  completed non-normative LIB004-0 design closure;
+- the bounded initial filesystem module is `std:io/Files`, with exactly
+  `readAllBytes`, `writeAllBytes`, `readAllText`, and `writeAllText`, explicit
+  Filesystem/Path authority, and explicit Encoding for text;
+- the bounded Process module is `std:io/ProcessStreams`, with exactly
+  `stdinReader`, `stdoutWriter`, and `stderrWriter` as fresh borrowing wrappers
+  over explicitly supplied Process streams and Process-provided Encoding;
+- whole-file resource custody is an internal ordinary-Protos pattern built on
+  Future/Error/`ensure`; no public `withOpen`/resource type or File-specific Java
+  cleanup primitive is introduced;
+- copy, staged publication, OpenOptions recipes, directory/exists APIs,
+  subprocess/OS-process control, ambient authority/default Encoding, and generic
+  resource scopes are outside this bounded initial closure;
+- LIB004 implementation must preserve `NATIVE_CLOSURE_BOUNDARY_DELTA: 0`; the
+  absolute native-boundary inventory remains owned by the then-current
+  architecture ledger/guard.
 
-Planning boundary:
-- convenience code must preserve capability confinement, lifecycle, commitment,
-  and authority-transfer semantics;
-- library code must not obtain ambient filesystem, process, subprocess, or other
-  host authority merely because a host API exists;
-- resource-owning whole-file helpers and in-flight-I/O-owning copy workflows
-  require I022's cancellation/unwind machinery before implementation;
-- no shell/subprocess API, ambient filesystem lookup, generic public resource
-  scope, or implementation slice is authorized by D043.
+Planned slices:
+
+| Slice | Status | Version | Closure evidence | Scope / unblock condition |
+|---|---|---|---|---|
+| LIB004-0 | CLOSED | — | `SAME_COMMIT` | Documentation/governance design closure, current-main dependency reconciliation, exact bounded modules/contracts, exclusions and slice assignment; no implementation-version or specification-revision change. |
+| LIB004-A | READY | — | — | `std:io/Files.readAllBytes`; private strong owned-open custody; fresh whole-result Bytes; bounded outstanding read state; Protos-level normal/failure/cancellation/close conformance. |
+| LIB004-B | BLOCKED_BY_DEPENDENCIES | — | — | After A, `writeAllBytes`; invocation-time private Bytes snapshot; fixed writable create-or-truncate positioned policy; bounded sequential writes; committed-prefix/failure/cancellation aftermath. |
+| LIB004-C | BLOCKED_BY_DEPENDENCIES | — | — | After A/B, explicit-Encoding `readAllText`/`writeAllText`; one-shot codec composition; no default Encoding; complete text/cleanup conformance. |
+| LIB004-D | READY | — | — | Independently publish `std:io/ProcessStreams` as exact fresh borrowing `TextReader`/`TextWriter` composition over explicit Process streams and Process-provided Encoding. |
+| LIB004-E | BLOCKED_BY_DEPENDENCIES | — | — | After A/B/C/D, final cross-slice Protos conformance, architecture/native-boundary audit, project-state reconciliation and bounded parent closure. |
+
+Implementation boundary:
+- every operation receives authority explicitly; no module may recover a
+  bootstrap-local Filesystem or Process, current directory, temp namespace, or
+  host process API;
+- File acquisition/close, read/write contribution, cancellation and cleanup
+  follow the standardized Core commitment/lifecycle rules rather than a
+  library-specific rollback model;
+- whole-file writes are create-or-truncate operations, not atomic replacement or
+  crash-durable publication, and failed writes are never retried transparently;
+- text helpers require an explicit Encoding and preserve that descriptor's exact
+  one-shot strict/replacement/BOM behavior;
+- Process adapter calls return fresh borrowing wrappers and never cache codec
+  state or own the underlying Process standard streams;
+- implementation belongs in ordinary Protos Standard Library modules under
+  `protos/lib/io/` and adds no Java/native standard operation.
 
 Dependencies:
 - I013 Standard Path — CLOSED;
 - I014 Standard Byte I/O — CLOSED;
 - I015 Encoding / Text I/O — CLOSED;
+- I016 Filesystem / File — CLOSED;
 - I017 Process I/O / bootstrap — CLOSED;
-- I022 Dynamic Error handlers / unwind-safe cleanup — READY and must be CLOSED
-  before the resource-owning/in-flight-I/O-owning initial LIB004 surface begins.
-
+- I022 Dynamic Error handlers / unwind-safe cleanup — CLOSED;
+- no relevant entry in `docs/project/IMPLEMENTATION_BLOCKERS.md` may be
+  unresolved for this bounded LIB004 surface.
 
 ### LIB005 — Networking
 
