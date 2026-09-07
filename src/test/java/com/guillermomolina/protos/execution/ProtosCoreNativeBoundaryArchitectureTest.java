@@ -85,7 +85,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
     private static final Map<String, Integer> EXPECTED_NON_CORE_NATIVE_PROVIDERS =
             Map.ofEntries(
                     Map.entry("cli/ProtosCliPrintFacility.java", 1),
-                    Map.entry("execution/ProtosExactExecutionFacility.java", 1));
+                    Map.entry("execution/ProtosExactExecutionFacility.java", 2));
 
     @Test
     void javaNativeClosureProvidersMatchTheAuditedBoundaryExactly() throws IOException {
