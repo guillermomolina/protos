@@ -757,7 +757,7 @@ record distributable Standard Library functionality.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | Foundations D/E are CLOSED; TOOL001-F physical lockfile v1 is IN_PROGRESS with F1A header CLOSED and F1B body grammar IN_PROGRESS through F1B1 scalar/reference CLOSED, F1B2 root/workspace READY. |
+| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | Foundations D/E are CLOSED; TOOL001-F physical lockfile v1 is IN_PROGRESS with F1A header CLOSED and F1B body grammar through F1B1/F1B2 CLOSED, F1B3 external blocks/edges/final closure READY. |
 | TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C CLOSED; TOOL002-D IN_PROGRESS with D1/D2 CLOSED and D3 IN_PROGRESS; D3A/D3B/D3C1 CLOSED, D3C2A parser and D3C2B exact binary64 mechanism CLOSED through `0.2.208-SNAPSHOT`, D3C2C integration READY. |
 
 ### TOOL001 — Package Tool
@@ -800,10 +800,10 @@ forward.
 | TOOL001-E2 | retained exact-version preference | CLOSED | `SAME_COMMIT` | Preserve an available exact retained version while it satisfies D2; otherwise fall back to E1. No physical lockfile/identity/discovery behavior. |
 | TOOL001-F | canonical physical lockfile v1 | IN_PROGRESS | TOOL001-F1A published | F1A exact canonical header grammar CLOSED; F1B body node/edge grammar READY; parser/writer and graph integration remain later slices. |
 | TOOL001-F1A | canonical lock header grammar | CLOSED | `SAME_COMMIT` | Design/governance-only freeze of exact header keywords, separators, canonical decimals/tokens/digest spelling and one blank line before body records. |
-| TOOL001-F1B | canonical lock body node/edge grammar | IN_PROGRESS | TOOL001-F1B1 published | F1B1 scalar/reference grammar CLOSED; F1B2 root/workspace READY; F1B3 external blocks/edges/final closure dependency-gated. |
+| TOOL001-F1B | canonical lock body node/edge grammar | IN_PROGRESS | TOOL001-F1B1/F1B2 published | Scalar/reference and root/workspace grammar CLOSED; F1B3 external blocks/edges/final closure READY. |
 | TOOL001-F1B1 | canonical scalar strings + typed node references | CLOSED | `SAME_COMMIT` | Deterministic quoted UTF-8 body scalars and typed registry/git/workspace identity tuples; does not freeze PackageId's public textual encoding. |
-| TOOL001-F1B2 | root/workspace representation | READY | — | Freeze root and workspace-node/member body records over F1B1 references. |
-| TOOL001-F1B3 | external node blocks + dependency edges + F1B closure | BLOCKED_BY_DEPENDENCIES | — | After F1B2, freeze registry/git fields, provenance/content/edges, remaining body choices and canonical ordering. |
+| TOOL001-F1B2 | root/workspace representation | CLOSED | `SAME_COMMIT` | One root workspace-ref plus canonically ordered mappings from explicit workspace.members strings to member workspace refs; no virtual root or path semantics. |
+| TOOL001-F1B3 | external node blocks + dependency edges + F1B closure | READY | — | Freeze registry/git blocks, fields/edges and remaining canonical body decisions, then close F1B. |
 
 
 

@@ -240,6 +240,118 @@ F1B1 does not yet decide:
 
 Those are F1B2/F1B3 decisions.
 
+## Lock-format 1 root/workspace records — selected by TOOL001-F1B2
+
+F1B2 freezes the resolution-root and workspace-member records over F1B1 lexical
+primitives.
+
+Manifest schema v1 has no virtual workspace root: every manifest describes one
+package, and an optional `[workspace]` adds explicit member declarations around
+that package. Lock-format 1 preserves that model rather than inventing a second
+workspace identity.
+
+### Root record
+
+Every lock body begins with exactly one root record:
+
+```text
+root-record =
+    "root" SP workspace-ref LF
+```
+
+The workspace-ref is the PackageId of the package described by the resolution
+root's own manifest:
+
+```text
+root workspace "<root-PackageId>"
+```
+
+The root is always represented as a `workspace-ref` because the resolution root
+is mutable local development state, not an immutable registry or Git node merely
+because the same PackageId may also have published/external releases.
+
+There is no separate `workspace-id`, virtual-root identifier, absolute path, or
+root ReleaseVersion in this record. The root manifest and semantic
+resolution-input own its current package metadata/version.
+
+### Additional workspace member records
+
+For each explicit string in the root manifest's `workspace.members`, after
+workspace policy has resolved that declaration to one member package with a
+PackageId, the lock records:
+
+```text
+workspace-member-record =
+    "workspace-member" SP qstring SP workspace-ref LF
+```
+
+Conceptually:
+
+```text
+workspace-member "<exact-manifest-member-string>" workspace "<member-PackageId>"
+```
+
+The first qstring preserves the decoded manifest member declaration exactly. F1B2
+does not interpret it as a normalized filesystem path, glob, URI, search path, or
+machine-local absolute location. Portable path interpretation, containment and
+membership validation remain workspace-policy responsibilities.
+
+The root package is never redundantly emitted as a `workspace-member` record.
+Only additional explicit `workspace.members` declarations appear.
+
+An absent `[workspace]` table and a present workspace with an empty `members`
+array both therefore produce no `workspace-member` records. Their semantic
+resolution-input may still differ if the resolver-input model considers that
+distinction relevant; the physical graph need not invent different root identity
+for it.
+
+### Cardinality and canonical order
+
+The root/workspace prefix of the body is:
+
+```text
+root-record
+*workspace-member-record
+```
+
+Rules:
+
+- exactly one `root-record`;
+- zero or more `workspace-member-record` records;
+- `root-record` is always first;
+- member records are sorted by the canonical UTF-8 bytes of the first qstring;
+- if two records have byte-identical member qstrings, PackageId qstring bytes are
+  the deterministic tie-breaker;
+- duplicate semantic member declarations are not legalized by the lock format;
+  manifest/workspace validation remains responsible for rejecting them;
+- root/member records never contain absolute paths or current source-tree
+  content digests.
+
+F1B2 deliberately does not freeze the blank-line boundary after this prefix.
+F1B3 owns final body block separation together with external node blocks and
+dependency edges so one rule can cover the complete body.
+
+### Relationship to workspace nodes
+
+A `workspace-ref` may later be the declaring or target node of dependency edges.
+F1B2 freezes only its root/member introduction. It does not yet define a separate
+workspace node block or package fields because the root manifest/member manifests
+already own mutable local package metadata; F1B3 must decide only what additional
+lock body material is genuinely required to reconstruct dependency edges without
+copying non-resolution descriptive metadata.
+
+F1B2 does not decide:
+
+- registry or Git node-block syntax;
+- authority, locator, fetch, revision or ContentIdentity field records;
+- dependency alias/target records;
+- final body blank-line/block separation;
+- complete node total ordering beyond the root/workspace prefix;
+- diagnostic PackageLocator emission;
+- ArtifactDigest inclusion.
+
+Those are F1B3 decisions.
+
 
 ## Illustrative canonical body shape
 
@@ -460,13 +572,9 @@ Changing that locator is an explicit source metadata update and must not alter
 Workspace members are mutable development sources and differ from immutable
 external nodes.
 
-The lock may record:
-
-```text
-workspace PackageId
-workspace member identity/relation
-dependency edges
-```
+F1B2 now fixes their root/member introduction as one root `workspace-ref` plus
+zero or more exact manifest-member-string -> member `workspace-ref` mappings.
+Dependency edges remain F1B3.
 
 It must not record:
 
@@ -484,12 +592,13 @@ Build caches may separately hash current source trees.
 
 Exactly one resolution root owns the lock graph.
 
-For a single package, the root package can be represented directly.
+F1B2 selects one exact representation for both a standalone package and a
+manifest-v1 workspace: the package described by the root manifest is the single
+`root workspace "<PackageId>"` record. Additional workspace declarations are
+recorded separately as `workspace-member` mappings. No virtual workspace identity
+is introduced.
 
-For a workspace, root metadata identifies the workspace and member package IDs
-participating in the graph.
-
-The lock should not copy every descriptive manifest field. It records only data
+The lock does not copy every descriptive manifest field. It records only data
 needed to identify the graph, validate resolution inputs, materialize exact
 dependencies, and reconstruct package dependency edges.
 

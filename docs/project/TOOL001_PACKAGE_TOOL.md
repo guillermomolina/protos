@@ -76,10 +76,10 @@ its relation to any legacy Slice 3 terminology that remains useful for continuit
 | TOOL001-E2 | retained exact-version preference | CLOSED | `SAME_COMMIT` | `self:RetainedVersionSelection.select/selectText` preserves an available exact retained ReleaseVersion while it still satisfies D2; otherwise it delegates to E1 fresh selection. No physical lockfile or package-identity policy is implied. |
 | TOOL001-F | canonical physical lockfile v1 | IN_PROGRESS | TOOL001-F1A published | Physical `protos.lock` format work after closed pure selection E; F1A header grammar CLOSED, F1B body node/edge grammar READY. Parser/writer and graph integration remain later slices. |
 | TOOL001-F1A | canonical lock header grammar | CLOSED | `SAME_COMMIT` | Exact three-line v1 header grammar and canonical lexical rules are frozen without implementing a parser/writer or choosing body node/edge syntax. |
-| TOOL001-F1B | canonical lock body node/edge grammar | IN_PROGRESS | TOOL001-F1B1 published | F1B1 canonical scalar strings + typed node references CLOSED; F1B2 root/workspace representation READY; F1B3 registry/git blocks + fields/edges/final closure dependency-gated. |
+| TOOL001-F1B | canonical lock body node/edge grammar | IN_PROGRESS | TOOL001-F1B1/F1B2 published | F1B1 scalar/reference grammar and F1B2 root/workspace representation CLOSED; F1B3 external blocks/fields/edges/final closure READY. |
 | TOOL001-F1B1 | canonical scalar strings + typed node references | CLOSED | `SAME_COMMIT` | Body variable values use one deterministic quoted UTF-8 scalar encoding; node references are source-kind-tagged tuples over quoted identity components, avoiding delimiter-composed PackageId keys while PackageId textual encoding remains open. |
-| TOOL001-F1B2 | root/workspace representation | READY | — | Freeze exact root record and workspace-node/member representation using F1B1 typed references, without choosing external registry/git field blocks or dependency-edge syntax. |
-| TOOL001-F1B3 | external node blocks + dependency edges + F1B closure | BLOCKED_BY_DEPENDENCIES | — | After F1B2, freeze registry/git block fields/order, content/provenance fields, dependency-edge serialization, artifact-digest/diagnostic-locator decisions and final canonical body ordering. |
+| TOOL001-F1B2 | root/workspace representation | CLOSED | `SAME_COMMIT` | Exactly one root workspace-ref identifies the root manifest package; additional workspace member declarations map their exact manifest string to a workspace-ref in canonical order, without introducing virtual-workspace identity or path semantics. |
+| TOOL001-F1B3 | external node blocks + dependency edges + F1B closure | READY | — | Freeze registry/git blocks, provenance/content fields, dependency edges, remaining body ordering/separation and diagnostic/artifact decisions, then close F1B. |
 
 
 
@@ -93,12 +93,14 @@ The historical manifest Slice 3, pure version/constraint parent `TOOL001-D`, and
 local/offline version-selection parent `TOOL001-E` are CLOSED.
 
 `TOOL001-F` is the current bounded continuation for the canonical physical
-`protos.lock` v1 format. `TOOL001-F1A` is CLOSED and freezes only the exact
-three-line header grammar plus its canonical lexical rules. `TOOL001-F1B` is IN_PROGRESS through closed F1B1; F1B2 root/workspace representation is READY.
+`protos.lock` v1 format. `TOOL001-F1A` is CLOSED. `TOOL001-F1B` is IN_PROGRESS
+through closed F1B1/F1B2: scalar/reference grammar and root/workspace
+representation are frozen; F1B3 external node blocks/fields/edges/final closure
+is READY.
 
-F1A/F1B1 do not implement a parser/writer. F1B1 freezes only body scalar encoding
-and typed node references; F1B2/F1B3 still own body structure. Complete candidate
-eligibility, graph resolution, workspace/store,
+F1A/F1B1/F1B2 do not implement a parser/writer. F1B3 still owns the remaining
+external-node body structure, dependency edges and final canonical separation/
+ordering. Complete candidate eligibility, graph resolution, workspace/store,
 registry/network and update operations remain separately scoped work.
 
 A separate non-committing note in `docs/design/PACKAGE_TOOL_ARCHITECTURE.md`
