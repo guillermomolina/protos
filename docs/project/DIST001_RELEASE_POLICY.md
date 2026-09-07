@@ -271,10 +271,12 @@ does not depend on one large all-or-nothing launcher:
   source plus `package manifest` resolve from a distinct caller project CWD; on
   a validation JDK outside the selected JDK22 contract, B3 disables optimizer
   JARs only in the disposable extracted copy and exercises fallback Truffle;
-- `DIST001-B4` — bundled Test Tool and exact optimizing-runtime probe — IN_PROGRESS:
+- `DIST001-B4` — bundled Test Tool and exact optimizing-runtime probe — CLOSED:
   - `DIST001-B4A` — extracted bundled Test Tool smoke — CLOSED;
-  - `DIST001-B4B` — intact optimizer classpath + exact runtime probe — READY;
-- `DIST001-B5` — cross-slice closure and DIST001-D readiness.
+  - `DIST001-B4B` — intact optimizer classpath + exact runtime probe — CLOSED
+    using exact GraalVM Community JDK 22.0.0 with the bundle's Truffle 24.0.0
+    runtime and exact `HotSpotTruffleRuntime` class evidence;
+- `DIST001-B5` — cross-slice closure and DIST001-D readiness — READY.
 
 A does not claim that the archive has passed outside-checkout execution merely
 because construction and structural validation pass. Parent B closes only after

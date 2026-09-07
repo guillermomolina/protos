@@ -154,6 +154,35 @@ Exact optimizing-runtime validation is deliberately separate:
 `DIST001-B4B` owns the intact optimizer classpath and exact
 `com.oracle.truffle.runtime.hotspot.HotSpotTruffleRuntime` proof.
 
+
+## Exact optimizing-runtime smoke
+
+`DIST001-B4B` validates the optimizer path separately from the fallback smokes:
+
+```sh
+PROTOS_DIST001_B4B_JAVA_HOME=/path/to/graalvm-community-jdk-22.0.0 \
+    sh dist/smoke_optimizing_runtime.sh
+```
+
+The smoke requires exact GraalVM Community JDK `22.0.0`; it does not accept the
+unsupported-runtime override. It extracts the verified distribution outside the
+checkout, keeps `lib/runtime` intact, verifies the bundle still declares Truffle
+`24.0.0`, and runs the extracted launcher through its normal supported-runtime
+gate.
+
+It then compiles `Dist001RuntimeProbe.java` against the exact extracted
+distribution classpath and requires `Truffle.getRuntime()` to resolve exactly:
+
+```text
+com.oracle.truffle.runtime.hotspot.HotSpotTruffleRuntime
+```
+
+The publication launcher may provision the pinned GraalVM JDK into a user cache
+before modifying the repository when the development JDK is different. The JDK
+archive and its official SHA-256 are fetched from the GraalVM Community JDK
+`22.0.0` release; the JDK is an external validation dependency and is not added
+to the Protos distribution.
+
 ## DIST001 boundary
 
 DIST001-A proves that the distribution can be constructed and that its archive
