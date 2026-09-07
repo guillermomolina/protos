@@ -800,7 +800,7 @@ record distributable Standard Library functionality.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | D/E and F1A/F1B grammar are CLOSED; F1C in-memory parser/writer is IN_PROGRESS through F1C1 lexical primitives, F1C2 body/model READY. |
+| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | D/E and F1A/F1B grammar are CLOSED; F1C in-memory parser/writer is IN_PROGRESS through F1C1/F1C2 parsing/structural validation, F1C3 writer/closure READY. |
 | TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D CLOSED; TOOL002-D closes through D4 at `0.2.211-SNAPSHOT`; TOOL002-E Package/TOML fixture migration READY, later F-J remain dependency-ordered. |
 
 ### TOOL001 — Package Tool
@@ -841,16 +841,16 @@ forward.
 | TOOL001-E | local/offline version selection policy | CLOSED | `SAME_COMMIT` | E1 fresh highest-satisfying selection and E2 retained exact-version preference complete pure selection over already-known ReleaseVersion candidates. |
 | TOOL001-E1 | fresh highest-satisfying ReleaseVersion selection | CLOSED | `SAME_COMMIT` | Pure bundled-Protos selection over already-known candidates using closed D2 satisfaction and D1 precedence; no-match fails closed. |
 | TOOL001-E2 | retained exact-version preference | CLOSED | `SAME_COMMIT` | Preserve an available exact retained version while it satisfies D2; otherwise fall back to E1. No physical lockfile/identity/discovery behavior. |
-| TOOL001-F | canonical physical lockfile v1 | IN_PROGRESS | TOOL001-F1A/F1B/F1C1 published | Canonical grammar CLOSED; F1C parser/writer IN_PROGRESS through lexical primitives, F1C2 READY. |
+| TOOL001-F | canonical physical lockfile v1 | IN_PROGRESS | TOOL001-F1A/F1B/F1C1/F1C2 published | Grammar plus lexical/body structural parser CLOSED; F1C3 canonical writer/rejection/round-trip closure READY. |
 | TOOL001-F1A | canonical lock header grammar | CLOSED | `SAME_COMMIT` | Design/governance-only freeze of exact header keywords, separators, canonical decimals/tokens/digest spelling and one blank line before body records. |
 | TOOL001-F1B | canonical lock body node/edge grammar | CLOSED | `SAME_COMMIT` | F1B1/F1B2/F1B3 freeze scalar/reference, root/workspace, external node, dependency and total canonical body grammar. |
 | TOOL001-F1B1 | canonical scalar strings + typed node references | CLOSED | `SAME_COMMIT` | Deterministic quoted UTF-8 body scalars and typed registry/git/workspace identity tuples; does not freeze PackageId's public textual encoding. |
 | TOOL001-F1B2 | root/workspace representation | CLOSED | `SAME_COMMIT` | One root workspace-ref plus canonically ordered mappings from explicit workspace.members strings to member workspace refs; no virtual root or path semantics. |
 | TOOL001-F1B3 | external node blocks + dependency edges + F1B closure | CLOSED | `SAME_COMMIT` | Registry/git external records, ContentIdentity/provenance, dependency edges and final ordering/separation close F1B. |
-| TOOL001-F1C | canonical lock parser/writer + round-trip conformance | IN_PROGRESS | TOOL001-F1C1 published | Lexical/header/qstring/node-ref primitives CLOSED; body/model structural validation READY. |
+| TOOL001-F1C | canonical lock parser/writer + round-trip conformance | IN_PROGRESS | TOOL001-F1C1/F1C2 published | Lexical and body structural parsing CLOSED; F1C3 canonical writer/rejection/round-trip closure READY. |
 | TOOL001-F1C1 | lock lexical/header/qstring/node-ref primitives | CLOSED | `SAME_COMMIT` | Bundled-Protos LockSyntax plus Protos-owned conformance; no body graph parsing or I/O. |
-| TOOL001-F1C2 | body record/model + structural validation | READY | — | Parse F1B records and reject duplicate/dangling structural graph state; total canonical writer remains F1C3. |
-| TOOL001-F1C3 | total writer + canonical rejection + F1C closure | BLOCKED_BY_DEPENDENCIES | — | After F1C2, canonical whole-document writer/order rejection/full round-trip closure. |
+| TOOL001-F1C2 | body record/model + structural validation | CLOSED | `SAME_COMMIT` | Complete in-memory body model with duplicate/dangling structural rejection; no canonical ordering rejection yet. |
+| TOOL001-F1C3 | total writer + canonical rejection + F1C closure | READY | — | Canonical total writer/order rejection/full round-trip closure over F1C1/F1C2. |
 
 
 

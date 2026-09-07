@@ -1,3 +1,9 @@
+## 0.2.214-SNAPSHOT
+
+- Close `TOOL001-F1C2 — body record/model + structural validation`. Add ordinary bundled-Protos `self:LockDocument` over the closed F1A/F1B/F1C1 grammar. It parses complete in-memory lock-format-1 documents into explicit root/workspace-member/registry-node/git-node/dependency arrays, preserving opaque locator/authority/fetch/content fields without inventing PackageId, registry, Git or content-hashing policy.
+- Reject structurally invalid graphs: missing/multiple roots; duplicate workspace declarations or workspace node identities; the root repeated as a member; duplicate registry/Git node references; duplicate `(declaring-ref, alias)` edges; dangling declaring/target references; blank body records; unknown/malformed record keywords/fields; and invalid lexical content delegated to F1C1. Record class/order canonicality is intentionally not rejected here: F1C3 owns total sorting/writing and whole-document parse-write equality.
+- Reuse the existing F1C1 Java harness unchanged; all new expectations remain Protos fixtures. `TOOL001-F1C3 — total writer + canonical rejection + F1C closure` becomes READY. Filesystem I/O, resolution/discovery, PackageId generation, AuthorityIdentity authentication, ContentIdentity tree hashing, registry/network/store and update behavior remain outside F1C.
+
 ## 0.2.213-SNAPSHOT
 
 - Add `CONTRIBUTING.md` and a public AI-assisted development policy. Explicitly welcome AI-assisted and fully AI-generated contributions while holding them to the same specification, review, validation, and contributor-responsibility standards as manually written work; require only a brief material-AI disclosure rather than prompts or model logs. Link the policy from the README and align repository agents with the same contribution rules.

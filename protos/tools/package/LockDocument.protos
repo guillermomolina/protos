@@ -1,0 +1,446 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Syntax: import("self:LockSyntax")
+Version: import("self:ReleaseVersion")
+
+fail: () => {
+    Error().signal()
+}
+
+emptyBytes: () => {
+    Encoding.UTF8.encode("")
+}
+
+expectBare: (tokens, index, expected) => {
+    (index >= tokens.size()).ifTrue(() => {
+        fail()
+    })
+
+    token: tokens.at(index)
+    token.quoted.ifTrue(() => {
+        fail()
+    })
+    (token.text == expected).ifFalse(() => {
+        fail()
+    })
+
+    token
+}
+
+expectQuoted: (tokens, index) => {
+    (index >= tokens.size()).ifTrue(() => {
+        fail()
+    })
+
+    token: tokens.at(index)
+    token.quoted.ifFalse(() => {
+        fail()
+    })
+
+    token.text
+}
+
+parseContentAt: (tokens, start) => {
+    ((start + 1) >= tokens.size()).ifTrue(() => {
+        fail()
+    })
+
+    method: Syntax.parseMethodToken(tokens.at(start))
+    digest: Syntax.parseDigestToken(tokens.at(start + 1))
+
+    {
+        value: {
+            method: method
+            algorithm: digest.algorithm
+            hex: digest.hex
+        }
+        next: start + 2
+    }
+}
+
+parseRootTokens: (tokens) => {
+    expectBare(tokens, 0, "root")
+    parsed: Syntax.nodeRefAt(tokens, 1)
+
+    (parsed.ref.kind == "workspace").ifFalse(() => {
+        fail()
+    })
+    (parsed.next == tokens.size()).ifFalse(() => {
+        fail()
+    })
+
+    {
+        kind: "root"
+        ref: parsed.ref
+    }
+}
+
+parseWorkspaceMemberTokens: (tokens) => {
+    expectBare(tokens, 0, "workspace-member")
+    declaration: expectQuoted(tokens, 1)
+    parsed: Syntax.nodeRefAt(tokens, 2)
+
+    (parsed.ref.kind == "workspace").ifFalse(() => {
+        fail()
+    })
+    (parsed.next == tokens.size()).ifFalse(() => {
+        fail()
+    })
+
+    {
+        kind: "workspace-member"
+        declaration: declaration
+        ref: parsed.ref
+    }
+}
+
+parseRegistryNodeTokens: (tokens) => {
+    expectBare(tokens, 0, "registry-node")
+    parsedRef: Syntax.nodeRefAt(tokens, 1)
+
+    (parsedRef.ref.kind == "registry").ifFalse(() => {
+        fail()
+    })
+
+    cursor: parsedRef.next
+    expectBare(tokens, cursor, "locator")
+    locator: expectQuoted(tokens, cursor + 1)
+    cursor = cursor + 2
+
+    expectBare(tokens, cursor, "authority")
+    authority: expectQuoted(tokens, cursor + 1)
+    cursor = cursor + 2
+
+    expectBare(tokens, cursor, "content")
+    parsedContent: parseContentAt(tokens, cursor + 1)
+    cursor = parsedContent.next
+
+    (cursor == tokens.size()).ifFalse(() => {
+        fail()
+    })
+
+    {
+        kind: "registry-node"
+        ref: parsedRef.ref
+        locator: locator
+        authority: authority
+        content: parsedContent.value
+    }
+}
+
+parseGitNodeTokens: (tokens) => {
+    expectBare(tokens, 0, "git-node")
+    parsedRef: Syntax.nodeRefAt(tokens, 1)
+
+    (parsedRef.ref.kind == "git").ifFalse(() => {
+        fail()
+    })
+
+    cursor: parsedRef.next
+    expectBare(tokens, cursor, "fetch")
+    fetch: expectQuoted(tokens, cursor + 1)
+    cursor = cursor + 2
+
+    expectBare(tokens, cursor, "content")
+    parsedContent: parseContentAt(tokens, cursor + 1)
+    cursor = parsedContent.next
+
+    (cursor == tokens.size()).ifFalse(() => {
+        fail()
+    })
+
+    {
+        kind: "git-node"
+        ref: parsedRef.ref
+        fetch: fetch
+        content: parsedContent.value
+    }
+}
+
+parseDependencyTokens: (tokens) => {
+    expectBare(tokens, 0, "dependency")
+    declaring: Syntax.nodeRefAt(tokens, 1)
+
+    cursor: declaring.next
+    expectBare(tokens, cursor, "alias")
+    alias: expectQuoted(tokens, cursor + 1)
+    cursor = cursor + 2
+
+    expectBare(tokens, cursor, "target")
+    target: Syntax.nodeRefAt(tokens, cursor + 1)
+    cursor = target.next
+
+    (cursor == tokens.size()).ifFalse(() => {
+        fail()
+    })
+
+    {
+        kind: "dependency"
+        declaring: declaring.ref
+        alias: alias
+        target: target.ref
+    }
+}
+
+parseRecord: (line) => {
+    tokens: Syntax.lineTokens(line)
+    (tokens.size() == 0).ifTrue(() => {
+        fail()
+    })
+
+    keyword: tokens.at(0)
+    keyword.quoted.ifTrue(() => {
+        fail()
+    })
+
+    result: null
+
+    (keyword.text == "root").ifTrue(() => {
+        result = parseRootTokens(tokens)
+    })
+    (keyword.text == "workspace-member").ifTrue(() => {
+        result = parseWorkspaceMemberTokens(tokens)
+    })
+    (keyword.text == "registry-node").ifTrue(() => {
+        result = parseRegistryNodeTokens(tokens)
+    })
+    (keyword.text == "git-node").ifTrue(() => {
+        result = parseGitNodeTokens(tokens)
+    })
+    (keyword.text == "dependency").ifTrue(() => {
+        result = parseDependencyTokens(tokens)
+    })
+
+    (result === null).ifTrue(() => {
+        fail()
+    })
+
+    result
+}
+
+refEquals: (left, right) => {
+    equal: left.kind == right.kind
+
+    equal.ifTrue(() => {
+        equal = left.packageId == right.packageId
+    })
+
+    equal.ifTrue(() => {
+        (left.kind == "registry").ifTrue(() => {
+            equal = Version.compare(left.version, right.version) == 0
+        })
+    })
+
+    equal.ifTrue(() => {
+        (left.kind == "git").ifTrue(() => {
+            equal = left.revision == right.revision
+        })
+    })
+
+    equal
+}
+
+documentLines: (text) => {
+    ignoredStringValidation: text + ""
+    source: Encoding.UTF8.encode(text)
+    lines: Array()
+    current: emptyBytes()
+
+    source.each((octet) => {
+        (octet == 10).ifTrue(() => {
+            line: ""
+            (current.size() > 0).ifTrue(() => {
+                line = Encoding.UTF8.decode(current)
+            })
+            lines = Array(...lines, line)
+            current = emptyBytes()
+        })
+
+        (octet == 10).ifFalse(() => {
+            (octet == 13).ifTrue(() => {
+                fail()
+            })
+            current.add(octet)
+        })
+    })
+
+    (current.size() == 0).ifFalse(() => {
+        fail()
+    })
+    (lines.size() == 0).ifTrue(() => {
+        fail()
+    })
+
+    lines
+}
+
+nodeExists: (ref, root, workspaceMembers, registryNodes, gitNodes) => {
+    found: false
+
+    (ref.kind == "workspace").ifTrue(() => {
+        refEquals(ref, root).ifTrue(() => {
+            found = true
+        })
+
+        workspaceMembers.each((member) => {
+            refEquals(ref, member.ref).ifTrue(() => {
+                found = true
+            })
+        })
+    })
+
+    (ref.kind == "registry").ifTrue(() => {
+        registryNodes.each((node) => {
+            refEquals(ref, node.ref).ifTrue(() => {
+                found = true
+            })
+        })
+    })
+
+    (ref.kind == "git").ifTrue(() => {
+        gitNodes.each((node) => {
+            refEquals(ref, node.ref).ifTrue(() => {
+                found = true
+            })
+        })
+    })
+
+    found
+}
+
+parse: (text) => {
+    lines: documentLines(text)
+
+    (lines.size() < 5).ifTrue(() => {
+        fail()
+    })
+    (lines.at(3) == "").ifFalse(() => {
+        fail()
+    })
+
+    headerText:
+        lines.at(0) + "\n" +
+        lines.at(1) + "\n" +
+        lines.at(2) + "\n\n"
+    header: Syntax.parseHeader(headerText)
+
+    roots: Array()
+    workspaceMembers: Array()
+    registryNodes: Array()
+    gitNodes: Array()
+    dependencies: Array()
+
+    index: 0
+    lines.each((line) => {
+        (index >= 4).ifTrue(() => {
+            (line == "").ifTrue(() => {
+                fail()
+            })
+
+            record: parseRecord(line)
+
+            (record.kind == "root").ifTrue(() => {
+                roots = Array(...roots, record)
+            })
+
+            (record.kind == "workspace-member").ifTrue(() => {
+                workspaceMembers.each((existing) => {
+                    (existing.declaration == record.declaration).ifTrue(() => {
+                        fail()
+                    })
+                    refEquals(existing.ref, record.ref).ifTrue(() => {
+                        fail()
+                    })
+                })
+                workspaceMembers = Array(...workspaceMembers, record)
+            })
+
+            (record.kind == "registry-node").ifTrue(() => {
+                registryNodes.each((existing) => {
+                    refEquals(existing.ref, record.ref).ifTrue(() => {
+                        fail()
+                    })
+                })
+                registryNodes = Array(...registryNodes, record)
+            })
+
+            (record.kind == "git-node").ifTrue(() => {
+                gitNodes.each((existing) => {
+                    refEquals(existing.ref, record.ref).ifTrue(() => {
+                        fail()
+                    })
+                })
+                gitNodes = Array(...gitNodes, record)
+            })
+
+            (record.kind == "dependency").ifTrue(() => {
+                dependencies.each((existing) => {
+                    sameDeclaring: refEquals(existing.declaring, record.declaring)
+                    sameDeclaring.ifTrue(() => {
+                        (existing.alias == record.alias).ifTrue(() => {
+                            fail()
+                        })
+                    })
+                })
+                dependencies = Array(...dependencies, record)
+            })
+        })
+
+        index = index + 1
+    })
+
+    (roots.size() == 1).ifFalse(() => {
+        fail()
+    })
+    root: roots.at(0).ref
+
+    workspaceMembers.each((member) => {
+        refEquals(member.ref, root).ifTrue(() => {
+            fail()
+        })
+    })
+
+    dependencies.each((dependency) => {
+        nodeExists(
+            dependency.declaring,
+            root,
+            workspaceMembers,
+            registryNodes,
+            gitNodes
+        ).ifFalse(() => {
+            fail()
+        })
+
+        nodeExists(
+            dependency.target,
+            root,
+            workspaceMembers,
+            registryNodes,
+            gitNodes
+        ).ifFalse(() => {
+            fail()
+        })
+    })
+
+    {
+        header: header
+        root: root
+        workspaceMembers: workspaceMembers
+        registryNodes: registryNodes
+        gitNodes: gitNodes
+        dependencies: dependencies
+    }
+}
