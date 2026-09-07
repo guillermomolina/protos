@@ -862,10 +862,13 @@ forward.
 | TOOL001-F2A | confined `protos.lock` read/publish substrate | CLOSED | `SAME_COMMIT` | Canonical load plus validation-before-staging atomic lock publication through existing confined Filesystem authority. |
 | TOOL001-F2B | semantic resolution-input + stale detection | CLOSED | `SAME_COMMIT` | F2B1 projection + F2B2 semantic root assembly + F2B3 canonical bytes/SHA-256/header stale comparison complete the bounded stale-input layer. |
 | TOOL001-F2C | physical resolution-root assembly | CLOSED | `SAME_COMMIT` | `self:ResolutionRoot.assemble(projectTreeFilesystem)` loads root + explicit member manifests, projects D1/D2 dependencies and normalizes in-root path targets into F2B ResolutionRootV1 using existing confined read-only tree authority. |
-| TOOL001-F2D | workspace-only normal-execution preflight + PackageExecutionPlan | IN_PROGRESS | TOOL001-F2D1/F2D2 published | Contract and pure Protos plan builder CLOSED; F2D3 mechanical host resolver + command preflight READY. External nodes remain fail-closed. |
+| TOOL001-F2D | workspace-only normal-execution preflight + PackageExecutionPlan | IN_PROGRESS | TOOL001-F2D1/F2D2/F2D3A published | Contract, pure builder and immutable defensive host detach CLOSED; F2D3B resolver READY. External nodes remain fail-closed. |
 | TOOL001-F2D1 | PackageExecutionPlan ABI + runtime-name/preflight contract | CLOSED | `SAME_COMMIT` | Workspace lock reconciliation, portable alias/export/module names, inert plan/authority boundary and external-node rejection frozen. |
 | TOOL001-F2D2 | pure workspace execution-state + plan construction | CLOSED | `SAME_COMMIT` | ResolutionRoot single-pass execution state + RuntimeNames + canonical non-stale workspace lock reconciliation produce fresh inert PackageExecutionPlanV1. |
-| TOOL001-F2D3 | mechanical host resolver handoff + command-scoped workspace preflight | READY | — | Pure plan builder published; host may now defensively detach generation-1 workspace plan and install exact self:/dep: resolver without duplicating package policy. |
+| TOOL001-F2D3 | mechanical host resolver handoff + command-scoped workspace preflight | IN_PROGRESS | TOOL001-F2D3A published | Decomposed after implementation audit: A detach CLOSED, B resolver READY, C command/authority boundary dependency-gated. |
+| TOOL001-F2D3A | immutable host DTO + defensive plan detach | CLOSED | `SAME_COMMIT` | Mechanical ABI boundary only: exact shape/domain/location/edge validation and recursive immutable copy. |
+| TOOL001-F2D3B | exact workspace package-backed module resolver | READY | — | Detached plan is available; implement exact canonical module/source mechanism without package policy. |
+| TOOL001-F2D3C | command-scoped workspace preflight + authority separation | BLOCKED_BY_DEPENDENCIES | TOOL001-F2D3B | Wire workspace run only after resolver is independently closed. |
 
 
 | TOOL001-F2B1 | per-manifest semantic resolution-input projection design | CLOSED | `SAME_COMMIT` | Resolver-affecting field matrix, semantic normalization ownership, deterministic ordering and fail-closed unresolved-owner rule frozen. |

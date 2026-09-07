@@ -1,3 +1,9 @@
+## 0.2.230-SNAPSHOT
+
+- Close `TOOL001-F2D3A — immutable host DTO + defensive plan detach` and formally subdivide the previously monolithic F2D3 handoff into F2D3A detach, F2D3B exact workspace resolver, and F2D3C command-scoped preflight/application-authority separation. This is implementation decomposition only; F2D remains workspace-only and external registry/Git nodes remain fail-closed.
+- Add immutable host-internal `ProtosPackageExecutionPlan` plus `ProtosPackageExecutionPlanAdapter.detach(...)`. The adapter defensively validates the already-published generation-1 ordinary Protos ABI and recursively copies it into immutable records/Lists/Maps. PackageId remains opaque; Java does not parse manifests/locks or invent package semantics.
+- Add focused F2D3A host-boundary tests over the existing F2D2 physical workspace fixture, including mutation-detachment proof and fail-closed malformed generation, unexpected shape, escaping member location and invalid runtime alias. No resolver, CLI dispatch, package selection, external materialization, lock mutation or native Closure boundary is added. `TOOL001-F2D3B` becomes READY.
+
 ## 0.2.229-SNAPSHOT
 
 - Publish `TOOL002-F2 — child-local failed/cancelled Future terminal mechanism`. Bundled `Runner.protos` now recognizes, but still does not publicly select, `future-error`, `future-error-parent`, and `future-cancelled`. The expectation-private child envelope calls ordinary `Future.value()` twice: a FAILED Future must re-signal the same stored Error identity, while a CANCELLED Future must signal two fresh standard `Cancelled` occurrences. `future-error-parent` additionally requires the exact immediate standard Error parent. No Test-only Future state reflection or host dispatch loop is added.

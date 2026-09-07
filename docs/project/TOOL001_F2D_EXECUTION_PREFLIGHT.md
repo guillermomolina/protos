@@ -1,6 +1,6 @@
 # TOOL001-F2D — Workspace Execution Preflight and PackageExecutionPlan
 
-Status: **IN_PROGRESS through CLOSED F2D2 implementation**
+Status: **IN_PROGRESS through CLOSED F2D3A host-detach implementation**
 Nature: non-normative Package Tool / host-integration design
 Design checkpoint: 2026-09-07
 
@@ -31,9 +31,12 @@ external materialization exists, workspace preflight rejects such a graph.
 ## F2D decomposition
 
 ```text
-F2D1  plan ABI + runtime-name/preflight contract             CLOSED
-F2D2  pure workspace execution-state + plan construction     READY
-F2D3  mechanical host resolver handoff + command preflight   BLOCKED_BY_DEPENDENCIES
+F2D1   plan ABI + runtime-name/preflight contract             CLOSED
+F2D2   pure workspace execution-state + plan construction     CLOSED
+F2D3   mechanical host handoff + workspace run parent         IN_PROGRESS
+F2D3A  immutable host DTO + defensive plan detach             CLOSED
+F2D3B  exact workspace package-backed module resolver         READY
+F2D3C  command preflight + tool/application authority split   BLOCKED_BY_DEPENDENCIES
 ```
 
 F2D is bounded to workspace-only execution. Closing it will not claim external
@@ -482,3 +485,42 @@ installation.
 
 `TOOL001-F2D3` is now READY for the mechanical host detach/resolver +
 command-scoped preflight boundary.
+
+
+## F2D3 decomposition refinement and F2D3A closure
+
+The former monolithic F2D3 implementation is now formally decomposed because
+three independently valid boundaries exist and have materially different failure
+surfaces:
+
+```text
+F2D3A  ordinary Protos plan -> immutable host DTO
+F2D3B  detached DTO -> exact workspace self:/dep:/std: resolver
+F2D3C  command-scoped preflight -> separate application execution
+```
+
+F2D3A is CLOSED.
+
+Published host-internal surfaces:
+
+```text
+ProtosPackageExecutionPlan
+ProtosPackageExecutionPlanAdapter.detach(rawPlan, projectRoot)
+```
+
+The adapter accepts only the exact generation-1 ordinary plan shape frozen by
+F2D1/F2D2, validates workspace refs, root/package/location uniqueness, in-root
+real directories, dependency referential integrity and portable alias/export
+runtime names, then recursively copies the data into immutable Java records,
+Lists and Maps.
+
+PackageId remains opaque: F2D3A does not invent a PackageId alphabet or
+normalization rule.
+
+Mutating the original Protos Arrays/Maps/objects after `detach` cannot mutate the
+detached host DTO. F2D3A does not install a module resolver, parse TOML or lock
+syntax, perform stale policy, select dependencies, scan/fetch packages, change
+CLI dispatch, or create application authority.
+
+F2D3B is READY and consumes only this detached DTO plus the already-selected
+workspace project root and standard-library resolver.
