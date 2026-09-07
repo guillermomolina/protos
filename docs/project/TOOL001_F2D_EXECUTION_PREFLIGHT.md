@@ -946,3 +946,43 @@ F2D3C2C  C1->C2 authority-isolation integration + C2 closure      BLOCKED_BY_DEP
 ```
 
 C2A adds `ProtosCanonicalInitialModuleExecution`, a package-neutral mechanism over an already-created RootActor initial bootstrap activation. It caches that bootstrap module context under the exact canonical ModuleKey before source execution and runs it through `ProtosRootTaskExecution`. Normal completion marks READY; failure/cancellation removes the exact record. C2A does not create/terminate a Process, select packages, provision authority or touch CLI.
+
+## F2D3C2B closure — detached plan to fresh application Process wiring
+
+C2B composes already-closed mechanisms; it adds no Package Tool policy and no
+public driver syntax. `ProtosWorkspacePackageApplicationExecution` consumes the
+selected project root plus the immutable detached execution plan, constructs the
+closed F2D3B workspace resolver, resolves one explicit root-package logical entry
+through `entryModule(...)`, and bootstraps a new semantic application Process.
+
+Application bootstrap data is supplied explicitly and copied at the existing
+Process boundary: application arguments, native environment name-domain/entries,
+and independently optional standard byte-stream backends. Every non-null stream
+Encoding is selected by an exact source-backed `Encoding` binding name from the
+new application Prelude; the mechanism does not case-fold, infer aliases or
+invent a default Encoding. The Process receives no default Filesystem.
+
+The canonical entry executes only through the closed C2A primitive, preserving
+cache-before-execute, Actor-local module identity and task suspension/replay.
+C2B owns the fresh application Process lifetime and terminates it before returning
+only the inert `ProtosExecutionOutcome`.
+
+The focal uses real package-backed Protos source. It observes copied
+`process.args()` and `process.environment()` data, writes both through an
+explicit stdout backend/`UTF8` association (therefore exercising normal Future
+suspension/resume), returns a semantic value, and proves the application Process
+is RUNNING only inside the boundary and TERMINATED afterward. A wrong-case
+Encoding binding fails before Process creation.
+
+C2B deliberately does not invoke C1 and therefore does not claim the end-to-end
+tool/application authority proof. C2C owns that composition and C2 closure.
+
+After publication:
+
+```text
+TOOL001-F2D3C2   IN_PROGRESS
+TOOL001-F2D3C2A  CLOSED
+TOOL001-F2D3C2B  CLOSED
+TOOL001-F2D3C2C  READY
+TOOL001-F2D3C3   BLOCKED_BY_DEPENDENCIES: TOOL001-F2D3C2
+```

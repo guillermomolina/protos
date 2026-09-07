@@ -1,3 +1,9 @@
+## 0.2.244-SNAPSHOT
+
+- Close `TOOL001-F2D3C2B — detached plan -> fresh application Process wiring`. Add `ProtosWorkspacePackageApplicationExecution`: reconstruct the closed F2D3B resolver only from the selected project root plus immutable execution-plan DTO, resolve an explicit root-package entry, bootstrap a fresh application Process from copied arguments/environment and explicitly supplied standard byte streams/Encoding binding names, execute the canonical entry through C2A, and terminate the Process before returning its inert outcome.
+- Keep C2B authority-neutral with respect to the Package Tool: it accepts no tool Process, activation, Filesystem or mutable Protos plan, grants no default Filesystem, and performs exact source-backed Encoding binding lookup without case folding or implicit defaults. C1->C2 authority isolation remains C2C.
+- Add real-Protos focal coverage for application args/environment plus stdout Future suspension/resume and exact Encoding selection, along with C2A/resolver regressions. No normative specification or native boundary changes occur. `TOOL001-F2D3C2C` becomes READY.
+
 ## 0.2.243-SNAPSHOT
 
 - Subdivide `TOOL001-F2D3C2` into C2A canonical initial-module execution, C2B detached-plan application Process wiring, and C2C C1->C2 authority-isolation integration/closure; close C2A only.
