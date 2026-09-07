@@ -314,10 +314,16 @@ publication:
         `pom.xml` transition. The primitive stages only `pom.xml`, creates one
         single-parent detached commit, verifies release-only diff/cleanliness,
         and leaves branch/tag refs unchanged. Fixture candidates only.
-      - `DIST001-E4B3B` — real detached candidate materialization — READY.
-        Compose B1+B2+B3A against the frozen E4A selection, create the first real
-        candidate commit, and persist its exact SHA without branch/tag/remote
-        release publication.
+      - `DIST001-E4B3B` — real detached candidate materialization — IN_PROGRESS:
+        - `DIST001-E4B3B1` — composition + recovery/idempotency guard — CLOSED.
+          Publish/test the fail-closed B1 -> B2 -> B3A materializer, including
+          exact B1/B2 resume and already-created-candidate reuse. Candidate
+          worktree reachability remains local/detached; no real candidate is
+          created by this slice.
+        - `DIST001-E4B3B2` — real candidate creation + SHA persistence — READY.
+          Invoke the proven composition against the frozen E4A selection,
+          validate the real candidate commit and persist its exact SHA while
+          publication remains separately unauthorized.
     - `DIST001-E4B4` — release-only lineage verification —
       `BLOCKED_BY_DEPENDENCIES` on E4B3. Independently prove selected baseline ->
       real candidate changes only the exact release-owned transition and then

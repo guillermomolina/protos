@@ -564,6 +564,40 @@ The primitive performs no push, branch creation, tag creation, GitHub Release,
 or release-asset publication. E4B3A itself uses only isolated fixture candidates;
 E4B3B owns the first real candidate commit and exact SHA capture.
 
+
+## Candidate materialization composition and recovery
+
+`DIST001-E4B3B1` composes the already-published E4B1, E4B2 and E4B3A
+mechanisms into one fail-closed local candidate materializer:
+
+```sh
+python3 dist/materialize_release_candidate.py     --selection docs/project/DIST001_E4_SELECTION.txt     --candidate /path/to/detached-candidate-worktree
+```
+
+The helper still requires the E4A selection record to say
+`candidate_source_revision=UNMATERIALIZED` and
+`release_publication_authorized=false`. It does not mutate that record itself.
+
+A fresh invocation creates the exact detached baseline worktree, applies the
+exact root `V-SNAPSHOT -> V` POM transition and creates the guarded detached
+candidate commit. Recovery is explicit and bounded:
+
+- an exact clean B1 baseline worktree resumes through B2+B3A;
+- an exact dirty-but-unstaged B2 POM transition resumes through B3A;
+- an already-created exact candidate commit is verified and reused unchanged;
+- any other dirty state, existing non-worktree path, wrong lineage/version,
+  attached HEAD, or local branch/tag ref to the candidate fails closed.
+
+If this invocation created only an incomplete baseline/dirty preparation
+worktree and then fails, it removes that worktree. Once a candidate commit
+exists, it intentionally leaves the detached worktree registered so the commit
+remains reachable and can be verified/reused by later E4 slices.
+
+The helper creates no branch or tag, performs no push, and does not create a
+GitHub Release or release asset. E4B3B1 publishes/tests this composition only;
+E4B3B2 owns its first use against the real frozen `0.2.236` selection and the
+subsequent persistence of that exact candidate SHA.
+
 ## DIST001 boundary
 
 DIST001-A proves that the distribution can be constructed and that its archive

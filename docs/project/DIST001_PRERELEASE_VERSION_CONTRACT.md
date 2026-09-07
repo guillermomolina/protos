@@ -382,3 +382,35 @@ E4B3A publishes/tests this mechanism only. `candidate_source_revision` therefore
 remains `UNMATERIALIZED` in the E4A selection record. E4B3B owns creation and
 capture of the real candidate SHA; release publication remains separately
 unauthorized.
+
+## E4B3B1 materialization composition checkpoint
+
+E4B3B is subdivided so recovery/idempotency mechanics are proven independently
+from creation of the first real candidate identity:
+
+```text
+DIST001-E4B3B1  composition + recovery/idempotency guard
+DIST001-E4B3B2  real candidate creation + SHA persistence
+```
+
+B3B1 composes B1 -> B2 -> B3A while the frozen selection remains:
+
+```text
+release_baseline_revision=3c23eaaccecbdcc7c2bcd86bc30c445403cfb047
+release_baseline_version=0.2.236-SNAPSHOT
+release_version=0.2.236
+release_tag=v0.2.236
+candidate_source_revision=UNMATERIALIZED
+release_publication_authorized=false
+```
+
+The materializer may safely resume an exact B1, B2 or already-created B3A local
+state, but accepts no broader recovery state. An exact candidate commit remains
+detached and must have no local branch/tag ref; the registered candidate
+worktree is the temporary reachability anchor until later E4/E5 ownership
+changes it.
+
+B3B1 itself uses isolated fixture repositories only. B3B2 owns the first real
+candidate materialization and the main-ledger transition from
+`candidate_source_revision=UNMATERIALIZED` to its exact 40-hex SHA. No E4 result
+authorizes E5 publication.
