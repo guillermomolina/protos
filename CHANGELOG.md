@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.193-SNAPSHOT
+
+- Subdivide `TOOL002-D3B` into D3B1 fixed-width policy and D3B2 Error-parent policy, and close only D3B1. `Runner.evaluateSimple` now accepts `fixed-integer`, parses retained `FAMILY:value` syntax in Protos, selects one of the eight Core fixed-width factories, and matches through primitive `===` so numeric family and exact value are both preserved.
+- Keep `error-parent` unsupported until D3B2. Focals cover all eight families, family/value mismatches, malformed/unknown/out-of-range policy, and runner selection that still skips D3B2 rows before source access. D3B2 becomes READY; D3C remains dependent.
+
 ## 0.2.192-SNAPSHOT
 
 - Close `TOOL002-D3A3`: compose the D2 TestPlan, D3A1 complete source loading and D3A2 simple expectation policy into the initial sequential bundled-Protos runner. `Array.each` only constructs a dependency chain; each selected case runs in a `Future.then` continuation after the previous selected case resolves, avoiding one recursive Protos frame per case while retaining manifest order and fresh-Process-per-case execution through D1.

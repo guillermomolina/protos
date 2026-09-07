@@ -419,6 +419,27 @@ reporting, failure rendering, CLI filtering, exit-status-on-mismatch policy or
 parallel scheduling. Those remain later Test Tool responsibilities; TOOL002-H
 still owns bounded outer parallel execution and deterministic reporting.
 
+### TOOL002-D3B1 fixed-integer expectation boundary
+
+D3B is subdivided because fixed-width family/value matching and Error-parent
+taxonomy matching are independent policy surfaces. D3B1 owns only
+`fixed-integer`; D3B2 remains responsible for `error-parent`.
+
+The retained manifest spelling is `FAMILY:value`. D3B1 parses that spelling in
+bundled Protos, accepts exactly the eight Core fixed-width family names, parses
+the signed decimal payload through the existing D3A2 Integer parser, and uses
+the selected standard numeric conversion factory to construct the expected
+fixed-width semantic value.
+
+Matching uses primitive `===` against the detached D1 observation. Core numeric
+semantic identity includes both numeric family and exact value, so the rule
+rejects an ordinary Integer, another fixed-width family, or another value while
+accepting a separately materialized value of the same family and value.
+
+Malformed syntax, unknown family, invalid decimal, and out-of-range expected
+values fail closed as Test Tool policy. D3B1 changes no execution, Filesystem,
+TestPlan, result shape, sequencing, reporting, or Java-owned runtime mechanism.
+
 ## Isolation audit
 
 The normal isolation boundary should be **one fresh Protos Process per test

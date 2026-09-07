@@ -82,6 +82,7 @@ isSimpleExpectation: (spec) => {
     supported: kind === "boolean"
     (kind === "null").ifTrue(() => { supported = true })
     (kind === "integer").ifTrue(() => { supported = true })
+    (kind === "fixed-integer").ifTrue(() => { supported = true })
     (kind === "error").ifTrue(() => { supported = true })
     supported
 }
@@ -126,6 +127,78 @@ parseExpectedInteger: (text) => {
     value
 }
 
+fixedIntegerFamilyPrototype: (name) => {
+    result: null
+    known: false
+
+    (name === "UInt8").ifTrue(() => {
+        result = UInt8
+        known = true
+    })
+    (name === "Int8").ifTrue(() => {
+        result = Int8
+        known = true
+    })
+    (name === "UInt16").ifTrue(() => {
+        result = UInt16
+        known = true
+    })
+    (name === "Int16").ifTrue(() => {
+        result = Int16
+        known = true
+    })
+    (name === "UInt32").ifTrue(() => {
+        result = UInt32
+        known = true
+    })
+    (name === "Int32").ifTrue(() => {
+        result = Int32
+        known = true
+    })
+    (name === "UInt64").ifTrue(() => {
+        result = UInt64
+        known = true
+    })
+    (name === "Int64").ifTrue(() => {
+        result = Int64
+        known = true
+    })
+
+    known.ifFalse(() => { policyError() })
+    result
+}
+
+parseExpectedFixedInteger: (text) => {
+    source: Encoding.UTF8.encode(text)
+    familyBytes: Encoding.UTF8.encode("")
+    valueBytes: Encoding.UTF8.encode("")
+    separatorSeen: false
+
+    source.each((octet) => {
+        (octet == 58).ifTrue(() => {
+            separatorSeen.ifTrue(() => { policyError() })
+            separatorSeen = true
+        })
+        (octet == 58).ifFalse(() => {
+            separatorSeen.ifTrue(() => {
+                valueBytes.add(octet)
+            })
+            separatorSeen.ifFalse(() => {
+                familyBytes.add(octet)
+            })
+        })
+    })
+
+    separatorSeen.ifFalse(() => { policyError() })
+    (familyBytes.size() == 0).ifTrue(() => { policyError() })
+    (valueBytes.size() == 0).ifTrue(() => { policyError() })
+
+    familyName: Encoding.UTF8.decode(familyBytes)
+    valueText: Encoding.UTF8.decode(valueBytes)
+    family: fixedIntegerFamilyPrototype(familyName)
+    family(parseExpectedInteger(valueText))
+}
+
 evaluateSimple: (spec, source, executor) => {
     isSimpleExpectation(spec).ifFalse(() => { policyError() })
 
@@ -166,6 +239,18 @@ evaluateSimple: (spec, source, executor) => {
 
     (kind === "integer").ifTrue(() => {
         expectedValue: parseExpectedInteger(expected)
+
+        passed = observation.state === "completed"
+        passed.ifTrue(() => {
+            passed = observation.error === null
+        })
+        passed.ifTrue(() => {
+            passed = observation.value === expectedValue
+        })
+    })
+
+    (kind === "fixed-integer").ifTrue(() => {
+        expectedValue: parseExpectedFixedInteger(expected)
 
         passed = observation.state === "completed"
         passed.ifTrue(() => {

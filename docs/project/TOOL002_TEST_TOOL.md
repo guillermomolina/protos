@@ -209,7 +209,7 @@ TOOL002-D therefore uses these publishable sub-slices:
 |---|---|---|
 | TOOL002-D1 | CLOSED | Bootstrap-local general `execution(source)` facility for the Test Tool over TOOL002-C, returning a caller-local observation through a strict authority-free detached-value boundary. No manifest/test policy. Implementation version `0.2.174-SNAPSHOT`. |
 | TOOL002-D2 | CLOSED | Grant the Test Tool one read-only tree-confined standard Filesystem rooted at the conformance corpus; bundled `Manifest.protos` uses bounded ordered readLine/Future.all windows to parse retained TSV rows into frozen CaseSpec/TestPlan tuples with named Protos accessors and validated path-based stable CaseIds. No case execution/expectation policy. Implementation version `0.2.182-SNAPSHOT`. |
-| TOOL002-D3 | IN_PROGRESS | D3A1 source loading, D3A2 simple single-case expectation policy and D3A3 sequential supported-case/TestPlan composition are CLOSED; D3B fixed-integer/error-parent policy is READY and D3C float policy remains dependent. |
+| TOOL002-D3 | IN_PROGRESS | D3A1/A2/A3 are CLOSED; D3B is IN_PROGRESS with D3B1 fixed-integer CLOSED and D3B2 error-parent READY; D3C float policy remains dependent. |
 | TOOL002-D4 | BLOCKED_BY_DEPENDENCIES | After D3, preserve the remaining non-Future `closure-error-parent-fresh` identity-sensitive expectations without leaking Closure authority; reconcile Java ownership for the D-migrated cases and close TOOL002-D. |
 
 The `future-*` families (`future-integer`, `future-null`, `future-boolean`,
@@ -268,7 +268,7 @@ Float families:
 | TOOL002-D3A1 | CLOSED | Bundled `Runner.readSource(spec, filesystem)` loads one complete UTF-8 case source through the D2 confined standard Filesystem/File surface. Ordered File reads are issued in bounded 16-read windows, exact bytes are accumulated before one UTF-8 decode, and the File is explicitly closed. No case execution or expectation policy. Implementation version `0.2.186-SNAPSHOT`. |
 | TOOL002-D3A2 | CLOSED | `Runner.evaluateSimple(spec, source, executor)` interprets `boolean`, `null`, `integer`, and generic `error` entirely in bundled Protos. Normal mismatches return frozen `passed + observation` evidence; malformed/unsupported policy signals. Integer matching uses signed-decimal Protos parsing plus primitive `===` to preserve exact numeric family. Implementation version `0.2.189-SNAPSHOT`. |
 | TOOL002-D3A3 | CLOSED | Compose TestPlan + source loader + simple evaluator through an ordered `Future.then` dependency chain built without suspending inside `Array.each`; skip unsupported kinds before source access, aggregate ordered frozen CaseRun evidence with balanced chunks, and integrate the supported subset into `Main.protos`. No reporting/parallel/exit-status policy. Implementation version `0.2.192-SNAPSHOT`. |
-| TOOL002-D3B | READY | D3A is closed through A3; migrate `fixed-integer` and `error-parent` single-case policy while preserving D3A3 runner/result boundaries. |
+| TOOL002-D3B | IN_PROGRESS | Subdivided into D3B1 fixed-integer and D3B2 error-parent: D3B1 is CLOSED and D3B2 is READY. |
 | TOOL002-D3C | BLOCKED_BY_DEPENDENCIES | After D3B, migrate `float-bits` and `float-nan` with exact binary64 requirements preserved. |
 
 D3A1 deliberately does not modify `Main.protos`: ordinary `protos test`
@@ -306,6 +306,21 @@ does not yet report individual cases or turn an inert mismatch into CLI exit
 policy.
 
 TOOL002-D3B is READY.
+
+### TOOL002-D3B decomposition
+
+The D3B audit found two independently meaningful policies, so publication is
+split again:
+
+| Slice | Status | Outcome |
+|---|---|---|
+| TOOL002-D3B1 | CLOSED | `fixed-integer` parses `FAMILY:value`, accepts exactly the eight Core fixed-width families, constructs the expected semantic value with the selected standard numeric factory, and matches through primitive `===`. Implementation version `0.2.193-SNAPSHOT`. |
+| TOOL002-D3B2 | READY | Add `error-parent` by matching the detached Error immediate parent against the named standard Error prototype without a Java Test taxonomy or detached-boundary change. |
+
+D3B1 preserves the D3A3 result and sequencing contract. `error-parent` remains
+skipped before source acquisition until D3B2.
+
+TOOL002-D3B2 is READY.
 
 ## Closure rule
 
