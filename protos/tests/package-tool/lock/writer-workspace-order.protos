@@ -14,14 +14,18 @@
 // the specific language governing rights and limitations under the License.
 
 Lock: import("self:LockDocument")
-text:
+source:
     "lock-format 1\n" +
     "resolver-version 1\n" +
     "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
-    "dependency workspace \"root-pkg\" alias \"json\" target registry \"json-pkg\" \"1.0.0\"\n" +
-    "registry-node registry \"json-pkg\" \"1.0.0\" locator \"json\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
-    "root workspace \"root-pkg\"\n"
-model: Lock.parseStructural(text)
-(model.root.packageId == "root-pkg").and() {
-    model.dependencies.size() == 1
-}
+    "root workspace \"root\"\n" +
+    "workspace-member \"z\" workspace \"wz\"\n" +
+    "workspace-member \"a\" workspace \"wa\"\n"
+expected:
+    "lock-format 1\n" +
+    "resolver-version 1\n" +
+    "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n" +
+    "root workspace \"root\"\n" +
+    "workspace-member \"a\" workspace \"wa\"\n" +
+    "workspace-member \"z\" workspace \"wz\"\n"
+Lock.write(Lock.parseStructural(source)) == expected

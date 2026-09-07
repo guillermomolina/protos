@@ -58,3 +58,15 @@ body-unknown-record-error.protos	error
 body-registry-wrong-field-error.protos	error
 body-git-missing-content-error.protos	error
 body-content-uppercase-digest-error.protos	error
+canonical-root-roundtrip.protos	true
+canonical-complete-roundtrip.protos	true
+writer-normalizes-class-order.protos	true
+writer-registry-semver-order.protos	true
+writer-workspace-order.protos	true
+writer-git-order.protos	true
+writer-dependency-total-order.protos	true
+canonical-class-order-error.protos	error
+canonical-workspace-order-error.protos	error
+canonical-registry-order-error.protos	error
+canonical-git-order-error.protos	error
+canonical-dependency-order-error.protos	error

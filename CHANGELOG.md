@@ -1,3 +1,9 @@
+## 0.2.215-SNAPSHOT
+
+- Close `TOOL001-F1C3 — total writer + canonical rejection + F1C closure` and parent `TOOL001-F1C`. Extend pure bundled-Protos `self:LockDocument` with the F1B3 canonical total ordering and writer: workspace members by canonical qstring bytes then PackageId qstring bytes; registry nodes by PackageId qstring bytes then D1 ReleaseVersion precedence; Git nodes by PackageId/revision qstring bytes; and dependency records by source-kind-ranked declaring ref (`workspace < registry < git`), alias qstring bytes and target ref.
+- Preserve the F1C2 structural boundary as `parseStructural(text)`, while public `parse(text)` now requires exact canonical bytes by `parseStructural -> write -> byte-identical String equality`. The writer emits the one F1A header separator, root first, then workspace/registry/Git/dependency classes, one LF per body record, and no extra blank/final records. Structurally valid but non-canonical class/order input therefore fails closed.
+- Add cross-slice Protos conformance for canonical root/full-document round trips, class normalization, semantic registry-version ordering (`1.2.0` before `1.10.0`), workspace/Git/dependency total ordering and canonical rejection. The existing Java harness remains unchanged. F1C is complete; TOOL001-F remains IN_PROGRESS and this slice deliberately does not allocate a new F continuation before a fresh post-F1C audit.
+
 ## 0.2.214-SNAPSHOT
 
 - Add community entry points for adoption and external contribution: a human-facing roadmap, Code of Conduct, support and security policies, GitHub Issue Forms, and a pull-request template. Route questions, exploratory ideas, and design discussion to the now-enabled GitHub Discussions space, while keeping Issues focused on reproducible bugs and scoped actionable work. No specification, implementation-version, or license-term change.

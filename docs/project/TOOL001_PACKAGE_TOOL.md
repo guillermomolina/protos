@@ -74,16 +74,16 @@ its relation to any legacy Slice 3 terminology that remains useful for continuit
 | TOOL001-E | local/offline version selection policy | CLOSED | `SAME_COMMIT` | E1 fresh highest-satisfying selection plus E2 retained exact-version preference are published as pure local version policy over already-known candidates. Discovery, full eligibility, graph resolution and physical lock work remain separate. |
 | TOOL001-E1 | fresh highest-satisfying ReleaseVersion selection | CLOSED | `SAME_COMMIT` | `self:FreshVersionSelection.select/selectText` filters already-known ReleaseVersion candidates through closed D2 constraint semantics and selects the highest satisfying candidate by D1 precedence; no-match fails closed. |
 | TOOL001-E2 | retained exact-version preference | CLOSED | `SAME_COMMIT` | `self:RetainedVersionSelection.select/selectText` preserves an available exact retained ReleaseVersion while it still satisfies D2; otherwise it delegates to E1 fresh selection. No physical lockfile or package-identity policy is implied. |
-| TOOL001-F | canonical physical lockfile v1 | IN_PROGRESS | TOOL001-F1A/F1B/F1C1/F1C2 published | Canonical grammar plus in-memory lexical/body structural parser are CLOSED; F1C3 total writer/canonical rejection/round-trip closure READY. |
+| TOOL001-F | canonical physical lockfile v1 | IN_PROGRESS | TOOL001-F1A/F1B/F1C published | Canonical grammar plus pure in-memory parser/model/writer/canonical rejection are CLOSED through F1C. Further physical-lock integration requires a fresh continuation audit. |
 | TOOL001-F1A | canonical lock header grammar | CLOSED | `SAME_COMMIT` | Exact three-line v1 header grammar and canonical lexical rules are frozen without implementing a parser/writer or choosing body node/edge syntax. |
 | TOOL001-F1B | canonical lock body node/edge grammar | CLOSED | `SAME_COMMIT` | F1B1 scalar/reference, F1B2 root/workspace and F1B3 external-node/dependency/final ordering decisions freeze the complete canonical body grammar for lock-format 1. |
 | TOOL001-F1B1 | canonical scalar strings + typed node references | CLOSED | `SAME_COMMIT` | Body variable values use one deterministic quoted UTF-8 scalar encoding; node references are source-kind-tagged tuples over quoted identity components, avoiding delimiter-composed PackageId keys while PackageId textual encoding remains open. |
 | TOOL001-F1B2 | root/workspace representation | CLOSED | `SAME_COMMIT` | Exactly one root workspace-ref identifies the root manifest package; additional workspace member declarations map their exact manifest string to a workspace-ref in canonical order, without introducing virtual-workspace identity or path semantics. |
 | TOOL001-F1B3 | external node blocks + dependency edges + F1B closure | CLOSED | `SAME_COMMIT` | Flat registry/git external records, mandatory ContentIdentity, registry locator+authority, Git fetch provenance, exact alias->target edges, total body ordering/separation and omission of ArtifactDigest close F1B. |
-| TOOL001-F1C | canonical lock parser/writer + round-trip conformance | IN_PROGRESS | TOOL001-F1C1/F1C2 published | Lexical primitives and body record/model structural validation CLOSED; F1C3 total writer/canonical rejection/round-trip closure READY. |
+| TOOL001-F1C | canonical lock parser/writer + round-trip conformance | CLOSED | `SAME_COMMIT` | F1C1 lexical primitives, F1C2 structural body model and F1C3 canonical total writer/rejection/round-trip conformance complete the pure in-memory lock-format-1 parser/writer boundary. |
 | TOOL001-F1C1 | lock lexical/header/qstring/node-ref primitives | CLOSED | `SAME_COMMIT` | `self:LockSyntax` owns strict canonical line tokens, qstring parse/render, lock-format-1 header parse/render and typed workspace/registry/git node refs; registry versions reuse D1 ReleaseVersion. |
 | TOOL001-F1C2 | body record/model + structural validation | CLOSED | `SAME_COMMIT` | `self:LockDocument` parses the complete in-memory v1 document/body model and rejects missing/duplicate nodes, duplicate declaring-alias edges and dangling references; canonical class/order rejection remains F1C3. |
-| TOOL001-F1C3 | total writer + canonical rejection + F1C closure | READY | — | Emit complete canonical bytes in F1B total order, reject non-canonical serialization/order by parse-write equality, add final round-trip/cross-slice conformance and close F1C. |
+| TOOL001-F1C3 | total writer + canonical rejection + F1C closure | CLOSED | `SAME_COMMIT` | Canonical F1B total ordering/writer plus public parse-write byte equality reject structurally valid non-canonical documents and close F1C. |
 
 
 
@@ -101,11 +101,15 @@ local/offline version-selection parent `TOOL001-E` are CLOSED.
 `protos.lock` v1 format. `TOOL001-F1A` and `TOOL001-F1B` are CLOSED: the complete
 canonical header/body grammar is frozen through F1B1/F1B2/F1B3.
 
-`TOOL001-F1C` is IN_PROGRESS through closed F1C1/F1C2 lexical and body
-structural parsing. `TOOL001-F1C3` total writer/canonical rejection/round-trip
-closure is READY.
+`TOOL001-F1C` is CLOSED: F1C1 lexical primitives, F1C2 structural body
+model and F1C3 canonical writer/rejection/round-trip conformance complete the
+pure in-memory lock-format-1 parser/writer boundary.
 
-F1C remains purely in-memory bundled-Protos tooling and does not own Filesystem
+`TOOL001-F` remains IN_PROGRESS. The next physical-lock integration slice is not
+allocated by F1C3; it requires a fresh audit of the current Package Tool,
+Filesystem authority, resolver-input and update boundaries.
+
+F1C does not own Filesystem
 I/O, resolution or ContentIdentity tree hashing. Complete candidate eligibility,
 graph resolution, workspace/store,
 registry/network and update operations remain separately scoped work.

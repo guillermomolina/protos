@@ -15,6 +15,7 @@
 
 Syntax: import("self:LockSyntax")
 Version: import("self:ReleaseVersion")
+Arrays: import("std:collections/Array")
 
 fail: () => {
     Error().signal()
@@ -321,7 +322,7 @@ nodeExists: (ref, root, workspaceMembers, registryNodes, gitNodes) => {
     found
 }
 
-parse: (text) => {
+parseStructural: (text) => {
     lines: documentLines(text)
 
     (lines.size() < 5).ifTrue(() => {
@@ -443,4 +444,235 @@ parse: (text) => {
         gitNodes: gitNodes
         dependencies: dependencies
     }
+}
+
+bytesLess: (left, right) => {
+    index: 0
+    decided: false
+    result: false
+    rightSize: right.size()
+
+    left.each((leftOctet) => {
+        decided.ifFalse(() => {
+            (index < rightSize).ifTrue(() => {
+                rightOctet: right.at(index)
+
+                (leftOctet < rightOctet).ifTrue(() => {
+                    result = true
+                    decided = true
+                })
+
+                decided.ifFalse(() => {
+                    (leftOctet > rightOctet).ifTrue(() => {
+                        result = false
+                        decided = true
+                    })
+                })
+            })
+        })
+
+        index = index + 1
+    })
+
+    decided.ifFalse(() => {
+        result = left.size() < right.size()
+    })
+
+    result
+}
+
+qstringLess: (left, right) => {
+    leftBytes: Encoding.UTF8.encode(Syntax.renderQstring(left))
+    rightBytes: Encoding.UTF8.encode(Syntax.renderQstring(right))
+    bytesLess(leftBytes, rightBytes)
+}
+
+refKindRank: (ref) => {
+    rank: -1
+
+    (ref.kind == "workspace").ifTrue(() => {
+        rank = 0
+    })
+    (ref.kind == "registry").ifTrue(() => {
+        rank = 1
+    })
+    (ref.kind == "git").ifTrue(() => {
+        rank = 2
+    })
+
+    (rank < 0).ifTrue(() => {
+        fail()
+    })
+
+    rank
+}
+
+refLess: (left, right) => {
+    leftRank: refKindRank(left)
+    rightRank: refKindRank(right)
+    result: false
+    decided: false
+
+    (leftRank < rightRank).ifTrue(() => {
+        result = true
+        decided = true
+    })
+
+    decided.ifFalse(() => {
+        (leftRank > rightRank).ifTrue(() => {
+            result = false
+            decided = true
+        })
+    })
+
+    decided.ifFalse(() => {
+        packageEqual: left.packageId == right.packageId
+
+        packageEqual.ifFalse(() => {
+            result = qstringLess(left.packageId, right.packageId)
+            decided = true
+        })
+    })
+
+    decided.ifFalse(() => {
+        (left.kind == "registry").ifTrue(() => {
+            result = Version.compare(left.version, right.version) < 0
+            decided = true
+        })
+    })
+
+    decided.ifFalse(() => {
+        (left.kind == "git").ifTrue(() => {
+            (left.revision == right.revision).ifFalse(() => {
+                result = qstringLess(left.revision, right.revision)
+            })
+            decided = true
+        })
+    })
+
+    result
+}
+
+workspaceMemberLess: (left, right) => {
+    result: false
+    decided: false
+
+    (left.declaration == right.declaration).ifFalse(() => {
+        result = qstringLess(left.declaration, right.declaration)
+        decided = true
+    })
+
+    decided.ifFalse(() => {
+        (left.ref.packageId == right.ref.packageId).ifFalse(() => {
+            result = qstringLess(left.ref.packageId, right.ref.packageId)
+        })
+    })
+
+    result
+}
+
+registryNodeLess: (left, right) => {
+    refLess(left.ref, right.ref)
+}
+
+gitNodeLess: (left, right) => {
+    refLess(left.ref, right.ref)
+}
+
+dependencyLess: (left, right) => {
+    result: false
+    decided: false
+
+    refEquals(left.declaring, right.declaring).ifFalse(() => {
+        result = refLess(left.declaring, right.declaring)
+        decided = true
+    })
+
+    decided.ifFalse(() => {
+        (left.alias == right.alias).ifFalse(() => {
+            result = qstringLess(left.alias, right.alias)
+            decided = true
+        })
+    })
+
+    decided.ifFalse(() => {
+        refEquals(left.target, right.target).ifFalse(() => {
+            result = refLess(left.target, right.target)
+        })
+    })
+
+    result
+}
+
+renderContent: (content) => {
+    content.method + " " + content.algorithm + ":" + content.hex
+}
+
+renderWorkspaceMember: (member) => {
+    "workspace-member " +
+    Syntax.renderQstring(member.declaration) + " " +
+    Syntax.renderNodeRef(member.ref)
+}
+
+renderRegistryNode: (node) => {
+    "registry-node " +
+    Syntax.renderNodeRef(node.ref) +
+    " locator " + Syntax.renderQstring(node.locator) +
+    " authority " + Syntax.renderQstring(node.authority) +
+    " content " + renderContent(node.content)
+}
+
+renderGitNode: (node) => {
+    "git-node " +
+    Syntax.renderNodeRef(node.ref) +
+    " fetch " + Syntax.renderQstring(node.fetch) +
+    " content " + renderContent(node.content)
+}
+
+renderDependency: (dependency) => {
+    "dependency " +
+    Syntax.renderNodeRef(dependency.declaring) +
+    " alias " + Syntax.renderQstring(dependency.alias) +
+    " target " + Syntax.renderNodeRef(dependency.target)
+}
+
+write: (model) => {
+    members: Arrays.sort(model.workspaceMembers, workspaceMemberLess)
+    registry: Arrays.sort(model.registryNodes, registryNodeLess)
+    git: Arrays.sort(model.gitNodes, gitNodeLess)
+    dependencies: Arrays.sort(model.dependencies, dependencyLess)
+
+    result:
+        Syntax.renderHeader(model.header) +
+        "root " + Syntax.renderNodeRef(model.root) + "\n"
+
+    members.each((member) => {
+        result = result + renderWorkspaceMember(member) + "\n"
+    })
+
+    registry.each((node) => {
+        result = result + renderRegistryNode(node) + "\n"
+    })
+
+    git.each((node) => {
+        result = result + renderGitNode(node) + "\n"
+    })
+
+    dependencies.each((dependency) => {
+        result = result + renderDependency(dependency) + "\n"
+    })
+
+    ignoredStructuralValidation: parseStructural(result)
+    result
+}
+
+parse: (text) => {
+    model: parseStructural(text)
+    canonical: write(model)
+
+    (canonical == text).ifFalse(() => {
+        fail()
+    })
+
+    model
 }
