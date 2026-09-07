@@ -280,103 +280,71 @@ not allocate a `LIBxxx` item.
 
 ## B007 — Standard `while` protocol semantics
 
-Status: BLOCKED
+Status: READY
 
 Implementation area:
-The Core standard `while` operation named by
-`spec/semantics/EXECUTION_AND_CONTROL.md` §17, together with implementation,
-conformance, executable tutorial/example material, and programming-guide text
-that would present that operation as runnable current behavior.
+The Core standard `while` operation defined by D044 / specification revision
+`0.1.381`, together with I023 reference implementation, conformance, executable
+tutorial/example material, and programming-guide text that presents the operation
+as runnable current behavior.
 
 Normative dependency:
-The current normative execution owner states that a `while` operation requires a
-reevaluated condition and therefore semantically operates on a Closure, and gives
-this shape:
+Satisfied by specification revision `0.1.381` / D044.
 
-```js
-(() => i < 10).while() {
-    i = i + 1
-}
-```
+`spec/semantics/EXECUTION_AND_CONTROL.md` §17 now defines the complete standard
+Closure `while(body)` behavior: Closure-only receiver and body domain, exact
+arity, validation timing, zero-argument condition/body activation order, strict
+canonical Boolean condition results, fresh Error on every other normal condition
+result, ignored body results, canonical `null` normal result, and exact
+Error/non-local-return/suspension/replay/cancellation/Future composition.
 
-That statement fixes an important direction but does not yet define the complete
-observable standard protocol precisely enough for independent implementation.
-
-In particular, the current normative text does not explicitly and uniquely
-determine all of the following:
-
-- where the standard `while` selector is installed and its semantic receiver
-  domain;
-- exact argument arity and the required semantic/callable domain of the loop
-  body;
-- the exact per-iteration invocation order and argument vectors for condition
-  and body;
-- which normal condition results continue or terminate the loop, including
-  whether canonical Boolean identity is required and how any non-Boolean result
-  fails;
-- whether and when condition/body callability or arity is validated;
-- how the normal result of each body invocation is treated;
-- the exact normal result of the complete `while` invocation, including the
-  zero-iteration case;
-- the complete Error, non-local-return, suspension, cancellation, and Future
-  interaction contract required at the loop boundary.
-
-Ordinary call, Closure, Boolean, Error, and task rules constrain many of these
-interactions, but §17 does not currently compose those owners into one unique
-standard `while` contract. Implementing the missing selector now would therefore
-require selecting observable semantics that the specification has not selected.
+`spec/semantics/CALLABLES.md` fixes `while` as an ordinary local Closure-valued
+`Object` slot with standard semantic-Closure receiver-domain behavior, ordinary
+reflection/extraction/shadowing, and no `Closure` prototype. The grammar owner
+confirms that `condition.while() { ... }` is only ordinary call plus trailing
+Closure and adds no `while` keyword or dedicated loop syntax.
 
 Specification authority:
-- `spec/semantics/EXECUTION_AND_CONTROL.md` §17 `Iteration and Loops` is the
-  primary owner of iteration/loop control semantics;
-- `spec/semantics/CALLABLES.md` owns ordinary callable invocation, capture,
-  return-home, and non-local-return semantics that a loop callback must compose
-  with;
-- `spec/semantics/VALUES_AND_COLLECTIONS.md` owns the canonical Boolean domain
-  and standard Boolean result contracts;
-- `spec/semantics/ERRORS.md` owns Error signaling/unwind behavior;
-- `spec/concurrency/FUTURES_AND_TASKS.md` owns suspension/cancellation and
-  structured task behavior where loop callbacks interact with those mechanisms;
-- `spec/PROTOS_GRAMMAR.md` owns ordinary call and trailing-Closure syntax. It
-  currently defines no dedicated `while` syntax.
+- `spec/semantics/EXECUTION_AND_CONTROL.md` §17 `Iteration and Loops` — primary
+  owner of standard loop execution semantics;
+- `spec/semantics/CALLABLES.md` — standard `Object.while` placement, Closure
+  receiver domain, extraction/shadowing and ordinary Closure activation rules;
+- `spec/semantics/VALUES_AND_COLLECTIONS.md` — canonical `true` / `false` domain;
+- `spec/semantics/ERRORS.md` — fresh Error occurrences and Error unwind;
+- `spec/concurrency/FUTURES_AND_TASKS.md` — suspension, cancellation and
+  structured task behavior composed by the loop;
+- `spec/PROTOS_GRAMMAR.md` — unchanged ordinary call/trailing-Closure syntax.
 
 Unblock condition:
-The current normative specification explicitly and uniquely determines the
-complete observable standard `while` protocol, including selector
-placement/receiver domain, exact argument/callback domains, condition and body
-invocation order, accepted condition results and failure behavior, validation
-timing, body-result treatment, complete normal result, and composition with
-ordinary Error/control-transfer/suspension/cancellation/Future semantics.
-
-The unblock condition is semantic, not textual: it is satisfied only when two
-independent implementers can derive the same observable behavior without
-choosing any of the items above themselves.
+Satisfied by specification revision `0.1.381` / D044. Two independent
+implementers can derive the same selector location and receiver domain, argument
+domain/validation order, exact callback activation count/order and argument
+vectors, accepted condition values/failure behavior, body-result treatment,
+normal result, and Error/control-transfer/suspension/cancellation/Future behavior
+without selecting new observable semantics.
 
 Current consequence:
-Do not implement or publish a standard `while` selector from the existing
-one-example description.
+B007 is `READY`, not `CLOSED`. `I023 — Standard while protocol` is allocated and
+READY for implementation. No reference implementation selector is published by
+D044 itself.
 
-The Programming Guide control-flow chapter is also paused at this point. It
-cannot responsibly present the specified `while` shape as runnable current
-behavior, and it must not silently invent the missing contract. The published
-guide therefore remains complete only through chapter 03 until this blocker is
-resolved.
-
-This is not an implementation-tool or environment limitation. The reference
-implementation currently has no standard `while` selector, but implementation
-absence alone is not the reason for `BLOCKED`; the blocker is the unresolved
-observable normative contract above.
+The Programming Guide control-flow slice DOC001-E remains
+`BLOCKED_BY_DEPENDENCIES` on I023. D044 makes the semantics explainable, but the
+guide must not present the standard `while` form as runnable current behavior
+until I023 implementation/conformance is published.
 
 Independent work:
 Existing `ifTrue` / `ifFalse` / `and` / `or`, trailing-Closure syntax, collection
-`each`, and other already-specified and already-implemented behavior may continue
-independently. Documentation or implementation work unrelated to the missing
-`while` contract is not blocked.
+`each`, and all unrelated already-defined work remain independent. I023 may now
+proceed in its recorded slices without another language-design decision unless
+implementation audit exposes a genuine contradiction in D044.
 
 History:
 B007 was discovered while auditing the planned Programming Guide control-flow
-chapter after chapters 01-03 were published. Repository inspection found the
-normative Closure-based `while` example but no complete standard protocol
-contract, no current reference-implementation selector, and no executable
-tutorial/conformance coverage for `while`. The documentation work stopped rather
-than turning that gap into accidental language design.
+chapter after chapters 01-03 were published. The initial normative text named a
+Closure-based shape but left selector placement, callback domains/order,
+Boolean/result rules and control/concurrency composition implementation-selectable,
+so documentation stopped rather than inventing semantics. D044 / specification
+revision `0.1.381` closes that normative gap and transitions B007
+`BLOCKED -> READY`; final `READY -> CLOSED` requires I023 implementation,
+validation, and publication.

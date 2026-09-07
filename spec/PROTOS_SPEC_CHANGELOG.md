@@ -9,6 +9,50 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.381] - 2026-09-07
+
+### Standard Closure `while` protocol (D044)
+- Resolves B007 by defining one exact Core v0.1 pre-test loop protocol as the
+  ordinary Closure-specific message `condition.while(body)`, with no `while`
+  keyword, statement form, dedicated grammar production, `Closure` prototype,
+  truthiness rule, or second executable-value kind.
+- Adds `while` beside `future`, `parallel`, and `ensure` as an ordinary local
+  Closure-valued `Object` slot. The standard behavior accepts only a semantic
+  Closure receiver and exactly one semantic Closure body; ordinary lookup,
+  reflection, extraction, shadowing, and user override rules remain unchanged.
+- Requires ordinary receiver/argument evaluation first, followed by receiver,
+  exact-arity, and body-Closure validation before the first condition activation.
+  Callback declared arity is not preflighted: condition and body are each
+  activated with zero supplied arguments when their path is reached, and ordinary
+  Closure binding failures occur at that actual activation.
+- Defines exact pre-test order: activate condition; canonical `false` terminates;
+  canonical `true` activates body and repeats; every other normal condition value
+  signals a fresh standard `Error`. No truthiness, coercion, implicit call,
+  awaiting, or Future adoption is permitted.
+- Ignores every normal body result and returns canonical `null` on every normal
+  loop termination, including zero iterations. A Future returned by condition is
+  therefore an invalid non-Boolean result; a Future returned by body is merely an
+  ignored ordinary value.
+- Composes the loop boundary with existing Error, non-local-return, suspension,
+  replay, cooperative-cancellation, `ensure`, and structured-task rules. The
+  loop adds no hidden task, Future, handler, cleanup scope, cancellation mask,
+  preemption point, scheduler boundary, or suspension point, and replay must not
+  duplicate completed condition/body effects.
+- Clarifies in the grammar owner that `condition.while() { ... }` is only the
+  existing empty argument list plus trailing-Closure desugaring; future
+  `while (condition) { ... }` sugar is outside Core v0.1.
+
+### Compatibility and implementation state
+- Existing programs not selecting the new standard `while` slot retain their
+  behavior and pay no loop-specific runtime/scheduling cost.
+- D044 satisfies B007's normative unblock condition. B007 therefore becomes
+  `READY`, not `CLOSED`: reference implementation, conformance, suspension/
+  cancellation evidence, and final integration are tracked by newly allocated
+  `I023 — Standard while protocol`.
+- DOC001-E is no longer blocked by unresolved language design, but remains
+  `BLOCKED_BY_DEPENDENCIES` until I023 publishes runnable current behavior; the
+  Programming Guide must not present the selector as implemented before then.
+
 ## [0.1.380] - 2026-09-06
 
 ### Standard Closure `ensure` protocol (D043)

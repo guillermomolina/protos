@@ -66,7 +66,7 @@ Closure evidence:
 | DOC001-B | CLOSED | Bindings, execution contexts, lexical state, and receiver state | Published at `bd3cd38218cfccdca8de529f4d6c26fede7ad771`. |
 | DOC001-C | CLOSED | Objects, delegation, composition, structural state, reflection | Published at `8ab9463b8466974fc5f23f0c7304faeacb3db641`. |
 | DOC001-D | CLOSED | Closures, methods, receivers, extraction, `super`, return homes | Published at `01470dca9df787ed216b2c19faaead965fb18cc8`. |
-| DOC001-E | BLOCKED | Control flow through ordinary protocols | B007 must first define the complete observable standard `while` protocol. |
+| DOC001-E | BLOCKED_BY_DEPENDENCIES | Control flow through ordinary protocols | D044 defines the complete standard `while` protocol; I023 must publish implementation/conformance before this guide slice proceeds. |
 | DOC001-F | READY | Values, identity, equality, and collections | Independent of DOC001-E. |
 | DOC001-G | READY | Modules and imports | Independent of DOC001-E. |
 | DOC001-H | READY | Errors, handlers, `ensure`, and resource lifetime | Independent of DOC001-E. |
@@ -77,28 +77,23 @@ Closure evidence:
 | DOC001-M | BLOCKED_BY_DEPENDENCIES | Packages, testing, and bundled toolchain | Final chapter closure requires TOOL001 and TOOL002 CLOSED. |
 | DOC001-N | BLOCKED_BY_DEPENDENCIES | Final navigation and consistency closure | Requires DOC001-E through DOC001-M complete. |
 
-## B007 relationship
+## B007 / I023 relationship
 
-`B007 — Standard while protocol semantics` is a genuine normative blocker
-discovered while preparing DOC001-E.
+`B007 — Standard while protocol semantics` was discovered while preparing
+DOC001-E. D044 / specification revision `0.1.381` now satisfies that normative
+unblock condition and transitions B007 from `BLOCKED` to `READY`.
 
-B007 does not block DOC001 as a whole. The control-flow chapter must not guess the
-missing `while` contract, but unrelated documentation slices whose semantics and
-implementation are already defined may continue independently.
+The reference implementation is deliberately separate. The fresh current-main
+audit performed when D044 was allocated found `I023` unused, so
+`I023 — Standard while protocol` now owns implementation/conformance closure.
+DOC001-E therefore remains `BLOCKED_BY_DEPENDENCIES` until I023 is CLOSED: the
+guide may explain only runnable current behavior and must not present a
+specified-but-unimplemented selector as available.
 
-When B007's normative unblock condition is satisfied, DOC001-E must be re-audited
-against the then-current specification and implementation before changing its
-status.
-
-## Future implementation tracking
-
-DOC001 does not reserve an `Ixxx` for `while`.
-
-While B007 is BLOCKED, standard `while` implementation work is not READY.
-Because `main` is developed concurrently, reserving a future implementation
-number now could collide with unrelated work. When B007 is normatively resolved,
-the implementation task must audit the then-current `origin/main` and allocate
-the next unused `Ixxx` at that time.
+B007/I023 do not block DOC001 as a whole. Unrelated documentation slices whose
+semantics and implementation are already defined may continue independently.
+After I023 closes, DOC001-E must still perform its own fresh current-main audit
+before moving to READY/IN_PROGRESS.
 
 ## Completion rule
 

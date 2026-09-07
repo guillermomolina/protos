@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-06
+Last updated: 2026-09-07
 ## Prelude Binding Note
 
 Prelude bindings introduce no additional grammar. The shared standard prelude is frozen by runtime semantics. Therefore `name = value` cannot modify a binding found only in the prelude; `name: value` creates a local slot and may explicitly shadow that name.
@@ -2848,6 +2848,44 @@ x: ...value
 return ...value
 ```
 
+
+## Standard Closure `while` Syntax Note
+
+Core v0.1 introduces no `while` keyword, statement form, or dedicated loop
+production. `while` remains an ordinary member name and the standard Closure loop
+uses ordinary message syntax:
+
+```js
+condition.while(body)
+```
+
+The common form:
+
+```js
+condition.while() {
+    bodyExpression
+}
+```
+
+is parsed by the existing ordinary call plus trailing-Closure rules. The
+completed empty argument list is followed on the same logical line by the
+trailing braced Closure, which the existing mandatory desugaring appends as the
+single final positional argument. It is therefore semantically the same ordinary
+one-argument `while` message, with a parameterless Closure value in that argument
+position. `semantics/EXECUTION_AND_CONTROL.md` owns the standard loop behavior;
+`semantics/CALLABLES.md` owns the standard `Object.while` placement and Closure
+receiver domain.
+
+A source form such as:
+
+```text
+while (condition) { body }
+```
+
+is not Core v0.1 syntax. Adding such sugar in a future language version would
+require an explicit grammar/lowering rule and must preserve the ordinary
+Closure/message protocol unless that future specification deliberately changes
+it.
 
 ## Resource Cleanup Syntax Note
 

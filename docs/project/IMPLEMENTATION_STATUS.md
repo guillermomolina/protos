@@ -55,6 +55,47 @@ an item.
 | I020 | Post-Ixxx implementation audit reconciliation | CLOSED | `SAME_COMMIT` | I020-A/B/C/D complete; D040 missing-`methodHome` `InvalidSuper` implemented; B005 closed |
 | I021 | Filesystem namespace replacement/removal | CLOSED | `SAME_COMMIT` | I021-A/B/C complete; D042 / spec `0.1.379`; production confined namespace backend and Protos-visible integrated conformance published; B006 CLOSED by package-tool Filesystem Slice 2B metadata publication integration |
 | I022 | Dynamic Error handlers / unwind-safe cleanup | CLOSED | `SAME_COMMIT` | I022-A/B/C/D/E/F complete; D043 / spec `0.1.380`; replay-stable Error handlers, unwind-safe `ensure`, suspension, later-transfer precedence, cooperative cancellation, structured lifetime and task/Actor isolation have final adversarial closure evidence |
+| I023 | Standard `while` protocol | READY | — | D044 / spec `0.1.381` satisfies B007; I023-A/B/C/D planned for synchronous protocol, control transfer, suspension/cancellation replay, and final closure |
+
+### I023 — Standard `while` protocol
+
+Status: READY
+
+Purpose: Implement D044 / specification revision `0.1.381` faithfully as the
+standard Closure-specific `while(body)` protocol and close B007 without adding
+new syntax, truthiness, a `Closure` prototype, hidden scheduling, or a second
+callback/invocation model.
+
+Normative owners:
+- `spec/semantics/EXECUTION_AND_CONTROL.md` §17 for validation timing, exact
+  condition/body activation order, strict canonical Boolean condition results,
+  ignored body results, canonical `null` completion and control/concurrency
+  composition;
+- `spec/semantics/CALLABLES.md` for ordinary `Object.while` placement,
+  Closure-family receiver domain, lookup/reflection/extraction/shadowing and
+  Closure activation semantics;
+- `spec/PROTOS_GRAMMAR.md` for ordinary call plus trailing-Closure syntax only;
+- `spec/semantics/VALUES_AND_COLLECTIONS.md`, `ERRORS.md`, and
+  `spec/concurrency/FUTURES_AND_TASKS.md` for the referenced Boolean, Error,
+  suspension/cancellation and structured-ownership rules.
+
+Planned slices:
+
+| Slice | Status | Version | Closure evidence | Scope / unblock condition |
+|---|---|---|---|---|
+| I023-A | READY | — | — | Publish the standard `Object.while` selector with Closure receiver/body validation, exact one-argument contract, zero-argument pre-test condition/body activation, strict true/false loop decision, ignored body values, canonical `null` normal completion, zero/multiple-iteration Protos conformance, and no implementation-version-independent semantic additions. |
+| I023-B | BLOCKED_BY_DEPENDENCIES | — | — | After A, adversarial synchronous control closure: non-Boolean condition Error timing/freshness, body/condition arity failures at actual activation, Error and non-local-return propagation, exact no-extra-activation/effect behavior, and Future-as-condition/body normal-value boundaries. |
+| I023-C | BLOCKED_BY_DEPENDENCIES | — | — | After B, suspension/replay and cooperative cancellation: condition/body `Future.value()` suspension resumes the same logical iteration without duplicate effects; no hidden loop checkpoint; cancellation/unwind/`ensure`/structured-child interactions match D044 and existing I022/I009 machinery. |
+| I023-D | BLOCKED_BY_DEPENDENCIES | — | — | After C, final cross-slice Protos conformance, architecture/native-boundary audit, status/guide dependency reconciliation, complete required publication validation, close I023 and transition B007 `READY -> CLOSED`; DOC001-E may then be re-audited for READY work. |
+
+Dependencies:
+- D044 / specification revision `0.1.381` — normative loop contract;
+- I007 Error infrastructure — CLOSED;
+- I009 Future / Task — CLOSED;
+- I022 dynamic handlers / unwind-safe cleanup — CLOSED.
+
+B007 remains READY until I023-D closes the implementation/conformance boundary.
+D044 itself does not publish runnable `while` behavior.
 
 ### I022 — Dynamic Error handlers and unwind-safe cleanup
 
@@ -716,7 +757,7 @@ documentation tooling.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| DOC001 | Protos Programming Documentation | IN_PROGRESS | `docs/project/DOC001_PROGRAMMING_DOCUMENTATION.md` | A/B/C/D CLOSED retrospectively from published documentation commits; E BLOCKED by B007; F-L READY independently; M toolchain-gated; N final closure. |
+| DOC001 | Protos Programming Documentation | IN_PROGRESS | `docs/project/DOC001_PROGRAMMING_DOCUMENTATION.md` | A/B/C/D CLOSED retrospectively; D044 resolves B007 semantics; E BLOCKED_BY_DEPENDENCIES on I023; F-L READY independently; M toolchain-gated; N final closure. |
 
 ### DOC001 — Protos Programming Documentation
 
@@ -728,7 +769,7 @@ Status: IN_PROGRESS
 | DOC001-B | CLOSED | `bd3cd38218cfccdca8de529f4d6c26fede7ad771` | Guide 01: bindings, execution contexts, lexical lookup, and receiver state. |
 | DOC001-C | CLOSED | `8ab9463b8466974fc5f23f0c7304faeacb3db641` | Guide 02: objects, delegation, composition, structural state, and reflection. |
 | DOC001-D | CLOSED | `01470dca9df787ed216b2c19faaead965fb18cc8` | Guide 03: Closures, methods, receivers, extraction, `this`, `context`, `super`, and non-local return. |
-| DOC001-E | BLOCKED | — | Control flow through ordinary protocols; blocked by B007 until the complete observable standard `while` protocol is normatively defined. |
+| DOC001-E | BLOCKED_BY_DEPENDENCIES | — | Control flow through ordinary protocols; D044 resolves B007 semantics, but I023 must publish runnable standard `while` behavior before the guide slice proceeds. |
 | DOC001-F | READY | — | Values, identity, equality, numeric/value families, and collections. Independent of DOC001-E. |
 | DOC001-G | READY | — | Modules, imports, module contexts, and resolution boundaries. Independent of DOC001-E. |
 | DOC001-H | READY | — | Errors, dynamic handlers, `ensure`, unwind behavior, and resource-lifetime mental models. Independent of DOC001-E. |
@@ -742,9 +783,9 @@ Status: IN_PROGRESS
 Owning record:
 `docs/project/DOC001_PROGRAMMING_DOCUMENTATION.md`.
 
-DOC001 is intentionally not blocked as a whole by B007. Only DOC001-E is
-normatively blocked; independent READY slices may proceed after their own fresh
-current-main audit.
+DOC001 is intentionally not blocked as a whole by I023. D044 has resolved
+B007's normative ambiguity; only DOC001-E is implementation-gated on I023, while
+independent READY slices may proceed after their own fresh current-main audit.
 
 ## Toolchain tools
 
@@ -979,7 +1020,7 @@ Identifier shape alone is insufficient: incidental IDs from design ideas, tests,
 | B004 | Public Group/GroupRef acquisition and discovery API | CLOSED | D039 defines and I011-21 implements the exact Core v0.1 `Actor.group(...) -> GroupRef` acquisition surface; portable service discovery remains outside Core v0.1. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
 | B005 | `super` without a physical methodHome | CLOSED | D040 defines missing-`methodHome` `InvalidSuper` semantics and I020-D implements them. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
 | B006 | Atomic package metadata replacement | CLOSED | D042 + closed I021 provide the general semantics/backend; package-tool Filesystem Slice 2B provisions confined staging-write/mutation authority and publishes metadata through standard File/Filesystem operations. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
-| B007 | Standard `while` protocol semantics | BLOCKED | The normative loop owner fixes a reevaluated Closure-condition shape but does not yet uniquely define the complete observable standard `while` protocol; implementation and the guide chapter must not guess the missing semantics. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
+| B007 | Standard `while` protocol semantics | READY | D044 / spec `0.1.381` defines the complete observable standard Closure `while` protocol; I023 implementation/conformance remains required before closure. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
 
 ### D family
 
@@ -1011,6 +1052,8 @@ Identifier shape alone is insufficient: incidental IDs from design ideas, tests,
 | D040 | Dynamic super-dispatch context | CLOSED | Defines no-`methodHome` super execution as fresh `InvalidSuper` after ordinary argument-vector evaluation while preserving valid super lookup and `SlotNotFound` behavior. | `spec/PROTOS_SPEC_CHANGELOG.md` |
 | D041 | Failure-atomic Filesystem namespace replacement/removal | CLOSED | Defines confined file-entry `Filesystem.replace`/`remove`, atomic visibility, commitment/cancellation/failure aftermath, stable open-File binding, and the explicit namespace-durability boundary. | `spec/PROTOS_SPEC_CHANGELOG.md` |
 | D042 | Race-safe Filesystem namespace-entry selection | CLOSED | Corrects D041's ordinary-file-only preclassification: final components are selected as namespace entries without following them; unsupported atomic entry-kind combinations fail `IOError`; removal is non-recursive while D041's atomicity/cancellation/durability rules remain. | `spec/PROTOS_SPEC_CHANGELOG.md` |
+| D043 | Standard Closure `ensure` protocol | CLOSED | Defines ordinary `Object.ensure` Closure ownership plus exact protected-extent cleanup, suspension, cancellation and later-transfer precedence semantics. | `spec/PROTOS_SPEC_CHANGELOG.md` |
+| D044 | Standard Closure `while` protocol | CLOSED | Defines ordinary `Object.while` Closure ownership, strict pre-test Boolean loop semantics, canonical `null` completion and exact control/suspension/cancellation/Future composition. | `spec/PROTOS_SPEC_CHANGELOG.md` |
 
 <!-- END AUTO-DISCOVERED WORK REGISTRY -->
 
