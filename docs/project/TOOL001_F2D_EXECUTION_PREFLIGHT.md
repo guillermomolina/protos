@@ -1,6 +1,6 @@
 # TOOL001-F2D — Workspace Execution Preflight and PackageExecutionPlan
 
-Status: **IN_PROGRESS through CLOSED F2D3B1A module-identity implementation**
+Status: **IN_PROGRESS through CLOSED F2D3B1B1 project-root/index implementation**
 Nature: non-normative Package Tool / host-integration design
 Design checkpoint: 2026-09-07
 
@@ -36,10 +36,13 @@ F2D2     pure workspace execution-state + plan construction       CLOSED
 F2D3     mechanical host handoff + workspace run parent           IN_PROGRESS
 F2D3A    immutable host DTO + defensive plan detach               CLOSED
 F2D3B    exact workspace package-backed module resolver           IN_PROGRESS
-F2D3B1   package identity + source mechanism                      IN_PROGRESS
-F2D3B1A  canonical workspace ModuleKey codec                      CLOSED
-F2D3B1B  package-root binding + exact source path                 READY
-F2D3B2   resolver routing                                         BLOCKED_BY_DEPENDENCIES
+F2D3B1    package identity + source mechanism                     IN_PROGRESS
+F2D3B1A   canonical workspace ModuleKey codec                     CLOSED
+F2D3B1B   physical source mechanism parent                        IN_PROGRESS
+F2D3B1B1  selected project-root anchor + detached package index   CLOSED
+F2D3B1B2  exact member-location directory binding                 READY
+F2D3B1B3  logical module -> exact regular .protos source          BLOCKED_BY_DEPENDENCIES
+F2D3B2    resolver routing                                        BLOCKED_BY_DEPENDENCIES
 F2D3B2A  self: routing                                            BLOCKED_BY_DEPENDENCIES
 F2D3B2B  dep: edge/export routing                                 BLOCKED_BY_DEPENDENCIES
 F2D3B2C  std: delegation + resolver closure                       BLOCKED_BY_DEPENDENCIES
@@ -580,3 +583,50 @@ The focal test is intentionally Java: canonical ModuleKey is normatively an
 internal host/runtime concept and need not be exposed as a Protos object. Protos
 source conformance resumes in the routing slices where `import(String)` behavior
 becomes observable.
+
+
+## F2D3B1B refinement and F2D3B1B1 closure
+
+The former `package-root binding + exact source path` slice is further
+decomposed before physical lookup work:
+
+```text
+F2D3B1B1  selected project-root anchor + detached package index  CLOSED
+F2D3B1B2  exact member-location directory binding                READY
+F2D3B1B3  logical module -> exact regular .protos source         dependency-gated
+```
+
+The separation is intentional:
+
+- selecting/anchoring the host project root and indexing inert plan records is a
+  representation step;
+- turning a workspace `location` String into a physical member directory is a
+  path/confinement step;
+- turning a portable logical module into a physical source file is a distinct
+  exact-case/source-type step.
+
+F2D3B1B1 is CLOSED.
+
+`ProtosWorkspacePackageProjectIndex.bind(projectRoot, detachedPlan)`:
+
+- normalizes the selected host project-root Path;
+- resolves that selected root once to a real directory;
+- keeps both selected and real root as host-only state;
+- indexes detached package nodes by exact opaque PackageId and exact plan
+  `location` String;
+- rejects empty/duplicate PackageIds, duplicate locations, empty package sets,
+  and disagreement between the plan root ref and the unique empty root
+  location;
+- provides exact lookup by PackageId/location for later resolver mechanics.
+
+B1B1 deliberately does **not** traverse a non-empty workspace member location.
+It therefore does not yet decide exact-case host lookup, symlink behavior, or
+member-directory confinement. Those belong to B1B2.
+
+B1B1 also does not inspect logical module names, append `.protos`, read source,
+construct ModuleKeys, implement `self:`/`dep:`/`std:` routing, or touch CLI
+dispatch.
+
+Its focal is Java intentionally: this is host Path/DTO indexing mechanics, not
+observable Protos `import(String)` behavior. Protos-owned conformance resumes
+when routing becomes observable in B2.
