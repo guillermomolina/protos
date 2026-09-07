@@ -400,7 +400,7 @@ work may proceed without waiting for an earlier-numbered roadmap item.
 | LIB001 | Collections library | CLOSED | `SAME_COMMIT` | LIB001-A/B/C/D/E closed; initial Set/IdentitySet and eager sequential Array algorithm surfaces are fully published with no new runtime collection family, generic hierarchy, or production Java boundary. |
 | LIB002 | Text / encoding conveniences | CLOSED | `SAME_COMMIT` | LIB002-A published the four audited ordinary portable-Encoding convenience modules with real-`std:` Protos conformance; initial LIB002 scope is closed with no Core, native-boundary, registry/default, or distributed-runtime semantic change. |
 | LIB003 | JSON | CLOSED | `SAME_COMMIT` | LIB003-A/B/C/D/E closed; the bounded initial strict JSON tree, exact-decimal parser/encoder, JSON-specific event streaming, explicit TextReader/TextWriter composition, final stress/Actor-transfer evidence, and architecture audit are fully published without a generic serialization or object-persistence boundary. |
-| LIB004 | Filesystem / process conveniences | READY | — | LIB004-0 closes the bounded design: `std:io/Files` whole-file bytes/text helpers and `std:io/ProcessStreams` fresh borrowing adapters; A and D are independently READY, later selected slices are dependency-gated; no Core/native-boundary expansion. |
+| LIB004 | Filesystem / process conveniences | IN_PROGRESS | — | LIB004-0 design CLOSED; LIB004-A implementation IN_PROGRESS through subdivided A1/A2/A3, with A1 published in ordinary `std:io/Files`; LIB004-D remains independently READY. |
 | LIB005 | Networking | OPEN | — | Roadmap item only; `spec/io/IO_CORE.md` currently leaves network authority acquisition, socket APIs, DNS/name resolution, and transport configuration outside its standardized scope. Re-audit and establish prerequisites before implementation. |
 
 ### LIB001 — Collections
@@ -572,7 +572,7 @@ Dependencies:
 - LIB002 convenience helpers are not required by LIB003-A/B/C core work.
 ### LIB004 — Filesystem / process conveniences
 
-Status: READY
+Status: IN_PROGRESS
 
 Description: Higher-level filesystem and Process conveniences layered over the
 standard capability-based File/Filesystem and Process I/O surfaces.
@@ -601,7 +601,10 @@ Planned slices:
 | Slice | Status | Version | Closure evidence | Scope / unblock condition |
 |---|---|---|---|---|
 | LIB004-0 | CLOSED | — | `SAME_COMMIT` | Documentation/governance design closure, current-main dependency reconciliation, exact bounded modules/contracts, exclusions and slice assignment; no implementation-version or specification-revision change. |
-| LIB004-A | READY | — | — | `std:io/Files.readAllBytes`; private strong owned-open custody; fresh whole-result Bytes; bounded outstanding read state; Protos-level normal/failure/cancellation/close conformance. |
+| LIB004-A | IN_PROGRESS | — | — | Subdivided after implementation audit into A1/A2/A3 so the resource-custody races can be validated independently without publishing temporary semantics. |
+| LIB004-A1 | CLOSED | `0.2.203-SNAPSHOT` | `SAME_COMMIT` | Publish `std:io/Files.readAllBytes` in ordinary Protos with a retained-open-Future/`ensure` custody path, finite 16×65536 read windows, fresh open whole-result Bytes, explicit Filesystem/Path authority, and source-level empty/multi-window/open-failure conformance. No production Java/native operation added. |
+| LIB004-A2 | READY | — | — | Adversarial conformance for cancellation after File acquisition, accepted/pending reads, cleanup suspension, read failure and close failure/precedence without changing the A1 public surface. |
+| LIB004-A3 | BLOCKED_BY_DEPENDENCIES | — | — | After A2, adversarial cancellation during pending open and late successful acquisition, final owned-open custody audit, native boundary/status reconciliation, and closure of parent LIB004-A. |
 | LIB004-B | BLOCKED_BY_DEPENDENCIES | — | — | After A, `writeAllBytes`; invocation-time private Bytes snapshot; fixed writable create-or-truncate positioned policy; bounded sequential writes; committed-prefix/failure/cancellation aftermath. |
 | LIB004-C | BLOCKED_BY_DEPENDENCIES | — | — | After A/B, explicit-Encoding `readAllText`/`writeAllText`; one-shot codec composition; no default Encoding; complete text/cleanup conformance. |
 | LIB004-D | READY | — | — | Independently publish `std:io/ProcessStreams` as exact fresh borrowing `TextReader`/`TextWriter` composition over explicit Process streams and Process-provided Encoding. |

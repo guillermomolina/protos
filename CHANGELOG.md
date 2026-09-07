@@ -1,3 +1,8 @@
+## 0.2.203-SNAPSHOT
+
+- Start the subdivided `LIB004-A — Files.readAllBytes` implementation with `LIB004-A1`. Publish exact-case `std:io/Files` as ordinary Protos Standard Library source with only `readAllBytes(filesystem, path)` in this slice: explicit authority, one retained open Future, `ensure`-owned File custody/close, finite 16×65536 read windows, one fresh open whole-result Bytes, and no filesystem snapshot/reopen/probe semantics.
+- Keep Core and the native boundary unchanged. Bytes allocation uses the existing source-level `Encoding.UTF8.encode("")` empty-Bytes path because Bytes is deliberately not a required public prelude binding; the operation remains binary and exposes no Encoding parameter/default. Add Protos-owned empty/freshness, multi-window ordering and open-failure conformance with Java restricted to standard-module/Filesystem fixture provisioning. A2/A3 retain the adversarial cancellation/late-open/close-precedence evidence before parent LIB004-A can close.
+
 ## 0.2.202-SNAPSHOT
 
 - Close `TOOL001-D2C — explicit bounded intervals`. Extend ordinary bundled-Protos `self:DependencyConstraint` with exactly two whitespace-joined primitive comparisons over full ReleaseVersion values, requiring one lower (`>`/`>=`) and one upper (`<`/`<=`) bound. Conjunction order is irrelevant; stable candidates are evaluated by D1 precedence with exact inclusive/exclusive endpoints.
