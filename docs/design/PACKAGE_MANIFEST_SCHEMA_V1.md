@@ -752,3 +752,31 @@ Slice 3B may implement this schema when all of these remain true on current
 - no unresolved Standard Library dependency is required for bootstrap.
 
 If those conditions hold, no `LIBxxx` dependency blocks Slice 3B.
+
+## TOOL001-F2B2 workspace/path semantic checkpoint
+
+The structural schema above deliberately leaves Strings uninterpreted until
+their semantic owner runs. `TOOL001-F2B2` now closes the initial workspace/path
+interpretation used by the resolution-input model:
+
+- only the active resolution-root manifest expands `workspace.members`;
+- member declarations are canonical `/`-separated root-relative normal-component
+  paths with no empty, `.` or `..` component;
+- each member names exactly one package manifest at
+  `<root>/<member>/protos.toml`;
+- root/member PackageIds are unique;
+- member manifests do not recursively expand their own `[workspace]` while
+  consumed under an enclosing root;
+- a path dependency resolves relative to its declaring participating package,
+  may use `.`/`..` navigation, may not escape the root, and must finish at the
+  root package or an explicitly declared member;
+- path dependency semantic identity is its declared source kind plus resolved
+  canonical target location/PackageId, not the original relative spelling.
+
+These are package-tool resolution-root rules. They do not alter the schema-v1
+TOML shapes or Core `Path` semantics.
+
+F2B2 also gives `compatibility.language` its initial semantic value contract:
+an opaque exact `LanguageCompatibilityId`. The current language generation is
+`"0.1"`; absence means no declared restriction and presence requires exact
+equality with the active resolution-context identifier.

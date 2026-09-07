@@ -1254,3 +1254,28 @@ In particular:
 
 `TOOL001-F2B2` is the next prerequisite for root/workspace semantic assembly.
 Hashing and stale comparison remain dependency-gated after that work.
+
+## TOOL001-F2B2 implementation checkpoint — complete semantic root input
+
+F2B2 closes the previously unresolved workspace/path/compatibility semantic
+owners required by `protos-resolution-input-v1`.
+
+The resolution-input producer can now be defined over:
+
+- the active language-compatibility context;
+- one root manifest projection;
+- the root's explicit canonical workspace-member path -> PackageId mappings;
+- one member manifest projection per mapping;
+- normalized dependency projections, including path dependencies resolved to an
+  already-declared root/member location and PackageId.
+
+Only the root manifest's workspace table expands the current resolution root.
+Nested member workspace declarations are not recursively followed.
+
+No raw TOML bytes, absolute filesystem paths, host path normalization, member
+lockfiles or undeclared path targets enter this model.
+
+The semantic model is now closed, but executable digest computation remains
+blocked on an explicitly owned hashing capability. F2B3 must define canonical
+projection bytes and stale comparison without introducing a Package-Tool-only
+host/JVM crypto shortcut.

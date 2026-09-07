@@ -818,3 +818,24 @@ constraint and resolver model**:
 
 That audit can build on stable package/release/content identities without needing
 to reopen names, mirrors, caches, or archive formats.
+
+## TOOL001-F2B2 local-source relation checkpoint
+
+The existing workspace/path identity rule remains unchanged: mutable local
+packages retain stable lineage through PackageId rather than source-tree content
+hashes.
+
+F2B2 makes the relation to physical location explicit for resolution-root input:
+
+- each active workspace PackageId is bound to one canonical root-relative member
+  location (the root package uses the empty location);
+- a path dependency resolves to one of those already-declared local package
+  locations and therefore to its PackageId;
+- changing source file contents does not by itself change this relation;
+- moving/rebinding a member location is an explicit resolution-input change even
+  when the PackageId remains stable;
+- host absolute paths, inode/file keys, symlink targets, current working
+  directory and cache locations are never PackageId or lock identity.
+
+Compilation caches may continue to hash source trees separately. That cache
+identity is not the resolution-input workspace relation.

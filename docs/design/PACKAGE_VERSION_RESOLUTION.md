@@ -919,3 +919,234 @@ fallbacks.
 Only after that boundary closes may a later F2B slice choose/consume the hashing
 capability, emit the `protos-resolution-input-v1 <algorithm>:<digest>` value and
 compare it with `protos.lock`.
+
+## TOOL001-F2B2 — resolution-root/workspace semantic assembly
+
+`TOOL001-F2B2` closes the semantic assembly boundary that F2B1 deliberately left
+open. It defines how one root manifest and its explicit local member packages
+become one deterministic resolution root before any digest is computed.
+
+This is package-tool policy. It reuses the normative `Path` value model but does
+not redefine Core filesystem or Path semantics.
+
+### One active workspace owner per resolution root
+
+The manifest at the resolution root is the only manifest whose
+`workspace.members` table expands that resolution root.
+
+A workspace member's own `[workspace]`, when present, is **not recursively
+expanded** while that package is participating as a member of an enclosing root.
+That declaration remains meaningful if the member package is later used as an
+independent resolution root.
+
+This role-sensitive rule is required by lock-format 1: `workspace-member` records
+map root-declared member strings directly to workspace PackageIds and carry no
+second declaring-workspace reference. Nested workspace expansion would therefore
+create graph state that the frozen v1 lock grammar cannot identify.
+
+Accordingly:
+
+- root projection includes the root manifest's active workspace relation;
+- member projections do not include their own inactive nested workspace relation;
+- no parent-directory walk, sibling scan, glob, manifest search path, or
+  dependency lockfile contributes members.
+
+### Canonical workspace-member path
+
+Each root `workspace.members` String is interpreted as one portable,
+root-relative package path.
+
+The v1 manifest spelling uses literal `/` as the component separator. It is valid
+only when:
+
+- the complete String is non-empty;
+- it is not rooted and does not begin with `/`;
+- splitting on `/` produces no empty component;
+- no component is `.` or `..`.
+
+Each resulting normal component is the exact decoded String value and maps to
+one normative `Path.child(component)` step from `Path.relative()`.
+
+There is no case folding, Unicode normalization, host separator rewriting,
+drive/UNC interpretation, `realpath`, environment expansion, home expansion, or
+filesystem search. Backslash, colon and other characters inside a component have
+only the ordinary component-String meaning supplied by `Path`; a host that
+cannot represent/access such a path fails at the filesystem boundary rather
+than changing package identity.
+
+Because member declarations admit only normal components, the source String is
+already the canonical semantic member-path spelling. Leading/trailing slash,
+double slash, `.` and `..` variants are rejected rather than normalized to an
+alternate spelling.
+
+The physical member manifest is exactly:
+
+```text
+<resolution-root>/<member-path>/protos.toml
+```
+
+under the resolution-root Filesystem authority.
+
+### Root/member validation
+
+Resolution-root assembly parses the root manifest first and then exactly the
+explicit member manifests.
+
+It must reject:
+
+- a member relation that denotes the root package;
+- duplicate canonical member paths;
+- duplicate PackageIds across root and members;
+- a member path that cannot be read as one package root with a valid
+  schema-v1 `protos.toml`;
+- a member read that escapes the resolution-root Filesystem confinement.
+
+The member's `package.id` is the workspace-node identity recorded by
+`workspace-member`. Its package version remains mutable manifest input and is
+included by F2B1, but the F1B workspace node reference remains PackageId-only.
+
+Member `protos.lock` files are never consulted while assembling the enclosing
+root. One resolution root has one authoritative lock graph.
+
+### Path-dependency resolution
+
+A schema-v1 path dependency is a local relation from its declaring participating
+package to another package in the **same assembled resolution root**. It is not
+permission to search arbitrary directories.
+
+Its String uses `/` separators and is interpreted relative to the declaring
+package directory. For this relation only, `.` and `..` components are accepted
+as navigation syntax:
+
+- `.` contributes no movement;
+- `..` removes one already-established root-relative normal component;
+- a `..` that would move above the resolution root is invalid;
+- every other non-empty component contributes one exact normal component.
+
+Leading `/` and empty components remain invalid.
+
+After lexical resolution against the declaring package's canonical root-relative
+location, the resulting normal-component path must equal exactly one of:
+
+- the empty root location; or
+- one explicit root workspace-member location.
+
+No undeclared directory becomes a package merely because a path dependency
+points at it.
+
+The target manifest's PackageId is therefore already known from root assembly.
+The semantic dependency projection records:
+
+```text
+source-kind = path
+target-location = <canonical root-relative package location>
+target-PackageId = <workspace PackageId>
+```
+
+and does not retain the original `.`/`..` spelling as resolution identity.
+Equivalent path expressions resolving to the same declared target are equivalent
+resolution input.
+
+### Filesystem aliases do not redefine semantic identity
+
+The canonical relation is the root-relative `Path` structure plus PackageId, not
+a host absolute path, current working directory, inode number, drive spelling or
+`realpath` result.
+
+Filesystem confinement remains mandatory. A symlink or other host alias cannot
+authorize escape outside the resolution root. If the backend cannot preserve the
+required confinement while selecting a member/path target, assembly fails rather
+than substituting host-canonical absolute path bytes into the semantic input.
+
+Two declared locations that ultimately expose the same package lineage still
+collide through the required unique PackageId rule; they are not silently
+deduplicated by host file identity.
+
+### Language compatibility value
+
+F2B2 closes the initial semantic owner of schema-v1
+`compatibility.language` without inventing SemVer/range behavior.
+
+The value is an opaque exact **LanguageCompatibilityId**:
+
+- its canonical value is the already-decoded non-empty String;
+- no trimming, case folding, numeric parsing, SemVer expansion or range syntax
+  applies;
+- absent compatibility means the package declares no language-compatibility
+  restriction;
+- present compatibility requires exact equality with the resolution context's
+  active LanguageCompatibilityId.
+
+For the current Protos language generation the active compatibility identifier is:
+
+```text
+0.1
+```
+
+matching the normative language-version generation, not the Maven
+implementation version, specification revision, Git commit or runtime vendor.
+
+A future language-compatibility policy that needs ranges or multiple compatible
+generations must define a new semantic contract explicitly rather than
+reinterpreting existing schema-v1 Strings.
+
+The active resolution-context LanguageCompatibilityId is itself part of the
+semantic resolution input because changing it may change candidate eligibility.
+
+### Deterministic assembled model
+
+Conceptually, the complete semantic input before byte serialization is:
+
+```text
+ResolutionRootV1 {
+    languageCompatibility: LanguageCompatibilityId
+
+    root: ManifestProjection {
+        role: root
+        location: empty relative Path
+        ...
+        workspace: [
+            { location: canonical member path, packageId: PackageId },
+            ...
+        ]
+    }
+
+    members: [
+        {
+            location: canonical member path
+            packageId: PackageId
+            manifest: ManifestProjection(role = member)
+        },
+        ...
+    ]
+}
+```
+
+Member entries are ordered by canonical member-path qstring UTF-8 bytes, with
+PackageId qstring bytes as a defensive tie-break. Duplicate paths/PackageIds are
+invalid before ordering.
+
+Dependency aliases inside each manifest remain ordered under F2B1. Path
+dependencies are projected only after the complete root/member mapping exists.
+
+No filesystem traversal order, Map insertion order, manifest source order,
+host path spelling or resolver traversal order contributes to this model.
+
+### F2B1 role refinement
+
+F2B1's inclusion matrix is role-sensitive for `workspace.members`: the field is
+resolution input when the manifest is the active root, because it defines the
+member set. The same field on a manifest consumed as an enclosing-root member is
+inactive and excluded from that enclosing root's semantic projection.
+
+This is a refinement of the F2B1 ownership rule, not nested-workspace support.
+
+### F2B3 boundary
+
+F2B2 makes the complete semantic resolution-root model well-defined without raw
+source fallback. It does not select a cryptographic implementation.
+
+`TOOL001-F2B3` may now define the canonical byte stream over this model and stale
+comparison, but executable hashing remains dependency-gated until the repository
+has an explicit suitable hashing capability/owner. Package Tool code must not
+silently acquire host/JVM hashing authority merely to finish F2.
