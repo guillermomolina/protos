@@ -276,7 +276,10 @@ does not depend on one large all-or-nothing launcher:
   - `DIST001-B4B` — intact optimizer classpath + exact runtime probe — CLOSED
     using exact GraalVM Community JDK 22.0.0 with the bundle's Truffle 24.0.0
     runtime and exact `HotSpotTruffleRuntime` class evidence;
-- `DIST001-B5` — cross-slice closure and DIST001-D readiness — READY.
+- `DIST001-B5` — cross-slice closure and DIST001-D readiness — CLOSED after
+  the exact same clean-source ZIP passes B2 identity/checksums, B3 CWD/Package
+  Tool, B4A bundled Test Tool, and B4B exact optimizing-runtime evidence in one
+  composed validation run; parent DIST001-B is CLOSED and DIST001-D is READY.
 
 A does not claim that the archive has passed outside-checkout execution merely
 because construction and structural validation pass. Parent B closes only after

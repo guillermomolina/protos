@@ -183,6 +183,27 @@ archive and its official SHA-256 are fetched from the GraalVM Community JDK
 `22.0.0` release; the JDK is an external validation dependency and is not added
 to the Protos distribution.
 
+
+## Complete extracted-distribution gate
+
+`DIST001-B5` composes the previously independent evidence against one exact ZIP:
+
+```sh
+python3 dist/build_portable.py
+PROTOS_DIST001_B4B_JAVA_HOME=/path/to/graalvm-community-jdk-22.0.0 \
+    sh dist/validate_portable.sh --require-clean-source
+```
+
+The gate verifies B2 archive/source/checksum identity, B3 outside-checkout
+caller-CWD and Package Tool behavior, B4A bundled Test Tool execution, and B4B
+exact supported optimizing-runtime selection. Every sub-gate receives the same
+archive path. The outer ZIP SHA-256 is checked before and after the full run so
+disposable fallback isolation cannot mutate the validated artifact.
+
+This is the reusable complete distribution-conformance entry point for
+development artifacts. `DIST001-D` may call this gate from CI, but a green run
+does not create a tag or GitHub Release.
+
 ## DIST001 boundary
 
 DIST001-A proves that the distribution can be constructed and that its archive

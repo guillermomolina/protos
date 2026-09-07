@@ -1031,24 +1031,24 @@ repository when formally introduced rather than relying on chat/prompt history.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| DIST001 | End-user distribution and release engineering | IN_PROGRESS | DIST001-A + DIST001-C published | B/D/E remain; public release publication is deliberately separate from ordinary implementation publication. |
+| DIST001 | End-user distribution and release engineering | IN_PROGRESS | DIST001-A/B/C published | DIST001-D is READY; DIST001-E remains dependent on D plus an explicit release decision. |
 | DIST001-A | Relocatable portable distribution layout and runtime contract | CLOSED | `SAME_COMMIT` | Constructible POSIX/JVM ZIP; shared checkout/distribution launcher preserves caller CWD through `PROTOS_HOME`; exact source/runtime metadata and checksums; initial supported optimizing stack is GraalVM Community JDK 22 + external `truffle-runtime:24.0.0`; no tag/release. |
-| DIST001-B | Extracted-distribution smoke/conformance | IN_PROGRESS | DIST001-B1/B2/B3 + DIST001-B4A/B4B published | B1-B4 are closed; B5 is READY for bounded cross-slice closure and DIST001-D readiness. |
+| DIST001-B | Extracted-distribution smoke/conformance | CLOSED | DIST001-B1/B2/B3/B4A/B4B/B5 published | One exact clean-source ZIP passes archive/checksum identity, outside-checkout caller-CWD + Package Tool, bundled Test Tool, and exact GraalVM Community JDK22/Truffle24 `HotSpotTruffleRuntime` evidence through the composed B5 gate. |
 | DIST001-B1 | Validation hygiene and bounded smoke decomposition | CLOSED | `SAME_COMMIT` | Ignore Python bytecode/cache outputs and persist the bounded B1..B5 validation plan; no executable distribution behavior changes. |
 | DIST001-B2 | Clean-source archive identity | CLOSED | `SAME_COMMIT` | Rebuild the A archive from the exact clean committed candidate; direct ZIP verification proves CRC/single-root safety, exact `SOURCE.txt` HEAD identity with `source_dirty=false`, and complete SHA-256 coverage/value integrity for every distributed file except `SHA256SUMS` itself. |
 | DIST001-B3 | Outside-checkout CWD and Package Tool smoke | CLOSED | `SAME_COMMIT` | Extract the B2-validated ZIP outside the checkout into a dedicated toolchain tree and use a distinct caller project CWD for a relative Protos source plus public `protos package manifest`. A host outside the selected JDK22 contract disables optimizer JARs only in the disposable extraction and uses the explicit fallback/override path; B4 retains exact optimizing-runtime ownership. |
 | DIST001-B4 | Bundled Test Tool and optimizing-runtime probe | CLOSED | DIST001-B4A + DIST001-B4B published | B4A proves extracted Test Tool portability; B4B preserves optimizer JARs intact and proves exact GraalVM Community JDK 22.0.0 + Truffle 24.0.0 resolves `com.oracle.truffle.runtime.hotspot.HotSpotTruffleRuntime`. |
 | DIST001-B4A | Extracted bundled Test Tool smoke | CLOSED | `SAME_COMMIT` | Extract the validated distribution outside the checkout and run public `protos test`; on a non-selected validation JDK isolate optimizer JARs only in the disposable copy and require fallback/override diagnostics. |
 | DIST001-B4B | Exact optimizing-runtime probe | CLOSED | `SAME_COMMIT` | Exact GraalVM Community JDK 22.0.0 passes the extracted launcher supported-runtime gate with no override; the intact distribution Truffle 24.0.0 classpath resolves exact `com.oracle.truffle.runtime.hotspot.HotSpotTruffleRuntime`. |
-| DIST001-B5 | Cross-slice distribution closure | READY | — | B1-B4 are closed; rerun bounded archive/CWD/Package Tool/Test Tool/runtime evidence, close parent B, and make DIST001-D READY. |
+| DIST001-B5 | Cross-slice distribution closure | CLOSED | `SAME_COMMIT` | `dist/validate_portable.sh` composes B2/B3/B4A/B4B against one exact archive and proves the archive SHA-256 is unchanged across validation; parent B closes and D becomes READY. |
 | DIST001-C | Release selection and publication policy | CLOSED | `SAME_COMMIT` | Non-normative policy in `docs/project/DIST001_RELEASE_POLICY.md`; implementation snapshots are not releases; selected public releases may skip internal versions. |
-| DIST001-D | CI snapshot artifact | BLOCKED_BY_DEPENDENCIES | — | Depends on A/B; downloadable CI development artifacts remain explicitly distinct from GitHub Releases. |
+| DIST001-D | CI snapshot artifact | READY | — | A/B/C are closed; add CI construction + complete `dist/validate_portable.sh` conformance and upload a transient development artifact without creating a Git tag or GitHub Release. |
 | DIST001-E | First selected GitHub pre-release | BLOCKED_BY_DEPENDENCIES | — | Depends on A-D plus an explicit release decision for an exact validated candidate revision. |
 
-DIST001-A and C are closed. DIST001-B is IN_PROGRESS through the bounded
-B1..B5 decomposition above. DIST001-B1/B2/B3/B4A/B4B are closed, parent B4 is
-closed, and DIST001-B5 is the next READY slice. Parent B does not close until B5
-publishes the cross-slice evidence.
+DIST001-A/B/C are closed. The B1..B5 decomposition is complete and the
+composed B5 gate is the reusable extracted-distribution conformance entry point.
+DIST001-D is the next READY slice; DIST001-E remains dependency-gated and still
+requires an explicit release decision after D.
 
 ## P-label classification
 
