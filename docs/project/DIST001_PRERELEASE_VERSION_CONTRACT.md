@@ -438,3 +438,26 @@ E4B3B2 persists the exact candidate identity but does not independently close th
 release-only lineage proof: E4B4 is READY and owns that separate verification.
 No Git tag, GitHub Release, release asset, or release-publication authorization is
 created by this checkpoint.
+
+## E4B4 independent lineage closure checkpoint
+
+Independent verification closes E4B for:
+
+```text
+release_baseline_revision=3c23eaaccecbdcc7c2bcd86bc30c445403cfb047
+candidate_source_revision=957b1e16793a682de1d6406e37b5734c44d32d19
+release_baseline_version=0.2.236-SNAPSHOT
+release_version=0.2.236
+release_tag=v0.2.236
+release_publication_authorized=false
+```
+
+The candidate has exactly one parent, the selected baseline, and the complete
+baseline-to-candidate tree delta is exactly one modified `pom.xml`. Candidate
+POM bytes equal baseline POM bytes except for the one root Protos project-version
+transition `0.2.236-SNAPSHOT -> 0.2.236`. The candidate remains clean, detached and
+reachable through exactly one registered local worktree with no branch/tag or
+remote-tracking ref naming it. The future public tag remains absent.
+
+This closes candidate materialization, not release publication. E4C is the next
+parent and remains entirely preparatory.

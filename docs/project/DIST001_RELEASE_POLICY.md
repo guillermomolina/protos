@@ -297,7 +297,7 @@ publication:
     future tag `v0.2.236`, current specification revision `0.1.382`, and the
     candidate-time I023/B007 closure checkpoint. Release publication remains
     explicitly unauthorized and no candidate commit is materialized.
-  - `DIST001-E4B` — detached candidate materialization — IN_PROGRESS:
+  - `DIST001-E4B` — detached candidate materialization — CLOSED:
     - `DIST001-E4B1` — selected-baseline detached-worktree guard — CLOSED.
       Publish/test the fail-closed `git worktree add --detach` primitive bound to
       the exact E4A selection. Destination must be new and outside the main
@@ -326,13 +326,19 @@ publication:
           version `0.2.236`. The exact SHA is persisted in the E4 selection
           record. Candidate reachability remains local through its registered
           detached worktree; no branch/tag/remote release publication exists.
-    - `DIST001-E4B4` — release-only lineage verification — READY.
-      Independently prove selected baseline `3c23eaaccecbdcc7c2bcd86bc30c445403cfb047` -> candidate
-      `957b1e16793a682de1d6406e37b5734c44d32d19` changes only the exact `0.2.236-SNAPSHOT` -> `0.2.236` root project
-      transition, re-check detached/local-only reachability and publication
-      guards, and then close E4B.
-  - `DIST001-E4C` — candidate archive/envelope/audit preparation —
-    `BLOCKED_BY_DEPENDENCIES` on E4B.
+    - `DIST001-E4B4` — release-only lineage verification — CLOSED.
+      Independent Git-object verification proves selected baseline `3c23eaaccecbdcc7c2bcd86bc30c445403cfb047`
+      -> candidate `957b1e16793a682de1d6406e37b5734c44d32d19` is a single-parent release-only commit changing
+      only the exact root project `0.2.236-SNAPSHOT` -> `0.2.236` transition. The candidate
+      remains clean/detached with exactly one registered local worktree and no
+      branch/tag/remote-tracking ref; future tag `v0.2.236` remains available and
+      publication remains unauthorized.
+  - `DIST001-E4C` — candidate archive/envelope/audit preparation — IN_PROGRESS:
+    - `DIST001-E4C1` — public-prerelease portable ZIP build — READY.
+    - `DIST001-E4C2` — archive identity + SOURCE/RUNTIME verification — `BLOCKED_BY_DEPENDENCIES` on E4C1.
+    - `DIST001-E4C3` — release-note claims selection — `BLOCKED_BY_DEPENDENCIES` on E4C2.
+    - `DIST001-E4C4` — deterministic release-envelope generation — `BLOCKED_BY_DEPENDENCIES` on E4C3.
+    - `DIST001-E4C5` — candidate-audit materialization — `BLOCKED_BY_DEPENDENCIES` on E4C4.
   - `DIST001-E4D` — immutable full candidate validation and E4 closure —
     `BLOCKED_BY_DEPENDENCIES` on E4C. Freeze the exact validated candidate SHA
     and assets for E5 while keeping release publication separately unauthorized.

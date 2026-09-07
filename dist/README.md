@@ -598,6 +598,29 @@ GitHub Release or release asset. E4B3B1 publishes/tests this composition only;
 E4B3B2 owns its first use against the real frozen `0.2.236` selection and the
 subsequent persistence of that exact candidate SHA.
 
+
+## Independent persisted-candidate lineage verification
+
+`DIST001-E4B4` independently verifies the persisted candidate identity after
+E4B3B2. It does not call the B1/B2/B3A/B3B1 materialization helpers.
+
+```sh
+python3 dist/verify_release_candidate_lineage.py     --selection docs/project/DIST001_E4_SELECTION.txt
+```
+
+For the frozen candidate `957b1e16793a682de1d6406e37b5734c44d32d19`, the verifier reconstructs the proof from
+Git objects and the persisted selection: one parent exactly `3c23eaaccecbdcc7c2bcd86bc30c445403cfb047`, only
+`pom.xml` modified, and byte-exact root project-version transition
+`0.2.236-SNAPSHOT -> 0.2.236`. It discovers exactly one registered worktree at the
+candidate SHA, requires clean detached state, rejects any local branch/tag or
+remote-tracking ref to the candidate, requires future tag `v0.2.236` to remain
+absent locally and on origin, and requires release-publication authorization and
+publication-state flags to remain false.
+
+E4B4 closes detached candidate materialization only. E4C owns archive, release
+notes, envelope and audit preparation. No tag, GitHub Release or release asset is
+created here.
+
 ## DIST001 boundary
 
 DIST001-A proves that the distribution can be constructed and that its archive
