@@ -348,3 +348,92 @@ so documentation stopped rather than inventing semantics. D044 / specification
 revision `0.1.381` closes that normative gap and transitions B007
 `BLOCKED -> READY`; final `READY -> CLOSED` requires I023 implementation,
 validation, and publication.
+
+## B008 — Structured ownership when a task-backed Future escapes an activation
+
+Status: BLOCKED
+
+Implementation area:
+I023-B2D2 structured-ownership/cross-B2 closure and any runtime change that
+would make an ordinary synchronous Closure activation wait for, transfer,
+re-parent, or otherwise alter ownership of a task-backed Future merely because
+that Future was produced inside the activation or returned as its exact normal
+result.
+
+Normative dependency:
+The current normative sources do not uniquely determine the lifetime boundary
+for this case. `spec/concurrency/FUTURES_AND_TASKS.md` states both that an
+ordinary function may return a Future and that asynchronous child work is owned
+by its creating execution context by default, while §24 says an owner reaching
+otherwise normal completion waits for every non-detached child. The same section
+defines `detach()` as removing a task from the structured lifetime of its
+creating activation. Separately, `spec/concurrency/PARALLEL_EXECUTION.md`
+requires P to create and return a normal Future owned under the ordinary
+structured-concurrency rules of the creating activation, with successful return
+itself being a normative cutover point.
+
+D044 composes those existing rules without adding a loop-specific answer:
+`spec/semantics/EXECUTION_AND_CONTROL.md` requires a normal Future returned by a
+`while` body to be ignored exactly like any other body result, with no implicit
+await/adoption/flatten/cancellation, while work created during the callback
+continues to use the ordinary structured-ownership rules.
+
+The specification does not currently say, for a task-backed Future produced by
+`future()`, `then()`, P, or equivalent ordinary work and returned from the same
+synchronous activation, whether normal return:
+
+- waits for that Future to become terminal before the invocation can return;
+- transfers/re-parents the ownership edge to a caller or enclosing structured
+  execution context;
+- permits the activation to finish while retaining an ownership edge whose
+  lifetime is defined elsewhere; or
+- follows another explicit general rule.
+
+Those choices are observably different and cannot be selected as implementation
+machinery.
+
+Specification authority:
+- `spec/concurrency/FUTURES_AND_TASKS.md` §§27, 30 and 24;
+- `spec/concurrency/PARALLEL_EXECUTION.md` for P result-Future creation/return
+  and ordinary structured ownership;
+- `spec/semantics/EXECUTION_AND_CONTROL.md` standard Closure `while` operation;
+- `spec/semantics/CALLABLES.md` for ordinary synchronous Closure activation and
+  normal result semantics.
+
+Unblock condition:
+The current normative specification must explicitly and uniquely define the
+structured-lifetime rule for a task-backed Future that escapes as the exact
+normal result of the activation that created it, including at least:
+
+1. the precise owner/lifetime boundary before and after the activation returns;
+2. whether ownership is waited, transferred/re-parented, retained, or removed;
+3. how the rule composes with `Future.then`, P, `Future.detach()`, adoption and
+   ordinary functions that intentionally expose pending Future-shaped APIs;
+4. whether task-backed work created but not returned follows a different rule;
+5. the ordering consequence for D044 `while`: ignoring a body Future result must
+   not secretly introduce a loop-specific await, adoption, cancellation, or
+   scheduler boundary.
+
+Two independent implementations must be able to implement the same observable
+ordering and lifetime without inferring programmer intent from escape analysis,
+API naming, library conventions, or current runtime behavior.
+
+Current consequence:
+I023-B2D2 is BLOCKED. B2D1 remains valid evidence for D044's result boundary:
+`while` itself neither awaits/adopts/flattens/cancels a body Future result. The
+remaining structured-ownership closure cannot be claimed until B008 is resolved.
+No activation-scoped ownership experiment produced while investigating B2D2 was
+published to `main`.
+
+Diagnostic evidence that exposed the ambiguity is intentionally non-normative:
+an activation-drain experiment made the existing Future-shaped
+`JSON.readEvents(...).read()` overlap conformance stop observing an outstanding
+operation, because the first call could not return while its newly-created
+continuation remained pending. That result demonstrates observability of the
+choice; it does not choose the language rule.
+
+Independent work:
+Unrelated implementation work may continue. I023-C and I023-D remain dependency
+blocked through I023-B/B2/B2D. B007 remains READY because D044 itself is already
+normatively resolved; B008 is a separate structured-concurrency ambiguity
+exposed while completing D044 conformance.
