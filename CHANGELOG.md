@@ -1,3 +1,9 @@
+## 0.2.226-SNAPSHOT
+
+- Close `TOOL002-E2B — Package/TOML Protos-owned expectation execution` through E2B2. `Main.protos` now executes the retained Package/TOML TestPlan with the existing bundled `Runner.runSimple`, the separate E1B `packageTomlFilesystem`, and the E2A `packageExecution` facility. No Package-specific expectation branch or resolver is added to Runner.
+- Add one ordinary-Protos full-corpus integration fixture that loads the real retained Package/TOML manifest, executes every CaseSpec through the D-owned Boolean/generic-Error policy, and requires a non-empty plan, selected count equal to plan size, zero skipped cases, passed count equal to plan size, full result cardinality and `runAllPassed`. Java only provisions the existing Package Prelude and confined corpus Filesystem, then asserts canonical true.
+- Keep the legacy Java `ProtosPackageToolTomlSyntaxConformanceTest` unchanged in this slice so ownership retirement remains attributable to TOOL002-E3. E2B is CLOSED and E3 becomes READY; no normative language change or authority broadening is introduced.
+
 ## 0.2.225-SNAPSHOT
 
 - Close `DIST001-B4A — extracted bundled Test Tool smoke`. Add a bounded `dist/smoke_test_tool.sh` that extracts the B2-validated distribution outside the checkout and runs public `protos test` from a separate temporary project, requiring the Test Tool bootstrap/argument markers after successful bundled-plan execution. On a validation JDK outside the selected JDK22 contract, isolate optimizer JARs only in the disposable copy and exercise fallback Truffle, exactly as B3 does; this does not broaden runtime support. Subdivide B4 so `DIST001-B4B` remains READY for the intact optimizer classpath and exact `HotSpotTruffleRuntime` proof. No Git tag, GitHub Release, normative specification, implementation-version, or license-term change.

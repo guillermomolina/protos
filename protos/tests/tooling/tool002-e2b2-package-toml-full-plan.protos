@@ -16,17 +16,29 @@
 Manifest: import("self:Manifest")
 Runner: import("self:Runner")
 
-plan: Manifest.load(filesystem)
-packageTomlPlan: Manifest.loadPackageToml(packageTomlFilesystem)
-run: Runner.runSimple(plan, filesystem, execution)
-packageTomlRun: Runner.runSimple(
-    packageTomlPlan,
+plan: Manifest.loadPackageToml(packageTomlFilesystem)
+cases: Manifest.planCases(plan)
+run: Runner.runSimple(
+    plan,
     packageTomlFilesystem,
     packageExecution
 )
 
-writer: TextWriter(process.stdout(), process.stdoutEncoding())
-writer.writeLine("Protos test tool bootstrap")
-writer.writeLine(process.args().at(0))
+passed: cases.size() > 0
+passed.ifTrue(() => {
+    passed = Runner.runSelectedCount(run) == cases.size()
+})
+passed.ifTrue(() => {
+    passed = Runner.runSkippedCount(run) == 0
+})
+passed.ifTrue(() => {
+    passed = Runner.runPassedCount(run) == cases.size()
+})
+passed.ifTrue(() => {
+    passed = Runner.runAllPassed(run)
+})
+passed.ifTrue(() => {
+    passed = Runner.runCaseResults(run).size() == cases.size()
+})
 
-run
+passed
