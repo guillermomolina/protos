@@ -1012,16 +1012,16 @@ repository when formally introduced rather than relying on chat/prompt history.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| DIST001 | End-user distribution and release engineering | IN_PROGRESS | DIST001-C policy published | A/B/D/E remain; public release publication is deliberately separate from ordinary implementation publication. |
-| DIST001-A | Relocatable portable distribution layout and runtime contract | READY | — | Build the toolchain archive and relocatable launcher; declare the supported GraalVM/JDK contract; no public release. |
-| DIST001-B | Extracted-distribution smoke/conformance | BLOCKED_BY_DEPENDENCIES | — | Depends on DIST001-A; must execute outside the repository checkout and preserve the invoker CWD. |
+| DIST001 | End-user distribution and release engineering | IN_PROGRESS | DIST001-A + DIST001-C published | B/D/E remain; public release publication is deliberately separate from ordinary implementation publication. |
+| DIST001-A | Relocatable portable distribution layout and runtime contract | CLOSED | `SAME_COMMIT` | Constructible POSIX/JVM ZIP; shared checkout/distribution launcher preserves caller CWD through `PROTOS_HOME`; exact source/runtime metadata and checksums; initial supported optimizing stack is GraalVM Community JDK 22 + external `truffle-runtime:24.0.0`; no tag/release. |
+| DIST001-B | Extracted-distribution smoke/conformance | READY | — | After A, execute the extracted archive outside the repository checkout, prove CWD-sensitive file/package behavior, verify the expected optimizing runtime, and exercise required bundled facilities. |
 | DIST001-C | Release selection and publication policy | CLOSED | `SAME_COMMIT` | Non-normative policy in `docs/project/DIST001_RELEASE_POLICY.md`; implementation snapshots are not releases; selected public releases may skip internal versions. |
 | DIST001-D | CI snapshot artifact | BLOCKED_BY_DEPENDENCIES | — | Depends on A/B; downloadable CI development artifacts remain explicitly distinct from GitHub Releases. |
 | DIST001-E | First selected GitHub pre-release | BLOCKED_BY_DEPENDENCIES | — | Depends on A-D plus an explicit release decision for an exact validated candidate revision. |
 
-DIST001-C intentionally closes before the executable distribution slices so
-release automation cannot accidentally interpret every `-SNAPSHOT` implementation
-revision as a publication event. DIST001-A is the next ready slice.
+DIST001-A and C are closed. DIST001-B is the next READY slice and remains the
+required independent outside-checkout execution proof; archive construction alone
+does not satisfy B.
 
 ## P-label classification
 

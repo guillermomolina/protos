@@ -105,7 +105,13 @@ The retained evidence records:
 - 10/10 consecutive optimizing-Truffle polymorphic-dispatch stability PASS;
 - 238 successful optimization events and zero optimization failures.
 
-No timing results were published by PERF002-B. The external runtime remains a
-benchmark/validation dependency only and is not added to the Protos
-distributable. With the exact external evidence now reconciled into the
-canonical ledger, PERF002-B and PERF002 are CLOSED.
+No timing results were published by PERF002-B. At PERF002 closure the external
+runtime remained a benchmark/validation dependency and was not part of the
+Protos distributable.
+
+DIST001-A later reuses that exact validated
+`GraalVM Community JDK 22 + truffle-runtime:24.0.0` combination as the initial
+portable-distribution runtime contract. This does not retroactively change
+PERF002 closure and does not add the optimizing runtime to the normal Protos
+Maven build/test classpath; DIST001 resolves it only while assembling the
+development distribution. PERF002-B and PERF002 remain CLOSED.

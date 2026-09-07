@@ -139,6 +139,36 @@ execute Protos only through a non-optimizing/fallback Truffle path, the release
 documentation must not present it as equivalent to the optimizing runtime
 without evidence.
 
+## Initial DIST001-A runtime contract
+
+DIST001-A selects the first distribution runtime from retained optimizing
+evidence rather than from whichever JDK happens to build the repository.
+
+The initial portable POSIX/JVM development distribution uses:
+
+```text
+host JDK:             GraalVM Community Edition for JDK 22
+Truffle runtime:      org.graalvm.truffle:truffle-runtime:24.0.0
+expected runtime:     HotSpotTruffleRuntime
+project bytecode:     Java 21 target
+```
+
+`docs/project/PERF002_TRUFFLE_COMPILABILITY.md` records successful optimizing
+validation for that GraalVM/JDK + external Truffle-runtime combination.
+
+The external optimizing runtime is a **distribution dependency**, not a new
+normal Maven runtime dependency of the Protos repository. The ordinary project
+build/test classpath therefore remains unchanged by DIST001-A.
+
+The distribution launcher defaults to requiring Java feature 22 and GraalVM
+vendor metadata. `PROTOS_ALLOW_UNSUPPORTED_RUNTIME=1` exists only as an explicit
+developer experiment escape hatch; using it does not extend the supported
+runtime contract or provide optimization evidence.
+
+A future move to a newer GraalVM/JDK or Truffle runtime is expected and should
+be treated as a separately validated runtime-contract update. The repository
+development-container JDK does not silently redefine end-user runtime support.
+
 ## CI snapshot artifacts are not GitHub Releases
 
 Once DIST001-D exists, CI may build transient downloadable artifacts from green
@@ -220,9 +250,18 @@ The selected work decomposition is:
 | DIST001-D | Produce CI snapshot artifacts without treating every green implementation revision as a public release. |
 | DIST001-E | Cut the first selected GitHub pre-release from an explicitly approved, fully validated release candidate. |
 
-DIST001-C can close before the executable distribution slices because it
-constrains how those slices may publish artifacts. DIST001 as a whole remains
-open until the required distribution and first-release work is complete.
+DIST001-C closed before the executable distribution slices so release automation
+cannot accidentally interpret every implementation revision as a publication
+event.
+
+DIST001-A now owns the constructible relocatable POSIX/JVM development archive,
+initial optimizing-runtime contract, exact source/runtime metadata, checksums,
+and launcher layout. DIST001-B remains the independent extracted-execution gate:
+A does not claim that the archive has passed outside-checkout execution merely
+because construction and structural validation pass.
+
+DIST001 as a whole remains open until the required distribution and first-release
+work is complete.
 
 ## Non-goals
 
