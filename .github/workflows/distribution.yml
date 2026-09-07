@@ -1,0 +1,81 @@
+name: Distribution snapshot
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: distribution-snapshot-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  snapshot:
+    name: Build and validate portable distribution
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up selected GraalVM
+        uses: graalvm/setup-graalvm@v1
+        with:
+          distribution: graalvm-community
+          java-version: "22.0.0"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          cache: maven
+          check-for-updates: "false"
+
+      - name: Verify selected runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          properties="$(java -XshowSettings:properties -version 2>&1)"
+          feature="$(sed -n 's/^[[:space:]]*java\.specification\.version = //p' <<<"$properties" | head -n 1)"
+          version="$(sed -n 's/^[[:space:]]*java\.version = //p' <<<"$properties" | head -n 1)"
+          printf '%s\n' "$properties" | grep -Ei 'graalvm|java\.vendor|java\.vm\.name|java\.runtime\.name' | grep -Fqi GraalVM
+          test "$feature" = "22"
+          test "$version" = "22"
+          echo "CI_SELECTED_JDK_CHECK: PASS java.version=$version"
+
+      - name: Run full test suite
+        run: mvn --batch-mode --no-transfer-progress test
+
+      - name: Build portable distribution
+        run: python3 dist/build_portable.py
+
+      - name: Run complete extracted-distribution gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          PROTOS_DIST001_B4B_JAVA_HOME="$JAVA_HOME" \
+            sh dist/validate_portable.sh --require-clean-source
+
+      - name: Prepare snapshot artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$(find "$GITHUB_WORKSPACE/target/distributions" -maxdepth 1 -type f -name 'protos-*-posix-jvm.zip' | sort | tail -n 1)"
+          test -n "$archive"
+          test -f "$archive"
+          sha256sum "$archive" > "$archive.sha256"
+          echo "DIST_ARCHIVE=$archive" >> "$GITHUB_ENV"
+          echo "DIST_ARCHIVE_CHECKSUM=$archive.sha256" >> "$GITHUB_ENV"
+          echo "DIST_ARTIFACT_NAME=protos-snapshot-$GITHUB_SHA" >> "$GITHUB_ENV"
+          echo "CI_SNAPSHOT_CHECKSUM: $(cat "$archive.sha256")"
+
+      - name: Upload development snapshot
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.DIST_ARTIFACT_NAME }}
+          path: |
+            ${{ env.DIST_ARCHIVE }}
+            ${{ env.DIST_ARCHIVE_CHECKSUM }}
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0

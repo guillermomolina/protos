@@ -1035,7 +1035,7 @@ repository when formally introduced rather than relying on chat/prompt history.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| DIST001 | End-user distribution and release engineering | IN_PROGRESS | DIST001-A/B/C published | DIST001-D is READY; DIST001-E remains dependent on D plus an explicit release decision. |
+| DIST001 | End-user distribution and release engineering | IN_PROGRESS | DIST001-A/B/C + DIST001-D1 published | DIST001-D2 must observe a real green snapshot artifact before D closes; E remains dependent on D plus an explicit release decision. |
 | DIST001-A | Relocatable portable distribution layout and runtime contract | CLOSED | `SAME_COMMIT` | Constructible POSIX/JVM ZIP; shared checkout/distribution launcher preserves caller CWD through `PROTOS_HOME`; exact source/runtime metadata and checksums; initial supported optimizing stack is GraalVM Community JDK 22 + external `truffle-runtime:24.0.0`; no tag/release. |
 | DIST001-B | Extracted-distribution smoke/conformance | CLOSED | DIST001-B1/B2/B3/B4A/B4B/B5 published | One exact clean-source ZIP passes archive/checksum identity, outside-checkout caller-CWD + Package Tool, bundled Test Tool, and exact GraalVM Community JDK22/Truffle24 `HotSpotTruffleRuntime` evidence through the composed B5 gate. |
 | DIST001-B1 | Validation hygiene and bounded smoke decomposition | CLOSED | `SAME_COMMIT` | Ignore Python bytecode/cache outputs and persist the bounded B1..B5 validation plan; no executable distribution behavior changes. |
@@ -1046,13 +1046,16 @@ repository when formally introduced rather than relying on chat/prompt history.
 | DIST001-B4B | Exact optimizing-runtime probe | CLOSED | `SAME_COMMIT` | Exact GraalVM Community JDK 22.0.0 passes the extracted launcher supported-runtime gate with no override; the intact distribution Truffle 24.0.0 classpath resolves exact `com.oracle.truffle.runtime.hotspot.HotSpotTruffleRuntime`. |
 | DIST001-B5 | Cross-slice distribution closure | CLOSED | `SAME_COMMIT` | `dist/validate_portable.sh` composes B2/B3/B4A/B4B against one exact archive and proves the archive SHA-256 is unchanged across validation; parent B closes and D becomes READY. |
 | DIST001-C | Release selection and publication policy | CLOSED | `SAME_COMMIT` | Non-normative policy in `docs/project/DIST001_RELEASE_POLICY.md`; implementation snapshots are not releases; selected public releases may skip internal versions. |
-| DIST001-D | CI snapshot artifact | READY | — | A/B/C are closed; add CI construction + complete `dist/validate_portable.sh` conformance and upload a transient development artifact without creating a Git tag or GitHub Release. |
-| DIST001-E | First selected GitHub pre-release | BLOCKED_BY_DEPENDENCIES | — | Depends on A-D plus an explicit release decision for an exact validated candidate revision. |
+| DIST001-D | CI snapshot artifact | IN_PROGRESS | DIST001-D1 published | D1 defines the exact JDK22/B5/upload workflow; D2 remains READY for observed workflow-run + artifact closure. |
+| DIST001-D1 | CI snapshot workflow definition | CLOSED | `SAME_COMMIT` | Add a `main`/manual GitHub Actions workflow using exact GraalVM Community JDK 22.0.0, full Maven suite, clean portable build, complete B5 gate, outer SHA-256, and `actions/upload-artifact@v7`; no tag/release. |
+| DIST001-D2 | Observed CI snapshot artifact closure | READY | — | After D1 publication, inspect an actual workflow run for the exact D1-or-later source revision; require successful job completion and the expected `protos-snapshot-<source-sha>` artifact before closing D. |
+| DIST001-E | First selected GitHub pre-release | BLOCKED_BY_DEPENDENCIES | — | Depends on DIST001-D closure plus an explicit release decision for an exact validated candidate revision. |
 
-DIST001-A/B/C are closed. The B1..B5 decomposition is complete and the
-composed B5 gate is the reusable extracted-distribution conformance entry point.
-DIST001-D is the next READY slice; DIST001-E remains dependency-gated and still
-requires an explicit release decision after D.
+DIST001-A/B/C are closed and the B5 gate is the reusable
+extracted-distribution conformance entry point. DIST001-D is IN_PROGRESS:
+DIST001-D1 publishes the snapshot workflow definition and DIST001-D2 is READY
+for observed workflow-run/artifact closure. DIST001-E remains dependency-gated
+and still requires an explicit release decision after D.
 
 ## P-label classification
 

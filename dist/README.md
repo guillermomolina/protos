@@ -204,6 +204,31 @@ This is the reusable complete distribution-conformance entry point for
 development artifacts. `DIST001-D` may call this gate from CI, but a green run
 does not create a tag or GitHub Release.
 
+
+## CI development snapshots
+
+`DIST001-D1` defines `.github/workflows/distribution.yml`. On every push to
+`main`, and on explicit `workflow_dispatch`, the job:
+
+1. checks out the exact workflow revision;
+2. selects GraalVM Community JDK `22.0.0`;
+3. runs the full Maven test suite;
+4. builds the portable distribution from the clean checkout;
+5. runs `dist/validate_portable.sh --require-clean-source` against that exact
+   revision and selected optimizing runtime;
+6. writes an outer SHA-256 file for the portable ZIP; and
+7. uploads the ZIP plus checksum as a transient GitHub Actions artifact named
+   `protos-snapshot-<full-source-sha>`.
+
+Snapshots are retained for 14 days. They are development artifacts, not Git tags
+or GitHub Releases, and their presence does not authorize public release
+publication.
+
+`DIST001-D2` owns observed closure: D does not close merely because the workflow
+definition exists. A real run must complete successfully for the exact published
+D1-or-later revision and expose the expected snapshot artifact/checksum before
+the parent slice is closed.
+
 ## DIST001 boundary
 
 DIST001-A proves that the distribution can be constructed and that its archive

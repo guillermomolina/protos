@@ -192,6 +192,21 @@ A CI snapshot artifact:
 
 Agents and documentation must not call ordinary CI artifacts "releases".
 
+### DIST001-D execution slices
+
+DIST001-D is deliberately split so repository configuration is not mistaken for
+observed artifact publication:
+
+- `DIST001-D1` — publish the CI snapshot workflow definition. The workflow runs
+  on `main` pushes and explicit manual dispatch, pins GraalVM Community JDK
+  22.0.0, runs the full suite and the complete B5 gate, writes an outer ZIP
+  checksum, and uploads a 14-day `protos-snapshot-<source-sha>` Actions artifact.
+- `DIST001-D2` — inspect a real D1-or-later workflow run and require green job
+  completion plus an uploaded artifact for that exact source revision before
+  closing D.
+
+Neither slice creates or authorizes a Git tag or GitHub Release.
+
 ## Release publication is an explicit action
 
 Implementation publication to `main` and public release publication are separate
