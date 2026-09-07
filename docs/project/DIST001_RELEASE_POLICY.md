@@ -308,26 +308,29 @@ publication:
       an E4B1 detached baseline worktree. Only the root Protos project-version
       token may change; the resulting worktree must remain detached, unstaged
       and uncommitted with exactly `pom.xml` modified.
-    - `DIST001-E4B3` — candidate commit creation — IN_PROGRESS:
+    - `DIST001-E4B3` — candidate commit creation — CLOSED:
       - `DIST001-E4B3A` — candidate-commit primitive + guards — CLOSED.
         Publish/test exact detached commit creation over the validated E4B2
         `pom.xml` transition. The primitive stages only `pom.xml`, creates one
         single-parent detached commit, verifies release-only diff/cleanliness,
         and leaves branch/tag refs unchanged. Fixture candidates only.
-      - `DIST001-E4B3B` — real detached candidate materialization — IN_PROGRESS:
+      - `DIST001-E4B3B` — real detached candidate materialization — CLOSED:
         - `DIST001-E4B3B1` — composition + recovery/idempotency guard — CLOSED.
           Publish/test the fail-closed B1 -> B2 -> B3A materializer, including
           exact B1/B2 resume and already-created-candidate reuse. Candidate
           worktree reachability remains local/detached; no real candidate is
           created by this slice.
-        - `DIST001-E4B3B2` — real candidate creation + SHA persistence — READY.
-          Invoke the proven composition against the frozen E4A selection,
-          validate the real candidate commit and persist its exact SHA while
-          publication remains separately unauthorized.
-    - `DIST001-E4B4` — release-only lineage verification —
-      `BLOCKED_BY_DEPENDENCIES` on E4B3. Independently prove selected baseline ->
-      real candidate changes only the exact release-owned transition and then
-      close E4B.
+        - `DIST001-E4B3B2` — real candidate creation + SHA persistence — CLOSED.
+          The proven B1 -> B2 -> B3A composition materialized exact candidate
+          `957b1e16793a682de1d6406e37b5734c44d32d19` from selected baseline `3c23eaaccecbdcc7c2bcd86bc30c445403cfb047` with public
+          version `0.2.236`. The exact SHA is persisted in the E4 selection
+          record. Candidate reachability remains local through its registered
+          detached worktree; no branch/tag/remote release publication exists.
+    - `DIST001-E4B4` — release-only lineage verification — READY.
+      Independently prove selected baseline `3c23eaaccecbdcc7c2bcd86bc30c445403cfb047` -> candidate
+      `957b1e16793a682de1d6406e37b5734c44d32d19` changes only the exact `0.2.236-SNAPSHOT` -> `0.2.236` root project
+      transition, re-check detached/local-only reachability and publication
+      guards, and then close E4B.
   - `DIST001-E4C` — candidate archive/envelope/audit preparation —
     `BLOCKED_BY_DEPENDENCIES` on E4B.
   - `DIST001-E4D` — immutable full candidate validation and E4 closure —

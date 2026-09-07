@@ -414,3 +414,27 @@ B3B1 itself uses isolated fixture repositories only. B3B2 owns the first real
 candidate materialization and the main-ledger transition from
 `candidate_source_revision=UNMATERIALIZED` to its exact 40-hex SHA. No E4 result
 authorizes E5 publication.
+
+## E4B3B2 real candidate identity checkpoint
+
+The first real candidate for the frozen E4A selection is now materialized:
+
+```text
+release_baseline_revision=3c23eaaccecbdcc7c2bcd86bc30c445403cfb047
+release_baseline_version=0.2.236-SNAPSHOT
+release_version=0.2.236
+release_tag=v0.2.236
+candidate_source_revision=957b1e16793a682de1d6406e37b5734c44d32d19
+release_publication_authorized=false
+```
+
+The candidate is one detached single-parent commit whose parent is exactly the
+selected baseline. Baseline -> candidate changes only the root Protos Maven
+project version from `0.2.236-SNAPSHOT` to `0.2.236`. No branch or tag names the candidate;
+its registered detached worktree remains the temporary local reachability anchor
+until later E4/E5 work establishes the next policy-owned reachability state.
+
+E4B3B2 persists the exact candidate identity but does not independently close the
+release-only lineage proof: E4B4 is READY and owns that separate verification.
+No Git tag, GitHub Release, release asset, or release-publication authorization is
+created by this checkpoint.
