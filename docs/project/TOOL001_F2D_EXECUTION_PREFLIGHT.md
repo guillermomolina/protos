@@ -1,6 +1,6 @@
 # TOOL001-F2D — Workspace Execution Preflight and PackageExecutionPlan
 
-Status: **IN_PROGRESS through CLOSED F2D3B1B2C immutable package-directory binding**
+Status: **IN_PROGRESS through CLOSED F2D3B1B3 exact package source lookup**
 Nature: non-normative Package Tool / host-integration design
 Design checkpoint: 2026-09-07
 
@@ -36,17 +36,17 @@ F2D2     pure workspace execution-state + plan construction       CLOSED
 F2D3     mechanical host handoff + workspace run parent           IN_PROGRESS
 F2D3A    immutable host DTO + defensive plan detach               CLOSED
 F2D3B    exact workspace package-backed module resolver           IN_PROGRESS
-F2D3B1    package identity + source mechanism                     IN_PROGRESS
+F2D3B1    package identity + source mechanism                     CLOSED
 F2D3B1A   canonical workspace ModuleKey codec                     CLOSED
-F2D3B1B   physical source mechanism parent                        IN_PROGRESS
+F2D3B1B   physical source mechanism parent                        CLOSED
 F2D3B1B1   selected project-root anchor + detached package index  CLOSED
 F2D3B1B2   exact member-location directory binding                CLOSED
 F2D3B1B2A  exact direct-child directory lookup                    CLOSED
 F2D3B1B2B  confined canonical member-location traversal           CLOSED
 F2D3B1B2C  immutable package -> physical-directory binding        CLOSED
-F2D3B1B3   logical module -> exact regular .protos source         READY
-F2D3B2    resolver routing                                        BLOCKED_BY_DEPENDENCIES
-F2D3B2A  self: routing                                            BLOCKED_BY_DEPENDENCIES
+F2D3B1B3   logical module -> exact regular .protos source         CLOSED
+F2D3B2    resolver routing                                        READY
+F2D3B2A  self: routing                                            READY
 F2D3B2B  dep: edge/export routing                                 BLOCKED_BY_DEPENDENCIES
 F2D3B2C  std: delegation + resolver closure                       BLOCKED_BY_DEPENDENCIES
 F2D3C    command preflight + tool/application authority split     BLOCKED_BY_DEPENDENCIES
@@ -714,4 +714,50 @@ TOOL001-F2D3B1B3  READY: YES
 TOOL001-F2D3B1B    CLOSED: NO
 TOOL001-F2D3B1     CLOSED: NO
 TOOL001-F2D3B      CLOSED: NO
+```
+
+## F2D3B1B3 closure — exact confined package source lookup
+
+B1B3 consumes one exact opaque workspace PackageId plus one already-frozen
+portable internal logical module name. It obtains only the package directory
+already bound by B1B2C; no manifest, workspace, basename or ambient filesystem
+search participates.
+
+The logical name is defensively revalidated through `ProtosPackageRuntimeNames`.
+Each non-final portable segment is selected from the current physical directory
+by exact stored spelling. The final validated segment is selected as exactly
+`<segment>.protos`. Every lookup also counts ASCII case-fold-equivalent directory
+entries and fails when more than one spelling exists, preserving deterministic
+portable behavior on a case-sensitive host rather than accepting a tree that
+would be ambiguous on a case-insensitive host.
+
+After every selected directory and after the final source selection, the real
+path must remain beneath the selected package root. This confinement is
+intentionally package-local, not merely project-local: a symlink may stay inside
+its own package, but it cannot reach another workspace member's source. The
+final real target must be a regular file. Missing, wrong-case-only,
+case-ambiguous, non-regular and escaping targets fail closed.
+
+The returned physical path is source location only. Module identity remains the
+closed B1A `PackageId + internal logical module` ModuleKey domain; physical paths,
+symlink targets, dependency aliases and export aliases do not enter identity.
+B1B3 performs no source read, `self:`/`dep:`/`std:` routing, import dispatch,
+CLI wiring or application-authority transition.
+
+The focal remains Java because B1B3 is still host source-location mechanics.
+Observable package import behavior begins in B2A and should primarily use Protos
+source conformance.
+
+After publication:
+
+```text
+TOOL001-F2D3B1B3 CLOSED: YES
+TOOL001-F2D3B1B  CLOSED: YES
+TOOL001-F2D3B1   CLOSED: YES
+TOOL001-F2D3B2   READY: YES
+TOOL001-F2D3B2A  READY: YES
+TOOL001-F2D3B2B  BLOCKED_BY_DEPENDENCIES: TOOL001-F2D3B2A
+TOOL001-F2D3B2C  BLOCKED_BY_DEPENDENCIES: TOOL001-F2D3B2B
+TOOL001-F2D3B     CLOSED: NO
+TOOL001-F2D3C     CLOSED: NO
 ```
