@@ -1,3 +1,9 @@
+## 0.2.195-SNAPSHOT
+
+- Close `TOOL001-C6 — confined project manifest read/diagnostics` (legacy manifest Slice 3D). Add ordinary-Protos `self:ManifestCommand`, reading exactly `protos.toml` through the already-provisioned confined Filesystem, decoding complete UTF-8 text across progress-oriented `TextReader.readText()` chunks, and invoking the closed `ManifestSchemaV1.parse` pipeline.
+- Add exact bundled `ManifestMain` for `protos package manifest`. The host driver performs only mechanical exact-entry selection, while read/validation/diagnostic policy stays in Protos; the historical bare `Main.protos` entry remains byte-for-byte unchanged. Successful validation reports `protos.toml: valid schema v1`; read/UTF-8 failures and TOML/schema failures receive distinct Protos-owned diagnostics before the exact Error continues to the common tool boundary.
+- Add Protos-source integrated cases for valid, invalid-schema, missing, invalid-UTF8 and multi-chunk (>8 KiB) manifests, with Java restricted to confined-Filesystem/driver integration. C6 closes and `TOOL001-C7` becomes READY. No dependency resolution, `protos.lock` read, network access, metadata mutation, package store or new Core/native boundary is introduced.
+
 # Changelog
 
 ## 0.2.194-SNAPSHOT

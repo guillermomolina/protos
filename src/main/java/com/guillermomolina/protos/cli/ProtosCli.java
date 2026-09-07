@@ -133,6 +133,10 @@ public final class ProtosCli {
             PrintStream out,
             PrintStream err)
             throws Exception {
+        String entryModuleName =
+                args.length == 2 && args[1].equals("manifest")
+                        ? "ManifestMain"
+                        : "Main";
         try (ProtosNioConfinedFilesystemBackend filesystemBackend =
                 new ProtosNioConfinedFilesystemBackend(
                         Path.of("").toAbsolutePath().normalize(),
@@ -142,6 +146,7 @@ public final class ProtosCli {
             return runBundledTool(
                     "package",
                     "Package",
+                    entryModuleName,
                     args,
                     in,
                     out,
@@ -171,6 +176,27 @@ public final class ProtosCli {
             PrintStream err,
             BundledToolSessionProvisioner provisioner)
             throws Exception {
+        return runBundledTool(
+                toolName,
+                diagnosticName,
+                "Main",
+                args,
+                in,
+                out,
+                err,
+                provisioner);
+    }
+
+    private int runBundledTool(
+            String toolName,
+            String diagnosticName,
+            String entryModuleName,
+            String[] args,
+            InputStream in,
+            PrintStream out,
+            PrintStream err,
+            BundledToolSessionProvisioner provisioner)
+            throws Exception {
         Path core = core();
         Path toolRoot = core.getParent().getParent().resolve("tools").resolve(toolName);
         ProtosBundledToolModuleResolver resolver =
@@ -188,7 +214,7 @@ public final class ProtosCli {
                         err);
         try {
             provisioner.provision(session);
-            String source = resolver.loadSource(resolver.entryModule("Main"));
+            String source = resolver.loadSource(resolver.entryModule(entryModuleName));
             executeStandaloneRootTask(session.compiler.compile(source), session.activation);
             return 0;
         } catch (ParseError e) {
