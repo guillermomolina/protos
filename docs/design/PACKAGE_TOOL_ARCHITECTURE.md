@@ -196,6 +196,100 @@ general facilities can naturally express:
 This code is trusted toolchain code, but it remains Protos code using ordinary
 language mechanisms and explicit capabilities.
 
+## Future reusable-library extraction opportunities
+
+This is a **non-committing architecture note**, not a roadmap item, blocker, or
+request to create a `LIBxxx`/`TOOLxxx` task. The current Package Tool may keep
+these components bundled under `protos/tools/package/` until a real second use
+case justifies extraction.
+
+Two components are particularly worth revisiting later:
+
+### TOML front-end
+
+`self:TomlSyntax` and the schema-neutral portions of `self:TomlDocument` are
+strong candidates for extraction into a reusable TOML library.
+
+The reason is architectural rather than cosmetic: TOOL001-C1 through C4 were
+deliberately built below package-manifest meaning. They parse TOML syntax and
+assemble the canonical TOML document/table model; package ownership begins above
+that boundary in `self:ManifestSchemaV1`.
+
+A future extraction should therefore preserve this split:
+
+```text
+reusable TOML syntax/document library
+        |
+        v
+Package Tool ManifestSchemaV1
+```
+
+Before promoting that code to a public or Standard Library surface, audit:
+
+- complete TOML 1.0 conformance of the intended public surface;
+- the error/diagnostic contract expected by non-Package-Tool callers;
+- whether the reusable API should expose syntax nodes, canonical table/value
+  values, or both;
+- whether the first extraction should remain an internal bundled library before
+  acquiring a stable public `std:` namespace.
+
+`ManifestSchemaV1`, package-manifest diagnostics, and package policy remain
+Package Tool responsibilities even if the TOML front-end moves.
+
+### Semantic Versioning core
+
+The parse/precedence machinery underlying `self:ReleaseVersion` is another
+candidate for a reusable Semantic Versioning library.
+
+Do **not** assume that the whole current Package Tool value is generic SemVer.
+The package `ReleaseVersion` contract intentionally narrows SemVer 2.0.0 to:
+
+```text
+MAJOR.MINOR.PATCH[-PRERELEASE]
+```
+
+and rejects build metadata. A future reusable SemVer library may reasonably own
+the general SemVer value/parser/precedence mechanism while Package Tool keeps a
+thin `ReleaseVersion` policy layer that applies its package-specific restrictions.
+
+Likewise, these remain Package Tool policy unless an independent use case proves
+otherwise:
+
+- `DependencyConstraint` syntax and prerelease-admission policy;
+- `FreshVersionSelection`;
+- `RetainedVersionSelection`;
+- resolver/yank/update/lock semantics.
+
+Conceptually, a future refactor could become:
+
+```text
+reusable SemVer library
+        |
+        v
+Package ReleaseVersion policy
+        |
+        +--> DependencyConstraint
+        +--> Package selection/resolution policy
+```
+
+### Extraction rule
+
+Extraction should happen only when it reduces duplicated concepts or serves a
+real non-Package-Tool caller. Moving a file merely because it looks generic is
+not sufficient.
+
+Any future extraction must:
+
+- preserve currently published Package Tool behavior;
+- avoid making the Package Tool self-dependent on project package resolution;
+- not expose bundled-tool internals through `std:` merely because code was moved;
+- separate generic mechanism from Package Tool policy instead of generalizing
+  package-specific rules into a supposedly universal library;
+- be independently designed, tested, and tracked when it becomes actual work.
+
+Until then, keeping the implementations local to the Package Tool is deliberate
+and does not invalidate their future reuse potential.
+
 ### D. Exact package-backed runtime resolver
 
 Core already leaves specifier interpretation to the host resolver and requires a

@@ -98,6 +98,11 @@ F1A does not implement a parser/writer and does not choose body record syntax.
 Complete candidate eligibility, graph resolution, workspace/store,
 registry/network and update operations remain separately scoped work.
 
+A separate non-committing note in `docs/design/PACKAGE_TOOL_ARCHITECTURE.md`
+records future reusable-library extraction opportunities for the schema-neutral
+TOML front-end and the generic SemVer parse/precedence core. Those opportunities
+do not create work items and do not block the current TOOL001-F lockfile path.
+
 ## Manifest Slice 3 final closure
 
 `TOOL001-C` is CLOSED. Its bounded outcome is the published composition of:
