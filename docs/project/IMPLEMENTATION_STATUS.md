@@ -879,10 +879,10 @@ forward.
 | TOOL001-F2D3B1A | canonical workspace ModuleKey codec | CLOSED | `SAME_COMMIT` | Workspace-domain canonical ModuleKey codec over exact PackageId + internal logical module; host-only and filesystem-free. |
 | TOOL001-F2D3B1B | physical source mechanism | IN_PROGRESS | TOOL001-F2D3B1B1 published | Further decomposed to keep root/index separate from member traversal and source lookup. |
 | TOOL001-F2D3B1B1 | selected project-root anchor + detached package index | CLOSED | `SAME_COMMIT` | Host-only representation step; no non-root filesystem traversal. |
-| TOOL001-F2D3B1B2 | exact member-location directory binding | IN_PROGRESS | TOOL001-F2D3B1B2A published | Further decomposed into exact child lookup, confined traversal and final package-directory binding. |
+| TOOL001-F2D3B1B2 | exact member-location directory binding | IN_PROGRESS | TOOL001-F2D3B1B2A/F2D3B1B2B published | Exact one-component lookup + confined canonical traversal CLOSED; final immutable package-directory binding remains. |
 | TOOL001-F2D3B1B2A | exact direct-child directory lookup | CLOSED | `SAME_COMMIT` | Host-only one-component exact stored-name + directory-type primitive; no multi-component path traversal. |
-| TOOL001-F2D3B1B2B | confined canonical member-location traversal | READY | — | Canonical location traversal plus real-path/symlink confinement only. |
-| TOOL001-F2D3B1B2C | immutable package -> physical-directory binding | BLOCKED_BY_DEPENDENCIES | TOOL001-F2D3B1B2B | Bind each detached package/location to its exact confined physical directory. |
+| TOOL001-F2D3B1B2B | confined canonical member-location traversal | CLOSED | `SAME_COMMIT` | Canonical multi-component traversal; every selected real directory must remain under the real project root, so only in-root symlinks survive. |
+| TOOL001-F2D3B1B2C | immutable package -> physical-directory binding | READY | — | Bind each detached package/location to its exact confined physical directory. |
 | TOOL001-F2D3B1B3 | logical module -> exact regular `.protos` source | BLOCKED_BY_DEPENDENCIES | TOOL001-F2D3B1B2C | Source-file mapping begins only after member roots are independently bound. |
 | TOOL001-F2D3B2 | resolver routing | BLOCKED_BY_DEPENDENCIES | TOOL001-F2D3B1 | Parent for self/dep/std routing after source mechanism. |
 | TOOL001-F2D3B2A | self: routing | BLOCKED_BY_DEPENDENCIES | TOOL001-F2D3B1B3 | First observable import routing slice; behavior belongs primarily in Protos source tests. |

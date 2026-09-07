@@ -1,6 +1,6 @@
 # TOOL001-F2D — Workspace Execution Preflight and PackageExecutionPlan
 
-Status: **IN_PROGRESS through CLOSED F2D3B1B2A exact direct-child directory lookup**
+Status: **IN_PROGRESS through CLOSED F2D3B1B2B confined member-location traversal**
 Nature: non-normative Package Tool / host-integration design
 Design checkpoint: 2026-09-07
 
@@ -42,8 +42,8 @@ F2D3B1B   physical source mechanism parent                        IN_PROGRESS
 F2D3B1B1   selected project-root anchor + detached package index  CLOSED
 F2D3B1B2   exact member-location directory binding                IN_PROGRESS
 F2D3B1B2A  exact direct-child directory lookup                    CLOSED
-F2D3B1B2B  confined canonical member-location traversal           READY
-F2D3B1B2C  immutable package -> physical-directory binding        BLOCKED_BY_DEPENDENCIES
+F2D3B1B2B  confined canonical member-location traversal           CLOSED
+F2D3B1B2C  immutable package -> physical-directory binding        READY
 F2D3B1B3   logical module -> exact regular .protos source         BLOCKED_BY_DEPENDENCIES
 F2D3B2    resolver routing                                        BLOCKED_BY_DEPENDENCIES
 F2D3B2A  self: routing                                            BLOCKED_BY_DEPENDENCIES
@@ -656,6 +656,26 @@ After publication:
 TOOL001-F2D3B1B2A CLOSED: YES
 TOOL001-F2D3B1B2B READY: YES
 TOOL001-F2D3B1B2C BLOCKED_BY_DEPENDENCIES: TOOL001-F2D3B1B2B
+TOOL001-F2D3B1B2 CLOSED: NO
+TOOL001-F2D3B1B3 BLOCKED_BY_DEPENDENCIES: TOOL001-F2D3B1B2C
+```
+
+## F2D3B1B2B closure — confined canonical member-location traversal
+
+B1B2B consumes exactly one already-canonical non-root workspace member location. It validates the detached host spelling defensively, splits only on literal `/`, and uses the closed B1B2A primitive for every physical child selection. It does not use `Path.resolve(component)` to reinterpret a semantic component as host path syntax.
+
+After each exact child selection, B1B2B resolves that directory to its real path before another component is traversed. The resolved directory must remain beneath the selected real project root. Therefore a directory symlink is accepted only when its target remains inside that root; a symlink/alias that resolves outside fails closed. Traversal continues from the resolved in-root directory, and the final result is the real member directory.
+
+B1B2B owns no PackageId or whole-plan relation. It does not enumerate the detached package index, bind root `location = ""`, search recursively, inspect module names, append `.protos`, construct ModuleKeys, implement `self:`/`dep:`/`std:` routing, or touch CLI/application authority. Those boundaries remain B1B2C, B1B3, B2 and C respectively.
+
+The focal remains Java because the slice is host filesystem/path mechanics. No observable Protos import behavior starts here.
+
+After publication:
+
+```text
+TOOL001-F2D3B1B2A CLOSED: YES
+TOOL001-F2D3B1B2B CLOSED: YES
+TOOL001-F2D3B1B2C READY: YES
 TOOL001-F2D3B1B2 CLOSED: NO
 TOOL001-F2D3B1B3 BLOCKED_BY_DEPENDENCIES: TOOL001-F2D3B1B2C
 ```
