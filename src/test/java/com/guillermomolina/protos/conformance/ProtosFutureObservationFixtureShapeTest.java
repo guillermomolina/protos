@@ -19,7 +19,10 @@ package com.guillermomolina.protos.conformance;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import com.guillermomolina.protos.execution.ProtosClosureInvoker;
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
 import com.guillermomolina.protos.execution.ProtosSourceFileLoader;
 import com.guillermomolina.protos.execution.ProtosStandardLibraryModuleResolver;
@@ -28,7 +31,9 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -42,6 +47,45 @@ final class ProtosFutureObservationFixtureShapeTest {
                     "conformance",
                     "future",
                     "failed-value-resignals-recorded-error.protos");
+
+    @Test
+    void retainedStoredFixtureSignalsItsLocalErrorOnceAfterTerminalProgress()
+            throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(
+                                CORE,
+                                new ProtosStandardLibraryModuleResolver(
+                                        STANDARD_LIBRARY));
+        ProtosActivation activation = prelude.newModuleActivation();
+
+        ProtosObjectValue fixture =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        new ProtosSourceFileLoader().load(FIXTURE).call(activation));
+        ProtosFutureValue future =
+                assertInstanceOf(
+                        ProtosFutureValue.class,
+                        fixture.readLocalSlot("future").orElseThrow());
+        ProtosObjectValue error =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        fixture.readLocalSlot("error").orElseThrow());
+        ProtosClosureValue observe =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        fixture.readLocalSlot("observe").orElseThrow());
+
+        awaitTerminal(future, activation);
+        assertEquals(ProtosFutureValue.State.FAILED, future.state());
+
+        ProtosSignalException observed =
+                assertThrows(
+                        ProtosSignalException.class,
+                        () -> ProtosClosureInvoker.invoke(observe, List.of(), activation));
+
+        assertSame(error, observed.error());
+    }
 
     @Test
     void retainedStoredFixtureHasExactLocalShapeWithoutObservation() throws Exception {
@@ -75,5 +119,21 @@ final class ProtosFutureObservationFixtureShapeTest {
                         fixture.readLocalSlot("observe").orElseThrow());
         assertNotNull(observe.definition());
         assertEquals(0, observe.definition().parameters().size());
+    }
+
+    private static void awaitTerminal(
+            ProtosFutureValue future, ProtosActivation activation) {
+        int dispatches = 0;
+        while (future.state() == ProtosFutureValue.State.PENDING) {
+            if (!activation.executionDomain().dispatchOne()) {
+                throw new AssertionError(
+                        "retained Future is pending with no runnable work");
+            }
+            dispatches++;
+            if (dispatches > 100000) {
+                throw new AssertionError(
+                        "retained Future exceeded bounded terminal progress");
+            }
+        }
     }
 }
