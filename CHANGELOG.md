@@ -1,3 +1,9 @@
+## 0.2.198-SNAPSHOT
+
+- Start the subdivided `TOOL001-D2 — dependency constraint language v1` with `TOOL001-D2A — exact constraints`. Add ordinary bundled-Protos `self:DependencyConstraint` with only bare full `ReleaseVersion` parsing and exact satisfaction; a bare `1.4.2` means exactly `1.4.2`, and an explicitly named prerelease means exactly that prerelease.
+- Keep the slice boundary strict: caret constraints remain D2B, explicit bounded intervals remain D2C, and general prerelease-admission/cross-form conformance remains D2D. D2A adds no candidate selection, resolver, lockfile, workspace, package-store, registry/network or Core behavior.
+- Extend the existing Protos-owned package-version corpus with exact parse/match/mismatch/prerelease cases and fail-closed deferred syntax checks. `TOOL001-D2A` closes, `TOOL001-D2B` becomes READY, and parent D2 remains IN_PROGRESS.
+
 ## 0.2.197-SNAPSHOT
 
 - Start `TOOL001-D — release-version and dependency-constraint value policy` with the bounded `TOOL001-D1 — ReleaseVersion` slice. Add ordinary bundled-Protos `self:ReleaseVersion` with strict `MAJOR.MINOR.PATCH[-PRERELEASE]` parsing, no build metadata, canonical decimal core identifiers, SemVer prerelease identifier validation and exact precedence comparison.

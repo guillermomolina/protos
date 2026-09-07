@@ -18,3 +18,12 @@ release-version-invalid-prerelease-char-error.protos	error
 release-version-extra-core-error.protos	error
 release-version-whitespace-error.protos	error
 release-version-nonascii-prerelease-error.protos	error
+constraint-exact-parse.protos	true
+constraint-exact-stable-match.protos	true
+constraint-exact-stable-mismatch.protos	true
+constraint-exact-prerelease-match.protos	true
+constraint-exact-prerelease-distinct.protos	true
+constraint-caret-deferred-error.protos	error
+constraint-interval-deferred-error.protos	error
+constraint-partial-rejected-error.protos	error
+constraint-wildcard-rejected-error.protos	error
