@@ -131,7 +131,6 @@ final class ProtosFilesystemNamespaceMutationFlowTest {
 
         CountDownLatch effectEntered = new CountDownLatch(1);
         CountDownLatch releaseEffect = new CountDownLatch(1);
-        CountDownLatch cancellationStarted = new CountDownLatch(1);
         AtomicBoolean commitResult = new AtomicBoolean();
         AtomicBoolean cancelResult = new AtomicBoolean(true);
         AtomicReference<Throwable> workerFailure = new AtomicReference<>();
@@ -153,16 +152,24 @@ final class ProtosFilesystemNamespaceMutationFlowTest {
                             }
                         });
         Thread cancellationThread =
-                new Thread(
-                        () -> {
-                            cancellationStarted.countDown();
-                            cancelResult.set(future.cancelRequest());
-                        });
+                new Thread(() -> cancelResult.set(future.cancelRequest()));
 
         effectThread.start();
         assertTrue(effectEntered.await(5, TimeUnit.SECONDS));
         cancellationThread.start();
-        assertTrue(cancellationStarted.await(5, TimeUnit.SECONDS));
+
+        // The effect owns the lifecycle monitor here. BLOCKED therefore proves that
+        // cancelRequest() already observed the pending Future and is contending for the
+        // same producer-side commitment monitor before the effect is allowed to finish.
+        long cancellationDeadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+        while (cancellationThread.getState() != Thread.State.BLOCKED
+                && System.nanoTime() < cancellationDeadline) {
+            Thread.sleep(1);
+        }
+        assertEquals(
+                Thread.State.BLOCKED,
+                cancellationThread.getState(),
+                "cancellation did not reach the lifecycle commitment monitor");
         releaseEffect.countDown();
 
         effectThread.join(5000);
