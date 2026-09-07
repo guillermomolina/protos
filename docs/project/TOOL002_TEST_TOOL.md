@@ -65,7 +65,7 @@ freeze those decisions unless their own audited scope requires and resolves them
 | TOOL002-C | CLOSED | Publish test-neutral sequential private-stream capture over `ProtosFreshProcessExecutor`: one exact compiled entry gets private stdin/stdout/stderr, a fresh semantic Process and an inert outcome plus detached captured bytes. No manifest/expectation/scheduler/result-transfer policy. Implementation version `0.2.171-SNAPSHOT`. |
 | TOOL002-D | CLOSED | D1-D4 are published; all retained non-Future main-manifest expectation policy is owned by bundled Protos. D4 closes at `0.2.211-SNAPSHOT`; `future-*` remains TOOL002-F. |
 | TOOL002-E | CLOSED | E1A/E1B/E2A/E2B/E3/E4 complete the retained Package/TOML migration: bundled Protos owns planning, confined source loading, Package execution, Boolean/Error expectation policy and aggregation; duplicate Java corpus-policy ownership is removed. |
-| TOOL002-F | READY | TOOL002-E is CLOSED; preserve async/Future pending-work and terminal-outcome test coverage through production execution semantics. |
+| TOOL002-F | IN_PROGRESS | Subdivided after current-main Future boundary audit: F1 child-local resolved-value mechanism is CLOSED; F2 failed/cancelled terminal mechanism READY; F3 observation-error identity and F4 activation/Java cutover remain dependency-ordered. |
 | TOOL002-G | BLOCKED_BY_DEPENDENCIES | After F, migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |
 | TOOL002-H | BLOCKED_BY_DEPENDENCIES | After G, add bounded parallel scheduling of independent fresh Processes, private output capture, and deterministic reporting. |
 | TOOL002-I | BLOCKED_BY_DEPENDENCIES | After H, add explicit resource constraints/private capabilities where real external-resource sharing requires them. |
@@ -322,7 +322,36 @@ change or implementation-version change is introduced by E4.
 
 TOOL002-E4 is CLOSED.
 TOOL002-E is CLOSED.
-TOOL002-F is READY.
+
+## TOOL002-F decomposition
+
+The fresh-Process/detached-value audit establishes a hard ownership boundary for
+the deferred `future-*` families: `ProtosDetachedExecutionValue` deliberately
+rejects live Future values, while `ProtosTask.complete` already keeps a root task
+non-terminal until its structured children drain. TOOL002-F therefore must not
+make Future transferable or add a Java progress loop. Future expectation policy
+stays inside the same fresh child Process and observes production Future behavior
+through ordinary `Future.value()` / Error semantics, returning only detached
+Boolean evidence to the Test Tool Process.
+
+F is split by the distinct terminal/identity contracts:
+
+| Slice | Status | Outcome |
+|---|---|---|
+| TOOL002-F1 | CLOSED | Child-local mechanism for `future-integer`, `future-null`, and `future-boolean`. The retained source produces the candidate Future in the fresh child Process; `Future.value()` performs ordinary suspension/resume there; only canonical Boolean evidence crosses D1. Not yet activated in `runSimple`. Implementation version `0.2.228-SNAPSHOT`. |
+| TOOL002-F2 | READY | Add child-local exact FAILED versus CANCELLED handling for `future-error`, `future-error-parent`, and `future-cancelled`, using repeated `Future.value()` observation identity where state distinction requires it; still no public-plan activation. |
+| TOOL002-F3 | BLOCKED_BY_DEPENDENCIES | After F2, migrate `future-observation-error-identity` entirely child-locally, preserving stored Error identity versus fresh Cancelled observation identity and exact local-slot contract. |
+| TOOL002-F4 | BLOCKED_BY_DEPENDENCIES | After F3, activate every retained `future-*` family in the generic sequential runner, require full main-manifest selection/pass evidence, retire Java `future-*` policy ownership, close TOOL002-F and make TOOL002-G READY. |
+
+F1 deliberately leaves `isDExpectation` / `runSimple` unchanged, so D4's
+already-published non-Future ownership boundary remains valid until the atomic F4
+activation/cutover. Java remains the temporary direct Future owner during F1-F3.
+
+TOOL002-F is IN_PROGRESS.
+TOOL002-F1 is CLOSED.
+TOOL002-F2 is READY.
+TOOL002-F3 is BLOCKED_BY_DEPENDENCIES.
+TOOL002-F4 is BLOCKED_BY_DEPENDENCIES.
 
 ## TOOL002-A closure
 

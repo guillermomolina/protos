@@ -1,0 +1,96 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Manifest: import("self:Manifest")
+Runner: import("self:Runner")
+
+evaluate: (line, source, expectedPassed) => {
+    spec: Manifest.parseLine(line)
+    result: Runner.evaluateFutureResolved(spec, source, execution)
+    observation: Runner.resultObservation(result)
+
+    passed: Runner.resultPassed(result) === expectedPassed
+    passed.ifTrue(() => {
+        passed = observation.state === "completed"
+    })
+    passed.ifTrue(() => {
+        passed = observation.error === null
+    })
+    passed
+}
+
+integerSpec: Manifest.parseLine(
+    "future/then-transforms.protos\tfuture-integer\t42"
+)
+integerSource: Runner.readSource(integerSpec, filesystem)
+
+nullSpec: Manifest.parseLine(
+    "future/closure-future-null.protos\tfuture-null\t-"
+)
+nullSource: Runner.readSource(nullSpec, filesystem)
+
+passed:
+    Runner.isFutureResolvedExpectation(integerSpec) &&
+    (Runner.isDExpectation(integerSpec) === false)
+
+passed.ifTrue(() => {
+    passed = evaluate(
+        "future/then-transforms.protos\tfuture-integer\t42",
+        integerSource,
+        true
+    )
+})
+
+passed.ifTrue(() => {
+    passed = evaluate(
+        "future/closure-future-null.protos\tfuture-null\t-",
+        nullSource,
+        true
+    )
+})
+
+passed.ifTrue(() => {
+    passed = evaluate(
+        "future/tool002-f1-inline.protos\tfuture-boolean\ttrue",
+        "(() => { true }).future()",
+        true
+    )
+})
+
+passed.ifTrue(() => {
+    passed = evaluate(
+        "future/tool002-f1-inline.protos\tfuture-boolean\tfalse",
+        "(() => { true }).future()",
+        false
+    )
+})
+
+passed.ifTrue(() => {
+    passed = evaluate(
+        "future/tool002-f1-inline.protos\tfuture-integer\t42",
+        "42",
+        false
+    )
+})
+
+passed.ifTrue(() => {
+    passed = evaluate(
+        "future/tool002-f1-inline.protos\tfuture-integer\t42",
+        "(() => { Error().signal() }).future()",
+        false
+    )
+})
+
+passed
