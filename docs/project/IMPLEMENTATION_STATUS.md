@@ -881,7 +881,7 @@ forward.
 | TOOL001-F2D | workspace-only normal-execution preflight + PackageExecutionPlan | IN_PROGRESS | TOOL001-F2D1/F2D2/F2D3A published | Contract, pure builder and immutable defensive host detach CLOSED; F2D3B resolver READY. External nodes remain fail-closed. |
 | TOOL001-F2D1 | PackageExecutionPlan ABI + runtime-name/preflight contract | CLOSED | `SAME_COMMIT` | Workspace lock reconciliation, portable alias/export/module names, inert plan/authority boundary and external-node rejection frozen. |
 | TOOL001-F2D2 | pure workspace execution-state + plan construction | CLOSED | `SAME_COMMIT` | ResolutionRoot single-pass execution state + RuntimeNames + canonical non-stale workspace lock reconciliation produce fresh inert PackageExecutionPlanV1. |
-| TOOL001-F2D3 | mechanical host resolver handoff + command-scoped workspace preflight | IN_PROGRESS | TOOL001-F2D3A published | Decomposed after implementation audit: A detach CLOSED, B resolver READY, C command/authority boundary dependency-gated. |
+| TOOL001-F2D3 | mechanical host resolver handoff + command-scoped workspace preflight | IN_PROGRESS | — | F2D3A/F2D3B closed; F2D3C is subdivided and C1 read-only preflight is closed, with C2 READY. |
 | TOOL001-F2D3A | immutable host DTO + defensive plan detach | CLOSED | `SAME_COMMIT` | Mechanical ABI boundary only: exact shape/domain/location/edge validation and recursive immutable copy. |
 | TOOL001-F2D3B | exact workspace package-backed module resolver | CLOSED | `SAME_COMMIT` | B1 identity/source plus B2 self:/dep:/std: routing complete the workspace resolver. |
 | TOOL001-F2D3B1 | package identity + source mechanism | CLOSED | `SAME_COMMIT` | Canonical workspace ModuleKey identity plus exact package-directory and confined logical-source mapping complete B1. |
@@ -897,7 +897,10 @@ forward.
 | TOOL001-F2D3B2A | self: routing | CLOSED | `SAME_COMMIT` | Explicit root entry key plus importer-relative self: resolution over exact plan PackageId and B1B3 source; Protos-source import execution covered. |
 | TOOL001-F2D3B2B | dep: edge/export routing | CLOSED | `SAME_COMMIT` | Importer PackageId + exact alias selects one detached target edge; exact target export selects the internal logical module, with no physical/internal-name bypass. |
 | TOOL001-F2D3B2C | std: delegation + resolver closure | CLOSED | `SAME_COMMIT` | Exact std: resolution/source loading delegates to the explicitly selected Standard Library resolver. |
-| TOOL001-F2D3C | command-scoped workspace preflight + authority separation | READY | — | Resolver is closed; command preflight + tool/application authority separation may now wire it. |
+| TOOL001-F2D3C | command-scoped workspace preflight + authority separation | IN_PROGRESS | — | Subdivided into C1 read-only Package Tool preflight, C2 separately-authorized application Process execution, and C3 public workspace-run wiring/closure. |
+| TOOL001-F2D3C1 | read-only Package Tool preflight -> detached plan | CLOSED | `SAME_COMMIT` | Fresh tool Process receives only confined read-only projectTreeFilesystem; ExecutionPlan.build result is detached before tool Process termination. |
+| TOOL001-F2D3C2 | detached plan -> separately-authorized application Process | READY | — | Consume C1 DTO plus closed F2D3B resolver; application Process must receive no Package Tool Filesystem/activation authority. |
+| TOOL001-F2D3C3 | public workspace-run wiring + F2D3/F2D closure | BLOCKED_BY_DEPENDENCIES | TOOL001-F2D3C2 | Wire the public driver only after the application execution boundary is independently closed. |
 
 
 | TOOL001-F2B1 | per-manifest semantic resolution-input projection design | CLOSED | `SAME_COMMIT` | Resolver-affecting field matrix, semantic normalization ownership, deterministic ordering and fail-closed unresolved-owner rule frozen. |

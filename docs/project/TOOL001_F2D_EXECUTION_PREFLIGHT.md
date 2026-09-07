@@ -1,6 +1,6 @@
 # TOOL001-F2D — Workspace Execution Preflight and PackageExecutionPlan
 
-Status: **IN_PROGRESS through CLOSED F2D3B exact workspace package-backed resolver**
+Status: **IN_PROGRESS through CLOSED F2D3C1 read-only Package Tool preflight**
 Nature: non-normative Package Tool / host-integration design
 Design checkpoint: 2026-09-07
 
@@ -49,7 +49,10 @@ F2D3B2    resolver routing                                        CLOSED
 F2D3B2A  self: routing                                            CLOSED
 F2D3B2B  dep: edge/export routing                                 CLOSED
 F2D3B2C  std: delegation + resolver closure                       CLOSED
-F2D3C    command preflight + tool/application authority split     READY
+F2D3C    command preflight + tool/application authority split     IN_PROGRESS
+F2D3C1   read-only Package Tool preflight -> detached plan        CLOSED
+F2D3C2   detached plan -> separately-authorized application       READY
+F2D3C3   public workspace-run wiring + F2D3/F2D closure           BLOCKED_BY_DEPENDENCIES
 ```
 
 F2D is bounded to workspace-only execution. Closing it will not claim external
@@ -877,4 +880,57 @@ TOOL001-F2D3B     CLOSED: YES
 TOOL001-F2D3C     READY: YES
 TOOL001-F2D3      CLOSED: NO
 TOOL001-F2D       CLOSED: NO
+```
+
+## F2D3C decomposition refinement and F2D3C1 closure
+
+F2D3C is further decomposed because tool preflight, application execution and
+public driver wiring have different authority and failure surfaces:
+
+```text
+F2D3C1  read-only Package Tool preflight -> detached plan
+F2D3C2  detached plan -> separately-authorized application Process
+F2D3C3  public workspace-run wiring + F2D3/F2D closure
+```
+
+C1 is CLOSED. `ProtosWorkspacePackagePreflight.build(...)` creates one fresh
+semantic Package Tool Process under the exact bundled `package` resolver. The
+Process receives empty arguments/environment, no standard streams and no default
+Filesystem. Its initial activation receives exactly one additional capability:
+`projectTreeFilesystem`, backed by `ProtosNioReadOnlyTreeFilesystemBackend`
+confined to the selected project root.
+
+The tool Process executes only the already-published mechanical wrapper:
+
+```protos
+Plan: import("self:ExecutionPlan")
+Plan.build(projectTreeFilesystem)
+```
+
+The returned ordinary Protos plan is defensively detached through the closed
+F2D3A adapter while the tool Process is still alive. The tool Process is then
+terminated before C1 returns. The public C1 result is only the immutable
+`ProtosPackageExecutionPlan`; no activation, Process, Filesystem, resolver,
+stream, tool module instance or mutable Protos plan escapes the boundary.
+
+Because the project authority backend is read-only, C1 cannot publish or rewrite
+`protos.lock` and cannot mutate `protos.toml`. Stale/malformed/external-node
+policy remains owned by the bundled `ExecutionPlan.build` implementation and
+fails before any application Process exists.
+
+C1 does not create an application Process, select an application entry, install
+application capabilities, add a CLI command or reserve public syntax. C2 owns
+the separately-authorized application execution mechanism; C3 owns final driver
+wiring only after C2 closes.
+
+After publication:
+
+```text
+TOOL001-F2D3B   CLOSED: YES
+TOOL001-F2D3C   IN_PROGRESS
+TOOL001-F2D3C1  CLOSED: YES
+TOOL001-F2D3C2  READY: YES
+TOOL001-F2D3C3  BLOCKED_BY_DEPENDENCIES: TOOL001-F2D3C2
+TOOL001-F2D3     CLOSED: NO
+TOOL001-F2D      CLOSED: NO
 ```

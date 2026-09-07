@@ -88,7 +88,7 @@ its relation to any legacy Slice 3 terminology that remains useful for continuit
 | TOOL001-F2D | workspace-only normal-execution preflight + PackageExecutionPlan | IN_PROGRESS | TOOL001-F2D1/F2D2/F2D3A published | Plan policy + pure builder + immutable host detach CLOSED; F2D3B exact workspace resolver READY; external nodes remain fail-closed. |
 | TOOL001-F2D1 | PackageExecutionPlan ABI + runtime-name/preflight contract | CLOSED | `SAME_COMMIT` | Freeze workspace-only lock reconciliation, alias/export/module portable-name policy, inert plan shape, authority separation, defensive detach boundary and explicit external-node rejection. |
 | TOOL001-F2D2 | pure workspace execution-state + plan construction | CLOSED | `SAME_COMMIT` | Single-pass full ManifestV1 + ResolutionRootV1 state, runtime-name validation, exact lock/body reconciliation and inert plan projection implemented in Protos. |
-| TOOL001-F2D3 | mechanical host resolver handoff + command-scoped workspace preflight | IN_PROGRESS | TOOL001-F2D3A published | Host handoff split into DTO/detach, resolver, then command authority boundary. |
+| TOOL001-F2D3 | mechanical host resolver handoff + command-scoped workspace preflight | IN_PROGRESS | — | F2D3A/F2D3B closed; F2D3C is subdivided and C1 read-only preflight is closed, with C2 READY. |
 | TOOL001-F2D3A | immutable host DTO + defensive plan detach | CLOSED | `SAME_COMMIT` | Validate exact generation-1 workspace plan shape and recursively detach ordinary Protos data into immutable host records/Lists/Maps; no resolver or CLI integration. |
 | TOOL001-F2D3B | exact workspace package-backed module resolver | CLOSED | `SAME_COMMIT` | B1 identity/source plus B2 self:/dep:/std: routing complete the workspace resolver. |
 | TOOL001-F2D3B1 | package identity + source mechanism | CLOSED | `SAME_COMMIT` | Canonical workspace ModuleKey identity plus exact package-directory and confined logical-source mapping complete B1. |
@@ -104,7 +104,10 @@ its relation to any legacy Slice 3 terminology that remains useful for continuit
 | TOOL001-F2D3B2A | self: routing | CLOSED | `SAME_COMMIT` | Root entry identity is explicit; self: resolves relative to the importing workspace PackageId, bypasses exports and uses exact B1B3 source. |
 | TOOL001-F2D3B2B | dep: edge/export routing | CLOSED | `SAME_COMMIT` | Resolve only the importing package's exact detached alias edge, then the target's exact public export -> internal logical module; aliases/exports never enter ModuleKey identity. |
 | TOOL001-F2D3B2C | std: delegation + resolver closure | CLOSED | `SAME_COMMIT` | Exact std: resolution/source loading delegates to the explicitly selected Standard Library resolver. |
-| TOOL001-F2D3C | command-scoped workspace preflight + authority separation | READY | — | Resolver is closed; command preflight + tool/application authority separation may now wire it. |
+| TOOL001-F2D3C | command-scoped workspace preflight + authority separation | IN_PROGRESS | — | Subdivided into C1 read-only Package Tool preflight, C2 separately-authorized application Process execution, and C3 public workspace-run wiring/closure. |
+| TOOL001-F2D3C1 | read-only Package Tool preflight -> detached plan | CLOSED | `SAME_COMMIT` | Fresh tool Process receives only confined read-only projectTreeFilesystem; ExecutionPlan.build result is detached before tool Process termination. |
+| TOOL001-F2D3C2 | detached plan -> separately-authorized application Process | READY | — | Consume C1 DTO plus closed F2D3B resolver; application Process must receive no Package Tool Filesystem/activation authority. |
+| TOOL001-F2D3C3 | public workspace-run wiring + F2D3/F2D closure | BLOCKED_BY_DEPENDENCIES | TOOL001-F2D3C2 | Wire the public driver only after the application execution boundary is independently closed. |
 
 
 | TOOL001-F2B1 | per-manifest semantic resolution-input projection design | CLOSED | `SAME_COMMIT` | Freeze resolver-affecting manifest inclusion/exclusion, D2 semantic constraint normalization, deterministic scalar/order owners and fail-closed unresolved-owner rule. No digest implementation. |
