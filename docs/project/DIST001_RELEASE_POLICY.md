@@ -256,9 +256,21 @@ event.
 
 DIST001-A now owns the constructible relocatable POSIX/JVM development archive,
 initial optimizing-runtime contract, exact source/runtime metadata, checksums,
-and launcher layout. DIST001-B remains the independent extracted-execution gate:
+and launcher layout.
+
+DIST001-B remains the independent extracted-execution gate, but is intentionally
+split into bounded validation slices so failures are isolated and publication
+does not depend on one large all-or-nothing launcher:
+
+- `DIST001-B1` — validation hygiene and B1..B5 decomposition;
+- `DIST001-B2` — clean-source archive identity/checksums;
+- `DIST001-B3` — outside-checkout caller-CWD and Package Tool execution;
+- `DIST001-B4` — bundled Test Tool and exact optimizing-runtime probe;
+- `DIST001-B5` — cross-slice closure and DIST001-D readiness.
+
 A does not claim that the archive has passed outside-checkout execution merely
-because construction and structural validation pass.
+because construction and structural validation pass. Parent B closes only after
+B5.
 
 DIST001 as a whole remains open until the required distribution and first-release
 work is complete.

@@ -16,6 +16,10 @@
 *.log
 hs_err_pid*
 
+# Python
+__pycache__/
+*.py[cod]
+
 # OS
 .DS_Store
 Thumbs.db
