@@ -456,6 +456,15 @@ development; their exact implementation state is recorded in
 -   [Implementation status](docs/project/IMPLEMENTATION_STATUS.md) — the
     canonical repository-level implementation-progress view.
 
+## Contributing
+
+Contributions are welcome, including AI-assisted and fully AI-generated
+contributions. Protos evaluates changes by correctness, design coherence,
+review, and validation evidence rather than by who or what typed the code.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the contribution workflow, review
+expectations, and the project's AI-assisted development policy.
+
 ## Current specification
 
 The normative Core v0.1 specification is modular. `PROTOS_GRAMMAR.md` owns

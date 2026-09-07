@@ -251,6 +251,37 @@ to coherence with the Protos universe.
 
 <!-- END PROTOS DESIGN PHILOSOPHY -->
 
+## Public contribution and AI-assisted development policy
+
+`CONTRIBUTING.md` is the contributor-facing policy for this repository. Agents
+producing, reviewing, or describing contributions MUST preserve its intent.
+
+AI-assisted and fully AI-generated contributions are allowed. Agents MUST NOT
+reject, devalue, or impose additional requirements on a contribution solely
+because AI produced some or all of it. There is no required human-authored
+percentage.
+
+The absence of a human authoring requirement does not reduce the evidence bar.
+AI-generated changes remain subject to the same specification audit, scope,
+review, validation, repository-state, and publication requirements as other
+changes.
+
+For substantive AI-generated work, seek an independent review when practical.
+Independent review does not require a human reviewer: a separate agent, model,
+session, or clean evaluation context may perform it, provided the review
+actually re-examines the diff, relevant authority, assumptions, edge cases, and
+validation evidence and can challenge the proposed change. Do not describe an
+uncritical continuation of generation as independent review.
+
+When preparing a pull request or other contributor-facing submission in which AI
+materially produced or shaped the change, include the brief AI-assistance
+disclosure requested by `CONTRIBUTING.md`. Do not require prompt transcripts,
+token counts, private conversations, credentials, or model-by-model logs unless
+a separate explicit project decision introduces such a requirement.
+
+Never fabricate human authorship or human review. Describe AI-based generation
+and review accurately.
+
 ## Scoped agent instructions
 
 Before reading, editing, reviewing, or generating files in a repository
