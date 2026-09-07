@@ -266,8 +266,12 @@ does not depend on one large all-or-nothing launcher:
 - `DIST001-B2` — clean-source archive identity/checksums — CLOSED after direct
   ZIP verification of exact clean source revision and complete internal checksum
   coverage;
-- `DIST001-B3` — outside-checkout caller-CWD and Package Tool execution — READY;
-- `DIST001-B4` — bundled Test Tool and exact optimizing-runtime probe;
+- `DIST001-B3` — outside-checkout caller-CWD and Package Tool execution — CLOSED
+  after extracting the bundle outside the checkout and proving a relative Protos
+  source plus `package manifest` resolve from a distinct caller project CWD; on
+  a validation JDK outside the selected JDK22 contract, B3 disables optimizer
+  JARs only in the disposable extracted copy and exercises fallback Truffle;
+- `DIST001-B4` — bundled Test Tool and exact optimizing-runtime probe — READY;
 - `DIST001-B5` — cross-slice closure and DIST001-D readiness.
 
 A does not claim that the archive has passed outside-checkout execution merely

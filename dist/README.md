@@ -97,8 +97,36 @@ requires `SOURCE.txt` to identify the exact repository `HEAD` and a clean source
 tree, and verifies that `SHA256SUMS` covers every distributed file except itself
 with no missing, extra, duplicate, unsafe, or mismatched entries.
 
-This slice deliberately does not extract or execute Protos. Outside-checkout
-source/Package Tool execution remains `DIST001-B3`.
+This slice deliberately does not extract or execute Protos.
+
+## Outside-checkout CWD smoke
+
+`DIST001-B3` validates relocation and caller-working-directory behavior:
+
+```sh
+python3 dist/build_portable.py
+python3 dist/verify_portable.py --require-clean-source
+sh dist/smoke_cwd_package.sh
+```
+
+The smoke first relies on B2's direct archive identity/checksum verification,
+then extracts the ZIP into a temporary toolchain tree outside the Git checkout
+and creates a distinct temporary project directory. From that project directory
+it executes a relative `.protos` source path and runs `protos package manifest`
+against a `protos.toml` that exists only in the caller project.
+
+If the validation host matches the selected GraalVM Community JDK 22 contract,
+the extracted launcher runs unchanged with the bundled optimizing runtime. If the
+host does not match, B3 sets the documented unsupported-runtime override and
+moves the optimizing-runtime JARs out of `lib/runtime` **only inside the
+disposable extracted smoke copy**. This forces B3 to exercise the fallback
+Truffle path instead of loading a runtime/JDK combination outside the selected
+contract. The original archive is not modified.
+
+This isolation is intentional: B3 owns relocation/CWD behavior, while
+`DIST001-B4` owns the bundled Test Tool and exact `HotSpotTruffleRuntime` proof
+for the selected optimizing-runtime contract. The smoke prints captured launcher
+stdout/stderr before failing so a runtime or command failure is diagnosable.
 
 ## DIST001 boundary
 
