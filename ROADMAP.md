@@ -41,8 +41,13 @@ testable, understandable, and increasingly self-hosted:
 The next adoption-oriented milestone is to make trying Protos require much less
 tooling knowledge:
 
-- provide versioned downloadable distributions so a new user does not need
+- build a relocatable downloadable distribution so a new user does not need
   Maven merely to run a first Protos program;
+- validate that extracted distribution outside the repository checkout;
+- publish transient CI snapshot artifacts separately from selected public
+  releases;
+- cut user-facing GitHub pre-releases only at coherent, explicitly selected
+  milestones rather than for every implementation snapshot;
 - establish a simple installation and upgrade path;
 - publish several non-trivial, task-oriented example programs;
 - identify a small set of real `good first issue` contributions;
@@ -51,6 +56,9 @@ tooling knowledge:
 
 These are directional priorities, not a promise that they will land in this
 exact order.
+
+The selected snapshot-versus-release and publication policy is documented in
+[`docs/project/DIST001_RELEASE_POLICY.md`](docs/project/DIST001_RELEASE_POLICY.md).
 
 ## Later
 

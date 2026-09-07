@@ -1003,6 +1003,21 @@ Dependency outline: `PERF001-A -> PERF001-B -> PERF001-C -> PERF001-D/E`; PERF00
 New Performance work MUST allocate and persist its `PERFxxx` identifier in the
 repository when formally introduced rather than relying on chat/prompt history.
 
+## Distribution and release engineering
+
+| Item | Description | Status | Closure evidence | Dependencies / notes |
+|---|---|---|---|---|
+| DIST001 | End-user distribution and release engineering | IN_PROGRESS | DIST001-C policy published | A/B/D/E remain; public release publication is deliberately separate from ordinary implementation publication. |
+| DIST001-A | Relocatable portable distribution layout and runtime contract | READY | — | Build the toolchain archive and relocatable launcher; declare the supported GraalVM/JDK contract; no public release. |
+| DIST001-B | Extracted-distribution smoke/conformance | BLOCKED_BY_DEPENDENCIES | — | Depends on DIST001-A; must execute outside the repository checkout and preserve the invoker CWD. |
+| DIST001-C | Release selection and publication policy | CLOSED | `SAME_COMMIT` | Non-normative policy in `docs/project/DIST001_RELEASE_POLICY.md`; implementation snapshots are not releases; selected public releases may skip internal versions. |
+| DIST001-D | CI snapshot artifact | BLOCKED_BY_DEPENDENCIES | — | Depends on A/B; downloadable CI development artifacts remain explicitly distinct from GitHub Releases. |
+| DIST001-E | First selected GitHub pre-release | BLOCKED_BY_DEPENDENCIES | — | Depends on A-D plus an explicit release decision for an exact validated candidate revision. |
+
+DIST001-C intentionally closes before the executable distribution slices so
+release automation cannot accidentally interpret every `-SNAPSHOT` implementation
+revision as a publication event. DIST001-A is the next ready slice.
+
 ## P-label classification
 
 `P57` and similar `Pnn` references found in historical conformance/changelog
