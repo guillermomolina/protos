@@ -54,11 +54,11 @@ an item.
 | I019-A | Actor source dominant-owner naming correction | CLOSED | `SAME_COMMIT` | `actor.protos` -> `Actor.protos`; public `Actor` is the dominant conceptual owner and private ActorRef/GroupRef/SendOperation prototype bindings are subordinate bootstrap helpers; naming guard and architecture classification reconciled |
 | I020 | Post-Ixxx implementation audit reconciliation | CLOSED | `SAME_COMMIT` | I020-A/B/C/D complete; D040 missing-`methodHome` `InvalidSuper` implemented; B005 closed |
 | I021 | Filesystem namespace replacement/removal | CLOSED | `SAME_COMMIT` | I021-A/B/C complete; D042 / spec `0.1.379`; production confined namespace backend and Protos-visible integrated conformance published; B006 CLOSED by package-tool Filesystem Slice 2B metadata publication integration |
-| I022 | Dynamic Error handlers / unwind-safe cleanup | IN_PROGRESS | — | I022-A/B/C/D CLOSED; I022-E CLOSED (E1/E2/E3); I022-F READY; D043 / spec `0.1.380`; final cross-feature closure remains before resource-owning LIB004 work may depend on the completed control substrate |
+| I022 | Dynamic Error handlers / unwind-safe cleanup | CLOSED | `SAME_COMMIT` | I022-A/B/C/D/E/F complete; D043 / spec `0.1.380`; replay-stable Error handlers, unwind-safe `ensure`, suspension, later-transfer precedence, cooperative cancellation, structured lifetime and task/Actor isolation have final adversarial closure evidence |
 
 ### I022 — Dynamic Error handlers and unwind-safe cleanup
 
-Status: IN_PROGRESS
+Status: CLOSED
 
 Purpose: Implement the already-normative dynamic `Error.handle(body, handler)`
 control substrate together with D043's standard Closure `ensure(cleanup)`
@@ -90,7 +90,7 @@ Planned slices:
 | I022-E1 | CLOSED | `0.2.184-SNAPSHOT` | `SAME_COMMIT` | Internal-only cancellation lifecycle substrate: one idempotently recorded request has explicit NONE/REQUESTED/UNWINDING/TERMINAL phases; only REQUESTED is pending for portable observation; existing structured-child cancellation drain occupies UNWINDING and terminalizes without re-entering parent ordinary code. No `ensure`, public Future protocol, spec or native boundary change. |
 | I022-E2 | CLOSED | `0.2.187-SNAPSHOT` | `SAME_COMMIT` | Cancellation is a fourth exact pending `ensure` outcome. Observation with an active ensure extent defers terminal cancellation; synchronous cleanup runs in LIFO order; normal cleanup rethrows the exact cancellation transfer and terminalizes through Task unwind completion; cleanup Error/non-local return marks the delivered request SUPERSEDED and proceeds through the ordinary later-transfer path. Protos conformance covers cleanup execution, exact cleanup Error identity, `^` precedence and nested LIFO cleanup. |
 | I022-E3 | CLOSED | `0.2.191-SNAPSHOT` | `SAME_COMMIT` | Cancellation cleanup may suspend and replay under the existing D043/D machinery without re-observing the same request. An active ensure extent keeps the parent running even when pre-existing structured children are being cancelled, so cleanup runs first; the task-backed Future remains PENDING while cleanup is suspended. After successful cleanup, all children still owned at the cutover—including cleanup-created unawaited children—receive cancellation and drain before terminal `CANCELLED`; cleanup-created awaited children may complete normally during cleanup. Suspended cleanup Error still supersedes cancellation with exact Error identity. |
-| I022-F | READY | — | — | Cross-feature closure: handler-deactivation-before-cleanup, Error/return/cancellation precedence, structured-child interaction, Actor/task isolation, native-boundary audit, Protos conformance and full-suite publication. |
+| I022-F | CLOSED | — | `SAME_COMMIT` | Final adversarial closure composes selected-handler deactivation with cleanup-initiated cancellation; cancellation cleanup Error with an outer handler; Error/non-local-return supersession with structured children; child-Future handler non-inheritance and consumer-context re-signaling; and Actor termination with suspending cancellation cleanup. The Core native boundary remains 109 sites / 30 providers and the complete suite is required for publication. No production or specification change and no implementation-version increment. |
 
 Dependencies:
 - I007 Core Error infrastructure — CLOSED; its historical scope intentionally did
@@ -98,6 +98,21 @@ Dependencies:
 - I009 Future / Task — CLOSED;
 - D043 / specification revision `0.1.380` — normative public `ensure` ambiguity
   resolved.
+
+
+Final I022 closure boundary:
+- handler installation/selection, deactivation, unwind cleanup and Future
+  re-signaling compose without handler state crossing Task or Actor boundaries;
+- `ensure` preserves exact pending outcomes across replay, lets later cleanup
+  Error/non-local-return/cancellation transfers win permanently, and runs
+  cancellation cleanup through ordinary suspension without re-delivering the
+  already-honored request;
+- structured children remain owned across normal/error/return/cancellation
+  completion, including cleanup-created work, and Actor termination cannot
+  bypass cleanup by terminalizing the Actor while an unwind task remains live;
+- the Core native boundary is unchanged by I022-D/E/F and is definitively guarded
+  at 109 construction sites across 30 providers;
+- no implementation blocker remains for the general I022 control substrate.
 
 ### I021 — Filesystem namespace replacement/removal
 
@@ -557,7 +572,7 @@ Dependencies:
 - LIB002 convenience helpers are not required by LIB003-A/B/C core work.
 ### LIB004 — Filesystem / process conveniences
 
-Status: BLOCKED_BY_DEPENDENCIES
+Status: OPEN
 
 Description: Higher-level filesystem and Process conveniences layered over the
 standard capability-based File/Filesystem and Process I/O surfaces.
@@ -567,9 +582,12 @@ Design record:
   non-normative draft checkpoint for the ongoing convenience-surface audit;
 - D043 / specification revision `0.1.380` closes the standard Closure
   `ensure(cleanup)` public protocol needed by the resource-custody design;
-- implementation remains blocked until I022 publishes the general dynamic
-  handler/unwind-safe cleanup substrate. LIB004 must not bypass that dependency
-  with File/Filesystem-specific Java cleanup primitives.
+- I022 is CLOSED: the general dynamic handler/unwind-safe cleanup prerequisite
+  is now published, and File/Filesystem-specific Java cleanup primitives remain
+  unnecessary;
+- LIB004 is therefore no longer dependency-blocked, but its persisted design
+  record remains DRAFT and no implementation surface is approved yet. Finalize
+  and persist the convenience-surface design before moving LIB004 to READY.
 
 Planning boundary:
 - convenience code must preserve capability confinement, lifecycle, commitment,

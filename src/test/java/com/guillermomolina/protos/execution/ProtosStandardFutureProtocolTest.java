@@ -23,6 +23,7 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosActor;
 import com.guillermomolina.protos.runtime.ProtosActorExecutionDomain;
 import com.guillermomolina.protos.runtime.ProtosActorModuleState;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
@@ -204,6 +205,80 @@ class ProtosStandardFutureProtocolTest {
         assertEquals(
                 ProtosTask.CancellationPhase.TERMINAL,
                 producer.cancellationPhase());
+    }
+
+    // Deliberately Java-side: this verifies an intermediate Actor lifecycle state
+    // while cancellation cleanup is suspended. The final cancellation/cleanup behavior itself
+    // is covered by executable Protos conformance.
+    @Test
+    void actorTerminationWaitsForSuspendingCancellationCleanup() throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosObjectValue actorRefPrototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosActor actor = new ProtosActor(actorRefPrototype);
+        assertTrue(actor.markReady());
+
+        ProtosActorExecutionDomain domain = actor.executionDomain();
+        ProtosActivation activation =
+                prelude.newModuleActivation(
+                        actor.moduleState(),
+                        null,
+                        prelude.newExecutionContext(),
+                        domain);
+
+        ProtosFutureValue bodyGate =
+                new ProtosFutureValue(prelude.futurePrototype(), domain);
+        ProtosFutureValue cleanupGate =
+                new ProtosFutureValue(prelude.futurePrototype(), domain);
+        activation.context().createLocalSlot("bodyGate", bodyGate);
+        activation.context().createLocalSlot("cleanupGate", cleanupGate);
+
+        ProtosFutureValue producer =
+                (ProtosFutureValue)
+                        eval(
+                                prelude,
+                                activation,
+                                "future: (() => {\n"
+                                        + "    (() => {\n"
+                                        + "        bodyGate.value()\n"
+                                        + "        41\n"
+                                        + "    }).ensure(() => {\n"
+                                        + "        cleanupGate.value()\n"
+                                        + "        null\n"
+                                        + "    })\n"
+                                        + "}).future()\n"
+                                        + "future");
+
+        assertTrue(domain.dispatchOne());
+        assertEquals(ProtosFutureValue.State.PENDING, producer.state());
+        assertEquals(1, domain.liveTaskCount());
+
+        actor.requestTerminationForRuntime();
+        assertEquals(ProtosActor.LifecycleState.TERMINATING, actor.lifecycleState());
+
+        assertTrue(domain.dispatchOne());
+        ProtosTask producerTask = producer.producerTask().orElseThrow();
+        assertEquals(ProtosTask.State.SUSPENDED, producerTask.state());
+        assertEquals(
+                ProtosTask.CancellationPhase.UNWINDING,
+                producerTask.cancellationPhase());
+        assertEquals(ProtosFutureValue.State.PENDING, producer.state());
+        assertEquals(
+                ProtosActor.LifecycleState.TERMINATING,
+                actor.lifecycleState(),
+                "Actor termination must wait for cancellation cleanup");
+
+        cleanupGate.resolve(ProtosNullValue.INSTANCE, activation);
+        domain.dispatchUntilIdle();
+
+        assertEquals(ProtosFutureValue.State.CANCELLED, producer.state());
+        assertEquals(ProtosTask.State.CANCELLED, producerTask.state());
+        assertEquals(ProtosActor.LifecycleState.TERMINATED, actor.lifecycleState());
+        assertEquals(0, domain.liveTaskCount());
+        assertEquals(
+                ProtosFutureValue.State.PENDING,
+                bodyGate.state(),
+                "cancelling the waiter must not cancel its observed dependency");
     }
 
     // Success ordering and empty-input behavior already have executable Protos
