@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.2.187-SNAPSHOT
+
+- Close I022-E2 by integrating cooperative cancellation with D043 `ensure` for the synchronous-cleanup slice. `EnsureExitKind` gains `CANCELLATION`; an observed request with an active ensure frame remains in Task `UNWINDING` instead of publishing a terminal cancelled Future; each crossed ensure records and propagates the exact cancellation transfer after running cleanup in ordinary LIFO order.
+- Add explicit later-transfer precedence over delivered cancellation. Cleanup Error or non-local return changes the internal cancellation phase to `SUPERSEDED`, preventing redelivery of the original request and allowing the ordinary Error/return path to determine the Task/Future outcome. Normal cleanup reaches `finishCancellationUnwind()`, which preserves E1's existing child-drain terminalization when applicable.
+- Add Protos-source conformance for synchronous cancellation cleanup execution, exact cleanup Error identity, cleanup `^` superseding cancellation, and nested LIFO cleanup; retain narrow Java Task-state focal coverage for the internal UNWINDING/SUPERSEDED transitions. No specification or native-Closure boundary change. I022-E remains IN_PROGRESS and I022-E3 becomes READY for suspension/shielding and cleanup-created structured-child closure.
+
 ## 0.2.186-SNAPSHOT
 
 - Start the subdivided `TOOL002-D3` implementation with `TOOL002-D3A1`: add bundled `Runner.readSource(spec, filesystem)` as ordinary Protos policy. It resolves the D2 canonical CaseSpec path through the confined standard Filesystem, consumes the ordered File with bounded 16-read / 64-KiB windows, accumulates exact bytes, closes the File, and decodes UTF-8 exactly once so codec scalars split across read results remain intact.

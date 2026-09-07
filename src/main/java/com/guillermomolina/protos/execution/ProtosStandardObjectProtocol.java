@@ -25,6 +25,7 @@ import com.guillermomolina.protos.runtime.ProtosEvaluatorContinuation;
 import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosTask;
 import java.util.List;
 
 public final class ProtosStandardObjectProtocol {
@@ -106,9 +107,11 @@ public final class ProtosStandardObjectProtocol {
                         pending,
                         replayCursor(activation));
             } catch (ProtosTaskCancellationException pending) {
-                // I022-E owns cancellation unwind and same-request cleanup shielding.
-                state.leaveFrame(frame);
-                throw pending;
+                state.beginEnsureCleanup(
+                        frame,
+                        ProtosDynamicControlState.EnsureExitKind.CANCELLATION,
+                        pending,
+                        replayCursor(activation));
             } catch (RuntimeException hostFailure) {
                 state.leaveFrame(frame);
                 throw hostFailure;
@@ -138,6 +141,7 @@ public final class ProtosStandardObjectProtocol {
             case NORMAL -> outcome;
             case ERROR -> throw (ProtosSignalException) outcome;
             case RETURN -> throw (ProtosNonLocalReturnException) outcome;
+            case CANCELLATION -> throw (ProtosTaskCancellationException) outcome;
         };
     }
 
@@ -153,6 +157,19 @@ public final class ProtosStandardObjectProtocol {
             // The frame remains in CLEANUP phase so replay resumes cleanup, never the body.
             throw suspension;
         } catch (RuntimeException laterTransfer) {
+            if (frame.ensureExitKind().orElse(null)
+                    == ProtosDynamicControlState.EnsureExitKind.CANCELLATION) {
+                ProtosTask task =
+                        activation.task()
+                                .orElseThrow(
+                                        () ->
+                                                new IllegalStateException(
+                                                        "cancellation cleanup requires a task"));
+                if (!task.supersedeCancellationUnwind()) {
+                    throw new IllegalStateException(
+                            "cleanup transfer could not supersede cancellation unwind");
+                }
+            }
             state.leaveFrame(frame);
             throw laterTransfer;
         }

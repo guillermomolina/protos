@@ -223,6 +223,68 @@ final class ProtosActorExecutionDomainTest {
     }
 
     @Test
+    void activeEnsureDefersCancellationTerminalizationUntilCleanupUnwindFinishes() {
+        ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+
+        ProtosTask task = domain.createTask(null, current -> {
+            ProtosDynamicControlState state = current.dynamicControlState();
+            ProtosDynamicControlState.Frame ensure =
+                    state.enterFrame(new Object(), ProtosDynamicControlState.FrameKind.ENSURE);
+
+            assertTrue(current.requestCancellation());
+            assertTrue(current.observeCancellation());
+
+            assertEquals(ProtosTask.State.RUNNING, current.state());
+            assertEquals(
+                    ProtosTask.CancellationPhase.UNWINDING,
+                    current.cancellationPhase());
+            assertFalse(current.cancellationRequested());
+
+            state.leaveFrame(ensure);
+            assertTrue(current.finishCancellationUnwind());
+            assertEquals(ProtosTask.State.CANCELLED, current.state());
+            assertEquals(
+                    ProtosTask.CancellationPhase.TERMINAL,
+                    current.cancellationPhase());
+        });
+
+        assertTrue(domain.dispatchOne());
+        assertEquals(ProtosTask.State.CANCELLED, task.state());
+    }
+
+    @Test
+    void laterCleanupTransferSupersedesDeliveredCancellation() {
+        ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
+
+        ProtosTask task = domain.createTask(null, current -> {
+            ProtosDynamicControlState state = current.dynamicControlState();
+            ProtosDynamicControlState.Frame ensure =
+                    state.enterFrame(new Object(), ProtosDynamicControlState.FrameKind.ENSURE);
+
+            assertTrue(current.requestCancellation());
+            assertTrue(current.observeCancellation());
+            assertEquals(
+                    ProtosTask.CancellationPhase.UNWINDING,
+                    current.cancellationPhase());
+
+            assertTrue(current.supersedeCancellationUnwind());
+            assertEquals(
+                    ProtosTask.CancellationPhase.SUPERSEDED,
+                    current.cancellationPhase());
+            assertFalse(current.cancellationRequested());
+            assertFalse(current.requestCancellation());
+
+            state.leaveFrame(ensure);
+            current.complete("replacement");
+        });
+
+        assertTrue(domain.dispatchOne());
+        assertEquals(ProtosTask.State.COMPLETED, task.state());
+        assertEquals(ProtosTask.CancellationPhase.TERMINAL, task.cancellationPhase());
+        assertEquals("replacement", task.result().orElseThrow());
+    }
+
+    @Test
     void fifoQueueProvidesDeterministicWeakFairDispatch() {
         ProtosActorExecutionDomain domain = new ProtosActorExecutionDomain();
         List<Integer> order = new ArrayList<>();

@@ -579,3 +579,7 @@ control/ensure-return-cleanup-suspension-preserves-return.protos	future-integer	
 control/ensure-selected-handler-inactive-across-cleanup-suspension.protos	future-integer	2
 future/root-activation-preserves-local-binding-across-suspension.protos	future-integer	42
 future/root-activation-preserves-return-home-across-suspension.protos	future-integer	42
+control/ensure-cancellation-cleanup-error-supersedes.protos	future-observation-error-identity	stored:Error
+control/ensure-cancellation-cleanup-return-supersedes.protos	future-integer	42
+control/ensure-cancellation-nested-lifo.protos	future-integer	12
+control/ensure-cancellation-sync-cleanup-runs.protos	future-integer	1

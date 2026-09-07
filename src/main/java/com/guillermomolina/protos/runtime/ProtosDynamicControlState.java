@@ -49,7 +49,8 @@ public final class ProtosDynamicControlState {
     public enum EnsureExitKind {
         NORMAL,
         ERROR,
-        RETURN
+        RETURN,
+        CANCELLATION
     }
 
     public enum TransferKind {
@@ -253,6 +254,15 @@ public final class ProtosDynamicControlState {
             int bodyReplayCursor) {
         requirePresent(frame);
         frame.beginEnsureCleanup(exitKind, outcome, bodyReplayCursor);
+    }
+
+    public boolean hasActiveEnsureFrames() {
+        for (Frame frame : framesNewestFirst) {
+            if (frame.active() && frame.kind() == FrameKind.ENSURE) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public Optional<Frame> frameForInvocation(Object invocationIdentity) {

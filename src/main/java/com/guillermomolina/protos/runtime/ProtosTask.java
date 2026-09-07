@@ -52,6 +52,7 @@ public final class ProtosTask {
         NONE,
         REQUESTED,
         UNWINDING,
+        SUPERSEDED,
         TERMINAL
     }
 
@@ -173,8 +174,7 @@ public final class ProtosTask {
         } catch (ProtosEvaluatorSuspension suspended) {
             // suspend() already changed the task state; returning yields the host thread to the domain.
         } catch (ProtosTaskCancellationException cancelled) {
-            // Cancellation was already observed; terminalization may be immediate or may be
-            // waiting only for existing structured children to drain.
+            finishCancellationUnwind();
         } catch (ProtosSignalException signalled) {
             fail(signalled.error());
         } finally {
@@ -276,7 +276,7 @@ public final class ProtosTask {
         } catch (ProtosEvaluatorSuspension suspended) {
             // suspension already changed task state
         } catch (ProtosTaskCancellationException cancelled) {
-            // Cancellation was already observed; structured child drain may still be pending.
+            finishCancellationUnwind();
         } catch (ProtosSignalException signalled) {
             fail(signalled.error());
         } finally {
@@ -378,9 +378,16 @@ public final class ProtosTask {
 
             cancellationPhase = CancellationPhase.UNWINDING;
             cancelChildren = Set.copyOf(children);
+            boolean hasEnsureCleanup =
+                    dynamicControlState != null
+                            && dynamicControlState.hasActiveEnsureFrames();
             if (!cancelChildren.isEmpty()) {
                 state = State.SUSPENDED;
                 waitDependency = childDrain;
+                terminalNow = false;
+            } else if (hasEnsureCleanup) {
+                // The cancellation request has been delivered but the task-backed Future must
+                // not become terminal before the active ensure extents run their cleanup.
                 terminalNow = false;
             } else {
                 cancellationPhase = CancellationPhase.TERMINAL;
@@ -395,6 +402,63 @@ public final class ProtosTask {
 
         if (terminalNow) {
             publishCancellationTerminal();
+        }
+        return true;
+    }
+
+    /**
+     * Completes an already-delivered cancellation after synchronous ensure cleanup.
+     *
+     * <p>If existing structured children are still draining, the E1 child-drain continuation
+     * remains the terminalization owner. E3 will extend this method for cleanup suspension and
+     * cleanup-created structured children.
+     */
+    public boolean finishCancellationUnwind() {
+        boolean terminalNow = false;
+        synchronized (this) {
+            if (cancellationPhase != CancellationPhase.UNWINDING || isTerminal()) {
+                return false;
+            }
+
+            if (state == State.RUNNING) {
+                if (!children.isEmpty()) {
+                    state = State.SUSPENDED;
+                    waitDependency = childDrain;
+                    return true;
+                }
+                cancellationPhase = CancellationPhase.TERMINAL;
+                state = State.CANCELLED;
+                terminalNow = true;
+            } else if (state == State.SUSPENDED && waitDependency == childDrain) {
+                return true;
+            } else {
+                throw new IllegalStateException(
+                        "finish cancellation unwind requires running cleanup or child drain");
+            }
+        }
+
+        if (terminalNow) {
+            publishCancellationTerminal();
+        }
+        return true;
+    }
+
+    /**
+     * Records that a later cleanup transfer replaced the delivered cancellation.
+     *
+     * <p>The original request remains idempotently recorded but can never be delivered again.
+     * Returning a suspended child-drain task to RUNNING lets the ordinary later transfer path
+     * re-establish its own structured completion/failure drain.
+     */
+    public synchronized boolean supersedeCancellationUnwind() {
+        if (cancellationPhase != CancellationPhase.UNWINDING || isTerminal()) {
+            return false;
+        }
+        cancellationPhase = CancellationPhase.SUPERSEDED;
+        if (state == State.SUSPENDED && waitDependency == childDrain) {
+            state = State.RUNNING;
+            waitDependency = null;
+            resumedDependency = null;
         }
         return true;
     }
