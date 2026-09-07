@@ -817,3 +817,105 @@ local/no-network implementation slice without committing to a public registry.
 - SwiftPM resolution/update: https://github.com/swiftlang/swift-package-manager/blob/main/Sources/PackageManagerDocs/Documentation.docc/ResolvingPackageVersions.md
 - Dart package versioning: https://dart.dev/tools/pub/versioning
 - Dart PubGrub solver design: https://github.com/dart-lang/pub/blob/master/doc/solver.md
+
+## TOOL001-F2B1 — canonical manifest resolution-input projection
+
+`TOOL001-F2B1` freezes the semantic inclusion boundary for one already-parsed
+manifest participating in a resolution root. It deliberately does **not** choose
+workspace filesystem membership, assemble the complete resolution root, hash
+bytes, or compare a lock digest. Those steps remain later F2B work.
+
+The purpose of this layer is to prevent stale detection from regressing into a
+hash of spelling or formatting. A resolution-input implementation consumes
+semantic values owned by their existing policy layers. It does not hash raw TOML
+substrings merely because a later semantic owner is missing.
+
+### Per-manifest inclusion matrix
+
+For manifest schema v1, the semantic projection has these owners:
+
+| Manifest value | F2B1 treatment | Reason |
+| --- | --- | --- |
+| manifest generation | represented by the projection/resolver generation; not repeated as raw TOML | the schema generation is already an interpretation boundary |
+| `package.id` | include the parsed opaque String | package identity participates in the resolution root |
+| `package.version` | include the canonical D1 `ReleaseVersion` value | root/workspace package version is mutable resolution metadata even though workspace lock refs omit a ReleaseVersion |
+| `package.locator` | exclude | local package locator does not select dependency targets |
+| `compatibility.language` | include semantically, but construction remains fail-closed until its canonical compatibility owner is frozen | compatibility affects candidate eligibility |
+| `exports` | exclude | exports affect module visibility after package selection, not dependency selection |
+| `workspace.members` | include the declared membership relation, but complete root assembly remains fail-closed until workspace/path policy interprets and validates those declarations | membership changes which package manifests participate in the root |
+| dependency alias | include | the declaring package's alias identifies the dependency edge |
+| registry dependency authority/package/constraint | include, with the constraint normalized through D2 semantics | all three affect target eligibility |
+| Git dependency repository/revision | include as semantic source requirements; exact-revision policy remains the VCS/source owner | changing either changes the selected immutable source requirement |
+| path dependency | include semantically, but construction remains fail-closed until path/workspace policy owns canonical path identity | path interpretation is resolution policy, not schema syntax |
+
+Comments, whitespace, TOML table ordering, quote style, descriptions, export
+entries, local cache paths, credentials, mirror/proxy configuration, editor
+configuration and timestamps never enter this projection merely because they
+appear beside resolver-affecting data.
+
+### Dependency-constraint normalization
+
+The schema-v1 model currently retains the dependency `version` field as String,
+while closed D2 owns its meaning. F2B1 therefore forbids hashing that source
+String directly.
+
+Canonical constraint projection is derived from
+`DependencyConstraint.parse(...)`:
+
+- `exact` projects the canonical parsed ReleaseVersion;
+- `caret` projects its canonical lower ReleaseVersion and the `caret` kind;
+- `interval` projects the semantic lower comparison first and upper comparison
+  second, including each inclusive/exclusive bit and canonical ReleaseVersion,
+  independent of source comparison order or tab/space separator spelling.
+
+The original D2 `.text` field is diagnostic/source-preservation data and is not
+the semantic digest input.
+
+This means, for example, that accepted interval spellings which D2 parses to the
+same lower/upper model do not become different solely because the user reordered
+the comparisons or used a different accepted separator.
+
+### Scalar encoding and ordering
+
+When F2B later materializes canonical bytes:
+
+- scalar Strings use the already-frozen F1B1 canonical `qstring` encoding;
+- dependency entries are ordered by canonical alias-qstring UTF-8 bytes;
+- workspace member declarations are ordered by their canonical declaration
+  qstring bytes before workspace policy maps them to participating package
+  manifests;
+- no iteration order from `Map`, filesystem traversal, manifest source order, or
+  resolver traversal may affect the byte stream.
+
+These ordering rules define deterministic projection, not workspace path
+semantics.
+
+### Fail closed on unresolved semantic owners
+
+F2B1 establishes a strict rule for later stale detection:
+
+> If a manifest value affects resolution but its canonical semantic owner has not
+> been defined, `protos-resolution-input-v1` construction must fail closed. It
+> must not substitute raw source text, host path spelling, cache identity, or
+> another incidental representation.
+
+At this checkpoint the unresolved owners materially affecting complete
+resolution-root input are:
+
+- workspace member path interpretation and validated membership;
+- canonical path-dependency identity/relation;
+- the language/package compatibility value model;
+- complete root/member assembly across the participating manifests.
+
+Consequently F2B1 does **not** make stale detection executable yet.
+
+### F2B continuation boundary
+
+`TOOL001-F2B2` owns the next focused design step: resolution-root assembly,
+including workspace membership/path identity and the compatibility value needed
+to construct all participating manifest projections without raw-source
+fallbacks.
+
+Only after that boundary closes may a later F2B slice choose/consume the hashing
+capability, emit the `protos-resolution-input-v1 <algorithm>:<digest>` value and
+compare it with `protos.lock`.

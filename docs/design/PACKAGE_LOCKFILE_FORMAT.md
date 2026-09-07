@@ -1223,3 +1223,34 @@ F1C must not silently absorb work still owned elsewhere:
 Those remain separate focused slices/design owners. Closing the physical grammar
 is a prerequisite for implementation, not evidence that the whole Package Tool
 or dependency resolver is complete.
+
+## TOOL001-F2B1 implementation checkpoint — stale-input ownership
+
+F2A now reads and atomically publishes canonical `protos.lock`, but that physical
+I/O substrate does not make the `resolution-input` header executable stale
+policy by itself.
+
+F2B1 closes the per-manifest semantic inclusion matrix in
+`PACKAGE_VERSION_RESOLUTION.md`. The lock header continues to reserve:
+
+```text
+resolution-input protos-resolution-input-v1 <algorithm>:<lowercase-hex>
+```
+
+but a production tool must not synthesize that digest until the complete
+resolution-root semantic input can be constructed.
+
+In particular:
+
+- raw `protos.toml` bytes are never a valid substitute;
+- canonical `protos.lock` bytes are the resolver **output** and are not the
+  stale-input digest source;
+- D2 dependency constraints must contribute normalized semantic constraint data,
+  not their retained source `.text`;
+- workspace/path/compatibility values must come from their canonical semantic
+  owners;
+- missing semantic ownership fails closed rather than creating a platform- or
+  spelling-dependent digest.
+
+`TOOL001-F2B2` is the next prerequisite for root/workspace semantic assembly.
+Hashing and stale comparison remain dependency-gated after that work.

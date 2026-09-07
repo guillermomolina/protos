@@ -804,7 +804,7 @@ record distributable Standard Library functionality.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | D/E and F1 are CLOSED; F2 physical lock integration IN_PROGRESS through F2A confined read/publish. Stale/resolution-input and resolver/execution/update work remain open. |
+| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | D/E and F1 CLOSED; F2 physical integration IN_PROGRESS through F2A I/O and F2B1 semantic stale-input design. F2B2 root/workspace assembly READY. |
 | TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D CLOSED; TOOL002-E is IN_PROGRESS with E1A Package/TOML manifest planning CLOSED at `0.2.216-SNAPSHOT` and E1B confined corpus authority CLOSED at `0.2.218-SNAPSHOT`; E2A is READY and E2B-E4 plus later F-J remain dependency-ordered. |
 
 ### TOOL001 — Package Tool
@@ -845,15 +845,20 @@ forward.
 | TOOL001-E | local/offline version selection policy | CLOSED | `SAME_COMMIT` | E1 fresh highest-satisfying selection and E2 retained exact-version preference complete pure selection over already-known ReleaseVersion candidates. |
 | TOOL001-E1 | fresh highest-satisfying ReleaseVersion selection | CLOSED | `SAME_COMMIT` | Pure bundled-Protos selection over already-known candidates using closed D2 satisfaction and D1 precedence; no-match fails closed. |
 | TOOL001-E2 | retained exact-version preference | CLOSED | `SAME_COMMIT` | Preserve an available exact retained version while it satisfies D2; otherwise fall back to E1. No physical lockfile/identity/discovery behavior. |
-| TOOL001-F | canonical physical lockfile v1 | IN_PROGRESS | TOOL001-F1/F2A published | Canonical in-memory format CLOSED; confined physical lock load/publication CLOSED; stale/resolution-input integration pending focused audit. |
+| TOOL001-F | canonical physical lockfile v1 | IN_PROGRESS | TOOL001-F1/F2A/F2B1 published | Canonical format + physical I/O CLOSED; semantic resolution-input/stale work IN_PROGRESS, F2B2 READY. |
 | TOOL001-F1A | canonical lock header grammar | CLOSED | `SAME_COMMIT` | Design/governance-only freeze of exact header keywords, separators, canonical decimals/tokens/digest spelling and one blank line before body records. |
 | TOOL001-F1B | canonical lock body node/edge grammar | CLOSED | `SAME_COMMIT` | F1B1/F1B2/F1B3 freeze scalar/reference, root/workspace, external node, dependency and total canonical body grammar. |
 | TOOL001-F1B1 | canonical scalar strings + typed node references | CLOSED | `SAME_COMMIT` | Deterministic quoted UTF-8 body scalars and typed registry/git/workspace identity tuples; does not freeze PackageId's public textual encoding. |
 | TOOL001-F1B2 | root/workspace representation | CLOSED | `SAME_COMMIT` | One root workspace-ref plus canonically ordered mappings from explicit workspace.members strings to member workspace refs; no virtual root or path semantics. |
 | TOOL001-F1B3 | external node blocks + dependency edges + F1B closure | CLOSED | `SAME_COMMIT` | Registry/git external records, ContentIdentity/provenance, dependency edges and final ordering/separation close F1B. |
 | TOOL001-F1C | canonical lock parser/writer + round-trip conformance | CLOSED | `SAME_COMMIT` | F1C1/F1C2/F1C3 complete lexical, structural and canonical writer/round-trip behavior. |
-| TOOL001-F2 | physical lock integration | IN_PROGRESS | TOOL001-F2A published | Confined read/publish substrate CLOSED; stale/resolution-input and later execution/update integration require fresh audit. |
+| TOOL001-F2 | physical lock integration | IN_PROGRESS | TOOL001-F2A/F2B1 published | Confined read/publish CLOSED; resolution-input/stale work IN_PROGRESS through semantic projection design. |
 | TOOL001-F2A | confined `protos.lock` read/publish substrate | CLOSED | `SAME_COMMIT` | Canonical load plus validation-before-staging atomic lock publication through existing confined Filesystem authority. |
+| TOOL001-F2B | semantic resolution-input + stale detection | IN_PROGRESS | TOOL001-F2B1 published | Inclusion/normalization ownership CLOSED; root/workspace semantic assembly READY; digest/stale comparison blocked on F2B2. |
+| TOOL001-F2B1 | per-manifest semantic resolution-input projection design | CLOSED | `SAME_COMMIT` | Resolver-affecting field matrix, semantic normalization ownership, deterministic ordering and fail-closed unresolved-owner rule frozen. |
+| TOOL001-F2B2 | resolution-root/workspace semantic assembly design | READY | — | Resolve canonical workspace/path/compatibility semantic inputs and deterministic root/member assembly. |
+| TOOL001-F2B3 | resolution-input digest + stale comparison | BLOCKED_BY_DEPENDENCIES | — | After F2B2, hash canonical semantic input and compare lock-header digest without resolving or rewriting. |
+
 
 | TOOL001-F1C1 | lock lexical/header/qstring/node-ref primitives | CLOSED | `SAME_COMMIT` | Bundled-Protos LockSyntax plus Protos-owned conformance; no body graph parsing or I/O. |
 | TOOL001-F1C2 | body record/model + structural validation | CLOSED | `SAME_COMMIT` | Complete in-memory body model with duplicate/dangling structural rejection; no canonical ordering rejection yet. |
