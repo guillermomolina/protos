@@ -336,9 +336,20 @@ public final class ProtosCoreBootstrap {
         ProtosStandardBufferedByteIoProtocol.installWriterFactory(
                 bufferedWriterFactory, bufferedBytesPrototype, bootstrapActivation);
 
-        sourceLoader
-                .load(coreDirectory.resolve("prelude.protos"))
-                .call(bootstrapActivation);
+        if (bootstrapContext.hasLocalSlot("_coreRootObject")) {
+            throw new IllegalStateException(
+                    "Core bootstrap root seed already exists");
+        }
+        bootstrapContext.createLocalSlot(
+                "_coreRootObject",
+                ProtosObjectValue.rootObject());
+        try {
+            sourceLoader
+                    .load(coreDirectory.resolve("prelude.protos"))
+                    .call(bootstrapActivation);
+        } finally {
+            bootstrapContext.removeLocalSlot("_coreRootObject");
+        }
         ProtosObjectValue preludeBindings =
                 requirePrototype(
                         bootstrapContext, "_corePreludeBindings", contextPrototype);

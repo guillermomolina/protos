@@ -40,7 +40,7 @@ the standard native boundary.
 
 | Provider | Native Closure sites | Classification | Audited reason for remaining native |
 |---|---:|---|---|
-| `ProtosStandardObjectProtocol.java` | 3 | host-irreducible | Generic polymorphic `call` performs Closure invocation or ordinary instance construction; `identityHash` exposes semantic identity without dynamic-dispatch substitution; `ensure` establishes the D043 Closure-only protected dynamic extent and executes unwind cleanup before normal/return/Error propagation. |
+| `ProtosStandardObjectProtocol.java` | 4 | host-irreducible / representation bridge | Generic polymorphic `call` performs Closure invocation or ordinary instance construction; `identityHash` exposes semantic identity without dynamic-dispatch substitution; `ensure` establishes the D043 Closure-only protected dynamic extent and executes unwind cleanup before normal/return/Error propagation; inherited `parent` projects the exact immutable semantic delegation parent across ordinary and opaque represented values and signals for the unique root because no structural parent exists. |
 | `ProtosStandardBooleanProtocol.java` | 1 | host-irreducible | `ifTrue`/`ifFalse`/`and`/`or` are the primitive selective-control surface used to express branching itself, including path-sensitive callback validation. |
 | `ProtosStandardHashSupport.java` | 3 | representation bridge | Object identity hashing and Number/String hashing depend on semantic identity or exact represented values and must not be redefined through overrideable message sends. |
 | `ProtosStandardNumberEqualityProtocol.java` | 1 | representation bridge | Exact cross-family Number equality needs Integer/fixed/binary64 representation knowledge, including NaN and exact-integral Float handling. |
@@ -71,7 +71,7 @@ the standard native boundary.
 | `ProtosStandardFileProtocol.java` | 10 | resource/capability bridge | File objects are acquired resource capabilities whose exact local surface depends on backend-provided authority and whose operations own cursor/append/sync/close/commitment state. |
 | `ProtosStandardFilesystemProtocol.java` | 1 | resource/capability bridge | Host-provisioned Filesystem authority exposes standard `open`, `replace`, and `remove` through one shared audited operation-Closure construction helper. Open retains confined/race-free acquisition and File materialization; D041 namespace mutation uses an independent host-neutral effect/commit cutover and backend-provided confined atomic transition. |
 
-Total audited Core production construction sites: **109 across 30 providers**.
+Total audited Core production construction sites: **110 across 30 providers**.
 
 CLI/launcher-owned host conveniences are not Core standard behavior and therefore
 do not change that 30-provider / 109-site Core boundary. They are nevertheless
@@ -82,6 +82,29 @@ kept explicit rather than allowed to accumulate invisibly:
 | `ProtosCliPrintFacility.java` | 1 | standalone CLI host/display bridge | Installs one ordinary initial-context `print` Closure only for normal standalone CLI sessions. General value rendering is CLI policy; output is delegated through a borrowing standard `TextWriter` over the already-provisioned Process stdout capability and Encoding. Bundled tools, Core bootstrap, imported modules and non-root Actor bootstrap do not receive this binding. |
 | `ProtosExactExecutionFacility.java` | 1 | bundled-tool bootstrap execution bridge | Installs one ordinary initial-context `execution` Closure only when the host explicitly grants the Test Tool execution capability. It delegates to the general fresh-Process/private-capture machinery and returns only detached authority-free observation data. It is not a Core/prelude binding and therefore does not widen the 30-provider / 109-site Core standard native boundary. |
 
+
+### TOOL002-D3B2A Object.parent reflection prerequisite
+
+The D3B2 `error-parent` migration exposed a pre-existing implementation gap in
+the already-normative Core reflection surface: Protos source could not invoke
+the inherited standard `Object.parent()` selector even though delegation parent
+is portable observable semantics. D3B2A closes that general gap rather than
+adding a Test Tool-specific parent-inspection facility.
+
+`ProtosStandardObjectProtocol` therefore gains one reviewed native Closure
+construction site. This is a representation bridge: ordinary objects store their
+parent directly while represented semantic values obtain it from their selected
+Prelude-backed representation contract. `ProtosValueLookup.delegationParent`
+centralizes that projection so lookup and reflection cannot silently disagree.
+
+The standard prelude also regains its normative `Object` binding. Because the root
+cannot name itself before that binding exists, bootstrap supplies a temporary
+`_coreRootObject` lexical seed solely while evaluating distributable
+`prelude.protos`; the seed is removed before prelude freeze and the final binding
+is source-declared. This adds no native Closure construction site.
+
+The definitive Core boundary becomes **110 sites across 30 providers**. No new
+provider, syntax, capability, scheduler, or Test-only runtime surface is introduced.
 
 ### I022-F definitive dynamic-control re-audit
 

@@ -26,6 +26,7 @@ import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosTask;
+import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import java.util.List;
 
 public final class ProtosStandardObjectProtocol {
@@ -56,6 +57,29 @@ public final class ProtosStandardObjectProtocol {
                 if (!supplied.isEmpty()) throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
                 return new com.guillermomolina.protos.runtime.ProtosIntegerValue(com.guillermomolina.protos.runtime.ProtosIdentity.identityHash(activation.receiver()));
             }));
+        }
+        if (!object.hasLocalSlot("parent")) {
+            object.createLocalSlot(
+                    "parent",
+                    ProtosClosureValue.nativeClosure(
+                            (activation, supplied) -> {
+                                if (!supplied.isEmpty()) {
+                                    throw invalid(activation);
+                                }
+                                var parent =
+                                        ProtosValueLookup.delegationParent(
+                                                activation.receiver(),
+                                                activation
+                                                        .prelude()
+                                                        .orElseThrow(
+                                                                () ->
+                                                                        new IllegalStateException(
+                                                                                "Object.parent requires Core prelude")));
+                                if (parent.isEmpty()) {
+                                    throw invalid(activation);
+                                }
+                                return parent.orElseThrow();
+                            }));
         }
         if (!object.hasLocalSlot("ensure")) {
             object.createLocalSlot(

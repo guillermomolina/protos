@@ -51,6 +51,9 @@ class ProtosCoreBootstrapTest {
                 contextPrototype.parent().orElseThrow());
         assertSame(contextPrototype, bindings.parent().orElseThrow());
         assertSame(
+                ProtosObjectValue.rootObject(),
+                bindings.readLocalSlot("Object").orElseThrow());
+        assertSame(
                 contextPrototype,
                 bindings.readLocalSlot("Context").orElseThrow());
         ProtosObjectValue errorPrototype = prelude.errorPrototype();
@@ -96,8 +99,10 @@ class ProtosCoreBootstrapTest {
                 ProtosObjectValue.MutationState.FROZEN,
                 bindings.mutationState());
         assertFalse(bindings.hasLocalSlot("Bytes"));
+        assertFalse(bindings.hasLocalSlot("_coreRootObject"));
         assertEquals(
                 java.util.Set.of(
+                        "Object",
                         "Context",
                         "Number",
                         "Integer",
@@ -158,9 +163,13 @@ class ProtosCoreBootstrapTest {
                                 "execution",
                                 "ProtosCoreBootstrap.java"));
         assertFalse(bootstrapSource.contains("preludeBindings.createLocalSlot("));
-        assertTrue(
-                Files.readString(Path.of("protos", "lib", "core", "prelude.protos"))
-                        .contains("_corePreludeBindings: Context {"));
+        String preludeSource =
+                Files.readString(
+                        Path.of("protos", "lib", "core", "prelude.protos"));
+        assertTrue(preludeSource.contains("_corePreludeBindings: Context {"));
+        assertTrue(preludeSource.contains("Object: _coreRootObject"));
+        assertTrue(bootstrapSource.contains("bootstrapContext.createLocalSlot("));
+        assertTrue(bootstrapSource.contains("_coreRootObject"));
         assertNotSame(first, second);
         assertSame(contextPrototype, first.parent().orElseThrow());
         assertSame(contextPrototype, second.parent().orElseThrow());

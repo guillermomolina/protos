@@ -41,25 +41,39 @@ public final class ProtosValueLookup {
                 if (local.isPresent()) {
                     return Optional.of(new ProtosSlotLookupResult(local.orElseThrow(), ordinary));
                 }
-                Optional<Object> parent = ordinary.parent();
-                if (parent.isEmpty()) {
-                    return Optional.empty();
-                }
-                current = parent.orElseThrow();
-                continue;
             }
 
-            if (current instanceof ProtosRepresentedValue represented) {
-                current =
-                        java.util.Objects.requireNonNull(
-                                represented.representedDelegationParent(prelude),
-                                "represented delegation parent");
-                continue;
+            Optional<Object> parent = delegationParent(current, prelude);
+            if (parent.isEmpty()) {
+                return Optional.empty();
             }
-
-            throw new UnsupportedOperationException(
-                    "Standard prototype lookup is not yet implemented for runtime value representation "
-                            + current.getClass().getName());
+            current = parent.orElseThrow();
         }
+    }
+
+    /**
+     * Returns the semantic immediate delegation parent used by ordinary lookup.
+     *
+     * <p>The unique root Object has no parent. Represented semantic values delegate through the
+     * parent supplied by their representation contract. The prelude may be {@code null} for a
+     * representation whose contract does not require a Core prototype.
+     */
+    public static Optional<Object> delegationParent(
+            Object receiver,
+            ProtosPrelude prelude) {
+        Objects.requireNonNull(receiver, "receiver");
+
+        if (receiver instanceof ProtosObjectValue ordinary) {
+            return ordinary.parent();
+        }
+        if (receiver instanceof ProtosRepresentedValue represented) {
+            return Optional.of(
+                    Objects.requireNonNull(
+                            represented.representedDelegationParent(prelude),
+                            "represented delegation parent"));
+        }
+        throw new UnsupportedOperationException(
+                "Standard delegation parent is not implemented for runtime value representation "
+                        + receiver.getClass().getName());
     }
 }

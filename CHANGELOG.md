@@ -1,3 +1,8 @@
+## 0.2.196-SNAPSHOT
+
+- Publish `TOOL002-D3B2A`, the general Core prerequisites discovered by the `error-parent` migration: implement the already-normative inherited `Object.parent()` reflection message and restore the normative standard prelude `Object` binding instead of adding a Test-only parent inspection escape hatch. The zero-argument operation reports the receiver's exact immutable immediate delegation parent, or canonical `null` only for the unique root `Object`, across ordinary and represented values.
+- Centralize semantic immediate-parent projection in `ProtosValueLookup` so ordinary lookup and reflection use the same representation boundary. Add Protos conformance for ordinary/custom parents, root, Error taxonomy, Integer/Float/String/Boolean/null represented values, and arity failure. The audited Core native boundary grows by one reviewed representation-bridge construction site in the existing Object provider. `error-parent` policy itself remains D3B2B READY.
+
 ## 0.2.195-SNAPSHOT
 
 - Close `TOOL001-C6 — confined project manifest read/diagnostics` (legacy manifest Slice 3D). Add ordinary-Protos `self:ManifestCommand`, reading exactly `protos.toml` through the already-provisioned confined Filesystem, decoding complete UTF-8 text across progress-oriented `TextReader.readText()` chunks, and invoking the closed `ManifestSchemaV1.parse` pipeline.

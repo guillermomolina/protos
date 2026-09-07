@@ -440,6 +440,27 @@ Malformed syntax, unknown family, invalid decimal, and out-of-range expected
 values fail closed as Test Tool policy. D3B1 changes no execution, Filesystem,
 TestPlan, result shape, sequencing, reporting, or Java-owned runtime mechanism.
 
+### TOOL002-D3B2A parent-reflection prerequisite
+
+The first D3B2 policy attempt exposed that the Test Tool had no language-level
+way to observe an Error occurrence's immediate delegation parent: the normative
+Core `Object.parent()` reflection selector was absent from the implementation.
+
+D3B2 must not compensate with an `errorParent` field in the host observation, a
+Test-only native Closure, a hidden Error-category tag, or ancestry matching.
+Those would duplicate or weaken ordinary language reflection solely for testing.
+
+D3B2 is therefore split again:
+
+```text
+D3B2A  implement Object.parent() and restore the normative prelude Object binding
+D3B2B  consume that ordinary reflection from bundled Protos error-parent policy
+```
+
+D3B2A is a Core prerequisite, not Test semantics. D1 remains unchanged and
+authority-free. D3B2B remains responsible for the retained immediate-parent
+expectation and will not be published until D3B2A is available on `origin/main`.
+
 ## Isolation audit
 
 The normal isolation boundary should be **one fresh Protos Process per test

@@ -268,7 +268,7 @@ Float families:
 | TOOL002-D3A1 | CLOSED | Bundled `Runner.readSource(spec, filesystem)` loads one complete UTF-8 case source through the D2 confined standard Filesystem/File surface. Ordered File reads are issued in bounded 16-read windows, exact bytes are accumulated before one UTF-8 decode, and the File is explicitly closed. No case execution or expectation policy. Implementation version `0.2.186-SNAPSHOT`. |
 | TOOL002-D3A2 | CLOSED | `Runner.evaluateSimple(spec, source, executor)` interprets `boolean`, `null`, `integer`, and generic `error` entirely in bundled Protos. Normal mismatches return frozen `passed + observation` evidence; malformed/unsupported policy signals. Integer matching uses signed-decimal Protos parsing plus primitive `===` to preserve exact numeric family. Implementation version `0.2.189-SNAPSHOT`. |
 | TOOL002-D3A3 | CLOSED | Compose TestPlan + source loader + simple evaluator through an ordered `Future.then` dependency chain built without suspending inside `Array.each`; skip unsupported kinds before source access, aggregate ordered frozen CaseRun evidence with balanced chunks, and integrate the supported subset into `Main.protos`. No reporting/parallel/exit-status policy. Implementation version `0.2.192-SNAPSHOT`. |
-| TOOL002-D3B | IN_PROGRESS | Subdivided into D3B1 fixed-integer and D3B2 error-parent: D3B1 is CLOSED and D3B2 is READY. |
+| TOOL002-D3B | IN_PROGRESS | D3B1 fixed-integer is CLOSED; D3B2 is IN_PROGRESS after audit subdivision into D3B2A general `Object.parent()` reflection prerequisite and D3B2B `error-parent` policy. |
 | TOOL002-D3C | BLOCKED_BY_DEPENDENCIES | After D3B, migrate `float-bits` and `float-nan` with exact binary64 requirements preserved. |
 
 D3A1 deliberately does not modify `Main.protos`: ordinary `protos test`
@@ -315,12 +315,22 @@ split again:
 | Slice | Status | Outcome |
 |---|---|---|
 | TOOL002-D3B1 | CLOSED | `fixed-integer` parses `FAMILY:value`, accepts exactly the eight Core fixed-width families, constructs the expected semantic value with the selected standard numeric factory, and matches through primitive `===`. Implementation version `0.2.193-SNAPSHOT`. |
-| TOOL002-D3B2 | READY | Add `error-parent` by matching the detached Error immediate parent against the named standard Error prototype without a Java Test taxonomy or detached-boundary change. |
+| TOOL002-D3B2 | IN_PROGRESS | First policy validation exposed the missing already-normative `Object.parent()` implementation. D3B2A closes that general Core prerequisite; D3B2B remains READY to migrate `error-parent`. |
 
 D3B1 preserves the D3A3 result and sequencing contract. `error-parent` remains
-skipped before source acquisition until D3B2.
+skipped before source acquisition until D3B2B.
 
-TOOL002-D3B2 is READY.
+#### TOOL002-D3B2 decomposition after executable prerequisite audit
+
+| Slice | Status | Outcome |
+|---|---|---|
+| TOOL002-D3B2A | CLOSED | Implement the already-normative inherited `Object.parent()` reflection selector as one audited general Core representation bridge shared by ordinary lookup/reflection, restore the normative prelude `Object` binding through a temporary non-leaking root bootstrap seed, and cover ordinary/custom-parent, Error-taxonomy, represented values, root failure, and arity in Protos conformance. Implementation version `0.2.196-SNAPSHOT`. |
+| TOOL002-D3B2B | READY | Migrate retained `error-parent` policy using ordinary `observation.error.parent()` plus the standard Error prototype taxonomy. No D1/result-boundary change. |
+
+The failed pre-D3B2A policy attempt is not closure evidence. It demonstrated the
+missing Core prerequisite and cleaned all patch-owned residue before publication.
+
+TOOL002-D3B2B is READY.
 
 ## Closure rule
 

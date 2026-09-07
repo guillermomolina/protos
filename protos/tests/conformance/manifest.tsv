@@ -593,3 +593,9 @@ control/ensure-cancellation-cleanup-error-handler-recovers.protos	future-integer
 control/ensure-cancellation-cleanup-return-child-structured-completion.protos	future-integer	142
 control/ensure-selected-error-cleanup-cancellation-supersedes-handler.protos	future-integer	0
 error/handle-parent-task-does-not-flow-into-child-future.protos	future-integer	1
+reflection/parent-ordinary.protos	boolean	true
+reflection/parent-error-taxonomy.protos	boolean	true
+reflection/parent-number-string.protos	boolean	true
+reflection/parent-singletons.protos	boolean	true
+reflection/root-parent.protos	error	-
+reflection/parent-arity.protos	error	-
