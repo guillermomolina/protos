@@ -1,0 +1,25 @@
+{
+  "schema": "protos-toolchain-v1",
+  "java": {
+    "bytecode_release": 21
+  },
+  "graalvm": {
+    "distribution": "graalvm-community",
+    "release": "25.3.4.1",
+    "jdk_feature": 25,
+    "jdk_version": "25.0.4.1",
+    "container_channel": "25i3",
+    "container_image": "ghcr.io/graalvm/graalvm-community:25i3-25.0.4.1-ol8-20260825"
+  },
+  "graal_components": {
+    "version": "25.3.4.1"
+  },
+  "maven": {
+    "version": "3.9.9"
+  },
+  "policy": {
+    "primary_runtime_alignment": "development-ci-distribution",
+    "upgrade_mode": "explicit-validated-change",
+    "floating_primary_runtime": false
+  }
+}

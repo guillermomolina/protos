@@ -1,6 +1,6 @@
 # DIST002 — Development/release toolchain alignment
 
-Status: OPEN
+Status: IN_PROGRESS
 Nature: non-normative build, development-environment and release-engineering project work
 
 ## Problem
@@ -74,6 +74,43 @@ DIST002 is not closed until all of the following are true:
    project change with retained validation evidence; updating the devcontainer
    alone must never silently redefine the supported release runtime.
 
+## DIST002-A selected canonical toolchain contract
+
+On 2026-09-08 the project owner explicitly selected the repository's primary
+runtime/toolchain direction for DIST002: use the newest currently selected
+GraalVM Community/JDK line rather than retaining the historical JDK22 runtime
+merely because it already has DIST001/PERF evidence. The selected exact
+repository-owned coordinates are persisted in root `toolchain.json`:
+
+```text
+Java source/bytecode target: 21
+primary GraalVM release:     25.3.4.1
+primary JDK feature/version: 25 / 25.0.4.1
+GraalVM container channel:   25i3
+Graal/Truffle components:    25.3.4.1
+Maven:                       3.9.9
+```
+
+The Java 21 bytecode target remains an independent compatibility choice; it does
+not require routine development or the supported runtime to remain on JDK21 or
+JDK22. The primary runtime is exact and non-floating. A later GraalVM/JDK,
+Truffle or Maven migration is an explicit validated project change rather than
+a side effect of updating one environment.
+
+Historical DIST001/PERF evidence for GraalVM Community JDK22 + Truffle 24.0.0
+remains valid evidence for those historical revisions and is not rewritten by
+DIST002. Likewise, the companion benchmark repository's isolated JDK17 IGV
+analyzer remains a diagnostic-tool compatibility boundary: its older NetBeans /
+Java-7-target build requirements do not define the measured Protos runtime or
+this repository's primary JDK.
+
+`tools/verify_toolchain.py` owns the machine-checkable v1 contract validation and
+static binding audit. During DIST002-A it can report the intentional migration
+drift that still exists in Maven dependencies, normal CI and DIST001-derived
+distribution metadata. DIST002-B and DIST002-C must remove those drifts; once
+alignment is complete, `--mode check` becomes a zero-drift gate. This separation
+allows A to establish one authority before later slices change consumers.
+
 ## Current observed mismatch
 
 At the time this item was opened:
@@ -112,8 +149,8 @@ pattern.
 
 | Slice | Status | Scope / closure condition |
 |---|---|---|
-| DIST002-A | OPEN | Select and persist the canonical repository toolchain coordinate source and drift checks. |
-| DIST002-B | BLOCKED_BY_DEPENDENCIES | Align devcontainer and ordinary CI primary runtime with A; required runtime is pre-provisioned, not downloaded by normal gates. |
+| DIST002-A | CLOSED | Selected exact canonical coordinates are persisted in root `toolchain.json`; tested contract/static-binding drift audit is published. |
+| DIST002-B | READY | Align devcontainer and ordinary CI primary runtime with the A contract; required runtime is pre-provisioned, not downloaded by normal gates. |
 | DIST002-C | BLOCKED_BY_DEPENDENCIES | Make distribution/runtime metadata and validation consume/check the same coordinates; remove ordinary on-demand-JDK gate dependence. |
 | DIST002-D | BLOCKED_BY_DEPENDENCIES | Cross-environment conformance, documentation/status reconciliation, and DIST002 closure. |
 
