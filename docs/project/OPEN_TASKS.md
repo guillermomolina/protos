@@ -60,17 +60,40 @@ purpose is to distinguish explicit project-owner selection from agent-authored
 recommendations, broad implementation instructions, patch execution, and
 publication evidence.
 
-Current triage:
+Current triage: - D038 has explicit project-owner confirmation and needs only have that evidence recorded.
+- D044 remains the priority review item because no recovered evidence yet demonstrates explicit project-owner selection of its complete published semantics. is not ratification.
+- D002 and D006 and D009-D019 are expected to be predominantly project-owner decisions, but their approval evidence must be checked rather than inferred. Recorded review results:
 
-- D038 has explicit project-owner confirmation and needs only have that evidence
-  recorded.
-- D044 remains the priority review item because no recovered evidence yet
-  demonstrates explicit project-owner selection of its complete published semantics.
-  is not ratification.
-- D002 and D006 and D008-D019 are expected to be predominantly project-owner decisions, but their
-  approval evidence must be checked rather than inferred.
-
-Recorded review results:
+- D008 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D008 / specification `0.1.347` after cross-language comparison,
+  adversarial review and dedicated future-scalability analysis spanning
+  Smalltalk/Traits, Self structural reuse, JavaScript own-property copying and
+  PHP/Scala trait-style composition. This present approval reaffirms the complete
+  D008 package for which explicit project-owner selection was also recovered
+  before its original normative publication in commit `1f72b589d838c3f0633638b34d8cd12a2bb62f9f`.
+  Standard `Object.without(name)` and `Object.alias(sourceName, aliasName)` remain
+  ordinary messages over local slot structure only: semantic String names are
+  required, delegated lookup and coercion do not participate, `without` excludes
+  one required local binding, and `alias` adds a second local name while
+  preserving the source name and rejecting local collisions. Successful results
+  remain fresh identity-bearing open ordinary objects whose immediate delegation
+  parent is `Object`; the source parent and open/closed/frozen state are not
+  copied. Retained and aliased bindings are shallow and preserve the exact stored
+  value objects, including Closure identity. `alias` does not clone, re-home or
+  rebind a Closure; ordinary later lookup/invocation on the eventual receiver
+  establishes `this` and `methodHome`. No delegated bindings are materialized, no
+  source-to-view live dependency is created, and no Trait/TraitView value kind,
+  trait-specific syntax, deep-copy policy, precedence rule or global view/cache
+  institution is introduced. The observable contract does not require physical
+  O(n) copying: persistent maps, structural sharing, copy-on-write, shapes,
+  virtualization, allocation elision or other representations remain permitted
+  when fresh identity, independent mutable result state, reflection and exact
+  stored-value identity remain observable as specified. Future first-class
+  Traits/Roles, required-slot contracts, Symbol/Selector name domains, bulk
+  structural transformations, multiple-delegation policy and shared-memory
+  concurrency semantics remain separate explicit design decisions. This
+  governance classification changes no normative specification or implementation
+  and does not classify D002 or D005-D019 by transitivity.
 
 - D011 is `RATIFIED` in its effective current form. On 2026-09-08 the
   project owner explicitly approved retaining the public Filesystem/I/O surface
@@ -755,12 +778,12 @@ Recorded review results:
   This governance classification changes no normative specification or
   implementation and does not classify D006 or D008 by transitivity.
 
-Required procedure: 1. Continue backwards through the remaining unresolved decisions in D044-D040, and finally D001-D003 and D005-D006 and D008-D019.
+Required procedure: 1. Continue backwards through the remaining unresolved decisions in D044-D040, and finally D001-D003 and D005-D006 and D009-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or PROVENANCE_UNRESOLVED. Executing or publishing a patch is not sufficient approval evidence.
 4. Present every substantive unresolved choice to the project owner under the current explicit design-approval gate. Do not silently preserve, replace, or reopen semantics.
 5. Keep D046 outside AUD001 and do not let this audit overwrite or pre-empt its separate review. Next audit work: 1. Complete the separate D044 review already in progress, considering D045 only as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D043-D040, then D001-D003 and D005-D006 and D008-D019 under the required procedure above. AUD001 closes only when D001-D003 and D005-D006 and D008-D020, D025, D027-D028 and D030-D045, except D046, have an explicit classification,
+2. Continue backwards through the remaining unresolved decisions in D043-D040, then D001-D003 and D005-D006 and D009-D019 under the required procedure above. AUD001 closes only when D001-D003 and D005-D006 and D008-D020, D025, D027-D028 and D030-D045, except D046, have an explicit classification,
 the project owner has decided every NEEDS_USER_DECISION item, relevant
 provenance is recorded durably, and all affected project ledgers are reconciled.
 Any later normative correction must be a separately approved specification
