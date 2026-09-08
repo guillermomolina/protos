@@ -680,6 +680,49 @@ user-owned and MUST remain untouched. In particular, the launcher MUST NOT use
 `git clean`, or a commit in the caller checkout to dispose of or absorb
 pre-existing state.
 
+### Caller-checkout isolation is operational, not a frozen-state assertion
+
+Caller-checkout protection is established by **where the launcher performs
+mutating operations**, not by requiring the caller checkout to remain byte-for-byte
+unchanged for the whole duration of a potentially long validation run.
+
+A publication launcher MUST scope patch materialization, file writes, staging,
+commits, builds, tests, resets/restores (when permitted on launcher-owned state),
+and other worktree mutations to its isolated temporary worktree. Against the
+caller repository/worktree it may perform only operations needed to inspect Git
+metadata, fetch remote refs, create/remove the launcher-owned temporary worktree,
+and create/delete the launcher-owned temporary local branch.
+
+A launcher MUST NOT use equality of the caller's `HEAD`, current branch, index,
+tracked-file status, or untracked-file status between launcher start and launcher
+exit as a publication precondition or postcondition. The caller checkout may be
+edited independently while validation runs; observing such a change cannot prove
+that the launcher caused it and MUST NOT invalidate an otherwise valid isolated
+publication.
+
+Reports SHOULD therefore describe the operational guarantee, for example:
+
+```text
+CALLER_WORKTREE_TOUCHED_BY_LAUNCHER: NO
+```
+
+rather than claiming that the caller checkout itself stayed globally unchanged
+while unrelated tools or the user may have modified it.
+
+A launcher MUST NOT print `PUBLISHED` until the remote fast-forward push has
+succeeded. Once that push succeeds, the publication result is final for that
+invocation: later cleanup of launcher-owned temporary worktree/branch state MUST
+NOT convert the already-successful publication into a generic failure or
+non-zero exit solely because cleanup or a caller-state observation failed.
+Cleanup failure after publication MUST be reported explicitly as a warning with
+the launcher-owned path/branch that may remain, for example
+`CLEANUP_WARNING`, while preserving successful publication status.
+
+Before push, failure to remove unexpected launcher-owned state, failed validation,
+or movement of `origin/main` away from `PUBLICATION_BASE` remains a normal hard
+failure. This rule changes only caller-state observation and post-publication
+cleanup reporting; it does not weaken validation or publication-base stability.
+
 A launcher may manage only the temporary branch/worktree and patch-owned state it
 created itself. An unexpected worktree change, failed validation, relevant
 semantic-precondition failure, execution-window movement of `origin/main`, or
@@ -747,6 +790,19 @@ extent the required repository content is available:
    disposable local remote; and
 10. never report an artifact-level check as `PASS` unless that exact check was
     actually executed successfully.
+
+Generated-launcher acceptance MUST also exercise caller isolation as an
+operational property. When an end-to-end disposable Git harness is available,
+the harness SHOULD make an unrelated caller-worktree change while the launcher is
+operating and verify that the isolated patch still reaches its publication gate,
+that the unrelated caller change is preserved, and that the launcher performs no
+file/index/commit mutation in the caller checkout.
+
+Acceptance MUST verify that a successful disposable push cannot subsequently be
+reported as a failed publication merely because caller state differs from the
+launcher's initial observation. Post-push cleanup failure may be simulated to
+verify warning/reporting behavior, but it must not turn an already successful
+push into a generic `ERROR: caller checkout state changed`.
 
 A generated artifact that fails any authoring-time acceptance check MUST be fixed
 and re-tested before it is shown to the user. Do not intentionally use the
