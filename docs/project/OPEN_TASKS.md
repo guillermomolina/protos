@@ -64,6 +64,40 @@ Current triage: - D038 has explicit project-owner confirmation and needs only ha
 - D044 remains the priority review item because no recovered evidence yet demonstrates explicit project-owner selection of its complete published semantics. is not ratification.
 - D002 and D010 and D013-D019 are expected to be predominantly project-owner decisions, but their approval evidence must be checked rather than inferred. Recorded review results:
 
+- D013 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D013 / specification `0.1.352` after comparison with Python,
+  ECMAScript, Kotlin, Scala, Ruby, Lua, Self and Smalltalk/Pharo-style object
+  construction plus adversarial and future-scalability review. Parenthesized
+  invocation remains one ordinary structural protocol: after ordinary target and
+  argument evaluation, lookup selects the nearest ordinary `call` slot through
+  the receiver's delegation chain; the selected value must be a semantic Closure,
+  and that already-selected Closure is then activated directly as the terminal
+  executable operation with the original invocation receiver as `this` and the
+  selected slot owner as `methodHome`. This is not a source-level recursive
+  rewrite through `call.call...`, and Core adds no hidden callable bit/property,
+  callable registry, metatable/metaclass route, `Callable` hierarchy, `Method`
+  value kind or second dispatch universe. A `call` slot remains fully ordinary:
+  it may be inherited, shadowed (including by a non-Closure value that makes that
+  invocation fail), copied, composed, assigned, aliased and read/extracted under
+  the normal slot and Closure-binding rules; reading `obj.call` never invokes it.
+  Non-executing callability inspection remains exactly read-only ordinary `call`
+  lookup plus Closure-value validation, performs no activation/arity/default work
+  and does not pin the selected behavior for a later invocation. The inherited
+  ordinary `Object.call` continues to unify standard Closure execution with
+  default prototype construction: Closure receivers execute their Closure value;
+  other receivers construct a fresh child delegating to the receiver, send
+  ordinary `init` with the supplied arguments, and return that child on normal
+  construction. Standard Array/Map/IdentityMap/numeric factories continue to
+  specialize through nearer ordinary `call` slots. D022's independently ratified
+  initializer/result details remain independently owned and are not reclassified
+  here. Future static callable types, overload/multimethod systems, RPC/remote-call
+  policy, partial-application helpers or an explicitly justified future callable
+  abstraction remain separate designs. The original normative D013 publication
+  is commit `afe6c07557e630f6570404506fee7094a37ad72b`. This governance
+  classification changes no normative specification, implementation, blocker,
+  implementation version, runtime, native boundary or license terms and creates
+  no implementation follow-up.
+
 - D008 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
   retaining D008 / specification `0.1.347` after cross-language comparison,
   adversarial review and dedicated future-scalability analysis spanning
