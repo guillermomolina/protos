@@ -50,6 +50,31 @@ Current triage:
 
 Recorded review results:
 
+- D006 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D006 / specification `0.1.344` after cross-language comparison
+  spanning Python, Julia, Swift, ECMAScript BigInt, Rust and Self plus adversarial
+  and future-scalability review. Core v0.1 keeps ordinary `Integer` exact and
+  semantically unbounded, `Float` exactly IEEE 754-2019 binary64, and the eight
+  fixed-width signed/unsigned integer families as distinct semantic families.
+  Standard arithmetic performs no implicit cross-family promotion, widening,
+  narrowing or coercion; family changes use explicit conversion factories, and
+  fixed-width ordinary arithmetic signals `Error` rather than silently wrapping
+  when its specified result is not representable. Exact-integer `/` retains the
+  specified correctly rounded binary64 result computed from the exact rational
+  quotient, while `div`, `mod` and `%` retain their same-family exact-integer
+  contracts. Numeric `==` and ordering remain cross-family mathematical
+  comparisons without operand conversion, `===` remains sensitive to semantic
+  numeric family and Float special-value identity, and standard numeric hashing
+  remains coherent with `==`. `SmallInteger`, `BigInteger`, tagging, boxing and
+  other storage strategies remain unobservable implementation representation.
+  Future Rational, Decimal, Complex, bit/wrapping protocols, relaxed/SIMD math
+  and any promotion framework remain separate explicit design decisions rather
+  than consequences of D006. The original normative publication is commit
+  `22bf764b04d9118b2e5c182a21e6f4b46840a80a`; publication alone was not treated
+  as owner approval. This governance classification changes no normative
+  specification or implementation and does not classify D004-D005 or D007-D019
+  by transitivity.
+
 - D003 is `RATIFIED AS AMENDED`. On 2026-09-08 the project owner explicitly approved
   retaining D003's deterministic Closure argument/default/rest/spread binding core
   from specification `0.1.340` after comparison with Self, Ruby, Kotlin,
