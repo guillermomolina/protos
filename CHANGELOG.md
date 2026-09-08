@@ -1,3 +1,7 @@
+## 0.2.268-SNAPSHOT
+
+- Close `LIB004-B — writeAllBytes`. Publish `std:io/Files.writeAllBytes(filesystem, path, bytes) -> Future<Filesystem>` in ordinary Protos. Capture one private invocation-time Bytes snapshot synchronously before any Filesystem effect through the exact Latin1 byte-preserving one-shot Core conversion, then use one explicit write/create/truncate/positioned open and sequential at-most-65536-byte writes, never retrying a failed ordinary write whose Core contract may already have committed a contiguous prefix. Reuse LIB004-A strong pending-open and owned-File custody and D043 ensure cleanup so success resolves to the exact supplied Filesystem only after close succeeds, while open/write/close failure and cancellation preserve the already-normative partial-effect aftermath with no rollback promise. Add nine Protos-source conformance cases for snapshot mutation isolation, empty truncate, bounded multi-chunk output, committed-prefix failure, close failure, two cancellation boundaries, pre-I/O invalid input and open failure; reuse the single filesystem-library Java harness only to provision/control backend races. LIB004-B closes and LIB004-C becomes READY. No specification or production-Java/native-boundary change; implementation version becomes `0.2.268-SNAPSHOT`.
+
 ## 0.2.267-SNAPSHOT
 
 

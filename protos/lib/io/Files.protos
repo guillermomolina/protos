@@ -89,3 +89,74 @@ readAllBytes: (filesystem, path) => {
         })
     }).future()
 }
+
+writeAllBytes: (filesystem, path, bytes) => {
+    // Capture the complete caller Bytes value synchronously, before the helper
+    // creates its Future or starts any Filesystem effect. Latin1 is a bijection
+    // over all 256 octets, so this one-shot round trip is an ordinary Core way
+    // to obtain one fresh private Bytes value without borrowing caller state or
+    // invoking user-shadowable Bytes iteration messages.
+    snapshot: Encoding.Latin1.encode(Encoding.Latin1.decode(bytes))
+
+    (() => {
+        openFuture: null
+        file: null
+
+        (() => {
+            options: {
+                read: false
+                write: true
+                create: true
+                truncate: true
+                append: false
+            }
+            openFuture = filesystem.open(path, options)
+            file = openFuture.value()
+
+            offset: 0
+            snapshotSize: snapshot.size()
+            (() => offset < snapshotSize).while(() => {
+                remaining: snapshotSize - offset
+                chunkSize: 65536
+                (remaining < chunkSize).ifTrue(() => {
+                    chunkSize = remaining
+                })
+
+                chunk: Encoding.UTF8.encode("")
+                chunkIndex: 0
+                (() => chunkIndex < chunkSize).while(() => {
+                    chunk.add(snapshot.at(offset + chunkIndex))
+                    chunkIndex = chunkIndex + 1
+                })
+
+                // Each write is awaited before constructing/issuing the next
+                // chunk. A failed ordinary write is never retried because the
+                // Core failure may already have contributed a committed prefix.
+                file.write(chunk).value()
+                offset = offset + chunkSize
+            })
+
+            filesystem
+        }).ensure(() => {
+            // Reuse the strong acquisition-custody pattern closed by LIB004-A:
+            // if cancellation/failure wins while open is pending, retain and
+            // observe that exact Future so a post-commit File cannot be orphaned.
+            (file === null).ifTrue(() => {
+                (openFuture === null).ifFalse(() => {
+                    openFuture.cancel()
+                    lateFile: Error.handle(
+                        () => openFuture.value(),
+                        (ignored) => null
+                    )
+                    (lateFile === null).ifFalse(() => {
+                        lateFile.close().value()
+                    })
+                })
+            })
+
+            (file === null).ifFalse(() => {
+                file.close().value()
+            })
+        })
+    }).future()
+}

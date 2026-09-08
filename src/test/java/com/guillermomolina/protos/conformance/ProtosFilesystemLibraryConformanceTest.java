@@ -33,12 +33,14 @@ import com.guillermomolina.protos.execution.ProtosStandardFilesystemProtocol;
 import com.guillermomolina.protos.execution.ProtosStandardLibraryModuleResolver;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
+import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
+import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
@@ -63,7 +65,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * LIB004-A1/A2/A3 integration harness.
+ * LIB004-A1/A2/A3/B integration harness.
  *
  * <p>The behavior assertions live in Protos source. Java is restricted to provisioning the
  * confined Filesystem/standard-library resolver and inspecting the host fixture or exact Core
@@ -293,6 +295,134 @@ final class ProtosFilesystemLibraryConformanceTest {
         }
     }
 
+
+
+    @Test
+    void writeAllBytesBehaviorIsDrivenByProtosCases() throws Exception {
+        WriteFixture snapshot =
+                runWriteCase(
+                        "write-all-bytes-snapshot.protos",
+                        WriteMode.SUCCESS,
+                        new byte[0],
+                        0,
+                        0);
+        assertWriteOpen(snapshot.backend());
+        assertEquals(1, snapshot.resource().writeStarts());
+        assertEquals(3, snapshot.resource().maxWriteLength());
+
+        WriteFixture empty =
+                runWriteCase(
+                        "write-all-bytes-truncate-empty.protos",
+                        WriteMode.SUCCESS,
+                        "stale".getBytes(StandardCharsets.ISO_8859_1),
+                        0,
+                        0);
+        assertWriteOpen(empty.backend());
+        assertEquals(0, empty.resource().writeStarts());
+
+        WriteFixture large =
+                runWriteCase(
+                        "write-all-bytes-large-bounded.protos",
+                        WriteMode.SUCCESS,
+                        new byte[0],
+                        0,
+                        131089);
+        assertWriteOpen(large.backend());
+        assertEquals(3, large.resource().writeStarts());
+        assertTrue(large.resource().maxWriteLength() <= 65536);
+
+        WriteFixture prefixFailure =
+                runWriteCase(
+                        "write-all-bytes-prefix-failure.protos",
+                        WriteMode.FAIL_PREFIX,
+                        new byte[0],
+                        3,
+                        0);
+        assertWriteOpen(prefixFailure.backend());
+        assertEquals(1, prefixFailure.resource().writeStarts());
+
+        WriteFixture closeFailure =
+                runWriteCase(
+                        "write-all-bytes-close-failure.protos",
+                        WriteMode.CLOSE_FAILURE,
+                        new byte[0],
+                        0,
+                        0);
+        assertWriteOpen(closeFailure.backend());
+        assertEquals(1, closeFailure.resource().closeStarts());
+
+        WriteFixture pendingWrite =
+                runWriteCase(
+                        "write-all-bytes-cancel-pending-write.protos",
+                        WriteMode.PENDING_UNCOMMITTED_WRITE,
+                        "old".getBytes(StandardCharsets.ISO_8859_1),
+                        0,
+                        0);
+        assertWriteOpen(pendingWrite.backend());
+        assertEquals(1, pendingWrite.resource().writeStarts());
+        assertEquals(1, pendingWrite.resource().writeCancellations());
+        assertEquals(1, pendingWrite.resource().closeStarts());
+
+        WriteFixture invalid =
+                runWriteCase(
+                        "write-all-bytes-invalid-before-io.protos",
+                        WriteMode.SUCCESS,
+                        "unchanged".getBytes(StandardCharsets.ISO_8859_1),
+                        0,
+                        0);
+        assertEquals(0, invalid.backend().writeOpenCount());
+        assertEquals(0, invalid.resource().writeStarts());
+
+        WriteFixture openFailure =
+                runWriteCase(
+                        "write-all-bytes-open-failure.protos",
+                        WriteMode.OPEN_FAILURE,
+                        "unchanged".getBytes(StandardCharsets.ISO_8859_1),
+                        0,
+                        0);
+        assertWriteOpen(openFailure.backend());
+        assertEquals(0, openFailure.resource().writeStarts());
+    }
+
+    @Test
+    void writeAllBytesCommittedPendingOpenCustodyIsDrivenByProtosCase() throws Exception {
+        WriteFixture fixture =
+                writeFixture(
+                        WriteMode.COMMITTED_PENDING_OPEN,
+                        "stale".getBytes(StandardCharsets.ISO_8859_1),
+                        0,
+                        0);
+        ExecutorService executor = daemonExecutor();
+        CompletableFuture<Object> execution =
+                executeAsync(
+                        "write-all-bytes-cancel-committed-open.protos",
+                        fixture.activation(),
+                        executor);
+        try {
+            assertTrue(
+                    fixture.backend().awaitCommittedOpenCancellation(),
+                    "committed pending Filesystem.open cancellation was not requested");
+            assertWriteOpen(fixture.backend());
+            assertEquals(0, fixture.resource().writeStarts());
+            assertEquals(0, fixture.resource().closeStarts());
+            assertEquals(0, fixture.backend().untransferredReleases());
+
+            fixture.backend().completeCommittedOpen();
+            assertSame(
+                    ProtosBooleanValue.TRUE,
+                    execution.get(5, TimeUnit.SECONDS));
+
+            assertEquals(0, fixture.resource().writeStarts());
+            assertEquals(1, fixture.resource().closeStarts());
+            assertEquals(0, fixture.backend().untransferredReleases());
+            assertEquals(0, fixture.backend().contentSnapshot().length);
+        } finally {
+            fixture.backend().completeCommittedOpenIfPending();
+            shutdown(executor);
+        }
+    }
+
+
     private Fixture fixture() throws Exception {
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap()
@@ -369,6 +499,59 @@ final class ProtosFilesystemLibraryConformanceTest {
         return new PendingOpenFixture(activation, control, backend, resource);
     }
 
+
+
+    private WriteFixture runWriteCase(
+            String file,
+            WriteMode mode,
+            byte[] initialContent,
+            int failurePrefix,
+            int injectedPayloadSize)
+            throws Exception {
+        WriteFixture fixture =
+                writeFixture(mode, initialContent, failurePrefix, injectedPayloadSize);
+        assertSame(ProtosBooleanValue.TRUE, execute(file, fixture.activation()));
+        return fixture;
+    }
+
+    private WriteFixture writeFixture(
+            WriteMode mode,
+            byte[] initialContent,
+            int failurePrefix,
+            int injectedPayloadSize)
+            throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(
+                                CORE,
+                                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosObjectValue control = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosFutureValue gate =
+                new ProtosFutureValue(prelude.futurePrototype(), activation.executionDomain());
+        ControlledWritableResource resource =
+                new ControlledWritableResource(mode, failurePrefix, gate, activation);
+        ControlledWriteBackend backend =
+                new ControlledWriteBackend(
+                        mode, initialContent, gate, activation, resource);
+        ProtosFilesystemValue filesystem =
+                assertInstanceOf(
+                        ProtosFilesystemValue.class,
+                        ProtosStandardFilesystemProtocol.createCapability(
+                                prelude.bytesPrototypeForRuntime(), activation, backend));
+
+        activation.context().createLocalSlot("filesystem", filesystem);
+        activation.context().createLocalSlot("control", control);
+        activation.context().createLocalSlot("gate", gate);
+        if (injectedPayloadSize > 0) {
+            activation.context().createLocalSlot(
+                    "largePayload",
+                    patternedBytes(prelude, injectedPayloadSize));
+        }
+        return new WriteFixture(activation, control, backend, resource);
+    }
+
+
     private static CompletableFuture<Object> executeAsync(
             String file, ProtosActivation activation, ExecutorService executor) {
         return CompletableFuture.supplyAsync(
@@ -437,6 +620,29 @@ final class ProtosFilesystemLibraryConformanceTest {
         assertEquals(ProtosFilesystemOpenOptions.Placement.POSITIONED, options.placement());
         assertEquals(1, backend.openCount());
     }
+
+
+
+    private static void assertWriteOpen(ControlledWriteBackend backend) {
+        ProtosFilesystemOpenOptions options = backend.writeOptions().get();
+        assertFalse(options.readAccess());
+        assertTrue(options.writeAccess());
+        assertEquals(ProtosFilesystemOpenOptions.Creation.CREATE, options.creation());
+        assertTrue(options.truncateInitialContent());
+        assertEquals(ProtosFilesystemOpenOptions.Placement.POSITIONED, options.placement());
+        assertEquals(1, backend.writeOpenCount());
+    }
+
+    private static ProtosBytesValue patternedBytes(ProtosPrelude prelude, int size) {
+        ProtosBytesValue result = new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
+        for (int index = 0; index < size; index++) {
+            result.indexedAdd(
+                    new ProtosIntegerValue(
+                            BigInteger.valueOf((index * 31L + 7L) & 0xffL)));
+        }
+        return result;
+    }
+
 
     private static Object execute(String file, ProtosActivation activation) throws IOException {
         String source =
@@ -609,6 +815,334 @@ final class ProtosFilesystemLibraryConformanceTest {
 
         private int closeStarts() {
             return closeStarts.get();
+        }
+    }
+
+
+
+
+    private enum WriteMode {
+        SUCCESS,
+        FAIL_PREFIX,
+        CLOSE_FAILURE,
+        PENDING_UNCOMMITTED_WRITE,
+        COMMITTED_PENDING_OPEN,
+        OPEN_FAILURE
+    }
+
+    private record WriteFixture(
+            ProtosActivation activation,
+            ProtosObjectValue control,
+            ControlledWriteBackend backend,
+            ControlledWritableResource resource) {}
+
+    private static final class ControlledWriteBackend
+            implements ProtosStandardFilesystemProtocol.Backend {
+        private final WriteMode mode;
+        private final ProtosFutureValue gate;
+        private final ProtosActivation activation;
+        private final ControlledWritableResource writeResource;
+        private final java.util.ArrayList<Byte> content = new java.util.ArrayList<>();
+        private final AtomicReference<ProtosFilesystemOpenOptions> writeOptions =
+                new AtomicReference<>();
+        private final AtomicReference<ProtosStandardFilesystemProtocol.OpenCompletion>
+                committedOpenCompletion = new AtomicReference<>();
+        private final AtomicInteger writeOpenCount = new AtomicInteger();
+        private final AtomicInteger readOpenCount = new AtomicInteger();
+        private final AtomicInteger openCancellations = new AtomicInteger();
+        private final AtomicInteger untransferredReleases = new AtomicInteger();
+        private final CountDownLatch committedOpenCancellation = new CountDownLatch(1);
+        private final AtomicBoolean committedOpenCompleted = new AtomicBoolean();
+
+        private ControlledWriteBackend(
+                WriteMode mode,
+                byte[] initialContent,
+                ProtosFutureValue gate,
+                ProtosActivation activation,
+                ControlledWritableResource writeResource) {
+            this.mode = mode;
+            this.gate = gate;
+            this.activation = activation;
+            this.writeResource = writeResource;
+            replaceContent(initialContent);
+            writeResource.attachContent(this);
+        }
+
+        @Override
+        public ProtosFilesystemOpenFlow.Cancellation open(
+                ProtosPathValue path,
+                ProtosFilesystemOpenOptions options,
+                ProtosStandardFilesystemProtocol.OpenCompletion completion) {
+            if (isWriteAllBytesOpen(options)) {
+                writeOpenCount.incrementAndGet();
+                if (!writeOptions.compareAndSet(null, options)) {
+                    throw new IllegalStateException("LIB004-B expected exactly one write open");
+                }
+                if (mode == WriteMode.OPEN_FAILURE) {
+                    completion.failed();
+                    return () -> {};
+                }
+                if (!completion.commitPortableEffect()) {
+                    return () -> {};
+                }
+                truncateContent();
+
+                if (mode == WriteMode.COMMITTED_PENDING_OPEN) {
+                    if (!committedOpenCompletion.compareAndSet(null, completion)) {
+                        throw new IllegalStateException("committed pending open already installed");
+                    }
+                    gate.resolve(ProtosNullValue.INSTANCE, activation);
+                    return () -> {
+                        openCancellations.incrementAndGet();
+                        committedOpenCancellation.countDown();
+                    };
+                }
+
+                completion.succeeded(
+                        writeResource,
+                        new ProtosFileFlow.Capabilities(
+                                false, true, false, false, false, false),
+                        () -> {
+                            untransferredReleases.incrementAndGet();
+                            writeResource.releaseSilently();
+                        });
+                return openCancellations::incrementAndGet;
+            }
+
+            if (isDefaultReadOpen(options)) {
+                readOpenCount.incrementAndGet();
+                SnapshotReadableResource resource =
+                        new SnapshotReadableResource(contentSnapshot());
+                completion.succeeded(
+                        resource,
+                        new ProtosFileFlow.Capabilities(
+                                true, false, false, false, false, false),
+                        resource::releaseSilently);
+                return () -> {};
+            }
+
+            completion.failed();
+            return () -> {};
+        }
+
+        private boolean awaitCommittedOpenCancellation() throws InterruptedException {
+            return committedOpenCancellation.await(5, TimeUnit.SECONDS);
+        }
+
+        private void completeCommittedOpen() {
+            if (!committedOpenCompleted.compareAndSet(false, true)) {
+                throw new IllegalStateException("committed pending open already completed");
+            }
+            ProtosStandardFilesystemProtocol.OpenCompletion completion =
+                    committedOpenCompletion.get();
+            if (completion == null) {
+                throw new IllegalStateException("committed pending open has not started");
+            }
+            completion.succeeded(
+                    writeResource,
+                    new ProtosFileFlow.Capabilities(
+                            false, true, false, false, false, false),
+                    () -> {
+                        untransferredReleases.incrementAndGet();
+                        writeResource.releaseSilently();
+                    });
+        }
+
+        private void completeCommittedOpenIfPending() {
+            if (committedOpenCompletion.get() != null
+                    && committedOpenCompleted.compareAndSet(false, true)) {
+                committedOpenCompletion.get()
+                        .succeeded(
+                                writeResource,
+                                new ProtosFileFlow.Capabilities(
+                                        false, true, false, false, false, false),
+                                () -> {
+                                    untransferredReleases.incrementAndGet();
+                                    writeResource.releaseSilently();
+                                });
+            }
+        }
+
+        private static boolean isWriteAllBytesOpen(ProtosFilesystemOpenOptions options) {
+            return !options.readAccess()
+                    && options.writeAccess()
+                    && options.creation() == ProtosFilesystemOpenOptions.Creation.CREATE
+                    && options.truncateInitialContent()
+                    && options.placement() == ProtosFilesystemOpenOptions.Placement.POSITIONED;
+        }
+
+        private static boolean isDefaultReadOpen(ProtosFilesystemOpenOptions options) {
+            return options.readAccess()
+                    && !options.writeAccess()
+                    && options.creation() == ProtosFilesystemOpenOptions.Creation.EXISTING
+                    && !options.truncateInitialContent()
+                    && options.placement() == ProtosFilesystemOpenOptions.Placement.POSITIONED;
+        }
+
+        private synchronized void replaceContent(byte[] bytes) {
+            content.clear();
+            for (byte value : bytes) {
+                content.add(value);
+            }
+        }
+
+        private synchronized void truncateContent() {
+            content.clear();
+        }
+
+        private synchronized void contribute(BigInteger position, byte[] bytes, int length) {
+            int start = position.intValueExact();
+            while (content.size() < start) {
+                content.add((byte) 0);
+            }
+            for (int index = 0; index < length; index++) {
+                int target = start + index;
+                if (target < content.size()) {
+                    content.set(target, bytes[index]);
+                } else {
+                    content.add(bytes[index]);
+                }
+            }
+        }
+
+        private synchronized byte[] contentSnapshot() {
+            byte[] result = new byte[content.size()];
+            for (int index = 0; index < content.size(); index++) {
+                result[index] = content.get(index);
+            }
+            return result;
+        }
+
+        private AtomicReference<ProtosFilesystemOpenOptions> writeOptions() {
+            return writeOptions;
+        }
+
+        private int writeOpenCount() {
+            return writeOpenCount.get();
+        }
+
+        private int untransferredReleases() {
+            return untransferredReleases.get();
+        }
+    }
+
+    private static final class ControlledWritableResource
+            implements ProtosFileFlow.WritableResource {
+        private final WriteMode mode;
+        private final int failurePrefix;
+        private final ProtosFutureValue gate;
+        private final ProtosActivation activation;
+        private final AtomicInteger writeStarts = new AtomicInteger();
+        private final AtomicInteger writeCancellations = new AtomicInteger();
+        private final AtomicInteger closeStarts = new AtomicInteger();
+        private final AtomicInteger maxWriteLength = new AtomicInteger();
+        private ControlledWriteBackend contentOwner;
+
+        private ControlledWritableResource(
+                WriteMode mode,
+                int failurePrefix,
+                ProtosFutureValue gate,
+                ProtosActivation activation) {
+            this.mode = mode;
+            this.failurePrefix = failurePrefix;
+            this.gate = gate;
+            this.activation = activation;
+        }
+
+        private void attachContent(ControlledWriteBackend owner) {
+            this.contentOwner = owner;
+        }
+
+        @Override
+        public ProtosFileFlow.Cancellation writeAt(
+                BigInteger position,
+                byte[] bytes,
+                ProtosFileFlow.WriteCompletion completion) {
+            writeStarts.incrementAndGet();
+            maxWriteLength.accumulateAndGet(bytes.length, Math::max);
+
+            if (mode == WriteMode.PENDING_UNCOMMITTED_WRITE) {
+                gate.resolve(ProtosNullValue.INSTANCE, activation);
+                return writeCancellations::incrementAndGet;
+            }
+
+            if (!completion.commitFirstContribution()) {
+                return writeCancellations::incrementAndGet;
+            }
+
+            if (mode == WriteMode.FAIL_PREFIX) {
+                int contributed = Math.min(failurePrefix, bytes.length);
+                contentOwner.contribute(position, bytes, contributed);
+                completion.failed(contributed);
+                return () -> {};
+            }
+
+            contentOwner.contribute(position, bytes, bytes.length);
+            completion.succeeded();
+            return () -> {};
+        }
+
+        @Override
+        public void close(ProtosFileFlow.CloseCompletion completion) {
+            closeStarts.incrementAndGet();
+            if (mode == WriteMode.CLOSE_FAILURE) {
+                completion.failed();
+            } else {
+                completion.succeeded();
+            }
+        }
+
+        private void releaseSilently() {
+            // The controlled backend has no native resource beyond this object.
+        }
+
+        private int writeStarts() {
+            return writeStarts.get();
+        }
+
+        private int writeCancellations() {
+            return writeCancellations.get();
+        }
+
+        private int closeStarts() {
+            return closeStarts.get();
+        }
+
+        private int maxWriteLength() {
+            return maxWriteLength.get();
+        }
+    }
+
+    private static final class SnapshotReadableResource
+            implements ProtosFileFlow.ReadableResource {
+        private final byte[] content;
+
+        private SnapshotReadableResource(byte[] content) {
+            this.content = content.clone();
+        }
+
+        @Override
+        public ProtosFileFlow.Cancellation readAt(
+                BigInteger position,
+                int maxBytes,
+                ProtosFileFlow.ReadCompletion completion) {
+            int start = position.intValueExact();
+            if (start >= content.length) {
+                completion.eof();
+                return () -> {};
+            }
+            int end = Math.min(content.length, start + maxBytes);
+            completion.data(Arrays.copyOfRange(content, start, end));
+            return () -> {};
+        }
+
+        @Override
+        public void close(ProtosFileFlow.CloseCompletion completion) {
+            completion.succeeded();
+        }
+
+        private void releaseSilently() {
+            // Immutable in-memory fixture; nothing native to release.
         }
     }
 
