@@ -44,7 +44,7 @@ Current triage:
   recorded.
 - D044 remains the priority review item because no recovered evidence yet
   demonstrates explicit project-owner selection of its complete published semantics.
-- D021-D025 require provenance and substance review; publication alone
+- D021-D024 require provenance and substance review; publication alone
   is not ratification.
 - D001-D019 are expected to be predominantly project-owner decisions, but their
   approval evidence must be checked rather than inferred.
@@ -333,6 +333,31 @@ Recorded review results:
   work. No normative specification or implementation change is introduced by this
   classification.
 
+- D025 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved retaining
+  D025 / specification `0.1.366` after comparative review spanning Smalltalk, Self,
+  JavaScript, Ruby and Python plus adversarial and future-scalability analysis. Core
+  v0.1 keeps the standard Closure-specific `future` and `parallel` selectors as
+  ordinary local Closure-valued slots of `Object`; Core Closures reach them through
+  the independently ratified D027 direct parent edge to `Object`. D025 adds no
+  standard `Closure` or `Callable` prototype, hidden method table, per-Closure slot
+  materialization or second dispatch path. The standard behaviors have the semantic
+  Closure family as receiver domain: non-Closure receivers may find the inherited
+  selector by ordinary lookup, but invoking that selected standard behavior signals
+  the ordinary invalid-receiver Error before Task/Future creation or isolated-P
+  projection/transfer/execution and does not resume lookup. `future` and `parallel`
+  remain ordinary non-reserved names with ordinary nearer-slot shadowing and
+  user-defined override contracts; member reads reuse the existing receiver-bound
+  Closure extraction and `methodHome` semantics rather than creating an async-method
+  value kind. `FUTURES_AND_TASKS.md` continues to own asynchronous Future/task
+  behavior after receiver validation and `PARALLEL_EXECUTION.md` continues to own
+  isolated-parallel behavior; host scheduler/worker machinery is implementation-only.
+  The ratification is bounded to D025 `future`/`parallel`: it does not ratify D024 or
+  D026, does not retroactively own the independently decided `ensure`/`while`
+  selectors, does not make every ordinarily invokable object asynchronously/parallel
+  executable, and is not a permanent prohibition on a future explicitly approved
+  Closure/callable prototype or other abstraction if later requirements justify one.
+  This governance classification changes no normative specification or implementation.
+
 - D020 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
   retaining D020 / specification `0.1.359` after cross-language comparison,
   adversarial review and future-scalability analysis. Core v0.1 continues not
@@ -464,7 +489,7 @@ Recorded review results:
 Required procedure:
 
 1. Continue backwards through the remaining unresolved decisions in D044-D040,
-   then D021-D025, and finally D001-D019.
+   then D021-D024, and finally D001-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published
    normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or
@@ -480,7 +505,7 @@ Next audit work:
 
 1. Complete the separate D044 review already in progress, considering D045 only
    as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D043-D040, then D021-D025 and D001-D019
+2. Continue backwards through the remaining unresolved decisions in D043-D040, then D021-D024 and D001-D019
    under the required procedure above.
 
 AUD001 closes only when D001-D025, D027-D028 and D030-D045, except D046, have an explicit classification,
