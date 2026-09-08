@@ -62,7 +62,7 @@ publication evidence.
 
 Current triage: - D038 has explicit project-owner confirmation and needs only have that evidence recorded.
 - D044 remains the priority review item because no recovered evidence yet demonstrates explicit project-owner selection of its complete published semantics. is not ratification.
-- D002 and D006 and D009-D019 are expected to be predominantly project-owner decisions, but their approval evidence must be checked rather than inferred. Recorded review results:
+- D002 and D010 and D013-D019 are expected to be predominantly project-owner decisions, but their approval evidence must be checked rather than inferred. Recorded review results:
 
 - D008 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
   retaining D008 / specification `0.1.347` after cross-language comparison,
@@ -778,13 +778,34 @@ Current triage: - D038 has explicit project-owner confirmation and needs only ha
   This governance classification changes no normative specification or
   implementation and does not classify D006 or D008 by transitivity.
 
-Required procedure: 1. Continue backwards through the remaining unresolved decisions in D044-D040, and finally D001-D003 and D005-D006 and D009-D019.
+- D012 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D012 / specification `0.1.355` after comparison with Java, Rust,
+  ECMAScript and Go plus adversarial and future-scalability review. D012 is an
+  ownership/migration decision, not a transitive ratification of every historical
+  String semantic rule moved by that revision. The current primary normative
+  owner of Core String value/indexing behavior remains
+  `semantics/VALUES_AND_COLLECTIONS.md`; String-literal source spelling, lexical
+  validation and grammar remain owned by `PROTOS_GRAMMAR.md`; and the standard
+  Encoding/text-to-bytes conversion contract remains owned by `io/TEXT_IO.md`.
+  The former monolithic language-spec String headings remain navigation and
+  compatibility anchors rather than a second normative authority. This preserves
+  the semantic separation between abstract text values, source syntax and encoded
+  byte representations and avoids duplicating Encoding policy across String and
+  text-I/O domains. D012 does not classify D020 or, by transitivity, historical
+  grapheme-indexing, Unicode-version, String identity/equality, concatenation or
+  other String choices. It also does not freeze today's physical file names or
+  granularity: future explicitly approved owner migrations may split, merge or
+  rename documents coherently while preserving the independently ratified D009
+  single-primary-owner invariant. This governance classification changes no
+  normative specification or implementation and does not classify D011 or D013.
+
+Required procedure: 1. Continue backwards through the remaining unresolved decisions in D044, and finally D002 and D010 and D013-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or PROVENANCE_UNRESOLVED. Executing or publishing a patch is not sufficient approval evidence.
 4. Present every substantive unresolved choice to the project owner under the current explicit design-approval gate. Do not silently preserve, replace, or reopen semantics.
-5. Keep D046 outside AUD001 and do not let this audit overwrite or pre-empt its separate review. Next audit work: 1. Complete the separate D044 review already in progress, considering D045 only as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D043-D040, then D001-D003 and D005-D006 and D009-D019 under the required procedure above. AUD001 closes only when D001-D003 and D005-D006 and D008-D020, D025, D027-D028 and D030-D045, except D046, have an explicit classification,
+5. Keep D046 outside AU and do not let this audit overwrite or pre-empt its separate review. Next audit work: 1. Complete the separate D044 review already in progress, considering only as a ratified dependency where their semantics interact.
+2. Continue backwards through the remaining unresolved decisions in D002 and D010 and D013-D019 under the required procedure above. AU closes only when D002 and D010 and D013-D019,, and D044, except D046, have an explicit classification,
 the project owner has decided every NEEDS_USER_DECISION item, relevant
 provenance is recorded durably, and all affected project ledgers are reconciled.
 Any later normative correction must be a separately approved specification
-change; AUD001 itself authorizes no specification or implementation change.
+change; AU itself authorizes no specification or implementation change.
