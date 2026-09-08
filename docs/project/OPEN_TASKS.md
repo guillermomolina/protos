@@ -62,7 +62,35 @@ publication evidence.
 
 Current triage: - D038 has explicit project-owner confirmation and needs only have that evidence recorded.
 - D044 remains the priority review item because no recovered evidence yet demonstrates explicit project-owner selection of its complete published semantics. is not ratification.
-- D002 and D010 and D013-D019 are expected to be predominantly project-owner decisions, but their approval evidence must be checked rather than inferred. Recorded review results:
+- D002 and D010 and D013 and D015-D019 are expected to be predominantly project-owner decisions, but their approval evidence must be checked rather than inferred. Recorded review results:
+
+- D014 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D014 / specification `0.1.356` after recovered historical owner
+  selection plus renewed cross-language, adversarial and future-scalability
+  review spanning Python methods/properties/descriptors, JavaScript methods and
+  accessors, C#/Kotlin properties, Java ordinary methods, and Self/Smalltalk/Ruby
+  message models. Standard computed operations such as `size`, `hash`, and the
+  exposed `identityHash` convenience remain ordinary zero-argument Closure-valued
+  slots invoked with parentheses. An ordinary member read such as `obj.hash`
+  retrieves/extracts the selected value and never auto-invokes it; `obj.hash()`
+  performs ordinary invocation. Ordinary lookup and shadowing remain decisive:
+  if a nearer slot with the selected name contains a non-invokable value, reading
+  that value succeeds normally while parenthesized invocation fails under the
+  ordinary invocation contract and does not resume lookup at a more distant
+  homonymous slot. `identityHashOf(value)` remains the separate non-overridable
+  primitive semantic operation used by identity-sensitive machinery including
+  `IdentityMap`; ordinary overridable `identityHash()` is only a convenience
+  message and cannot redefine semantic identity hashing. D014 introduces no
+  getter/property/descriptor category, zero-argument auto-call rule, hidden
+  built-in exception or second invocation protocol. Immediate invocation may be
+  specialized, inlined or avoid materializing an unobservable extracted Closure
+  when all lookup/receiver/result/error semantics remain exact. A future explicit
+  property/computed-slot/descriptor facility remains separately designable and
+  does not retroactively change these existing selectors. The original normative
+  publication is commit `a113d4d66a253e691f8f09b1fc1b978b19a66cc3`.
+  This governance classification changes no normative specification or
+  implementation and does not classify D013 or D015-D019 by transitivity.
+
 
 - D013 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
   retaining D013 / specification `0.1.352` after comparison with Python,
@@ -833,12 +861,12 @@ Current triage: - D038 has explicit project-owner confirmation and needs only ha
   single-primary-owner invariant. This governance classification changes no
   normative specification or implementation and does not classify D011 or D013.
 
-Required procedure: 1. Continue backwards through the remaining unresolved decisions in D044, and finally D002 and D010 and D013-D019.
+Required procedure: 1. Continue backwards through the remaining unresolved decisions in D044, and finally D002 and D010 and D013 and D015-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or PROVENANCE_UNRESOLVED. Executing or publishing a patch is not sufficient approval evidence.
 4. Present every substantive unresolved choice to the project owner under the current explicit design-approval gate. Do not silently preserve, replace, or reopen semantics.
 5. Keep D046 outside AU and do not let this audit overwrite or pre-empt its separate review. Next audit work: 1. Complete the separate D044 review already in progress, considering only as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D002 and D010 and D013-D019 under the required procedure above. AU closes only when D002 and D010 and D013-D019,, and D044, except D046, have an explicit classification,
+2. Continue backwards through the remaining unresolved decisions in D002 and D010 and D013 and D015-D019 under the required procedure above. AU closes only when D002 and D010 and D013-D019,, and D044, except D046, have an explicit classification,
 the project owner has decided every NEEDS_USER_DECISION item, relevant
 provenance is recorded durably, and all affected project ledgers are reconciled.
 Any later normative correction must be a separately approved specification
