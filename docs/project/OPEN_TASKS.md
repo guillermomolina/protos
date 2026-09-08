@@ -26,6 +26,29 @@ Task states:
 
 ## Open tasks
 
+### AUD002 — GraalVM / Truffle editor-tooling compatibility audit
+
+Status: **OPEN**
+Priority: **NORMAL**
+Nature: non-normative implementation/tooling architecture audit
+
+Evidence collection is complete. The current runtime uses Truffle AST/call-target
+machinery but is not yet a registered/instrumentable `TruffleLanguage`: roots are
+created with a null language, source identity is not propagated as Truffle
+`Source`, and debugger-facing source sections, tags, scopes and value interop are
+not currently exposed. GraalVM DAP therefore has high reuse potential but is not
+yet a supported Protos debugger; GraalVM LSP is useful dynamic tooling but does
+not replace all static Protos language intelligence.
+
+The audit recommends a hybrid Truffle-first architecture: make Protos a proper
+instrumentable guest language, prove Graal DAP, use Graal LSP as dynamic
+augmentation, reuse the real Protos parser/resolver for static language services,
+and keep the VS Code extension thin. This durable architecture remains
+**PENDING PROJECT-OWNER APPROVAL**. No `TOOL003` or implementation slice is
+allocated by the audit.
+
+See `docs/project/AUD002_GRAALVM_EDITOR_TOOLING_AUDIT.md`.
+
 ### AUD001 — Retrospective design-decision ratification audit
 
 Status: **OPEN**
