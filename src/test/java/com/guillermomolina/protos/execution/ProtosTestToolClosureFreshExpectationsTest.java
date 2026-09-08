@@ -50,7 +50,7 @@ final class ProtosTestToolClosureFreshExpectationsTest {
     }
 
     @Test
-    void sequentialRunnerSelectsClosureFreshButSkipsFuture()
+    void sequentialRunnerSelectsClosureFreshButSkipsUnsupportedExpectation()
             throws Exception {
         ProtosExecutionOutcome outcome =
                 execute("tool002-d4-runner-selection.protos");

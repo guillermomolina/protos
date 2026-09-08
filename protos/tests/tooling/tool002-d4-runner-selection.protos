@@ -20,7 +20,7 @@ closureCase: Manifest.parseLine(
     "closure.protos\tclosure-error-parent-fresh\tInvalidSuper"
 )
 futureCase: Manifest.parseLine(
-    "future.protos\tfuture-integer\t42"
+    "future.protos\ttool002-unsupported-sentinel\t-"
 )
 plan: Manifest.frozenTuple(
     Manifest.frozenTuple(closureCase, futureCase)

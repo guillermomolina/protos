@@ -20,7 +20,7 @@ errorParent: Manifest.parseLine(
     "error-parent.protos\terror-parent\tSlotNotFound"
 )
 floatNotYet: Manifest.parseLine(
-    "future.protos\tfuture-integer\t42"
+    "future.protos\ttool002-unsupported-sentinel\t-"
 )
 plan: Manifest.frozenTuple(
     Manifest.frozenTuple(errorParent, floatNotYet)

@@ -60,7 +60,7 @@ final class ProtosTestToolFloatBitsExpectationsTest {
     }
 
     @Test
-    void sequentialRunnerSelectsFloatBitsButStillSkipsFuturePolicy()
+    void sequentialRunnerSelectsFloatBitsButStillSkipsUnsupportedExpectation()
             throws Exception {
         ProtosExecutionOutcome outcome =
                 execute("tool002-d3c2c-runner-selection.protos", false);

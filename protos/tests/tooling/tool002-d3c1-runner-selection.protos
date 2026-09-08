@@ -18,7 +18,7 @@ Runner: import("self:Runner")
 
 nanCase: Manifest.parseLine("nan.protos\tfloat-nan\t-")
 bitsNotYet: Manifest.parseLine(
-    "future.protos\tfuture-integer\t42"
+    "future.protos\ttool002-unsupported-sentinel\t-"
 )
 plan: Manifest.frozenTuple(
     Manifest.frozenTuple(nanCase, bitsNotYet)

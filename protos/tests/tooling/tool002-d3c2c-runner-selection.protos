@@ -20,7 +20,7 @@ bits: Manifest.parseLine(
     "bits.protos\tfloat-bits\t3ff0000000000000"
 )
 futureNotYet: Manifest.parseLine(
-    "future.protos\tfuture-integer\t42"
+    "future.protos\ttool002-unsupported-sentinel\t-"
 )
 plan: Manifest.frozenTuple(
     Manifest.frozenTuple(bits, futureNotYet)
