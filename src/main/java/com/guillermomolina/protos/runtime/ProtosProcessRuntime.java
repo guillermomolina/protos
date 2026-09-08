@@ -22,6 +22,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 /**
  * Internal local Protos Process failure-domain and RootActor failure-authority substrate.
@@ -89,6 +90,7 @@ public final class ProtosProcessRuntime {
     private ProtosEncodingValue stdinEncoding;
     private ProtosEncodingValue stdoutEncoding;
     private ProtosEncodingValue stderrEncoding;
+    private ProtosProcessExecutionHost executionHost;
 
     /**
      * Creates one Process incarnation together with its unique RootActor and no default
@@ -123,6 +125,48 @@ public final class ProtosProcessRuntime {
 
     public ProtosActor rootActorForRuntime() {
         return rootActor;
+    }
+
+    /**
+     * Binds this Process incarnation to one host execution placement exactly once.
+     *
+     * <p>The binding is implementation placement, not semantic Process identity. A4B3 still owns
+     * migration of every production driver; an unbound Process therefore retains the staged direct
+     * host path until that cutover is complete.
+     */
+    public synchronized void bindExecutionHostForRuntime(ProtosProcessExecutionHost host) {
+        Objects.requireNonNull(host, "host");
+        if (lifecycle != LifecycleState.RUNNING) {
+            throw new IllegalStateException(
+                    "Process execution host cannot be bound after termination begins");
+        }
+        if (executionHost != null) {
+            throw new IllegalStateException("Process execution host is already bound");
+        }
+        executionHost = host;
+    }
+
+    public synchronized Optional<ProtosProcessExecutionHost> executionHostForRuntime() {
+        return Optional.ofNullable(executionHost);
+    }
+
+    /** Executes host placement machinery when this Process is bound; staged direct path otherwise. */
+    public <T> T callInExecutionHostForRuntime(Supplier<T> action) {
+        Objects.requireNonNull(action, "action");
+        ProtosProcessExecutionHost host;
+        synchronized (this) {
+            host = executionHost;
+        }
+        return host == null ? action.get() : host.callForRuntime(action);
+    }
+
+    public void runInExecutionHostForRuntime(Runnable action) {
+        Objects.requireNonNull(action, "action");
+        callInExecutionHostForRuntime(
+                () -> {
+                    action.run();
+                    return null;
+                });
     }
 
     /** Optional default Filesystem authority granted only to the RootActor initial module. */
@@ -523,6 +567,7 @@ public final class ProtosProcessRuntime {
 
     void actorTerminatedForRuntime(ProtosActor actor) {
         Objects.requireNonNull(actor, "actor");
+        ProtosProcessExecutionHost terminatedHost = null;
         synchronized (this) {
             if (!liveActors.remove(actor)) {
                 return;
@@ -530,16 +575,27 @@ public final class ProtosProcessRuntime {
             if (lifecycle == LifecycleState.TERMINATING && liveActors.isEmpty()) {
                 lifecycle = LifecycleState.TERMINATED;
                 notifyAll();
+                terminatedHost = executionHost;
             }
         }
+        notifyHostAfterTermination(terminatedHost);
     }
 
     private void tryCompleteTermination() {
+        ProtosProcessExecutionHost terminatedHost = null;
         synchronized (this) {
             if (lifecycle == LifecycleState.TERMINATING && liveActors.isEmpty()) {
                 lifecycle = LifecycleState.TERMINATED;
                 notifyAll();
+                terminatedHost = executionHost;
             }
+        }
+        notifyHostAfterTermination(terminatedHost);
+    }
+
+    private static void notifyHostAfterTermination(ProtosProcessExecutionHost host) {
+        if (host != null) {
+            host.processTerminatedForRuntime();
         }
     }
 

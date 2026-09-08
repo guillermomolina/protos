@@ -26,7 +26,9 @@ import java.io.OutputStream;
 import java.util.Objects;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
+import java.util.function.Supplier;
 import org.graalvm.polyglot.Context;
+import org.graalvm.polyglot.Engine;
 
 /**
  * One host-owned Polyglot context that may be entered by multiple Protos carrier threads.
@@ -42,29 +44,45 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
     private final ReentrantReadWriteLock lifecycle = new ReentrantReadWriteLock(true);
     private final Lock executionLock = lifecycle.readLock();
     private final Lock closeLock = lifecycle.writeLock();
-    private boolean closed;
+    private final Runnable closedCallback;
+    private volatile boolean closeRequested;
+    private volatile boolean closed;
 
-    private ProtosPolyglotExecutionContext(Context context) {
+    private ProtosPolyglotExecutionContext(Context context, Runnable closedCallback) {
         this.context = Objects.requireNonNull(context, "context");
+        this.closedCallback = Objects.requireNonNull(closedCallback, "closedCallback");
     }
 
     public static ProtosPolyglotExecutionContext open(
             InputStream in, OutputStream out, OutputStream err) {
+        return open(null, in, out, err, () -> {});
+    }
+
+    static ProtosPolyglotExecutionContext open(
+            Engine engine,
+            InputStream in,
+            OutputStream out,
+            OutputStream err,
+            Runnable closedCallback) {
         Objects.requireNonNull(in, "in");
         Objects.requireNonNull(out, "out");
         Objects.requireNonNull(err, "err");
+        Objects.requireNonNull(closedCallback, "closedCallback");
 
-        Context context =
+        Context.Builder builder =
                 Context.newBuilder(ProtosLanguage.ID)
                         .in(in)
                         .out(out)
-                        .err(err)
-                        .build();
+                        .err(err);
+        if (engine != null) {
+            builder.engine(engine);
+        }
+        Context context = builder.build();
         boolean initialized = false;
         try {
             context.initialize(ProtosLanguage.ID);
             initialized = true;
-            return new ProtosPolyglotExecutionContext(context);
+            return new ProtosPolyglotExecutionContext(context, closedCallback);
         } finally {
             if (!initialized) {
                 context.close();
@@ -82,15 +100,22 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
     public ProtosExecutionOutcome execute(Source source, ProtosActivation activation) {
         Objects.requireNonNull(source, "source");
         Objects.requireNonNull(activation, "activation");
+        return callEntered(
+                () -> {
+                    CallTarget target = ProtosLanguageContext.current().parsePublic(source);
+                    return ProtosRootTaskExecution.execute(target, activation);
+                });
+    }
 
+    <T> T callEntered(Supplier<T> action) {
+        Objects.requireNonNull(action, "action");
         executionLock.lock();
         try {
             requireOpen();
             context.enter();
             Throwable failure = null;
             try {
-                CallTarget target = ProtosLanguageContext.current().parsePublic(source);
-                return ProtosRootTaskExecution.execute(target, activation);
+                return action.get();
             } catch (RuntimeException | Error executionFailure) {
                 failure = executionFailure;
                 throw executionFailure;
@@ -107,13 +132,53 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
             }
         } finally {
             executionLock.unlock();
+            finishRequestedClose();
         }
     }
 
     private void requireOpen() {
-        if (closed) {
+        if (closeRequested || closed) {
             throw new IllegalStateException("Polyglot Protos execution context is closed");
         }
+    }
+
+    /**
+     * Requests platform cleanup after semantic Process termination.
+     *
+     * <p>If invoked from an entered carrier, actual Context.close is deferred until that carrier
+     * leaves. New entries fail immediately after the request. Calls from other threads may wait for
+     * already-entered carriers through the existing exclusive close side.
+     */
+    void requestClose() {
+        closeRequested = true;
+        if (lifecycle.getReadHoldCount() == 0) {
+            finishRequestedClose();
+        }
+    }
+
+    private void finishRequestedClose() {
+        if (!closeRequested || closed || lifecycle.getReadHoldCount() != 0) {
+            return;
+        }
+        closeLock.lock();
+        try {
+            if (closed) {
+                return;
+            }
+            context.close();
+            closed = true;
+            closedCallback.run();
+        } finally {
+            closeLock.unlock();
+        }
+    }
+
+    Engine engineForTesting() {
+        return context.getEngine();
+    }
+
+    boolean isClosedForTesting() {
+        return closed;
     }
 
     @Override
@@ -122,16 +187,7 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
             throw new IllegalStateException(
                     "Polyglot Protos execution context cannot close from an executing carrier");
         }
-
-        closeLock.lock();
-        try {
-            if (closed) {
-                return;
-            }
-            closed = true;
-            context.close();
-        } finally {
-            closeLock.unlock();
-        }
+        closeRequested = true;
+        finishRequestedClose();
     }
 }

@@ -165,6 +165,27 @@ not established until that slice.
 
 `ContextPolicy.SHARED` remains deferred. A4B1 does not require or approve it.
 
+## A4B2A implementation evidence
+
+I026-A4B2 is mechanically decomposed into A4B2A-A4B2B without changing PLAT001.
+A4B2A closes in `0.2.269-SNAPSHOT` and establishes an explicit
+`ProtosPolyglotRuntimeHost` that owns one Engine without making it a JVM singleton. Multiple
+semantic Processes may bind once to distinct `ProtosPolyglotProcessContext` instances created
+from that same Engine. The Process runtime depends only on a host-neutral internal execution-host
+interface; Context identity never becomes Process identity or authority.
+
+Semantic Process termination remains authoritative and happens first. Only after the Process has
+reached `TERMINATED` does the host binding request physical Context close; a request originating
+from an entered carrier is deferred until that carrier leaves. Closing the Engine owner while any
+Process Context is still active fails instead of implicitly terminating or cancelling a live Protos
+Process. Terminating one Process closes only its Context and leaves sibling Process Contexts on the
+same Engine usable.
+
+A4B2A deliberately retains A4B3's staged unbound/direct Process path and makes no Actor/P routing
+claim. A4B2B is READY and still owns Actor/P carrier entry plus concurrent Core-root bootstrap
+publication. `ContextPolicy.SHARED` remains deferred; explicit Engine sharing here does not change
+the default EXCLUSIVE language-context policy.
+
 ## Explicitly deferred choices
 
 PLAT001 does **not** ratify any of the following:

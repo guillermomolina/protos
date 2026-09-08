@@ -61,7 +61,9 @@ see `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md`.
 | I026-A4A | CLOSED | `0.2.266-SNAPSHOT` | I026-A3 | Establish one host-owned thread-confined entered Polyglot `Context`, resolve the exact current `ProtosLanguageContext` through Truffle `ContextReference`, parse exact Truffle `Source` values through `Env.parsePublic(...)` / `ProtosLanguage.parse(...)`, and execute the resulting language-bound target through the existing activation-bearing `ProtosRootTaskExecution`. No CLI route is cut over by A4A. |
 | I026-A4B | IN_PROGRESS | — | I026-A4A | Implement ratified PLAT001 through ordered A4B1-A4B3; A4B closes only after multithread safety, Process-scoped hosting and driver cutover are all published. |
 | I026-A4B1 | CLOSED | `0.2.267-SNAPSHOT` | I026-A4A + PLAT001 | Audited the language/context/compiler state, authorized Truffle multithread access, replaced permanent owner-thread entry with per-carrier enter/leave plus shared-read/exclusive-close lifecycle coordination, and proved overlapping same-Context execution without a global GIL or semantic ThreadLocal. Cross-Process bootstrap and Actor/P Process-context binding remain A4B2. |
-| I026-A4B2 | READY | — | I026-A4B1 | Establish shared-Engine / Process-scoped multithread Context lifecycle, bind existing Actor/P carriers to their owning Process Context, close concurrent Process-bootstrap safety, and prove independent multi-Process plus concurrent-Actor behavior without making Context semantic identity. |
+| I026-A4B2 | IN_PROGRESS | — | I026-A4B1 | Implement Process-scoped PLAT001 hosting through A4B2A-A4B2B; B2 closes only after Engine/Context lifecycle plus Actor/P/bootstrap integration are both published. |
+| I026-A4B2A | CLOSED | `0.2.269-SNAPSHOT` | I026-A4B1 | Establish one explicit shareable Engine owner, distinct Process-scoped Contexts, one fixed implementation-only Process-host binding, semantic-termination-triggered Context cleanup, and lifecycle isolation across independent Processes. No Actor/P carrier routing or Core-bootstrap concurrency claim yet. |
+| I026-A4B2B | READY | — | I026-A4B2A | Route Actor and P carriers through the bound Process Context, close bounded concurrent Core-root bootstrap publication, and prove concurrent Actor/P plus concurrent multi-Process bootstrap behavior. |
 | I026-A4B3 | BLOCKED_BY_DEPENDENCIES | — | I026-A4B2 | Cut CLI, REPL, bundled-tool, workspace and remaining production drivers onto the PLAT001 substrate and retire direct compiler/call entry as a separate primary production architecture. |
 | I026-B | BLOCKED_BY_DEPENDENCIES | — | I026-A4 | Map the existing exact `SourceSpan` ranges to valid Truffle `SourceSection` values on roots/execution nodes, with focused Java-side integration evidence. |
 | I026-C | BLOCKED_BY_DEPENDENCIES | — | I026-B | Make the relevant AST nodes instrumentable and expose the minimal faithful `StandardTags` needed for source execution/stepping; do not tag nodes merely to satisfy a debugger UI. |
@@ -85,9 +87,11 @@ no Context-per-Actor/carrier mapping, no global execution lock/GIL, and no Truff
 promoted into Protos semantics. A4B remains IN_PROGRESS. A4B1 is now CLOSED: Truffle permits concurrent external
 carrier entry, the A4A owner-thread/permanent-entry staging rule is removed, and the
 host bridge uses bounded per-execution enter/leave with only per-Context lifecycle
-coordination. A4B2 is READY to establish the shared-Engine / Process-scoped Context
-lifecycle, route Actor/P carriers through that owner, and close concurrent Process-bootstrap
-safety before A4B3 cuts production drivers over. I026-D remains independently READY.
+coordination. A4B2 is now IN_PROGRESS through A4B2A-A4B2B. A4B2A publishes the
+explicit shareable Engine owner and one distinct Context per bound semantic Process, with Context
+cleanup following already-complete Process termination and no host shutdown authority over live
+Processes. A4B2B is READY for Actor/P carrier routing plus bounded concurrent Core-root bootstrap
+publication; only that closure releases A4B3. I026-D remains independently READY.
 
 ## Deferred ownership
 
