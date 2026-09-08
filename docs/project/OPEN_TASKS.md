@@ -45,8 +45,8 @@ Current triage:
 - D020 and the still-unratified decisions in D040-D044 require priority review
   because no recovered evidence yet demonstrates explicit project-owner selection
   of their complete published semantics.
-- D021-D035 require provenance and substance review; publication alone is not
-  ratification.
+- D021-D032 and D034 require provenance and substance review; publication alone
+  is not ratification.
 - D001-D019 are expected to be predominantly project-owner decisions, but their
   approval evidence must be checked rather than inferred.
 
@@ -248,10 +248,31 @@ Recorded review results:
   remains independently subject to AUD001 review. No normative specification or
   implementation change is introduced by this classification.
 
+- D033 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D033 / specification `0.1.371` after comparative review spanning
+  Self/Smalltalk, Python, Java/.NET, Ruby and JavaScript plus a dedicated
+  future-scalability review. Standard `hasSlot(name)`, `slotValue(name)`, and
+  `removeSlot(name)` continue to accept exactly semantic `String` values. No
+  implicit conversion, stringification, selector coercion, delegation-based
+  String-like acceptance, host-name adaptation or hidden Unicode normalization
+  is introduced. After ordinary argument evaluation, an invalid non-String
+  name fails before local-slot inspection and, for `removeSlot`, before any
+  structural mutation. A valid String denotes exactly its Unicode scalar-value
+  sequence as the slot name. The operations remain local-only: `hasSlot` returns
+  canonical `false` for a valid absent local name, `slotValue` and `removeSlot`
+  retain their ordinary missing-local-slot Error, and delegated slots do not
+  satisfy any of the three operations. The public String contract does not
+  prescribe lookup machinery: implementations remain free to intern/canonicalize
+  storage, cache hashes, use internal name/slot IDs, shapes or inline caches when
+  Protos cannot observe a semantic difference. A future first-class Symbol,
+  Selector or broader name facility remains separately designable; introducing
+  one does not implicitly widen these Core v0.1 APIs. This ratification changes
+  no normative specification or implementation.
+
 Required procedure:
 
 1. Continue backwards through the remaining unresolved decisions in D044-D040,
-   then D020, D021-D035, and finally D001-D019.
+   then D020, D034, D021-D032, and finally D001-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published
    normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or
@@ -267,7 +288,7 @@ Next audit work:
 
 1. Complete the separate D044 review already in progress, considering D045 only
    as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D043-D040, then D020, D021-D035 and D001-D019
+2. Continue backwards through the remaining unresolved decisions in D043-D040, then D020, D034, D021-D032 and D001-D019
    under the required procedure above.
 
 AUD001 closes only when D001-D045, except D046, have an explicit classification,
