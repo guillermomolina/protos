@@ -41,6 +41,7 @@ documentation areas whose semantics and implementation are already closed.
 4. [Control flow through ordinary protocols](04-control-flow-through-protocols.md)
 5. [Values, identity, equality, and collections](05-values-identity-equality-and-collections.md)
 6. [Modules and imports](06-modules-and-imports.md)
+7. [Errors, handlers, `ensure`, and resource lifetime](07-errors-handlers-ensure-and-resource-lifetime.md)
 
 ## Current guide state
 
@@ -63,18 +64,23 @@ control-flow behavior as ordinary protocols without redefining the language.
 current value-identity/equality model, indexing, Core collection mechanisms, and
 their Standard Library extensions.
 
-`DOC001-G` is now CLOSED with
+`DOC001-G` is CLOSED with
 [chapter 06](06-modules-and-imports.md), which explains module contexts,
 ordinary `import(...)`, canonical ModuleKeys, Actor-local module instances,
 cache-before-execute cycles, failure/retry semantics, and the resolver-policy
-boundary. The next independently READY Programming Guide slice is `DOC001-H`
-for Errors, handlers, `ensure`, and resource lifetime.
+boundary.
+
+`DOC001-H` is now CLOSED with
+[chapter 07](07-errors-handlers-ensure-and-resource-lifetime.md), which explains
+Error objects, non-resumable signaling, dynamic handlers, unwind-safe `ensure`,
+cleanup precedence, and deterministic explicit resource release. The next
+independently READY Programming Guide slice is `DOC001-I` for Futures and
+structured concurrency.
 
 ## Planned progression
 
 Future chapters should cover, as the guide grows:
 
-- Errors, handlers, `ensure`, and resource lifetime;
 - Futures and structured concurrency;
 - isolated parallel execution;
 - Actors and Actor groups;
