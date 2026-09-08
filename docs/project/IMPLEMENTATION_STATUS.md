@@ -32,7 +32,7 @@ an item.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| AUD002 | GraalVM / Truffle editor-tooling compatibility audit | CLOSED | `SAME_COMMIT` | Evidence complete and Alternative C / hybrid Truffle-first architecture explicitly approved by project owner on 2026-09-08. Runtime/compiler tooling foundation allocated as I026 READY; no TOOL003, public CLI UX, VS Code extension or static language-service item allocated by this decision. See docs/project/AUD002_GRAALVM_EDITOR_TOOLING_AUDIT.md. |
+| AUD002 | GraalVM / Truffle editor-tooling compatibility audit | CLOSED | `SAME_COMMIT` | Evidence complete and Alternative C / hybrid Truffle-first architecture explicitly approved by project owner on 2026-09-08. Runtime/compiler tooling foundation I026 is now IN_PROGRESS; no TOOL003, public CLI UX, VS Code extension or static language-service item allocated by this decision. See docs/project/AUD002_GRAALVM_EDITOR_TOOLING_AUDIT.md. |
 | AUD001 | Retrospective D001-D045 design-decision ratification audit | CLOSED | `SAME_COMMIT` | CLOSED on 2026-09-08 after final D044 classification; D001-D045 all explicitly classified; D046 excluded. The specification `0.1.90` structured-child outcome policy is RATIFIED by explicit owner approval on 2026-09-08; its follow-up is closed. D045's task-scoped ownership core is RATIFIED by explicit project-owner approval on 2026-09-08. D037 is RATIFIED from recovered explicit project-owner confirmation; D038 already has explicit owner confirmation. D043 is RATIFIED by explicit project-owner approval on 2026-09-08; clarification is specification `0.1.385`. D039's public ActorGroup acquisition is RATIFIED by explicit project-owner approval on 2026-09-08. D035's fresh/independent standard Bytes-result semantics are RATIFIED from recovered explicit project-owner selection on 2026-09-04. D036's Future result-identity semantics are RATIFIED by explicit project-owner approval on 2026-09-08. D033's strict semantic-String reflective local-slot name domain is RATIFIED by explicit project-owner approval on 2026-09-08 after comparative and future-scalability review. D032's fresh independent `slotNames()` reflection-Array semantics are RATIFIED by explicit project-owner approval on 2026-09-08 after comparative and future-scalability review. D020's Core-v0.1 String transformation boundary is RATIFIED by explicit project-owner approval on 2026-09-08 after cross-language, adversarial and future-scalability review. D030's ordinary-invokable eager-validation `Future.then` semantics are RATIFIED by explicit project-owner approval on 2026-09-08 after cross-language, adversarial and future-scalability review. D029's general bare-Integer standard-result family is RATIFIED by explicit project-owner approval on 2026-09-08 after cross-language, adversarial and future-scalability review. D027's portable Core-v0.1 delegation topology is RATIFIED by explicit project-owner approval on 2026-09-08 after cross-language, adversarial and future-scalability review; D025/D026 were reviewed independently under AUD001; D027 did not classify them by transitivity. D026's no-standard-Boolean-object Core surface is RATIFIED by explicit project-owner approval on 2026-09-08 after cross-language, adversarial and future-scalability review. D025's ordinary `Object.future`/`Object.parallel` Closure-specific ownership is RATIFIED by explicit project-owner approval on 2026-09-08 after cross-language, adversarial and future-scalability review; D024/D026 and later `ensure`/`while` ownership remain independent decisions. D023's exact-RHS slot-write expression result is RATIFIED by explicit project-owner approval on 2026-09-08 after cross-language, adversarial and future-scalability review. D022's standard inherited `Object.init()` normal-result semantics are RATIFIED by explicit project-owner approval on 2026-09-08 after cross-language, adversarial and future-scalability review; construction still returns the fresh instance independently of an override's ordinary normal result, and D021/D023/D024 were reviewed independently under AUD001; D022 did not classify them by transitivity. D021's GroupRef semantic capability identity is RATIFIED by explicit project-owner approval on 2026-09-08 after distributed-systems, object-capability, adversarial and future-scalability review. D001's empty semantic `Sequence` normal-result rule is RATIFIED by explicit project-owner approval on 2026-09-08 after cross-language, adversarial and future-scalability review; zero-expression normal completion yields canonical `null`, non-empty normal completion preserves the final expression's exact result, escaping control transfers are not converted, object-body construction remains separate, and D002-D019 were reviewed independently under AUD001; D001 did not classify them by transitivity. D003 is RATIFIED AS AMENDED by explicit project-owner approval on 2026-09-08; specification `0.1.386` retains the D003/0.1.340 deterministic binding core and requires required non-rest Closure parameters before defaulted parameters; `I025` is READY for parser/conformance alignment. D004's standard Boolean protocol is RATIFIED by explicit project-owner approval on 2026-09-08 after cross-language, adversarial and future-scalability review, retaining ordinary-message control, strict canonical-Boolean standard receiver/result rules, selected-only callback invocation, no truthiness or hidden asynchronous behavior, and mandatory `&&`/`||` lowering through RHS Closures; no other Dxxx decision is classified by this slice. D006's Core numeric-family/arithmetic model is RATIFIED by explicit project-owner approval on 2026-09-08 after cross-language, adversarial and future-scalability review; specification `0.1.344` is retained without normative amendment. D007's strict import/resolver boundary is RATIFIED by explicit project-owner approval on 2026-09-08 after corrected cross-language, adversarial, package-system and future-scalability review; semantic String validation remains separate from host interpretation and canonical ModuleKey identity. D005's Error occurrence, identity and portable-taxonomy policy is RATIFIED by explicit project-owner approval on 2026-09-08 after cross-language, adversarial and future-scalability review; fresh standard failure occurrences, exact re-signaling/recorded Error identity, fresh per-observation `Cancelled`, domain-local identity, non-resumable signaling and the deliberately shallow D005 taxonomy are retained, while D002/D006-D019 and later Error/handler/cleanup decisions were reviewed independently; D005 did not classify them by transitivity. D009's single-primary-owner normative-authority discipline is RATIFIED from recovered explicit project-owner approval, reaffirmed on 2026-09-08 after cross-specification, adversarial and future-scalability review; specification `0.1.349` is retained without normative amendment and the current physical specification document split is not frozen. D011's effective public Filesystem/I/O surface is RATIFIED by explicit project-owner approval on 2026-09-08 after cross-language/capability, adversarial and future-scalability review; specification `0.1.351` is retained subject to the already-ratified D028 / `0.1.369` replacement of Path construction `parent()` with `parentComponent()`, with no new normative amendment or implementation follow-up. D012's String normative-ownership migration is RATIFIED by explicit project-owner approval on 2026-09-08 after cross-language, adversarial and future-scalability review; current String-value, String-literal and Encoding owners remain distinct without freezing the physical document split or ratifying adjacent String semantics by transitivity. D013's ordinary-slot polymorphic invocation protocol is RATIFIED by explicit project-owner approval on 2026-09-08 after cross-language, adversarial and future-scalability review; specification `0.1.352` is retained without normative amendment, `call` remains an ordinary Closure-valued lookup protocol with `Object.call` supplying Closure execution/default construction, and no implementation follow-up is required. D015's Actor non-resumable Error boundary is RATIFIED by explicit project-owner approval on 2026-09-08 after cross-language, Actor-runtime, adversarial and future-scalability review; handled Errors remain ordinary unwinding control while only an unhandled turn escape is Actor-fatal, with no implicit rollback/replay/retry and no transitive classification of failure-authority, handler-timing, cleanup or structured-ownership decisions. D016's Actor creation/admission cutover is RATIFIED by explicit project-owner approval on 2026-09-08 after actor-runtime, distributed-systems, adversarial and future-scalability review; specification `0.1.354` is retained without normative amendment, `Actor.spawn(...) -> ActorRef` remains the sole Core creation result with placement/admission after the one incarnation cutover, and no implementation follow-up is required. D010's public Actor/P/Process bootstrap architecture is RATIFIED by explicit project-owner approval on 2026-09-08 after cross-language, capability, adversarial and future-scalability review; specification `0.1.350` is retained without normative amendment, with its historical surface-exhaustiveness wording scoped to that publication point and not overriding later independently owned compatible extensions such as `Actor.group(...)` and `ActorRef.termination()`. D018's canonical Process-bootstrap snapshot identity is RATIFIED by explicit project-owner approval on 2026-09-08 after cross-language, concurrency, isolation, distribution, adversarial and future-scalability review; the normative semantics published in `PROCESS_IO.md` remain unchanged and `0.1.361` remains their administrative D018 record, with no implementation follow-up. D002's effective bare-name/creation/assignment model is RATIFIED by explicit project-owner approval on 2026-09-08 after cross-language, adversarial and future-scalability review; specification `0.1.348` is retained in its effective form as corrected by `0.1.387`, with the exact bare-assignment destination selected before RHS evaluation, no delegated/implicit-creation assignment fallback, and no normative or implementation follow-up. See docs/project/OPEN_TASKS.md. D044's ordinary Closure-specific `while` protocol is RATIFIED by explicit project-owner approval on 2026-09-08 after cross-language, adversarial and future-scalability review; specification `0.1.381` is retained without normative amendment, I023/B007 remain CLOSED, and future loop syntax/`break`/`continue`/pattern/async facilities remain separate designs. |
 
 ## Core implementation
@@ -63,7 +63,7 @@ an item.
 | I021 | Filesystem namespace replacement/removal | CLOSED | `SAME_COMMIT` | I021-A/B/C complete; D042 / spec `0.1.379`; production confined namespace backend and Protos-visible integrated conformance published; B006 CLOSED by package-tool Filesystem Slice 2B metadata publication integration |
 | I022 | Dynamic Error handlers / unwind-safe cleanup | CLOSED | `SAME_COMMIT` | I022-A/B/C/D/E/F complete; D043 / spec `0.1.380`; replay-stable Error handlers, unwind-safe `ensure`, suspension, later-transfer precedence, cooperative cancellation, structured lifetime and task/Actor isolation have final adversarial closure evidence |
 | I023 | Standard `while` protocol | CLOSED | `SAME_COMMIT` | D044 / spec `0.1.381` + D045 / spec `0.1.382`; I023-A/B/C/D complete; B007 CLOSED; DOC001-E subsequently published and CLOSED. |
-| I024 | Filesystem directory observation + captured-tree capability | CLOSED | I024-A/A2/B/C/D `SAME_COMMIT`; D046 / spec `0.1.384`; B009 CLOSED | D046 is fully implemented and integrated conformance is published; B009 closes and TOOL001-F2E2 is READY. |
+| I024 | Filesystem directory observation + captured-tree capability | CLOSED | I024-A/A2/B/C/D `SAME_COMMIT`; D046 / spec `0.1.384`; B009 CLOSED | D046 is fully implemented and integrated conformance is published; B009 is CLOSED; TOOL001-F2E2 is CLOSED and TOOL001-F2E3 is READY. |
 | I025 | D003 required-before-default Closure parameter ordering conformance | READY | — | Implement specification `0.1.386`: reject any required non-rest parameter after the first defaulted parameter, preserve optional-final-rest and all existing D003 binding semantics, and add focused parser plus Protos-visible syntax conformance. |
 | I026 | Truffle tooling foundation | IN_PROGRESS | — | AUD002 hybrid Truffle-first architecture. A1/A2/A3 are published. A4 is IN_PROGRESS through A4A/A4B; A4A is published and A4B plus D are READY. See docs/project/I026_TRUFFLE_TOOLING_FOUNDATION.md. |
 | I026-A1 | Registered Truffle language/runtime boundary | CLOSED | `SAME_COMMIT` | `0.2.260-SNAPSHOT`; `ProtosLanguage`/`ProtosLanguageContext`, official Truffle registration processing, and Polyglot discovery/context-initialization smoke published. No parse/eval support is claimed by A1. |
@@ -97,7 +97,7 @@ Dependencies:
 - I013 Path — CLOSED;
 - I016 Filesystem/File — CLOSED;
 - I021 Filesystem namespace mutation — CLOSED;
-- B009 — READY until final I024 implementation/conformance closes it.
+- B009 — CLOSED by I024-D.
 
 I024-A deliberately does not publish the new messages. It establishes the
 host-neutral producer/result lifecycle so later materialization and NIO work do
@@ -107,7 +107,7 @@ production incompatibility: eager complete-result representation, exact-name
 uniqueness, cancellation/failure cleanup and successful custody transfer already
 match the amended semantics. The internal release callback is strictly an
 untransferred-custody mechanism and does not define a captured-Filesystem close
-obligation. I024-B is now CLOSED: the standard Filesystem bridge exposes `entries` and `captureTree`, materializes their approved result shapes, and keeps existing backends default-fail until implementation support exists. I024-C is CLOSED: the complete-tree NIO backend provides secure no-follow directory observation and recursive immutable capture into implementation-managed backing while preserving the captured-Filesystem no-close contract. I024-D is also CLOSED: integrated Protos-visible conformance validates that backend through the standard surface, the native-boundary guard is reconciled, B009 is CLOSED, and TOOL001-F2E2 is READY.
+obligation. I024-B is now CLOSED: the standard Filesystem bridge exposes `entries` and `captureTree`, materializes their approved result shapes, and keeps existing backends default-fail until implementation support exists. I024-C is CLOSED: the complete-tree NIO backend provides secure no-follow directory observation and recursive immutable capture into implementation-managed backing while preserving the captured-Filesystem no-close contract. I024-D is also CLOSED: integrated Protos-visible conformance validates that backend through the standard surface, the native-boundary guard is reconciled, B009 and TOOL001-F2E2 are CLOSED, and TOOL001-F2E3 is READY.
 
 ### I023 — Standard `while` protocol
 
@@ -170,7 +170,7 @@ Final I023 closure boundary:
 - synchronous Error/non-local-return transfer, returned-Future non-adoption, D045 task-scoped ownership, condition/body suspension replay and cooperative cancellation/ensure composition all pass together;
 - replay retention remains bounded across both normal and repeatedly suspending iterations;
 - the Core native boundary remains 111 production `nativeClosure` construction sites across 30 providers, with `ProtosStandardObjectProtocol` at five sites and no post-I023-A expansion;
-- B007 and I023 are CLOSED; DOC001-E is dependency-unblocked and re-audited READY for its own documentation slice.
+- B007, I023 and DOC001-E are CLOSED; DOC001-M remains blocked on TOOL001 and TOOL002 closure.
 
 ### I022 — Dynamic Error handlers and unwind-safe cleanup
 
@@ -862,10 +862,9 @@ Status: IN_PROGRESS
 Owning record:
 `docs/project/DOC001_PROGRAMMING_DOCUMENTATION.md`.
 
-DOC001 remains IN_PROGRESS as a whole. I023-D closes B007 and removes
-DOC001-E's implementation dependency; the fresh I023-D current-main audit makes
-DOC001-E READY. Independent READY slices remain unaffected and still perform
-their own current-main audit when started.
+DOC001 remains IN_PROGRESS as a whole. I023-D/B007 and DOC001-E are CLOSED.
+DOC001-M remains BLOCKED_BY_DEPENDENCIES until TOOL001 and TOOL002 close;
+DOC001-N remains dependency-gated behind M.
 
 ## Toolchain tools
 
@@ -878,7 +877,7 @@ record distributable Standard Library functionality.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | D/E/F1 CLOSED; F2 now includes lock I/O, stale/root assembly and F2D1 workspace execution-plan contract. F2D2 pure plan construction READY. |
+| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | D/E/F1 and F2D are CLOSED; F2E2 is CLOSED and F2E3 is READY for the active external immutable-package execution continuation. |
 | TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D/E/F CLOSED; F4 ownership cutover is reconciled through F4A/F4B1/F4B2/F4C; TOOL002-G READY; H-J remain dependency-ordered. |
 
 ### TOOL001 — Package Tool
@@ -926,7 +925,7 @@ forward.
 | TOOL001-F1B2 | root/workspace representation | CLOSED | `SAME_COMMIT` | One root workspace-ref plus canonically ordered mappings from explicit workspace.members strings to member workspace refs; no virtual root or path semantics. |
 | TOOL001-F1B3 | external node blocks + dependency edges + F1B closure | CLOSED | `SAME_COMMIT` | Registry/git external records, ContentIdentity/provenance, dependency edges and final ordering/separation close F1B. |
 | TOOL001-F1C | canonical lock parser/writer + round-trip conformance | CLOSED | `SAME_COMMIT` | F1C1/F1C2/F1C3 complete lexical, structural and canonical writer/round-trip behavior. |
-| TOOL001-F2 | physical lock integration | IN_PROGRESS | TOOL001-F2A/F2B/F2C/F2D CLOSED; F2E0 `SAME_COMMIT` | Workspace-only normal execution is CLOSED. F2E external immutable-package execution is allocated; E1 canonical ContentIdentity tree contract is READY. |
+| TOOL001-F2 | physical lock integration | IN_PROGRESS | TOOL001-F2A/F2B/F2C/F2D CLOSED; F2E0 `SAME_COMMIT` | Workspace-only normal execution and F2E1/F2E2 are CLOSED; F2E3 external-node execution-plan construction is READY. |
 | TOOL001-F2A | confined `protos.lock` read/publish substrate | CLOSED | `SAME_COMMIT` | Canonical load plus validation-before-staging atomic lock publication through existing confined Filesystem authority. |
 | TOOL001-F2B | semantic resolution-input + stale detection | CLOSED | `SAME_COMMIT` | F2B1 projection + F2B2 semantic root assembly + F2B3 canonical bytes/SHA-256/header stale comparison complete the bounded stale-input layer. |
 | TOOL001-F2C | physical resolution-root assembly | CLOSED | `SAME_COMMIT` | `self:ResolutionRoot.assemble(projectTreeFilesystem)` loads root + explicit member manifests, projects D1/D2 dependencies and normalizes in-root path targets into F2B ResolutionRootV1 using existing confined read-only tree authority. |
@@ -958,7 +957,7 @@ forward.
 | TOOL001-F2D3C3 | public workspace-run wiring + F2D3/F2D closure | CLOSED | `SAME_COMMIT` | C3A CLI-neutral driver plus C3B explicit public `protos run <entry> [args...]` wiring complete the workspace-run boundary. |
 | TOOL001-F2D3C3A | TOOL001 F2D3 public-run integration: CLI-neutral workspace-run driver | CLOSED | `8769e106dceeb7b7d6bf2c888a24a74f18b08e6e` | CLI-neutral C1->C2 workspace-run driver with explicit project root and logical entry. |
 | TOOL001-F2D3C3B | TOOL001 F2D3 public-run integration: public `protos run` wiring + final F2D3/F2D closure | CLOSED | `SAME_COMMIT` | Public CLI selects the current directory as project root and requires an explicit root-package logical entry; application args start after the entry, diagnostics translate the closed driver outcome, and no default application Filesystem is granted. |
-| TOOL001-F2E | external immutable-package execution continuation | IN_PROGRESS | F2E0/F2E1 CLOSED; I024/B009 CLOSED; F2E2A CLOSED | ContentIdentity policy now has a production bundled-Protos verifier over captured Filesystems; F2E2 remains IN_PROGRESS and F2E2B exact selected-root capture/custody is READY. |
+| TOOL001-F2E | external immutable-package execution continuation | IN_PROGRESS | F2E0/F2E1 CLOSED; I024/B009 CLOSED; F2E2A CLOSED | ContentIdentity policy and same-capture verification/custody are CLOSED through F2E2; F2E3 external-node execution-plan construction is READY. |
 | TOOL001-F2E0 | external materialization prerequisite audit + decomposition | CLOSED | `SAME_COMMIT` | Fresh post-F2D audit preserves fail-closed external execution and allocates E1-E5 without an executable shortcut. |
 | TOOL001-F2E1 | `protos-package-tree-v1` ContentIdentity canonical tree contract | CLOSED | `SAME_COMMIT` | E1A logical tree/path domain, E1B canonical stream + sha256 relation, and E1C independent fixed vectors are published; protos-package-tree-v1 is frozen. |
 | TOOL001-F2E1A | ContentIdentity logical-tree domain + portable path/entry-kind contract | CLOSED | `SAME_COMMIT` | Define ContentIdentity over the already-materialized payload, include every valid regular-file path+bytes, require root `protos.toml`, make directories structural/empty directories non-semantic, reject symlink/special entries, ignore host metadata and freeze conservative portable ASCII artifact paths/collision rules. |
@@ -1088,7 +1087,7 @@ Performance work follows these project rules:
 
 ### PERF003 — Collection algorithm Truffle compilability
 
-Status: IN_PROGRESS
+Status: CLOSED
 
 Originating baseline:
 - `guillermomolina/protos-benchmarks@4bff9f7f6c5e0e006530f166c188e0e988acf565`;
@@ -1099,8 +1098,8 @@ Originating baseline:
 
 | Slice | Status | Version | Closure evidence | Scope / unblock condition |
 |---|---|---|---|---|
-| PERF003-A | IN_PROGRESS | `0.2.180-SNAPSHOT` | `THIRD_CORRECTIVE_IMPLEMENTATION_SAME_COMMIT` | Valid external evidence against `5404667964dec84b8b8de2ff8dbe7923a5d1dd2e` shows reduce correctness PASS and 2 remaining `GraphTooBig` failures at graph size 150036 / limit 150000. This third corrective phase removes redundant `hasInitial`/mutable `startIndex` state and derives the balanced strict-left-fold start from zero-or-one `initialSize`; exact external no-GraphTooBig validation against this new commit is still required. |
-| PERF003-B | BLOCKED_BY_DEPENDENCIES | — | — | After A, companion correctness-first external validation against the exact optimized Protos revision, retaining pre/post evidence and diagnostics without rewriting PERF001-E baseline evidence. |
+| PERF003-A | CLOSED | `0.2.180-SNAPSHOT` | A4 closure evidence through `guillermomolina/protos-benchmarks@433ebb8075148493d4eae8da701803b21ab50c09` | Final A4 evidence exhausted the justified local production hypotheses; the residual compiler-threshold limitation is characterized and accepted without a broad production Truffle boundary. |
+| PERF003-B | CLOSED | — | `guillermomolina/protos-benchmarks@433ebb8075148493d4eae8da701803b21ab50c09` | Companion correctness, control, retained A4 diagnostics and separate no-trace timing evidence are published; PERF003 is CLOSED. |
 
 Project record: `docs/project/PERF003_COLLECTION_COMPILABILITY.md`.
 
@@ -1228,12 +1227,9 @@ repository when formally introduced rather than relying on chat/prompt history.
 | DIST002-D3 | CI distribution workspace Git trust correction | CLOSED | `SAME_COMMIT` | Post-D2 revision `fab881f88b9bf89b36326bc21aeaba7257a73872`: Tests 34223295064 SUCCESS; Distribution snapshot 34223295074 passed bootstrap, zero-drift toolchain verification and 1096 tests, then failed only because builder `git status` lost checkout's temporary-HOME safe-directory trust. Distribution CI now trusts only `$GITHUB_WORKSPACE` in the real job HOME and proves the exact git-status probe before building. |
 | DIST002-D | Cross-environment conformance + closure | CLOSED | `SAME_COMMIT` | Green post-D3 Tests run 34224766060 and Distribution snapshot run 34224766104 on revision `6977f06441624267147b1f146fac340d06f464c3`; final publication candidate revalidated exact JDK/Graal/Truffle/Maven identity, toolchain drift 0, full Maven suite, portable build and complete extracted-distribution gate. DIST002 CLOSED. |
 
-DIST001-A/B/C/D and DIST001-E1/E2/E3 are closed. DIST001-E4 is READY for an
-explicit exact development-baseline/public-version selection decision. The
-generic candidate gate composes release-aware B5, independent envelope
-verification, explicit candidate/claims audit, current specification identity
-and tag-availability guards. No concrete baseline, candidate, public version,
-tag, GitHub Release, or release asset is currently selected or authorized.
+DIST001-A/B/C/D and DIST001-E1-E6 are CLOSED. The first public pre-release
+`v0.2.236` is published and independently verified. Future release work requires
+a separately allocated follow-up rather than reopening the closed DIST001 item.
 
 ## P-label classification
 
@@ -1249,7 +1245,7 @@ If a future project-work family named `Pxxx` is introduced, it must be declared
 explicitly by a canonical project ledger; identifier resemblance alone is not
 sufficient.
 
-<!-- PROJECT-STATUS-HISTORICAL-RECONCILIATION: v6 -->
+<!-- PROJECT-STATUS-HISTORICAL-RECONCILIATION: v7 -->
 
 <!-- BEGIN AUTO-DISCOVERED WORK REGISTRY -->
 
@@ -1271,7 +1267,9 @@ Identifier shape alone is insufficient: incidental IDs from design ideas, tests,
 | B004 | Public Group/GroupRef acquisition and discovery API | CLOSED | D039 defines and I011-21 implements the exact Core v0.1 `Actor.group(...) -> GroupRef` acquisition surface; portable service discovery remains outside Core v0.1. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
 | B005 | `super` without a physical methodHome | CLOSED | D040 defines missing-`methodHome` `InvalidSuper` semantics and I020-D implements them. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
 | B006 | Atomic package metadata replacement | CLOSED | D042 + closed I021 provide the general semantics/backend; package-tool Filesystem Slice 2B provisions confined staging-write/mutation authority and publishes metadata through standard File/Filesystem operations. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
-| B007 | Standard `while` protocol semantics | READY | D044 / spec `0.1.381` defines the complete observable standard Closure `while` protocol; I023 implementation/conformance remains required before closure. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
+| B007 | Standard `while` protocol semantics | CLOSED | D044 / spec `0.1.381` plus I023-A/B/C/D implement and validate the complete standard Closure `while` protocol. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
+| B008 | Structured ownership when a task-backed Future escapes an activation | CLOSED | D045 / spec `0.1.382` fixes task-scoped structured ownership; I023-B2D2 closes the implementation/conformance dependency. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
+| B009 | Portable Filesystem tree observation for immutable package verification | CLOSED | D046 / spec `0.1.384` plus I024-D close portable tree observation/capture; TOOL001-F2E2 subsequently closes verified same-capture package custody. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
 
 ### D family
 
