@@ -44,7 +44,7 @@ Current triage:
   recorded.
 - D044 remains the priority review item because no recovered evidence yet
   demonstrates explicit project-owner selection of its complete published semantics.
-- D021-D029 require provenance and substance review; publication alone
+- D021-D028 require provenance and substance review; publication alone
   is not ratification.
 - D001-D019 are expected to be predominantly project-owner decisions, but their
   approval evidence must be checked rather than inferred.
@@ -379,10 +379,28 @@ Recorded review results:
   its retention characteristics are not ratified as language semantics. This
   governance classification changes no normative specification or implementation.
 
+- D029 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D029 / specification `0.1.368` after cross-language comparison,
+  adversarial review and future-scalability analysis. For every Core-standard
+  contract whose normal result or Future resolution is specified simply as
+  `Integer`, without naming a more-specific numeric family, the result remains
+  an ordinary unbounded Integer. This rule is deliberately result-only: it does
+  not narrow an operation's accepted input domain, and a contract that explicitly
+  names `UInt8`, `Int64` or another numeric family continues to own that result
+  family. The rule keeps host pointer/index width, collection backing limits and
+  small/big/tagged/machine-word representation out of portable semantics; such
+  representations may still be used, changed, scalar-replaced or elided when
+  unobservable. It therefore scales from ordinary counts to large/virtual data
+  models without introducing host-shaped `size_t`/Int32/Int64 choices or new
+  `Size`, `Natural` or `Index` semantic families merely to represent a count. A
+  future API for which width is itself semantic remains free to name the exact
+  fixed-width family explicitly. This governance ratification changes no normative
+  specification or implementation and does not classify D030 or D031.
+
 Required procedure:
 
 1. Continue backwards through the remaining unresolved decisions in D044-D040,
-   then D021-D029, and finally D001-D019.
+   then D021-D028, and finally D001-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published
    normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or
@@ -398,10 +416,10 @@ Next audit work:
 
 1. Complete the separate D044 review already in progress, considering D045 only
    as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D043-D040, then D021-D029 and D001-D019
+2. Continue backwards through the remaining unresolved decisions in D043-D040, then D021-D028 and D001-D019
    under the required procedure above.
 
-AUD001 closes only when D001-D045, except D046, have an explicit classification,
+AUD001 closes only when D001-D028 and D030-D045, except D046, have an explicit classification,
 the project owner has decided every NEEDS_USER_DECISION item, relevant
 provenance is recorded durably, and all affected project ledgers are reconciled.
 Any later normative correction must be a separately approved specification
