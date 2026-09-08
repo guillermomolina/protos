@@ -630,3 +630,37 @@ candidate audit. It also requires the candidate worktree to remain clean and
 detached. The result is persisted in `DIST001_E4_VALIDATION.txt`.
 
 E4D2 is now READY and owns the extracted release-aware B5 candidate gate.
+
+## E4D2 release-aware B5 checkpoint
+
+The frozen public-prerelease archive has passed the already-published E3C1/B5
+distribution gate directly from the clean detached candidate:
+
+```text
+release_baseline_revision=3c23eaaccecbdcc7c2bcd86bc30c445403cfb047
+candidate_source_revision=957b1e16793a682de1d6406e37b5734c44d32d19
+release_version=0.2.236
+archive_name=protos-0.2.236-posix-jvm.zip
+archive_sha256=b1a58ba445d082156bd4eb637ee6df70c046abdee600d468c0fac29be065e296
+artifact_mode=public-prerelease
+source_mode=require-clean
+d2_release_b5=PASS
+```
+
+D2 runs exactly one heavy B5 pass on the normal publication path. The B5
+surface independently re-checks public-prerelease archive/source identity,
+outside-checkout Package Tool behavior, bundled Test Tool behavior, and the
+selected optimizing GraalVM Community JDK 22 / Truffle 24 runtime against the
+same immutable ZIP. The launcher requires the archive SHA-256 to remain
+`b1a58ba445d082156bd4eb637ee6df70c046abdee600d468c0fac29be065e296` before and after B5.
+
+D2 does not re-audit the truth of the frozen release claims or current blocker/
+specification evidence; E4D3 owns that work. It also does not decide tag/GitHub
+Release collision or publication availability; E4D4 owns those guards.
+
+If `origin/main` moves after the candidate B5 pass, D2 rebases only its
+documentation ledger and re-checks the frozen identities. It does not rerun B5
+merely because unrelated `main` moved: the validated subject is the immutable
+candidate/archive pair above.
+
+E4D3 is now READY. Release publication remains explicitly unauthorized.
