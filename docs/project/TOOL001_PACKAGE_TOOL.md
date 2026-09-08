@@ -301,3 +301,28 @@ confined metadata Filesystem fixture.
 All Protos sources remain unchanged and execute through
 `ProtosRootTaskExecution`. Read-only metadata backend evidence and F2E2A remain
 on later bounded slices.
+
+## Runner-D3 — read-only metadata fixture wrapper closure
+
+Runner-D3 migrates the remaining TOOL001-owned Java wrapper whose purpose was
+to execute the `read-project-metadata.protos` fixture and adjacent Protos open
+checks. Its three existing confinement guarantees remain intact:
+
+- only explicitly configured project metadata names are readable;
+- an allowed final symlink cannot redirect access outside the authority root;
+- a host without secure directory confinement fails closed.
+
+The cases now live in `ProtosPackageToolProtosTest` and execute through
+`ProtosRootTaskExecution`, with fresh fixture activations where independent
+top-level declarations or Protos tasks are required.
+
+This closes the temporary **per-corpus TOOL001 Protos fixture-wrapper**
+consolidation: the migrated fixture corpora are owned by the single
+`ProtosPackageToolProtosTest` bridge until TOOL002 replaces it. Java tests for
+genuinely Java-side mechanisms remain separate; for example adapter/preflight
+tests may use package trees or inline setup while testing the host mechanism,
+but they are not second owners of TOOL001 Protos fixture-source execution.
+
+F2E2A is deliberately not repaired in this slice. Its next revision must add
+its Protos evidence to this single runner and must not recreate a
+`ProtosPackageToolContentIdentityTest` wrapper.

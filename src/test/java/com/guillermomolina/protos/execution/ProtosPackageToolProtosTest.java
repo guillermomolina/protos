@@ -30,6 +30,8 @@ import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -415,6 +417,108 @@ final class ProtosPackageToolProtosTest {
                             fixture.activation());
             assertExpected(stale, "true", "resolution-input/lockfile-stale.protos");
         }
+    }
+
+
+    @Test
+    void readOnlyMetadataBackendAllowsOnlyConfiguredProjectMetadata() throws Exception {
+        Files.writeString(
+                projectRoot.resolve("protos.toml"), "x", StandardCharsets.UTF_8);
+        Files.writeString(
+                projectRoot.resolve("secret.txt"), "secret", StandardCharsets.UTF_8);
+
+        try (ProtosNioReadOnlyFilesystemBackend backend =
+                new ProtosNioReadOnlyFilesystemBackend(
+                        projectRoot, Set.of("protos.toml", "protos.lock"))) {
+            assumeTrue(
+                    backend.secureConfinementAvailable(),
+                    "host provider has no SecureDirectoryStream");
+
+            ProtosExecutionOutcome read =
+                    executeFile(
+                            TEST_ROOT.resolve("read-project-metadata.protos"),
+                            readOnlyMetadataActivation(backend));
+            assertEquals(
+                    ProtosExecutionOutcome.State.COMPLETED,
+                    read.state(),
+                    "read-project-metadata.protos");
+            assertEquals(
+                    "x",
+                    assertInstanceOf(ProtosStringValue.class, read.value()).value(),
+                    "read-project-metadata.protos");
+
+            ProtosExecutionOutcome secret =
+                    execute(
+                            "filesystem.open(Path.relative().child(\"secret.txt\")).value()",
+                            readOnlyMetadataActivation(backend));
+            assertExpected(secret, "error", "read-only metadata secret rejection");
+        }
+    }
+
+    @Test
+    void readOnlyMetadataBackendDoesNotFollowFinalSymlink() throws Exception {
+        Path outside = Files.createTempFile("protos-package-tool-outside-", ".txt");
+        try {
+            Files.writeString(outside, "outside", StandardCharsets.UTF_8);
+            try {
+                Files.createSymbolicLink(projectRoot.resolve("protos.toml"), outside);
+            } catch (UnsupportedOperationException | IOException | SecurityException unavailable) {
+                assumeTrue(false, "host cannot create the symlink confinement fixture");
+            }
+
+            try (ProtosNioReadOnlyFilesystemBackend backend =
+                    new ProtosNioReadOnlyFilesystemBackend(
+                            projectRoot, Set.of("protos.toml"))) {
+                assumeTrue(
+                        backend.secureConfinementAvailable(),
+                        "host provider has no SecureDirectoryStream");
+
+                ProtosExecutionOutcome outcome =
+                        execute(
+                                "filesystem.open(Path.relative().child(\"protos.toml\")).value()",
+                                readOnlyMetadataActivation(backend));
+                assertExpected(
+                        outcome,
+                        "error",
+                        "read-only metadata final symlink rejection");
+            }
+        } finally {
+            Files.deleteIfExists(outside);
+        }
+    }
+
+    @Test
+    void readOnlyMetadataBackendFailsClosedWithoutSecureProvider() throws Exception {
+        try (ProtosNioReadOnlyFilesystemBackend backend =
+                new ProtosNioReadOnlyFilesystemBackend(
+                        projectRoot, Set.of("protos.toml"))) {
+            if (backend.secureConfinementAvailable()) {
+                return;
+            }
+
+            ProtosExecutionOutcome outcome =
+                    execute(
+                            "filesystem.open(Path.relative().child(\"protos.toml\")).value()",
+                            readOnlyMetadataActivation(backend));
+            assertExpected(
+                    outcome,
+                    "error",
+                    "read-only metadata unsupported provider");
+        }
+    }
+
+    private static ProtosActivation readOnlyMetadataActivation(
+            ProtosNioReadOnlyFilesystemBackend backend)
+            throws Exception {
+        ProtosPrelude prelude = newPackagePrelude();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosObjectValue rawFilesystem =
+                ProtosStandardFilesystemProtocol.createCapability(
+                        prelude.bytesPrototypeForRuntime(), activation, backend);
+        ProtosFilesystemValue filesystem =
+                assertInstanceOf(ProtosFilesystemValue.class, rawFilesystem);
+        activation.context().createLocalSlot("filesystem", filesystem);
+        return activation;
     }
 
     private void assertConfinedTrue(String relative) throws Exception {
