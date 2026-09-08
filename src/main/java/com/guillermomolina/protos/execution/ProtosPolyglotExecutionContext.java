@@ -24,25 +24,28 @@ import com.oracle.truffle.api.source.Source;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Objects;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import org.graalvm.polyglot.Context;
 
 /**
- * One host-owned, thread-confined Polyglot context entered for Protos execution.
+ * One host-owned Polyglot context that may be entered by multiple Protos carrier threads.
  *
- * <p>This is implementation machinery, not a Protos semantic context or an Actor. Keeping the
- * Polyglot context entered lets all parsing performed by this execution session resolve the exact
- * current {@link ProtosLanguageContext} without global mutable state or a host-side language
- * singleton. The semantic execution domain and {@link ProtosActivation} remain the existing Protos
- * runtime authorities.
+ * <p>This is implementation machinery, not a Protos semantic context, Process, Actor, Task, or
+ * carrier identity. Each execution enters and leaves the Polyglot context on the current carrier.
+ * A per-context read/write lifecycle lock allows executions to overlap while preventing close from
+ * racing an in-flight guest segment; it is not a global execution lock or language-level GIL.
+ * Semantic execution state remains explicit in {@link ProtosActivation}.
  */
 public final class ProtosPolyglotExecutionContext implements AutoCloseable {
     private final Context context;
-    private final Thread ownerThread;
+    private final ReentrantReadWriteLock lifecycle = new ReentrantReadWriteLock(true);
+    private final Lock executionLock = lifecycle.readLock();
+    private final Lock closeLock = lifecycle.writeLock();
     private boolean closed;
 
-    private ProtosPolyglotExecutionContext(Context context, Thread ownerThread) {
+    private ProtosPolyglotExecutionContext(Context context) {
         this.context = Objects.requireNonNull(context, "context");
-        this.ownerThread = Objects.requireNonNull(ownerThread, "ownerThread");
     }
 
     public static ProtosPolyglotExecutionContext open(
@@ -57,14 +60,13 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
                         .out(out)
                         .err(err)
                         .build();
-        boolean entered = false;
+        boolean initialized = false;
         try {
             context.initialize(ProtosLanguage.ID);
-            context.enter();
-            entered = true;
-            return new ProtosPolyglotExecutionContext(context, Thread.currentThread());
+            initialized = true;
+            return new ProtosPolyglotExecutionContext(context);
         } finally {
-            if (!entered) {
+            if (!initialized) {
                 context.close();
             }
         }
@@ -73,54 +75,63 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
     /**
      * Parses through the registered public Protos language and runs one semantic root task.
      *
-     * <p>The returned value is the existing inert {@link ProtosExecutionOutcome}; this bridge does
-     * not invent a second Polyglot-visible representation for Protos runtime values before I026-D
-     * defines their faithful interop view.
+     * <p>The current carrier enters only for the bounded parse/execution extent. Concurrent calls
+     * share this same Context and may execute simultaneously. The returned value is the existing
+     * inert {@link ProtosExecutionOutcome}; I026-D still owns any Polyglot-visible value model.
      */
     public ProtosExecutionOutcome execute(Source source, ProtosActivation activation) {
-        requireOpenOnOwnerThread();
         Objects.requireNonNull(source, "source");
         Objects.requireNonNull(activation, "activation");
 
-        CallTarget target = ProtosLanguageContext.current().parsePublic(source);
-        return ProtosRootTaskExecution.execute(target, activation);
+        executionLock.lock();
+        try {
+            requireOpen();
+            context.enter();
+            Throwable failure = null;
+            try {
+                CallTarget target = ProtosLanguageContext.current().parsePublic(source);
+                return ProtosRootTaskExecution.execute(target, activation);
+            } catch (RuntimeException | Error executionFailure) {
+                failure = executionFailure;
+                throw executionFailure;
+            } finally {
+                try {
+                    context.leave();
+                } catch (RuntimeException | Error leaveFailure) {
+                    if (failure != null) {
+                        failure.addSuppressed(leaveFailure);
+                    } else {
+                        throw leaveFailure;
+                    }
+                }
+            }
+        } finally {
+            executionLock.unlock();
+        }
     }
 
-    private void requireOpenOnOwnerThread() {
+    private void requireOpen() {
         if (closed) {
             throw new IllegalStateException("Polyglot Protos execution context is closed");
-        }
-        if (Thread.currentThread() != ownerThread) {
-            throw new IllegalStateException(
-                    "Polyglot Protos execution context is confined to its owner thread");
         }
     }
 
     @Override
     public void close() {
-        if (closed) {
-            return;
+        if (lifecycle.getReadHoldCount() != 0) {
+            throw new IllegalStateException(
+                    "Polyglot Protos execution context cannot close from an executing carrier");
         }
-        requireOpenOnOwnerThread();
-        closed = true;
 
-        RuntimeException failure = null;
+        closeLock.lock();
         try {
-            context.leave();
-        } catch (RuntimeException leaveFailure) {
-            failure = leaveFailure;
-        }
-        try {
-            context.close();
-        } catch (RuntimeException closeFailure) {
-            if (failure == null) {
-                failure = closeFailure;
-            } else {
-                failure.addSuppressed(closeFailure);
+            if (closed) {
+                return;
             }
-        }
-        if (failure != null) {
-            throw failure;
+            closed = true;
+            context.close();
+        } finally {
+            closeLock.unlock();
         }
     }
 }

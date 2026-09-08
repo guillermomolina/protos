@@ -60,8 +60,8 @@ see `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md`.
 | I026-A4 | IN_PROGRESS | — | I026-A2 + I026-A3 | Polyglot runtime-entry cutover, refined into A4A-A4B after the A3 publication exposed the activation-bearing root-task boundary. A4 closes only when A4B has migrated all primary runtime drivers and retired direct compiler/call entry as a parallel architecture. |
 | I026-A4A | CLOSED | `0.2.266-SNAPSHOT` | I026-A3 | Establish one host-owned thread-confined entered Polyglot `Context`, resolve the exact current `ProtosLanguageContext` through Truffle `ContextReference`, parse exact Truffle `Source` values through `Env.parsePublic(...)` / `ProtosLanguage.parse(...)`, and execute the resulting language-bound target through the existing activation-bearing `ProtosRootTaskExecution`. No CLI route is cut over by A4A. |
 | I026-A4B | IN_PROGRESS | — | I026-A4A | Implement ratified PLAT001 through ordered A4B1-A4B3; A4B closes only after multithread safety, Process-scoped hosting and driver cutover are all published. |
-| I026-A4B1 | READY | — | I026-A4A + PLAT001 | Audit/establish Truffle multithread safety, replace A4A owner-thread confinement with bounded per-carrier enter/leave, and prove no global execution lock/GIL or semantic ThreadLocal. |
-| I026-A4B2 | BLOCKED_BY_DEPENDENCIES | — | I026-A4B1 | Establish shared-Engine / Process-scoped multithread Context lifecycle and prove independent multi-Process plus concurrent-Actor behavior without making Context semantic identity. |
+| I026-A4B1 | CLOSED | `0.2.267-SNAPSHOT` | I026-A4A + PLAT001 | Audited the language/context/compiler state, authorized Truffle multithread access, replaced permanent owner-thread entry with per-carrier enter/leave plus shared-read/exclusive-close lifecycle coordination, and proved overlapping same-Context execution without a global GIL or semantic ThreadLocal. Cross-Process bootstrap and Actor/P Process-context binding remain A4B2. |
+| I026-A4B2 | READY | — | I026-A4B1 | Establish shared-Engine / Process-scoped multithread Context lifecycle, bind existing Actor/P carriers to their owning Process Context, close concurrent Process-bootstrap safety, and prove independent multi-Process plus concurrent-Actor behavior without making Context semantic identity. |
 | I026-A4B3 | BLOCKED_BY_DEPENDENCIES | — | I026-A4B2 | Cut CLI, REPL, bundled-tool, workspace and remaining production drivers onto the PLAT001 substrate and retire direct compiler/call entry as a separate primary production architecture. |
 | I026-B | BLOCKED_BY_DEPENDENCIES | — | I026-A4 | Map the existing exact `SourceSpan` ranges to valid Truffle `SourceSection` values on roots/execution nodes, with focused Java-side integration evidence. |
 | I026-C | BLOCKED_BY_DEPENDENCIES | — | I026-B | Make the relevant AST nodes instrumentable and expose the minimal faithful `StandardTags` needed for source execution/stepping; do not tag nodes merely to satisfy a debugger UI. |
@@ -82,9 +82,12 @@ runs through the existing activation-bearing RootActor task machinery. A4A remai
 selected production topology. PLAT001 is now RATIFIED and owns the durable Truffle hosting
 architecture: a shareable Engine, one current multithread Context per hosted Protos Process,
 no Context-per-Actor/carrier mapping, no global execution lock/GIL, and no Truffle identity
-promoted into Protos semantics. A4B is IN_PROGRESS through A4B1-A4B3: multithread safety
-first, Process-scoped hosting second, and complete driver cutover/retirement of the staged
-direct production entry path third. I026-D remains independently READY.
+promoted into Protos semantics. A4B remains IN_PROGRESS. A4B1 is now CLOSED: Truffle permits concurrent external
+carrier entry, the A4A owner-thread/permanent-entry staging rule is removed, and the
+host bridge uses bounded per-execution enter/leave with only per-Context lifecycle
+coordination. A4B2 is READY to establish the shared-Engine / Process-scoped Context
+lifecycle, route Actor/P carriers through that owner, and close concurrent Process-bootstrap
+safety before A4B3 cuts production drivers over. I026-D remains independently READY.
 
 ## Deferred ownership
 

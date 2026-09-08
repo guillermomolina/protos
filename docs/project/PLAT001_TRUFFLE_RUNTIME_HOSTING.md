@@ -146,6 +146,25 @@ PLAT001 refines the remaining A4B implementation into three ordered slices:
 `I026-A4` closes only after A4B3 publishes and the old direct primary runtime
 entry architecture is retired.
 
+## A4B1 implementation evidence
+
+I026-A4B1 closes the first PLAT001 safety gate in `0.2.267-SNAPSHOT`. The
+Truffle language now authorizes concurrent external thread access, and the A4A
+owner-thread/permanent-entry bridge is replaced by per-execution Context
+enter/leave. A fair per-Context read/write lifecycle lock permits concurrent
+executions under shared read ownership while `close()` alone takes exclusive
+ownership; this is lifecycle coordination rather than a guest-execution GIL.
+
+The retained audit is `docs/project/I026_A4B1_TRUFFLE_MULTITHREAD_SAFETY.md`. It
+records the stateless/immutable compiler and language-context evidence and one
+important remaining B2 requirement: Core bootstrap still mutates the static root
+Object during protocol installation, so concurrent bootstrap of multiple hosted
+Processes must be proven or bounded before PLAT001 multi-Process hosting closes.
+Actor/P carrier binding also remains B2 because Process-to-Context ownership is
+not established until that slice.
+
+`ContextPolicy.SHARED` remains deferred. A4B1 does not require or approve it.
+
 ## Explicitly deferred choices
 
 PLAT001 does **not** ratify any of the following:

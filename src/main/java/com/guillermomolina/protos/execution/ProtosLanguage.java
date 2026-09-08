@@ -37,6 +37,17 @@ public final class ProtosLanguage extends TruffleLanguage<ProtosLanguageContext>
         return new ProtosLanguageContext(env);
     }
 
+    /**
+     * Protos owns concurrency through its Actor/Task/P runtime rather than through carrier identity.
+     * The language/context implementation state reached by Truffle is safe for concurrent external
+     * carrier entry after the I026-A4B1 audit; semantic Actor/Task state remains explicit in
+     * ProtosActivation and is not stored in a thread local.
+     */
+    @Override
+    protected boolean isThreadAccessAllowed(Thread thread, boolean singleThreaded) {
+        return true;
+    }
+
     @Override
     protected CallTarget parse(ParsingRequest request) {
         if (!request.getArgumentNames().isEmpty()) {
