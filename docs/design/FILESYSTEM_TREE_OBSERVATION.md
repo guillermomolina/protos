@@ -423,24 +423,43 @@ Current planned boundary after specification revision 0.1.384:
 
 ```text
 I024-A   host-neutral result/custody flow                     CLOSED
-I024-A2  post-0.1.384 compatibility re-audit                  READY
-I024-B   standard Filesystem public materialization           BLOCKED_BY_DEPENDENCIES
+I024-A2  post-0.1.384 compatibility re-audit                  CLOSED
+I024-B   standard Filesystem public materialization           READY
 I024-C   secure NIO + immutable captured backend              BLOCKED_BY_DEPENDENCIES
 I024-D   integrated Protos conformance + B009 closure         BLOCKED_BY_DEPENDENCIES
 ```
 
-A2 must verify at least:
+## I024-A2 compatibility audit result
 
-- the eager complete-result `List<Entry>` substrate remains consistent with the
-  approved v0.1 Array contract;
-- duplicate exact-name rejection matches the already-normative successful-result
+I024-A2 is CLOSED without production modification after auditing the published
+host-neutral substrate against D046 as amended by specification revision
+0.1.384.
+
+The audit establishes:
+
+- `EntriesCompletion.succeeded(List<Entry>)` plus `List.copyOf(...)` is an
+  internal complete-result representation compatible with the approved eager
+  `Future<Array>` contract; it creates no public iterator/stream identity;
+- `snapshotEntries` rejects duplicate exact names rather than silently
+  deduplicating them, matching the already-normative successful-result
   uniqueness/fail-closed rule;
-- captured-result custody/release callbacks govern only tentative/backend custody
-  before result transfer and do not accidentally create a Protos-visible
-  `Filesystem.close()` obligation;
-- no existing A machinery assumes a public `Directory`/stream identity;
-- cancellation/failure cleanup still releases tentative resources without making
-  immutable backing strategy observable.
+- `CapturedTree` is an opaque Java-only custody token. It is not a Protos-visible
+  `Directory`, stream, Filesystem subclass, or lifecycle identity;
+- `releaseIfUntransferred` is invoked only when terminality/cancellation,
+  invalid capture state, materialization failure, or a lost commit/resolve
+  cutover prevents transfer. A successfully resolved capture transfers custody
+  and does not invoke that callback;
+- the existing Filesystem implementation boundary remains non-`Closable` and the
+  current standard Filesystem protocol installs no `close` operation;
+- the pre-existing `ProtosNioReadOnlyTreeFilesystemBackend` being Java
+  `AutoCloseable` is implementation machinery, not language semantics. I024-C
+  must keep any deterministic backend cleanup under implementation custody and
+  must not surface it as a caller obligation on the captured Filesystem.
 
-If A satisfies those checks, A2 may close without rewriting A. If not, A2 owns
-the minimum implementation correction before B becomes READY.
+Retained focal tests already cover complete entries snapshotting, duplicate-name
+failure, successful custody transfer without release, late cancelled-result
+release and materialization-failure release. I024-A2 publication runs that focal
+class plus the complete test suite before closing the audit.
+
+No source, test, normative specification, native-boundary, implementation-version
+or license-term change is required by A2. I024-B is READY.

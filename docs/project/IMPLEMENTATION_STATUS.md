@@ -62,7 +62,7 @@ an item.
 | I021 | Filesystem namespace replacement/removal | CLOSED | `SAME_COMMIT` | I021-A/B/C complete; D042 / spec `0.1.379`; production confined namespace backend and Protos-visible integrated conformance published; B006 CLOSED by package-tool Filesystem Slice 2B metadata publication integration |
 | I022 | Dynamic Error handlers / unwind-safe cleanup | CLOSED | `SAME_COMMIT` | I022-A/B/C/D/E/F complete; D043 / spec `0.1.380`; replay-stable Error handlers, unwind-safe `ensure`, suspension, later-transfer precedence, cooperative cancellation, structured lifetime and task/Actor isolation have final adversarial closure evidence |
 | I023 | Standard `while` protocol | CLOSED | `SAME_COMMIT` | D044 / spec `0.1.381` + D045 / spec `0.1.382`; I023-A/B/C/D complete; B007 CLOSED; DOC001-E subsequently published and CLOSED. |
-| I024 | Filesystem directory observation + captured-tree capability | IN_PROGRESS | I024-A `SAME_COMMIT`; D046 / spec `0.1.384`; B009 READY | A host-neutral result/custody flow remains CLOSED evidence; A2 post-D046 compatibility re-audit is READY; B public materialization is blocked on A2; C/D remain dependency-gated. |
+| I024 | Filesystem directory observation + captured-tree capability | IN_PROGRESS | I024-A + I024-A2 `SAME_COMMIT`; D046 / spec `0.1.384`; B009 READY | A host-neutral result/custody flow is confirmed compatible with 0.1.384 by A2; B public materialization is READY; C/D remain dependency-gated. |
 
 ### I024 — Filesystem directory observation + captured-tree capability
 
@@ -77,8 +77,8 @@ Planned slices:
 | Slice | Status | Version | Closure evidence | Scope / unblock condition |
 |---|---|---|---|---|
 | I024-A | CLOSED | `0.2.249-SNAPSHOT` | `SAME_COMMIT` | Published host-neutral D046 tree-observation flow. It remains implementation evidence, not design authority; A2 must verify it against the explicitly approved 0.1.384 amendment before dependent public work proceeds. |
-| I024-A2 | READY | — | — | Post-D046/0.1.384 compatibility re-audit. Verify eager complete-result `List<Entry>` compatibility, exact-name uniqueness/fail-closed behavior, cancellation/custody cleanup, absence of public Directory/stream identity, and that backend release callbacks do not create a Protos-visible captured-Filesystem close obligation. Correct A only if the audit finds an incompatibility. |
-| I024-B | BLOCKED_BY_DEPENDENCIES | — | — | Depends on I024-A2. Extend the existing host-provisioned standard Filesystem bridge with both D046 operations. Materialize a fresh Array of fresh frozen ordinary name/kind descriptors and a fresh captured Filesystem capability without adding standard `Closable` to the captured Filesystem. Preserve the existing shared Filesystem native-Closure provider shape. |
+| I024-A2 | CLOSED | — | `SAME_COMMIT` | Post-D046/0.1.384 compatibility re-audit found no production incompatibility. A's complete `List<Entry>` result and defensive snapshot match eager v0.1 entries; exact duplicate names fail closed; `CapturedTree` remains an internal opaque custody token with no public Directory/stream identity; cancellation/materialization/late-result paths release only untransferred custody, while successful terminal transfer does not invoke the release callback; Filesystem remains non-Closable. Existing focal and full-suite validation close the audit. |
+| I024-B | READY | — | — | I024-A2 is CLOSED. Extend the existing host-provisioned standard Filesystem bridge with both D046 operations. Materialize a fresh Array of fresh frozen ordinary name/kind descriptors and a fresh captured Filesystem capability without adding standard `Closable` to the captured Filesystem. Preserve the existing shared Filesystem native-Closure provider shape. |
 | I024-C | BLOCKED_BY_DEPENDENCIES | — | — | Depends on I024-B. Implement secure NIO direct-child no-follow observation and scalable recursive capture into implementation-managed immutable backing, without following child links or exposing a Directory/lifetime subsystem. Preserve source/captured authority separation and retained open behavior. |
 | I024-D | BLOCKED_BY_DEPENDENCIES | — | — | Depends on I024-C. Publish Protos-visible integrated D046 conformance including kinds, exact names/uniqueness, eager complete entries, read-only capture, no captured-Filesystem close obligation, source mutation independence, cancellation/failure and verify-use stability; reconcile native-boundary inventory, close B009 and I024, and make TOOL001-F2E2 READY. |
 
@@ -92,10 +92,13 @@ Dependencies:
 
 I024-A deliberately does not publish the new messages. It establishes the
 host-neutral producer/result lifecycle so later materialization and NIO work do
-not duplicate cancellation/custody semantics. Because A predates the explicit
-D046 re-evaluation, I024-A2 must now verify that this machinery implements rather
-than silently defines the approved 0.1.384 semantics. I024-B cannot start until
-A2 closes.
+not duplicate cancellation/custody semantics. I024-A2 has now re-audited that
+machinery against the explicitly approved D046/0.1.384 contract and found no
+production incompatibility: eager complete-result representation, exact-name
+uniqueness, cancellation/failure cleanup and successful custody transfer already
+match the amended semantics. The internal release callback is strictly an
+untransferred-custody mechanism and does not define a captured-Filesystem close
+obligation. I024-B is therefore READY.
 
 ### I023 — Standard `while` protocol
 
