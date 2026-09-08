@@ -486,3 +486,26 @@ E4C1 records only build identity. The builder's own archive/layout/source/runtim
 checks must pass, but E4C2 deliberately owns the independent archive identity and
 `SOURCE.txt` / `RUNTIME.txt` verification. E4C1 does not create the E3B release
 envelope, candidate audit, Git tag, GitHub Release, or release assets.
+
+## E4C2 independent archive identity checkpoint
+
+The exact E4C1 bytes have now passed independent verification:
+
+```text
+release_baseline_revision=3c23eaaccecbdcc7c2bcd86bc30c445403cfb047
+candidate_source_revision=957b1e16793a682de1d6406e37b5734c44d32d19
+release_version=0.2.236
+archive_name=protos-0.2.236-posix-jvm.zip
+archive_sha256=b1a58ba445d082156bd4eb637ee6df70c046abdee600d468c0fac29be065e296
+archive_identity_independently_verified=true
+```
+
+Independent verification does not call `dist/build_portable.py` and therefore
+does not silently replace missing or changed bytes. It checks the persisted
+external SHA-256, exact archive root/CRC, exact public-prerelease `SOURCE.txt`,
+exact supported `RUNTIME.txt`, full internal checksum coverage/values, and the
+shaded JAR `Implementation-Version`.
+
+E4C3 is the next owner and may select only truthful release-note capabilities
+and limitations against this fixed candidate/archive identity. No E4C2 result
+authorizes release publication.

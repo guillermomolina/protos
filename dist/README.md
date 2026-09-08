@@ -621,6 +621,28 @@ E4B4 closes detached candidate materialization only. E4C owns archive, release
 notes, envelope and audit preparation. No tag, GitHub Release or release asset is
 created here.
 
+
+## Persisted candidate archive identity verifier
+
+`DIST001-E4C2` adds an independent verifier for the exact archive persisted by
+E4C1. It does not rebuild or mutate the archive:
+
+```sh
+python3 dist/verify_candidate_archive_identity.py   --repository-root .   --selection docs/project/DIST001_E4_SELECTION.txt   --artifact-record docs/project/DIST001_E4_CANDIDATE_ARTIFACT.txt   --expect-verification-state true
+```
+
+For `protos-0.2.236-posix-jvm.zip` / `b1a58ba445d082156bd4eb637ee6df70c046abdee600d468c0fac29be065e296`, the verifier requires the exact external
+SHA-256, one `protos-0.2.236/` root, valid ZIP CRC, exact public-prerelease
+`SOURCE.txt`, exact GraalVM/JDK/Truffle `RUNTIME.txt`, complete/value-correct
+internal `SHA256SUMS`, and `lib/protos.jar` manifest
+`Implementation-Version: 0.2.236`. It locates the candidate worktree by exact
+persisted SHA rather than by a hardcoded path.
+
+The expected verification-state argument makes the same verifier usable both
+before closure (`false`) and after closure (`true`). It never regenerates the
+archive and performs no tag, GitHub Release, envelope, audit, or asset
+publication.
+
 ## DIST001 boundary
 
 DIST001-A proves that the distribution can be constructed and that its archive
