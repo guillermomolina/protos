@@ -1,6 +1,6 @@
 # DIST002 — Development/release toolchain alignment
 
-Status: IN_PROGRESS
+Status: CLOSED
 Nature: non-normative build, development-environment and release-engineering project work
 
 ## Problem
@@ -246,6 +246,38 @@ READY until a revision containing C + D1 + D2 + D3 completes both primary
 workflows green, followed by the final local cross-environment gate and status
 reconciliation.
 
+## DIST002-D final cross-environment closure
+
+DIST002-D closes the toolchain-alignment project after both external CI and the
+publication candidate prove the selected contract end to end. Post-D3 GitHub
+Actions evidence is green on revision `6977f06441624267147b1f146fac340d06f464c3`, which is a descendant of
+the published D3 workspace-trust correction:
+
+- `Tests` run 34224766060 completed successfully on the exact primary
+  GraalVM/JDK/Maven environment and full Maven suite;
+- `Distribution snapshot` run 34224766104 completed successfully through Maven
+  bootstrap/checksum validation, checkout workspace trust, zero-drift toolchain
+  verification, the full Maven suite, portable-distribution build, complete
+  extracted-distribution validation, snapshot checksum preparation and artifact
+  upload.
+
+The DIST002-D publication launcher additionally requires its execution-time
+`PUBLICATION_BASE` to descend from that green evidence revision and revalidates
+the resulting documentation/status-only closure candidate locally in an
+isolated worktree: exact selected GraalVM/JDK/Maven identity, toolchain verifier
+unit tests, all-surface zero drift, full Maven tests, portable build and the
+complete extracted-distribution gate with clean-source enforcement. Therefore a
+later unrelated `main` advance can be closed only if it still satisfies the same
+canonical toolchain and distribution contract.
+
+DIST002 is now complete: Java 21 remains the intentional bytecode compatibility
+target, while ordinary development, ordinary CI and live portable-distribution
+validation share GraalVM Community 25.3.4.1 / JDK 25.0.4.1, Graal/Truffle
+25.3.4.1 and Maven 3.9.9. Historical DIST001/PERF JDK22/Truffle24 evidence and
+the public `v0.2.236` release remain unchanged. This closure adds no Protos
+semantics, runtime behavior, implementation-version change, native-boundary
+change or license-term change.
+
 ## Current observed mismatch
 
 At the time this item was opened:
@@ -290,7 +322,7 @@ pattern.
 | DIST002-D1 | CLOSED | Correct the Maven 3.9.9 CI-bootstrap SHA-512 verifier for Apache's digest-only metadata format; both primary workflows retain exact checksum validation. |
 | DIST002-D2 | CLOSED | Correct the no-trailing-newline EOF handling in the Maven `.sha512` bootstrap while retaining D1's exact 128-hex and independently calculated SHA-512 checks. |
 | DIST002-D3 | CLOSED | Restore Git workspace ownership trust in distribution CI after checkout without weakening Git's safe-directory protection. |
-| DIST002-D | READY | Await green post-D3 Tests + Distribution snapshot evidence, then run final cross-environment conformance/documentation reconciliation and close DIST002. |
+| DIST002-D | CLOSED | Post-D3 `Tests` run 34224766060 and `Distribution snapshot` run 34224766104 are green on revision `6977f06441624267147b1f146fac340d06f464c3`; the closure launcher revalidates the current descendant publication candidate with zero drift, full tests, portable build and complete extracted-distribution gate, then closes DIST002. |
 
 Opening DIST002 changes no Protos semantics, implementation version, current
 DIST001 candidate, runtime support promise, tag, GitHub Release, or release
