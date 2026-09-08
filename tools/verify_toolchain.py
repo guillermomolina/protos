@@ -161,6 +161,11 @@ def audit_bindings(root, contract):
     pom = root / "pom.xml"
     rows.append(("pom.bytecode", bytecode, xml_property(pom, "maven.compiler.release")))
     rows.append(("pom.graal_components", components, xml_property(pom, "graalvm.version")))
+    pom_text = read_text(pom)
+    rows.append(("pom.shade_multi_release", "present", "present" if "<Multi-Release>true</Multi-Release>" in pom_text else "missing"))
+    rows.append(("pom.shade_services", "present", "present" if "org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" in pom_text else "missing"))
+    shade_signature_filter = all(token in pom_text for token in ("<exclude>META-INF/*.SF</exclude>", "<exclude>META-INF/*.DSA</exclude>", "<exclude>META-INF/*.RSA</exclude>"))
+    rows.append(("pom.shade_signature_filter", "present", "present" if shade_signature_filter else "missing"))
 
     docker = read_text(root / ".devcontainer" / "Dockerfile")
     rows.append((
@@ -180,9 +185,11 @@ def audit_bindings(root, contract):
     rows.append(("ci.tests.java_version", jdk_version, workflow_scalar(tests_workflow, "PROTOS_PRIMARY_JDK_VERSION")))
     rows.append(("ci.tests.maven", maven, workflow_scalar(tests_workflow, "PROTOS_MAVEN_VERSION")))
 
-    dist_distribution, dist_java = workflow_java(root / ".github" / "workflows" / "distribution.yml")
-    rows.append(("ci.distribution.distribution", str(graal["distribution"]), dist_distribution))
-    rows.append(("ci.distribution.java", jdk_version, dist_java))
+    distribution_workflow = root / ".github" / "workflows" / "distribution.yml"
+    rows.append(("ci.distribution.image", str(graal["container_image"]), workflow_container_image(distribution_workflow)))
+    rows.append(("ci.distribution.java_feature", feature, workflow_scalar(distribution_workflow, "PROTOS_PRIMARY_JDK_FEATURE")))
+    rows.append(("ci.distribution.java_version", jdk_version, workflow_scalar(distribution_workflow, "PROTOS_PRIMARY_JDK_VERSION")))
+    rows.append(("ci.distribution.maven", maven, workflow_scalar(distribution_workflow, "PROTOS_MAVEN_VERSION")))
 
     rows.append((
         "dist.runtime_pom.graal_components",
@@ -195,6 +202,16 @@ def audit_bindings(root, contract):
         "dist.builder.java_feature",
         feature,
         first_match(builder, r'^SUPPORTED_JAVA_FEATURE[ \t]*=[ \t]*[\"\']([^\"\']+)', "SUPPORTED_JAVA_FEATURE"),
+    ))
+    rows.append((
+        "dist.builder.java_version",
+        jdk_version,
+        first_match(builder, r'^SUPPORTED_JAVA_VERSION[ \t]*=[ \t]*[\"\']([^\"\']+)', "SUPPORTED_JAVA_VERSION"),
+    ))
+    rows.append((
+        "dist.builder.graalvm_release",
+        str(graal["release"]),
+        first_match(builder, r'^SUPPORTED_GRAALVM_RELEASE[ \t]*=[ \t]*[\"\']([^\"\']+)', "SUPPORTED_GRAALVM_RELEASE"),
     ))
     rows.append((
         "dist.builder.graal_components",
@@ -218,6 +235,15 @@ def audit_bindings(root, contract):
         components,
         first_match(smoke, r"^EXPECTED_TRUFFLE_VERSION=([^ \t\n]+)", "EXPECTED_TRUFFLE_VERSION"),
     ))
+
+    launcher = read_text(root / "bin" / "protos")
+    launcher_version_gate = (
+        "present"
+        if "s/^java_version=//p" in launcher
+        and '[ "$actual_version" = "$expected_version" ] || supported=0' in launcher
+        else "missing"
+    )
+    rows.append(("dist.launcher.java_version_gate", "present", launcher_version_gate))
     return rows
 
 

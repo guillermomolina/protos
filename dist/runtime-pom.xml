@@ -25,7 +25,7 @@ the specific language governing rights and limitations under the License.
     <packaging>pom</packaging>
 
     <properties>
-        <graalvm.version>24.0.0</graalvm.version>
+        <graalvm.version>25.3.4.1</graalvm.version>
     </properties>
 
     <dependencies>

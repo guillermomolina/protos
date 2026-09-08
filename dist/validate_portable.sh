@@ -112,12 +112,12 @@ esac
 sh "$ROOT/dist/smoke_cwd_package.sh" "$archive"
 sh "$ROOT/dist/smoke_test_tool.sh" "$archive"
 
-# B4B is the supported optimizing-runtime gate. No fallback or unsupported
-# override is accepted here.
-[ -n "${PROTOS_DIST001_B4B_JAVA_HOME:-}" ] ||
-    fail "PROTOS_DIST001_B4B_JAVA_HOME is required for exact B4B validation"
-PROTOS_DIST001_B4B_JAVA_HOME="$PROTOS_DIST001_B4B_JAVA_HOME" \
-    sh "$ROOT/dist/smoke_optimizing_runtime.sh" "$archive"
+# B4B remains the exact optimizing-runtime gate, now against the already
+# provisioned DIST002 primary runtime. The smoke defaults to JAVA_HOME; the
+# historical PROTOS_DIST001_B4B_JAVA_HOME override remains optional only for
+# explicit compatibility invocation. No fallback or unsupported override is
+# accepted here.
+sh "$ROOT/dist/smoke_optimizing_runtime.sh" "$archive"
 
 archive_sha_after=$(sha256sum "$archive" | awk '{print $1}')
 [ "$archive_sha_before" = "$archive_sha_after" ] ||

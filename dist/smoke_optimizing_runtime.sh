@@ -21,9 +21,9 @@ fail() {
 }
 
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-EXPECTED_FEATURE=22
-EXPECTED_JAVA_VERSION=22
-EXPECTED_TRUFFLE_VERSION=24.0.0
+EXPECTED_FEATURE=25
+EXPECTED_JAVA_VERSION=25.0.4.1
+EXPECTED_TRUFFLE_VERSION=25.3.4.1
 EXPECTED_RUNTIME_CLASS=com.oracle.truffle.runtime.hotspot.HotSpotTruffleRuntime
 
 archive=${1:-}
@@ -40,7 +40,7 @@ esac
 
 runtime_home=${PROTOS_DIST001_B4B_JAVA_HOME:-${JAVA_HOME:-}}
 [ -n "$runtime_home" ] || fail \
-    "exact GraalVM JDK22 runtime not configured; set PROTOS_DIST001_B4B_JAVA_HOME"
+    "selected primary GraalVM runtime not configured; set JAVA_HOME or PROTOS_DIST001_B4B_JAVA_HOME"
 
 java_bin=$runtime_home/bin/java
 javac_bin=$runtime_home/bin/javac

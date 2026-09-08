@@ -31,9 +31,11 @@ import zipfile
 from release_identity import build_source_metadata
 
 DIST_FORMAT = "protos-portable-posix-jvm-v1"
-SUPPORTED_JAVA_FEATURE = "22"
+SUPPORTED_JAVA_FEATURE = "25"
+SUPPORTED_JAVA_VERSION = "25.0.4.1"
+SUPPORTED_GRAALVM_RELEASE = "25.3.4.1"
 SUPPORTED_VENDOR_TOKEN = "GraalVM"
-EXPECTED_TRUFFLE_VERSION = "24.0.0"
+EXPECTED_TRUFFLE_VERSION = "25.3.4.1"
 EXPECTED_OPTIMIZING_RUNTIME = "HotSpotTruffleRuntime"
 DEPENDENCY_PLUGIN = "org.apache.maven.plugins:maven-dependency-plugin:3.8.1:copy-dependencies"
 
@@ -227,7 +229,9 @@ def verify_archive(
         for needle in [
             f"distribution_format={DIST_FORMAT}",
             f"java_feature={SUPPORTED_JAVA_FEATURE}",
+            f"java_version={SUPPORTED_JAVA_VERSION}",
             f"java_vendor_contains={SUPPORTED_VENDOR_TOKEN}",
+            f"graalvm_release={SUPPORTED_GRAALVM_RELEASE}",
             f"truffle_runtime_version={EXPECTED_TRUFFLE_VERSION}",
             f"optimizing_runtime={EXPECTED_OPTIMIZING_RUNTIME}",
         ]:
@@ -254,7 +258,7 @@ def build(args: argparse.Namespace) -> Path:
     version, truffle_version = project_version(root)
     if truffle_version != EXPECTED_TRUFFLE_VERSION:
         fail(
-            "project graalvm.version changed from the DIST001-A runtime contract "
+            "project graalvm.version changed from the DIST002 canonical runtime contract "
             f"({EXPECTED_TRUFFLE_VERSION} -> {truffle_version}); revalidate the "
             "distribution runtime before changing the bundle"
         )
@@ -342,11 +346,13 @@ def build(args: argparse.Namespace) -> Path:
             [
                 f"distribution_format={DIST_FORMAT}",
                 f"java_feature={SUPPORTED_JAVA_FEATURE}",
+                f"java_version={SUPPORTED_JAVA_VERSION}",
                 f"java_vendor_contains={SUPPORTED_VENDOR_TOKEN}",
-                "java_distribution=GraalVM Community Edition for JDK 22",
+                f"graalvm_release={SUPPORTED_GRAALVM_RELEASE}",
+                f"java_distribution=GraalVM Community Edition {SUPPORTED_GRAALVM_RELEASE} for JDK {SUPPORTED_JAVA_VERSION}",
                 f"truffle_runtime_version={EXPECTED_TRUFFLE_VERSION}",
                 f"optimizing_runtime={EXPECTED_OPTIMIZING_RUNTIME}",
-                "runtime_evidence=docs/project/PERF002_TRUFFLE_COMPILABILITY.md",
+                "runtime_evidence=docs/project/DIST002_TOOLCHAIN_ALIGNMENT.md",
                 "unsupported_runtime_override=PROTOS_ALLOW_UNSUPPORTED_RUNTIME=1",
             ]
         ),

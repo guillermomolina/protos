@@ -136,6 +136,41 @@ DIST001-derived distribution workflow/runtime metadata are assigned to
 DIST002-C. B does not rewrite historical DIST001/PERF evidence and does not
 change the existing public `v0.2.236` support claim.
 
+## DIST002-C live distribution/runtime migration
+
+DIST002-C migrates the live implementation and portable-distribution runtime
+from the historical DIST001 GraalVM JDK22 / Truffle 24.0.0 contract to the
+canonical DIST002-A toolchain. The root Maven implementation dependency and the
+portable runtime dependency closure now use Graal/Truffle `25.3.4.1` while Java
+source/bytecode compatibility remains deliberately at release 21. This is an
+implementation/runtime migration, so the Maven implementation version advances
+exactly once from `0.2.256-SNAPSHOT` to `0.2.257-SNAPSHOT`.
+
+The distribution snapshot workflow now executes in the same exact
+`ghcr.io/graalvm/graalvm-community:25i3-25.0.4.1-ol8-20260825` image used by the
+primary development/ordinary-CI contract. It no longer invokes
+`graalvm/setup-graalvm` to fetch JDK22 during the repository gate. Exact Maven
+3.9.9 is bootstrapped separately with checksum verification before repository
+validation, then CI verifies the actual GraalVM/JDK/Maven identity and requires
+a zero-drift all-surface toolchain audit before building/testing.
+
+New development distributions record exact `java_feature=25`,
+`java_version=25.0.4.1`, `graalvm_release=25.3.4.1` and
+`truffle_runtime_version=25.3.4.1` metadata. The distributed launcher now
+requires the exact recorded Java version in addition to the existing feature and
+GraalVM-vendor gate. B5/B4B validation uses the already-provisioned primary
+`JAVA_HOME` by default and still requires the intact optimizer closure to resolve
+exact `com.oracle.truffle.runtime.hotspot.HotSpotTruffleRuntime`; no unsupported
+runtime override is accepted for that gate.
+
+Historical `v0.2.236`, DIST001 and PERF evidence remains immutable evidence for
+its JDK22/Truffle24 revision. DIST002-C changes only live post-DIST001
+development/distribution bindings; it does not rewrite the released artifact,
+tag, release notes or historical benchmark conclusions. After C the static
+repository toolchain audit is zero-drift across development, ordinary CI and
+distribution bindings. DIST002-D remains responsible for final cross-environment
+closure/reconciliation.
+
 ## Current observed mismatch
 
 At the time this item was opened:
@@ -176,8 +211,8 @@ pattern.
 |---|---|---|
 | DIST002-A | CLOSED | Selected exact canonical coordinates are persisted in root `toolchain.json`; tested contract/static-binding drift audit is published. |
 | DIST002-B | CLOSED | Existing devcontainer binding is verified against A; ordinary Tests CI runs in the exact primary GraalVM image with exact Maven and a development-scope drift/runtime gate. |
-| DIST002-C | READY | Make distribution/runtime metadata and validation consume/check the same coordinates; remove ordinary on-demand-JDK gate dependence. |
-| DIST002-D | BLOCKED_BY_DEPENDENCIES | Cross-environment conformance, documentation/status reconciliation, and DIST002 closure. |
+| DIST002-C | CLOSED | Live Maven/Truffle dependencies, distribution metadata, launcher/runtime gates and distribution CI now use/check the canonical JDK25.0.4.1/Graal-Truffle25.3.4.1 contract; historical DIST001 evidence is retained. |
+| DIST002-D | READY | Cross-environment conformance, documentation/status reconciliation, and DIST002 closure after the zero-drift C migration. |
 
 Opening DIST002 changes no Protos semantics, implementation version, current
 DIST001 candidate, runtime support promise, tag, GitHub Release, or release

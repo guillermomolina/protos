@@ -34,8 +34,9 @@ if [ "$MODE" = distribution ]; then
     }
 
     expected_feature=$(sed -n 's/^java_feature=//p' "$RUNTIME_META")
+    expected_version=$(sed -n 's/^java_version=//p' "$RUNTIME_META")
     expected_vendor=$(sed -n 's/^java_vendor_contains=//p' "$RUNTIME_META")
-    [ -n "$expected_feature" ] && [ -n "$expected_vendor" ] || {
+    [ -n "$expected_feature" ] && [ -n "$expected_version" ] && [ -n "$expected_vendor" ] || {
         echo "protos: incomplete distribution runtime metadata" >&2
         exit 1
     }
@@ -45,22 +46,24 @@ if [ "$MODE" = distribution ]; then
         exit 1
     }
     actual_feature=$(printf '%s\n' "$runtime_properties" | sed -n 's/^[[:space:]]*java\.specification\.version = //p' | head -n 1)
+    actual_version=$(printf '%s\n' "$runtime_properties" | sed -n 's/^[[:space:]]*java\.version = //p' | head -n 1)
     actual_vendor=$(printf '%s\n' "$runtime_properties" | sed -n 's/^[[:space:]]*java\.vendor = //p' | head -n 1)
     actual_vendor_version=$(printf '%s\n' "$runtime_properties" | sed -n 's/^[[:space:]]*java\.vendor\.version = //p' | head -n 1)
 
     supported=1
     [ "$actual_feature" = "$expected_feature" ] || supported=0
+    [ "$actual_version" = "$expected_version" ] || supported=0
     printf '%s\n%s\n' "$actual_vendor" "$actual_vendor_version" | grep -Fqi "$expected_vendor" || supported=0
 
     if [ "$supported" -ne 1 ]; then
         if [ "${PROTOS_ALLOW_UNSUPPORTED_RUNTIME:-0}" = 1 ]; then
             echo "protos: WARNING: unsupported runtime override enabled" >&2
-            echo "protos: expected Java $expected_feature / vendor containing '$expected_vendor'" >&2
-            echo "protos: actual Java ${actual_feature:-unknown} / ${actual_vendor:-unknown} ${actual_vendor_version:-}" >&2
+            echo "protos: expected Java $expected_feature ($expected_version) / vendor containing '$expected_vendor'" >&2
+            echo "protos: actual Java ${actual_feature:-unknown} (${actual_version:-unknown}) / ${actual_vendor:-unknown} ${actual_vendor_version:-}" >&2
         else
             echo "protos: unsupported runtime" >&2
-            echo "protos: expected Java $expected_feature / vendor containing '$expected_vendor'" >&2
-            echo "protos: actual Java ${actual_feature:-unknown} / ${actual_vendor:-unknown} ${actual_vendor_version:-}" >&2
+            echo "protos: expected Java $expected_feature ($expected_version) / vendor containing '$expected_vendor'" >&2
+            echo "protos: actual Java ${actual_feature:-unknown} (${actual_version:-unknown}) / ${actual_vendor:-unknown} ${actual_vendor_version:-}" >&2
             echo "protos: see RUNTIME.txt; PROTOS_ALLOW_UNSUPPORTED_RUNTIME=1 is an unsupported override" >&2
             exit 1
         fi
