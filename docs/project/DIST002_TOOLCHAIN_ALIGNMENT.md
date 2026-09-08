@@ -196,6 +196,28 @@ evidence on a revision containing the zero-drift C migration, after which the
 final local cross-environment gate and project-state reconciliation may close
 DIST002.
 
+## DIST002-D2 checksum metadata EOF correction
+
+Post-D1 GitHub Actions exposed a second, narrower shell portability defect in the
+same Maven bootstrap before repository checkout. A revision containing D1,
+`4f0b608728eadad569372d17eade6edb251737ec`, produced failing `Tests`
+34222276908 and `Distribution snapshot` 34222276919 runs. The upstream Maven
+3.9.9 `.sha512` body is exactly one 128-hex digest and has no trailing newline.
+Under `set -e`, shell `read ... < file` returns non-zero when EOF arrives
+without a line terminator even though it populated the variable, so the D1
+bootstrap exited before its digest validation or PASS marker.
+
+DIST002-D2 keeps D1's exact digest-only contract and SHA-512 integrity check but
+loads the complete metadata body through command substitution (`cat`), which is
+successful for a non-newline-terminated file. The existing non-empty, exact
+128-hex, independently calculated SHA-512 and case-insensitive equality checks
+remain unchanged. No fallback parser, checksum bypass, runtime coordinate or
+implementation behavior changes.
+
+D2 closes only this observed EOF-handling defect. DIST002-D remains READY until
+both primary workflows complete green on a revision containing C + D1 + D2,
+followed by the final local cross-environment gate and status reconciliation.
+
 ## Current observed mismatch
 
 At the time this item was opened:
@@ -238,7 +260,8 @@ pattern.
 | DIST002-B | CLOSED | Existing devcontainer binding is verified against A; ordinary Tests CI runs in the exact primary GraalVM image with exact Maven and a development-scope drift/runtime gate. |
 | DIST002-C | CLOSED | Live Maven/Truffle dependencies, distribution metadata, launcher/runtime gates and distribution CI now use/check the canonical JDK25.0.4.1/Graal-Truffle25.3.4.1 contract; historical DIST001 evidence is retained. |
 | DIST002-D1 | CLOSED | Correct the Maven 3.9.9 CI-bootstrap SHA-512 verifier for Apache's digest-only metadata format; both primary workflows retain exact checksum validation. |
-| DIST002-D | READY | Await green post-D1 Tests + Distribution snapshot evidence, then run final cross-environment conformance/documentation reconciliation and close DIST002. |
+| DIST002-D2 | CLOSED | Correct the no-trailing-newline EOF handling in the Maven `.sha512` bootstrap while retaining D1's exact 128-hex and independently calculated SHA-512 checks. |
+| DIST002-D | READY | Await green post-D2 Tests + Distribution snapshot evidence, then run final cross-environment conformance/documentation reconciliation and close DIST002. |
 
 Opening DIST002 changes no Protos semantics, implementation version, current
 DIST001 candidate, runtime support promise, tag, GitHub Release, or release

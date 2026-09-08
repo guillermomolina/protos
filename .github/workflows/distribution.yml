@@ -38,7 +38,7 @@ jobs:
           base="https://archive.apache.org/dist/maven/maven-3/${PROTOS_MAVEN_VERSION}/binaries"
           curl --fail --location --silent --show-error "$base/$archive" --output "/tmp/$archive"
           curl --fail --location --silent --show-error "$base/$archive.sha512" --output "/tmp/$archive.sha512"
-          IFS=' ' read -r expected_sha512 _ < "/tmp/$archive.sha512"
+          expected_sha512="$(cat "/tmp/$archive.sha512")"
           test -n "$expected_sha512"
           test "${#expected_sha512}" -eq 128
           case "$expected_sha512" in
