@@ -123,6 +123,10 @@ futureObservationPolicyParent: (policy) => {
     policy.at(1)
 }
 
+futureObservationPolicyParentName: (policy) => {
+    policy.at(2)
+}
+
 parseFutureObservationPolicy: (text) => {
     source: Encoding.UTF8.encode(text)
     modeBytes: Encoding.UTF8.encode("")
@@ -157,7 +161,7 @@ parseFutureObservationPolicy: (text) => {
 
     parentName: Encoding.UTF8.decode(parentBytes)
     parent: standardErrorPrototype(parentName)
-    resultTuple(mode, parent)
+    resultTuple(mode, parent, parentName)
 }
 
 isDExpectation: (spec) => {
@@ -199,6 +203,76 @@ evaluateFutureStoredObservation: (spec, source, inspectorExecutor) => {
     observation: inspectorExecutor(
         source,
         futureStoredObservationInspectorSource()
+    )
+
+    passed: observation.state === "completed"
+    passed.ifTrue(() => {
+        passed = observation.error === null
+    })
+    passed.ifTrue(() => {
+        passed = observation.value === true
+    })
+
+    resultTuple(passed, observation)
+}
+
+futureFreshObservationInspectorSource: (expectedParentName) => {
+    "(subject) => {\n" +
+    "    observe: subject.slotValue(\"observe\")\n" +
+    "    first: null\n" +
+    "    second: null\n" +
+    "    firstCaught: false\n" +
+    "    secondCaught: false\n" +
+    "    Error.handle(\n" +
+    "        () => {\n" +
+    "            observe()\n" +
+    "            null\n" +
+    "        },\n" +
+    "        (caught) => {\n" +
+    "            first = caught\n" +
+    "            firstCaught = true\n" +
+    "            null\n" +
+    "        }\n" +
+    "    )\n" +
+    "    Error.handle(\n" +
+    "        () => {\n" +
+    "            observe()\n" +
+    "            null\n" +
+    "        },\n" +
+    "        (caught) => {\n" +
+    "            second = caught\n" +
+    "            secondCaught = true\n" +
+    "            null\n" +
+    "        }\n" +
+    "    )\n" +
+    "    passed: firstCaught && secondCaught\n" +
+    "    passed.ifTrue(() => {\n" +
+    "        passed = first.parent() === " + expectedParentName + "\n" +
+    "    })\n" +
+    "    passed.ifTrue(() => {\n" +
+    "        passed = second.parent() === " + expectedParentName + "\n" +
+    "    })\n" +
+    "    passed.ifTrue(() => {\n" +
+    "        passed = first !== second\n" +
+    "    })\n" +
+    "    passed\n" +
+    "}"
+}
+
+evaluateFutureFreshObservation: (spec, source, inspectorExecutor) => {
+    (Manifest.caseExpectation(spec) === "future-observation-error-identity").ifFalse(() => {
+        policyError()
+    })
+
+    policy: parseFutureObservationPolicy(Manifest.caseExpected(spec))
+    (futureObservationPolicyMode(policy) === "fresh").ifFalse(() => {
+        policyError()
+    })
+
+    expectedParentName: futureObservationPolicyParentName(policy)
+    observation: inspectorExecutor(
+        source,
+        futureFreshObservationInspectorSource(expectedParentName)
     )
 
     passed: observation.state === "completed"

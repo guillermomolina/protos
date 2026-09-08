@@ -24,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -41,6 +42,13 @@ final class ProtosTestToolFutureObservationPolicyFixtureSuiteTest {
     private static final Path TOOLING_ROOT = Path.of("protos", "tests", "tooling");
     private static final Path MANIFEST =
             TOOLING_ROOT.resolve("tool002-f3e-integration-fixtures.tsv");
+    private static final Path RETAINED_FRESH_SOURCE =
+            Path.of(
+                    "protos",
+                    "tests",
+                    "conformance",
+                    "future",
+                    "cancelled-value-fresh-error.protos");
 
     @TestFactory
     Stream<DynamicTest> futureObservationPolicyFixtures() throws IOException {
@@ -79,6 +87,13 @@ final class ProtosTestToolFutureObservationPolicyFixtureSuiteTest {
                         new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation activation = prelude.newModuleActivation();
+        ProtosExactExecutionFacility.installInspection(activation);
+        activation
+                .context()
+                .createLocalSlot(
+                        "retainedFreshSource",
+                        new ProtosStringValue(
+                                Files.readString(RETAINED_FRESH_SOURCE, StandardCharsets.UTF_8)));
 
         ProtosExecutionOutcome outcome =
                 ProtosRootTaskExecution.execute(
