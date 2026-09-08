@@ -344,10 +344,16 @@ publication:
       persisted candidate/source/baseline/public-version identity, exact
       supported runtime contract, complete internal checksums and shaded JAR
       `Implementation-Version: 0.2.236` without regenerating archive bytes.
-    - `DIST001-E4C3` — release-note claims selection — READY.
-      Select explicit truthful capabilities and limitations against exact
-      candidate `957b1e16793a682de1d6406e37b5734c44d32d19` and independently verified archive `protos-0.2.236-posix-jvm.zip`.
-    - `DIST001-E4C4` — deterministic release-envelope generation — `BLOCKED_BY_DEPENDENCIES` on E4C3.
+    - `DIST001-E4C3` — release-note claims selection — CLOSED.
+      Freeze the ordered capability/limitation set in
+      `docs/project/DIST001_E4_RELEASE_CLAIMS.txt` against candidate
+      `957b1e16793a682de1d6406e37b5734c44d32d19`, specification `0.1.382` and independently verified archive
+      `protos-0.2.236-posix-jvm.zip` / `b1a58ba445d082156bd4eb637ee6df70c046abdee600d468c0fac29be065e296`. Candidate B001-B008 blocker review is PASS;
+      Package Tool/Test Tool/documentation incompleteness and exact runtime scope
+      are disclosed. Publication remains unauthorized.
+    - `DIST001-E4C4` — deterministic release-envelope generation — READY.
+      Render the E3B release notes/manifest/basename-only checksum from the exact
+      C3 claim record and already-verified archive without changing claim text.
     - `DIST001-E4C5` — candidate-audit materialization — `BLOCKED_BY_DEPENDENCIES` on E4C4.
   - `DIST001-E4D` — immutable full candidate validation and E4 closure —
     `BLOCKED_BY_DEPENDENCIES` on E4C. Freeze the exact validated candidate SHA

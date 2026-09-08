@@ -509,3 +509,29 @@ shaded JAR `Implementation-Version`.
 E4C3 is the next owner and may select only truthful release-note capabilities
 and limitations against this fixed candidate/archive identity. No E4C2 result
 authorizes release publication.
+
+## E4C3 release-note claim selection checkpoint
+
+Release-note claims are now frozen against the exact candidate/archive identity:
+
+```text
+release_baseline_revision=3c23eaaccecbdcc7c2bcd86bc30c445403cfb047
+candidate_source_revision=957b1e16793a682de1d6406e37b5734c44d32d19
+release_version=0.2.236
+specification_revision=0.1.382
+archive_name=protos-0.2.236-posix-jvm.zip
+archive_sha256=b1a58ba445d082156bd4eb637ee6df70c046abdee600d468c0fac29be065e296
+claims_record=docs/project/DIST001_E4_RELEASE_CLAIMS.txt
+known_blockers_review=PASS
+release_publication_authorized=false
+```
+
+The selected capabilities deliberately describe only behavior supported by the
+candidate source and verified portable distribution. The limitations explicitly
+preserve the experimental/draft status, exact POSIX/GraalVM/JDK runtime scope,
+the candidate-time incompleteness of Package Tool and Test Tool, and incomplete
+Programming Guide coverage.
+
+E4C3 does not render `RELEASE_NOTES.md`. E4C4 owns deterministic E3B envelope
+generation from this exact ordered claim set. No claim-selection result creates
+a tag, GitHub Release, release asset, or release-publication authorization.
