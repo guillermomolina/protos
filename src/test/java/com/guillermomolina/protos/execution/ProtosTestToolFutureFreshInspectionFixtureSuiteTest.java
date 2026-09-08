@@ -127,7 +127,7 @@ final class ProtosTestToolFutureFreshInspectionFixtureSuiteTest {
 
         String caseId = fields.get(0);
         Path fixture = Path.of(fields.get(1));
-        if (!caseId.startsWith("TOOL002-F3D1")) {
+        if (!caseId.equals("TOOL002-F3D1") && !caseId.equals("TOOL002-F3D2")) {
             throw new IllegalArgumentException("unexpected fresh-inspection fixture case id: " + caseId);
         }
         if (fixture.isAbsolute()
