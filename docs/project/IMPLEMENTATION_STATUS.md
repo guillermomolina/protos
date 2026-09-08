@@ -1007,10 +1007,10 @@ the initial TOOL002 closure.
 | TOOL002-E2B2 | CLOSED | `0.2.226-SNAPSHOT` / `SAME_COMMIT`; public `Main.protos` executes the full retained Package/TOML plan through generic `Runner` + `packageExecution`; Protos evidence requires selected==plan cases, skipped==0, passed==plan cases and complete result cardinality. |
 | TOOL002-E3 | CLOSED | Legacy Java TOML corpus owner removed: no JUnit path parses the retained manifest, interprets its `true`/`error` expectations or directly executes every fixture. Existing Java tests retain host-mechanical coverage only; no implementation-version change. |
 | TOOL002-E4 | CLOSED | Documentation/governance-only final E reconciliation; no executable, normative or implementation-version change. Parent TOOL002-E is CLOSED and TOOL002-F is READY. |
-| TOOL002-F | IN_PROGRESS | F1/F2/F3A/F3B/F3C/F3D CLOSED; F3E IN_PROGRESS with E1 parser and E2 positive fresh evaluator CLOSED; E3A unified private composition READY; F4 remains dependency-gated. |
+| TOOL002-F | IN_PROGRESS | F1/F2/F3A/F3B/F3C/F3D CLOSED; F3E IN_PROGRESS with E1 parser, E2 fresh evaluator and E3A unified private composition CLOSED; E3B integrated negatives READY; F4 remains dependency-gated. |
 | TOOL002-F1 | CLOSED | `0.2.228-SNAPSHOT` / `SAME_COMMIT`; bundled Protos can evaluate `future-integer/null/boolean` wholly inside one fresh child Process through ordinary `Future.value()` suspension/resume and return only Boolean evidence. Public `runSimple` selection is unchanged. |
 | TOOL002-F2 | CLOSED | `0.2.229-SNAPSHOT` / `SAME_COMMIT`; repeated child-local `Future.value()` observations distinguish FAILED stored-Error identity from CANCELLED fresh `Cancelled` occurrences and preserve exact immediate Error-parent policy; not yet selected by `runSimple`. |
-| TOOL002-F3 | IN_PROGRESS | F3A/F3B/F3C/F3D CLOSED; F3E IN_PROGRESS with E1/E2 CLOSED and E3A READY. |
+| TOOL002-F3 | IN_PROGRESS | F3A/F3B/F3C/F3D CLOSED; F3E IN_PROGRESS with E1/E2/E3A CLOSED and E3B READY. |
 | TOOL002-F3A | CLOSED | F3A1 `3c23eaaccecbdcc7c2bcd86bc30c445403cfb047` + F3A2 `119c90032088ccf428ace37185187b854966e0cb` + F3A3 `SAME_COMMIT`; base stored-Future Error identity is established independently from Test Tool mechanism. |
 | TOOL002-F3A1 | CLOSED | `3c23eaaccecbdcc7c2bcd86bc30c445403cfb047`; test-impact Protos conformance proves repeated failed-Future observations re-signal one Error identity. |
 | TOOL002-F3A2 | CLOSED | `119c90032088ccf428ace37185187b854966e0cb`; test-impact Protos conformance proves a failed-Future observation is exactly the producer-created same-domain Error. |
@@ -1027,11 +1027,11 @@ the initial TOOL002 closure.
 | TOOL002-F3D | CLOSED | F3D1 first cancelled-parent evidence + F3D2 second-observation fresh identity complete retained `fresh:Cancelled` evidence. |
 | TOOL002-F3D1 | CLOSED | `SAME_COMMIT`; test-impact Protos evidence invokes the retained cancelled fixture's exact `observe` Closure once inside `executionInspect` and requires the caught Error's immediate parent to be `Cancelled`. No second-observation freshness policy. |
 | TOOL002-F3D2 | CLOSED | `SAME_COMMIT`; test-impact Protos evidence observes the same retained cancelled Future twice, requires the second caught Error's immediate parent to be `Cancelled`, and requires `first !== second`; closes F3D. |
-| TOOL002-F3E | IN_PROGRESS | E1 parser + E2 positive private fresh evaluator CLOSED; E3A unified private stored/fresh composition READY; E3B/E4 remain dependency-ordered; public Future activation remains F4. |
+| TOOL002-F3E | IN_PROGRESS | E1 parser + E2 positive fresh evaluator + E3A unified private stored/fresh composition CLOSED; E3B integrated negatives READY; E4 remains dependency-gated before F4. |
 | TOOL002-F3E1 | CLOSED | `SAME_COMMIT`; private bundled-Protos parser accepts retained `stored`/`fresh` `MODE:ErrorPrototype`, resolves the named standard immediate parent, and fails closed on malformed format/mode/prototype; no observation execution or public selection. |
 | TOOL002-F3E2 | CLOSED | `SAME_COMMIT`; private `fresh` evaluator parses the retained mode/parent, invokes `observe` exactly twice inside `executionInspect`, requires both immediate parents and `first !== second`; no public selection. |
-| TOOL002-F3E3A | READY | TOOL002-F3E2 CLOSED; compose one private stored/fresh observation evaluator without public selection. |
-| TOOL002-F3E3B | BLOCKED_BY_DEPENDENCIES | TOOL002-F3E3A; add integrated malformed/mismatch negative policy. |
+| TOOL002-F3E3A | CLOSED | `SAME_COMMIT`; one private observation entry parses retained policy and dispatches positive `stored`/`fresh` cases to their already-closed evaluators; no public selection. |
+| TOOL002-F3E3B | READY | TOOL002-F3E3A CLOSED; add integrated malformed/mismatch negative policy without public selection. |
 | TOOL002-F3E4 | BLOCKED_BY_DEPENDENCIES | TOOL002-F3E3B; governance reconciliation only, close F3E/F3 and make F4 READY. |
 | TOOL002-F4 | BLOCKED_BY_DEPENDENCIES | TOOL002-F3; activate all `future-*` expectations in generic `runSimple`, prove complete main-manifest ownership, retire Java Future expectation policy and close F; make G READY. |
 | TOOL002-G | BLOCKED_BY_DEPENDENCIES | TOOL002-F; migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |

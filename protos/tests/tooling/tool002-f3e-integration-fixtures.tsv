@@ -2,3 +2,4 @@
 # case-id<TAB>fixture-basename
 TOOL002-F3E1	tool002-f3e1-observation-policy-parser.protos
 TOOL002-F3E2	tool002-f3e2-fresh-observation-evaluator.protos
+TOOL002-F3E3A	tool002-f3e3a-unified-private-observation.protos

@@ -286,6 +286,36 @@ evaluateFutureFreshObservation: (spec, source, inspectorExecutor) => {
     resultTuple(passed, observation)
 }
 
+evaluateFutureObservation: (spec, source, inspectorExecutor) => {
+    (Manifest.caseExpectation(spec) === "future-observation-error-identity").ifFalse(() => {
+        policyError()
+    })
+
+    policy: parseFutureObservationPolicy(Manifest.caseExpected(spec))
+    mode: futureObservationPolicyMode(policy)
+    evaluation: null
+
+    (mode === "stored").ifTrue(() => {
+        evaluation = evaluateFutureStoredObservation(
+            spec,
+            source,
+            inspectorExecutor
+        )
+    })
+    (mode === "fresh").ifTrue(() => {
+        evaluation = evaluateFutureFreshObservation(
+            spec,
+            source,
+            inspectorExecutor
+        )
+    })
+
+    (evaluation === null).ifTrue(() => {
+        policyError()
+    })
+    evaluation
+}
+
 parseExpectedInteger: (text) => {
     source: Encoding.UTF8.encode(text)
     (source.size() == 0).ifTrue(() => { policyError() })

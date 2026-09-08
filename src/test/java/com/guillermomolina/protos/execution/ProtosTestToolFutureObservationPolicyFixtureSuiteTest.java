@@ -42,6 +42,13 @@ final class ProtosTestToolFutureObservationPolicyFixtureSuiteTest {
     private static final Path TOOLING_ROOT = Path.of("protos", "tests", "tooling");
     private static final Path MANIFEST =
             TOOLING_ROOT.resolve("tool002-f3e-integration-fixtures.tsv");
+    private static final Path RETAINED_STORED_SOURCE =
+            Path.of(
+                    "protos",
+                    "tests",
+                    "conformance",
+                    "future",
+                    "failed-value-resignals-recorded-error.protos");
     private static final Path RETAINED_FRESH_SOURCE =
             Path.of(
                     "protos",
@@ -88,6 +95,12 @@ final class ProtosTestToolFutureObservationPolicyFixtureSuiteTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosExactExecutionFacility.installInspection(activation);
+        activation
+                .context()
+                .createLocalSlot(
+                        "retainedStoredSource",
+                        new ProtosStringValue(
+                                Files.readString(RETAINED_STORED_SOURCE, StandardCharsets.UTF_8)));
         activation
                 .context()
                 .createLocalSlot(
