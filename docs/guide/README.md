@@ -38,11 +38,11 @@ documentation areas whose semantics and implementation are already closed.
 1. [Bindings, contexts, and object state](01-bindings-contexts-and-state.md)
 2. [Objects, delegation, and composition](02-objects-delegation-and-composition.md)
 3. [Closures, methods, and receivers](03-closures-methods-and-receivers.md)
+4. [Control flow through ordinary protocols](04-control-flow-through-protocols.md)
 
-## Current guide dependency
+## Current guide state
 
-The planned control-flow chapter is not published yet, but its implementation
-dependency is now closed.
+The control-flow dependency that originally blocked chapter 04 is closed.
 
 D044 / specification revision `0.1.381` defines the complete standard Closure
 `while` protocol, D045 / specification revision `0.1.382` clarifies task-scoped
@@ -52,16 +52,16 @@ has published the reference implementation plus full conformance closure.
 [`B007`](../project/IMPLEMENTATION_BLOCKERS.md#b007--standard-while-protocol-semantics)
 is CLOSED.
 
-The affected documentation slice `DOC001-E` has therefore been freshly
-re-audited to READY. The guide sequence deliberately remains at chapter 03 until
-DOC001-E itself is written and published; READY means the chapter may now
-describe current runnable behavior, not that the documentation already exists.
+`DOC001-E` is now CLOSED with
+[chapter 04](04-control-flow-through-protocols.md), which explains the published
+control-flow behavior as ordinary protocols without redefining the language.
+The next independently READY Programming Guide slice is `DOC001-F` for values,
+identity, equality, and collections.
 
 ## Planned progression
 
 Future chapters should cover, as the guide grows:
 
-- control flow through ordinary protocols;
 - values, identity, equality, and collections;
 - modules and imports;
 - Errors, handlers, `ensure`, and resource lifetime;

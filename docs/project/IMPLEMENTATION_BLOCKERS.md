@@ -321,9 +321,10 @@ bounded across completed and repeatedly suspending iterations, and the final
 Core native-boundary audit remains 111 construction sites across 30 providers.
 B008 is also CLOSED under D045.
 
-The Programming Guide control-flow slice DOC001-E has been freshly re-audited
-after I023 closure and is now READY. It remains separate documentation work and
-does not become CLOSED merely because the implementation dependency is gone.
+The Programming Guide control-flow slice DOC001-E was subsequently published
+and is now CLOSED. That documentation closure remains separate from the earlier
+I023/B007 implementation closure; chapter 04 records the programmer-facing
+explanation while the normative specification remains authoritative.
 
 Independent work:
 No implementation blocker remains for the standard `while` protocol. Future

@@ -57,6 +57,9 @@ Closure evidence:
 - DOC001-D:
   `01470dca9df787ed216b2c19faaead965fb18cc8`
   (`Add callable programming guide`).
+- DOC001-E:
+  `SAME_COMMIT`
+  (`Publish control flow programming guide`).
 
 ## Slice ledger
 
@@ -66,7 +69,7 @@ Closure evidence:
 | DOC001-B | CLOSED | Bindings, execution contexts, lexical state, and receiver state | Published at `bd3cd38218cfccdca8de529f4d6c26fede7ad771`. |
 | DOC001-C | CLOSED | Objects, delegation, composition, structural state, reflection | Published at `8ab9463b8466974fc5f23f0c7304faeacb3db641`. |
 | DOC001-D | CLOSED | Closures, methods, receivers, extraction, `super`, return homes | Published at `01470dca9df787ed216b2c19faaead965fb18cc8`. |
-| DOC001-E | READY | Control flow through ordinary protocols | I023 and B007 are CLOSED; fresh I023-D audit confirms the standard `while` protocol is runnable current behavior. The documentation slice itself remains unpublished. |
+| DOC001-E | CLOSED | Control flow through ordinary protocols | Published in `SAME_COMMIT`: chapter 04, guide navigation, current-behavior cross-links, and DOC001 project reconciliation. |
 | DOC001-F | READY | Values, identity, equality, and collections | Independent of DOC001-E. |
 | DOC001-G | READY | Modules and imports | Independent of DOC001-E. |
 | DOC001-H | READY | Errors, handlers, `ensure`, and resource lifetime | Independent of DOC001-E. |
@@ -89,13 +92,16 @@ B007 is CLOSED with it. The fresh I023-D current-main audit confirms that the
 standard inherited `Object.while` behavior is runnable reference-implementation
 behavior rather than merely specified future behavior.
 
-DOC001-E is therefore READY. It is not CLOSED: the control-flow guide chapter
-still has to be written, cross-linked and validated as its own documentation
-slice. The guide must explain the published behavior faithfully rather than
-copying project-ledger prose or redefining the language.
+DOC001-E is now CLOSED. Chapter 04 publishes the control-flow explanation,
+cross-links representative executable conformance evidence, and keeps the
+normative specification authoritative. The chapter describes the current
+runnable standard Boolean and `Object.while` behavior without copying
+project-ledger prose or redefining the language.
 
-B007/I023 no longer gate DOC001. Other READY documentation slices remain
-independent and retain their own current-main audit requirement when started.
+B007/I023 no longer gate DOC001. DOC001-F through DOC001-L remain independently
+READY and retain their own current-main audit requirement when started.
+DOC001-M remains toolchain-gated and DOC001-N remains the final consistency
+closure.
 
 ## Completion rule
 
