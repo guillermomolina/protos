@@ -664,3 +664,49 @@ merely because unrelated `main` moved: the validated subject is the immutable
 candidate/archive pair above.
 
 E4D3 is now READY. Release publication remains explicitly unauthorized.
+
+## E4D3 candidate claims/blockers/spec checkpoint
+
+The frozen E4C3 editorial claims have been independently re-audited against the
+exact candidate source rather than current moving `main`:
+
+```text
+release_baseline_revision=3c23eaaccecbdcc7c2bcd86bc30c445403cfb047
+candidate_source_revision=957b1e16793a682de1d6406e37b5734c44d32d19
+release_version=0.2.236
+specification_revision=0.1.382
+archive_name=protos-0.2.236-posix-jvm.zip
+archive_sha256=b1a58ba445d082156bd4eb637ee6df70c046abdee600d468c0fac29be065e296
+claims_sha256=ad0b77ae5bd41bc16e306487072620c99581643d68ed5141011e7537c0439e33
+capability_count=4
+limitation_count=5
+b001_through_b008=CLOSED
+d3_claims_blockers_spec=PASS
+release_publication_authorized=false
+```
+
+The D3 verifier first requires the detached candidate commit to have exact parent
+`3c23eaaccecbdcc7c2bcd86bc30c445403cfb047` and to differ from that release baseline only in `pom.xml`.
+All claim evidence is then read with `git show 957b1e16793a682de1d6406e37b5734c44d32d19:<path>`; later
+documentation or implementation work on `main` cannot retroactively strengthen
+or invalidate the historical 0.2.236 claim audit.
+
+The four capability claims are checked against candidate-time portable CLI/
+distribution evidence, Core/control implementation and normative owners,
+Future/parallel/Actor implementation and task-scoped ownership, and the closed
+standard value/collection/I/O/filesystem/process surfaces plus physical numeric
+protocol installation.
+
+The five limitation claims are checked against the candidate's experimental/
+draft status, exact GraalVM JDK22 + Truffle24 / Java21-bytecode distribution
+contract, incomplete Package Tool, incomplete Test Tool and deferred hard-timeout
+work, and the candidate-time three-chapter Programming Guide whose control-flow
+chapter was still unpublished.
+
+B001 through B008 are parsed independently by blocker section and each must be
+`CLOSED`. The candidate specification changelog must have global revision
+`0.1.382` as its newest revision, with D043/D044/D045 present, and the relevant
+normative owner documents must remain Core v0.1 `Draft`.
+
+E4D4 is now READY for tag/GitHub Release collision and publication-state guards.
+D3 creates no tag, Release, asset, candidate change, or publication authorization.

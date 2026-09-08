@@ -363,8 +363,8 @@ publication:
   - `DIST001-E4D` — immutable full candidate validation and E4 closure — IN_PROGRESS:
     - `DIST001-E4D1` — envelope/audit/record consistency — CLOSED.
     - `DIST001-E4D2` — extracted release-aware B5 candidate gate — CLOSED.
-    - `DIST001-E4D3` — candidate claims/blockers/spec audit — READY.
-    - `DIST001-E4D4` — tag/Release collision + publication guard — `BLOCKED_BY_DEPENDENCIES` on E4D3.
+    - `DIST001-E4D3` — candidate claims/blockers/spec audit — CLOSED.
+    - `DIST001-E4D4` — tag/Release collision + publication guard — READY.
     - `DIST001-E4D5` — full Maven + cross-E3/E4 validation — `BLOCKED_BY_DEPENDENCIES` on E4D4.
     - `DIST001-E4D6` — freeze candidate SHA/assets + close E4 — `BLOCKED_BY_DEPENDENCIES` on E4D5.
 - `DIST001-E5` — first GitHub pre-release publication —
