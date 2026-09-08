@@ -42,9 +42,8 @@ Current triage:
 
 - D038 has explicit project-owner confirmation and needs only have that evidence
   recorded.
-- D020 and the still-unratified decisions in D040-D044 require priority review
-  because no recovered evidence yet demonstrates explicit project-owner selection
-  of their complete published semantics.
+- D044 remains the priority review item because no recovered evidence yet
+  demonstrates explicit project-owner selection of its complete published semantics.
 - D021-D031 require provenance and substance review; publication alone
   is not ratification.
 - D001-D019 are expected to be predominantly project-owner decisions, but their
@@ -314,10 +313,29 @@ Recorded review results:
   work. No normative specification or implementation change is introduced by this
   classification.
 
+- D020 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D020 / specification `0.1.359` after cross-language comparison,
+  adversarial review and future-scalability analysis. Core v0.1 continues not
+  to standardize `uppercase()` or `replace(...)` as String operations. String
+  immutability remains the Core invariant: an operation that produces different
+  text produces a new semantic String value, while libraries, implementation
+  extensions and ordinary user objects remain free to define transformation
+  names through normal slots and invocation. The ratified boundary deliberately
+  avoids importing one mandatory Core contract for Unicode case mapping/version
+  evolution, locale tailoring, normalization, literal-versus-pattern matching,
+  overlap, empty-pattern/needle behavior, replacement callbacks or streaming and
+  resource policy. This is a Core-boundary decision, not a rejection of useful
+  text APIs: casing, case folding, replacement, split/join, normalization,
+  collation, locale, pattern facilities and streaming transformations remain
+  separately designable future Standard Library or later-version work. The later
+  LIB002 text/encoding audit independently preserves the same separation but does
+  not become normative authority for D020. This governance ratification changes
+  no normative specification or implementation.
+
 Required procedure:
 
 1. Continue backwards through the remaining unresolved decisions in D044-D040,
-   then D020, D021-D031, and finally D001-D019.
+   then D021-D031, and finally D001-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published
    normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or
@@ -333,7 +351,7 @@ Next audit work:
 
 1. Complete the separate D044 review already in progress, considering D045 only
    as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D043-D040, then D020, D021-D031 and D001-D019
+2. Continue backwards through the remaining unresolved decisions in D043-D040, then D021-D031 and D001-D019
    under the required procedure above.
 
 AUD001 closes only when D001-D045, except D046, have an explicit classification,
