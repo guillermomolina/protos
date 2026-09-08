@@ -62,7 +62,38 @@ publication evidence.
 
 Current triage: - D038 has explicit project-owner confirmation and needs only have that evidence recorded.
 - D044 remains the priority review item because no recovered evidence yet demonstrates explicit project-owner selection of its complete published semantics. is not ratification.
-- D002 and D010 and D016-D019 are expected to be predominantly project-owner decisions, but their approval evidence must be checked rather than inferred. Recorded review results:
+- D002 and D010 and D016 and D018-D019 are expected to be predominantly project-owner decisions, but their approval evidence must be checked rather than inferred. Recorded review results:
+
+- D017 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D017 / specification `0.1.357` after retrospective reconstruction,
+  cross-ecosystem comparison and dedicated adversarial/future-scalability review
+  spanning Erlang/OTP, Akka and Orleans-style Actor lifecycle/supervision models.
+  D017 is retained as an Actor API-boundary cleanup, not as a transitive
+  re-ratification of the surrounding Actor model. Portable Core `SendOperation`
+  continues to expose only the minimal `cancel()` / `retry()` control surface;
+  status, progress, waiting, attempt counts, destination IDs, last transport
+  errors and transport introspection remain non-portable diagnostics unless a
+  separately approved facility standardizes them. Delivery uncertainty remains
+  distinct from proof of non-delivery and never authorizes transparent replay;
+  explicit retry creates the separately specified fresh operation over the
+  already-formed message snapshot. Graceful lifecycle control remains separated
+  from observation: `ActorRef.stop()` returns canonical `null` and creates no
+  dedicated stop Future/operation, while `ActorRef.termination()` is the
+  independent Future-based observation mechanism. Core v0.1 continues to expose
+  no configurable public supervisor/failure-authority policy API. An Actor
+  incarnation that fails terminates; `restart` is not identity-preserving Actor
+  lifecycle semantics, and any replacement is a distinct Actor/ActorRef that does
+  not inherit the failed incarnation's identity, mutable heap, pending
+  interactions or mailbox. This does not prohibit a future explicitly designed
+  Supervisor/Controller, durable service/role identity, restart policy,
+  discovery/rebinding, diagnostics/tracing or recovery layer; each must define
+  its own authority, lifetime, transfer, ordering, failure and distribution
+  semantics rather than retroactively retargeting an ActorRef. The original D017
+  normative cleanup publication is commit
+  `0a5a54fdf9e6e24eb0f8205a2586321fde285bb1`. This governance classification
+  changes no normative specification or implementation and does not classify
+  D015, D016, D018 or D019 by transitivity.
+
 
 - D016 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
   retaining D016 / specification `0.1.354` after comparison with Erlang/OTP,
@@ -921,12 +952,12 @@ Current triage: - D038 has explicit project-owner confirmation and needs only ha
   changes no normative specification or implementation and creates no
   implementation follow-up.
 
-Required procedure: 1. Continue backwards through the remaining unresolved decisions in D044, and finally D002 and D010 and D016-D019.
+Required procedure: 1. Continue backwards through the remaining unresolved decisions in D044, and finally D002 and D010 and D016 and D018-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or PROVENANCE_UNRESOLVED. Executing or publishing a patch is not sufficient approval evidence.
 4. Present every substantive unresolved choice to the project owner under the current explicit design-approval gate. Do not silently preserve, replace, or reopen semantics.
 5. Keep D046 outside AU and do not let this audit overwrite or pre-empt its separate review. Next audit work: 1. Complete the separate D044 review already in progress, considering only as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D002 and D010 and D016-D019 under the required procedure above. AU closes only when D002 and D010 and D016-D019, and D044, except D046, have an explicit classification,
+2. Continue backwards through the remaining unresolved decisions in D002 and D010 and D016 and D018-D019 under the required procedure above. AU closes only when D002 and D010 and D016-D019, and D044, except D046, have an explicit classification,
 the project owner has decided every NEEDS_USER_DECISION item, relevant
 provenance is recorded durably, and all affected project ledgers are reconciled.
 Any later normative correction must be a separately approved specification
