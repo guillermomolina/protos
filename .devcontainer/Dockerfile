@@ -50,11 +50,3 @@ USER vscode
 
 ENV NPM_CONFIG_PREFIX=/home/vscode/.local/npm
 ENV PATH="/home/vscode/.local/npm/bin:/opt/node/bin:/opt/maven/bin:${PATH}"
-
-ARG CLAUDE_CODE_VERSION=2.1.252
-
-RUN mkdir -p /home/vscode/.local/npm \
-    && npm install --global \
-        --allow-scripts=@anthropic-ai/claude-code \
-        "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" \
-    && claude --version
