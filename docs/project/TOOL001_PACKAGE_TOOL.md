@@ -264,3 +264,15 @@ Runner-B additionally migrates the read-only `resolution-root` and `execution-pl
 project-tree corpora through one shared `project-tree` runner profile. Filesystem-
 mutable and other host-stateful corpora remain on their existing wrappers until
 later bounded migration slices.
+
+## Runner-C — confined project-metadata corpora
+
+Runner-C continues the temporary single-Java-runner migration without adding a
+new fixture DSL. The existing `manifest-command` and `lock-file` Protos tests
+need concrete host setup/postconditions around one confined project metadata
+Filesystem, so those preparations and assertions now live as methods inside the
+same `ProtosPackageToolProtosTest` class.
+
+The Protos sources remain unchanged and every source executes through
+`ProtosRootTaskExecution`. `metadata-publication`, `resolution-input`, the
+read-only metadata backend fixtures, and F2E2A remain on later bounded slices.

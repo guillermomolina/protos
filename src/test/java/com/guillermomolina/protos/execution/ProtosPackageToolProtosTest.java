@@ -18,20 +18,26 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
+import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
  * Temporary single Java execution bridge for Protos-owned TOOL001 fixture corpora.
@@ -46,6 +52,32 @@ final class ProtosPackageToolProtosTest {
     private static final Path TOOL_ROOT = Path.of("protos", "tools", "package");
     private static final Path TEST_ROOT = Path.of("protos", "tests", "package-tool");
     private static final Path RUNNER_MANIFEST = TEST_ROOT.resolve("java-runner.tsv");
+
+    private static final Set<String> READABLE = Set.of("protos.toml", "protos.lock");
+    private static final Set<String> WRITABLE =
+            Set.of(".protos.toml.stage", ".protos.lock.stage");
+    private static final Set<String> MUTABLE =
+            Set.of("protos.toml", "protos.lock", ".protos.toml.stage", ".protos.lock.stage");
+
+    private static final String CANONICAL_LOCK =
+            "lock-format 1\n"
+                    + "resolver-version 1\n"
+                    + "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n"
+                    + "\n"
+                    + "root workspace \"root\"\n"
+                    + "registry-node registry \"pkg\" \"1.0.0\" locator \"pkg\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n"
+                    + "dependency workspace \"root\" alias \"dep\" target registry \"pkg\" \"1.0.0\"\n";
+
+    private static final String NONCANONICAL_LOCK =
+            "lock-format 1\n"
+                    + "resolver-version 1\n"
+                    + "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n"
+                    + "\n"
+                    + "dependency workspace \"root\" alias \"dep\" target registry \"pkg\" \"1.0.0\"\n"
+                    + "registry-node registry \"pkg\" \"1.0.0\" locator \"pkg\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n"
+                    + "root workspace \"root\"\n";
+
+    @TempDir Path projectRoot;
 
     @Test
     void manifestDrivenCorporaUseTheSingleTool001Runner() throws Exception {
@@ -137,6 +169,178 @@ final class ProtosPackageToolProtosTest {
                                 activation);
                 assertExpected(outcome, fields[2], fields[0] + "/" + fields[1]);
             }
+        }
+    }
+
+
+    @Test
+    void manifestCommandReadsValidManifest() throws Exception {
+        Files.writeString(
+                projectRoot.resolve("protos.toml"),
+                "manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n",
+                StandardCharsets.UTF_8);
+        assertConfinedTrue("manifest-command/valid-minimal.protos");
+    }
+
+    @Test
+    void manifestCommandReportsInvalidSchema() throws Exception {
+        Files.writeString(
+                projectRoot.resolve("protos.toml"),
+                "manifest-version = 1\n[package]\nid = \"pkg\"\n",
+                StandardCharsets.UTF_8);
+        assertConfinedTrue("manifest-command/invalid-schema-diagnostic.protos");
+    }
+
+    @Test
+    void manifestCommandReportsMissingManifest() throws Exception {
+        assertConfinedTrue("manifest-command/missing-manifest-diagnostic.protos");
+    }
+
+    @Test
+    void manifestCommandReportsInvalidUtf8() throws Exception {
+        Files.write(projectRoot.resolve("protos.toml"), new byte[] {(byte) 0xc3, 0x28});
+        assertConfinedTrue("manifest-command/invalid-utf8-diagnostic.protos");
+    }
+
+    @Test
+    void manifestCommandReadsAcrossMultipleTextReaderChunks() throws Exception {
+        StringBuilder source =
+                new StringBuilder(
+                        "manifest-version = 1\n[package]\nid = \"large\"\nversion = \"1.0.0\"\n[exports]\n");
+        for (int i = 0; i < 700; i++) {
+            source.append("Export").append(i).append(" = \"module/")
+                    .append(i).append("\"\n");
+        }
+        Files.writeString(projectRoot.resolve("protos.toml"), source, StandardCharsets.UTF_8);
+        assertConfinedTrue("manifest-command/multichunk-read.protos");
+    }
+
+    @Test
+    void lockFileLoadsCanonicalContent() throws Exception {
+        Files.writeString(projectRoot.resolve("protos.lock"), CANONICAL_LOCK, StandardCharsets.UTF_8);
+        assertConfinedTrue("lock-file/load-canonical.protos");
+    }
+
+    @Test
+    void lockFileRejectsNonCanonicalContent() throws Exception {
+        Files.writeString(
+                projectRoot.resolve("protos.lock"), NONCANONICAL_LOCK, StandardCharsets.UTF_8);
+        assertConfinedFailed("lock-file/load-noncanonical-error.protos");
+    }
+
+    @Test
+    void lockFileMissingUsesOrdinaryIoFailure() throws Exception {
+        try (Fixture fixture = confinedFixture(projectRoot)) {
+            assertIoErrorOutcome(
+                    executeFile(
+                            TEST_ROOT.resolve("lock-file/load-missing-error.protos"),
+                            fixture.activation()),
+                    fixture.activation(),
+                    "lock-file/load-missing-error.protos");
+        }
+    }
+
+    @Test
+    void lockFilePublishesCanonicalBytes() throws Exception {
+        Files.writeString(projectRoot.resolve("protos.lock"), "old\n", StandardCharsets.UTF_8);
+        assertConfinedTrue("lock-file/publish-canonical.protos");
+        assertEquals(CANONICAL_LOCK, Files.readString(projectRoot.resolve("protos.lock")));
+        assertTrue(
+                Files.notExists(
+                        projectRoot.resolve(".protos.lock.stage"), LinkOption.NOFOLLOW_LINKS));
+    }
+
+    @Test
+    void lockFileInvalidModelCreatesNoStageAndPreservesTarget() throws Exception {
+        Files.writeString(projectRoot.resolve("protos.lock"), "old\n", StandardCharsets.UTF_8);
+        assertConfinedFailed("lock-file/publish-invalid-no-stage.protos");
+        assertEquals("old\n", Files.readString(projectRoot.resolve("protos.lock")));
+        assertFalse(
+                Files.exists(
+                        projectRoot.resolve(".protos.lock.stage"), LinkOption.NOFOLLOW_LINKS));
+    }
+
+    @Test
+    void lockFileStageCollisionPreservesExistingLockAndStage() throws Exception {
+        Files.writeString(projectRoot.resolve("protos.lock"), "old\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                projectRoot.resolve(".protos.lock.stage"), "stale\n", StandardCharsets.UTF_8);
+
+        try (Fixture fixture = confinedFixture(projectRoot)) {
+            assertIoErrorOutcome(
+                    executeFile(
+                            TEST_ROOT.resolve("lock-file/publish-stage-collision.protos"),
+                            fixture.activation()),
+                    fixture.activation(),
+                    "lock-file/publish-stage-collision.protos");
+        }
+
+        assertEquals("old\n", Files.readString(projectRoot.resolve("protos.lock")));
+        assertEquals("stale\n", Files.readString(projectRoot.resolve(".protos.lock.stage")));
+    }
+
+    private void assertConfinedTrue(String relative) throws Exception {
+        try (Fixture fixture = confinedFixture(projectRoot)) {
+            ProtosExecutionOutcome outcome =
+                    executeFile(TEST_ROOT.resolve(relative), fixture.activation());
+            assertExpected(outcome, "true", relative);
+        }
+    }
+
+    private void assertConfinedFailed(String relative) throws Exception {
+        try (Fixture fixture = confinedFixture(projectRoot)) {
+            ProtosExecutionOutcome outcome =
+                    executeFile(TEST_ROOT.resolve(relative), fixture.activation());
+            assertExpected(outcome, "error", relative);
+        }
+    }
+
+    private static Fixture confinedFixture(Path root) throws Exception {
+        ProtosNioConfinedFilesystemBackend backend =
+                new ProtosNioConfinedFilesystemBackend(root, READABLE, WRITABLE, MUTABLE);
+        if (!backend.secureNamespaceConfinementAvailable()) {
+            backend.close();
+            assumeTrue(false, "host provider has no SecureDirectoryStream");
+        }
+
+        ProtosPrelude prelude = newPackagePrelude();
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosObjectValue rawFilesystem =
+                ProtosStandardFilesystemProtocol.createCapability(
+                        prelude.bytesPrototypeForRuntime(), activation, backend);
+        ProtosFilesystemValue filesystem =
+                assertInstanceOf(ProtosFilesystemValue.class, rawFilesystem);
+        activation.context().createLocalSlot("filesystem", filesystem);
+        return new Fixture(activation, backend);
+    }
+
+    private static ProtosExecutionOutcome executeFile(
+            Path source,
+            ProtosActivation activation)
+            throws Exception {
+        return execute(Files.readString(source, StandardCharsets.UTF_8), activation);
+    }
+
+    private static void assertIoErrorOutcome(
+            ProtosExecutionOutcome outcome,
+            ProtosActivation activation,
+            String label) {
+        assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state(), label);
+        ProtosObjectValue error = outcome.error();
+        assertSame(
+                ProtosCoreErrors.prototype(
+                        activation, ProtosCoreErrors.StandardError.I_O_ERROR),
+                error.parent().orElseThrow(),
+                label);
+    }
+
+    private record Fixture(
+            ProtosActivation activation,
+            ProtosNioConfinedFilesystemBackend backend)
+            implements AutoCloseable {
+        @Override
+        public void close() throws Exception {
+            backend.close();
         }
     }
 
