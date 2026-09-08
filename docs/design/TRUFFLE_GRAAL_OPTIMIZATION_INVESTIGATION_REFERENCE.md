@@ -401,3 +401,8 @@ defaults. The most relevant upstream references are the Truffle optimization and
 compiler-options documentation, including the sections on observing compilations,
 method/node expansion, inlining diagnostics, graph dumps, and Ideal Graph
 Visualizer.
+
+
+## PERF003 final decision after structural falsification
+
+Later A4 evidence completed the open PERF003 call/activation investigation. `invokePrepared` alone left `48153:150001:150000`; the combined preparation plus `invokePrepared` diagnostic boundaries eliminated the bailout; a production-shaped sync/task split retained `48823:150002:150000`; and preparation-only retained `51502:150053:150000`. The preparation-only variant nevertheless measured `0.578142x` the control median without tracing. PERF003 therefore closed without another production runtime change: the zero-bailout gate had ceased to select for a justified architecture and was instead selecting for crossing one compiler threshold.

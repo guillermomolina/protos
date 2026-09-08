@@ -1,6 +1,6 @@
 # PERF003 — Collection algorithm Truffle compilability
 
-Status: IN_PROGRESS
+Status: CLOSED
 
 This is a non-normative project record. It tracks performance engineering
 discovered by `PERF001-E`; it does not define Protos language or Standard Library
@@ -47,11 +47,11 @@ The optimization must preserve:
 
 | Slice | Status | Scope / closure condition |
 |---|---|---|
-| PERF003-A | IN_PROGRESS | The `0.2.170-SNAPSHOT` implementation cut `array-reduce` from 40 to 2 `GraphTooBig` failures. The `0.2.175-SNAPSHOT` correction reduced graph size to 150069 / 150000, and the `0.2.178-SNAPSHOT` correction reduced it again to 150036 while preserving exact result `528`; only 36 graph-size units remain. This third corrective phase `0.2.180-SNAPSHOT` removes redundant reduce initialization state by deriving the fold start directly from the already-validated zero-or-one `initialSize`. Repository validation is required here; exact external GraalVM/Truffle diagnostics against the newly published commit remain the closure gate. |
-| PERF003-B | BLOCKED_BY_DEPENDENCIES | After A, publish companion correctness-first external validation against the exact optimized Protos revision, retain pre/post evidence and diagnostics, and do not rewrite PERF001-E baseline evidence. |
+| PERF003-A | CLOSED | Final A4 evidence exhausted the justified local production hypotheses. A4g proved combined immediate-method preparation plus `invokePrepared` expansion causality, while A4h and A4i falsified the production-shaped sync/task split and preparation-only boundary. The residual is accepted as a characterized compiler-threshold limitation rather than converted into a broad opaque runtime boundary. |
+| PERF003-B | CLOSED | Companion evidence is published through `guillermomolina/protos-benchmarks@433ebb8075148493d4eae8da701803b21ab50c09`, including exact correctness `528`, control reproduction, retained A4g/A4h/A4i diagnostics, and separate no-trace timing evidence. |
 
-PERF003 closes only after PERF003-B evidence is published and reconciled into the
-canonical Protos ledger.
+PERF003 is CLOSED. PERF003-B evidence is published and reconciled into the
+canonical Protos ledger below.
 
 ## Investigation boundary
 
@@ -189,3 +189,21 @@ check, or normative rule changes. Existing 32-element repeated-reduction Protos
 conformance remains the focal semantic guard. Exact external optimizing-runtime
 evidence against the commit produced by this third corrective phase is still
 required before PERF003-A may close.
+
+
+## Final A4 structural evidence and closure decision
+
+The retained A4 evidence pins Protos `d66841adb0b820047ed079f0bc7d643873f23194`. The stable control reproduced `40` deterministic `GraphTooBig` failures at `50681:150026:150000` while preserving exact result `528`.
+
+- A4a (`invokePrepared` boundary only): `40`, `48153:150001:150000`.
+- A4g (preparation plus `invokePrepared` boundaries): `0` failures; sufficient causal isolation, but too broad to justify as a production optimization by itself.
+- A4h (production-shaped sync/task split): `40`, `48823:150002:150000`; not a sufficient production rewrite.
+- A4i (preparation boundary only): `40`, `51502:150053:150000`; not a sufficient compilability frontier.
+
+A4i also retained separate no-trace timing: control median `9950715696 ns`, preparation-boundary median `5752923868 ns`, ratio `0.578142x`. This workload-specific result is not a general speed claim, but it demonstrates that the residual bailout count is not a reliable performance proxy.
+
+The earlier zero-bailout closure gate is therefore retired for PERF003. Continuing to shave the `150000` threshold or publishing a broad opaque `TruffleBoundary` would optimize the gate rather than a justified general architecture. PERF003 closes with no additional canonical runtime change. The residual bailout remains a known optimizing-runtime limitation, not a correctness defect. Future work should reopen this area only with materially new runtime/compiler machinery or broader evidence.
+
+Closure evidence: A4g `bc7e649458e0c66f6a9de6367610af3020839aa6`; A4h `9737e21a0f040bf81e82f06e8a43a6808f50f80c`; A4i `433ebb8075148493d4eae8da701803b21ab50c09`.
+
+No language specification, implementation source, implementation version, native boundary, or license term changes as part of this reconciliation.
