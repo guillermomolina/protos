@@ -40,8 +40,8 @@ publication evidence.
 
 Current triage:
 
-- D037 and D038 have explicit project-owner confirmation and need only have that
-  evidence recorded.
+- D038 has explicit project-owner confirmation and needs only have that evidence
+  recorded.
 - D020 and the still-unratified decisions in D040-D044 require priority review
   because no recovered evidence yet demonstrates explicit project-owner selection
   of their complete published semantics.
@@ -51,6 +51,23 @@ Current triage:
   approval evidence must be checked rather than inferred.
 
 Recorded review results:
+
+- D037 is `RATIFIED`. AUD001 had already recovered explicit project-owner
+  confirmation of the published D037 / specification `0.1.375` choice when
+  the audit was opened; this entry persists that evidence rather than
+  inferring approval from authorship, patch execution, or publication. The
+  ratified contract keeps portable Path equality structural and filesystem-
+  independent: equality compares rootedness plus the ordered component
+  sequence. Path semantic identity remains ordinary individual object
+  identity, so independently created structurally equal Paths remain
+  distinct through `===`, `!==`, `identityHashOf`, and `IdentityMap`; Path
+  is not added to the closed Core value-identity set. Filesystem namespace
+  lookup identity, host syntax/normalization, and resource identity remain
+  separate from portable Path equality. The normative D037 publication is
+  commit `6af40a7f013a3cb792740f991c64641d9d5e53c0`; the existing AUD001
+  owner-confirmation record was opened in commit
+  `a8e77489c3989d4ffe03da8539c6e688c03bfaad`. This governance
+  classification changes no normative specification or implementation.
 
 - D043 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved the
   complete reviewed standard Closure `ensure(cleanup)` design and the bounded
