@@ -60,6 +60,18 @@ public final class ProtosCli {
                 out.println("Protos " + (v == null ? "development" : v));
                 return 0;
             }
+            if (args[0].equals("run")) {
+                if (args.length < 2) {
+                    return usage(err, "run requires a root-package logical entry");
+                }
+                return runWorkspaceApplication(
+                        Path.of("").toAbsolutePath().normalize(),
+                        args[1],
+                        applicationArguments(args, 2),
+                        in,
+                        out,
+                        err);
+            }
             if (args[0].equals("package")) {
                 return runBundledPackageTool(args, in, out, err);
             }
@@ -100,6 +112,53 @@ public final class ProtosCli {
             err.println("Internal error: " + e);
             e.printStackTrace(err);
             return 70;
+        }
+    }
+
+    int runWorkspaceApplication(
+            Path projectRoot,
+            String entryLogicalModule,
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream out,
+            PrintStream err) {
+        try {
+            Path core = core();
+            Path distributionRoot = core.getParent().getParent();
+            ProtosExecutionOutcome outcome =
+                    ProtosWorkspaceRunDriver.execute(
+                            new ProtosWorkspaceRunDriver.Request(
+                                    core,
+                                    distributionRoot.resolve("tools").resolve("package"),
+                                    projectRoot,
+                                    new ProtosStandardLibraryModuleResolver(core.getParent()),
+                                    entryLogicalModule,
+                                    applicationArguments,
+                                    HOST_ENVIRONMENT_NAME_DOMAIN,
+                                    hostEnvironmentEntries(),
+                                    readableBackend(in),
+                                    writableBackend(out),
+                                    writableBackend(err),
+                                    "UTF8",
+                                    "UTF8",
+                                    "UTF8"));
+
+            return switch (outcome.state()) {
+                case COMPLETED -> 0;
+                case FAILED -> {
+                    err.println("Error: " + renderer.render(outcome.error()));
+                    yield 1;
+                }
+                case CANCELLED -> {
+                    err.println(
+                            "Runtime error: workspace application root task was cancelled "
+                                    + "before entry completion");
+                    yield 1;
+                }
+            };
+        } catch (IOException failure) {
+            err.println("protos run: " + failure.getMessage());
+            return 1;
         }
     }
 
@@ -712,6 +771,7 @@ public final class ProtosCli {
                 "Usage:\n"
                         + "  protos <file> [args...]\n"
                         + "  protos -e <source> [args...]\n"
+                        + "  protos run <entry> [args...]\n"
                         + "  protos package [args...]\n"
                         + "  protos test [args...]\n"
                         + "  protos\n\n"
@@ -719,6 +779,9 @@ public final class ProtosCli {
                         + "  -e <source> [args...]\n"
                         + "  -h, --help\n"
                         + "  -v, --version\n\n"
+                        + "Workspace run executes the explicit root-package logical <entry> "
+                        + "from the current directory; neither 'run' nor <entry> is included "
+                        + "in process.args().\n"
                         + "Application arguments are available through process.args(); "
                         + "the file/source launcher identity is excluded.\n"
                         + "The CLI provisions stdin/stdout/stderr as byte streams with "

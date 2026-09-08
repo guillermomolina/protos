@@ -439,6 +439,18 @@ directly:
 bin/protos -e 'print("Hello, Protos!")'
 ```
 
+A workspace whose current directory contains the selected `protos.toml` and
+canonical non-stale `protos.lock` can execute an explicit root-package logical
+module through the package-backed resolver:
+
+``` sh
+bin/protos run Main arg1 arg2
+```
+
+`run` does not assume a default `Main` module and does not read an entry name
+from manifest schema v1. The logical entry is required explicitly; only the
+arguments after it become `process.args()`.
+
 Bundled developer tools such as the Package Tool and Test Tool are under active
 development; their exact implementation state is recorded in
 [`docs/project/IMPLEMENTATION_STATUS.md`](docs/project/IMPLEMENTATION_STATUS.md).

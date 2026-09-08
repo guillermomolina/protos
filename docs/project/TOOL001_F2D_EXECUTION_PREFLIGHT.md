@@ -1,6 +1,6 @@
 # TOOL001-F2D — Workspace Execution Preflight and PackageExecutionPlan
 
-Status: **IN_PROGRESS through CLOSED F2D3C1 read-only Package Tool preflight**
+Status: **CLOSED — workspace-only execution preflight and public exact workspace run**
 Nature: non-normative Package Tool / host-integration design
 Design checkpoint: 2026-09-07
 
@@ -33,7 +33,7 @@ external materialization exists, workspace preflight rejects such a graph.
 ```text
 F2D1     plan ABI + runtime-name/preflight contract               CLOSED
 F2D2     pure workspace execution-state + plan construction       CLOSED
-F2D3     mechanical host handoff + workspace run parent           IN_PROGRESS
+F2D3     mechanical host handoff + workspace run parent CLOSED
 F2D3A    immutable host DTO + defensive plan detach               CLOSED
 F2D3B    exact workspace package-backed module resolver           CLOSED
 F2D3B1    package identity + source mechanism                     CLOSED
@@ -49,10 +49,10 @@ F2D3B2    resolver routing                                        CLOSED
 F2D3B2A  self: routing                                            CLOSED
 F2D3B2B  dep: edge/export routing                                 CLOSED
 F2D3B2C  std: delegation + resolver closure                       CLOSED
-F2D3C    command preflight + tool/application authority split     IN_PROGRESS
+F2D3C    command preflight + tool/application authority split CLOSED
 F2D3C1   read-only Package Tool preflight -> detached plan        CLOSED
-F2D3C2   detached plan -> separately-authorized application       READY
-F2D3C3   public workspace-run wiring + F2D3/F2D closure           BLOCKED_BY_DEPENDENCIES
+F2D3C2   detached plan -> separately-authorized application CLOSED
+F2D3C3   public workspace-run wiring + F2D3/F2D closure CLOSED
 ```
 
 F2D is bounded to workspace-only execution. Closing it will not claim external
@@ -411,7 +411,7 @@ package source roots and package graph identity remain distinct resolver policy.
 
 ## Preflight authority separation
 
-F2D3 must keep tool and application authority separate.
+F2D3 must keep tool and application authority CLOSED
 
 Workspace run preflight receives only the explicit authority needed to:
 
@@ -447,7 +447,7 @@ F2D2 does not change `ProtosCli` or install a host resolver.
 After F2D2 publishes, F2D3 may add the narrow host bridge/resolver and
 command-scoped workspace preflight needed to execute the plan.
 
-F2D3 must remain mechanical. It must not parse TOML/lock syntax, perform stale
+F2D3 must remain mechanical. It must not parse TOML/lock syntax, perform CLOSED
 policy, select versions, interpret path dependencies, decide exports, scan
 packages, or materialize external nodes.
 
@@ -512,7 +512,7 @@ surfaces:
 ```text
 F2D3A  ordinary Protos plan -> immutable host DTO
 F2D3B  detached DTO -> exact workspace self:/dep:/std: resolver
-F2D3C  command-scoped preflight -> separate application execution
+F2D3C  command-scoped preflight -> separate application CLOSED
 ```
 
 F2D3A is CLOSED.
@@ -884,13 +884,13 @@ TOOL001-F2D       CLOSED: NO
 
 ## F2D3C decomposition refinement and F2D3C1 closure
 
-F2D3C is further decomposed because tool preflight, application execution and
+F2D3C is further decomposed because tool preflight, application execution CLOSED
 public driver wiring have different authority and failure surfaces:
 
 ```text
 F2D3C1  read-only Package Tool preflight -> detached plan
-F2D3C2  detached plan -> separately-authorized application Process
-F2D3C3  public workspace-run wiring + F2D3/F2D closure
+F2D3C2  detached plan -> separately-authorized application CLOSED
+F2D3C3  public workspace-run wiring + F2D3/F2D CLOSED
 ```
 
 C1 is CLOSED. `ProtosWorkspacePackagePreflight.build(...)` creates one fresh
@@ -1062,4 +1062,64 @@ TOOL001-F2D3C3B  READY
 TOOL001-F2D3C     IN_PROGRESS
 TOOL001-F2D3      CLOSED: NO
 TOOL001-F2D        CLOSED: NO
+```
+
+## F2D3C3B closure — explicit public workspace run and F2D closure
+
+C3B publishes the first package-backed normal-execution CLI path as an explicit
+host/toolchain convention:
+
+```text
+protos run <entry> [args...]
+```
+
+The command operates on the current working directory as the selected project
+root. `<entry>` is required and is interpreted only as the exact portable
+logical module name inside the root package. It is not a filesystem path, a
+dependency export, a manifest field or an implicit `Main` convention. Manifest
+schema v1 therefore remains unchanged. The CLI strips both the `run` command and
+the entry name before constructing the application argument snapshot; only
+`[args...]` reaches `process.args()`.
+
+The CLI locates the selected Core/Standard Library/bundled Package Tool through
+the existing toolchain-root mechanism and delegates the complete workspace
+operation to the closed C3A `ProtosWorkspaceRunDriver`. It supplies the ordinary
+host environment snapshot, stdin/stdout/stderr backends and exact `UTF8` stream
+Encoding bindings. No default application Filesystem is granted.
+
+Terminal CLI policy remains small and host-owned. A normally completed package
+entry returns exit status 0 with no implicit value echo. A semantic Protos
+failure is rendered with the existing `Error:` convention and returns 1.
+Cancellation returns 1 with a runtime diagnostic. Read-only preflight, lock,
+source, entry or other workspace-driver `IOException` failures are reported as
+`protos run: ...` and return 1 rather than being classified as an internal CLI
+failure.
+
+The focal materializes the existing canonical workspace fixture, overlays real
+root-package Protos entries, and invokes the same workspace-run CLI translation
+with an explicit project root. The successful entry writes its first application
+argument through the Process stdout/UTF8 surface, proving that neither `run` nor
+the logical entry leaked into `process.args()`. A second entry signals an
+ordinary Protos Error and proves normal CLI Error translation. Public dispatch
+requires `<entry>` and `--help` documents the exact contract. C3A, C2 and C1
+regressions retain the physical current-directory/preflight/authority mechanics.
+
+This closes the bounded F2D workspace-only objective. It does **not** claim
+registry/Git locked-node execution, package-store materialization, network
+authority, ContentIdentity verification for external nodes, fresh dependency
+selection, update, fetch or publication. Those remain later TOOL001-F2 work.
+
+After publication:
+
+```text
+TOOL001-F2D3C2   CLOSED
+TOOL001-F2D3C3   CLOSED
+TOOL001-F2D3C3A  CLOSED
+TOOL001-F2D3C3B  CLOSED
+TOOL001-F2D3C     CLOSED
+TOOL001-F2D3      CLOSED
+TOOL001-F2D        CLOSED
+TOOL001-F2         CLOSED: NO
+TOOL001-F          CLOSED: NO
+TOOL001             CLOSED: NO
 ```
