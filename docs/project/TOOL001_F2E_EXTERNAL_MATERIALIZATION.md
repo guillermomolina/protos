@@ -1,6 +1,6 @@
 # TOOL001-F2E — External Immutable-Package Execution
 
-Status: **IN_PROGRESS through CLOSED F2E0 prerequisite audit/decomposition**
+Status: **IN_PROGRESS through CLOSED F2E1A logical-tree domain/path contract**
 Nature: non-normative Package Tool / host-integration project record
 Allocated after: `TOOL001-F2D` workspace-only execution closure
 
@@ -94,7 +94,10 @@ designed store-write/network authority.
 ```text
 F2E   external immutable-package execution                         IN_PROGRESS
 F2E0  prerequisite audit + decomposition                           CLOSED
-F2E1  protos-package-tree-v1 ContentIdentity contract              READY
+F2E1  protos-package-tree-v1 ContentIdentity contract              IN_PROGRESS
+F2E1A logical-tree domain + portable path/entry-kind contract       CLOSED
+F2E1B canonical byte stream + method/hash contract                  READY
+F2E1C independent conformance vectors + F2E1 closure                BLOCKED_BY_DEPENDENCIES
 F2E2  verified read-only package-store binding                     BLOCKED_BY_DEPENDENCIES
 F2E3  external-node execution-plan construction                    BLOCKED_BY_DEPENDENCIES
 F2E4  external canonical ModuleKey + source resolver               BLOCKED_BY_DEPENDENCIES
@@ -195,3 +198,33 @@ TOOL001-F2    CLOSED: NO
 TOOL001-F     CLOSED: NO
 TOOL001       CLOSED: NO
 ```
+
+## F2E1 decomposition refinement and F2E1A closure
+
+The ContentIdentity contract is decomposed because three boundaries can be
+reviewed independently without publishing temporary semantics:
+
+```text
+F2E1A  logical-tree domain + portable path/entry-kind contract     CLOSED
+F2E1B  canonical byte stream + method/hash contract                READY
+F2E1C  independent conformance vectors + F2E1 closure              BLOCKED_BY_DEPENDENCIES
+```
+
+E1A is owned in `docs/design/PACKAGE_CONTENT_IDENTITY.md`.
+
+It freezes the abstract logical package tree before selecting serialization:
+ContentIdentity observes an already-materialized package payload, not an arbitrary
+source checkout. Every valid regular-file leaf in that payload is semantic.
+There is no hidden `.gitignore`, VCS configuration, build-directory heuristic,
+timestamp/permission rule or file-extension allowlist.
+
+The root must contain exact regular file `protos.toml`. Directories are structural
+only; empty directories are non-semantic. Symbolic links and other traversal/
+special-entry forms are rejected in v1. File content is exact bytes and all host
+metadata is excluded. Package payload paths use the conservative portable ASCII
+artifact-path domain selected by E1A, including case-fold collision and Windows
+reserved-name rejection.
+
+E1A does not yet define the canonical byte stream or digest. E1B owns that
+serialization/hash boundary. E1C then publishes independent fixed vectors and
+closes parent E1. F2E2 remains blocked on the whole E1 parent, not merely E1A.
