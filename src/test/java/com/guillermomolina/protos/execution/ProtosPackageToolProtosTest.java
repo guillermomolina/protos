@@ -77,6 +77,14 @@ final class ProtosPackageToolProtosTest {
                     + "registry-node registry \"pkg\" \"1.0.0\" locator \"pkg\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n"
                     + "root workspace \"root\"\n";
 
+
+    private static final String RESOLUTION_INPUT_FRESH_LOCK =
+            "lock-format 1\n"
+                    + "resolver-version 1\n"
+                    + "resolution-input protos-resolution-input-v1 sha256:7041a8afff9ffd0879673557d5c88e47b5fa7f577b369165679d8899f382f579\n"
+                    + "\n"
+                    + "root workspace \"root\"\n";
+
     @TempDir Path projectRoot;
 
     @Test
@@ -380,6 +388,33 @@ final class ProtosPackageToolProtosTest {
                 "staged but forbidden\n",
                 Files.readString(
                         projectRoot.resolve(".protos.toml.stage"), StandardCharsets.UTF_8));
+    }
+
+
+    @Test
+    void resolutionInputLockFileStaleComparisonUsesHeaderOnly() throws Exception {
+        Files.writeString(
+                projectRoot.resolve("protos.lock"),
+                RESOLUTION_INPUT_FRESH_LOCK,
+                StandardCharsets.UTF_8);
+
+        try (Fixture fixture = confinedFixture(projectRoot)) {
+            ProtosExecutionOutcome fresh =
+                    executeFile(
+                            TEST_ROOT.resolve("resolution-input/lockfile-fresh.protos"),
+                            fixture.activation());
+            assertExpected(fresh, "true", "resolution-input/lockfile-fresh.protos");
+        }
+
+        // Top-level declarations live in the supplied activation, so the stale
+        // case deliberately uses an independent fresh activation.
+        try (Fixture fixture = confinedFixture(projectRoot)) {
+            ProtosExecutionOutcome stale =
+                    executeFile(
+                            TEST_ROOT.resolve("resolution-input/lockfile-stale.protos"),
+                            fixture.activation());
+            assertExpected(stale, "true", "resolution-input/lockfile-stale.protos");
+        }
     }
 
     private void assertConfinedTrue(String relative) throws Exception {

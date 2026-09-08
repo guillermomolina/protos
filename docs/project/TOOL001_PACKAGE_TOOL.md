@@ -287,3 +287,17 @@ fixture DSL is introduced.
 The Protos sources remain unchanged and execute through
 `ProtosRootTaskExecution`. `resolution-input`, read-only metadata backend
 evidence, and F2E2A remain on later bounded slices.
+
+## Runner-D2 — resolution-input corpus
+
+Runner-D2 migrates only the existing `resolution-input` Protos evidence into
+the temporary single Java runner.
+
+The ordinary `resolution-input/manifest.tsv` cases use the existing `plain`
+profile. The two physical `protos.lock` stale/fresh comparison cases remain
+host-prepared methods inside the same runner and reuse the already-published
+confined metadata Filesystem fixture.
+
+All Protos sources remain unchanged and execute through
+`ProtosRootTaskExecution`. Read-only metadata backend evidence and F2E2A remain
+on later bounded slices.
