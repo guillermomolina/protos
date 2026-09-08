@@ -44,12 +44,14 @@ Current triage:
   recorded.
 - D044 remains the priority review item because no recovered evidence yet
   demonstrates explicit project-owner selection of its complete published semantics.
-- D021-D022 and D024 require provenance and substance review; publication alone
+- D021 and D024 require provenance and substance review; publication alone
   is not ratification.
 - D001-D019 are expected to be predominantly project-owner decisions, but their
   approval evidence must be checked rather than inferred.
 
 Recorded review results:
+
+- D022 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved retaining D022 / specification `0.1.362` after cross-language comparison, adversarial review and dedicated future-scalability analysis. The inherited standard `Object.init()` continues to accept zero arguments and, on normal completion, returns its exact receiver (`this`); a non-empty vector handled by that inherited standard behavior signals the ordinary argument-count Error. An overriding `init` remains an ordinary Closure method with ordinary return semantics and is not required to return `this`. Default construction remains deliberately separate from initializer return value: inherited `Object.call` creates one fresh child of the invocation receiver, sends ordinary `init` with the supplied arguments, ignores any normal initializer result, and returns that fresh instance; initialization Error or other control transfer propagates and prevents a successful construction result. This keeps direct initialization composable without making `init` a hidden factory or special initializer category. Alternative constructors remain ordinary named messages. This governance classification changes no normative specification or implementation and does not classify D021, D023, D024 or any future constructor/initializer abstraction.
 
 - D037 is `RATIFIED`. AUD001 had already recovered explicit project-owner
   confirmation of the published D037 / specification `0.1.375` choice when
