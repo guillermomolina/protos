@@ -44,12 +44,42 @@ Current triage:
   recorded.
 - D044 remains the priority review item because no recovered evidence yet
   demonstrates explicit project-owner selection of its complete published semantics.
-- D021 and D024 require provenance and substance review; publication alone
+- D021 require provenance and substance review; publication alone
   is not ratification.
 - D001-D019 are expected to be predominantly project-owner decisions, but their
   approval evidence must be checked rather than inferred.
 
 Recorded review results:
+
+- D024 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D024 / specification `0.1.367` after comparative, adversarial and
+  future-scalability review spanning Python bound methods, JavaScript ordinary
+  extraction/`bind`, Ruby Method objects, .NET delegates and Self-style method
+  activation. Every successful ordinary member read whose selected slot value is
+  a Closure continues to produce one fresh identity-bearing Closure representing
+  that receiver-bound extraction, carrying the original receiver and selected
+  lookup home/`methodHome` required by the current callable model. Repeating the
+  same extraction never canonicalizes by receiver, slot, stored Closure or
+  `methodHome`; ordinary aliasing, argument passing, local assignment and other
+  reference-preserving operations retain the exact already-extracted Closure.
+  Storing an extracted Closure does not mutate or rebind it, while a later
+  ordinary member read of a slot containing that Closure is a new extraction and
+  therefore produces a fresh Closure with the new read's receiver/lookup binding.
+  Primitive `===`, `!==`, `identityHashOf` and `IdentityMap` keep their ordinary
+  identity semantics; no bound-method equality, interning table or global identity
+  registry is introduced. Immediate message invocation remains distinct from
+  extraction and need not materialize an unobservable bound Closure, preserving
+  implementation freedom for dispatch caching, allocation elision, scalar
+  replacement and copy-on-write/persistent local-slot backing where semantics stay
+  exact. D024 retains Closure as the single Core executable value kind and adds no
+  Method/BoundMethod value kind or standard Closure prototype. Stable callback
+  identity can be expressed by retaining one extraction (or by a future explicit
+  subscription/capability API) rather than by implicit canonicalization. Future
+  behavior-reflection/equality facilities, multiple-delegation lookup metadata,
+  cross-isolation Closure transfer rules and physical bound-Closure representation
+  remain separate explicit design/implementation work. This governance
+  classification changes no normative specification or implementation and does
+  not classify D025 or D026 by transitivity.
 
 - D022 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved retaining D022 / specification `0.1.362` after cross-language comparison, adversarial review and dedicated future-scalability analysis. The inherited standard `Object.init()` continues to accept zero arguments and, on normal completion, returns its exact receiver (`this`); a non-empty vector handled by that inherited standard behavior signals the ordinary argument-count Error. An overriding `init` remains an ordinary Closure method with ordinary return semantics and is not required to return `this`. Default construction remains deliberately separate from initializer return value: inherited `Object.call` creates one fresh child of the invocation receiver, sends ordinary `init` with the supplied arguments, ignores any normal initializer result, and returns that fresh instance; initialization Error or other control transfer propagates and prevents a successful construction result. This keeps direct initialization composable without making `init` a hidden factory or special initializer category. Alternative constructors remain ordinary named messages. This governance classification changes no normative specification or implementation and does not classify D021, D023, D024 or any future constructor/initializer abstraction.
 
@@ -515,7 +545,7 @@ Recorded review results:
 Required procedure:
 
 1. Continue backwards through the remaining unresolved decisions in D044-D040,
-   then D021-D022 and D024, and finally D001-D019.
+   then D021-D022, and finally D001-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published
    normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or
@@ -531,7 +561,7 @@ Next audit work:
 
 1. Complete the separate D044 review already in progress, considering D045 only
    as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D043-D040, then D021-D022 and D024 and D001-D019
+2. Continue backwards through the remaining unresolved decisions in D043-D040, then D021-D022 and D001-D019
    under the required procedure above.
 
 AUD001 closes only when D001-D022, D024-D025, D027-D028 and D030-D045, except D046, have an explicit classification,
