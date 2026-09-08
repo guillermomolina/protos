@@ -45,6 +45,7 @@ documentation areas whose semantics and implementation are already closed.
 8. [Futures and structured concurrency](08-futures-and-structured-concurrency.md)
 9. [Isolated parallel execution](09-isolated-parallel-execution.md)
 10. [Actors, ActorRefs, and Actor Groups](10-actors-actorrefs-and-groups.md)
+11. [Process, I/O, Filesystems, and Authority](11-process-io-filesystems-and-authority.md)
 
 ## Current guide state
 
@@ -89,19 +90,26 @@ isolation, Closure projection, argument snapshots, deterministic Array parallel
 operations, cooperative cancellation/structured ownership, and controlled
 Bytes/ByteRegion writable partitioning.
 
-`DOC001-K` is now CLOSED with
+`DOC001-K` is CLOSED with
 [chapter 10](10-actors-actorrefs-and-groups.md), which explains Actor isolation,
 ActorRef incarnation identity, explicit snapshot/capability transfer,
 send/request/backpressure and acceptance boundaries, lifecycle monitoring,
 Actor Group identity, GroupRef routing, and Group/Process lifetime separation.
-The next independently READY Programming Guide slice is `DOC001-L` for Process,
-I/O, Filesystem/File capabilities, and authority.
+
+`DOC001-L` is now CLOSED with
+[chapter 11](11-process-io-filesystems-and-authority.md), which explains
+bootstrap-local Process authority, args/environment snapshots, independently
+optional byte streams and explicit Encoding, TextReader/TextWriter ownership,
+I/O Future/commitment/lifecycle rules, structural Path values, confined
+Filesystem/File capabilities, namespace mutation, and the current D046/I024
+specified-versus-runnable boundary. No independently READY Programming Guide
+slice remains: `DOC001-M` is blocked until TOOL001 and TOOL002 close, and
+`DOC001-N` remains the final consistency closure.
 
 ## Planned progression
 
 Future chapters should cover, as the guide grows:
 
-- Process, I/O, filesystem capabilities, and authority;
 - packages, testing, and the bundled toolchain.
 
 These headings organize explanatory work only. They do not define planned

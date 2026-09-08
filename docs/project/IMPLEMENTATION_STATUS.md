@@ -814,7 +814,7 @@ documentation tooling.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| DOC001 | Protos Programming Documentation | IN_PROGRESS | `docs/project/DOC001_PROGRAMMING_DOCUMENTATION.md` | A/B/C/D/E/F/G/H/I/J/K CLOSED; I023/B007 CLOSED; L READY independently; M toolchain-gated; N final closure. |
+| DOC001 | Protos Programming Documentation | IN_PROGRESS | `docs/project/DOC001_PROGRAMMING_DOCUMENTATION.md` | A/B/C/D/E/F/G/H/I/J/K/L CLOSED; I023/B007 CLOSED; M toolchain-gated; N final closure. |
 
 ### DOC001 — Protos Programming Documentation
 
@@ -833,7 +833,7 @@ Status: IN_PROGRESS
 | DOC001-I | CLOSED | `fdde9c1376aea39988bc139dbd2c604362114061` | Guide 08: Futures and structured concurrency. |
 | DOC001-J | CLOSED | `SAME_COMMIT` | Guide 09: isolated parallel execution. |
 | DOC001-K | CLOSED | `SAME_COMMIT` | Guide 10: Actors, ActorRefs, Groups/GroupRefs, messaging, isolation, ownership, and lifecycle. |
-| DOC001-L | READY | — | Process, byte/text I/O, Filesystem/File capabilities, Path, authority, and resource boundaries. Independent of DOC001-E. |
+| DOC001-L | CLOSED | `SAME_COMMIT` | Guide 11: Process, byte/text I/O, Filesystem/File capabilities, Path, authority, resource boundaries, and explicit D046/I024 current-status distinction. |
 | DOC001-M | BLOCKED_BY_DEPENDENCIES | — | Packages, testing, and bundled toolchain; final closure requires TOOL001 and TOOL002 CLOSED. |
 | DOC001-N | BLOCKED_BY_DEPENDENCIES | — | Final navigation, stale-status/link audit, cross-document consistency, and DOC001 closure after E-M. |
 

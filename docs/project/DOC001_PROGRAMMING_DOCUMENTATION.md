@@ -78,6 +78,9 @@ Closure evidence:
 - DOC001-K:
   `SAME_COMMIT`
   (`Publish Actors and Actor groups programming guide`).
+- DOC001-L:
+  `SAME_COMMIT`
+  (`Publish Process I/O and filesystem authority programming guide`).
 
 ## Slice ledger
 
@@ -94,7 +97,7 @@ Closure evidence:
 | DOC001-I | CLOSED | Futures and structured concurrency | Published in `SAME_COMMIT`: chapter 08, guide navigation, current Future tutorial/conformance/runtime cross-links, and DOC001 project reconciliation. |
 | DOC001-J | CLOSED | Isolated parallel execution | Published in `SAME_COMMIT`: chapter 09, guide navigation, current I010/runtime evidence, and DOC001 project reconciliation. |
 | DOC001-K | CLOSED | Actors and Actor Groups | Published in `SAME_COMMIT`: chapter 10, guide navigation, current I011/LM005/tutorial evidence, and DOC001 project reconciliation. |
-| DOC001-L | READY | Process, I/O, Filesystem/File capabilities, and authority | Independent of DOC001-E. |
+| DOC001-L | CLOSED | Process, I/O, Filesystem/File capabilities, and authority | Published in `SAME_COMMIT`: chapter 11, guide navigation, current I013-I017/I021 implementation evidence, explicit D046/I024 status boundary, and DOC001 project reconciliation. |
 | DOC001-M | BLOCKED_BY_DEPENDENCIES | Packages, testing, and bundled toolchain | Final chapter closure requires TOOL001 and TOOL002 CLOSED. |
 | DOC001-N | BLOCKED_BY_DEPENDENCIES | Final navigation and consistency closure | Requires DOC001-E through DOC001-M complete. |
 
@@ -116,10 +119,9 @@ normative specification authoritative. The chapter describes the current
 runnable standard Boolean and `Object.while` behavior without copying
 project-ledger prose or redefining the language.
 
-B007/I023 no longer gate DOC001. DOC001-L remains independently READY and
-retains its own current-main audit requirement when started.
-DOC001-M remains toolchain-gated and DOC001-N remains the final consistency
-closure.
+B007/I023 no longer gate DOC001. DOC001-L is now CLOSED after its own
+current-main audit and publication. DOC001-M remains toolchain-gated and
+DOC001-N remains the final consistency closure.
 
 ## Completion rule
 
