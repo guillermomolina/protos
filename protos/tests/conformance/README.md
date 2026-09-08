@@ -3,11 +3,11 @@
 This tree contains executable Protos programs that verify observable language
 behavior independently from the Java implementation test layout.
 
-The bundled TOOL002 Test Tool owns the retained non-Future main-manifest
-expectation families through D4. The direct Java/JUnit conformance harness under
-`src/test/java` now executes only the deferred `future-*` families pending
-TOOL002-F; Java remains appropriate for host/runtime mechanics. The Protos
-programs themselves remain implementation-independent corpus sources.
+The bundled TOOL002 Test Tool owns every retained main-manifest expectation
+family, including all `future-*` families, through the F4 executable ownership
+cutover. The former direct Java/JUnit manifest owner has been retired; Java tests
+remain appropriate for host/runtime mechanics. The Protos programs themselves
+remain implementation-independent corpus sources.
 
 `manifest.tsv` contains exactly three tab-separated fields:
 

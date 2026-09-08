@@ -50,9 +50,9 @@ passed:
     Runner.isFutureTerminalExpectation(failedSpec) &&
     Runner.isFutureTerminalExpectation(parentSpec) &&
     Runner.isFutureTerminalExpectation(cancelledSpec) &&
-    (Runner.isDExpectation(failedSpec) === false) &&
-    (Runner.isDExpectation(parentSpec) === false) &&
-    (Runner.isDExpectation(cancelledSpec) === false)
+    Runner.isDExpectation(failedSpec) &&
+    Runner.isDExpectation(parentSpec) &&
+    Runner.isDExpectation(cancelledSpec)
 
 passed.ifTrue(() => {
     passed = evaluate(

@@ -16,44 +16,12 @@
 Manifest: import("self:Manifest")
 Runner: import("self:Runner")
 
-isFutureExpectation: (spec) => {
-    kind: Manifest.caseExpectation(spec)
-    future: kind === "future-integer"
-    (kind === "future-null").ifTrue(() => { future = true })
-    (kind === "future-boolean").ifTrue(() => { future = true })
-    (kind === "future-error").ifTrue(() => { future = true })
-    (kind === "future-error-parent").ifTrue(() => { future = true })
-    (kind === "future-observation-error-identity").ifTrue(() => {
-        future = true
-    })
-    (kind === "future-cancelled").ifTrue(() => { future = true })
-    future
-}
-
 plan: Manifest.load(filesystem)
-run: Runner.runSimple(plan, filesystem, execution)
+run: Runner.runSimple(plan, filesystem, execution, executionInspect)
 cases: Manifest.planCases(plan)
 
-expectedSelected: 0
-expectedSkipped: 0
-ownershipClosed: true
-
-cases.each((spec) => {
-    Runner.isDExpectation(spec).ifTrue(() => {
-        expectedSelected = expectedSelected + 1
-    })
-    Runner.isDExpectation(spec).ifFalse(() => {
-        isFutureExpectation(spec).ifTrue(() => {
-            expectedSkipped = expectedSkipped + 1
-        })
-        isFutureExpectation(spec).ifFalse(() => {
-            ownershipClosed = false
-        })
-    })
-})
-
-ownershipClosed &&
-(Runner.runSelectedCount(run) == expectedSelected) &&
-(Runner.runSkippedCount(run) == expectedSkipped) &&
-(Runner.runSelectedCount(run) + Runner.runSkippedCount(run) == cases.size()) &&
+(Runner.runSelectedCount(run) == cases.size()) &&
+(Runner.runPassedCount(run) == cases.size()) &&
+(Runner.runSkippedCount(run) == 0) &&
+(Runner.runCaseResults(run).size() == cases.size()) &&
 Runner.runAllPassed(run)

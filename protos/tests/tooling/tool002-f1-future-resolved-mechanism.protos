@@ -43,7 +43,7 @@ nullSource: Runner.readSource(nullSpec, filesystem)
 
 passed:
     Runner.isFutureResolvedExpectation(integerSpec) &&
-    (Runner.isDExpectation(integerSpec) === false)
+    Runner.isDExpectation(integerSpec)
 
 passed.ifTrue(() => {
     passed = evaluate(

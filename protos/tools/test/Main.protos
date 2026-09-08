@@ -18,7 +18,7 @@ Runner: import("self:Runner")
 
 plan: Manifest.load(filesystem)
 packageTomlPlan: Manifest.loadPackageToml(packageTomlFilesystem)
-run: Runner.runSimple(plan, filesystem, execution)
+run: Runner.runSimple(plan, filesystem, execution, executionInspect)
 packageTomlRun: Runner.runSimple(
     packageTomlPlan,
     packageTomlFilesystem,

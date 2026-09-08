@@ -197,6 +197,7 @@ public final class ProtosCli {
                     err,
                     session -> {
                         ProtosExactExecutionFacility.install(session.activation);
+                        ProtosExactExecutionFacility.installInspection(session.activation);
                         ProtosExactExecutionFacility.install(
                                 session.activation,
                                 "packageExecution",

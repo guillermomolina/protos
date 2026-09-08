@@ -34,6 +34,6 @@ passed:
     (Runner.isFutureStoredObservationExpectation(fresh) === false) &&
     (Runner.isFutureStoredObservationExpectation(wrongExpected) === false) &&
     (Runner.isFutureStoredObservationExpectation(wrongKind) === false) &&
-    (Runner.isDExpectation(stored) === false)
+    Runner.isDExpectation(stored)
 
 passed

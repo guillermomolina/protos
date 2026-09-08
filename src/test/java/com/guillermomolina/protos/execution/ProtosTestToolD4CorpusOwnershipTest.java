@@ -45,7 +45,7 @@ final class ProtosTestToolD4CorpusOwnershipTest {
                     "tool002-d4-corpus-ownership.protos");
 
     @Test
-    void bundledTestToolOwnsAllNonFutureMainManifestCases()
+    void bundledTestToolOwnsEntireMainManifestAfterFutureCutover()
             throws Exception {
         ProtosBundledToolModuleResolver resolver =
                 new ProtosBundledToolModuleResolver(
@@ -57,6 +57,7 @@ final class ProtosTestToolD4CorpusOwnershipTest {
                 new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         ProtosActivation activation = prelude.newModuleActivation();
         ProtosExactExecutionFacility.install(activation);
+        ProtosExactExecutionFacility.installInspection(activation);
 
         try (ProtosNioReadOnlyTreeFilesystemBackend backend =
                 new ProtosNioReadOnlyTreeFilesystemBackend(CORPUS_ROOT)) {

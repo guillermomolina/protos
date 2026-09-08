@@ -169,6 +169,15 @@ isDExpectation: (spec) => {
     isClosureErrorParentFreshExpectation(spec).ifTrue(() => {
         supported = true
     })
+    isFutureResolvedExpectation(spec).ifTrue(() => {
+        supported = true
+    })
+    isFutureTerminalExpectation(spec).ifTrue(() => {
+        supported = true
+    })
+    (Manifest.caseExpectation(spec) === "future-observation-error-identity").ifTrue(() => {
+        supported = true
+    })
     supported
 }
 
@@ -1033,19 +1042,36 @@ evaluateSimple: (spec, source, executor) => {
     resultTuple(passed, observation)
 }
 
-evaluateDCase: (spec, source, executor) => {
-    closureFresh: isClosureErrorParentFreshExpectation(spec)
+evaluateDCase: (spec, source, executor, inspectorExecutor = null) => {
     evaluation: null
 
-    closureFresh.ifTrue(() => {
-        evaluation = evaluateClosureErrorParentFresh(
-            spec,
-            source,
-            executor
-        )
+    isFutureResolvedExpectation(spec).ifTrue(() => {
+        (inspectorExecutor === null).ifTrue(() => { policyError() })
+        evaluation = evaluateFutureResolved(spec, source, inspectorExecutor)
     })
-    closureFresh.ifFalse(() => {
-        evaluation = evaluateSimple(spec, source, executor)
+
+    (evaluation === null).ifTrue(() => {
+        isFutureTerminalExpectation(spec).ifTrue(() => {
+            (inspectorExecutor === null).ifTrue(() => { policyError() })
+            evaluation = evaluateFutureTerminal(spec, source, inspectorExecutor)
+        })
+    })
+
+    (evaluation === null).ifTrue(() => {
+        (Manifest.caseExpectation(spec) === "future-observation-error-identity").ifTrue(() => {
+            (inspectorExecutor === null).ifTrue(() => { policyError() })
+            evaluation = evaluateFutureObservation(spec, source, inspectorExecutor)
+        })
+    })
+
+    (evaluation === null).ifTrue(() => {
+        closureFresh: isClosureErrorParentFreshExpectation(spec)
+        closureFresh.ifTrue(() => {
+            evaluation = evaluateClosureErrorParentFresh(spec, source, executor)
+        })
+        closureFresh.ifFalse(() => {
+            evaluation = evaluateSimple(spec, source, executor)
+        })
     })
 
     evaluation
@@ -1087,7 +1113,7 @@ runAllPassed: (run) => {
     runPassedCount(run) == runSelectedCount(run)
 }
 
-runSimpleWithLoader: (plan, sourceLoader, executor) => {
+runSimpleWithLoader: (plan, sourceLoader, executor, inspectorExecutor = null) => {
     cases: Manifest.planCases(plan)
 
     resultChunks: Map()
@@ -1134,7 +1160,7 @@ runSimpleWithLoader: (plan, sourceLoader, executor) => {
             previous: chain
             chain = previous.then((ignored) => {
                 source: sourceLoader(spec)
-                evaluation: evaluateDCase(spec, source, executor)
+                evaluation: evaluateDCase(spec, source, executor, inspectorExecutor)
                 carryChunk(Array(caseRunTuple(spec, evaluation)), 0)
                 null
             })
@@ -1166,10 +1192,11 @@ runSimpleWithLoader: (plan, sourceLoader, executor) => {
     )
 }
 
-runSimple: (plan, filesystem, executor) => {
+runSimple: (plan, filesystem, executor, inspectorExecutor = null) => {
     runSimpleWithLoader(
         plan,
         (spec) => { readSource(spec, filesystem) },
-        executor
+        executor,
+        inspectorExecutor
     )
 }
