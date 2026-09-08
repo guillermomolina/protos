@@ -44,7 +44,7 @@ Current triage:
   recorded.
 - D044 remains the priority review item because no recovered evidence yet
   demonstrates explicit project-owner selection of its complete published semantics.
-- D021-D026 require provenance and substance review; publication alone
+- D021-D025 require provenance and substance review; publication alone
   is not ratification.
 - D001-D019 are expected to be predominantly project-owner decisions, but their
   approval evidence must be checked rather than inferred.
@@ -442,10 +442,29 @@ Recorded review results:
   be optimized invisibly. This governance classification changes no
   normative specification or implementation.
 
+- D026 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D026 / specification `0.1.364` after cross-language comparison,
+  adversarial review and future-scalability analysis. Core v0.1 continues to
+  define exactly the canonical singleton objects `true` and `false` as the
+  Boolean semantic family and no standard prelude binding, object or prototype
+  named `Boolean`. `Boolean` remains an ordinary, non-reserved identifier: a
+  program or library may bind or shadow that name through ordinary lookup/slot
+  mechanisms, but such an object does not thereby acquire Boolean-family
+  membership. Delegation, copying, composition, freezing, similarly named
+  protocol slots or implementation representation likewise cannot create a
+  third Boolean value. The selected boundary introduces no truthiness, Boolean
+  conversion constructor, nominal Boolean type descriptor or primitive/wrapper
+  duality merely to organize two canonical values. Future Boolean utility
+  libraries and explicit family/introspection mechanisms remain separately
+  designable. This ratification does not classify D027: the immediate delegation
+  parent of `true`/`false` and the general portable Core topology remain D027's
+  separately audited decision. This governance classification changes no
+  normative specification or implementation.
+
 Required procedure:
 
 1. Continue backwards through the remaining unresolved decisions in D044-D040,
-   then D021-D026, and finally D001-D019.
+   then D021-D025, and finally D001-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published
    normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or
@@ -461,10 +480,10 @@ Next audit work:
 
 1. Complete the separate D044 review already in progress, considering D045 only
    as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D043-D040, then D021-D026 and D001-D019
+2. Continue backwards through the remaining unresolved decisions in D043-D040, then D021-D025 and D001-D019
    under the required procedure above.
 
-AUD001 closes only when D001-D028 and D030-D045, except D046, have an explicit classification,
+AUD001 closes only when D001-D025, D027-D028 and D030-D045, except D046, have an explicit classification,
 the project owner has decided every NEEDS_USER_DECISION item, relevant
 provenance is recorded durably, and all affected project ledgers are reconciled.
 Any later normative correction must be a separately approved specification
