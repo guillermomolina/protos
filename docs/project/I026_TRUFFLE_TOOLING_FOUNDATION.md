@@ -1,0 +1,86 @@
+# I026 — Truffle tooling foundation
+
+Status: **READY**
+
+Nature: non-normative runtime/compiler tooling implementation
+
+Origin: `AUD002` hybrid Truffle-first editor-tooling architecture, explicitly
+approved by the project owner on 2026-09-08.
+
+## Purpose
+
+Make the existing Protos Truffle execution pipeline visible to standard Truffle
+instrumentation without changing Protos language semantics. The resulting
+foundation should let the project prove how much debugger and dynamic-language
+service behavior can be reused from GraalVM before adding Protos-specific
+protocol implementations.
+
+This work owns the runtime/compiler bridge only. It does not by itself create a
+VS Code extension, select a public CLI command or option, allocate `TOOL003`, or
+commit the project to a standalone static language-server architecture.
+
+## Architectural constraints
+
+I026 implements the selected AUD002 direction under these constraints:
+
+- Protos semantics remain defined by the normative specification, not by
+  Truffle, GraalVM, DAP, LSP, VS Code, or Java implementation convenience.
+- Preserve one source of runtime truth. Debugger/tooling views adapt the existing
+  Protos execution model instead of creating a parallel variable, slot, lookup,
+  identity, or callable model.
+- Preserve source identity alongside the existing `SourceSpan` offsets so
+  Truffle `SourceSection` values identify the real Protos source unit.
+- Use standard Truffle instrumentation and interop mechanisms where they can
+  faithfully expose existing semantics.
+- Do not expose Java fields, implementation sentinels, host reflection, or other
+  implementation-only state as if they were Protos-visible slots or values.
+- Ordinary execution that is not using tooling should not acquire unnecessary
+  observation, synchronization, or retained-state cost.
+- GraalVM DAP/LSP compatibility is a claim to be demonstrated by smoke evidence,
+  not inferred merely from API integration.
+
+## Planned slices
+
+| Slice | Status | Dependencies | Scope / exit condition |
+|---|---|---|---|
+| I026-A | READY | — | Register Protos as a real `TruffleLanguage` and preserve Truffle `Source` ownership through the compilation/root boundary without changing observable Protos behavior. |
+| I026-B | BLOCKED_BY_DEPENDENCIES | I026-A | Map the existing exact `SourceSpan` ranges to valid Truffle `SourceSection` values on roots/execution nodes, with focused Java-side integration evidence. |
+| I026-C | BLOCKED_BY_DEPENDENCIES | I026-B | Make the relevant AST nodes instrumentable and expose the minimal faithful `StandardTags` needed for source execution/stepping; do not tag nodes merely to satisfy a debugger UI. |
+| I026-D | BLOCKED_BY_DEPENDENCIES | I026-A | Expose semantically faithful Truffle interop/debug views for Protos runtime values needed by tooling, without changing Protos identity or access semantics. |
+| I026-E | BLOCKED_BY_DEPENDENCIES | I026-C + I026-D | Bridge top/local debugger scopes from the existing Protos activation/context model and prove visible names/values match Protos lookup boundaries. |
+| I026-F | BLOCKED_BY_DEPENDENCIES | I026-C + I026-E | Run a real GraalVM DAP smoke gate over Protos source: source breakpoint, stepping, stack frames, scopes and representative values. Only successful evidence permits a Protos DAP-support claim. |
+| I026-G | BLOCKED_BY_DEPENDENCIES | I026-C + I026-E | Run a GraalVM dynamic-LSP smoke gate and record exactly which useful runtime-derived capabilities work for Protos. Do not treat this as a replacement for static Protos language intelligence. |
+
+I026-D is intentionally allowed to proceed independently from I026-B/C after
+I026-A. The dependency graph therefore preserves parallelizable work rather than
+serializing source mapping and value interop without cause.
+
+## Deferred ownership
+
+The following work is deliberately outside I026 and receives no identifier from
+this allocation:
+
+- public CLI selection/launch UX for debugger or language-server modes;
+- a VS Code extension, including file association, syntax highlighting, run/test
+  commands and debug configuration;
+- a Protos-specific static language service for diagnostics, symbols,
+  navigation, rename, completion or semantic tokens;
+- any official bundled tool that would justify a future `TOOLxxx` allocation;
+- any third-party extension/plugin model.
+
+After I026-F/G produce real compatibility evidence, those surfaces should be
+classified under the already selected project-family boundaries rather than
+being forced into I026 or pre-allocated as `TOOL003`.
+
+## Specification and compatibility boundary
+
+I026 is implementation/tooling work. It must not change Protos observable
+semantics merely to fit Truffle instrumentation or editor expectations. If a
+slice exposes a genuine missing semantic rule, that dependency must go through
+the normal design/specification process before dependent implementation proceeds.
+
+Implementation versioning and adaptive validation follow `AGENTS.md`: slices
+that modify production implementation are executable-impact changes and require
+the normal implementation-version bump plus focused/full validation. This
+allocation/architecture publication is documentation/governance only and does
+not itself change the implementation version.

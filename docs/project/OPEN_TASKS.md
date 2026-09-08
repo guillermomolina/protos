@@ -28,26 +28,25 @@ Task states:
 
 ### AUD002 — GraalVM / Truffle editor-tooling compatibility audit
 
-Status: **OPEN**
+Status: **CLOSED**
 Priority: **NORMAL**
 Nature: non-normative implementation/tooling architecture audit
 
-Evidence collection is complete. The current runtime uses Truffle AST/call-target
-machinery but is not yet a registered/instrumentable `TruffleLanguage`: roots are
-created with a null language, source identity is not propagated as Truffle
-`Source`, and debugger-facing source sections, tags, scopes and value interop are
-not currently exposed. GraalVM DAP therefore has high reuse potential but is not
-yet a supported Protos debugger; GraalVM LSP is useful dynamic tooling but does
-not replace all static Protos language intelligence.
+Evidence collection completed in the published AUD002 audit. On 2026-09-08 the
+project owner explicitly approved Alternative C, the hybrid Truffle-first
+architecture: Protos will expose its real runtime through standard Truffle
+language/source/instrumentation/interop mechanisms, prove GraalVM DAP and dynamic
+LSP reuse on actual Protos execution, keep static language intelligence tied to
+the real Protos parser/resolver, and keep editor integration thin rather than
+duplicating Protos semantics in TypeScript.
 
-The audit recommends a hybrid Truffle-first architecture: make Protos a proper
-instrumentable guest language, prove Graal DAP, use Graal LSP as dynamic
-augmentation, reuse the real Protos parser/resolver for static language services,
-and keep the VS Code extension thin. This durable architecture remains
-**PENDING PROJECT-OWNER APPROVAL**. No `TOOL003` or implementation slice is
-allocated by the audit.
+The runtime/compiler foundation is allocated as `I026` and starts `READY`.
+`TOOL003` is not allocated by this decision. Public CLI UX, the VS Code extension
+and a Protos-specific static language service remain separately classified future
+work after I026 produces real compatibility evidence.
 
-See `docs/project/AUD002_GRAALVM_EDITOR_TOOLING_AUDIT.md`.
+See `docs/project/AUD002_GRAALVM_EDITOR_TOOLING_AUDIT.md` and
+`docs/project/I026_TRUFFLE_TOOLING_FOUNDATION.md`.
 
 ### AUD001 — Retrospective design-decision ratification audit
 

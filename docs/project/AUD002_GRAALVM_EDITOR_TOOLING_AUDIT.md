@@ -1,6 +1,6 @@
 # AUD002 — GraalVM / Truffle editor-tooling compatibility audit
 
-Status: **OPEN — EVIDENCE COMPLETE, ARCHITECTURE PENDING PROJECT-OWNER APPROVAL**
+Status: **CLOSED — HYBRID TRUFFLE-FIRST ARCHITECTURE APPROVED**
 
 Nature: non-normative implementation/tooling architecture audit
 
@@ -15,10 +15,10 @@ GraalVM's language-agnostic tooling instead of duplicating runtime knowledge in
 a VS Code extension or implementing an independent debugger and language server
 from scratch.
 
-This audit does **not** select a durable editor architecture, allocate a new
-`TOOLxxx` implementation item, alter Protos semantics, or claim that the current
-runtime is already compatible with GraalVM DAP/LSP. The architecture proposal at
-the end remains pending explicit project-owner approval.
+On 2026-09-08 the project owner explicitly approved the audit recommendation:
+Alternative C, the hybrid Truffle-first architecture. This closure records that
+durable project choice and allocates only the runtime/compiler foundation as
+`I026`; it does not change Protos semantics or claim current DAP/LSP support.
 
 ## Repository material inspected
 
@@ -309,9 +309,9 @@ Costs/risks:
 
 Assessment: strongest current candidate.
 
-## Recommendation — pending explicit project-owner approval
+## Selected architecture — explicit project-owner approval
 
-**Proposal:** adopt Alternative C as the durable direction:
+**Selected direction:** Alternative C is the durable editor-tooling architecture:
 
 1. make Protos a real registered `TruffleLanguage` without changing language
    semantics;
@@ -329,16 +329,17 @@ Assessment: strongest current candidate.
 8. keep the VS Code extension thin and avoid reimplementing Protos semantics in
    TypeScript.
 
-This is a durable tooling architecture choice and therefore remains
-**PENDING PROJECT-OWNER APPROVAL** under the repository design-approval gate.
-Publishing this audit records evidence and a recommendation only. It does not
-select the proposal.
+The project owner explicitly approved this architecture on 2026-09-08. The
+approval selects the responsibility boundaries above; it does not convert
+unproven GraalVM compatibility into a support claim, and the DAP/LSP smoke gates
+remain required implementation evidence.
 
-## Candidate implementation decomposition after approval
+## Approved implementation decomposition
 
-No implementation identifiers are allocated by this audit. If the architecture
-is approved, the first work should be decomposed before implementation. A likely
-order is:
+The runtime/compiler foundation A-G is allocated as `I026` because it modifies
+the Protos implementation boundary rather than bundled-tool policy or general CLI
+UX. Public CLI integration, the VS Code extension and Protos-specific static
+language-service work remain separately classified future work.
 
 ```text
 A  registered TruffleLanguage + Source ownership
@@ -352,15 +353,15 @@ H  thin VS Code language association/run/debug integration
 I  static Protos language-service diagnostics/navigation/completion as needed
 ```
 
-The exact project-work ownership (`Ixxx`, `CLIxxx`, `TOOLxxx`, or another
-already-authorized family) must be derived from the selected architecture and the
-current canonical ledger rather than decided by this audit.
+`I026` owns only the Truffle tooling foundation and proof gates. This approval
+does not allocate `TOOL003`; later CLI/editor/static-language-service work must
+follow the already selected family boundaries when each surface becomes concrete.
 
 ## Audit outcome
 
 Evidence phase: **COMPLETE**
 
-Architecture selection: **PENDING PROJECT-OWNER APPROVAL**
+Architecture selection: **SELECTED — ALTERNATIVE C / HYBRID TRUFFLE-FIRST**
 
 Current runtime compatibility claim: **NOT YET — prerequisites missing**
 
