@@ -17,7 +17,6 @@
 from __future__ import print_function
 
 import json
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -50,84 +49,139 @@ def write(path, text):
     path.write_text(text, encoding="utf-8")
 
 
-def make_fixture(root, drift=False):
+def tests_workflow(*, drift=False):
+    image = (
+        "ghcr.io/graalvm/graalvm-community:25i3-25.0.4.1-ol8-20260825"
+        if not drift
+        else "ghcr.io/graalvm/graalvm-community:25-ol8"
+    )
+    feature = "25" if not drift else "21"
+    version = "25.0.4.1" if not drift else "21"
+    maven = "3.9.9" if not drift else "3.9.8"
+    return """jobs:
+  test:
+    container:
+      image: %s
+    env:
+      PROTOS_PRIMARY_JDK_FEATURE: \"%s\"
+      PROTOS_PRIMARY_JDK_VERSION: \"%s\"
+      PROTOS_MAVEN_VERSION: \"%s\"
+""" % (image, feature, version, maven)
+
+
+def make_fixture(root, *, development_drift=False, remaining_c_drift=False):
     write(root / "toolchain.json", json.dumps(TOOLCHAIN, indent=2) + "\n")
+    components = "24.0.0" if remaining_c_drift else "25.3.4.1"
     write(
         root / "pom.xml",
-        """<project xmlns=\"http://maven.apache.org/POM/4.0.0\"><properties><maven.compiler.release>21</maven.compiler.release><graalvm.version>25.3.4.1</graalvm.version></properties></project>\n""",
+        """<project xmlns=\"http://maven.apache.org/POM/4.0.0\"><properties><maven.compiler.release>21</maven.compiler.release><graalvm.version>%s</graalvm.version></properties></project>\n""" % components,
     )
     write(
         root / ".devcontainer" / "Dockerfile",
         "FROM ghcr.io/graalvm/graalvm-community:25i3-25.0.4.1-ol8-20260825\nARG MAVEN_VERSION=3.9.9\n",
     )
-    tests_distribution = "temurin" if drift else "graalvm-community"
-    tests_java = "21" if drift else "25.0.4.1"
     write(
         root / ".github" / "workflows" / "tests.yml",
-        "distribution: %s\njava-version: \"%s\"\n" % (tests_distribution, tests_java),
+        tests_workflow(drift=development_drift),
     )
+    if remaining_c_drift:
+        dist_java = "22.0.0"
+        dist_components = "24.0.0"
+        feature = "22"
+        smoke_java = "22"
+    else:
+        dist_java = "25.0.4.1"
+        dist_components = "25.3.4.1"
+        feature = "25"
+        smoke_java = "25.0.4.1"
     write(
         root / ".github" / "workflows" / "distribution.yml",
-        "distribution: graalvm-community\njava-version: \"25.0.4.1\"\n",
+        "distribution: graalvm-community\njava-version: \"%s\"\n" % dist_java,
     )
     write(
         root / "dist" / "runtime-pom.xml",
-        """<project xmlns=\"http://maven.apache.org/POM/4.0.0\"><properties><graalvm.version>25.3.4.1</graalvm.version></properties></project>\n""",
+        """<project xmlns=\"http://maven.apache.org/POM/4.0.0\"><properties><graalvm.version>%s</graalvm.version></properties></project>\n""" % dist_components,
     )
     write(
         root / "dist" / "build_portable.py",
-        'SUPPORTED_JAVA_FEATURE = "25"\nEXPECTED_TRUFFLE_VERSION = "25.3.4.1"\n',
+        'SUPPORTED_JAVA_FEATURE = "%s"\nEXPECTED_TRUFFLE_VERSION = "%s"\n' % (feature, dist_components),
     )
     write(
         root / "dist" / "smoke_optimizing_runtime.sh",
-        "EXPECTED_FEATURE=25\nEXPECTED_JAVA_VERSION=25.0.4.1\nEXPECTED_TRUFFLE_VERSION=25.3.4.1\n",
+        "EXPECTED_FEATURE=%s\nEXPECTED_JAVA_VERSION=%s\nEXPECTED_TRUFFLE_VERSION=%s\n" % (
+            feature,
+            smoke_java,
+            dist_components,
+        ),
     )
 
 
-def run(verifier, root, mode):
+def run(verifier, root, mode, scope="all"):
     return subprocess.run(
-        [sys.executable, str(verifier), "--root", str(root), "--mode", mode],
+        [
+            sys.executable,
+            str(verifier),
+            "--root",
+            str(root),
+            "--mode",
+            mode,
+            "--scope",
+            scope,
+        ],
         text=True,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
 
 
+def require(condition, message, result=None):
+    if condition:
+        return
+    if result is not None:
+        print(result.stdout)
+        print(result.stderr, file=sys.stderr)
+    raise SystemExit(message)
+
+
 def main():
     verifier = Path(__file__).resolve().with_name("verify_toolchain.py")
     with tempfile.TemporaryDirectory(prefix="protos-toolchain-test-") as tmp:
         root = Path(tmp) / "repo"
-        make_fixture(root, drift=False)
-        result = run(verifier, root, "check")
-        if result.returncode != 0:
-            print(result.stdout)
-            print(result.stderr, file=sys.stderr)
-            raise SystemExit("aligned fixture unexpectedly failed")
-        if "TOOLCHAIN_DRIFT_COUNT: 0" not in result.stdout:
-            raise SystemExit("aligned fixture did not report zero drift")
 
-        shutil.rmtree(root)
-        make_fixture(root, drift=True)
+        make_fixture(root)
         result = run(verifier, root, "check")
-        if result.returncode != 1:
-            print(result.stdout)
-            print(result.stderr, file=sys.stderr)
-            raise SystemExit("drift fixture did not fail closed")
-        if "ci.tests.distribution" not in result.stdout or "ci.tests.java" not in result.stdout:
-            raise SystemExit("drift fixture did not identify CI mismatch")
+        require(result.returncode == 0, "aligned fixture unexpectedly failed", result)
+        require("TOOLCHAIN_DRIFT_COUNT: 0" in result.stdout, "aligned fixture did not report zero drift", result)
 
-        result = run(verifier, root, "report")
-        if result.returncode != 0 or "TOOLCHAIN_DRIFT_COUNT: 2" not in result.stdout:
-            print(result.stdout)
-            print(result.stderr, file=sys.stderr)
-            raise SystemExit("report mode did not preserve non-blocking drift report")
+        root = Path(tmp) / "dev-drift"
+        make_fixture(root, development_drift=True)
+        result = run(verifier, root, "check", "development")
+        require(result.returncode == 1, "development drift did not fail closed", result)
+        for binding in (
+            "ci.tests.image",
+            "ci.tests.java_feature",
+            "ci.tests.java_version",
+            "ci.tests.maven",
+        ):
+            require(binding in result.stdout, "development drift did not identify %s" % binding, result)
+
+        root = Path(tmp) / "c-pending"
+        make_fixture(root, remaining_c_drift=True)
+        result = run(verifier, root, "check", "development")
+        require(result.returncode == 0, "DIST002-B transitional fixture failed development scope", result)
+        require("TOOLCHAIN_DRIFT_COUNT: 0" in result.stdout, "development scope retained unexpected drift", result)
+        result = run(verifier, root, "check", "all")
+        require(result.returncode == 1, "remaining DIST002-C drift did not fail all-scope check", result)
+        require("pom.graal_components" in result.stdout, "remaining C drift did not include pom components", result)
+        require("ci.distribution.java" in result.stdout, "remaining C drift did not include distribution CI runtime", result)
+        result = run(verifier, root, "report", "all")
+        require(result.returncode == 0, "all-scope report should be non-blocking", result)
 
         malformed = json.loads(json.dumps(TOOLCHAIN))
         malformed["graal_components"]["version"] = "25.3.4"
         write(root / "toolchain.json", json.dumps(malformed, indent=2) + "\n")
         result = run(verifier, root, "contract")
-        if result.returncode != 2:
-            raise SystemExit("malformed contract did not fail closed")
+        require(result.returncode == 2, "malformed contract did not fail closed", result)
 
     print("TOOLCHAIN_VERIFIER_TESTS: PASS")
     return 0

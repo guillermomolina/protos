@@ -29,6 +29,17 @@ class ToolchainError(Exception):
     pass
 
 
+DEVELOPMENT_BINDINGS = {
+    "pom.bytecode",
+    "devcontainer.image",
+    "devcontainer.maven",
+    "ci.tests.image",
+    "ci.tests.java_feature",
+    "ci.tests.java_version",
+    "ci.tests.maven",
+}
+
+
 def read_text(path):
     # type: (Path) -> str
     if not path.is_file():
@@ -116,6 +127,26 @@ def workflow_java(path):
     return distribution, version
 
 
+def workflow_scalar(path, key):
+    # type: (Path, str) -> str
+    text = read_text(path)
+    return first_match(
+        text,
+        r"^[ \t]*%s:[ \t]*[\"']?([^\"'\n#]+)" % re.escape(key),
+        key,
+    )
+
+
+def workflow_container_image(path):
+    # type: (Path) -> str
+    text = read_text(path)
+    return first_match(
+        text,
+        r"^[ \t]*image:[ \t]*[\"']?([^\"'\n#]+)",
+        "container image",
+    )
+
+
 def audit_bindings(root, contract):
     # type: (Path, Dict[str, object]) -> List[Tuple[str, str, str]]
     graal = contract["graalvm"]
@@ -143,9 +174,11 @@ def audit_bindings(root, contract):
         first_match(docker, r"^ARG[ \t]+MAVEN_VERSION=([^ \t\n]+)", "MAVEN_VERSION"),
     ))
 
-    tests_distribution, tests_java = workflow_java(root / ".github" / "workflows" / "tests.yml")
-    rows.append(("ci.tests.distribution", str(graal["distribution"]), tests_distribution))
-    rows.append(("ci.tests.java", jdk_version, tests_java))
+    tests_workflow = root / ".github" / "workflows" / "tests.yml"
+    rows.append(("ci.tests.image", str(graal["container_image"]), workflow_container_image(tests_workflow)))
+    rows.append(("ci.tests.java_feature", feature, workflow_scalar(tests_workflow, "PROTOS_PRIMARY_JDK_FEATURE")))
+    rows.append(("ci.tests.java_version", jdk_version, workflow_scalar(tests_workflow, "PROTOS_PRIMARY_JDK_VERSION")))
+    rows.append(("ci.tests.maven", maven, workflow_scalar(tests_workflow, "PROTOS_MAVEN_VERSION")))
 
     dist_distribution, dist_java = workflow_java(root / ".github" / "workflows" / "distribution.yml")
     rows.append(("ci.distribution.distribution", str(graal["distribution"]), dist_distribution))
@@ -204,6 +237,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description="Verify the repository-owned Protos toolchain contract and static bindings.")
     parser.add_argument("--root", default=None, help="repository root; defaults to parent of tools/")
     parser.add_argument("--mode", choices=("contract", "report", "check"), default="check")
+    parser.add_argument("--scope", choices=("all", "development"), default="all")
     args = parser.parse_args(argv)
 
     root = Path(args.root).resolve() if args.root else Path(__file__).resolve().parents[1]
@@ -214,6 +248,8 @@ def main(argv=None):
             return 0
 
         rows = audit_bindings(root, contract)
+        if args.scope == "development":
+            rows = [row for row in rows if row[0] in DEVELOPMENT_BINDINGS]
     except (ToolchainError, ET.ParseError, OSError) as exc:
         print("TOOLCHAIN_ERROR: %s" % exc, file=sys.stderr)
         return 2

@@ -111,6 +111,31 @@ distribution metadata. DIST002-B and DIST002-C must remove those drifts; once
 alignment is complete, `--mode check` becomes a zero-drift gate. This separation
 allows A to establish one authority before later slices change consumers.
 
+## DIST002-B development and ordinary-CI alignment
+
+DIST002-B closes the primary development/ordinary-CI runtime split without yet
+changing the live portable-distribution contract. The devcontainer already
+matched the selected DIST002-A coordinates at the start of this slice, so B
+retains its exact GraalVM Community `25i3` / JDK `25.0.4.1` image and Maven
+`3.9.9` binding rather than introducing a redundant container change.
+
+The ordinary `Tests` workflow no longer installs Temurin 21 with
+`actions/setup-java`. Its job executes inside the exact primary GraalVM image
+recorded by `toolchain.json`, so the JDK/runtime exists before repository
+validation begins. A bootstrap step installs only ordinary OS prerequisites and
+exact Maven `3.9.9`; Maven's archive checksum is verified before extraction.
+Before the suite, CI verifies the actual Java feature/version and GraalVM
+identity, verifies Maven's exact version, and runs the repository toolchain
+auditor over the development scope.
+
+`tools/verify_toolchain.py --scope development --mode check` is therefore a
+zero-drift gate for Java bytecode compatibility, devcontainer image/Maven and
+ordinary-CI runtime/Maven bindings. The all-surface audit intentionally remains
+non-zero after B because `pom.xml`'s Graal/Truffle dependency and the
+DIST001-derived distribution workflow/runtime metadata are assigned to
+DIST002-C. B does not rewrite historical DIST001/PERF evidence and does not
+change the existing public `v0.2.236` support claim.
+
 ## Current observed mismatch
 
 At the time this item was opened:
@@ -150,8 +175,8 @@ pattern.
 | Slice | Status | Scope / closure condition |
 |---|---|---|
 | DIST002-A | CLOSED | Selected exact canonical coordinates are persisted in root `toolchain.json`; tested contract/static-binding drift audit is published. |
-| DIST002-B | READY | Align devcontainer and ordinary CI primary runtime with the A contract; required runtime is pre-provisioned, not downloaded by normal gates. |
-| DIST002-C | BLOCKED_BY_DEPENDENCIES | Make distribution/runtime metadata and validation consume/check the same coordinates; remove ordinary on-demand-JDK gate dependence. |
+| DIST002-B | CLOSED | Existing devcontainer binding is verified against A; ordinary Tests CI runs in the exact primary GraalVM image with exact Maven and a development-scope drift/runtime gate. |
+| DIST002-C | READY | Make distribution/runtime metadata and validation consume/check the same coordinates; remove ordinary on-demand-JDK gate dependence. |
 | DIST002-D | BLOCKED_BY_DEPENDENCIES | Cross-environment conformance, documentation/status reconciliation, and DIST002 closure. |
 
 Opening DIST002 changes no Protos semantics, implementation version, current
