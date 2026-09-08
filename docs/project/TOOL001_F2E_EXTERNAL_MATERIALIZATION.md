@@ -1,6 +1,6 @@
 # TOOL001-F2E — External Immutable-Package Execution
 
-Status: **IN_PROGRESS — F2E1 CLOSED; I024/B009 CLOSED; F2E2 IN_PROGRESS; F2E2A CLOSED; F2E2B READY**
+Status: **IN_PROGRESS — F2E1 CLOSED; I024/B009 CLOSED; F2E2 IN_PROGRESS; F2E2A/F2E2B CLOSED; F2E2C READY**
 Nature: non-normative Package Tool / host-integration project record
 Allocated after: `TOOL001-F2D` workspace-only execution closure
 
@@ -100,8 +100,8 @@ F2E1B canonical byte stream + method/hash contract                  CLOSED
 F2E1C independent conformance vectors + F2E1 closure                CLOSED
 F2E2  verified read-only package-store binding                     IN_PROGRESS
 F2E2A  captured-Filesystem ContentIdentity canonicalizer/verifier  CLOSED
-F2E2B  exact selected-root capture + verified-capture host custody READY
-F2E2C same-capture integration + F2E2 closure                      BLOCKED_BY_DEPENDENCIES
+F2E2B  exact selected-root capture + verified-capture host custody CLOSED
+F2E2C same-capture integration + F2E2 closure                      READY
 F2E3  external-node execution-plan construction                    BLOCKED_BY_DEPENDENCIES
 F2E4  external canonical ModuleKey + source resolver               BLOCKED_BY_DEPENDENCIES
 F2E5  public run integration + F2 external-execution closure       BLOCKED_BY_DEPENDENCIES
@@ -489,3 +489,72 @@ Implementation note: exact file bytes are awaited into ordinary local values bef
 the canonical record object is constructed. Record construction is therefore
 suspension-free while preserving the frozen path/content map and the same
 ContentIdentity bytes.
+
+
+## F2E2B closure — exact selected-root capture and host custody
+
+F2E2B is CLOSED after explicit project-owner approval of the ownership/lifetime
+architecture on 2026-09-08 following alternative, scalability and future-evolution review.
+
+The selected boundary is one run-scoped host custody object for one exact immutable capture:
+
+```text
+selected materialized root M
+        |
+        | exact D046 capture, once
+        v
+immutable captured authority C
+        |
+        +--> fresh Filesystem(C, PackageToolDomain)
+        |         |
+        |         +--> F2E2A verifies ContentIdentity(C)
+        |
+        +--> retain SAME C after Package Tool Process termination
+                  |
+                  +--> later fresh Filesystem(C, application/resolver domain)
+```
+
+The production host machinery is `ProtosCapturedFilesystemCustody`. It owns the exact
+`CapturedBackend` and its release callback independently of any Protos Actor-domain wrapper.
+`materialize(activation)` creates a fresh standard structurally read-only `Filesystem` bound to
+that activation's execution domain while delegating to the same captured backend. The source NIO
+backend is closed immediately after the one selected-root capture, so later materialization never
+reopens the original store `Path`. `close()` releases the run-owned captured backing exactly once.
+
+The standard Filesystem bridge now has one host-internal captured-capability rematerialization
+entry that reuses the existing D046 read-only adapter; no second Filesystem semantics or Actor
+transfer exception is introduced. The current NIO implementation factors its already-published
+secure capture machinery so host custody can capture the selected authority root without inventing
+a second traversal/copy path.
+
+The durable contract is intentionally backing-opaque. Today's implementation-managed temporary
+blob backing is not part of F2E2B identity or policy; a future in-memory, CAS/deduplicated,
+copy-on-write/versioned or remote immutable representation may implement the same custody without
+changing `Filesystem`, F2E2A verification or the later execution boundary. There is no global
+capture registry and no cross-run mutable coordination point.
+
+F2E2B deliberately does not associate custody with `PackageId`, registry/Git node identity or a
+`PackageExecutionPlan` record. That mapping remains F2E3 work. The detached execution plan stays
+inert and contains no Filesystem/backend/Process/resolver/store authority. F2E2B also does not
+select CAS persistence, cache GC, fetch, acquisition, store layout or distributed transport.
+
+Focused evidence proves that source deletion after capture cannot change bytes observed through
+either the Package Tool-domain or a separately bootstrapped application-domain view; those views
+are fresh non-identical `ProtosFilesystemValue` objects backed by the same captured backend. It
+also proves deterministic idempotent host-custody release and rejection of rematerialization after
+close. Existing I024 capture/materialization focals plus the complete suite remain required by the
+publication launcher.
+
+After this slice:
+
+```text
+TOOL001-F2E2   IN_PROGRESS
+TOOL001-F2E2A  CLOSED
+TOOL001-F2E2B  CLOSED
+TOOL001-F2E2C  READY
+TOOL001-F2E3   BLOCKED_BY_DEPENDENCIES: TOOL001-F2E2
+```
+
+No normative Protos specification, lock format, ContentIdentity bytes, package-store physical
+layout, acquisition/fetch policy, `PackageExecutionPlan` authority model, resolver identity or
+public-run semantics change in F2E2B. Implementation version becomes `0.2.262-SNAPSHOT`.

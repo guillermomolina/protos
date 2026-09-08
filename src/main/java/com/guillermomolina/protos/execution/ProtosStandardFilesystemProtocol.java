@@ -245,6 +245,25 @@ public final class ProtosStandardFilesystemProtocol {
         return filesystem;
     }
 
+    /** Host-internal rematerialization of one captured backend in a chosen Actor domain. */
+    static ProtosFilesystemValue createCapturedCapability(
+            ProtosActivation constructionActivation, CapturedBackend capturedBackend) {
+        Objects.requireNonNull(constructionActivation, "constructionActivation");
+        Objects.requireNonNull(capturedBackend, "capturedBackend");
+        ProtosPrelude prelude =
+                constructionActivation
+                        .prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalArgumentException(
+                                                "captured Filesystem materialization requires a Core prelude"));
+        return (ProtosFilesystemValue)
+                createCapability(
+                        prelude.bytesPrototypeForRuntime(),
+                        constructionActivation,
+                        readOnlyCapturedBackend(capturedBackend));
+    }
+
     private static ProtosClosureValue operationClosure(
             ProtosObjectValue filesystem,
             ProtosFilesystemOpenFlow openFlow,

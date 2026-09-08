@@ -175,20 +175,12 @@ public final class ProtosNioReadOnlyTreeFilesystemBackend
             return () -> {};
         }
 
-        ArrayList<SecureDirectoryStream<Path>> openedDirectories = new ArrayList<>();
         ProtosNioCapturedTreeFilesystemBackend captured;
-        try (ProtosNioCapturedTreeFilesystemBackend.Builder builder =
-                new ProtosNioCapturedTreeFilesystemBackend.Builder()) {
-            SecureDirectoryStream<Path> directory =
-                    selectDirectory(components, openedDirectories);
-            ProtosNioCapturedTreeFilesystemBackend.DirectoryNode root =
-                    captureDirectory(directory, builder);
-            captured = builder.complete(root);
+        try {
+            captured = captureSelectedDirectory(components);
         } catch (IOException | RuntimeException failure) {
             completion.failed();
             return () -> {};
-        } finally {
-            closeDirectories(openedDirectories);
         }
 
         try {
@@ -198,6 +190,29 @@ public final class ProtosNioReadOnlyTreeFilesystemBackend
             throw failure;
         }
         return () -> {};
+    }
+
+    /** Host-only exact root capture used when custody must outlive the source backend. */
+    ProtosNioCapturedTreeFilesystemBackend captureRootForHostCustody() throws IOException {
+        if (closed || secureRoot == null) {
+            throw new IOException("secure selected-root capture unavailable");
+        }
+        return captureSelectedDirectory(List.of());
+    }
+
+    private ProtosNioCapturedTreeFilesystemBackend captureSelectedDirectory(
+            List<String> components) throws IOException {
+        ArrayList<SecureDirectoryStream<Path>> openedDirectories = new ArrayList<>();
+        try (ProtosNioCapturedTreeFilesystemBackend.Builder builder =
+                new ProtosNioCapturedTreeFilesystemBackend.Builder()) {
+            SecureDirectoryStream<Path> directory =
+                    selectDirectory(components, openedDirectories);
+            ProtosNioCapturedTreeFilesystemBackend.DirectoryNode root =
+                    captureDirectory(directory, builder);
+            return builder.complete(root);
+        } finally {
+            closeDirectories(openedDirectories);
+        }
     }
 
     private SecureDirectoryStream<Path> selectDirectory(
