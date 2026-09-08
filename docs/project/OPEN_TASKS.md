@@ -44,7 +44,7 @@ Current triage:
   recorded.
 - D044 remains the priority review item because no recovered evidence yet
   demonstrates explicit project-owner selection of its complete published semantics.
-- D021-D031 require provenance and substance review; publication alone
+- D021-D030 require provenance and substance review; publication alone
   is not ratification.
 - D001-D019 are expected to be predominantly project-owner decisions, but their
   approval evidence must be checked rather than inferred.
@@ -243,8 +243,7 @@ Recorded review results:
   explicit memoized/shared-work APIs expressible without weakening the default rule.
   Freshness is semantic rather than an allocation mandate: scalar replacement,
   allocation elision, virtualization, pooling, canonical terminal-state backing and
-  other invisible optimizations remain allowed. This ratifies D036 only; D031
-  remains independently subject to AUD001 review. No normative specification or
+  other invisible optimizations remain allowed. D031 is independently `RATIFIED` under AUD001 as recorded below. No normative specification or
   implementation change is introduced by this classification.
 
 - D033 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
@@ -332,10 +331,37 @@ Recorded review results:
   not become normative authority for D020. This governance ratification changes
   no normative specification or implementation.
 
+- D031 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved retaining
+  D031 / specification `0.1.368` after comparative, adversarial and future-
+  scalability review spanning JavaScript Promises, Java CompletableFuture/
+  CompletionStage, Python asyncio/coroutines, Kotlin Job, .NET Task/ValueTask
+  and Rust Future models. D031 is retained as the idempotent-lifecycle
+  specialization of the already-ratified D036 Future-result identity rule:
+  every successfully dispatched invocation of a standardized Future-returning
+  idempotent lifecycle operation has its own fresh semantic standard Future
+  identity unless the operation expressly returns an existing Future, while
+  repeated `close()`, `shutdownRead()` and `shutdownWrite()` calls observe one
+  irreversible logical lifecycle and never begin independent retry attempts.
+  Calls made while pending and after terminalization observe that lifecycle's
+  single logical success/failure outcome; where the lifecycle records a stable
+  terminal Error cause, every same-domain re-observation preserves that exact
+  Error object. Fresh Future identity remains distinct from lifecycle identity
+  and outcome identity and is a semantic guarantee rather than a physical-
+  allocation mandate: implementations may use completion-state sharing,
+  virtualization, scalar replacement, pooling or other invisible representation
+  optimizations while preserving Future identity and Future-local effects. No
+  canonical lifecycle Future, Future subtype, wrapper, hidden lifecycle token or
+  distributed Future identity is introduced. A future API that genuinely needs
+  to return one pre-existing/shared Future remains expressible through D036's
+  existing explicit-result exception. The current runtime follower-list
+  representation is implementation machinery and may be optimized separately;
+  its retention characteristics are not ratified as language semantics. This
+  governance classification changes no normative specification or implementation.
+
 Required procedure:
 
 1. Continue backwards through the remaining unresolved decisions in D044-D040,
-   then D021-D031, and finally D001-D019.
+   then D021-D030, and finally D001-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published
    normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or
@@ -351,7 +377,7 @@ Next audit work:
 
 1. Complete the separate D044 review already in progress, considering D045 only
    as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D043-D040, then D021-D031 and D001-D019
+2. Continue backwards through the remaining unresolved decisions in D043-D040, then D021-D030 and D001-D019
    under the required procedure above.
 
 AUD001 closes only when D001-D045, except D046, have an explicit classification,
