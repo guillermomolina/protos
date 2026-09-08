@@ -631,3 +631,7 @@ reflection/has-slot-local-only.protos	boolean	true
 reflection/has-slot-represented-values.protos	boolean	true
 reflection/has-slot-invalid-name.protos	error	-
 reflection/has-slot-arity.protos	error	-
+reflection/slot-value-exact-local-identity.protos	boolean	true
+reflection/slot-value-does-not-delegate.protos	error	-
+reflection/slot-value-invalid-name.protos	error	-
+reflection/slot-value-represented-absent.protos	error	-

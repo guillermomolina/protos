@@ -1,5 +1,25 @@
 # Core Native Boundary
 
+## TOOL002-F3C1B2A4P2 — standard `Object.slotValue` reflection prerequisite
+
+The retained-Future inspector progression reached the first local-slot value read
+and exposed the second pre-existing gap in the already-normative Core reflection
+surface: `Object.slotValue(name)` remained absent after the intentionally narrow
+`hasSlot` prerequisite.
+
+This slice implements only `Object.slotValue(name)`. It validates exactly one
+semantic String argument, reads only the receiver's own local-slot table through
+`ProtosObjectValue.readLocalSlot`, returns the exact stored value without copying
+or delegated lookup, and signals the ordinary fresh `Error` when the receiver is
+not an ordinary object or the named local slot is absent.
+
+This adds exactly one reviewed native Closure construction site. The current
+audited Core boundary is therefore **113 native Closure construction sites across
+30 providers**, with `ProtosStandardObjectProtocol.java` at seven sites.
+`slotNames` and `removeSlot` remain outside this slice. Test Tool policy,
+`executionInspect`, Future behavior, syntax, specification and canonical TOOL002
+ledgers are unchanged.
+
 ## TOOL002-F3C1B2A1P1 — standard `Object.hasSlot` reflection prerequisite
 
 The F3C1B2 retained-Future inspector audit exposed a pre-existing implementation
@@ -18,8 +38,8 @@ and therefore report canonical false. Invalid argument shape signals the
 ordinary fresh `Error`.
 
 This adds exactly one reviewed native Closure construction site to the existing
-`ProtosStandardObjectProtocol` provider. The current audited Core boundary is
-therefore **112 native Closure construction sites across 30 providers**, with
+`ProtosStandardObjectProtocol` provider. At that prerequisite publication cutover the audited Core boundary became
+**112 native Closure construction sites across 30 providers**, with
 `ProtosStandardObjectProtocol.java` at six sites. `slotNames`, `slotValue`, and
 `removeSlot` remain outside this slice and remain unimplemented by this change.
 No Test Tool policy, execution capability, scheduler, syntax, or normative
@@ -109,7 +129,7 @@ the standard native boundary.
 
 | Provider | Native Closure sites | Classification | Audited reason for remaining native |
 |---|---:|---|---|
-| `ProtosStandardObjectProtocol.java` | 6 | host-irreducible / representation bridge | Generic polymorphic `call` performs Closure invocation or ordinary instance construction; `identityHash` exposes semantic identity without dynamic-dispatch substitution; inherited `hasSlot` validates one semantic String and projects exact receiver-local slot presence across ordinary/represented runtime forms; `ensure` establishes the D043 Closure-only protected dynamic extent and executes unwind cleanup before normal/return/Error propagation; inherited `parent` projects the exact immutable semantic delegation parent across ordinary and opaque represented values and signals for the unique root because no structural parent exists; `while` establishes the D044 Closure-only iterative control boundary while reusing ordinary Closure invocation, replay, suspension, cancellation and task ownership machinery. |
+| `ProtosStandardObjectProtocol.java` | 7 | host-irreducible / representation bridge | Generic polymorphic `call` performs Closure invocation or ordinary instance construction; `identityHash` exposes semantic identity without dynamic-dispatch substitution; inherited `hasSlot` validates one semantic String and projects exact receiver-local slot presence; inherited `slotValue` validates one semantic String, reads only an ordinary receiver local binding and returns the exact stored value or signals Error when absent; `ensure` establishes the D043 Closure-only protected dynamic extent and executes unwind cleanup before normal/return/Error propagation; inherited `parent` projects the exact immutable semantic delegation parent across ordinary and opaque represented values and signals for the unique root because no structural parent exists; `while` establishes the D044 Closure-only iterative control boundary while reusing ordinary Closure invocation, replay, suspension, cancellation and task ownership machinery. |
 | `ProtosStandardBooleanProtocol.java` | 1 | host-irreducible | `ifTrue`/`ifFalse`/`and`/`or` are the primitive selective-control surface used to express branching itself, including path-sensitive callback validation. |
 | `ProtosStandardHashSupport.java` | 3 | representation bridge | Object identity hashing and Number/String hashing depend on semantic identity or exact represented values and must not be redefined through overrideable message sends. |
 | `ProtosStandardNumberEqualityProtocol.java` | 1 | representation bridge | Exact cross-family Number equality needs Integer/fixed/binary64 representation knowledge, including NaN and exact-integral Float handling. |
@@ -140,7 +160,7 @@ the standard native boundary.
 | `ProtosStandardFileProtocol.java` | 10 | resource/capability bridge | File objects are acquired resource capabilities whose exact local surface depends on backend-provided authority and whose operations own cursor/append/sync/close/commitment state. |
 | `ProtosStandardFilesystemProtocol.java` | 1 | resource/capability bridge | Host-provisioned Filesystem authority exposes standard `open`, `replace`, and `remove` through one shared audited operation-Closure construction helper. Open retains confined/race-free acquisition and File materialization; D041 namespace mutation uses an independent host-neutral effect/commit cutover and backend-provided confined atomic transition. |
 
-Total audited Core production construction sites: **112 across 30 providers**.
+Total audited Core production construction sites: **113 across 30 providers**.
 
 CLI/launcher-owned host conveniences are not Core standard behavior and therefore
 do not change that 30-provider / 111-site Core boundary. They are nevertheless
@@ -195,7 +215,7 @@ audited selectors rather than a new Protos-visible primitive family.
 The numerical entries below are retained as chronological audit history at the
 named slices. Lower historical counts in that progression are not current
 boundary claims; the table above plus the executable architecture guard own the
-current 112-site / 30-provider inventory.
+current 113-site / 30-provider inventory.
 I018-L closed with the 90-site/22-provider baseline. I016-D1 was an explicitly
 reviewed post-I018 resource/capability extension adding exactly one
 `Filesystem.open` native-Closure construction site.

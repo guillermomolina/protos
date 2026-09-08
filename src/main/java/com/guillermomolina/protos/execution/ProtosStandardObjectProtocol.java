@@ -67,6 +67,12 @@ public final class ProtosStandardObjectProtocol {
                     ProtosClosureValue.nativeClosure(
                             ProtosStandardObjectProtocol::hasSlot));
         }
+        if (!object.hasLocalSlot("slotValue")) {
+            object.createLocalSlot(
+                    "slotValue",
+                    ProtosClosureValue.nativeClosure(
+                            ProtosStandardObjectProtocol::slotValue));
+        }
         if (!object.hasLocalSlot("parent")) {
             object.createLocalSlot(
                     "parent",
@@ -113,6 +119,24 @@ public final class ProtosStandardObjectProtocol {
             return ProtosBooleanValue.of(ordinary.hasLocalSlot(name.value()));
         }
         return ProtosBooleanValue.FALSE;
+    }
+
+    private static Object slotValue(ProtosActivation activation, List<?> supplied) {
+        if (supplied.size() != 1
+                || !(supplied.get(0) instanceof ProtosStringValue name)) {
+            throw invalid(activation);
+        }
+
+        Object receiver = activation.receiver();
+        if (!(receiver instanceof ProtosObjectValue ordinary)) {
+            throw invalid(activation);
+        }
+
+        var value = ordinary.readLocalSlot(name.value());
+        if (value.isEmpty()) {
+            throw invalid(activation);
+        }
+        return value.orElseThrow();
     }
 
     private static Object whileLoop(ProtosActivation activation, List<?> supplied) {
