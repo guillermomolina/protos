@@ -115,6 +115,51 @@ isFutureStoredObservationExpectation: (spec) => {
     (Manifest.caseExpected(spec) === "stored:Error")
 }
 
+futureObservationPolicyMode: (policy) => {
+    policy.at(0)
+}
+
+futureObservationPolicyParent: (policy) => {
+    policy.at(1)
+}
+
+parseFutureObservationPolicy: (text) => {
+    source: Encoding.UTF8.encode(text)
+    modeBytes: Encoding.UTF8.encode("")
+    parentBytes: Encoding.UTF8.encode("")
+    separatorSeen: false
+
+    source.each((octet) => {
+        (octet == 58).ifTrue(() => {
+            separatorSeen.ifTrue(() => { policyError() })
+            separatorSeen = true
+        })
+        (octet == 58).ifFalse(() => {
+            separatorSeen.ifTrue(() => {
+                parentBytes.add(octet)
+            })
+            separatorSeen.ifFalse(() => {
+                modeBytes.add(octet)
+            })
+        })
+    })
+
+    separatorSeen.ifFalse(() => { policyError() })
+    (modeBytes.size() == 0).ifTrue(() => { policyError() })
+    (parentBytes.size() == 0).ifTrue(() => { policyError() })
+
+    mode: Encoding.UTF8.decode(modeBytes)
+    supportedMode: mode === "stored"
+    (mode === "fresh").ifTrue(() => {
+        supportedMode = true
+    })
+    supportedMode.ifFalse(() => { policyError() })
+
+    parentName: Encoding.UTF8.decode(parentBytes)
+    parent: standardErrorPrototype(parentName)
+    resultTuple(mode, parent)
+}
+
 isDExpectation: (spec) => {
     supported: isSimpleExpectation(spec)
     isClosureErrorParentFreshExpectation(spec).ifTrue(() => {
