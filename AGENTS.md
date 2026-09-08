@@ -95,6 +95,42 @@ a new agent encounters them. If the user explicitly asks to re-evaluate or
 reopen such a decision, treat it as open for the requested review and do not
 advance dependent new design work until the user approves the resulting choice.
 
+## Project decision families
+
+Formal decision identifiers distinguish normative language design from durable
+platform-specific implementation architecture:
+
+- `Dxxx` records language/specification design decisions whose authority is or
+  may become normative for observable Protos behavior. A `Dxxx` resolution is
+  implementation-independent even when a particular implementation exposed the
+  question.
+- `PLATxxx` records durable, non-normative implementation architecture decisions
+  that depend on a concrete host platform/runtime/VM/OS/native substrate,
+  materially constrain later implementation work, and are intended to remain
+  semantically invisible to Protos programs.
+
+Both families cross the explicit approval gate above: allocating an unresolved
+identifier is allowed, but moving it to a selected/ratified state requires
+explicit project-owner approval unless that bounded decision was explicitly
+delegated.
+
+Do not use `PLATxxx` as an escape hatch for semantic decisions. If a
+platform-dependent choice changes observable Protos identity, authority,
+ordering, isolation, failure behavior, portability guarantees, or another
+language contract, resolve the semantic question through the applicable
+`Dxxx`/normative specification process first. Conversely, do not force a
+Truffle/JVM/OS/backend hosting choice into `Dxxx` merely because it is durable
+when another conforming implementation could realize the same Protos semantics
+with different machinery.
+
+`Ixxx`, `CLIxxx`, `TOOLxxx`, `PERFxxx`, `DISTxxx`, and similar implementation or
+project-work families may consume a ratified `PLATxxx` decision. The decision
+record owns the durable platform architecture; the consuming work item owns its
+implementation, tests, migration, and closure evidence.
+
+The canonical registry for platform/runtime architecture decisions is
+`docs/project/PLATFORM_ARCHITECTURE_DECISIONS.md`.
+
 ## Current project coordinates
 
 The following identifiers are the repository's current operational coordinates.

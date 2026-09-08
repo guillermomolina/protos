@@ -49,6 +49,9 @@ an old path temporarily between slices only as staging machinery; I026-A4 must
 retire it as a separate primary runtime entry path rather than institutionalize a
 permanent compatibility layer.
 
+The production hosting topology exposed during A4B is owned by ratified `PLAT001`;
+see `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md`.
+
 | Slice | Status | Version | Dependencies | Scope / exit condition |
 |---|---|---|---|---|
 | I026-A1 | CLOSED | `0.2.260-SNAPSHOT` | — | Register `ProtosLanguage` and one per-Polyglot-context `ProtosLanguageContext`, enable the official Truffle registration annotation processor, and prove Polyglot discovery plus `Context.initialize("protos")`. Parsing/execution is intentionally not connected by this slice. |
@@ -56,7 +59,10 @@ permanent compatibility layer.
 | I026-A3 | CLOSED | `0.2.265-SNAPSHOT` | I026-A2 | Resolver-loaded modules now cross the host boundary as one `ProtosModuleSource` carrying the exact canonical `ModuleKey` plus a character Truffle `Source`. Standard-library, bundled-tool and workspace-package file resolvers attach the exact file URI; delegated resolvers preserve the returned Source unchanged. Module runtime, RootActor initial-module execution and bundled-tool staging compile the `ProtosModuleSource` directly, preserve its Source on top-level/derived roots even before A4 supplies an active language instance, and fail closed on key/source mismatch. No identity-free String fallback remains in the resolver contract. |
 | I026-A4 | IN_PROGRESS | — | I026-A2 + I026-A3 | Polyglot runtime-entry cutover, refined into A4A-A4B after the A3 publication exposed the activation-bearing root-task boundary. A4 closes only when A4B has migrated all primary runtime drivers and retired direct compiler/call entry as a parallel architecture. |
 | I026-A4A | CLOSED | `0.2.266-SNAPSHOT` | I026-A3 | Establish one host-owned thread-confined entered Polyglot `Context`, resolve the exact current `ProtosLanguageContext` through Truffle `ContextReference`, parse exact Truffle `Source` values through `Env.parsePublic(...)` / `ProtosLanguage.parse(...)`, and execute the resulting language-bound target through the existing activation-bearing `ProtosRootTaskExecution`. No CLI route is cut over by A4A. |
-| I026-A4B | READY | — | I026-A4A | Move CLI, REPL, bundled-tool, workspace and remaining production top-level drivers onto the A4A context boundary; make imported/Core roots language-bound while that context is entered; preserve public CLI/Process/module semantics; and retire direct `compile(String).call(...)` as a separate production entry architecture. |
+| I026-A4B | IN_PROGRESS | — | I026-A4A | Implement ratified PLAT001 through ordered A4B1-A4B3; A4B closes only after multithread safety, Process-scoped hosting and driver cutover are all published. |
+| I026-A4B1 | READY | — | I026-A4A + PLAT001 | Audit/establish Truffle multithread safety, replace A4A owner-thread confinement with bounded per-carrier enter/leave, and prove no global execution lock/GIL or semantic ThreadLocal. |
+| I026-A4B2 | BLOCKED_BY_DEPENDENCIES | — | I026-A4B1 | Establish shared-Engine / Process-scoped multithread Context lifecycle and prove independent multi-Process plus concurrent-Actor behavior without making Context semantic identity. |
+| I026-A4B3 | BLOCKED_BY_DEPENDENCIES | — | I026-A4B2 | Cut CLI, REPL, bundled-tool, workspace and remaining production drivers onto the PLAT001 substrate and retire direct compiler/call entry as a separate primary production architecture. |
 | I026-B | BLOCKED_BY_DEPENDENCIES | — | I026-A4 | Map the existing exact `SourceSpan` ranges to valid Truffle `SourceSection` values on roots/execution nodes, with focused Java-side integration evidence. |
 | I026-C | BLOCKED_BY_DEPENDENCIES | — | I026-B | Make the relevant AST nodes instrumentable and expose the minimal faithful `StandardTags` needed for source execution/stepping; do not tag nodes merely to satisfy a debugger UI. |
 | I026-D | READY | — | I026-A1 | Expose semantically faithful Truffle interop/debug views for Protos runtime values needed by tooling, without changing Protos identity or access semantics. This may proceed independently from A2-A4. |
@@ -72,9 +78,13 @@ module semantics. A4 is now IN_PROGRESS. A4A establishes the entered Polyglot ex
 inventing a second representation of Protos values: a host-owned thread-confined
 `Context` supplies the current `ProtosLanguageContext`, `Env.parsePublic(...)` feeds the
 already-published `ProtosLanguage.parse(...)` boundary, and the resulting target still
-runs through the existing activation-bearing RootActor task machinery. A4B is READY to
-perform the actual CLI/REPL/workspace/tool-driver cutover and retire the staged direct
-production entry path. I026-D remains independently READY.
+runs through the existing activation-bearing RootActor task machinery. A4A remains valid historical staging evidence, but its owner-thread confinement is not the
+selected production topology. PLAT001 is now RATIFIED and owns the durable Truffle hosting
+architecture: a shareable Engine, one current multithread Context per hosted Protos Process,
+no Context-per-Actor/carrier mapping, no global execution lock/GIL, and no Truffle identity
+promoted into Protos semantics. A4B is IN_PROGRESS through A4B1-A4B3: multithread safety
+first, Process-scoped hosting second, and complete driver cutover/retirement of the staged
+direct production entry path third. I026-D remains independently READY.
 
 ## Deferred ownership
 
