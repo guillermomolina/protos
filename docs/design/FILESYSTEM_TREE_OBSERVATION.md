@@ -425,8 +425,8 @@ Current planned boundary after specification revision 0.1.384:
 I024-A   host-neutral result/custody flow                     CLOSED
 I024-A2  post-0.1.384 compatibility re-audit                  CLOSED
 I024-B   standard Filesystem public materialization           CLOSED
-I024-C   secure NIO + immutable captured backend              READY
-I024-D   integrated Protos conformance + B009 closure         BLOCKED_BY_DEPENDENCIES
+I024-C   secure NIO + immutable captured backend              CLOSED
+I024-D   integrated Protos conformance + B009 closure         READY
 ```
 
 ## I024-B public materialization result
@@ -452,9 +452,50 @@ model:
 - no Filesystem `close` selector is introduced and the internal captured-backend
   contract exposes no caller-managed release protocol.
 
-I024-B does not implement host enumeration or capture. I024-C remains the sole
-owner of secure NIO no-follow traversal and scalable implementation-managed
-immutable backing.
+I024-B deliberately did not implement host enumeration or capture. I024-C now
+closes that implementation boundary with secure NIO no-follow traversal and
+scalable implementation-managed immutable backing.
+
+## I024-C secure NIO + immutable backing result
+
+I024-C is CLOSED. The existing complete-tree
+`ProtosNioReadOnlyTreeFilesystemBackend` now implements the two D046 backend
+operations without changing the public Filesystem object model.
+
+The live source side keeps confinement explicit:
+
+- every `entries`/`captureTree` directory selection starts from the retained
+  authority-root `SecureDirectoryStream` and opens a fresh relative directory
+  handle with `NOFOLLOW_LINKS`, including a fresh internal `.` handle for root
+  observation so repeated root enumeration never reuses a one-shot
+  `DirectoryStream` iterator;
+- each returned child name is the exact representable final native component and
+  duplicate exact names fail the operation;
+- kind classification uses `BasicFileAttributeView` with `NOFOLLOW_LINKS`;
+- regular capture opens the selected child with `READ + NOFOLLOW_LINKS`;
+- directory capture opens the selected child as a secure relative directory with
+  `NOFOLLOW_LINKS`; links and other entries remain opaque metadata and are never
+  traversed.
+
+Recursive capture uses an explicit heap traversal stack rather than Java call-stack
+recursion. Directory/name/kind metadata is frozen into an immutable logical tree.
+Regular-file content is copied with a bounded 64 KiB buffer into private
+implementation-managed temporary blob backing, so total captured bytes are not
+retained in Java heap. Each regular copy fixes one finite source-channel size and
+either obtains exactly that extent or fails; concurrent source mutation can still
+produce the deliberately non-point-in-time D046 image but cannot retarget a
+selected regular/directory through a followed child link.
+
+The captured backend is Java-only implementation machinery. Captured subtree
+operations share the same immutable backing through internal leases, and opened
+captured Files retain their own backing lease. Cleaner-based reclamation removes
+backing after the final internal lease disappears. `releaseIfUntransferred`
+performs prompt cleanup only for custody that never reaches a successful
+Filesystem result. None of these mechanics create a Protos-visible `close`,
+release, Directory identity, source path, or backing locator.
+
+I024-D remains responsible for the final integrated Protos-visible conformance,
+native-boundary reconciliation, B009/I024 closure and TOOL001-F2E2 transition.
 
 ## I024-A2 compatibility audit result
 

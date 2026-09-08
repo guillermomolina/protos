@@ -475,21 +475,19 @@ B009 becomes CLOSED only after the general D046 `entries` + `captureTree`
 implementation and integrated Protos conformance are published.
 
 Implementation progress:
-I024-A host-neutral tree-observation flow is published at `0.2.249-SNAPSHOT`, and
-I024-A2 is CLOSED after confirming that substrate against D046/0.1.384. I024-B is
-now CLOSED at `0.2.251-SNAPSHOT`: the standard host-provisioned Filesystem surface contains
-ordinary `entries` and `captureTree` selectors through the existing shared
-native-Closure helper, eager entry results materialize as the required fresh
-Array/frozen descriptor shape, and captured results materialize as fresh
-structurally read-only Filesystem capabilities with no standard `close`.
-Backends that have not implemented tree observation retain default-fail behavior,
-so the current production NIO backend reports `IOError` rather than exposing an
-incomplete result. I024-C is READY to add secure NIO direct-child observation and
-implementation-managed immutable capture backing. The existing internal
-AutoCloseable tree backend remains an implementation-custody constraint, not
-public lifecycle. B009 itself remains READY until complete D046
-implementation/conformance closes it.
+I024-A/A2 are CLOSED and I024-B is CLOSED at `0.2.251-SNAPSHOT`. I024-C is now
+CLOSED at `0.2.253-SNAPSHOT`: the general complete-tree NIO backend performs confined
+direct-child no-follow observation through fresh relative `SecureDirectoryStream`
+handles and captures directory trees without following child links. Regular-file
+bytes stream into private implementation-managed blob backing while immutable
+name/kind/tree metadata stays detached from source authority. Captured subtree
+views share that backing, opened Files retain internal backing custody, and
+Cleaner/lease reclamation remains implementation-only; no standard Filesystem
+`close` or Directory lifetime identity is introduced.
 
+I024-D is READY for the integrated Protos-visible conformance/architecture closure.
+B009 itself remains READY until that final evidence publishes and closes the
+general D046 implementation.
 Independent work:
 F2E1 remains CLOSED; package acquisition/network/store-write remain independently
 scoped; F2E3/F2E4/F2E5 remain gated behind F2E2.

@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
+import com.guillermomolina.protos.runtime.ProtosFilesystemTreeObservationFlow;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
 import java.io.IOException;
 import java.math.BigInteger;
@@ -31,12 +32,26 @@ import java.nio.file.OpenOption;
 import java.nio.file.Path;
 import java.nio.file.SecureDirectoryStream;
 import java.nio.file.StandardOpenOption;
+import java.nio.file.DirectoryIteratorException;
+import java.nio.file.attribute.BasicFileAttributeView;
+import java.nio.file.attribute.BasicFileAttributes;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
-/** Read-only NIO Filesystem backend confined to one complete directory tree. */
+/**
+ * Read-only NIO Filesystem backend confined to one complete directory tree.
+ *
+ * <p>I024-C adds D046 direct-child no-follow observation and recursive immutable capture. Source
+ * traversal stays relative to pinned {@code SecureDirectoryStream} handles; regular bytes stream
+ * into implementation-managed backing rather than accumulating the complete payload in heap.
+ */
 public final class ProtosNioReadOnlyTreeFilesystemBackend
         implements ProtosStandardFilesystemProtocol.Backend, AutoCloseable {
     private static final int MAX_READ_CHUNK = 64 * 1024;
@@ -114,6 +129,285 @@ public final class ProtosNioReadOnlyTreeFilesystemBackend
             closeDirectories(openedDirectories);
         }
         return () -> {};
+    }
+
+
+    @Override
+    public ProtosFilesystemTreeObservationFlow.Cancellation entries(
+            ProtosPathValue path,
+            ProtosFilesystemTreeObservationFlow.EntriesCompletion completion) {
+        Objects.requireNonNull(path, "path");
+        Objects.requireNonNull(completion, "completion");
+
+        List<String> components = permittedDirectoryComponents(path);
+        if (closed || secureRoot == null || components == null) {
+            completion.failed();
+            return () -> {};
+        }
+
+        ArrayList<SecureDirectoryStream<Path>> openedDirectories = new ArrayList<>();
+        List<ProtosFilesystemTreeObservationFlow.Entry> result;
+        try {
+            SecureDirectoryStream<Path> directory =
+                    selectDirectory(components, openedDirectories);
+            result = observeEntries(directory);
+        } catch (IOException | RuntimeException failure) {
+            completion.failed();
+            return () -> {};
+        } finally {
+            closeDirectories(openedDirectories);
+        }
+
+        completion.succeeded(result);
+        return () -> {};
+    }
+
+    @Override
+    public ProtosFilesystemTreeObservationFlow.Cancellation captureTree(
+            ProtosPathValue path,
+            ProtosFilesystemTreeObservationFlow.CaptureCompletion completion) {
+        Objects.requireNonNull(path, "path");
+        Objects.requireNonNull(completion, "completion");
+
+        List<String> components = permittedDirectoryComponents(path);
+        if (closed || secureRoot == null || components == null) {
+            completion.failed();
+            return () -> {};
+        }
+
+        ArrayList<SecureDirectoryStream<Path>> openedDirectories = new ArrayList<>();
+        ProtosNioCapturedTreeFilesystemBackend captured;
+        try (ProtosNioCapturedTreeFilesystemBackend.Builder builder =
+                new ProtosNioCapturedTreeFilesystemBackend.Builder()) {
+            SecureDirectoryStream<Path> directory =
+                    selectDirectory(components, openedDirectories);
+            ProtosNioCapturedTreeFilesystemBackend.DirectoryNode root =
+                    captureDirectory(directory, builder);
+            captured = builder.complete(root);
+        } catch (IOException | RuntimeException failure) {
+            completion.failed();
+            return () -> {};
+        } finally {
+            closeDirectories(openedDirectories);
+        }
+
+        try {
+            completion.succeeded(captured, captured::releaseIfUntransferred);
+        } catch (RuntimeException failure) {
+            captured.releaseIfUntransferred();
+            throw failure;
+        }
+        return () -> {};
+    }
+
+    private SecureDirectoryStream<Path> selectDirectory(
+            List<String> components,
+            List<SecureDirectoryStream<Path>> openedDirectories)
+            throws IOException {
+        SecureDirectoryStream<Path> current =
+                secureRoot.newDirectoryStream(
+                        nativeComponent("."), LinkOption.NOFOLLOW_LINKS);
+        openedDirectories.add(current);
+        for (String name : components) {
+            SecureDirectoryStream<Path> next =
+                    current.newDirectoryStream(nativeComponent(name), LinkOption.NOFOLLOW_LINKS);
+            openedDirectories.add(next);
+            current = next;
+        }
+        return current;
+    }
+
+    private List<ProtosFilesystemTreeObservationFlow.Entry> observeEntries(
+            SecureDirectoryStream<Path> directory)
+            throws IOException {
+        ArrayList<ProtosFilesystemTreeObservationFlow.Entry> result = new ArrayList<>();
+        HashSet<String> exactNames = new HashSet<>();
+        try {
+            for (Path observed : directory) {
+                String name = exactChildName(observed);
+                if (!exactNames.add(name)) {
+                    throw new IOException("duplicate exact direct-child name");
+                }
+                result.add(
+                        new ProtosFilesystemTreeObservationFlow.Entry(
+                                name, classify(directory, name)));
+            }
+        } catch (DirectoryIteratorException failure) {
+            throw failure.getCause();
+        }
+        return List.copyOf(result);
+    }
+
+    private ProtosNioCapturedTreeFilesystemBackend.DirectoryNode captureDirectory(
+            SecureDirectoryStream<Path> root,
+            ProtosNioCapturedTreeFilesystemBackend.Builder builder)
+            throws IOException {
+        Deque<CaptureFrame> stack = new ArrayDeque<>();
+        stack.push(new CaptureFrame(root, null, false));
+        try {
+            while (!stack.isEmpty()) {
+                CaptureFrame frame = stack.peek();
+                if (frame.iterator().hasNext()) {
+                    Path observed = frame.iterator().next();
+                    String name = exactChildName(observed);
+                    if (frame.children().containsKey(name)) {
+                        throw new IOException("duplicate exact captured child name");
+                    }
+
+                    ProtosFilesystemTreeObservationFlow.EntryKind kind =
+                            classify(frame.directory(), name);
+                    switch (kind) {
+                        case REGULAR -> {
+                            try (SeekableByteChannel source =
+                                    frame.directory()
+                                            .newByteChannel(
+                                                    nativeComponent(name),
+                                                    Set.<OpenOption>of(
+                                                            StandardOpenOption.READ,
+                                                            LinkOption.NOFOLLOW_LINKS))) {
+                                frame.children()
+                                        .put(
+                                                name,
+                                                ProtosNioCapturedTreeFilesystemBackend.EntryNode
+                                                        .regular(
+                                                                builder.captureBlob(source)));
+                            }
+                        }
+                        case DIRECTORY -> {
+                            SecureDirectoryStream<Path> child =
+                                    frame.directory()
+                                            .newDirectoryStream(
+                                                    nativeComponent(name),
+                                                    LinkOption.NOFOLLOW_LINKS);
+                            try {
+                                stack.push(new CaptureFrame(child, name, true));
+                            } catch (RuntimeException frameFailure) {
+                                closeSilently(child);
+                                throw frameFailure;
+                            }
+                        }
+                        case LINK, OTHER ->
+                                frame.children()
+                                        .put(
+                                                name,
+                                                ProtosNioCapturedTreeFilesystemBackend.EntryNode
+                                                        .opaque(kind));
+                    }
+                    continue;
+                }
+
+                ProtosNioCapturedTreeFilesystemBackend.DirectoryNode completed =
+                        new ProtosNioCapturedTreeFilesystemBackend.DirectoryNode(
+                                frame.children());
+                stack.pop();
+                if (frame.closeWhenDone()) {
+                    closeSilently(frame.directory());
+                }
+                if (stack.isEmpty()) {
+                    return completed;
+                }
+                stack.peek()
+                        .children()
+                        .put(
+                                frame.nameInParent(),
+                                ProtosNioCapturedTreeFilesystemBackend.EntryNode.directory(
+                                        completed));
+            }
+        } catch (DirectoryIteratorException failure) {
+            throw failure.getCause();
+        } finally {
+            while (!stack.isEmpty()) {
+                CaptureFrame frame = stack.pop();
+                if (frame.closeWhenDone()) {
+                    closeSilently(frame.directory());
+                }
+            }
+        }
+        throw new IOException("capture traversal ended without a root result");
+    }
+
+    private ProtosFilesystemTreeObservationFlow.EntryKind classify(
+            SecureDirectoryStream<Path> directory, String name)
+            throws IOException {
+        BasicFileAttributeView view =
+                directory.getFileAttributeView(
+                        nativeComponent(name),
+                        BasicFileAttributeView.class,
+                        LinkOption.NOFOLLOW_LINKS);
+        if (view == null) {
+            throw new IOException("basic no-follow attributes unavailable");
+        }
+        BasicFileAttributes attributes = view.readAttributes();
+        if (attributes.isSymbolicLink()) {
+            return ProtosFilesystemTreeObservationFlow.EntryKind.LINK;
+        }
+        if (attributes.isDirectory()) {
+            return ProtosFilesystemTreeObservationFlow.EntryKind.DIRECTORY;
+        }
+        if (attributes.isRegularFile()) {
+            return ProtosFilesystemTreeObservationFlow.EntryKind.REGULAR;
+        }
+        return ProtosFilesystemTreeObservationFlow.EntryKind.OTHER;
+    }
+
+    private String exactChildName(Path observed) throws IOException {
+        Path fileName = observed.getFileName();
+        if (fileName == null) {
+            throw new IOException("directory entry has no exact child name");
+        }
+        String name = fileName.toString();
+        if (!portableNativeComponent(name)) {
+            throw new IOException("directory entry is not one representable Path component");
+        }
+        return name;
+    }
+
+    private List<String> permittedDirectoryComponents(ProtosPathValue path) {
+        if (path.rooted()) {
+            return null;
+        }
+        ArrayList<String> result = new ArrayList<>(path.components().size());
+        for (ProtosPathValue.Component component : path.components()) {
+            if (!(component instanceof ProtosPathValue.Normal normal)) {
+                return null;
+            }
+            String name = normal.name();
+            if (!portableNativeComponent(name)) {
+                return null;
+            }
+            result.add(name);
+        }
+        return List.copyOf(result);
+    }
+
+    private record CaptureFrame(
+            SecureDirectoryStream<Path> directory,
+            String nameInParent,
+            boolean closeWhenDone,
+            Iterator<Path> iterator,
+            LinkedHashMap<String, ProtosNioCapturedTreeFilesystemBackend.EntryNode> children) {
+        CaptureFrame(
+                SecureDirectoryStream<Path> directory,
+                String nameInParent,
+                boolean closeWhenDone) {
+            this(
+                    Objects.requireNonNull(directory, "directory"),
+                    nameInParent,
+                    closeWhenDone,
+                    directory.iterator(),
+                    new LinkedHashMap<>());
+        }
+    }
+
+    private static void closeSilently(SecureDirectoryStream<Path> directory) {
+        if (directory == null) {
+            return;
+        }
+        try {
+            directory.close();
+        } catch (IOException ignored) {
+            // Source traversal handles remain implementation-owned acquisition machinery.
+        }
     }
 
     @Override

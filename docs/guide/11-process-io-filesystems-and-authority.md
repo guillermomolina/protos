@@ -1259,16 +1259,18 @@ from it keep their ordinary File/`Closable` lifecycle.
 `I024 — Filesystem directory observation + captured-tree capability` remains
 `IN_PROGRESS`.
 
-I024-B now publishes the language-visible `entries` and `captureTree` selectors
-and their standard result materialization. Existing production Filesystem
-backends that do not yet implement D046 tree observation fail those operations
-through an ordinary failed Future/`IOError`; I024-C still owns secure NIO
-enumeration and immutable captured-tree backing, and I024-D still owns complete
-integrated conformance.
+I024-B publishes the language-visible `entries` and `captureTree` selectors and
+their standard result materialization. I024-C now also implements those operations
+for the production complete-tree NIO backend: direct-child observation remains
+no-follow/confined, recursive capture copies regular bytes into
+implementation-managed immutable backing, links are retained opaquely rather than
+followed, and captured Filesystems remain read-only with no public `close`.
 
-Therefore the selectors are now executable standard API surface, but successful
-real-tree `entries`/`captureTree` behavior is not yet available from the current
-production NIO backend until I024-C/D close.
+Therefore successful real-tree `entries`/`captureTree` behavior is now available
+where the host provider supplies the required secure directory confinement.
+Backends that do not implement D046 still fail through the ordinary
+Future/`IOError` path. I024-D remains responsible for complete integrated
+Protos-visible conformance and final I024/B009 closure.
 
 This distinction is intentional:
 
