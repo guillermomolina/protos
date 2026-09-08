@@ -1,6 +1,6 @@
 # Protos Package ContentIdentity — canonical logical tree v1
 
-Status: **IN_PROGRESS through CLOSED TOOL001-F2E1B**
+Status: **CLOSED — TOOL001-F2E1A/B/C canonical ContentIdentity v1 contract**
 Nature: non-normative Package Tool/package-artifact design
 Owning work: `TOOL001-F2E1`
 
@@ -41,7 +41,7 @@ become executable source authority.
 ```text
 F2E1A  logical-tree domain + portable path/entry-kind contract     CLOSED
 F2E1B  canonical byte stream + method/hash contract                CLOSED
-F2E1C  independent conformance vectors + F2E1 closure              READY
+F2E1C  independent conformance vectors + F2E1 closure              CLOSED
 ```
 
 E1A answers **what the logical tree is**. It does not answer how that tree is
@@ -707,3 +707,32 @@ TOOL001-F2E2   BLOCKED_BY_DEPENDENCIES: TOOL001-F2E1
 No Protos language semantics, Core Filesystem surface, native boundary,
 implementation version, registry protocol or executable external-node behavior
 changes in this slice.
+
+## F2E1C published conformance and parent closure
+
+`docs/design/PACKAGE_CONTENT_IDENTITY_VECTORS.md` is the fixed external
+conformance-vector companion for this contract.
+
+The expected constants were computed before the repository Java focal with two
+separate one-off Python implementations of E1A/E1B: one materialized the whole
+canonical stream before hashing, while the other fed the grammar directly into a
+streaming SHA-256 state with different code/chunk boundaries. Both agreed.
+
+`ProtosPackageContentIdentityV1ConformanceTest` independently reconstructs the
+domain checks and canonical stream in Java/JDK primitives. It calls no production
+ContentIdentity canonicalizer because none exists yet.
+
+The fixed evidence covers canonical ordering, empty/binary content, varuint
+boundaries including a value beyond 64 bits, path/content framing, exact-case
+identity, manifest/content mutation, invalid paths and reserved names,
+ASCII-case-fold collisions, symlink/special-entry rejection, empty-directory
+non-semantics, excluded metadata, and store/transport-layout independence.
+
+TOOL001-F2E1 is CLOSED.
+
+This closes the artifact identity contract only. The required post-E1 audit
+confirms that current Core Filesystem still cannot express the observations
+needed for a portable verifier: confined directory enumeration, entry-kind
+observation without following links/special entries, and stable regular-file
+snapshot acquisition. That missing general semantic boundary is recorded as
+B009. F2E2 therefore becomes `BLOCKED (B009)`, not READY.

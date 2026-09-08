@@ -1,6 +1,6 @@
 # TOOL001-F2E — External Immutable-Package Execution
 
-Status: **IN_PROGRESS through CLOSED F2E1B canonical byte-stream/hash contract**
+Status: **IN_PROGRESS — F2E1 ContentIdentity CLOSED; F2E2 BLOCKED by B009**
 Nature: non-normative Package Tool / host-integration project record
 Allocated after: `TOOL001-F2D` workspace-only execution closure
 
@@ -40,7 +40,7 @@ integration slice.
 
 ## Fresh audit findings
 
-### ContentIdentity tree canonicalization is not yet frozen
+### ContentIdentity tree canonicalization was open; F2E1 now closes it
 
 `docs/design/PACKAGE_IDENTITY_VERSIONING.md` defines ContentIdentity as the
 algorithm-tagged digest of a versioned canonical logical package tree and gives
@@ -94,11 +94,11 @@ designed store-write/network authority.
 ```text
 F2E   external immutable-package execution                         IN_PROGRESS
 F2E0  prerequisite audit + decomposition                           CLOSED
-F2E1  protos-package-tree-v1 ContentIdentity contract              IN_PROGRESS
+F2E1  protos-package-tree-v1 ContentIdentity contract              CLOSED
 F2E1A logical-tree domain + portable path/entry-kind contract       CLOSED
 F2E1B canonical byte stream + method/hash contract                  CLOSED
-F2E1C independent conformance vectors + F2E1 closure                READY
-F2E2  verified read-only package-store binding                     BLOCKED_BY_DEPENDENCIES
+F2E1C independent conformance vectors + F2E1 closure                CLOSED
+F2E2  verified read-only package-store binding                     BLOCKED
 F2E3  external-node execution-plan construction                    BLOCKED_BY_DEPENDENCIES
 F2E4  external canonical ModuleKey + source resolver               BLOCKED_BY_DEPENDENCIES
 F2E5  public run integration + F2 external-execution closure       BLOCKED_BY_DEPENDENCIES
@@ -246,3 +246,19 @@ transition over exactly the same stream may use a new algorithm token.
 
 E1C is now READY to publish independently computed fixed vectors and close F2E1.
 F2E2 remains blocked on the parent F2E1 closure.
+
+## F2E1 final closure and F2E2 prerequisite result
+
+F2E1 is CLOSED by A/B/C. The exact package-tree identity is owned by
+`PACKAGE_CONTENT_IDENTITY.md` and `PACKAGE_CONTENT_IDENTITY_VECTORS.md`.
+
+The required E2 post-E1 capability audit now has a concrete answer. Verification
+needs confined directory enumeration, exact stored child names, entry-kind
+observation without following links/special entries, regular-file acquisition,
+and one stable logical snapshot or fail-closed mutation detection.
+
+Current standard Filesystem exposes `open`, `replace` and `remove`, but not that
+tree-observation boundary. LIB004 already records that directory
+enumeration/stat/symlink inspection cannot be manufactured from ambient host
+APIs. A package-only Java/NIO recursive verifier would violate F2E0, so B009
+records the missing general semantic owner and F2E2 is BLOCKED.

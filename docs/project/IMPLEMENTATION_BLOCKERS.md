@@ -419,3 +419,48 @@ Independent work:
 B008 no longer blocks implementation work. I023-C may proceed; unrelated work
 remains independent. B007 remains READY until final I023-D implementation
 closure.
+
+## B009 — Portable Filesystem tree observation for immutable package verification
+
+Status: BLOCKED
+
+Implementation area:
+`TOOL001-F2E2` verified read-only package-store binding and later package
+execution that must prove a materialized external payload matches its locked
+`protos-package-tree-v1` ContentIdentity before code authority begins.
+
+Normative dependency:
+F2E1 now fixes the exact package observations, but current Core Filesystem does
+not define a portable general protocol for confined directory enumeration and
+entry-kind observation. The current surface is `open`, `replace`, and `remove`;
+the LIB004 design explicitly states that ordinary library code cannot manufacture
+directory enumeration/stat/symlink inspection from ambient host APIs.
+
+Specification authority:
+- `spec/io/FILESYSTEM.md`;
+- any future normative design revision owning portable namespace/tree
+  observation;
+- `docs/design/PACKAGE_CONTENT_IDENTITY.md` as the non-normative package consumer.
+
+Objective unblock condition:
+The normative Filesystem contract must let independent implementations determine:
+
+1. exact direct-child enumeration under explicit confined Filesystem authority;
+2. entry-kind observation sufficient to accept directories/regular files and
+   reject symlink/reparse/special traversal entries without first following them;
+3. exact stored-name/case and confinement behavior while traversing;
+4. regular-file acquisition/snapshot behavior that either observes one stable
+   logical tree or fails instead of hashing mixed states;
+5. Future/cancellation/error/authority behavior for those observations.
+
+No particular API spelling (`entries`, `stat`, iterator, snapshot handle, etc.) is
+required; the portable semantics are.
+
+Current consequence:
+F2E2 is BLOCKED. Do not introduce `PackageNative.walkTree`,
+`java.nio.file.Files.walk`, ambient store scans, or another package-specific
+Java-only stat/symlink escape hatch.
+
+Independent work:
+F2E1 remains CLOSED; fetch/network/store-write design and unrelated Filesystem
+work may proceed independently. F2E3/F2E4/F2E5 remain gated behind F2E2.

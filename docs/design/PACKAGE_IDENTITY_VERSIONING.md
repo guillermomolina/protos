@@ -340,21 +340,18 @@ algorithm: sha256
 digest:    ...
 ```
 
-The exact canonical tree algorithm remains a focused artifact-format audit, but
-its design must define at least:
+`TOOL001-F2E1` closes that focused artifact-format audit in
+`docs/design/PACKAGE_CONTENT_IDENTITY.md` plus
+`docs/design/PACKAGE_CONTENT_IDENTITY_VECTORS.md`.
 
-- included package files and manifest content;
-- canonical relative path encoding;
-- path separator and case rules;
-- treatment/rejection of symlinks and special filesystem entries;
-- metadata that is semantic versus intentionally excluded;
-- deterministic byte representation;
-- resource inclusion;
-- exclusion of VCS metadata, caches, build products, absolute paths, usernames,
-  timestamps, and other machine-local state.
+The initial method is exactly `protos-package-tree-v1`: E1A's already-materialized
+portable regular-file payload, E1B's domain-separated tagged/length-framed stream,
+and the separately persisted initial `sha256` digest algorithm. E1C publishes
+fixed positive/negative vectors and exact expected digests.
 
-The canonicalization method itself is versioned. Changing tree encoding in the
-future must not cause old digests to be reinterpreted under a new algorithm.
+The canonicalization method remains versioned. Changing tree membership, path
+semantics or byte encoding requires a new method token. A future digest algorithm
+over exactly the same canonical stream changes the separate algorithm token.
 
 ### Digest agility
 
