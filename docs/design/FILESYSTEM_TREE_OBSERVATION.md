@@ -170,3 +170,32 @@ protocol exposure, secure NIO captured-tree backend, and final Protos integrated
 conformance/B009 closure.
 
 Those are implementation planning hints, not normative machinery.
+
+## I024 implementation decomposition and I024-A closure
+
+The current implementation audit splits I024 at four existing layer boundaries:
+
+```text
+I024-A  host-neutral result/custody flow                    CLOSED
+I024-B  standard Filesystem public materialization          READY
+I024-C  secure NIO + immutable captured backend             BLOCKED_BY_DEPENDENCIES
+I024-D  integrated Protos conformance + B009 closure        BLOCKED_BY_DEPENDENCIES
+```
+
+I024-A adds `ProtosFilesystemTreeObservationFlow` in the runtime layer.
+
+It preserves the established Filesystem flow discipline without publishing
+selectors: invalid non-Path arguments fail before backend authority; every
+invocation owns an independent hidden I/O lifecycle; backend/runtime descriptor
+failures map to IOError; exact-name/no-follow-kind observations are inert copied
+DTOs; and a captured result remains opaque custody with a release callback.
+
+Cancellation/failure/duplicate terminal completion that wins before transfer
+releases capture custody. Successful completion performs one producer-side
+commit+Future resolve cutover and establishes no source namespace/content effect.
+
+I024-A host-neutral result/custody flow is published.
+
+I024-B alone owns semantic Array/frozen descriptor and Filesystem capability
+materialization. I024-C alone owns Java/NIO traversal/capture. I024-D owns final
+observable Protos conformance and B009 closure.

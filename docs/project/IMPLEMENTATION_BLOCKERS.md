@@ -469,6 +469,14 @@ package-specific Java/NIO tree walker.
 B009 becomes CLOSED only after the general D046 `entries` + `captureTree`
 implementation and integrated Protos conformance are published.
 
+Implementation progress:
+I024-A host-neutral tree-observation flow is published at `0.2.249-SNAPSHOT`. It
+establishes Path preflight, exact-name/no-follow-kind DTOs, defensive snapshot,
+Future/cancellation/Actor lifecycle and captured-result custody release without
+publishing the language selectors or adding NIO traversal. I024-B is READY.
+B009 remains READY until complete D046 implementation/conformance closes it.
+
+
 Independent work:
 F2E1 remains CLOSED; package acquisition/network/store-write remain independently
 scoped; F2E3/F2E4/F2E5 remain gated behind F2E2.

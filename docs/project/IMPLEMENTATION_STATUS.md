@@ -56,7 +56,36 @@ an item.
 | I021 | Filesystem namespace replacement/removal | CLOSED | `SAME_COMMIT` | I021-A/B/C complete; D042 / spec `0.1.379`; production confined namespace backend and Protos-visible integrated conformance published; B006 CLOSED by package-tool Filesystem Slice 2B metadata publication integration |
 | I022 | Dynamic Error handlers / unwind-safe cleanup | CLOSED | `SAME_COMMIT` | I022-A/B/C/D/E/F complete; D043 / spec `0.1.380`; replay-stable Error handlers, unwind-safe `ensure`, suspension, later-transfer precedence, cooperative cancellation, structured lifetime and task/Actor isolation have final adversarial closure evidence |
 | I023 | Standard `while` protocol | CLOSED | `SAME_COMMIT` | D044 / spec `0.1.381` + D045 / spec `0.1.382`; I023-A/B/C/D complete; B007 CLOSED; DOC001-E subsequently published and CLOSED. |
-| I024 | Filesystem directory observation + captured-tree capability | READY | D046 / spec `0.1.383`; B009 READY | Implement general `Filesystem.entries` and immutable read-only `captureTree`, then publish integrated Protos conformance and close B009. Subdivide after a fresh current-main source audit. |
+| I024 | Filesystem directory observation + captured-tree capability | IN_PROGRESS | I024-A `SAME_COMMIT`; D046 / spec `0.1.383`; B009 READY | A host-neutral result/custody flow is CLOSED; B public Filesystem materialization is READY; C secure NIO/captured backend and D integrated conformance/B009 closure remain dependency-gated. |
+
+### I024 — Filesystem directory observation + captured-tree capability
+
+Status: IN_PROGRESS
+
+Purpose: implement D046 / specification revision `0.1.383` as one general
+capability-confined Filesystem mechanism, close B009, and then unblock
+TOOL001-F2E2 without adding a package-specific host filesystem path.
+
+Planned slices:
+
+| Slice | Status | Version | Closure evidence | Scope / unblock condition |
+|---|---|---|---|---|
+| I024-A | CLOSED | `0.2.249-SNAPSHOT` | `SAME_COMMIT` | Host-neutral D046 tree-observation flow: Path preflight before backend authority, exact-name/no-follow-kind DTOs, defensive result snapshots, independent Future/Actor/cancellation lifecycle, and captured-tree custody release when cancellation/failure wins. No public entries/captureTree selector and no NIO implementation yet. |
+| I024-B | READY | — | — | Extend the existing host-provisioned standard Filesystem bridge with both D046 operations. Materialize a fresh Array of fresh frozen ordinary name/kind descriptors and a fresh captured Filesystem capability from A's opaque capture result. Preserve the existing shared Filesystem native-Closure provider shape. |
+| I024-C | BLOCKED_BY_DEPENDENCIES | — | — | Depends on I024-B. Implement secure NIO direct-child no-follow observation, recursive capture without following child links, immutable read-only captured-tree backend, source/captured authority separation and retained open behavior. |
+| I024-D | BLOCKED_BY_DEPENDENCIES | — | — | Depends on I024-C. Publish Protos-visible integrated D046 conformance including kinds, exact names, read-only capture, source mutation independence, cancellation/failure and verify-use stability; reconcile native-boundary inventory, close B009 and I024, and make TOOL001-F2E2 READY. |
+
+Dependencies:
+- D046 / specification revision `0.1.383` — CLOSED normative contract;
+- I009 Future/Task — CLOSED;
+- I013 Path — CLOSED;
+- I016 Filesystem/File — CLOSED;
+- I021 Filesystem namespace mutation — CLOSED;
+- B009 — READY until final I024 implementation/conformance closes it.
+
+I024-A deliberately does not publish the new messages. It establishes the
+host-neutral producer/result lifecycle so later materialization and NIO work do
+not duplicate cancellation/custody semantics.
 
 ### I023 — Standard `while` protocol
 
