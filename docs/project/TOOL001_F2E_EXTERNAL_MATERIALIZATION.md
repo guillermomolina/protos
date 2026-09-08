@@ -1,6 +1,6 @@
 # TOOL001-F2E — External Immutable-Package Execution
 
-Status: **IN_PROGRESS — F2E1 CLOSED; I024/B009 CLOSED; F2E2 IN_PROGRESS; F2E2A READY**
+Status: **IN_PROGRESS — F2E1 CLOSED; I024/B009 CLOSED; F2E2 IN_PROGRESS; F2E2A CLOSED; F2E2B READY**
 Nature: non-normative Package Tool / host-integration project record
 Allocated after: `TOOL001-F2D` workspace-only execution closure
 
@@ -99,8 +99,8 @@ F2E1A logical-tree domain + portable path/entry-kind contract       CLOSED
 F2E1B canonical byte stream + method/hash contract                  CLOSED
 F2E1C independent conformance vectors + F2E1 closure                CLOSED
 F2E2  verified read-only package-store binding                     IN_PROGRESS
-F2E2A captured-Filesystem ContentIdentity canonicalizer/verifier   READY
-F2E2B exact selected-root capture + verified-capture host custody  BLOCKED_BY_DEPENDENCIES
+F2E2A  captured-Filesystem ContentIdentity canonicalizer/verifier  CLOSED
+F2E2B  exact selected-root capture + verified-capture host custody READY
 F2E2C same-capture integration + F2E2 closure                      BLOCKED_BY_DEPENDENCIES
 F2E3  external-node execution-plan construction                    BLOCKED_BY_DEPENDENCIES
 F2E4  external canonical ModuleKey + source resolver               BLOCKED_BY_DEPENDENCIES
@@ -310,8 +310,8 @@ failure surfaces and must remain separate:
 
 ```text
 F2E2   verified read-only package-store binding                    IN_PROGRESS
-F2E2A  captured-Filesystem ContentIdentity canonicalizer/verifier  READY
-F2E2B  exact selected-root capture + verified-capture host custody BLOCKED_BY_DEPENDENCIES
+F2E2A  captured-Filesystem ContentIdentity canonicalizer/verifier  CLOSED
+F2E2B  exact selected-root capture + verified-capture host custody READY
 F2E2C  same-capture integration + F2E2 closure                     BLOCKED_BY_DEPENDENCIES
 ```
 
@@ -405,3 +405,87 @@ At that point `TOOL001-F2E3` becomes READY. F2E4/F2E5 remain dependency-gated.
 This decomposition does not change F2E1, D046, I024, lock format, ContentIdentity
 bytes, package-store physical layout, acquisition/fetch policy or public run
 semantics.
+
+## F2E2A closure — captured-Filesystem ContentIdentity policy
+
+F2E2A is CLOSED.
+
+Published bundled-Protos implementation:
+
+```text
+self:ContentIdentity
+
+digest(capturedFilesystem)
+    -> { method, algorithm, hex }
+
+verify(capturedFilesystem, expectedContentIdentity)
+    -> same capturedFilesystem on exact match
+```
+
+The implementation consumes the already-captured Filesystem supplied by its
+caller. It never calls `captureTree`, inspects a host/store path, searches by
+PackageId/version, performs registry/Git acquisition, or introduces Java/NIO tree
+walking.
+
+`digest` implements the closed `protos-package-tree-v1` policy directly in
+Protos:
+
+- iterative directory traversal through `Filesystem.entries`, so physical tree
+  depth does not create one recursive Protos frame per directory;
+- exact E1A portable-ASCII segment validation plus Windows-reserved basename
+  rejection and per-directory ASCII-case-fold collision rejection;
+- exact root regular `protos.toml` requirement;
+- link/other rejection without following;
+- directories as structure only and every valid regular leaf as identity input;
+- exact regular bytes through the existing `std:io/Files.readAllBytes` helper;
+- canonical complete-path unsigned ASCII ordering through
+  `std:collections/Array.sort`;
+- E1B FILE/END framing and minimal arbitrary-precision base-128 varuint;
+- standard `std:crypto/SHA256` over the canonical stream; and
+- exactly 64 lowercase hexadecimal digest digits under method
+  `protos-package-tree-v1` and algorithm `sha256`.
+
+`verify` validates the recorded method/algorithm/digest shape fail-closed before
+tree hashing, compares the exact resulting digest, and returns the same supplied
+captured Filesystem object only on a match. It does not recapture or reconstruct
+authority.
+
+The F2E2A behavioral fixtures remain Protos-owned under
+`protos/tests/package-tool/content-identity/**`. Their host materialization and
+string-binding mechanics are executed by the already-published single
+`ProtosPackageToolProtosTest` Java bridge. No `ProtosPackageToolContentIdentityTest`
+or other per-corpus Java wrapper is introduced. Fixture execution is RootActor-
+local through `ProtosRootTaskExecution`, so D046 Future observation occurs in the
+same execution model used by the consolidated TOOL001 runner.
+
+The production implementation is checked against the frozen E1 vectors for
+minimal content, canonical ordering/empty-file framing, binary content, 128/300
+varuint boundaries and both exact-case identities. A pure Protos fixture checks
+the standalone frozen varuint values through `2^70`. Representative negative
+evidence covers missing root manifest, invalid artifact character, reserved
+basename, sibling ASCII-case-fold collision, symbolic-link rejection,
+unsupported method/algorithm and malformed digest spelling.
+
+F2E2C intentionally remains the owner of the complete cross-boundary fixed-vector
+and equivalence matrix together with the same-capture custody proof. F2E2A does
+not claim that final integration closure.
+
+After this slice:
+
+```text
+TOOL001-F2E2   IN_PROGRESS
+TOOL001-F2E2A  CLOSED
+TOOL001-F2E2B  READY
+TOOL001-F2E2C  BLOCKED_BY_DEPENDENCIES: TOOL001-F2E2B
+TOOL001-F2E3   BLOCKED_BY_DEPENDENCIES: TOOL001-F2E2
+```
+
+No normative Protos specification, lock format, ContentIdentity bytes,
+package-store layout, acquisition/fetch policy, captured-backend custody design,
+PackageExecutionPlan shape, resolver identity or public-run semantics change in
+F2E2A.
+
+Implementation note: exact file bytes are awaited into ordinary local values before
+the canonical record object is constructed. Record construction is therefore
+suspension-free while preserving the frozen path/content map and the same
+ContentIdentity bytes.

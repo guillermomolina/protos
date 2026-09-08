@@ -1,0 +1,412 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Arrays: import("std:collections/Array")
+Files: import("std:io/Files")
+SHA256: import("std:crypto/SHA256")
+
+fail: () => {
+    Error().signal()
+}
+
+emptyBytes: () => {
+    Encoding.UTF8.encode("")
+}
+
+appendBytes: (target, source) => {
+    source.each((octet) => {
+        target.add(octet)
+    })
+    target
+}
+
+between: (value, lower, upper) => {
+    result: value >= lower
+    result.ifTrue(() => {
+        result = value <= upper
+    })
+    result
+}
+
+varuint: (value) => {
+    (value < 0).ifTrue(() => {
+        fail()
+    })
+
+    result: emptyBytes()
+    remaining: value
+
+    (() => remaining >= 128).while() {
+        result.add(128 + remaining.mod(128))
+        remaining = remaining.div(128)
+    }
+
+    result.add(remaining)
+    result
+}
+
+bytesLess: (left, right) => {
+    index: 0
+    decided: false
+    result: false
+    rightSize: right.size()
+
+    left.each((leftOctet) => {
+        decided.ifFalse(() => {
+            (index < rightSize).ifTrue(() => {
+                rightOctet: right.at(index)
+
+                (leftOctet < rightOctet).ifTrue(() => {
+                    result = true
+                    decided = true
+                })
+
+                decided.ifFalse(() => {
+                    (leftOctet > rightOctet).ifTrue(() => {
+                        result = false
+                        decided = true
+                    })
+                })
+            })
+        })
+
+        index = index + 1
+    })
+
+    decided.ifFalse(() => {
+        result = left.size() < right.size()
+    })
+
+    result
+}
+
+lowerHex: (digestBytes) => {
+    digits: Array(
+        "0", "1", "2", "3",
+        "4", "5", "6", "7",
+        "8", "9", "a", "b",
+        "c", "d", "e", "f"
+    )
+
+    result: ""
+    digestBytes.each((octet) => {
+        result =
+            result +
+            digits.at(octet.div(16)) +
+            digits.at(octet.mod(16))
+    })
+    result
+}
+
+reservedBase: (text) => {
+    reserved: false
+
+    Array(
+        "con", "prn", "aux", "nul",
+        "com1", "com2", "com3", "com4", "com5",
+        "com6", "com7", "com8", "com9",
+        "lpt1", "lpt2", "lpt3", "lpt4", "lpt5",
+        "lpt6", "lpt7", "lpt8", "lpt9"
+    ).each((candidate) => {
+        (text == candidate).ifTrue(() => {
+            reserved = true
+        })
+    })
+
+    reserved
+}
+
+foldAndValidateSegment: (name) => {
+    source: Encoding.UTF8.encode(name)
+
+    (source.size() == 0).ifTrue(() => {
+        fail()
+    })
+
+    folded: emptyBytes()
+    basename: emptyBytes()
+    suffixStarted: false
+
+    source.each((octet) => {
+        allowed: between(octet, 65, 90)
+
+        allowed.ifFalse(() => {
+            allowed = between(octet, 97, 122)
+        })
+        allowed.ifFalse(() => {
+            allowed = between(octet, 48, 57)
+        })
+        allowed.ifFalse(() => {
+            (octet == 46).ifTrue(() => {
+                allowed = true
+            })
+        })
+        allowed.ifFalse(() => {
+            (octet == 95).ifTrue(() => {
+                allowed = true
+            })
+        })
+        allowed.ifFalse(() => {
+            (octet == 45).ifTrue(() => {
+                allowed = true
+            })
+        })
+
+        allowed.ifFalse(() => {
+            fail()
+        })
+
+        foldedOctet: octet
+        between(octet, 65, 90).ifTrue(() => {
+            foldedOctet = octet + 32
+        })
+        folded.add(foldedOctet)
+
+        suffixStarted.ifFalse(() => {
+            (octet == 46).ifTrue(() => {
+                suffixStarted = true
+            })
+            (octet == 46).ifFalse(() => {
+                basename.add(foldedOctet)
+            })
+        })
+    })
+
+    (source.at(source.size() - 1) == 46).ifTrue(() => {
+        fail()
+    })
+
+    reservedBase(Encoding.UTF8.decode(basename)).ifTrue(() => {
+        fail()
+    })
+
+    Encoding.UTF8.decode(folded)
+}
+
+recordArray: (records, count) => {
+    buildRange: (start, end) => {
+        length: end - start
+        result: null
+
+        (length == 0).ifTrue(() => {
+            result = Array()
+        })
+
+        (length == 1).ifTrue(() => {
+            result = Array(records.at(start))
+        })
+
+        (length > 1).ifTrue(() => {
+            middle: start + length.div(2)
+            left: buildRange(start, middle)
+            right: buildRange(middle, end)
+            result = Array(...left, ...right)
+        })
+
+        result
+    }
+
+    buildRange(0, count)
+}
+
+collectRecords: (capturedFilesystem) => {
+    pending: Map()
+    pending.atPut(
+        0,
+        {
+            path: Path.relative()
+            prefix: ""
+        }
+    )
+    pendingCount: 1
+    cursor: 0
+
+    records: Map()
+    recordCount: 0
+    rootManifest: false
+
+    (() => cursor < pendingCount).while() {
+        frame: pending.at(cursor)
+        cursor = cursor + 1
+
+        entries: capturedFilesystem.entries(frame.path).value()
+        siblingFoldedNames: Map()
+
+        entries.each((entry) => {
+            name: entry.name
+            kind: entry.kind
+            foldedName: foldAndValidateSegment(name)
+
+            siblingFoldedNames.containsKey(foldedName).ifTrue(() => {
+                fail()
+            })
+            siblingFoldedNames.atPut(foldedName, true)
+
+            childPath: frame.path.child(name)
+            pathText: name
+            (frame.prefix == "").ifFalse(() => {
+                pathText = frame.prefix + "/" + name
+            })
+
+            (frame.prefix == "").ifTrue(() => {
+                (name == "protos.toml").ifTrue(() => {
+                    (kind == "regular").ifFalse(() => {
+                        fail()
+                    })
+                })
+            })
+
+            recognized: false
+
+            (kind == "regular").ifTrue(() => {
+                recognized = true
+
+                (frame.prefix == "").ifTrue(() => {
+                    (name == "protos.toml").ifTrue(() => {
+                        rootManifest = true
+                    })
+                })
+
+                // Resolve both fields before constructing the record so the
+                // record construction itself is suspension-free.
+                recordPathBytes: Encoding.UTF8.encode(pathText)
+                recordContent: Files.readAllBytes(
+                    capturedFilesystem,
+                    childPath
+                ).value()
+
+                records.atPut(
+                    recordCount,
+                    {
+                        pathBytes: recordPathBytes
+                        content: recordContent
+                    }
+                )
+                recordCount = recordCount + 1
+            })
+
+            (kind == "directory").ifTrue(() => {
+                recognized = true
+                pending.atPut(
+                    pendingCount,
+                    {
+                        path: childPath
+                        prefix: pathText
+                    }
+                )
+                pendingCount = pendingCount + 1
+            })
+
+            (kind == "link").ifTrue(() => {
+                fail()
+            })
+
+            (kind == "other").ifTrue(() => {
+                fail()
+            })
+
+            recognized.ifFalse(() => {
+                fail()
+            })
+        })
+    }
+
+    rootManifest.ifFalse(() => {
+        fail()
+    })
+
+    recordArray(records, recordCount)
+}
+
+canonicalStream: (capturedFilesystem) => {
+    records: Arrays.sort(
+        collectRecords(capturedFilesystem),
+        (left, right) => {
+            bytesLess(left.pathBytes, right.pathBytes)
+        }
+    )
+
+    stream: emptyBytes()
+    appendBytes(
+        stream,
+        Encoding.UTF8.encode("protos-package-tree-v1")
+    )
+    stream.add(0)
+
+    records.each((record) => {
+        stream.add(1)
+        appendBytes(stream, varuint(record.pathBytes.size()))
+        appendBytes(stream, record.pathBytes)
+        appendBytes(stream, varuint(record.content.size()))
+        appendBytes(stream, record.content)
+    })
+
+    stream.add(0)
+    stream
+}
+
+digest: (capturedFilesystem) => {
+    digestBytes: SHA256.digest(canonicalStream(capturedFilesystem))
+
+    {
+        method: "protos-package-tree-v1"
+        algorithm: "sha256"
+        hex: lowerHex(digestBytes)
+    }
+}
+
+validateExpected: (expected) => {
+    method: expected.method
+    algorithm: expected.algorithm
+    hex: expected.hex
+
+    ignoredMethodStringValidation: Encoding.UTF8.encode(method)
+    ignoredAlgorithmStringValidation: Encoding.UTF8.encode(algorithm)
+    hexBytes: Encoding.UTF8.encode(hex)
+
+    (method == "protos-package-tree-v1").ifFalse(() => {
+        fail()
+    })
+    (algorithm == "sha256").ifFalse(() => {
+        fail()
+    })
+
+    (hexBytes.size() == 64).ifFalse(() => {
+        fail()
+    })
+
+    hexBytes.each((octet) => {
+        valid: between(octet, 48, 57)
+        valid.ifFalse(() => {
+            valid = between(octet, 97, 102)
+        })
+        valid.ifFalse(() => {
+            fail()
+        })
+    })
+
+    expected
+}
+
+verify: (capturedFilesystem, expected) => {
+    validateExpected(expected)
+    actual: digest(capturedFilesystem)
+
+    (actual.hex == expected.hex).ifFalse(() => {
+        fail()
+    })
+
+    capturedFilesystem
+}
