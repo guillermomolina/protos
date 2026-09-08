@@ -44,7 +44,7 @@ Current triage:
   recorded.
 - D044 remains the priority review item because no recovered evidence yet
   demonstrates explicit project-owner selection of its complete published semantics.
-- D021-D028 require provenance and substance review; publication alone
+- D021-D026 and D028 require provenance and substance review; publication alone
   is not ratification.
 - D001-D019 are expected to be predominantly project-owner decisions, but their
   approval evidence must be checked rather than inferred.
@@ -379,6 +379,30 @@ Recorded review results:
   its retention characteristics are not ratified as language semantics. This
   governance classification changes no normative specification or implementation.
 
+- D027 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved retaining
+  D027 / specification `0.1.365` after comparative review spanning JavaScript, Self,
+  Smalltalk, Lua and Python plus adversarial and future-scalability analysis. Core
+  v0.1 keeps one portable default topology rule: a Core-standard visible object whose
+  immediate parent is not fixed by a more-specific normative owner delegates directly
+  to the unique root `Object`, and `Object` itself has no parent. Explicit semantic
+  topology remains authoritative where specified, including numeric and Error
+  hierarchies, Context ancestry, semantic String/Future value parentage, factory-result
+  parentage and domain-owned capability prototypes. Canonical `true`, canonical
+  `false`, canonical `null` and every Closure remain direct children of `Object`; Core
+  v0.1 introduces no organizational `Boolean`, `Closure`, `Value`, `Collection`,
+  `Callable` or `AsyncValue` ancestor solely to classify values. Standard `Array`,
+  `Map`, `IdentityMap`, `Future` and other ordinary Core prototype objects likewise
+  delegate directly to `Object` unless a narrower owner specifies otherwise; in
+  particular, `IdentityMap` does not implicitly inherit `Map`. Semantic-family
+  membership remains distinct from delegation, and implementations may use arbitrary
+  hidden host/JIT hierarchy or metadata only when `parent()`, lookup, `super` and
+  reflection cannot observe an extra Protos ancestor. This is the selected Core v0.1
+  topology, not a permanent ban on a future explicitly approved prototype category,
+  trait/multiple-delegation system or other object-model evolution. Ratifying these
+  D027 parent edges does not ratify D025 or D026 by transitivity; their remaining
+  semantics keep their own AUD001 provenance/decision status. This governance
+  classification changes no normative specification or implementation.
+
 - D029 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
   retaining D029 / specification `0.1.368` after cross-language comparison,
   adversarial review and future-scalability analysis. For every Core-standard
@@ -400,7 +424,7 @@ Recorded review results:
 Required procedure:
 
 1. Continue backwards through the remaining unresolved decisions in D044-D040,
-   then D021-D028, and finally D001-D019.
+   then D021-D026 and D028, and finally D001-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published
    normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or
@@ -416,7 +440,7 @@ Next audit work:
 
 1. Complete the separate D044 review already in progress, considering D045 only
    as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D043-D040, then D021-D028 and D001-D019
+2. Continue backwards through the remaining unresolved decisions in D043-D040, then D021-D026 and D028 and D001-D019
    under the required procedure above.
 
 AUD001 closes only when D001-D028 and D030-D045, except D046, have an explicit classification,
