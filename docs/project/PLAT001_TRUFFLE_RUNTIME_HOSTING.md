@@ -181,10 +181,27 @@ Process Context is still active fails instead of implicitly terminating or cance
 Process. Terminating one Process closes only its Context and leaves sibling Process Contexts on the
 same Engine usable.
 
-A4B2A deliberately retains A4B3's staged unbound/direct Process path and makes no Actor/P routing
-claim. A4B2B is READY and still owns Actor/P carrier entry plus concurrent Core-root bootstrap
-publication. `ContextPolicy.SHARED` remains deferred; explicit Engine sharing here does not change
-the default EXCLUSIVE language-context policy.
+A4B2A deliberately retains A4B3's staged unbound/direct Process path. Remaining A4B2B work is
+mechanically decomposed into A4B2B1 Actor routing, A4B2B2 P routing and A4B2B3 concurrent
+Core-root bootstrap closure.
+
+## A4B2B1 implementation evidence
+
+I026-A4B2B1 closes in `0.2.271-SNAPSHOT`. `ProtosActorScheduler` remains Truffle-neutral and wraps
+exactly the selected non-preemptive Actor segment in the owning Process's host-neutral
+`callInExecutionHostForRuntime` boundary. Initialization/control turns, runnable Task segments and
+accepted mailbox turns therefore use the same Process placement without binding Actor identity to
+a carrier or creating a Context per Actor. Actors without a Process and staged unbound Processes
+retain their existing direct path.
+
+Focused integration evidence runs two Actors of one hosted Process concurrently on two distinct
+carrier threads and proves both observe one exact `ProtosLanguageContext`. No global execution
+lock, semantic ThreadLocal or carrier affinity is introduced. A4B2B2 is READY for isolated P
+carrier routing; A4B2B3 remains blocked on B2B2 before closing concurrent Core-root bootstrap
+publication and A4B2 itself.
+
+`ContextPolicy.SHARED` remains deferred; explicit Engine sharing here does not change the default
+EXCLUSIVE language-context policy.
 
 ## Explicitly deferred choices
 

@@ -166,7 +166,7 @@ public final class ProtosActorScheduler {
             }
 
             try {
-                runOneSegment(state);
+                runOneHostedSegment(state);
             } catch (RuntimeException unhandledTurnFailure) {
                 terminateAfterUnhandledTurn(state.actor);
             } finally {
@@ -182,6 +182,15 @@ public final class ProtosActorScheduler {
                 }
             }
         }
+    }
+
+    private void runOneHostedSegment(State state) {
+        ProtosProcessRuntime process = state.actor.processForRuntime().orElse(null);
+        if (process == null) {
+            runOneSegment(state);
+            return;
+        }
+        process.runInExecutionHostForRuntime(() -> runOneSegment(state));
     }
 
     private void runOneSegment(State state) {
