@@ -44,7 +44,7 @@ Current triage:
   recorded.
 - D044 remains the priority review item because no recovered evidence yet
   demonstrates explicit project-owner selection of its complete published semantics.
-- D021-D024 require provenance and substance review; publication alone
+- D021-D022 and D024 require provenance and substance review; publication alone
   is not ratification.
 - D001-D019 are expected to be predominantly project-owner decisions, but their
   approval evidence must be checked rather than inferred.
@@ -486,10 +486,34 @@ Recorded review results:
   separately audited decision. This governance classification changes no
   normative specification or implementation.
 
+- D023 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D023 / specification `0.1.363` after comparative review spanning
+  Self, Smalltalk, JavaScript, Ruby, Python, Java/C#, Rust, Swift and Go plus
+  adversarial and future-scalability analysis. The four Core slot-write
+  expression forms `x: rhs`, `object.x: rhs`, `x = rhs`, and `object.x = rhs`
+  continue to return, after a successful write, the same exact object produced
+  by RHS evaluation and stored by that write. The expression result is not
+  canonical `null`, not the target/receiver and not a value obtained by reading
+  the slot again; no result-forming conversion, copying, canonicalization or
+  wrapping is introduced. This preserves identity-bearing RHS objects exactly
+  and avoids a second observation/race window after mutation. If required target
+  or RHS evaluation transfers control, or the subsequent slot write fails or
+  transfers control, the expression has no normal result; already-completed
+  evaluation effects are not rolled back. D023 does not change destination
+  selection, delegation or object-state/write-validity rules. Indexed assignment
+  `object[index] = value` remains a separate indexing-protocol operation and is
+  not classified by this rule. Future computed properties, validation setters or
+  other write protocols remain separately designable rather than retroactively
+  changing ordinary slot-write semantics. The exact-RHS requirement is semantic,
+  not a physical representation mandate: JIT/SSA reuse, result elision and slot
+  storage optimizations remain free when observable identity, effects and failure
+  behavior remain exact. This governance classification changes no normative
+  specification or implementation.
+
 Required procedure:
 
 1. Continue backwards through the remaining unresolved decisions in D044-D040,
-   then D021-D024, and finally D001-D019.
+   then D021-D022 and D024, and finally D001-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published
    normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or
@@ -505,10 +529,10 @@ Next audit work:
 
 1. Complete the separate D044 review already in progress, considering D045 only
    as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D043-D040, then D021-D024 and D001-D019
+2. Continue backwards through the remaining unresolved decisions in D043-D040, then D021-D022 and D024 and D001-D019
    under the required procedure above.
 
-AUD001 closes only when D001-D025, D027-D028 and D030-D045, except D046, have an explicit classification,
+AUD001 closes only when D001-D022, D024-D025, D027-D028 and D030-D045, except D046, have an explicit classification,
 the project owner has decided every NEEDS_USER_DECISION item, relevant
 provenance is recorded durably, and all affected project ledgers are reconciled.
 Any later normative correction must be a separately approved specification
