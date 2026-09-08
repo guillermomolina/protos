@@ -814,7 +814,7 @@ documentation tooling.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| DOC001 | Protos Programming Documentation | IN_PROGRESS | `docs/project/DOC001_PROGRAMMING_DOCUMENTATION.md` | A/B/C/D/E/F/G/H/I CLOSED; I023/B007 CLOSED; J-L READY independently; M toolchain-gated; N final closure. |
+| DOC001 | Protos Programming Documentation | IN_PROGRESS | `docs/project/DOC001_PROGRAMMING_DOCUMENTATION.md` | A/B/C/D/E/F/G/H/I/J CLOSED; I023/B007 CLOSED; K-L READY independently; M toolchain-gated; N final closure. |
 
 ### DOC001 — Protos Programming Documentation
 
@@ -826,12 +826,12 @@ Status: IN_PROGRESS
 | DOC001-B | CLOSED | `bd3cd38218cfccdca8de529f4d6c26fede7ad771` | Guide 01: bindings, execution contexts, lexical lookup, and receiver state. |
 | DOC001-C | CLOSED | `8ab9463b8466974fc5f23f0c7304faeacb3db641` | Guide 02: objects, delegation, composition, structural state, and reflection. |
 | DOC001-D | CLOSED | `01470dca9df787ed216b2c19faaead965fb18cc8` | Guide 03: Closures, methods, receivers, extraction, `this`, `context`, `super`, and non-local return. |
-| DOC001-E | BLOCKED_BY_DEPENDENCIES | — | Control flow through ordinary protocols; D044 resolves B007 semantics, but I023 must publish runnable standard `while` behavior before the guide slice proceeds. |
-| DOC001-F | READY | — | Values, identity, equality, numeric/value families, and collections. Independent of DOC001-E. |
-| DOC001-G | READY | — | Modules, imports, module contexts, and resolution boundaries. Independent of DOC001-E. |
-| DOC001-H | READY | — | Errors, dynamic handlers, `ensure`, unwind behavior, and resource-lifetime mental models. Independent of DOC001-E. |
-| DOC001-I | READY | — | Futures and structured concurrency. Independent of DOC001-E. |
-| DOC001-J | READY | — | Isolated parallel execution. Independent of DOC001-E. |
+| DOC001-E | CLOSED | `0907b1c2682e8330dd1a3a39144cf0a2d8d9beb1` | Guide 04: control flow through ordinary protocols; B007/I023 dependency closed before publication. |
+| DOC001-F | CLOSED | `9650a386dce901d630ccd31dc2c377124c829d85` | Guide 05: values, identity, equality, and collections. |
+| DOC001-G | CLOSED | `37c47498b57dca25912f682439416c6ca3ccd46c` | Guide 06: modules and imports. |
+| DOC001-H | CLOSED | `3e5a1176ecaaa3c02980041a96e3f9021774180d` | Guide 07: Errors, handlers, `ensure`, and resource lifetime. |
+| DOC001-I | CLOSED | `fdde9c1376aea39988bc139dbd2c604362114061` | Guide 08: Futures and structured concurrency. |
+| DOC001-J | CLOSED | `SAME_COMMIT` | Guide 09: isolated parallel execution. |
 | DOC001-K | READY | — | Actors, ActorRefs, Groups/GroupRefs, messaging, isolation, ownership, and lifecycle. Independent of DOC001-E. |
 | DOC001-L | READY | — | Process, byte/text I/O, Filesystem/File capabilities, Path, authority, and resource boundaries. Independent of DOC001-E. |
 | DOC001-M | BLOCKED_BY_DEPENDENCIES | — | Packages, testing, and bundled toolchain; final closure requires TOOL001 and TOOL002 CLOSED. |

@@ -43,6 +43,7 @@ documentation areas whose semantics and implementation are already closed.
 6. [Modules and imports](06-modules-and-imports.md)
 7. [Errors, handlers, `ensure`, and resource lifetime](07-errors-handlers-ensure-and-resource-lifetime.md)
 8. [Futures and structured concurrency](08-futures-and-structured-concurrency.md)
+9. [Isolated parallel execution](09-isolated-parallel-execution.md)
 
 ## Current guide state
 
@@ -76,18 +77,22 @@ boundary.
 Error objects, non-resumable signaling, dynamic handlers, unwind-safe `ensure`,
 cleanup precedence, and deterministic explicit resource release.
 
-`DOC001-I` is now CLOSED with
+`DOC001-I` is CLOSED with
 [chapter 08](08-futures-and-structured-concurrency.md), which explains Future
 identity/state and observation, adoption, `then`, deterministic `Future.all`,
-cooperative cancellation, task-scoped structured ownership, and `detach()`. The
-next independently READY Programming Guide slice is `DOC001-J` for isolated
-parallel execution.
+cooperative cancellation, task-scoped structured ownership, and `detach()`.
+
+`DOC001-J` is now CLOSED with
+[chapter 09](09-isolated-parallel-execution.md), which explains explicit P
+isolation, Closure projection, argument snapshots, deterministic Array parallel
+operations, cooperative cancellation/structured ownership, and controlled
+Bytes/ByteRegion writable partitioning. The next independently READY Programming
+Guide slice is `DOC001-K` for Actors and Actor groups.
 
 ## Planned progression
 
 Future chapters should cover, as the guide grows:
 
-- isolated parallel execution;
 - Actors and Actor groups;
 - Process, I/O, filesystem capabilities, and authority;
 - packages, testing, and the bundled toolchain.
