@@ -1256,16 +1256,19 @@ itself does not gain a standard `close()` obligation; any implementation-managed
 immutable backing remains behind that capability boundary, while Files opened
 from it keep their ordinary File/`Closable` lifecycle.
 
-However, on the current reference implementation baseline for this chapter,
 `I024 — Filesystem directory observation + captured-tree capability` remains
 `IN_PROGRESS`.
 
-Only its host-neutral foundation is published; the language-visible operations
-and complete backend/conformance closure are not yet current runnable reference
-behavior.
+I024-B now publishes the language-visible `entries` and `captureTree` selectors
+and their standard result materialization. Existing production Filesystem
+backends that do not yet implement D046 tree observation fail those operations
+through an ordinary failed Future/`IOError`; I024-C still owns secure NIO
+enumeration and immutable captured-tree backing, and I024-D still owns complete
+integrated conformance.
 
-Therefore this chapter does **not** present `entries` or `captureTree` as
-currently executable APIs.
+Therefore the selectors are now executable standard API surface, but successful
+real-tree `entries`/`captureTree` behavior is not yet available from the current
+production NIO backend until I024-C/D close.
 
 This distinction is intentional:
 
@@ -1302,7 +1305,7 @@ The implementation itself reflects the capability model:
   discovery;
 - [`ProtosStandardFilesystemProtocol.java`](../../src/main/java/com/guillermomolina/protos/execution/ProtosStandardFilesystemProtocol.java)
   constructs explicitly provisioned Filesystem capabilities with current
-  `open`/`replace`/`remove`;
+  `open`/`replace`/`remove`/`entries`/`captureTree`;
 - [`ProtosStandardFileProtocol.java`](../../src/main/java/com/guillermomolina/protos/execution/ProtosStandardFileProtocol.java)
   materializes only the File operations promised by its acquired capability
   descriptor.

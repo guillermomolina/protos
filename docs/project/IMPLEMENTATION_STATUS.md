@@ -62,7 +62,7 @@ an item.
 | I021 | Filesystem namespace replacement/removal | CLOSED | `SAME_COMMIT` | I021-A/B/C complete; D042 / spec `0.1.379`; production confined namespace backend and Protos-visible integrated conformance published; B006 CLOSED by package-tool Filesystem Slice 2B metadata publication integration |
 | I022 | Dynamic Error handlers / unwind-safe cleanup | CLOSED | `SAME_COMMIT` | I022-A/B/C/D/E/F complete; D043 / spec `0.1.380`; replay-stable Error handlers, unwind-safe `ensure`, suspension, later-transfer precedence, cooperative cancellation, structured lifetime and task/Actor isolation have final adversarial closure evidence |
 | I023 | Standard `while` protocol | CLOSED | `SAME_COMMIT` | D044 / spec `0.1.381` + D045 / spec `0.1.382`; I023-A/B/C/D complete; B007 CLOSED; DOC001-E subsequently published and CLOSED. |
-| I024 | Filesystem directory observation + captured-tree capability | IN_PROGRESS | I024-A + I024-A2 `SAME_COMMIT`; D046 / spec `0.1.384`; B009 READY | A host-neutral result/custody flow is confirmed compatible with 0.1.384 by A2; B public materialization is READY; C/D remain dependency-gated. |
+| I024 | Filesystem directory observation + captured-tree capability | IN_PROGRESS | I024-A + I024-A2 + I024-B `SAME_COMMIT`; D046 / spec `0.1.384`; B009 READY | A/A2 host-neutral lifecycle is closed; B publishes the standard `entries`/`captureTree` bridge/materialization; C secure NIO capture is READY and D remains dependency-gated. |
 
 ### I024 — Filesystem directory observation + captured-tree capability
 
@@ -78,8 +78,8 @@ Planned slices:
 |---|---|---|---|---|
 | I024-A | CLOSED | `0.2.249-SNAPSHOT` | `SAME_COMMIT` | Published host-neutral D046 tree-observation flow. It remains implementation evidence, not design authority; A2 must verify it against the explicitly approved 0.1.384 amendment before dependent public work proceeds. |
 | I024-A2 | CLOSED | — | `SAME_COMMIT` | Post-D046/0.1.384 compatibility re-audit found no production incompatibility. A's complete `List<Entry>` result and defensive snapshot match eager v0.1 entries; exact duplicate names fail closed; `CapturedTree` remains an internal opaque custody token with no public Directory/stream identity; cancellation/materialization/late-result paths release only untransferred custody, while successful terminal transfer does not invoke the release callback; Filesystem remains non-Closable. Existing focal and full-suite validation close the audit. |
-| I024-B | READY | — | — | I024-A2 is CLOSED. Extend the existing host-provisioned standard Filesystem bridge with both D046 operations. Materialize a fresh Array of fresh frozen ordinary name/kind descriptors and a fresh captured Filesystem capability without adding standard `Closable` to the captured Filesystem. Preserve the existing shared Filesystem native-Closure provider shape. |
-| I024-C | BLOCKED_BY_DEPENDENCIES | — | — | Depends on I024-B. Implement secure NIO direct-child no-follow observation and scalable recursive capture into implementation-managed immutable backing, without following child links or exposing a Directory/lifetime subsystem. Preserve source/captured authority separation and retained open behavior. |
+| I024-B | CLOSED | `0.2.251-SNAPSHOT` | `SAME_COMMIT` | Publish both D046 selectors through the existing shared standard Filesystem native-Closure helper. `entries` materializes a fresh standard Array of fresh frozen ordinary name/kind descriptors. `captureTree` materializes a fresh captured Filesystem capability through an internal structurally read-only backend contract with no standard `close`; existing backends default-fail the new operations until they implement them. |
+| I024-C | READY | — | — | I024-B is CLOSED. Implement secure NIO direct-child no-follow observation and scalable recursive capture into implementation-managed immutable backing, without following child links or exposing a Directory/lifetime subsystem. Preserve source/captured authority separation and retained open behavior. |
 | I024-D | BLOCKED_BY_DEPENDENCIES | — | — | Depends on I024-C. Publish Protos-visible integrated D046 conformance including kinds, exact names/uniqueness, eager complete entries, read-only capture, no captured-Filesystem close obligation, source mutation independence, cancellation/failure and verify-use stability; reconcile native-boundary inventory, close B009 and I024, and make TOOL001-F2E2 READY. |
 
 Dependencies:
@@ -98,7 +98,7 @@ production incompatibility: eager complete-result representation, exact-name
 uniqueness, cancellation/failure cleanup and successful custody transfer already
 match the amended semantics. The internal release callback is strictly an
 untransferred-custody mechanism and does not define a captured-Filesystem close
-obligation. I024-B is therefore READY.
+obligation. I024-B is now CLOSED: the standard Filesystem bridge exposes `entries` and `captureTree`, materializes their approved result shapes, and keeps existing backends default-fail until implementation support exists. I024-C is READY for the secure NIO enumeration/capture backend.
 
 ### I023 — Standard `while` protocol
 

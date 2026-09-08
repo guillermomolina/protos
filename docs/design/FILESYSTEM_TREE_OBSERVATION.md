@@ -424,10 +424,37 @@ Current planned boundary after specification revision 0.1.384:
 ```text
 I024-A   host-neutral result/custody flow                     CLOSED
 I024-A2  post-0.1.384 compatibility re-audit                  CLOSED
-I024-B   standard Filesystem public materialization           READY
-I024-C   secure NIO + immutable captured backend              BLOCKED_BY_DEPENDENCIES
+I024-B   standard Filesystem public materialization           CLOSED
+I024-C   secure NIO + immutable captured backend              READY
 I024-D   integrated Protos conformance + B009 closure         BLOCKED_BY_DEPENDENCIES
 ```
+
+## I024-B public materialization result
+
+I024-B is CLOSED. The existing `ProtosStandardFilesystemProtocol`
+resource/capability bridge now publishes `entries` and `captureTree` through the
+same audited operation-Closure construction helper already used by the
+Filesystem surface.
+
+The bridge preserves the D046 boundaries rather than adding a second namespace
+model:
+
+- existing backends receive default-fail `entries`/`captureTree` methods, so
+  unsupported implementations fail through the ordinary Future/`IOError` path;
+- successful `entries` materializes one fresh standard Array whose elements are
+  fresh frozen ordinary root-Object descriptors with exactly `name` and `kind`;
+- a successful captured backend is an internal Java-only read-only contract and
+  materializes as a fresh ordinary Filesystem capability, not Directory identity;
+- the captured Filesystem wrapper delegates only read/existing open plus
+  `entries`/`captureTree`; mutation methods keep the standard default-fail
+  behavior and write/create/truncate/append opens fail before captured backend
+  authority is exercised;
+- no Filesystem `close` selector is introduced and the internal captured-backend
+  contract exposes no caller-managed release protocol.
+
+I024-B does not implement host enumeration or capture. I024-C remains the sole
+owner of secure NIO no-follow traversal and scalable implementation-managed
+immutable backing.
 
 ## I024-A2 compatibility audit result
 

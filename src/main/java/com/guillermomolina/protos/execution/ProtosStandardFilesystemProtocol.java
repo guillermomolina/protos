@@ -24,14 +24,20 @@ import com.guillermomolina.protos.runtime.ProtosFileFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemNamespaceMutationFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemOpenOptions;
+import com.guillermomolina.protos.runtime.ProtosFilesystemTreeObservationFlow;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPathValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 /**
- * I016-D1 / I021-A host/resource bridge for one provisioned Filesystem authority capability.
+ * I016-D1 / I021-A / I024-B host/resource bridge for one provisioned Filesystem authority
+ * capability.
  *
  * <p>The returned object is deliberately not installed in the Core prelude and there is no Protos
  * constructor for it. Process/bootstrap policy may provision zero or more capabilities later under
@@ -47,9 +53,12 @@ import java.util.Objects;
  * <p>Any create/truncate effect crosses the portable open commitment handshake immediately before
  * the effect becomes observable. I021 namespace replacement/removal instead uses the dedicated
  * per-operation atomic effect/commit cutover so cancellation cannot split a successful namespace
- * transition from its Future outcome. File capability descriptors must exactly match the captured
- * read/write/append authority; optional seek/size/truncate/sync surfaces may be advertised only when
- * the selected backend resource implements their complete standard contracts.
+ * transition from its Future outcome. I024-B reuses the host-neutral tree-observation flow for
+ * {@code entries} and {@code captureTree}; captured-tree backends are structurally adapted as
+ * read-only Filesystem authorities and never acquire a public Filesystem {@code close} surface.
+ * File capability descriptors must exactly match the captured read/write/append authority; optional
+ * seek/size/truncate/sync surfaces may be advertised only when the selected backend resource
+ * implements their complete standard contracts.
  */
 public final class ProtosStandardFilesystemProtocol {
     private ProtosStandardFilesystemProtocol() {}
@@ -64,6 +73,16 @@ public final class ProtosStandardFilesystemProtocol {
 
         void failed();
     }
+
+    /**
+     * Internal backend marker for one completed immutable captured tree.
+     *
+     * <p>This is implementation machinery, not a Protos-visible Directory or resource-lifetime
+     * family. Materialization wraps it as a structurally read-only standard Filesystem: mutation
+     * never delegates and write/create/truncate/append opens fail before this backend is exercised.
+     */
+    public interface CapturedBackend
+            extends Backend, ProtosFilesystemTreeObservationFlow.CapturedTree {}
 
     @FunctionalInterface
     public interface Backend {
@@ -86,12 +105,28 @@ public final class ProtosStandardFilesystemProtocol {
             completion.failed();
             return () -> {};
         }
+
+        default ProtosFilesystemTreeObservationFlow.Cancellation entries(
+                ProtosPathValue path,
+                ProtosFilesystemTreeObservationFlow.EntriesCompletion completion) {
+            completion.failed();
+            return () -> {};
+        }
+
+        default ProtosFilesystemTreeObservationFlow.Cancellation captureTree(
+                ProtosPathValue path,
+                ProtosFilesystemTreeObservationFlow.CaptureCompletion completion) {
+            completion.failed();
+            return () -> {};
+        }
     }
 
     private enum Operation {
         OPEN,
         REPLACE,
-        REMOVE
+        REMOVE,
+        ENTRIES,
+        CAPTURE_TREE
     }
 
     public static ProtosObjectValue createCapability(
@@ -146,14 +181,67 @@ public final class ProtosStandardFilesystemProtocol {
                         backend::replace,
                         backend::remove);
 
+        ProtosFilesystemTreeObservationFlow treeObservationFlow =
+                new ProtosFilesystemTreeObservationFlow(
+                        filesystem,
+                        constructionActivation,
+                        backend::entries,
+                        backend::captureTree,
+                        new ProtosFilesystemTreeObservationFlow.ResultMaterializer() {
+                            @Override
+                            public ProtosObjectValue entries(
+                                    List<ProtosFilesystemTreeObservationFlow.Entry> entries) {
+                                return materializeEntries(constructionActivation, entries);
+                            }
+
+                            @Override
+                            public ProtosObjectValue capturedTree(
+                                    ProtosFilesystemTreeObservationFlow.CapturedTree capturedTree) {
+                                return materializeCapturedFilesystem(
+                                        bytesPrototype, constructionActivation, capturedTree);
+                            }
+                        });
+
         filesystem.createLocalSlot(
-                "open", operationClosure(filesystem, flow, namespaceMutationFlow, Operation.OPEN));
+                "open",
+                operationClosure(
+                        filesystem,
+                        flow,
+                        namespaceMutationFlow,
+                        treeObservationFlow,
+                        Operation.OPEN));
         filesystem.createLocalSlot(
                 "replace",
-                operationClosure(filesystem, flow, namespaceMutationFlow, Operation.REPLACE));
+                operationClosure(
+                        filesystem,
+                        flow,
+                        namespaceMutationFlow,
+                        treeObservationFlow,
+                        Operation.REPLACE));
         filesystem.createLocalSlot(
                 "remove",
-                operationClosure(filesystem, flow, namespaceMutationFlow, Operation.REMOVE));
+                operationClosure(
+                        filesystem,
+                        flow,
+                        namespaceMutationFlow,
+                        treeObservationFlow,
+                        Operation.REMOVE));
+        filesystem.createLocalSlot(
+                "entries",
+                operationClosure(
+                        filesystem,
+                        flow,
+                        namespaceMutationFlow,
+                        treeObservationFlow,
+                        Operation.ENTRIES));
+        filesystem.createLocalSlot(
+                "captureTree",
+                operationClosure(
+                        filesystem,
+                        flow,
+                        namespaceMutationFlow,
+                        treeObservationFlow,
+                        Operation.CAPTURE_TREE));
         return filesystem;
     }
 
@@ -161,6 +249,7 @@ public final class ProtosStandardFilesystemProtocol {
             ProtosObjectValue filesystem,
             ProtosFilesystemOpenFlow openFlow,
             ProtosFilesystemNamespaceMutationFlow namespaceMutationFlow,
+            ProtosFilesystemTreeObservationFlow treeObservationFlow,
             Operation operation) {
         return ProtosClosureValue.nativeClosure(
                 (activation, arguments) -> {
@@ -190,8 +279,98 @@ public final class ProtosStandardFilesystemProtocol {
                                         ? namespaceMutationFlow.remove(
                                                 activation, arguments.get(0))
                                         : invalid(activation);
+                        case ENTRIES ->
+                                arguments.size() == 1
+                                        ? treeObservationFlow.entries(
+                                                activation, arguments.get(0))
+                                        : invalid(activation);
+                        case CAPTURE_TREE ->
+                                arguments.size() == 1
+                                        ? treeObservationFlow.captureTree(
+                                                activation, arguments.get(0))
+                                        : invalid(activation);
                     };
                 });
+    }
+
+    private static ProtosObjectValue materializeEntries(
+            ProtosActivation constructionActivation,
+            List<ProtosFilesystemTreeObservationFlow.Entry> entries) {
+        Objects.requireNonNull(entries, "entries");
+        ProtosPrelude prelude = constructionActivation.prelude().orElseThrow();
+        ArrayList<ProtosObjectValue> descriptors = new ArrayList<>(entries.size());
+        for (ProtosFilesystemTreeObservationFlow.Entry entry : entries) {
+            Objects.requireNonNull(entry, "entry");
+            ProtosObjectValue descriptor =
+                    new ProtosObjectValue(ProtosObjectValue.rootObject());
+            descriptor.createLocalSlot("name", new ProtosStringValue(entry.name()));
+            descriptor.createLocalSlot("kind", new ProtosStringValue(semanticKind(entry.kind())));
+            descriptor.freeze();
+            descriptors.add(descriptor);
+        }
+        return prelude.newArray(descriptors);
+    }
+
+    private static String semanticKind(ProtosFilesystemTreeObservationFlow.EntryKind kind) {
+        return switch (Objects.requireNonNull(kind, "kind")) {
+            case REGULAR -> "regular";
+            case DIRECTORY -> "directory";
+            case LINK -> "link";
+            case OTHER -> "other";
+        };
+    }
+
+    private static ProtosObjectValue materializeCapturedFilesystem(
+            ProtosObjectValue bytesPrototype,
+            ProtosActivation constructionActivation,
+            ProtosFilesystemTreeObservationFlow.CapturedTree capturedTree) {
+        if (!(Objects.requireNonNull(capturedTree, "capturedTree")
+                instanceof CapturedBackend capturedBackend)) {
+            throw new IllegalArgumentException(
+                    "captured tree does not provide the standard captured backend contract");
+        }
+        return createCapability(
+                bytesPrototype, constructionActivation, readOnlyCapturedBackend(capturedBackend));
+    }
+
+    private static Backend readOnlyCapturedBackend(CapturedBackend capturedBackend) {
+        Objects.requireNonNull(capturedBackend, "capturedBackend");
+        return new Backend() {
+            @Override
+            public ProtosFilesystemOpenFlow.Cancellation open(
+                    ProtosPathValue path,
+                    ProtosFilesystemOpenOptions options,
+                    OpenCompletion completion) {
+                if (!readOnlyExisting(options)) {
+                    completion.failed();
+                    return () -> {};
+                }
+                return capturedBackend.open(path, options, completion);
+            }
+
+            @Override
+            public ProtosFilesystemTreeObservationFlow.Cancellation entries(
+                    ProtosPathValue path,
+                    ProtosFilesystemTreeObservationFlow.EntriesCompletion completion) {
+                return capturedBackend.entries(path, completion);
+            }
+
+            @Override
+            public ProtosFilesystemTreeObservationFlow.Cancellation captureTree(
+                    ProtosPathValue path,
+                    ProtosFilesystemTreeObservationFlow.CaptureCompletion completion) {
+                return capturedBackend.captureTree(path, completion);
+            }
+        };
+    }
+
+    private static boolean readOnlyExisting(ProtosFilesystemOpenOptions options) {
+        Objects.requireNonNull(options, "options");
+        return options.readAccess()
+                && !options.writeAccess()
+                && options.creation() == ProtosFilesystemOpenOptions.Creation.EXISTING
+                && !options.truncateInitialContent()
+                && options.placement() == ProtosFilesystemOpenOptions.Placement.POSITIONED;
     }
 
     private static void materialize(

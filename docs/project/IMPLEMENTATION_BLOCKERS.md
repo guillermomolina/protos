@@ -475,18 +475,20 @@ B009 becomes CLOSED only after the general D046 `entries` + `captureTree`
 implementation and integrated Protos conformance are published.
 
 Implementation progress:
-I024-A host-neutral tree-observation flow is published at `0.2.249-SNAPSHOT`. It
-establishes Path preflight, exact-name/no-follow-kind DTOs, defensive snapshot,
-Future/cancellation/Actor lifecycle and captured-result custody release without
-publishing the language selectors or adding NIO traversal. I024-A2 is now CLOSED
-after re-auditing that substrate against the explicit D046/0.1.384 decisions:
-A already matches eager complete-result/uniqueness semantics, carries no public
-Directory/stream identity, and uses its release callback only for untransferred
-backend custody rather than a captured-Filesystem close obligation. The existing
-internal AutoCloseable NIO tree backend remains an I024-C implementation-custody
-constraint, not public lifecycle. I024-B is READY. B009 itself remains READY
-until complete D046 implementation/conformance closes it.
-
+I024-A host-neutral tree-observation flow is published at `0.2.249-SNAPSHOT`, and
+I024-A2 is CLOSED after confirming that substrate against D046/0.1.384. I024-B is
+now CLOSED at `0.2.251-SNAPSHOT`: the standard host-provisioned Filesystem surface contains
+ordinary `entries` and `captureTree` selectors through the existing shared
+native-Closure helper, eager entry results materialize as the required fresh
+Array/frozen descriptor shape, and captured results materialize as fresh
+structurally read-only Filesystem capabilities with no standard `close`.
+Backends that have not implemented tree observation retain default-fail behavior,
+so the current production NIO backend reports `IOError` rather than exposing an
+incomplete result. I024-C is READY to add secure NIO direct-child observation and
+implementation-managed immutable capture backing. The existing internal
+AutoCloseable tree backend remains an implementation-custody constraint, not
+public lifecycle. B009 itself remains READY until complete D046
+implementation/conformance closes it.
 
 Independent work:
 F2E1 remains CLOSED; package acquisition/network/store-write remain independently

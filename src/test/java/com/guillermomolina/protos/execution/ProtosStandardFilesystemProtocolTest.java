@@ -50,7 +50,9 @@ class ProtosStandardFilesystemProtocolTest {
         Fixture x = fixture();
         assertTrue(x.prelude.bindings().readLocalSlot("Filesystem").isEmpty());
         assertTrue(x.filesystem instanceof ProtosFilesystemValue);
-        assertEquals(Set.of("open", "replace", "remove"), x.filesystem.localSlotsSnapshot().keySet());
+        assertEquals(
+                Set.of("open", "replace", "remove", "entries", "captureTree"),
+                x.filesystem.localSlotsSnapshot().keySet());
         assertTrue(x.filesystem.hasLocalSlot("open"));
         assertTrue(x.filesystem.hasLocalSlot("replace"));
         assertTrue(x.filesystem.hasLocalSlot("remove"));
