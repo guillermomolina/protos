@@ -60,14 +60,20 @@ Recorded review results:
   This avoids per-activation draining, result-shape/escape heuristics and hidden
   implicit detachment while preserving ordinary Future-returning APIs. This is
   an audit recommendation only and is not project-owner ratification.
-- D045 must not be treated as ratifying the older structured-child terminal-
-  outcome policy merely because its normative text preserved that policy. The
-  policy introduced in specification revision `0.1.90` makes non-detached child
-  failure/cancellation non-propagating unless the Future is explicitly observed.
-  Its provenance, alternatives and suitability require a separate AUD001 review
-  of failure propagation, aggregation, sibling cancellation and supervision.
-  That follow-up is **OPEN** and is independent of whether the D045 ownership
-  core is later ratified.
+- The structured-child terminal-outcome policy introduced in specification
+  revision `0.1.90` is `RATIFIED`. Its original commit
+  `53fd43c7edceaa2fbc93bdada645cc7b79195f0e` contained no recovered evidence of
+  explicit project-owner selection, so AUD001 independently compared automatic
+  fail-fast propagation, hidden observed/unobserved-failure state, explicit
+  policy-bearing scopes and the published lifetime-only rule. On 2026-09-08 the
+  project owner explicitly approved retaining the published Core v0.1 policy:
+  structured ownership waits for non-detached children and governs cleanup, but
+  child failure/cancellation affects owner control flow only through explicit
+  Future observation; owner error/cancellation still cancels non-detached
+  children and waits for cleanup. No hidden failure-consumption state is added.
+  Explicit fail-fast/supervision or aggregation remains possible future
+  library/design work rather than universal `future()` behavior. This
+  ratification is independent of the still-unratified D045 ownership-scope core.
 
 Required procedure:
 
@@ -88,13 +94,8 @@ Next audit work:
 
 1. Complete the separate D044 review already in progress, considering D045 only
    as an unratified dependency where their semantics interact.
-2. Reconstruct the provenance and design basis of specification revision
-   `0.1.90` structured-child terminal outcomes.
-3. Compare at least fail-propagating, supervising/non-propagating and explicit
-   policy-bearing scope models, including multiple simultaneous failures,
-   sibling cancellation, owner failure/cancellation and detached work.
-4. Present a recommendation to the project owner without changing normative
-   semantics or treating D045 publication as approval of the older policy.
+2. Continue backwards through D043-D039, then D020, D021-D036 and D001-D019
+   under the required procedure above.
 
 AUD001 closes only when D001-D045, except D046, have an explicit classification,
 the project owner has decided every NEEDS_USER_DECISION item, relevant
