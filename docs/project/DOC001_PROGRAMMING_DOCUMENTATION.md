@@ -63,6 +63,9 @@ Closure evidence:
 - DOC001-F:
   `SAME_COMMIT`
   (`Publish values and collections programming guide`).
+- DOC001-G:
+  `SAME_COMMIT`
+  (`Publish modules and imports programming guide`).
 
 ## Slice ledger
 
@@ -74,7 +77,7 @@ Closure evidence:
 | DOC001-D | CLOSED | Closures, methods, receivers, extraction, `super`, return homes | Published at `01470dca9df787ed216b2c19faaead965fb18cc8`. |
 | DOC001-E | CLOSED | Control flow through ordinary protocols | Published in `SAME_COMMIT`: chapter 04, guide navigation, current-behavior cross-links, and DOC001 project reconciliation. |
 | DOC001-F | CLOSED | Values, identity, equality, and collections | Published in `SAME_COMMIT`: chapter 05, guide navigation, runnable collection cross-links, and DOC001 project reconciliation. |
-| DOC001-G | READY | Modules and imports | Independent of DOC001-E. |
+| DOC001-G | CLOSED | Modules and imports | Published in `SAME_COMMIT`: chapter 06, guide navigation, current resolver/runtime evidence, and DOC001 project reconciliation. |
 | DOC001-H | READY | Errors, handlers, `ensure`, and resource lifetime | Independent of DOC001-E. |
 | DOC001-I | READY | Futures and structured concurrency | Independent of DOC001-E. |
 | DOC001-J | READY | Isolated parallel execution | Independent of DOC001-E. |
@@ -101,7 +104,7 @@ normative specification authoritative. The chapter describes the current
 runnable standard Boolean and `Object.while` behavior without copying
 project-ledger prose or redefining the language.
 
-B007/I023 no longer gate DOC001. DOC001-G through DOC001-L remain independently
+B007/I023 no longer gate DOC001. DOC001-H through DOC001-L remain independently
 READY and retain their own current-main audit requirement when started.
 DOC001-M remains toolchain-gated and DOC001-N remains the final consistency
 closure.

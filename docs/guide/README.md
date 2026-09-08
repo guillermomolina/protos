@@ -40,6 +40,7 @@ documentation areas whose semantics and implementation are already closed.
 3. [Closures, methods, and receivers](03-closures-methods-and-receivers.md)
 4. [Control flow through ordinary protocols](04-control-flow-through-protocols.md)
 5. [Values, identity, equality, and collections](05-values-identity-equality-and-collections.md)
+6. [Modules and imports](06-modules-and-imports.md)
 
 ## Current guide state
 
@@ -57,17 +58,22 @@ is CLOSED.
 [chapter 04](04-control-flow-through-protocols.md), which explains the published
 control-flow behavior as ordinary protocols without redefining the language.
 
-`DOC001-F` is now CLOSED with
+`DOC001-F` is CLOSED with
 [chapter 05](05-values-identity-equality-and-collections.md), which explains the
 current value-identity/equality model, indexing, Core collection mechanisms, and
-their Standard Library extensions. The next independently READY Programming
-Guide slice is `DOC001-G` for modules and imports.
+their Standard Library extensions.
+
+`DOC001-G` is now CLOSED with
+[chapter 06](06-modules-and-imports.md), which explains module contexts,
+ordinary `import(...)`, canonical ModuleKeys, Actor-local module instances,
+cache-before-execute cycles, failure/retry semantics, and the resolver-policy
+boundary. The next independently READY Programming Guide slice is `DOC001-H`
+for Errors, handlers, `ensure`, and resource lifetime.
 
 ## Planned progression
 
 Future chapters should cover, as the guide grows:
 
-- modules and imports;
 - Errors, handlers, `ensure`, and resource lifetime;
 - Futures and structured concurrency;
 - isolated parallel execution;
