@@ -18,10 +18,14 @@
 package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
+import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -44,7 +48,7 @@ final class ProtosPackageToolProtosTest {
     private static final Path RUNNER_MANIFEST = TEST_ROOT.resolve("java-runner.tsv");
 
     @Test
-    void plainManifestDrivenCorporaUseTheSingleTool001Runner() throws Exception {
+    void manifestDrivenCorporaUseTheSingleTool001Runner() throws Exception {
         for (String line :
                 Files.readAllLines(RUNNER_MANIFEST, StandardCharsets.UTF_8)) {
             if (line.isBlank() || line.startsWith("#")) {
@@ -52,11 +56,16 @@ final class ProtosPackageToolProtosTest {
             }
 
             String[] fields = line.split("\\t", -1);
-            if (fields.length != 2 || !fields[0].equals("plain")) {
+            if (fields.length != 2) {
                 throw new AssertionError("invalid TOOL001 runner row: " + line);
             }
 
-            runPlainSuite(TEST_ROOT.resolve(fields[1]));
+            Path suiteRoot = TEST_ROOT.resolve(fields[1]);
+            switch (fields[0]) {
+                case "plain" -> runPlainSuite(suiteRoot);
+                case "project-tree" -> runProjectTreeSuite(suiteRoot);
+                default -> throw new AssertionError("unknown TOOL001 runner profile: " + line);
+            }
         }
     }
 
@@ -77,19 +86,76 @@ final class ProtosPackageToolProtosTest {
 
             Path fixture = suiteRoot.resolve(fields[0]);
             ProtosExecutionOutcome outcome =
-                    execute(Files.readString(fixture, StandardCharsets.UTF_8));
+                    execute(
+                            Files.readString(fixture, StandardCharsets.UTF_8),
+                            newPackageActivation());
             assertExpected(outcome, fields[1], fixture.toString());
         }
     }
 
-    private static ProtosExecutionOutcome execute(String source) throws Exception {
+    private static void runProjectTreeSuite(Path suiteRoot) throws Exception {
+        Path cases = suiteRoot.resolve("cases");
+        Path fixtures = suiteRoot.resolve("fixtures");
+        List<String> lines =
+                Files.readAllLines(suiteRoot.resolve("manifest.tsv"), StandardCharsets.UTF_8);
+
+        for (String line : lines) {
+            if (line.isBlank() || line.startsWith("#")) {
+                continue;
+            }
+
+            String[] fields = line.split("\\t", -1);
+            if (fields.length != 3) {
+                throw new AssertionError(
+                        "invalid TOOL001 project-tree fixture row in " + suiteRoot + ": " + line);
+            }
+
+            Path caseRoot = cases.resolve(fields[0]);
+            Path fixture = fixtures.resolve(fields[1]);
+
+            try (ProtosNioReadOnlyTreeFilesystemBackend backend =
+                    new ProtosNioReadOnlyTreeFilesystemBackend(caseRoot)) {
+                assumeTrue(
+                        backend.secureConfinementAvailable(),
+                        "host provider has no SecureDirectoryStream");
+
+                ProtosPrelude prelude = newPackagePrelude();
+                ProtosActivation activation = prelude.newModuleActivation();
+                ProtosObjectValue rawFilesystem =
+                        ProtosStandardFilesystemProtocol.createCapability(
+                                prelude.bytesPrototypeForRuntime(),
+                                activation,
+                                backend);
+                ProtosFilesystemValue filesystem =
+                        assertInstanceOf(ProtosFilesystemValue.class, rawFilesystem);
+                activation.context()
+                        .createLocalSlot("projectTreeFilesystem", filesystem);
+
+                ProtosExecutionOutcome outcome =
+                        execute(
+                                Files.readString(fixture, StandardCharsets.UTF_8),
+                                activation);
+                assertExpected(outcome, fields[2], fields[0] + "/" + fields[1]);
+            }
+        }
+    }
+
+    private static ProtosActivation newPackageActivation() throws Exception {
+        return newPackagePrelude().newModuleActivation();
+    }
+
+    private static ProtosPrelude newPackagePrelude() throws Exception {
         ProtosStandardLibraryModuleResolver standard =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosBundledToolModuleResolver resolver =
                 new ProtosBundledToolModuleResolver("package", TOOL_ROOT, standard);
-        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
-        ProtosActivation activation = prelude.newModuleActivation();
+        return new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+    }
 
+    private static ProtosExecutionOutcome execute(
+            String source,
+            ProtosActivation activation)
+            throws Exception {
         return ProtosRootTaskExecution.execute(
                 new ProtosSourceCompiler().compile(source),
                 activation);

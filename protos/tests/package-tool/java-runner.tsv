@@ -1,3 +1,5 @@
 # profile	suite
 plain	version
 plain	lock
+project-tree	resolution-root
+project-tree	execution-plan

@@ -259,6 +259,8 @@ The runner executes source through `ProtosRootTaskExecution` rather than direct
 RootActor-local task and can suspend through ordinary `Future.value()` when later
 TOOL001 corpora require it.
 
-Runner-A migrates only the existing `version` and `lock` manifest-driven corpora.
-Filesystem-backed and host-stateful corpora remain on their existing wrappers
-until later bounded migration slices.
+Runner-A migrated the existing `version` and `lock` manifest-driven corpora.
+Runner-B additionally migrates the read-only `resolution-root` and `execution-plan`
+project-tree corpora through one shared `project-tree` runner profile. Filesystem-
+mutable and other host-stateful corpora remain on their existing wrappers until
+later bounded migration slices.
