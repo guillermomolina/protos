@@ -1,5 +1,26 @@
 ## 0.2.262-SNAPSHOT
 
+- Record explicit project-owner ratification of D018's canonical
+  Process-bootstrap snapshot identity under AUD001 on 2026-09-08 after
+  cross-language, concurrency, isolation, distribution, adversarial and
+  future-scalability review. Retain exactly one canonical identity-bearing
+  `process.args()` snapshot and one distinct canonical identity-bearing
+  `process.environment()` snapshot per logical Process, with repeated successful
+  acquisition through same-Process capability/proxy views preserving ordinary
+  semantic identity observations. Keep equal-content snapshots from distinct
+  Processes semantically distinct; require no permanent physical wrapper,
+  address or global registry; and preserve implementation freedom for immutable
+  backing sharing, lazy materialization, caching, rematerialization,
+  virtualization and scalar replacement when observations remain exact.
+  Preserve the existing boundary between canonical acquisition and ordinary
+  Actor/P pass-by-value transfer: a transferred snapshot follows the destination
+  isolation-domain identity rules rather than being globally canonicalized back
+  to the Process snapshot. Record `0.1.361` accurately as the administrative D018
+  changelog revision for semantics already published in `PROCESS_IO.md` by
+  `8a27fbfb3519126fecf3559a74f9ce62116d6ec6`; no normative specification,
+  implementation, blocker, implementation-version, runtime, native-boundary,
+  license-term or implementation-follow-up change.
+
 - Record explicit project-owner ratification of D010 / specification `0.1.350` under AUD001 on 2026-09-08 after comparison with Erlang/OTP, Akka Typed, Pony, Node.js, Julia, Rust/Rayon, E/object-capability systems, WASI and Capsicum plus adversarial and future-scalability review. Retain the code-identity-plus-explicit-values Actor bootstrap model through `Actor.spawn(moduleSpecifier, bindingName, arguments...)`, minimal `Actor.current()`, ordinary `ActorRef.send` / `request` / graceful `stop`, and the minimal explicit `SendOperation.cancel` / `retry` control surface without exposing scheduler, mailbox, transport or worker machinery. Retain P as a semantic isolated parallel-execution domain entered through ordinary dispatch (`Closure.parallel`, `Bytes.parallelRange`, `ByteRegion.parallelRange`) rather than introducing a public `P` object, namespace, capability, keyword or syntax. Retain `Process` as an authority-free standard prototype while the actual RootActor Process capability is a host-provisioned initial-module local `process` slot; imports/new Actors acquire no Process authority implicitly, explicit Actor delegation does not amplify authority, Process does not imply Filesystem/network/subprocess/Node/Cluster authority, and Process has no P-transfer contract. Treat D010's historical surface-exhaustiveness wording as scoped to the `0.1.350` publication point rather than as a veto on later independently owned compatible extensions such as `Actor.group(...)` and `ActorRef.termination()`. Future placement/resource Spawner capabilities, supervision/discovery, parallel-executor/QoS facilities, capability attenuation and similar higher-level mechanisms remain separate explicit designs. Governance only: no normative specification, implementation, blocker, implementation-version, runtime, native-boundary or license-term change.
 
 - Close `TOOL001-F2E2B — exact selected-root capture + verified-capture host custody` after explicit project-owner approval of the run-scoped same-capture architecture on 2026-09-08 following alternatives, scalability and future-evolution review. Add host-internal `ProtosCapturedFilesystemCustody`: capture one exact already-selected root once through the existing secure I024 NIO machinery, close the source authority immediately, retain the exact immutable captured backend across Package Tool Process termination, rematerialize fresh structurally read-only Filesystem capabilities in later Actor domains over that same backend, and release run-owned custody deterministically and idempotently. Reuse the standard captured-Filesystem read-only adapter rather than making Filesystem Actor-transferable or adding a second namespace model. Keep physical backing representation abstract so future CAS/deduplicated/COW/remote immutable storage can replace today's managed backing without changing this contract. Keep `ProtosPackageExecutionPlan` inert; do not introduce a global registry, PackageId-to-custody binding, source-Path reopen, fetch, store layout, resolver integration or public-run behavior. F2E2C becomes READY while F2E3 remains dependency-gated on F2E2 closure. No normative specification, lock-format, ContentIdentity, native-boundary or license-term change; implementation version becomes `0.2.262-SNAPSHOT`.

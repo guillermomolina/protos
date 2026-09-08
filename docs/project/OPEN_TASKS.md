@@ -64,6 +64,41 @@ Current triage: - D038 has explicit project-owner confirmation and needs only ha
 - D044 remains the priority review item because no recovered evidence yet demonstrates explicit project-owner selection of its complete published semantics. is not ratification.
 - D002 and D016 and D018-D019 are expected to be predominantly project-owner decisions, but their approval evidence must be checked rather than inferred. Recorded review results:
 
+- D018 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining the canonical Process-bootstrap snapshot identity decision after
+  cross-language, concurrency, isolation, distribution, adversarial and
+  future-scalability review. The normative semantics were originally published
+  in `spec/io/PROCESS_IO.md` by commit
+  `8a27fbfb3519126fecf3559a74f9ce62116d6ec6`; specification revision `0.1.361`
+  subsequently recorded that already-published decision administratively as
+  D018 in commit `580f79bb39ed468a7e3eac27d25c0b28a7ba42df`.
+  Each logical Process continues to have exactly one canonical identity-bearing
+  `process.args()` snapshot and one distinct canonical identity-bearing
+  `process.environment()` snapshot for its lifetime. Repeated successful
+  acquisition through any Actor-local Process capability/proxy denoting that
+  same logical Process preserves the corresponding semantic identity, so the
+  ordinary `===`, `identityHashOf`, default equality/hash and `IdentityMap`
+  consequences follow without a special snapshot-identity subsystem. Equal
+  contents belonging to distinct Processes do not merge semantic identity.
+  Canonical semantic identity does not require one permanent physical wrapper,
+  stable address or global registry: immutable backing may be shared and
+  wrappers may be lazily materialized, cached, evicted/rematerialized,
+  virtualized, scalar-replaced or moved when all semantic identity observations
+  remain exact. Canonical acquisition remains distinct from value transfer:
+  when an already-acquired snapshot crosses an Actor or P isolation boundary
+  under an independently applicable pass-by-value rule, that boundary's ordinary
+  destination-identity semantics remain authoritative; acquiring the snapshot
+  through a delegated Process capability is not such a copy. D018 grants no new
+  Process, Actor or P transferability and creates no canonical identity relation
+  among separate Error occurrences when bootstrap acquisition fails. Standard
+  stream capability/view identity remains separately owned and is not
+  reclassified by this decision. Future live/native environment inspection,
+  child-process environment construction, checkpoint/restore policy and other
+  Process facilities remain separate explicit designs. This governance
+  classification changes no normative specification, implementation, blocker,
+  implementation version, runtime, native boundary or license terms and creates
+  no implementation follow-up.
+
 - D017 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
   retaining D017 / specification `0.1.357` after retrospective reconstruction,
   cross-ecosystem comparison and dedicated adversarial/future-scalability review
