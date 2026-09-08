@@ -63,7 +63,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * LIB004-A1/A2 integration harness.
+ * LIB004-A1/A2/A3 integration harness.
  *
  * <p>The behavior assertions live in Protos source. Java is restricted to provisioning the
  * confined Filesystem/standard-library resolver and inspecting the host fixture or exact Core
@@ -240,6 +240,59 @@ final class ProtosFilesystemLibraryConformanceTest {
         }
     }
 
+
+    @Test
+    void readAllBytesCancellationDuringPendingOpenReleasesLateUntransferredAcquisition()
+            throws Exception {
+        PendingOpenFixture fixture = pendingOpenFixture();
+        ExecutorService executor = daemonExecutor();
+        CompletableFuture<Object> execution =
+                executeAsync(
+                        "read-all-bytes-cancel-pending-open.protos",
+                        fixture.activation(),
+                        executor);
+        try {
+            assertTrue(
+                    fixture.backend().awaitOpenCancellation(),
+                    "pending Filesystem.open cancellation was not requested");
+
+            ProtosObjectValue result =
+                    assertInstanceOf(
+                            ProtosObjectValue.class,
+                            execution.get(5, TimeUnit.SECONDS));
+            ProtosFutureValue helperFuture =
+                    assertInstanceOf(
+                            ProtosFutureValue.class,
+                            fixture.control().readLocalSlot("future").orElseThrow());
+
+            assertSame(
+                    ProtosBooleanValue.TRUE,
+                    result.readLocalSlot("sameCancelResult").orElseThrow());
+            assertSame(
+                    ProtosBooleanValue.TRUE,
+                    result.readLocalSlot("cancelled").orElseThrow());
+            assertSame(helperFuture, result.readLocalSlot("future").orElseThrow());
+            assertEquals(ProtosFutureValue.State.CANCELLED, helperFuture.state());
+            assertDefaultReadOpen(fixture.backend());
+            assertEquals(1, fixture.backend().openCancellations());
+            assertEquals(0, fixture.backend().untransferredReleases());
+            assertEquals(0, fixture.resource().readStarts());
+            assertEquals(0, fixture.resource().closeStarts());
+
+            // A backend result that arrives after pre-commit cancellation cannot
+            // transfer a File to the already-cancelled helper. The standard open
+            // flow owns that untransferred result and releases it exactly once.
+            fixture.backend().succeedLate();
+            assertEquals(1, fixture.backend().untransferredReleases());
+            assertEquals(0, fixture.resource().readStarts());
+            assertEquals(0, fixture.resource().closeStarts());
+            assertEquals(ProtosFutureValue.State.CANCELLED, helperFuture.state());
+        } finally {
+            fixture.backend().succeedLateIfPending();
+            shutdown(executor);
+        }
+    }
+
     private Fixture fixture() throws Exception {
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap()
@@ -288,6 +341,32 @@ final class ProtosFilesystemLibraryConformanceTest {
         activation.context().createLocalSlot("control", control);
         activation.context().createLocalSlot("gate", gate);
         return new ControlledFixture(activation, prelude, control, backend, resource);
+    }
+
+
+    private PendingOpenFixture pendingOpenFixture() throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(
+                                CORE,
+                                new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
+        ProtosActivation activation = prelude.newModuleActivation();
+        ProtosObjectValue control = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        ProtosFutureValue gate =
+                new ProtosFutureValue(prelude.futurePrototype(), activation.executionDomain());
+        LateReadableResource resource = new LateReadableResource();
+        PendingOpenBackend backend =
+                new PendingOpenBackend(resource, gate, activation);
+        ProtosFilesystemValue filesystem =
+                assertInstanceOf(
+                        ProtosFilesystemValue.class,
+                        ProtosStandardFilesystemProtocol.createCapability(
+                                prelude.bytesPrototypeForRuntime(), activation, backend));
+
+        activation.context().createLocalSlot("filesystem", filesystem);
+        activation.context().createLocalSlot("control", control);
+        activation.context().createLocalSlot("gate", gate);
+        return new PendingOpenFixture(activation, control, backend, resource);
     }
 
     private static CompletableFuture<Object> executeAsync(
@@ -347,6 +426,16 @@ final class ProtosFilesystemLibraryConformanceTest {
         assertEquals(ProtosFilesystemOpenOptions.Placement.POSITIONED, options.placement());
         assertEquals(1, backend.openCount());
         assertEquals(0, backend.openCancellations());
+    }
+
+    private static void assertDefaultReadOpen(PendingOpenBackend backend) {
+        ProtosFilesystemOpenOptions options = backend.options().get();
+        assertTrue(options.readAccess());
+        assertFalse(options.writeAccess());
+        assertEquals(ProtosFilesystemOpenOptions.Creation.EXISTING, options.creation());
+        assertFalse(options.truncateInitialContent());
+        assertEquals(ProtosFilesystemOpenOptions.Placement.POSITIONED, options.placement());
+        assertEquals(1, backend.openCount());
     }
 
     private static Object execute(String file, ProtosActivation activation) throws IOException {
@@ -516,6 +605,131 @@ final class ProtosFilesystemLibraryConformanceTest {
 
         private int readCancellations() {
             return readCancellations.get();
+        }
+
+        private int closeStarts() {
+            return closeStarts.get();
+        }
+    }
+
+
+    private record PendingOpenFixture(
+            ProtosActivation activation,
+            ProtosObjectValue control,
+            PendingOpenBackend backend,
+            LateReadableResource resource) {}
+
+    private static final class PendingOpenBackend
+            implements ProtosStandardFilesystemProtocol.Backend {
+        private final LateReadableResource resource;
+        private final ProtosFutureValue gate;
+        private final ProtosActivation activation;
+        private final AtomicInteger openCount = new AtomicInteger();
+        private final AtomicInteger openCancellations = new AtomicInteger();
+        private final AtomicInteger untransferredReleases = new AtomicInteger();
+        private final AtomicReference<ProtosFilesystemOpenOptions> options =
+                new AtomicReference<>();
+        private final AtomicReference<ProtosStandardFilesystemProtocol.OpenCompletion> completion =
+                new AtomicReference<>();
+        private final CountDownLatch openCancellation = new CountDownLatch(1);
+        private final AtomicBoolean lateCompleted = new AtomicBoolean();
+
+        private PendingOpenBackend(
+                LateReadableResource resource,
+                ProtosFutureValue gate,
+                ProtosActivation activation) {
+            this.resource = resource;
+            this.gate = gate;
+            this.activation = activation;
+        }
+
+        @Override
+        public ProtosFilesystemOpenFlow.Cancellation open(
+                ProtosPathValue path,
+                ProtosFilesystemOpenOptions capturedOptions,
+                ProtosStandardFilesystemProtocol.OpenCompletion openCompletion) {
+            openCount.incrementAndGet();
+            if (!options.compareAndSet(null, capturedOptions)
+                    || !completion.compareAndSet(null, openCompletion)) {
+                throw new IllegalStateException("LIB004-A3 expected exactly one pending open");
+            }
+            gate.resolve(ProtosNullValue.INSTANCE, activation);
+            return () -> {
+                openCancellations.incrementAndGet();
+                openCancellation.countDown();
+            };
+        }
+
+        private boolean awaitOpenCancellation() throws InterruptedException {
+            return openCancellation.await(5, TimeUnit.SECONDS);
+        }
+
+        private void succeedLate() {
+            if (!lateCompleted.compareAndSet(false, true)) {
+                throw new IllegalStateException("pending open already completed");
+            }
+            ProtosStandardFilesystemProtocol.OpenCompletion openCompletion = completion.get();
+            if (openCompletion == null) {
+                throw new IllegalStateException("pending open has not started");
+            }
+            openCompletion.succeeded(
+                    resource,
+                    new ProtosFileFlow.Capabilities(
+                            true, false, false, false, false, false),
+                    untransferredReleases::incrementAndGet);
+        }
+
+        private void succeedLateIfPending() {
+            if (completion.get() != null && lateCompleted.compareAndSet(false, true)) {
+                completion.get()
+                        .succeeded(
+                                resource,
+                                new ProtosFileFlow.Capabilities(
+                                        true, false, false, false, false, false),
+                                untransferredReleases::incrementAndGet);
+            }
+        }
+
+        private AtomicReference<ProtosFilesystemOpenOptions> options() {
+            return options;
+        }
+
+        private int openCount() {
+            return openCount.get();
+        }
+
+        private int openCancellations() {
+            return openCancellations.get();
+        }
+
+        private int untransferredReleases() {
+            return untransferredReleases.get();
+        }
+    }
+
+    private static final class LateReadableResource
+            implements ProtosFileFlow.ReadableResource {
+        private final AtomicInteger readStarts = new AtomicInteger();
+        private final AtomicInteger closeStarts = new AtomicInteger();
+
+        @Override
+        public ProtosFileFlow.Cancellation readAt(
+                BigInteger position,
+                int maxBytes,
+                ProtosFileFlow.ReadCompletion completion) {
+            readStarts.incrementAndGet();
+            completion.eof();
+            return () -> {};
+        }
+
+        @Override
+        public void close(ProtosFileFlow.CloseCompletion completion) {
+            closeStarts.incrementAndGet();
+            completion.succeeded();
+        }
+
+        private int readStarts() {
+            return readStarts.get();
         }
 
         private int closeStarts() {
