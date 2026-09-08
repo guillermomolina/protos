@@ -45,7 +45,7 @@ Current triage:
 - D044 remains the priority review item because no recovered evidence yet
   demonstrates explicit project-owner selection of its complete published semantics.
   is not ratification.
-- D002 and D005-D019 are expected to be predominantly project-owner decisions, but their
+- D002 and D005-D006 and D008-D019 are expected to be predominantly project-owner decisions, but their
   approval evidence must be checked rather than inferred.
 
 Recorded review results:
@@ -649,29 +649,42 @@ Recorded review results:
   semantics. This governance classification changes no normative specification or
   implementation and does not classify any other Dxxx decision by transitivity.
 
-Required procedure:
+- D007 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D007 / specification `0.1.346` after a corrected review (the prior
+  audit turn had misidentified D007), with comparison against ECMAScript,
+  Python, Go and Java plus package-system, adversarial and future-scalability
+  analysis. `import(specifier)` remains an ordinary call whose evaluated
+  argument must be exactly a semantic String. Core performs no coercion,
+  formatting, `toString` dispatch, duck typing, implicit invocation or
+  String-like delegation to manufacture the specifier, and invalid non-String
+  values fail with the ordinary Core Error before resolver entry. Core passes
+  the exact String value across the host/module-resolution boundary without
+  assigning intrinsic path, URI, URL, package, filesystem or registry semantics,
+  without normalization/rewriting and without universally rejecting the empty
+  String. The host resolver owns interpretation, policy, authority and
+  canonicalization of that text. Successful resolution yields the canonical
+  ModuleKey from which Core module identity, Actor-local caching,
+  cache-before-execute, initialization and cycle semantics proceed; the original
+  spelling is not module identity, so distinct spellings may converge on one
+  key. A valid String that cannot be resolved produces a language Error, not a
+  host exception/status/sentinel, and failed resolution creates/caches no module
+  instance. Import validation/resolution adds no implicit Protos suspension,
+  Future, scheduler or re-entry boundary. The later package architecture
+  validates the scalability of this boundary: dependency/version selection,
+  registries/network acquisition, immutable artifact fetching and exact
+  execution-plan preparation remain explicit host/tooling work, while the
+  execution-time resolver maps already-valid requests to canonical ModuleKeys.
+  Future genuinely asynchronous module/artifact acquisition remains separately
+  designable rather than a retroactive reinterpretation of ordinary Core import.
+  This governance classification changes no normative specification or
+  implementation and does not classify D006 or D008 by transitivity.
 
-1. Continue backwards through the remaining unresolved decisions in D044-D040,
- and finally D001-D003 and D005-D019.
-2. For each decision, reconstruct the alternatives, recommendation, published
-   normative result, downstream implementation, and owner-approval evidence.
-3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or
-   PROVENANCE_UNRESOLVED. Executing or publishing a patch is not sufficient
-   approval evidence.
-4. Present every substantive unresolved choice to the project owner under the
-   current explicit design-approval gate. Do not silently preserve, replace, or
-   reopen semantics.
-5. Keep D046 outside AUD001 and do not let this audit overwrite or pre-empt its
-   separate review.
-
-Next audit work:
-
-1. Complete the separate D044 review already in progress, considering D045 only
-   as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D043-D040, then D001-D003 and D005-D019
-   under the required procedure above.
-
-AUD001 closes only when D001-D003 and D005-D020, D025, D027-D028 and D030-D045, except D046, have an explicit classification,
+Required procedure: 1. Continue backwards through the remaining unresolved decisions in D044-D040, and finally D001-D003 and D005-D006 and D008-D019.
+2. For each decision, reconstruct the alternatives, recommendation, published normative result, downstream implementation, and owner-approval evidence.
+3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or PROVENANCE_UNRESOLVED. Executing or publishing a patch is not sufficient approval evidence.
+4. Present every substantive unresolved choice to the project owner under the current explicit design-approval gate. Do not silently preserve, replace, or reopen semantics.
+5. Keep D046 outside AUD001 and do not let this audit overwrite or pre-empt its separate review. Next audit work: 1. Complete the separate D044 review already in progress, considering D045 only as a ratified dependency where their semantics interact.
+2. Continue backwards through the remaining unresolved decisions in D043-D040, then D001-D003 and D005-D006 and D008-D019 under the required procedure above. AUD001 closes only when D001-D003 and D005-D006 and D008-D020, D025, D027-D028 and D030-D045, except D046, have an explicit classification,
 the project owner has decided every NEEDS_USER_DECISION item, relevant
 provenance is recorded durably, and all affected project ledgers are reconciled.
 Any later normative correction must be a separately approved specification
