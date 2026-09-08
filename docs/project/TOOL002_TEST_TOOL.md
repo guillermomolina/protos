@@ -65,7 +65,7 @@ freeze those decisions unless their own audited scope requires and resolves them
 | TOOL002-C | CLOSED | Publish test-neutral sequential private-stream capture over `ProtosFreshProcessExecutor`: one exact compiled entry gets private stdin/stdout/stderr, a fresh semantic Process and an inert outcome plus detached captured bytes. No manifest/expectation/scheduler/result-transfer policy. Implementation version `0.2.171-SNAPSHOT`. |
 | TOOL002-D | CLOSED | D1-D4 are published; all retained non-Future main-manifest expectation policy is owned by bundled Protos. D4 closes at `0.2.211-SNAPSHOT`; `future-*` remains TOOL002-F. |
 | TOOL002-E | CLOSED | E1A/E1B/E2A/E2B/E3/E4 complete the retained Package/TOML migration: bundled Protos owns planning, confined source loading, Package execution, Boolean/Error expectation policy and aggregation; duplicate Java corpus-policy ownership is removed. |
-| TOOL002-F | IN_PROGRESS | F1/F2/F3A/F3B/F3C/F3D are CLOSED; F3E executable integration is complete through E3B and E4 reconciliation is READY; F4 remains dependency-gated. |
+| TOOL002-F | IN_PROGRESS | F1/F2/F3 are CLOSED; F4 is READY for the atomic public Future expectation ownership cutover. |
 | TOOL002-G | BLOCKED_BY_DEPENDENCIES | After F, migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |
 | TOOL002-H | BLOCKED_BY_DEPENDENCIES | After G, add bounded parallel scheduling of independent fresh Processes, private output capture, and deterministic reporting. |
 | TOOL002-I | BLOCKED_BY_DEPENDENCIES | After H, add explicit resource constraints/private capabilities where real external-resource sharing requires them. |
@@ -340,7 +340,7 @@ F is split by the distinct terminal/identity contracts:
 |---|---|---|
 | TOOL002-F1 | CLOSED | Child-local mechanism for `future-integer`, `future-null`, and `future-boolean`. The retained source produces the candidate Future in the fresh child Process; `Future.value()` performs ordinary suspension/resume there; only canonical Boolean evidence crosses D1. Not yet activated in `runSimple`. Implementation version `0.2.228-SNAPSHOT`. |
 | TOOL002-F2 | CLOSED | Child-local `future-error`, `future-error-parent`, and `future-cancelled` mechanism uses repeated ordinary `Future.value()` observations: FAILED preserves stored Error identity; CANCELLED yields fresh `Cancelled` occurrences; exact immediate parent matching remains ordinary reflection. Not yet activated in `runSimple`. Implementation version `0.2.229-SNAPSHOT`. |
-| TOOL002-F3 | IN_PROGRESS | F3A/F3B/F3C/F3D are CLOSED; F3E E1-E3B executable/private policy evidence is complete and E4 reconciliation is READY. |
+| TOOL002-F3 | CLOSED | F3A/F3B/F3C/F3D plus F3E E1-E4 complete the retained stored/fresh observation substrate and private bundled-Protos policy without public Future selection. |
 | TOOL002-F3A | CLOSED | Semantic prerequisites plus governance reconciliation complete: F3A1 proves repeated failed-Future observations signal one Error identity; F3A2 proves one failed-Future observation is exactly the producer-created Error; F3A3 records the dependency-ordered continuation. No Test Tool executable change. |
 | TOOL002-F3A1 | CLOSED | Test-impact-only Protos conformance published at `3c23eaaccecbdcc7c2bcd86bc30c445403cfb047`: two handled observations of one failed Future satisfy `first === second`. |
 | TOOL002-F3A2 | CLOSED | Test-impact-only Protos conformance published at `119c90032088ccf428ace37185187b854966e0cb`: one handled observation of a failed Future satisfies `observed === original` for the producer-created same-domain Error. |
@@ -357,13 +357,13 @@ F is split by the distinct terminal/identity contracts:
 | TOOL002-F3D | CLOSED | F3D1 immediate `Cancelled` parent + F3D2 second-observation `first !== second` evidence complete retained `fresh:Cancelled` semantics outside public Runner selection. |
 | TOOL002-F3D1 | CLOSED | Test-impact-only retained fresh-cancellation evidence: one exact retained `observe` invocation inside same-Process `executionInspect` signals an Error whose immediate parent is `Cancelled`. No second observation or freshness comparison. |
 | TOOL002-F3D2 | CLOSED | Test-impact-only retained fresh-cancellation evidence: a second exact `observe` invocation yields another immediate-`Cancelled` Error and `first !== second`; closes F3D. |
-| TOOL002-F3E | IN_PROGRESS | E1 parser, E2 fresh evaluator, E3A unified private composition and E3B integrated negatives are CLOSED; E4 governance reconciliation is READY before F4. |
+| TOOL002-F3E | CLOSED | E1 parsing, E2 positive fresh evaluation, E3A unified private composition, E3B integrated negatives and E4 reconciliation are complete; F4 READY. |
 | TOOL002-F3E1 | CLOSED | Private bundled-Protos `MODE:ErrorPrototype` parser only: exact separator/non-empty fields, `stored`/`fresh` mode validation and existing standard Error-prototype resolution; no observation evaluation or public selection. |
 | TOOL002-F3E2 | CLOSED | Positive private `fresh` evaluator only: parse retained policy, invoke retained `observe` twice in same-Process inspection, require both named immediate parents and distinct Error identity; no public selection. |
 | TOOL002-F3E3A | CLOSED | Private composition only: parse one retained observation policy and route `stored`/`fresh` to the already-closed mode-specific evaluators; public selection remains unchanged. |
 | TOOL002-F3E3B | CLOSED | Test-impact-only integrated negative evidence through the unified private entry: malformed policy fails closed before inspection; stored/fresh identity and immediate-parent mismatches are inert false results. |
-| TOOL002-F3E4 | READY | After E3B, reconcile E1-E3B, close F3E/F3 and make F4 READY without executable change. |
-| TOOL002-F4 | BLOCKED_BY_DEPENDENCIES | After F3, activate every retained `future-*` family in the generic sequential runner, require full main-manifest selection/pass evidence, retire Java `future-*` policy ownership, close TOOL002-F and make TOOL002-G READY. |
+| TOOL002-F3E4 | CLOSED | Documentation/governance-only final reconciliation closes F3E/F3 and makes F4 READY; no executable or implementation-version change. |
+| TOOL002-F4 | READY | After F3 closure, atomically select all retained `future-*` families in generic `runSimple`, prove full main-manifest ownership, retire Java Future policy and close F; make G READY. |
 
 F1 deliberately leaves `isDExpectation` / `runSimple` unchanged, so D4's
 already-published non-Future ownership boundary remains valid until the atomic F4
@@ -698,6 +698,43 @@ TOOL002-F3E3A is CLOSED.
 TOOL002-F3E3B is CLOSED.
 TOOL002-F3E4 is READY.
 TOOL002-F4 is BLOCKED_BY_DEPENDENCIES.
+
+### TOOL002-F3E4 closure
+
+F3E4 adds no executable behavior. It reconciles the dependency-ordered F3
+program after every underlying evidence slice has published successfully:
+
+- F3A establishes the normative same-domain FAILED Future Error-identity
+  substrate independently of Test Tool policy;
+- F3B proves the exact retained stored fixture shape and repeated exact stored
+  Error observation behavior;
+- F3C owns positive `stored:Error` bundled-Protos policy plus malformed,
+  identity-mismatch and immediate-parent negative evidence;
+- F3D proves retained cancelled observation uses a fresh immediate-`Cancelled`
+  Error occurrence on each observation;
+- F3E1 parses exact retained `MODE:ErrorPrototype` policy, F3E2 adds positive
+  private `fresh` evaluation, F3E3A composes one private stored/fresh entry, and
+  F3E3B proves fail-closed malformed policy plus inert stored/fresh mismatch
+  behavior through that unified entry;
+- throughout F3, public `isDExpectation` / `runSimple` selection and the retained
+  main manifest remain unchanged, and Java remains the temporary direct owner of
+  `future-*` corpus expectation policy.
+
+Therefore F3E and F3 are CLOSED. F4 is now READY and owns the single atomic
+public selection/ownership cutover: enable every retained Future expectation in
+the generic bundled-Protos runner, prove complete main-manifest ownership, and
+retire the duplicate Java Future expectation policy. This reconciliation changes
+no Protos semantics, specification, executable source, implementation version,
+native boundary or license terms.
+
+TOOL002-F3 is CLOSED.
+TOOL002-F3E is CLOSED.
+TOOL002-F3E1 is CLOSED.
+TOOL002-F3E2 is CLOSED.
+TOOL002-F3E3A is CLOSED.
+TOOL002-F3E3B is CLOSED.
+TOOL002-F3E4 is CLOSED.
+TOOL002-F4 is READY.
 
 ## TOOL002-A closure
 
