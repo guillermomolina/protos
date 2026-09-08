@@ -129,6 +129,26 @@ Recorded review results:
   specification `0.1.379` race-safe namespace-entry selection and is not part
   of this ratification. This governance classification changes no normative
   specification or implementation.
+- D040 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D040 / specification `0.1.377` after comparative review against
+  Smalltalk, Self, JavaScript, Python and Java plus a separate future-
+  scalability review covering traits/mixins, multiple delegation, method
+  combination, metaprogramming, isolation and JIT optimization. Retain the
+  published model in which `super` is special lookup syntax that preserves the
+  original receiver and continues lookup after the invocation's `methodHome`;
+  Method remains an invocation role of the single Closure value kind rather
+  than a static executable category; the complete ordinary argument/spread
+  vector is formed before super dispatch; missing `methodHome` signals one
+  fresh `InvalidSuper` without lookup; and a valid home with an empty/exhausted
+  continuation remains ordinary `SlotNotFound`. No first-class `super`, hidden
+  fallback origin, static Method category or P-specific super error is added.
+  The scalability review records `parent(methodHome)` as the exact Core v0.1
+  realization under the current exactly-one-parent object model; this
+  ratification neither prohibits nor authorizes a future multiple-parent,
+  linearized, directed-resend, or next-applicable-method generalization. Any
+  such evolution remains a separate explicitly approved normative design
+  decision. This governance classification changes no normative specification
+  or implementation.
 
 Required procedure:
 
