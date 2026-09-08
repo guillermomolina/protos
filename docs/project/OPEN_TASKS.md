@@ -52,14 +52,16 @@ Current triage:
 
 Recorded review results:
 
-- D045 remains `NEEDS_USER_DECISION`. Its task-scoped ownership core is the
-  recommended design: synchronous Closure/method activations do not create
-  structured scopes; returning, storing or wrapping a pending Future does not
-  alter its ownership edge; distinct asynchronous child tasks own their own
-  descendants; and `detach()` is the explicit operation that removes the edge.
-  This avoids per-activation draining, result-shape/escape heuristics and hidden
-  implicit detachment while preserving ordinary Future-returning APIs. This is
-  an audit recommendation only and is not project-owner ratification.
+- D045 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved retaining
+  its task-scoped ownership core: synchronous Closure/method activations do not create
+  structured scopes; returning, storing or wrapping a pending Future does not alter
+  its ownership edge; distinct asynchronous child tasks own their own descendants;
+  and `detach()` is the explicit operation that removes the edge. This avoids
+  per-activation draining, result-shape/escape heuristics and hidden implicit
+  detachment while preserving ordinary Future-returning APIs. The ratification
+  confirms the already-published D045 semantics; it does not change normative
+  specification or implementation and is independent of the separately ratified
+  specification `0.1.90` structured-child terminal-outcome policy.
 - The structured-child terminal-outcome policy introduced in specification
   revision `0.1.90` is `RATIFIED`. Its original commit
   `53fd43c7edceaa2fbc93bdada645cc7b79195f0e` contained no recovered evidence of
@@ -93,7 +95,7 @@ Required procedure:
 Next audit work:
 
 1. Complete the separate D044 review already in progress, considering D045 only
-   as an unratified dependency where their semantics interact.
+   as a ratified dependency where their semantics interact.
 2. Continue backwards through D043-D039, then D020, D021-D036 and D001-D019
    under the required procedure above.
 
