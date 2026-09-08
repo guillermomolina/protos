@@ -207,6 +207,28 @@ Recorded review results:
   records already-selected/published semantics; it changes no normative
   specification or implementation.
 
+- D035 is `RATIFIED` from recovered explicit project-owner selection. The
+  recovered 2026-09-04 decision sequence shows that, immediately after the
+  concrete recommendation to close the Bytes identity/mutable-state gap with
+  one general standard Bytes-producing result rule plus the `read` and
+  `encode` specializations, the project owner accepted that bounded proposal
+  and requested the first publication prompt. Retain D035 / specification
+  `0.1.373`: unless an operation expressly returns an existing object, every
+  successful Core-standard operation whose normal result is `Bytes` returns
+  one fresh open standard Bytes identity with independent receiver-owned
+  mutable state, including empty results. A result is not identical to or
+  mutable state shared with source/argument Bytes, the producer, another
+  invocation's result or an implementation buffer; ordinary `===`/`!==`,
+  `identityHashOf`, `IdentityMap`, default equality/hash and open/closed/frozen
+  observations follow from those distinct ordinary Bytes identities. The rule
+  constrains observable semantics rather than physical copying, so immutable
+  backing, copy-on-write, slicing, persistent storage, zero-copy, lazy
+  materialization and scalar replacement remain permitted when unobservable.
+  Failed/cancelled operations expose no partial Bytes result, while later
+  Actor/P transfer remains governed independently by the existing value-
+  transfer rules. This classification records already-selected and still-
+  current semantics; it changes no normative specification or implementation.
+
 Required procedure:
 
 1. Continue backwards through the remaining unresolved decisions in D044-D040,
