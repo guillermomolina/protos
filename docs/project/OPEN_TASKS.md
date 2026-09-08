@@ -87,7 +87,27 @@ Recorded review results:
   rather than being emulated through check-then-act; and `remove` remains
   non-recursive. This ratifies D042 / specification `0.1.379` only; D041's
   separate atomicity, commitment, cancellation, stable-open-File and durability
-  package remains subject to its own AUD001 review.
+  package is independently `RATIFIED` in its effective post-D042 form below.
+- D041 is `RATIFIED` in its effective form after D042. On 2026-09-08 the
+  project owner explicitly approved retaining D041's still-effective
+  Filesystem namespace-mutation package after comparative review against
+  POSIX/Unix, Python, Java NIO, Rust, Go and Windows/.NET-style filesystem
+  models: both paths remain confined to one explicit Filesystem authority;
+  `replace` is one indivisible source-to-target namespace transition with no
+  operation-created missing-target window and same-resource replacement is a
+  no-op; `replace` is not copy-then-delete or truncate-and-write; `remove` is
+  one indivisible namespace transition; already-open File capabilities keep
+  their selected resource; cancellation/failure before commitment contributes
+  no namespace mutation, while the committed transition is irreversible and
+  cannot later be reported as failed/cancelled; implementations that cannot
+  provide a determinate conforming transition fail closed; distinct Filesystem
+  operations have no implicit FIFO; and live atomic visibility is explicitly
+  separate from crash durability, with File `sync()` not serving as a
+  namespace-durability barrier. D041's original ordinary-file-only final-entry
+  restriction is `SUPERSEDED` by the independently ratified D042 /
+  specification `0.1.379` race-safe namespace-entry selection and is not part
+  of this ratification. This governance classification changes no normative
+  specification or implementation.
 
 Required procedure:
 
