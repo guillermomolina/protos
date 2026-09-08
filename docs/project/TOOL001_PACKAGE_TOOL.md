@@ -276,3 +276,14 @@ same `ProtosPackageToolProtosTest` class.
 The Protos sources remain unchanged and every source executes through
 `ProtosRootTaskExecution`. `metadata-publication`, `resolution-input`, the
 read-only metadata backend fixtures, and F2E2A remain on later bounded slices.
+
+## Runner-D1 — metadata-publication corpus
+
+Runner-D1 migrates only the existing `metadata-publication` Protos evidence
+into the temporary single Java runner. It reuses Runner-C's existing confined
+metadata Filesystem fixture and host postconditions; no new runner profile or
+fixture DSL is introduced.
+
+The Protos sources remain unchanged and execute through
+`ProtosRootTaskExecution`. `resolution-input`, read-only metadata backend
+evidence, and F2E2A remain on later bounded slices.

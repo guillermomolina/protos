@@ -279,6 +279,109 @@ final class ProtosPackageToolProtosTest {
         assertEquals("stale\n", Files.readString(projectRoot.resolve(".protos.lock.stage")));
     }
 
+
+    @Test
+    void metadataPublicationReplacesManifestTarget() throws Exception {
+        Files.writeString(projectRoot.resolve("protos.toml"), "old\n", StandardCharsets.UTF_8);
+        assertConfinedTrue("metadata-publication/publish-replaces-target.protos");
+
+        assertEquals(
+                "new metadata\n",
+                Files.readString(projectRoot.resolve("protos.toml"), StandardCharsets.UTF_8));
+        assertTrue(
+                Files.notExists(
+                        projectRoot.resolve(".protos.toml.stage"), LinkOption.NOFOLLOW_LINKS));
+    }
+
+    @Test
+    void metadataPublicationReplacesLockTarget() throws Exception {
+        Files.writeString(projectRoot.resolve("protos.lock"), "old lock\n", StandardCharsets.UTF_8);
+        assertConfinedTrue("metadata-publication/publish-lock-replaces-target.protos");
+
+        assertEquals(
+                "new lock metadata\n",
+                Files.readString(projectRoot.resolve("protos.lock"), StandardCharsets.UTF_8));
+        assertTrue(
+                Files.notExists(
+                        projectRoot.resolve(".protos.lock.stage"), LinkOption.NOFOLLOW_LINKS));
+    }
+
+    @Test
+    void metadataPublicationStageCollisionPreservesTarget() throws Exception {
+        Files.writeString(projectRoot.resolve("protos.toml"), "old\n", StandardCharsets.UTF_8);
+        Files.writeString(
+                projectRoot.resolve(".protos.toml.stage"), "stale\n", StandardCharsets.UTF_8);
+
+        try (Fixture fixture = confinedFixture(projectRoot)) {
+            assertIoErrorOutcome(
+                    executeFile(
+                            TEST_ROOT.resolve(
+                                    "metadata-publication/stage-collision-preserves-target.protos"),
+                            fixture.activation()),
+                    fixture.activation(),
+                    "metadata-publication/stage-collision-preserves-target.protos");
+        }
+
+        assertEquals(
+                "old\n",
+                Files.readString(projectRoot.resolve("protos.toml"), StandardCharsets.UTF_8));
+        assertEquals(
+                "stale\n",
+                Files.readString(
+                        projectRoot.resolve(".protos.toml.stage"), StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void metadataPublicationExplicitDiscardRemovesStage() throws Exception {
+        Files.writeString(
+                projectRoot.resolve(".protos.toml.stage"),
+                "abandoned\n",
+                StandardCharsets.UTF_8);
+
+        assertConfinedTrue("metadata-publication/discard-staging.protos");
+
+        assertTrue(
+                Files.notExists(
+                        projectRoot.resolve(".protos.toml.stage"), LinkOption.NOFOLLOW_LINKS));
+    }
+
+    @Test
+    void metadataPublicationInvalidContentCreatesNoStage() throws Exception {
+        Files.writeString(projectRoot.resolve("protos.toml"), "old\n", StandardCharsets.UTF_8);
+
+        assertConfinedFailed("metadata-publication/invalid-content-has-no-stage.protos");
+
+        assertFalse(
+                Files.exists(
+                        projectRoot.resolve(".protos.toml.stage"), LinkOption.NOFOLLOW_LINKS));
+        assertEquals(
+                "old\n",
+                Files.readString(projectRoot.resolve("protos.toml"), StandardCharsets.UTF_8));
+    }
+
+    @Test
+    void metadataPublicationForbiddenTargetPreservesPreparedStageAndTarget() throws Exception {
+        Files.writeString(projectRoot.resolve("secret.txt"), "secret\n", StandardCharsets.UTF_8);
+
+        try (Fixture fixture = confinedFixture(projectRoot)) {
+            assertIoErrorOutcome(
+                    executeFile(
+                            TEST_ROOT.resolve(
+                                    "metadata-publication/forbidden-target-preserves-target.protos"),
+                            fixture.activation()),
+                    fixture.activation(),
+                    "metadata-publication/forbidden-target-preserves-target.protos");
+        }
+
+        assertEquals(
+                "secret\n",
+                Files.readString(projectRoot.resolve("secret.txt"), StandardCharsets.UTF_8));
+        assertEquals(
+                "staged but forbidden\n",
+                Files.readString(
+                        projectRoot.resolve(".protos.toml.stage"), StandardCharsets.UTF_8));
+    }
+
     private void assertConfinedTrue(String relative) throws Exception {
         try (Fixture fixture = confinedFixture(projectRoot)) {
             ProtosExecutionOutcome outcome =
