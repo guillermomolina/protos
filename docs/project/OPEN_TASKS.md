@@ -45,7 +45,7 @@ Current triage:
 - D020 and the still-unratified decisions in D040-D044 require priority review
   because no recovered evidence yet demonstrates explicit project-owner selection
   of their complete published semantics.
-- D021-D036 require provenance and substance review; publication alone is not
+- D021-D035 require provenance and substance review; publication alone is not
   ratification.
 - D001-D019 are expected to be predominantly project-owner decisions, but their
   approval evidence must be checked rather than inferred.
@@ -229,10 +229,29 @@ Recorded review results:
   transfer rules. This classification records already-selected and still-
   current semantics; it changes no normative specification or implementation.
 
+- D036 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved retaining
+  D036 / specification `0.1.374` after comparative, adversarial and scalability
+  review. Unless a Core-standard operation expressly returns an already-existing
+  Future, every successfully dispatched Future-producing invocation keeps its own
+  fresh semantic standard Future identity, including results that are immediately
+  resolved, failed or cancelled. Distinct invocation results remain distinct under
+  `===`, `!==`, `identityHashOf` and `IdentityMap`; implementations may not make
+  identity depend on pending-work sharing, terminal-result caching, scheduling or
+  completion timing. Future identity remains independent from eventual value/Error/
+  outcome identity. An operation whose normative contract expressly returns an
+  existing Future preserves that Future instead of manufacturing another identity,
+  which keeps receiver-preserving operations such as `cancel()`/`detach()` and future
+  explicit memoized/shared-work APIs expressible without weakening the default rule.
+  Freshness is semantic rather than an allocation mandate: scalar replacement,
+  allocation elision, virtualization, pooling, canonical terminal-state backing and
+  other invisible optimizations remain allowed. This ratifies D036 only; D031
+  remains independently subject to AUD001 review. No normative specification or
+  implementation change is introduced by this classification.
+
 Required procedure:
 
 1. Continue backwards through the remaining unresolved decisions in D044-D040,
-   then D020, D021-D036, and finally D001-D019.
+   then D020, D021-D035, and finally D001-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published
    normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or
@@ -248,7 +267,7 @@ Next audit work:
 
 1. Complete the separate D044 review already in progress, considering D045 only
    as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D043-D040, then D020, D021-D036 and D001-D019
+2. Continue backwards through the remaining unresolved decisions in D043-D040, then D020, D021-D035 and D001-D019
    under the required procedure above.
 
 AUD001 closes only when D001-D045, except D046, have an explicit classification,
