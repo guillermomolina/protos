@@ -1,6 +1,6 @@
 # Filesystem Tree Observation and Captured-Tree Capability
 
-Status: **RATIFIED by explicit user re-evaluation; D046 amended by specification revision 0.1.384; implementation pending I024**
+Status: **RATIFIED by explicit user re-evaluation; D046/specification revision 0.1.384 fully implemented and closed by I024**
 Nature: non-normative design rationale for the normative `spec/io/FILESYSTEM.md`
 Owner: B009 / D046
 Primary consumer discovered by: TOOL001-F2E2
@@ -426,7 +426,7 @@ I024-A   host-neutral result/custody flow                     CLOSED
 I024-A2  post-0.1.384 compatibility re-audit                  CLOSED
 I024-B   standard Filesystem public materialization           CLOSED
 I024-C   secure NIO + immutable captured backend              CLOSED
-I024-D   integrated Protos conformance + B009 closure         READY
+I024-D   integrated Protos conformance + B009 closure         CLOSED
 ```
 
 ## I024-B public materialization result
@@ -494,8 +494,38 @@ performs prompt cleanup only for custody that never reaches a successful
 Filesystem result. None of these mechanics create a Protos-visible `close`,
 release, Directory identity, source path, or backing locator.
 
-I024-D remains responsible for the final integrated Protos-visible conformance,
-native-boundary reconciliation, B009/I024 closure and TOOL001-F2E2 transition.
+I024-D closes the final integrated Protos-visible conformance, native-boundary
+reconciliation, B009/I024 closure and TOOL001-F2E2 transition.
+
+## I024-D integrated conformance and final closure
+
+I024-D is CLOSED without production modification. The final conformance layer
+provisions the production complete-tree NIO backend but expresses observable D046
+expectations in Protos source wherever language behavior is under test.
+
+The closure evidence covers:
+
+- two independent `entries` calls yield fresh complete eager Arrays and exact
+  frozen root-Object descriptors; order is never assumed;
+- production no-follow classification reaches `regular`, `directory`, `link`
+  and host-supported `other` through the standard Protos selector;
+- a final directory symlink is not followed by either operation and fails through
+  ordinary `IOError`;
+- a captured Filesystem is fresh, has no standard `close`, rejects write/mutation,
+  retains opaque links, supports captured subtrees and preserves exact bytes after
+  the mutable source is changed or removed;
+- cancellation is observable through the ordinary Future surface; a late
+  `entries` result cannot replace cancellation and late captured custody is
+  released when cancellation already won;
+- the same captured authority can be observed/read repeatedly after source
+  mutation, supplying the stable verify-then-use substrate required by F2E1;
+- the executable native-boundary architecture guard remains authoritative and the
+  standard Filesystem provider still owns one construction site for all five
+  selectors.
+
+No Directory identity, Filesystem lifecycle selector, package-specific host tree
+walker, normative specification change or production implementation change is
+introduced by D.
 
 ## I024-A2 compatibility audit result
 

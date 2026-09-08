@@ -1,6 +1,6 @@
 # TOOL001-F2E — External Immutable-Package Execution
 
-Status: **IN_PROGRESS — F2E1 CLOSED; F2E2 blocked by general I024 implementation**
+Status: **IN_PROGRESS — F2E1 CLOSED; I024/B009 CLOSED; F2E2 READY**
 Nature: non-normative Package Tool / host-integration project record
 Allocated after: `TOOL001-F2D` workspace-only execution closure
 
@@ -98,7 +98,7 @@ F2E1  protos-package-tree-v1 ContentIdentity contract              CLOSED
 F2E1A logical-tree domain + portable path/entry-kind contract       CLOSED
 F2E1B canonical byte stream + method/hash contract                  CLOSED
 F2E1C independent conformance vectors + F2E1 closure                CLOSED
-F2E2  verified read-only package-store binding                     BLOCKED_BY_DEPENDENCIES
+F2E2  verified read-only package-store binding                     READY
 F2E3  external-node execution-plan construction                    BLOCKED_BY_DEPENDENCIES
 F2E4  external canonical ModuleKey + source resolver               BLOCKED_BY_DEPENDENCIES
 F2E5  public run integration + F2 external-execution closure       BLOCKED_BY_DEPENDENCIES
@@ -285,3 +285,16 @@ original store Paths.
 
 B009 therefore moves to READY. F2E2 remains dependency-blocked until I024
 publishes the general D046 implementation.
+
+
+## Post-I024 dependency closure
+
+I024-D closes the general D046 implementation/conformance prerequisite and B009.
+`TOOL001-F2E2` is now READY. Its next implementation must capture the exact
+already-selected package-store root through the provisioned Filesystem, validate
+`protos-package-tree-v1` against that immutable captured Filesystem, and hand the
+same captured authority to subsequent execution planning. It must not re-read the
+mutable/source store tree after verification and must not introduce package-only
+Java/NIO traversal.
+
+F2E3/F2E4/F2E5 remain dependency-gated in order behind F2E2.

@@ -268,8 +268,7 @@ The closure statement above records the state when F2E1C was published.
 
 D046 / specification revision `0.1.383` subsequently satisfies B009's
 normative tree-observation requirement with general `Filesystem.entries` and
-`Filesystem.captureTree` semantics. F2E2 therefore no longer waits on an
-unresolved specification question; it is dependency-blocked on implementation
-item I024 until that general Core capability is published.
+`Filesystem.captureTree` semantics. I024-D now closes the general Core implementation/conformance prerequisite and
+B009. F2E2 is READY to consume D046 capture for verified store binding.
 
 The fixed ContentIdentity vectors and all expected digests remain unchanged.

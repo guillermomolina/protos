@@ -1,5 +1,19 @@
 # Core Native Boundary
 
+## I024-D — final Filesystem tree-observation closure
+
+I024-D adds no production native Closure construction site. The standard
+`ProtosStandardFilesystemProtocol` continues to expose `open`, `replace`,
+`remove`, `entries`, and `captureTree` through one shared resource/capability
+bridge construction helper. The execution-time inventory and executable
+architecture guard agree on **113 native Closure construction sites across 30 Core
+providers**.
+
+The NIO enumeration/capture backends and managed captured backing are backend
+machinery rather than additional standard Closure providers. D046 therefore
+closes without a Directory/Filesystem-close native surface expansion.
+
+
 ## TOOL002-F3C1B2A4P2 — standard `Object.slotValue` reflection prerequisite
 
 The retained-Future inspector progression reached the first local-slot value read
@@ -163,13 +177,13 @@ the standard native boundary.
 Total audited Core production construction sites: **113 across 30 providers**.
 
 CLI/launcher-owned host conveniences are not Core standard behavior and therefore
-do not change that 30-provider / 111-site Core boundary. They are nevertheless
+do not change that 30-provider / 113-site Core boundary. They are nevertheless
 kept explicit rather than allowed to accumulate invisibly:
 
 | Non-Core provider | Native Closure sites | Boundary | Reason |
 |---|---:|---|---|
 | `ProtosCliPrintFacility.java` | 1 | standalone CLI host/display bridge | Installs one ordinary initial-context `print` Closure only for normal standalone CLI sessions. General value rendering is CLI policy; output is delegated through a borrowing standard `TextWriter` over the already-provisioned Process stdout capability and Encoding. Bundled tools, Core bootstrap, imported modules and non-root Actor bootstrap do not receive this binding. |
-| `ProtosExactExecutionFacility.java` | 2 | bundled-tool bootstrap execution bridges | Installs the ordinary initial-context `execution` Closure plus the opt-in `executionInspect` Closure only when the host explicitly grants those tooling capabilities. `execution` delegates to the existing fresh-Process/root-task/private-capture machinery; `executionInspect` delegates to the C1A same-Process live-result inspection boundary and detaches only the inspector terminal observation. Neither is a Core/prelude binding, so the 30-provider / 111-site Core standard native boundary remains unchanged while the audited non-Core provider count for this file increases from one construction site to two. |
+| `ProtosExactExecutionFacility.java` | 2 | bundled-tool bootstrap execution bridges | Installs the ordinary initial-context `execution` Closure plus the opt-in `executionInspect` Closure only when the host explicitly grants those tooling capabilities. `execution` delegates to the existing fresh-Process/root-task/private-capture machinery; `executionInspect` delegates to the C1A same-Process live-result inspection boundary and detaches only the inspector terminal observation. Neither is a Core/prelude binding, so the 30-provider / 113-site Core standard native boundary remains unchanged while the audited non-Core provider count for this file increases from one construction site to two. |
 
 
 ### TOOL002-D3B2A Object.parent reflection prerequisite

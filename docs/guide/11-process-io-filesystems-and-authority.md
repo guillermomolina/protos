@@ -1239,50 +1239,34 @@ series. This chapter therefore uses the already-published normative/current
 runtime surfaces and links real Protos tool consumers without creating executable
 material inside a documentation-only slice.
 
-## Current implementation boundary: D046 is specified, I024 is still open
+## Current implementation boundary: D046 / I024 is closed
 
-D046 as amended by specification revision `0.1.384` defines two additional
-general Filesystem operations:
+D046 as amended by specification revision `0.1.384` is now fully implemented by
+`I024 — Filesystem directory observation + captured-tree capability`.
+
+The general surface remains:
 
 ```text
 filesystem.entries(path) -> Future<Array>
 filesystem.captureTree(path) -> Future<Filesystem>
 ```
 
-They provide capability-confined directory observation and an immutable
-read-only captured-tree Filesystem. The v0.1 `entries` result is deliberately one
-complete eager Array rather than a live directory stream. The captured Filesystem
-itself does not gain a standard `close()` obligation; any implementation-managed
-immutable backing remains behind that capability boundary, while Files opened
-from it keep their ordinary File/`Closable` lifecycle.
+The reference implementation now composes the language-visible selectors and
+standard result materialization with secure production NIO no-follow observation
+and immutable captured-tree backing. Integrated Protos conformance covers exact
+entry names/kinds, complete eager results, final-link failure, read-only capture,
+source mutation independence, cancellation and repeated verify/use of the same
+captured authority.
 
-`I024 — Filesystem directory observation + captured-tree capability` remains
-`IN_PROGRESS`.
+A captured Filesystem remains an ordinary read-only Filesystem capability with no
+standard `close()` obligation. Files opened from it retain their normal File
+lifecycle. Hosts/backends that cannot provide the D046 operation still fail it
+through the ordinary Future/`IOError` boundary rather than weakening confinement.
 
-I024-B publishes the language-visible `entries` and `captureTree` selectors and
-their standard result materialization. I024-C now also implements those operations
-for the production complete-tree NIO backend: direct-child observation remains
-no-follow/confined, recursive capture copies regular bytes into
-implementation-managed immutable backing, links are retained opaquely rather than
-followed, and captured Filesystems remain read-only with no public `close`.
-
-Therefore successful real-tree `entries`/`captureTree` behavior is now available
-where the host provider supplies the required secure directory confinement.
-Backends that do not implement D046 still fail through the ordinary
-Future/`IOError` path. I024-D remains responsible for complete integrated
-Protos-visible conformance and final I024/B009 closure.
-
-This distinction is intentional:
-
-> Specified semantics and current reference implementation status are different
-> facts, and documentation must label them accurately.
-
-See the current implementation ledger:
-
-- [`I024 — Filesystem directory observation + captured-tree capability`](../project/IMPLEMENTATION_STATUS.md#i024--filesystem-directory-observation--captured-tree-capability).
-
-Once I024 closes, later documentation maintenance can update the runnable-status
-note without redefining D046.
+I024-D closes I024 and B009. The Package Tool continuation
+`TOOL001-F2E2 — verified read-only package-store binding` is therefore READY to
+consume this general capability; package-specific Java/NIO tree walking remains
+outside that slice.
 
 ## Current implementation evidence
 

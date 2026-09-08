@@ -747,5 +747,6 @@ The ContentIdentity contract is unchanged. A verifier hashes one immutable
 captured Filesystem and, on a match, passes that **same captured authority**
 forward. It must not hash a mutable source tree and later re-open source Paths.
 
-The remaining prerequisite is I024 implementation; F2E2 stays dependency-blocked
-until that general capability is published.
+I024-D now closes that general implementation/conformance prerequisite and B009.
+F2E2 is READY to implement verified binding by hashing and subsequently using the
+same immutable captured Filesystem; the ContentIdentity contract itself is unchanged.

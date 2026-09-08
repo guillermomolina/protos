@@ -423,7 +423,7 @@ closure.
 
 ## B009 — Portable Filesystem tree observation for immutable package verification
 
-Status: READY
+Status: CLOSED
 
 Implementation area:
 `I024 — Filesystem directory observation + captured-tree capability`, followed by
@@ -467,27 +467,18 @@ absence of a captured-Filesystem caller-managed close obligation,
 concurrent-source semantics and Future/cancellation/error behavior.
 
 Current consequence:
-B009 is READY, not CLOSED. `I024` must implement and validate the general Core
-surface. `TOOL001-F2E2` is dependency-blocked on I024 and must not use a
-package-specific Java/NIO tree walker.
+B009 is CLOSED by I024-D. I024-A/A2/B/C/D now publish the complete general D046
+surface and integrated Protos-visible conformance: eager exact-name/no-follow
+`entries`, immutable read-only `captureTree`, source-independent captured bytes,
+ordinary Future cancellation/failure behavior, and no public Directory or
+captured-Filesystem close/release obligation. The final architecture guard
+confirms that Filesystem still uses one audited native-Closure construction helper.
 
-B009 becomes CLOSED only after the general D046 `entries` + `captureTree`
-implementation and integrated Protos conformance are published.
+`TOOL001-F2E2` is therefore READY. It must consume this general capability to
+capture one already-selected store root, verify the closed ContentIdentity
+contract against that captured Filesystem, and pass that same immutable authority
+forward. Package-specific Java/NIO traversal remains prohibited.
 
-Implementation progress:
-I024-A/A2 are CLOSED and I024-B is CLOSED at `0.2.251-SNAPSHOT`. I024-C is now
-CLOSED at `0.2.253-SNAPSHOT`: the general complete-tree NIO backend performs confined
-direct-child no-follow observation through fresh relative `SecureDirectoryStream`
-handles and captures directory trees without following child links. Regular-file
-bytes stream into private implementation-managed blob backing while immutable
-name/kind/tree metadata stays detached from source authority. Captured subtree
-views share that backing, opened Files retain internal backing custody, and
-Cleaner/lease reclamation remains implementation-only; no standard Filesystem
-`close` or Directory lifetime identity is introduced.
-
-I024-D is READY for the integrated Protos-visible conformance/architecture closure.
-B009 itself remains READY until that final evidence publishes and closes the
-general D046 implementation.
 Independent work:
 F2E1 remains CLOSED; package acquisition/network/store-write remain independently
 scoped; F2E3/F2E4/F2E5 remain gated behind F2E2.
