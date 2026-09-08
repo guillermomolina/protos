@@ -1,6 +1,6 @@
 # TOOL001-F2E — External Immutable-Package Execution
 
-Status: **IN_PROGRESS — F2E1 CLOSED; I024/B009 CLOSED; F2E2 IN_PROGRESS; F2E2A/F2E2B CLOSED; F2E2C READY**
+Status: **IN_PROGRESS — F2E1/F2E2 CLOSED; F2E3 READY; F2E4/F2E5 dependency-gated**
 Nature: non-normative Package Tool / host-integration project record
 Allocated after: `TOOL001-F2D` workspace-only execution closure
 
@@ -98,11 +98,11 @@ F2E1  protos-package-tree-v1 ContentIdentity contract              CLOSED
 F2E1A logical-tree domain + portable path/entry-kind contract       CLOSED
 F2E1B canonical byte stream + method/hash contract                  CLOSED
 F2E1C independent conformance vectors + F2E1 closure                CLOSED
-F2E2  verified read-only package-store binding                     IN_PROGRESS
+F2E2  verified read-only package-store binding                     CLOSED
 F2E2A  captured-Filesystem ContentIdentity canonicalizer/verifier  CLOSED
 F2E2B  exact selected-root capture + verified-capture host custody CLOSED
-F2E2C same-capture integration + F2E2 closure                      READY
-F2E3  external-node execution-plan construction                    BLOCKED_BY_DEPENDENCIES
+F2E2C same-capture integration + F2E2 closure                      CLOSED
+F2E3  external-node execution-plan construction                    READY
 F2E4  external canonical ModuleKey + source resolver               BLOCKED_BY_DEPENDENCIES
 F2E5  public run integration + F2 external-execution closure       BLOCKED_BY_DEPENDENCIES
 ```
@@ -558,3 +558,75 @@ TOOL001-F2E3   BLOCKED_BY_DEPENDENCIES: TOOL001-F2E2
 No normative Protos specification, lock format, ContentIdentity bytes, package-store physical
 layout, acquisition/fetch policy, `PackageExecutionPlan` authority model, resolver identity or
 public-run semantics change in F2E2B. Implementation version becomes `0.2.262-SNAPSHOT`.
+
+## F2E2C closure — same-capture verification integration
+
+F2E2C is CLOSED and closes parent F2E2.
+
+The production composition boundary is `ProtosPackageContentVerification`. It accepts one exact
+already-selected materialized package root plus the inert expected ContentIdentity fields. It does
+not discover a root by PackageId/version/locator, scan a store, fetch content, parse a lock, or
+perform package-specific tree traversal.
+
+The host path is deliberately one-way:
+
+```text
+selected materialized root M
+        |
+        | ProtosCapturedFilesystemCustody.captureSelectedRoot(M)
+        | capture exactly once; source authority closes
+        v
+run-owned immutable capture C
+        |
+        | fresh Filesystem(C, PackageToolDomain)
+        v
+self:ContentIdentity.verify(view(C), expected)
+        |
+        | integration requires result === supplied view(C)
+        v
+return custody(C) after Package Tool Process TERMINATED
+        |
+        +--> later fresh Filesystem(C, application/resolver domain)
+```
+
+The Package Tool verification Process receives no ambient/root Filesystem for the selected store.
+Its only package-content authority is the captured Filesystem materialized from custody; method,
+algorithm and hex are inert String inputs. Java does not duplicate ContentIdentity validation:
+unsupported method/algorithm/digest spelling, digest mismatch and invalid captured-tree shape all
+fail through the already-published bundled-Protos `self:ContentIdentity` policy.
+
+On every unsuccessful verification path, host custody is closed rather than handed forward. On
+success the verifier must return exactly the supplied Package Tool-domain Filesystem object, after
+which that Process is terminated before the still-open custody is returned. A later domain receives
+a fresh non-transferable Filesystem wrapper backed by the same immutable capture C; neither the
+source Path nor the Package Tool Filesystem crosses the Actor/Process boundary.
+
+Focused integration evidence composes the frozen F2E1 vectors already exercised through the single
+`ProtosPackageToolProtosTest` with the new host gate. It proves a frozen binary-tree vector verifies,
+the verification Process terminates with no root Filesystem, deleting/replacing the source after
+verification cannot change bytes visible through a later independently bootstrapped domain,
+post-capture source additions remain invisible, digest mismatch fails closed, unsupported
+method/algorithm fail in Protos policy, and an invalid captured tree is not admitted. The production
+host gate contains no Java/NIO tree walker and never reopens source content after verification.
+
+F2E2 therefore now provides the required verified immutable-material boundary for the next slice.
+F2E3 may decide how exact registry/Git nodes map to their already-verified run-local custody, but C
+does not pre-select that PackageId/registry/Git association, extend `ProtosPackageExecutionPlan`,
+install a resolver or change public run behavior.
+
+After this slice:
+
+```text
+TOOL001-F2E2   CLOSED
+TOOL001-F2E2A  CLOSED
+TOOL001-F2E2B  CLOSED
+TOOL001-F2E2C  CLOSED
+TOOL001-F2E3   READY
+TOOL001-F2E4   BLOCKED_BY_DEPENDENCIES: TOOL001-F2E3
+TOOL001-F2E5   BLOCKED_BY_DEPENDENCIES: TOOL001-F2E4
+```
+
+No normative Protos specification, lock format, ContentIdentity bytes, captured-Filesystem
+semantics, package-store physical layout, acquisition/fetch policy, PackageExecutionPlan authority,
+ModuleKey identity, resolver behavior, public-run semantics or capture-backing policy changes in
+F2E2C.
