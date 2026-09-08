@@ -138,7 +138,7 @@ futureStoredObservationInspectorSource: () => {
     "            null\n" +
     "        },\n" +
     "        (caught) => {\n" +
-    "            same = caught === storedError\n" +
+    "            same = (caught === storedError) && (caught.parent() === Error)\n" +
     "            null\n" +
     "        }\n" +
     "    )\n" +

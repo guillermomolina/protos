@@ -137,8 +137,9 @@ final class ProtosTestToolFutureStoredInspectionFixtureSuiteTest {
 
         String caseId = fields.get(0);
         Path fixture = Path.of(fields.get(1));
-        if (!caseId.startsWith("TOOL002-F3C1B")) {
-            throw new IllegalArgumentException("unexpected inspection fixture case id: " + caseId);
+        if (!caseId.startsWith("TOOL002-F3C1B")
+                && !caseId.startsWith("TOOL002-F3C2")) {
+            throw new IllegalArgumentException("unexpected stored-inspection fixture case id: " + caseId);
         }
         if (fixture.isAbsolute()
                 || fixture.getNameCount() != 1

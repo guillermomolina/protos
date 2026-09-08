@@ -17,3 +17,6 @@ TOOL002-F3C1B2D2	tool002-f3c1b2d2-second-observe-stored-error-identity.protos
 TOOL002-F3C1B2D3	tool002-f3c1b2d3-second-observe-error-parent.protos
 TOOL002-F3C1B2D4	tool002-f3c1b2d4-first-second-error-identity.protos
 TOOL002-F3C1B3	tool002-f3c1b3-stored-evaluator-composition.protos
+TOOL002-F3C2A	tool002-f3c2a-malformed-stored-policy.protos
+TOOL002-F3C2B	tool002-f3c2b-stored-identity-mismatch.protos
+TOOL002-F3C2C	tool002-f3c2c-stored-parent-mismatch.protos
