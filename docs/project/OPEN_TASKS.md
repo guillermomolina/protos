@@ -45,7 +45,7 @@ Current triage:
 - D020 and the still-unratified decisions in D040-D044 require priority review
   because no recovered evidence yet demonstrates explicit project-owner selection
   of their complete published semantics.
-- D021-D032 and D034 require provenance and substance review; publication alone
+- D021-D032 require provenance and substance review; publication alone
   is not ratification.
 - D001-D019 are expected to be predominantly project-owner decisions, but their
   approval evidence must be checked rather than inferred.
@@ -268,11 +268,35 @@ Recorded review results:
   Selector or broader name facility remains separately designable; introducing
   one does not implicitly widen these Core v0.1 APIs. This ratification changes
   no normative specification or implementation.
+- D034 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D034 / specification `0.1.372` after comparative, adversarial and
+  future-scalability review. `Error.handle(body, handler)` remains a dynamic
+  control boundary whose `body` and `handler` parameters must be semantic
+  Closures; an object that is merely ordinarily invokable through `call` is
+  intentionally insufficient. Ordinary receiver/body/handler expression
+  evaluation completes left-to-right first; the resulting body is then
+  Closure-validated, then the handler, and no HandlerFrame is installed until
+  both validations succeed, so an invalid handler cannot allow the protected
+  body to begin. Closure declared arity is not a D034 preflight: body and
+  handler parameter/default/rest binding remains ordinary activation-time
+  behavior, preserving the dynamic handler boundary for failures raised by
+  actual body activation and the consumed-handler rule for handler activation.
+  Once selected, the handler frame is inactive before the handler Closure runs
+  and the handler receives the exact signaled Error object. This deliberate
+  narrowness is distinct from D030's ordinary-invokable `Future.then` callback
+  domain: dataflow callbacks and dynamic-control extents need not share one
+  receiver/argument category. No Handler value kind, hidden callback protocol,
+  duck typing, `try`/`catch` syntax, distributed handler state or callable
+  category is introduced. Future resumable recovery/restarts/effects, new
+  executable value kinds, generic control-region callable domains and static
+  signature/arity introspection remain separate explicit design decisions.
+  This governance classification changes no normative specification or
+  implementation.
 
 Required procedure:
 
 1. Continue backwards through the remaining unresolved decisions in D044-D040,
-   then D020, D034, D021-D032, and finally D001-D019.
+   then D020, D021-D032, and finally D001-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published
    normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or
@@ -288,7 +312,7 @@ Next audit work:
 
 1. Complete the separate D044 review already in progress, considering D045 only
    as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D043-D040, then D020, D034, D021-D032 and D001-D019
+2. Continue backwards through the remaining unresolved decisions in D043-D040, then D020, D021-D032 and D001-D019
    under the required procedure above.
 
 AUD001 closes only when D001-D045, except D046, have an explicit classification,
