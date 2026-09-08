@@ -32,7 +32,7 @@ an item.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| AUD001 | Retrospective D001-D045 design-decision ratification audit | OPEN | — | HIGH priority; D046 excluded because it is under separate active user review. Review D045-D039 first, then D020, D021-D036 and D001-D019. D037-D038 already have explicit owner confirmation. See docs/project/OPEN_TASKS.md. |
+| AUD001 | Retrospective D001-D045 design-decision ratification audit | OPEN | — | HIGH priority; D046 excluded. D045 review recommends its task-scoped ownership core but remains NEEDS_USER_DECISION; the inherited specification `0.1.90` non-propagating child-outcome policy now has a separate OPEN AUD001 follow-up. D044 review is in progress. D037-D038 already have explicit owner confirmation. See docs/project/OPEN_TASKS.md. |
 
 ## Core implementation
 
