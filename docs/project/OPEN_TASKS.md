@@ -45,7 +45,7 @@ Current triage:
 - D044 remains the priority review item because no recovered evidence yet
   demonstrates explicit project-owner selection of its complete published semantics.
   is not ratification.
-- D002 and D004-D019 are expected to be predominantly project-owner decisions, but their
+- D002 and D005-D019 are expected to be predominantly project-owner decisions, but their
   approval evidence must be checked rather than inferred.
 
 Recorded review results:
@@ -591,10 +591,43 @@ Recorded review results:
   classification changes no normative specification or implementation and does
   not classify D024.
 
+- D004 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D004 / specification `0.1.342` after comparison with Self,
+  Smalltalk, Java, Python, Ruby and ECMAScript plus adversarial and dedicated
+  future-scalability review. The standard Boolean protocol remains the four
+  ordinary one-argument messages `ifTrue`, `ifFalse`, `and` and `or`. When
+  ordinary lookup selects standard Boolean behavior, the original receiver must
+  be exactly canonical `true` or canonical `false`; a custom object may define
+  or override the same selectors without becoming a semantic Boolean and without
+  creating language-wide truthiness. Receiver and argument expressions retain
+  ordinary left-to-right call evaluation. A callback is callability-validated
+  only on a path that selects it, then invoked exactly once with zero positional
+  arguments through the ordinary polymorphic invocation protocol; it need not be
+  a Closure. An unselected callback object is neither validated nor invoked, while
+  the argument expression that produced it was still evaluated ordinarily.
+  Standard `ifTrue`/`ifFalse` return the selected callback's exact normal result
+  unchanged and return canonical `null` on the unselected path. Standard `and`/
+  `or` short-circuit and, when they invoke the callback, require its normal result
+  to be exactly canonical `true` or canonical `false`; there is no truthiness
+  conversion, coercion, implicit invocation, implicit awaiting or Future adoption.
+  Error signaling, non-local return, cancellation and other non-normal control
+  transfers propagate exactly as from ordinary invocation, and the Boolean
+  protocol introduces no hidden task, lock, suspension point or scheduling
+  boundary. Grammar-owned `&&` and `||` retain the one mandatory lowering
+  `a.and(() => b)` / `a.or(() => b)`: standard Booleans therefore short-circuit
+  through the same message/Closure mechanisms, while a custom receiver may observe
+  the generated RHS Closure through ordinary dispatch. Implementations may inline,
+  constant-fold, eliminate unobservable Closure allocation or otherwise specialize
+  canonical Boolean cases only when the full observable protocol remains exact.
+  Future `if`/`else` sugar, additional callable kinds and unrelated Boolean-family
+  surface decisions remain separate work rather than alternate truthiness/control
+  semantics. This governance classification changes no normative specification or
+  implementation and does not classify any other Dxxx decision by transitivity.
+
 Required procedure:
 
 1. Continue backwards through the remaining unresolved decisions in D044-D040,
- and finally D001-D019.
+ and finally D001-D003 and D005-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published
    normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or
@@ -610,10 +643,10 @@ Next audit work:
 
 1. Complete the separate D044 review already in progress, considering D045 only
    as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D043-D040, then D001-D019
+2. Continue backwards through the remaining unresolved decisions in D043-D040, then D001-D003 and D005-D019
    under the required procedure above.
 
-AUD001 closes only when D001-D020, D025, D027-D028 and D030-D045, except D046, have an explicit classification,
+AUD001 closes only when D001-D003 and D005-D020, D025, D027-D028 and D030-D045, except D046, have an explicit classification,
 the project owner has decided every NEEDS_USER_DECISION item, relevant
 provenance is recorded durably, and all affected project ledgers are reconciled.
 Any later normative correction must be a separately approved specification
