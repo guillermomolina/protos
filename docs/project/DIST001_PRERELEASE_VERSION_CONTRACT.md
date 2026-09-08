@@ -567,3 +567,33 @@ ordering and text exactly.
 The envelope remains local release-preparation state under the detached candidate
 worktree. E4C5 owns candidate-audit materialization. No Git tag, GitHub Release,
 asset upload, or release-publication authorization is created here.
+
+## E4C5 candidate-audit checkpoint
+
+The explicit E3C3 candidate audit is now materialized byte-identically in
+`docs/project/DIST001_E4_CANDIDATE_AUDIT.txt` and in separate candidate-local release-preparation state as
+`target/release-candidate-audit-0.2.236/RELEASE_CANDIDATE_AUDIT.txt`:
+
+```text
+release_candidate_audit_format=protos-release-candidate-audit-v1
+candidate_selection_authorized=true
+selection_authorization_basis=explicit-user-decision
+release_publication_authorized=false
+source_revision=957b1e16793a682de1d6406e37b5734c44d32d19
+release_baseline_revision=3c23eaaccecbdcc7c2bcd86bc30c445403cfb047
+release_version=0.2.236
+release_tag=v0.2.236
+specification_revision=0.1.382
+capabilities_review=PASS
+limitations_review=PASS
+known_blockers_review=PASS
+audit_sha256=0f3ea9a321a462e977f4f33a2b4c24754a5cacbd8e45e0df8bc6639d4286692b
+```
+
+E4C5 validates those exact bytes with the already-published E3C3 audit verifier
+against the candidate archive SOURCE identity. It intentionally does not run the
+full candidate/B5 gate; immutable full candidate validation remains E4D.
+
+E4C is now closed. E4D is decomposed into independent validation leaves starting
+with E4D1 envelope/audit consistency. Release publication remains separately
+unauthorized; no tag, GitHub Release, or asset upload exists.

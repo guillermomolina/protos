@@ -1,5 +1,6 @@
 ## 0.2.247-SNAPSHOT
 
+- Close `DIST001-E4C5 — candidate-audit materialization` and parent E4C. Materialize the exact E3C3 audit for candidate `957b1e16793a682de1d6406e37b5734c44d32d19` with explicit candidate selection authorization, specification `0.1.382`, PASS capability/limitation/blocker reviews and `release_publication_authorized=false`; retain byte-identical main and candidate-local audit copies with SHA-256 `0f3ea9a321a462e977f4f33a2b4c24754a5cacbd8e45e0df8bc6639d4286692b` and validate them using the published E3C3 audit verifier. Decompose E4D into D1-D6 and make only D1 READY. No full B5 candidate gate, tag, GitHub Release, asset upload, implementation/spec/runtime/license change, or publication authorization occurs in this slice.
 - Close `PERF003 — Collection algorithm Truffle compilability` by reconciling retained A4g/A4h/A4i evidence. Exact result `528` remains correct; the stable control is `50681:150026:150000`; sync/task splitting and preparation-only boundary are rejected as sufficient fixes; preparation-only timing is `0.578142x` control despite retaining the bailout. Retire the zero-bailout gate for PERF003 rather than publish a broad opaque boundary or continue threshold-shaving edits. No runtime, specification, implementation-version, native-boundary, or license-term change.
 
 

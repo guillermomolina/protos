@@ -333,7 +333,7 @@ publication:
       remains clean/detached with exactly one registered local worktree and no
       branch/tag/remote-tracking ref; future tag `v0.2.236` remains available and
       publication remains unauthorized.
-  - `DIST001-E4C` — candidate archive/envelope/audit preparation — IN_PROGRESS:
+  - `DIST001-E4C` — candidate archive/envelope/audit preparation — CLOSED:
     - `DIST001-E4C1` — public-prerelease portable ZIP build — CLOSED.
       Candidate `957b1e16793a682de1d6406e37b5734c44d32d19` produced `protos-0.2.236-posix-jvm.zip` with SHA-256
       `b1a58ba445d082156bd4eb637ee6df70c046abdee600d468c0fac29be065e296` through the already-published explicit release-mode
@@ -355,10 +355,18 @@ publication:
       Render the E3B release notes/manifest/basename-only checksum from the exact
       C3 claim record and already-verified archive without changing claim text.
       Exact envelope identity: `protos-0.2.236-posix-jvm.zip` / `b1a58ba445d082156bd4eb637ee6df70c046abdee600d468c0fac29be065e296`, claims `ad0b77ae5bd41bc16e306487072620c99581643d68ed5141011e7537c0439e33`, notes `98684922feebb1cec41da2a51fca6776cd76aa5c99561b37adb733e5b944ed36`, manifest `2d71e48bf27e52d76bd4bd9166dca4298487532b1de08e832758c7f2abe7dcd4`, checksum-file `34b2d9a86c0e136ac2f9d92c8edf94563b9ea941c896f54eddce929680969035`. Two independent generations are byte-identical and E3C2 verification passes; publication remains unauthorized.
-    - `DIST001-E4C5` — candidate-audit materialization — READY.
-  - `DIST001-E4D` — immutable full candidate validation and E4 closure —
-    `BLOCKED_BY_DEPENDENCIES` on E4C. Freeze the exact validated candidate SHA
-    and assets for E5 while keeping release publication separately unauthorized.
+    - `DIST001-E4C5` — candidate-audit materialization — CLOSED.
+      Materialize the exact E3C3 audit for candidate `957b1e16793a682de1d6406e37b5734c44d32d19` with
+      candidate selection authorized, capabilities/limitations/blockers reviews
+      PASS and `release_publication_authorized=false`; retain byte-identical main
+      and candidate-local audit copies with SHA-256 `0f3ea9a321a462e977f4f33a2b4c24754a5cacbd8e45e0df8bc6639d4286692b`.
+  - `DIST001-E4D` — immutable full candidate validation and E4 closure — IN_PROGRESS:
+    - `DIST001-E4D1` — envelope/audit/record consistency — READY.
+    - `DIST001-E4D2` — extracted release-aware B5 candidate gate — `BLOCKED_BY_DEPENDENCIES` on E4D1.
+    - `DIST001-E4D3` — candidate claims/blockers/spec audit — `BLOCKED_BY_DEPENDENCIES` on E4D2.
+    - `DIST001-E4D4` — tag/Release collision + publication guard — `BLOCKED_BY_DEPENDENCIES` on E4D3.
+    - `DIST001-E4D5` — full Maven + cross-E3/E4 validation — `BLOCKED_BY_DEPENDENCIES` on E4D4.
+    - `DIST001-E4D6` — freeze candidate SHA/assets + close E4 — `BLOCKED_BY_DEPENDENCIES` on E4D5.
 - `DIST001-E5` — first GitHub pre-release publication —
   `BLOCKED_BY_DEPENDENCIES` on the explicitly selected, fully validated E4
   candidate. This is the first slice allowed to create the public tag, GitHub
