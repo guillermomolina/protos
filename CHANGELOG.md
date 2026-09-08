@@ -1,5 +1,7 @@
 ## 0.2.250-SNAPSHOT
 
+- Open AUD001 — Retrospective design-decision ratification audit as HIGH-priority non-normative governance work covering D001-D045 while explicitly excluding separately reviewed D046. Record D037/D038 as already owner-confirmed; prioritize D045-D039 and D020 where recovered evidence does not yet demonstrate explicit owner selection; require provenance/substance review for D021-D036 and evidence rather than assumption for D001-D019. Patch execution and publication are not ratification. AUD001 authorizes no automatic reopening, normative specification change, implementation change, blocker transition, or replacement decision.
+
 - Publish `TOOL002-F3C1B3 — stored observation evaluator composition`. Bundled `Runner.protos` composes the already-closed exact `future-observation-error-identity / stored:Error` classifier with one positive same-Process `executionInspect`-compatible inspector: the inspector reads only retained local `error`/`observe`, invokes `observe()` once, and returns inert Boolean evidence for exact caught-versus-stored Error identity. A Protos-owned fixture passes the retained CaseSpec, retained source and bootstrap-local `executionInspect` through the evaluator. `isDExpectation`, public `runSimple`, fresh mode, stored negatives and canonical TOOL002 ledgers remain unchanged until their later slices. No normative specification or Java host-mechanism change.
 
 ## 0.2.249-SNAPSHOT
