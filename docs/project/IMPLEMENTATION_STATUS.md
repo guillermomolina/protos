@@ -877,7 +877,7 @@ record distributable Standard Library functionality.
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
 | TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | D/E/F1 CLOSED; F2 now includes lock I/O, stale/root assembly and F2D1 workspace execution-plan contract. F2D2 pure plan construction READY. |
-| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D/E CLOSED; TOOL002-F IN_PROGRESS, F3A/F3B/F3C/F3D CLOSED, F3E IN_PROGRESS (E1 CLOSED; E2 READY), then F4 and G-J dependency-ordered. |
+| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D/E/F CLOSED; F4 ownership cutover is reconciled through F4A/F4B1/F4B2/F4C; TOOL002-G READY; H-J remain dependency-ordered. |
 
 ### TOOL001 — Package Tool
 
@@ -1014,7 +1014,7 @@ the initial TOOL002 closure.
 | TOOL002-E2B2 | CLOSED | `0.2.226-SNAPSHOT` / `SAME_COMMIT`; public `Main.protos` executes the full retained Package/TOML plan through generic `Runner` + `packageExecution`; Protos evidence requires selected==plan cases, skipped==0, passed==plan cases and complete result cardinality. |
 | TOOL002-E3 | CLOSED | Legacy Java TOML corpus owner removed: no JUnit path parses the retained manifest, interprets its `true`/`error` expectations or directly executes every fixture. Existing Java tests retain host-mechanical coverage only; no implementation-version change. |
 | TOOL002-E4 | CLOSED | Documentation/governance-only final E reconciliation; no executable, normative or implementation-version change. Parent TOOL002-E is CLOSED and TOOL002-F is READY. |
-| TOOL002-F | IN_PROGRESS | F1/F2/F3 are CLOSED; F4 READY for the atomic public Future expectation ownership cutover; G-J remain dependency-ordered. |
+| TOOL002-F | CLOSED | F1/F2/F3 plus F4A/F4B1/F4B2/F4C complete Future expectation ownership: root-preserving private evaluation, public generic Runner selection, full main-manifest ownership and Java policy retirement are published; G READY. |
 | TOOL002-F1 | CLOSED | `0.2.228-SNAPSHOT` / `SAME_COMMIT`; bundled Protos can evaluate `future-integer/null/boolean` wholly inside one fresh child Process through ordinary `Future.value()` suspension/resume and return only Boolean evidence. Public `runSimple` selection is unchanged. |
 | TOOL002-F2 | CLOSED | `0.2.229-SNAPSHOT` / `SAME_COMMIT`; repeated child-local `Future.value()` observations distinguish FAILED stored-Error identity from CANCELLED fresh `Cancelled` occurrences and preserve exact immediate Error-parent policy; not yet selected by `runSimple`. |
 | TOOL002-F3 | CLOSED | F3A/F3B/F3C/F3D plus F3E E1-E4 complete retained stored/fresh Future-observation evidence and private policy; public activation remains exclusively F4. |
@@ -1040,8 +1040,12 @@ the initial TOOL002 closure.
 | TOOL002-F3E3A | CLOSED | `SAME_COMMIT`; one private observation entry parses retained policy and dispatches positive `stored`/`fresh` cases to their already-closed evaluators; no public selection. |
 | TOOL002-F3E3B | CLOSED | `SAME_COMMIT`; unified private observation policy rejects malformed input before inspection and returns inert false evidence for stored identity/parent and fresh identity/parent mismatches; no public selection. |
 | TOOL002-F3E4 | CLOSED | Documentation/governance-only reconciliation closes F3E/F3 after E1-E3B evidence and makes F4 READY; no executable, normative or implementation-version change. |
-| TOOL002-F4 | READY | TOOL002-F3 CLOSED; atomically activate retained `future-*` expectations in generic `runSimple`, prove complete main-manifest ownership, retire Java Future expectation policy and close F; make G READY. |
-| TOOL002-G | BLOCKED_BY_DEPENDENCIES | TOOL002-F; migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |
+| TOOL002-F4 | CLOSED | F4A pre-cutover unsupported-sentinel reconciliation, F4B1 root-preserving whole-Future-corpus preparation, F4B2 atomic public ownership cutover and F4C governance reconciliation are complete; bundled Protos owns every retained main-manifest family and duplicate Java Future policy is retired. |
+| TOOL002-F4A | CLOSED | `09b593c96d6ad6e2f5b496975531cb18c9fe2e0c`; test-impact pre-cutover reconciliation removes Future expectations as historical unsupported sentinels without changing public Future ownership or implementation version. |
+| TOOL002-F4B1 | CLOSED | `16b818a42f6c8fc99e3c33fd1b72683c596b8e51` / `0.2.259-SNAPSHOT`; F1/F2 switch to generic same-Process root-preserving `executionInspect`, and one private fixture proves every deferred Future manifest row before public selection. |
+| TOOL002-F4B2 | CLOSED | `fed58149ec5af3e1d95f79e99d28a6032f581af7` / `0.2.261-SNAPSHOT`; atomically selects all retained `future-*` families in generic Runner, provisions inspection in real `protos test`, proves selected==passed==all and skipped==0, and removes the duplicate Java manifest owner. |
+| TOOL002-F4C | CLOSED | Documentation/governance-only final reconciliation; closes TOOL002-F/F4 and makes TOOL002-G READY with no executable, specification, native-boundary or implementation-version change. |
+| TOOL002-G | READY | TOOL002-F CLOSED; migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |
 | TOOL002-H | BLOCKED_BY_DEPENDENCIES | TOOL002-G; bounded parallel scheduling of independent fresh Processes with independent output capture and deterministic reporting. |
 | TOOL002-I | BLOCKED_BY_DEPENDENCIES | TOOL002-H; explicit resource constraints/private capabilities for real external-resource sharing. |
 | TOOL002-J | BLOCKED_BY_DEPENDENCIES | TOOL002-I; CI/launcher integration: Java implementation tests first, then the Protos test tool for the Protos corpus. |

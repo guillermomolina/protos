@@ -652,14 +652,41 @@ Boolean child result and ordinary observation metadata; no Closure, handler
 frame, source-domain Error identity, continuation, activation or Process
 authority crosses into the Test Tool Process.
 
-D4 also performs the ownership cutover for the retained main conformance
-manifest. The bundled Test Tool now owns every non-Future expectation family
-migrated by D1-D4. A corpus-level Protos fixture requires all such rows to be
-selected and passed and requires every skipped row to be one of the explicitly
-deferred `future-*` families. `ProtosLanguageConformanceTest` therefore retains
-direct Java policy only for those Future families until TOOL002-F.
+At D4 closure, the bundled Test Tool owned every non-Future expectation family
+migrated by D1-D4. The corpus-level Protos fixture required all such rows to be
+selected and passed and allowed skips only for the explicitly deferred
+`future-*` families. `ProtosLanguageConformanceTest` therefore retained direct
+Java policy only for those Future families until TOOL002-F completed its later
+ownership cutover.
 
 TOOL002-D is CLOSED after D4. TOOL002-E becomes READY.
+
+### TOOL002-F4 final ownership cutover
+
+F4 completes the architecture originally deferred by D4. The same generic
+bundled-Protos Runner now selects every retained main-manifest expectation
+family, including `future-integer`, `future-null`, `future-boolean`,
+`future-error`, `future-error-parent`, `future-cancelled`, and
+`future-observation-error-identity`.
+
+Future policy stays inside the fresh semantic Process and observes the live
+result through the already-general `executionInspect` facility. F1/F2 use that
+root-preserving inspection path so the exact retained module source is not
+wrapped in a synthetic Closure; F3 keeps identity-sensitive stored/fresh Error
+observation in the same Process. Only detached expectation evidence returns to
+the Test Tool Process.
+
+The real `protos test` session provisions `executionInspect` explicitly for the
+main conformance plan. The retained Package/TOML plan continues to use ordinary
+`packageExecution` without inspection. The main-corpus ownership fixture now
+requires every row to be selected and passed with zero skips, and the duplicate
+direct Java/JUnit manifest owner has been removed. Java tests remain appropriate
+for host/runtime mechanics.
+
+This is a tooling ownership migration only. It adds no Test-specific Future
+state API, scheduler queue, transferable Future, polling/progress loop, language
+semantics, or new runtime/native boundary. TOOL002-F is CLOSED after F4; TOOL002-G
+is the next READY migration stage.
 
 ## Isolation audit
 

@@ -65,8 +65,8 @@ freeze those decisions unless their own audited scope requires and resolves them
 | TOOL002-C | CLOSED | Publish test-neutral sequential private-stream capture over `ProtosFreshProcessExecutor`: one exact compiled entry gets private stdin/stdout/stderr, a fresh semantic Process and an inert outcome plus detached captured bytes. No manifest/expectation/scheduler/result-transfer policy. Implementation version `0.2.171-SNAPSHOT`. |
 | TOOL002-D | CLOSED | D1-D4 are published; all retained non-Future main-manifest expectation policy is owned by bundled Protos. D4 closes at `0.2.211-SNAPSHOT`; `future-*` remains TOOL002-F. |
 | TOOL002-E | CLOSED | E1A/E1B/E2A/E2B/E3/E4 complete the retained Package/TOML migration: bundled Protos owns planning, confined source loading, Package execution, Boolean/Error expectation policy and aggregation; duplicate Java corpus-policy ownership is removed. |
-| TOOL002-F | IN_PROGRESS | F1/F2/F3 are CLOSED; F4 is READY for the atomic public Future expectation ownership cutover. |
-| TOOL002-G | BLOCKED_BY_DEPENDENCIES | After F, migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |
+| TOOL002-F | CLOSED | F1/F2/F3 plus the F4 cutover program are published: bundled Protos now owns all retained Future expectation policy and the complete main manifest; duplicate Java Future policy is retired. |
+| TOOL002-G | READY | TOOL002-F is CLOSED; migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |
 | TOOL002-H | BLOCKED_BY_DEPENDENCIES | After G, add bounded parallel scheduling of independent fresh Processes, private output capture, and deterministic reporting. |
 | TOOL002-I | BLOCKED_BY_DEPENDENCIES | After H, add explicit resource constraints/private capabilities where real external-resource sharing requires them. |
 | TOOL002-J | BLOCKED_BY_DEPENDENCIES | After I, integrate the final Java-first / Protos-tool-second validation pipeline. |
@@ -363,7 +363,11 @@ F is split by the distinct terminal/identity contracts:
 | TOOL002-F3E3A | CLOSED | Private composition only: parse one retained observation policy and route `stored`/`fresh` to the already-closed mode-specific evaluators; public selection remains unchanged. |
 | TOOL002-F3E3B | CLOSED | Test-impact-only integrated negative evidence through the unified private entry: malformed policy fails closed before inspection; stored/fresh identity and immediate-parent mismatches are inert false results. |
 | TOOL002-F3E4 | CLOSED | Documentation/governance-only final reconciliation closes F3E/F3 and makes F4 READY; no executable or implementation-version change. |
-| TOOL002-F4 | READY | After F3 closure, atomically select all retained `future-*` families in generic `runSimple`, prove full main-manifest ownership, retire Java Future policy and close F; make G READY. |
+| TOOL002-F4 | CLOSED | F4A/F4B1/F4B2/F4C complete the public Future ownership cutover: pre-cutover sentinel cleanup, root-preserving private corpus proof, atomic generic Runner/CLI ownership transition, duplicate Java owner retirement and final reconciliation. |
+| TOOL002-F4A | CLOSED | Test-impact pre-cutover reconciliation removes historical Future-as-unsupported sentinels; no public Future selection or version change. Published at `09b593c96d6ad6e2f5b496975531cb18c9fe2e0c`. |
+| TOOL002-F4B1 | CLOSED | Root-preserving private Future inspection over exact retained sources plus one whole-deferred-Future-corpus private gate. Published at `16b818a42f6c8fc99e3c33fd1b72683c596b8e51`, implementation `0.2.259-SNAPSHOT`. |
+| TOOL002-F4B2 | CLOSED | Atomic public cutover: all retained Future families enter generic Runner selection, real `protos test` receives `executionInspect`, whole main manifest is selected/passed with zero skips, and `ProtosLanguageConformanceTest` is retired. Published at `fed58149ec5af3e1d95f79e99d28a6032f581af7`, implementation `0.2.261-SNAPSHOT`. |
+| TOOL002-F4C | CLOSED | Documentation/governance-only reconciliation closes F/F4 and makes G READY; no executable or implementation-version change. |
 
 F1 deliberately leaves `isDExpectation` / `runSimple` unchanged, so D4's
 already-published non-Future ownership boundary remains valid until the atomic F4
@@ -735,6 +739,41 @@ TOOL002-F3E3A is CLOSED.
 TOOL002-F3E3B is CLOSED.
 TOOL002-F3E4 is CLOSED.
 TOOL002-F4 is READY.
+
+### TOOL002-F4 closure
+
+F4 closes the retained Future expectation-policy migration without changing
+Future semantics or introducing a Test-only concurrency model. The published
+path is deliberately staged around the one atomic public ownership boundary:
+
+- F4A removes the historical use of `future-integer` as an "unsupported"
+  sentinel from D3/D4 runner tests while leaving public Future selection intact;
+- F4B1 repairs F1/F2 evaluation to preserve each retained source's exact root
+  activation through the already-general `executionInspect` mechanism, then
+  privately proves every deferred Future row in the current main manifest;
+- F4B2 performs the atomic cutover: `Runner.isDExpectation` selects every
+  retained Future family, `evaluateDCase` dispatches F1/F2/F3 policy through the
+  optional generic inspector, the real `protos test` session provisions
+  `executionInspect`, the corpus requires selected==passed==all with skipped==0,
+  and the direct Java/JUnit Future manifest owner is removed in that same
+  executable publication;
+- Package/TOML remains on its ordinary non-inspection execution path, and Java
+  remains responsible only for host/runtime mechanics rather than Protos corpus
+  expectation policy.
+
+F4C adds no executable behavior. It records the already-published cutover,
+closes TOOL002-F and TOOL002-F4, and makes TOOL002-G READY for the separate
+Actor/Group scheduler-sensitive corpus migration. TOOL002 as a whole remains
+IN_PROGRESS because G-J are still open. No Protos specification, language
+semantics, native boundary, implementation version or license terms change here.
+
+TOOL002-F is CLOSED.
+TOOL002-F4 is CLOSED.
+TOOL002-F4A is CLOSED.
+TOOL002-F4B1 is CLOSED.
+TOOL002-F4B2 is CLOSED.
+TOOL002-F4C is CLOSED.
+TOOL002-G is READY.
 
 ## TOOL002-A closure
 
