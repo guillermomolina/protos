@@ -45,10 +45,33 @@ Current triage:
 - D044 remains the priority review item because no recovered evidence yet
   demonstrates explicit project-owner selection of its complete published semantics.
   is not ratification.
-- D002-D019 are expected to be predominantly project-owner decisions, but their
+- D002 and D004-D019 are expected to be predominantly project-owner decisions, but their
   approval evidence must be checked rather than inferred.
 
 Recorded review results:
+
+- D003 is `RATIFIED AS AMENDED`. On 2026-09-08 the project owner explicitly approved
+  retaining D003's deterministic Closure argument/default/rest/spread binding core
+  from specification `0.1.340` after comparison with Self, Ruby, Kotlin,
+  JavaScript and Python plus adversarial and future-scalability review, while
+  correcting one unusable positional signature shape in specification `0.1.386`.
+  Caller arguments/spreads still form one left-to-right supplied vector before
+  binding; parameters bind left-to-right in the real activation; defaults run
+  exactly once only when their position is unsupplied and see earlier established
+  parameters plus ordinary `this`/`context`/`args`; current/later not-yet-bound
+  names still use ordinary bare-name lookup; `args` remains caller-supplied only;
+  rest remains the unconsumed supplied suffix; and existing Error, return,
+  suspension and partial-effect behavior is unchanged. The amendment requires all
+  required non-rest parameters to precede every defaulted parameter, with optional
+  rest final, because under Core v0.1 positional-only invocation a default before
+  a later required parameter can never be selected by an otherwise successful
+  call. No named arguments, omitted-position marker, hidden missing/undefined
+  value, TDZ or second parameter namespace is added. The original complete-binding
+  publication was agent-authored commit
+  `d37fc392d4b7b0d8c9df6d52bea0ecd39328ea8a`, so publication alone was not
+  treated as approval. `I025` is allocated `READY` for parser/conformance alignment;
+  this governance/specification publication does not claim that implementation
+  work complete. D002 and D004-D019 remain independent AUD001 decisions.
 
 - D001 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved retaining D001 / specification `0.1.341` after cross-language comparison, adversarial review and dedicated future-scalability analysis. The semantic `Sequence` remains one general left-to-right expression-sequence mechanism: on normal completion, a non-empty Sequence returns the exact result of its final expression and a zero-expression Sequence returns canonical `null`. Error signaling/unwind, non-local return, cooperative cancellation and other control transfers that leave the Sequence are not converted into `null` and yield no normal Sequence result. The same rule applies to source module/program bodies, braced Closure bodies and other semantic expression-sequences, while `object-body-sequence` and object construction remain independently owned and are not redefined by empty-Sequence semantics. Core v0.1 therefore introduces no `Unit`, `undefined`, EmptySequence value, empty-body Error or receiver/context-dependent result merely to represent zero expressions. Implementations may erase, inline, constant-fold or otherwise optimize Sequence machinery provided the observable result/control behavior stays exact. A future type system may separately design a `Unit` or no-useful-result abstraction without being pre-created by D001. The original normative D001 publication is commit `6724c6e63750cd777ea74fc5d8ae24de7c02cf34`; this governance classification changes no normative specification or implementation and does not classify D002-D019 by transitivity.
 

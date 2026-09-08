@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-07
+Last updated: 2026-09-08
 ## Prelude Binding Note
 
 Prelude bindings introduce no additional grammar. The shared standard prelude is frozen by runtime semantics. Therefore `name = value` cannot modify a binding found only in the prelude; `name: value` creates a local slot and may explicitly shadow that name.
@@ -934,11 +934,25 @@ parameter-list =
 
 parameter-items =
       rest-parameter
-    | parameter, { ",", [ layout ], parameter },
+    | required-parameter-items,
+      [ ",", [ layout ], default-parameter-items ],
+      [ ",", [ layout ], rest-parameter ]
+    | default-parameter-items,
       [ ",", [ layout ], rest-parameter ] ;
 
-parameter =
-    identifier, [ "=", expression ] ;
+required-parameter-items =
+    required-parameter,
+    { ",", [ layout ], required-parameter } ;
+
+default-parameter-items =
+    default-parameter,
+    { ",", [ layout ], default-parameter } ;
+
+required-parameter =
+    identifier ;
+
+default-parameter =
+    identifier, "=", expression ;
 
 rest-parameter =
     "...", identifier ;
@@ -982,6 +996,35 @@ x = 10 => x
 ```
 
 Because a bare parameter is an `identifier`, it must satisfy the ordinary identifier rules; a reserved word is not an `identifier` and remains invalid as a parameter name (`true => value` is not a Closure parameter form). A parser distinguishes a bare-parameter Closure from an ordinary identifier expression purely syntactically: when the parser token immediately following an `identifier` is `=>`, the identifier is the parameter of a `closure-expression`; otherwise it is an ordinary identifier expression. This is ordinary one-token syntactic lookahead over the token stream; it involves no semantic, type-based, or runtime-value interpretation, and it never inspects tokens across a separating logical `NEWLINE` (see Newlines below).
+
+Within a parenthesized parameter list, every required non-rest parameter must
+precede every defaulted parameter. Once a defaulted parameter appears, every
+later non-rest parameter must also have a default expression. An optional rest
+parameter remains final. Therefore these orderings are valid:
+
+```js
+(a, b, c = 10, d = 20) => { ... }
+(a, b = 10, ...rest) => { ... }
+(a = 10, b = 20, ...rest) => { ... }
+```
+
+while these are syntax errors:
+
+```js
+(a = 10, b) => { ... }
+(a, b = 10, c) => { ... }
+(a = 10, b, ...rest) => { ... }
+```
+
+Core v0.1 has no named-argument syntax and no omitted-position marker. Under the
+positional binding model in `semantics/CALLABLES.md`, a defaulted parameter that
+precedes a later required parameter cannot have its default selected by any
+otherwise successful positional call: omitting that position also leaves the
+later required parameter unsupplied, while supplying enough positional values to
+reach the later parameter necessarily supplies the earlier one. Protos rejects
+that dead-default signature shape syntactically rather than introducing a hidden
+missing value, placeholder argument, alternate binding mode, or named-argument
+mechanism.
 
 Parameters are comma-separated: exactly one comma is required between each two consecutive parameters. A comma is strictly a separator between two list elements; it is not a terminator and does not represent an empty or omitted element. A comma must have a parameter on both sides within the same list, so a trailing comma before the closing `)` is a syntax error: `(a,)` and `(a, b,)` are invalid. Default parameters and rest parameters use the same separator rule.
 
@@ -2436,11 +2479,25 @@ parameter-list =
 
 parameter-items =
       rest-parameter
-    | parameter, { ",", [ layout ], parameter },
+    | required-parameter-items,
+      [ ",", [ layout ], default-parameter-items ],
+      [ ",", [ layout ], rest-parameter ]
+    | default-parameter-items,
       [ ",", [ layout ], rest-parameter ] ;
 
-parameter =
-    identifier, [ "=", expression ] ;
+required-parameter-items =
+    required-parameter,
+    { ",", [ layout ], required-parameter } ;
+
+default-parameter-items =
+    default-parameter,
+    { ",", [ layout ], default-parameter } ;
+
+required-parameter =
+    identifier ;
+
+default-parameter =
+    identifier, "=", expression ;
 
 rest-parameter =
     "...", identifier ;
@@ -2761,7 +2818,7 @@ factory()[index]
 
 ## Parameters, Rest Parameters, and Argument Spread
 
-Closure parameter lists may contain ordinary parameters, parameters with defaults, and at most one trailing rest parameter.
+Closure parameter lists may contain required ordinary parameters followed by parameters with defaults, and at most one trailing rest parameter. Required non-rest parameters cannot follow a defaulted parameter.
 
 The normative productions are defined in Sections 16-17 and in the Compact EBNF. A rest parameter must be the final parameter. Defaults, rest capture, and spread are part of the canonical grammar rather than post-parse extensions.
 

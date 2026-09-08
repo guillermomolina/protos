@@ -9,6 +9,47 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.386] - 2026-09-08
+
+### AUD001 D003 ratification amendment — useful positional default ordering
+- Records explicit project-owner approval of D003 after comparative review
+  spanning Self, Ruby, Kotlin, JavaScript and Python plus adversarial and
+  future-scalability analysis. Retains the deterministic binding core introduced
+  by specification `0.1.340`: caller argument/spread evaluation is left-to-right;
+  one caller-supplied positional vector is formed before activation binding;
+  parameters bind incrementally left-to-right; defaults evaluate exactly once in
+  the real invocation activation only when their position is unsupplied; earlier
+  parameters are ordinary established local slots; `this`, `context`, `args`,
+  Error/control-transfer, suspension and return-home behavior remain ordinary;
+  `args` contains only caller-supplied values; and rest captures only the
+  unconsumed caller-supplied suffix.
+- Amends only the accepted Closure signature ordering. Every required non-rest
+  parameter must precede every defaulted parameter, and the optional rest
+  parameter remains final. A required parameter after a defaulted parameter is a
+  syntax error.
+- Rejects the former dead-default shape instead of adding named arguments,
+  omitted-position markers, `undefined`, a hidden missing sentinel, a parameter
+  TDZ, or a second binding namespace. Under positional-only binding, a default
+  before a later required parameter cannot be selected by any otherwise
+  successful call.
+- Keeps references from defaults to the current or later not-yet-bound parameter
+  names under ordinary Protos bare-name lookup; no special lookup exception is
+  added. Future named arguments or richer signature facilities, if ever desired,
+  remain a separate explicit design decision and may re-evaluate ordering without
+  retroactively changing this Core v0.1 rule.
+
+### Compatibility and implementation state
+- Existing source that declares a required non-rest parameter after a defaulted
+  parameter becomes syntactically invalid. The callable binding/runtime semantics
+  for every still-valid signature are unchanged.
+- The current reference parser predates this amendment and accepts the now-invalid
+  ordering, so implementation alignment is tracked separately by `I025`, initially
+  `READY`. This specification/governance publication does not claim parser
+  conformance and does not change the Maven implementation version.
+- No runtime binder, `args`, rest, spread, Closure identity, concurrency,
+  native-boundary, license-term, named-argument, or new reserved-word mechanism is
+  introduced.
+
 ## [0.1.385] - 2026-09-08
 
 ### AUD001 D043 ratification clarification — cleanup escape, handler destination, and lifetime boundaries
