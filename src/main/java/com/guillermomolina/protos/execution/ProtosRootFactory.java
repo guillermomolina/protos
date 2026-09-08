@@ -17,36 +17,44 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.oracle.truffle.api.frame.VirtualFrame;
-import com.oracle.truffle.api.nodes.RootNode;
+import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.source.Source;
 import java.util.Objects;
 import java.util.Optional;
 
-public final class ProtosRootNode extends RootNode {
-    @Child
-    private ProtosExpressionNode body;
+/** Immutable owner of the Truffle language/source identity used for roots from one compilation. */
+final class ProtosRootFactory {
+    private final ProtosLanguage language;
     private final Source source;
 
-    public ProtosRootNode(ProtosExpressionNode body) {
-        this(null, null, body);
+    private ProtosRootFactory(ProtosLanguage language, Source source) {
+        this.language = language;
+        this.source = source;
     }
 
-    ProtosRootNode(
-            ProtosLanguage language,
-            Source source,
-            ProtosExpressionNode body) {
-        super(language);
-        this.source = source;
-        this.body = Objects.requireNonNull(body, "body");
+    static ProtosRootFactory legacy() {
+        return new ProtosRootFactory(null, null);
+    }
+
+    static ProtosRootFactory sourceBound(ProtosLanguage language, Source source) {
+        return new ProtosRootFactory(
+                Objects.requireNonNull(language, "language"),
+                Objects.requireNonNull(source, "source"));
+    }
+
+    CallTarget createCallTarget(ProtosExpressionNode body) {
+        Objects.requireNonNull(body, "body");
+        if (language == null) {
+            return ProtosExecution.createCallTarget(body);
+        }
+        return new ProtosRootNode(language, source, body).getCallTarget();
+    }
+
+    Optional<ProtosLanguage> language() {
+        return Optional.ofNullable(language);
     }
 
     Optional<Source> source() {
         return Optional.ofNullable(source);
-    }
-
-    @Override
-    public Object execute(VirtualFrame frame) {
-        return body.execute(frame);
     }
 }

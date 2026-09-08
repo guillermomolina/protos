@@ -43,6 +43,24 @@ import com.guillermomolina.protos.semantic.ast.CanonicalSuperSend;
 import java.util.Objects;
 
 public final class CanonicalToTruffleLowerer {
+    private final ProtosRootFactory rootFactory;
+
+    public CanonicalToTruffleLowerer() {
+        this(ProtosRootFactory.legacy());
+    }
+
+    CanonicalToTruffleLowerer(ProtosRootFactory rootFactory) {
+        this.rootFactory = Objects.requireNonNull(rootFactory, "rootFactory");
+    }
+
+    CanonicalToTruffleLowerer withRootFactory(ProtosRootFactory roots) {
+        return new CanonicalToTruffleLowerer(roots);
+    }
+
+    ProtosRootFactory rootFactory() {
+        return rootFactory;
+    }
+
     public ProtosExpressionNode lower(CanonicalExpression expression) {
         Objects.requireNonNull(expression, "expression");
 
@@ -70,7 +88,7 @@ public final class CanonicalToTruffleLowerer {
             return new ProtosObjectLiteralNode(
                     object.span(),
                     parentNode,
-                    ProtosExecution.createCallTarget(
+                    rootFactory.createCallTarget(
                             lowerObjectBody(object)));
         }
         if (expression instanceof CanonicalIdentity identity) {
@@ -154,7 +172,7 @@ public final class CanonicalToTruffleLowerer {
                         closure.parameters(),
                         defaultNodes);
         ProtosExpressionNode body = lowerCallable(closure.body());
-        return new ProtosClosureExecutionPlan(binding, body);
+        return new ProtosClosureExecutionPlan(binding, body, rootFactory);
     }
 
     private ProtosExpressionNode lowerCallable(CanonicalExpression expression) {

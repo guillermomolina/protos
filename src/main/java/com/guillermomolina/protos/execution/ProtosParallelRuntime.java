@@ -356,7 +356,7 @@ public final class ProtosParallelRuntime {
             ProtosPrelude p=a.prelude().orElseThrow();
             if(v==ProtosObjectValue.rootObject()||prelude(v,p))return v;
             if(v instanceof ProtosClosureValue x){
-                ProtosClosureExecutionPlan plan=x.definition()==null?null:new CanonicalToTruffleLowerer().lowerClosurePlan(x.definition());
+                ProtosClosureExecutionPlan plan=x.definition()==null?null:x.executionPlan().map(existing->existing.rebuild(x.definition())).orElseGet(()->new CanonicalToTruffleLowerer().lowerClosurePlan(x.definition()));
                 ProtosClosureValue y=x.parallelProjection(List.of(p.newExecutionContext()),ProtosNullValue.INSTANCE,p,plan);
                 memo.put(v,y);slots(x,y,a,memo);state(x,y);return y;
             }

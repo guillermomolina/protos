@@ -18,22 +18,47 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.source.Source;
 import java.util.Objects;
+import java.util.Optional;
 
 public final class ProtosClosureExecutionPlan {
+    private final ProtosRootFactory rootFactory;
     private final CallTarget parameterBindingTarget;
     private final CallTarget bodyTarget;
 
     public ProtosClosureExecutionPlan(
             ProtosParameterBindingNode parameterBinding,
             ProtosExpressionNode body) {
+        this(parameterBinding, body, ProtosRootFactory.legacy());
+    }
+
+    ProtosClosureExecutionPlan(
+            ProtosParameterBindingNode parameterBinding,
+            ProtosExpressionNode body,
+            ProtosRootFactory rootFactory) {
+        this.rootFactory = Objects.requireNonNull(rootFactory, "rootFactory");
         this.parameterBindingTarget =
-                ProtosExecution.createCallTarget(
+                rootFactory.createCallTarget(
                         Objects.requireNonNull(parameterBinding, "parameterBinding"));
         this.bodyTarget =
-                ProtosExecution.createCallTarget(
+                rootFactory.createCallTarget(
                         Objects.requireNonNull(body, "body"));
+    }
+
+    ProtosClosureExecutionPlan rebuild(CanonicalClosure definition) {
+        return new CanonicalToTruffleLowerer(rootFactory)
+                .lowerClosurePlan(Objects.requireNonNull(definition, "definition"));
+    }
+
+    Optional<ProtosLanguage> language() {
+        return rootFactory.language();
+    }
+
+    Optional<Source> source() {
+        return rootFactory.source();
     }
 
     public void bind(ProtosActivation activation) {

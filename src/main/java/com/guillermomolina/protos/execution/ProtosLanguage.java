@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.TruffleLanguage;
 
 /** Truffle language identity and per-polyglot-context entry boundary for Protos. */
@@ -29,8 +30,19 @@ public final class ProtosLanguage extends TruffleLanguage<ProtosLanguageContext>
     public static final String ID = "protos";
     public static final String MIME_TYPE = "application/x-protos";
 
+    private final ProtosSourceCompiler sourceCompiler = new ProtosSourceCompiler();
+
     @Override
     protected ProtosLanguageContext createContext(Env env) {
         return new ProtosLanguageContext(env);
+    }
+
+    @Override
+    protected CallTarget parse(ParsingRequest request) {
+        if (!request.getArgumentNames().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "Protos top-level parsing does not accept host argument names");
+        }
+        return sourceCompiler.compile(request.getSource(), this);
     }
 }

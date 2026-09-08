@@ -1,4 +1,6 @@
-## 0.2.262-SNAPSHOT
+## 0.2.263-SNAPSHOT
+
+- Complete `I026-A2 — canonical Truffle Source compilation boundary`. Connect `ProtosLanguage.parse(ParsingRequest)` directly to the existing Protos parser/canonicalizer/Truffle lowerer using the request's exact character `Source` as the canonical compilation input. Introduce one immutable root factory per source-bound compilation so the top-level root, Closure parameter/body roots and object-body roots all carry the same active `ProtosLanguage` and exact Truffle `Source`; retain that ownership when a Closure execution plan is rebuilt by process-local parallel projection. Keep the legacy direct `compile(String).call(...)` route only as staged pre-A4 machinery and do not treat it as the target architecture. Prove Polyglot `Context.parse(...)` reaches the real frontend without executing user code, and prove exact language/source identity on generated roots and Closure-plan rebuilds. I026-A3 becomes READY. Module source identity, full Polyglot runtime bootstrap/CLI cutover, SourceSection/instrumentation, DAP/LSP, Protos semantics, native boundary and license terms are unchanged by A2.
 
 - Record explicit project-owner ratification of D018's canonical
   Process-bootstrap snapshot identity under AUD001 on 2026-09-08 after

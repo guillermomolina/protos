@@ -22,6 +22,7 @@ import com.guillermomolina.protos.parser.ast.SurfaceSequence;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.source.Source;
 import java.util.Objects;
 
 public final class ProtosSourceCompiler {
@@ -41,10 +42,28 @@ public final class ProtosSourceCompiler {
 
     public CallTarget compile(String source) {
         Objects.requireNonNull(source, "source");
+        return compileCharacters(source, lowerer, lowerer.rootFactory());
+    }
 
-        SurfaceSequence surface = new ProtosParser(source).parseProgram();
+    CallTarget compile(Source source, ProtosLanguage language) {
+        Objects.requireNonNull(source, "source");
+        Objects.requireNonNull(language, "language");
+
+        ProtosRootFactory roots = ProtosRootFactory.sourceBound(language, source);
+        CanonicalToTruffleLowerer sourceLowerer = lowerer.withRootFactory(roots);
+        return compileCharacters(
+                source.getCharacters().toString(),
+                sourceLowerer,
+                roots);
+    }
+
+    private CallTarget compileCharacters(
+            String characters,
+            CanonicalToTruffleLowerer activeLowerer,
+            ProtosRootFactory roots) {
+        SurfaceSequence surface = new ProtosParser(characters).parseProgram();
         CanonicalSequence canonical =
                 (CanonicalSequence) canonicalizer.canonicalize(surface);
-        return ProtosExecution.createCallTarget(lowerer.lower(canonical));
+        return roots.createCallTarget(activeLowerer.lower(canonical));
     }
 }
