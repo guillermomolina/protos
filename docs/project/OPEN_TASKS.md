@@ -44,7 +44,7 @@ Current triage:
   recorded.
 - D044 remains the priority review item because no recovered evidence yet
   demonstrates explicit project-owner selection of its complete published semantics.
-- D021-D026 and D028 require provenance and substance review; publication alone
+- D021-D026 require provenance and substance review; publication alone
   is not ratification.
 - D001-D019 are expected to be predominantly project-owner decisions, but their
   approval evidence must be checked rather than inferred.
@@ -421,10 +421,31 @@ Recorded review results:
   fixed-width family explicitly. This governance ratification changes no normative
   specification or implementation and does not classify D030 or D031.
 
+- D028 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D028 / specification `0.1.369` after cross-language comparison
+  and dedicated future/scalability review. The general Core `parent()`
+  selector remains structural reflection of the receiver's immediate
+  delegation parent; standard `Path` does not overload or shadow it with
+  filesystem/path-construction behavior. `path.parentComponent()` remains
+  the distinct immutable Path constructor that appends exactly one semantic
+  parent-traversal component. That operation does not resolve a Filesystem,
+  compute a lexical containing path, drop the preceding component, or
+  lexically collapse the new parent component, and Core v0.1 retains no
+  `Path.parent()` compatibility alias for traversal. This keeps ordinary
+  object reflection uniform and preserves the structural Path model needed
+  for capability-confined resolution in the presence of backend indirection.
+  Future Path parsers/literals, lexical-parent/drop-last operations,
+  normalization, first-class component APIs, multiple-delegation reflection
+  and persistent/rope Path representations remain separate design or
+  implementation choices rather than consequences of D028. The current
+  component-list copying representation is not ratified as semantics and may
+  be optimized invisibly. This governance classification changes no
+  normative specification or implementation.
+
 Required procedure:
 
 1. Continue backwards through the remaining unresolved decisions in D044-D040,
-   then D021-D026 and D028, and finally D001-D019.
+   then D021-D026, and finally D001-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published
    normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or
@@ -440,7 +461,7 @@ Next audit work:
 
 1. Complete the separate D044 review already in progress, considering D045 only
    as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D043-D040, then D021-D026 and D028 and D001-D019
+2. Continue backwards through the remaining unresolved decisions in D043-D040, then D021-D026 and D001-D019
    under the required procedure above.
 
 AUD001 closes only when D001-D028 and D030-D045, except D046, have an explicit classification,
