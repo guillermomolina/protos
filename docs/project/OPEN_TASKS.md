@@ -45,7 +45,7 @@ Current triage:
 - D020 and the still-unratified decisions in D040-D044 require priority review
   because no recovered evidence yet demonstrates explicit project-owner selection
   of their complete published semantics.
-- D021-D032 require provenance and substance review; publication alone
+- D021-D031 require provenance and substance review; publication alone
   is not ratification.
 - D001-D019 are expected to be predominantly project-owner decisions, but their
   approval evidence must be checked rather than inferred.
@@ -293,10 +293,31 @@ Recorded review results:
   This governance classification changes no normative specification or
   implementation.
 
+- D032 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved retaining
+  D032 / specification `0.1.370` after comparative review across JavaScript, Python,
+  Ruby, Smalltalk, Self, Java/.NET and Go plus dedicated future-scalability analysis.
+  Every successful `slotNames()` invocation continues to return one fresh identity-
+  bearing ordinary standard Array snapshot, including repeated observations of an
+  unchanged receiver and empty results. Independently returned reflection Arrays are
+  semantically distinct and own independent indexed mutable state: mutating one cannot
+  mutate the reflected receiver, another reflection result or a later observation.
+  D032 does not add deep-copy semantics for contained slot-name Strings and does not
+  change the pre-existing shallow snapshot contents or deterministic ordering rule.
+  Fresh identity constrains observable semantics rather than physical storage, so lazy,
+  virtual, persistent, shared immutable backing, copy-on-write, scalar replacement and
+  allocation-elision strategies remain permitted when identity and state independence
+  stay exact. The simple reflection query remains detached ordinary data rather than a
+  live view, Mirror, iterator-only API or observable result cache; future incremental
+  reflection or explicit reflective-authority mechanisms remain separate designs. This
+  governance ratification does not assert current runtime implementation completeness;
+  any `slotNames()` implementation/reconciliation gap remains separate implementation
+  work. No normative specification or implementation change is introduced by this
+  classification.
+
 Required procedure:
 
 1. Continue backwards through the remaining unresolved decisions in D044-D040,
-   then D020, D021-D032, and finally D001-D019.
+   then D020, D021-D031, and finally D001-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published
    normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or
@@ -312,7 +333,7 @@ Next audit work:
 
 1. Complete the separate D044 review already in progress, considering D045 only
    as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D043-D040, then D020, D021-D032 and D001-D019
+2. Continue backwards through the remaining unresolved decisions in D043-D040, then D020, D021-D031 and D001-D019
    under the required procedure above.
 
 AUD001 closes only when D001-D045, except D046, have an explicit classification,
