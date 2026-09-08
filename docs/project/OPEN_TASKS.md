@@ -1048,12 +1048,44 @@ Current triage: - D038 has explicit project-owner confirmation and needs only ha
   changes no normative specification or implementation and creates no
   implementation follow-up.
 
+- D002 is `RATIFIED` in its effective current form. On 2026-09-08 the
+  project owner explicitly approved retaining D002 after cross-language review
+  spanning Self, ECMAScript, Python, Ruby, Lua, Elixir and Rust, plus adversarial,
+  concurrency/distribution and future-scalability analysis against the Protos
+  design philosophy. The effective contract is specification `0.1.348` as
+  corrected by the explicitly owner-approved `0.1.387` assignment-timing
+  amendment; the earlier RHS-before-destination wording is not retained.
+  Ordinary bare reads continue to inspect only local slots of the current
+  execution context and its lexical parents, then fall back after lexical
+  exhaustion to ordinary member lookup from `this`, including receiver
+  delegation. Bare creation `x: value` performs no lookup and creates only in the
+  current execution context. Bare assignment `x = rhs` selects the nearest
+  existing local lexical binding, otherwise only an own local slot of `this`;
+  it never follows delegation and never creates. Selection is for the nearest
+  existing binding rather than the nearest writable binding, so an invalid
+  mutation fails at that selected binding instead of silently reaching farther
+  state. The exact assignment destination is selected before RHS evaluation; a
+  missing destination signals fresh `SlotNotFound` before RHS effects, and RHS
+  creation, removal, shadowing, freezing or other same-name effects never
+  retarget the in-progress assignment. After normal RHS completion the exact
+  result is written to that preselected slot under ordinary mutation validation;
+  control transfer performs no write, write failure does not resume lookup, and
+  already-completed RHS effects are not rolled back. `this`, `context` and
+  `args` remain execution-state intrinsics rather than bare-name bindings;
+  current `super` semantics and later independently owned execution/control
+  decisions are not reclassified by transitivity. The original D002 publication
+  is commit `3f60e8fdc8ade1b856f2fd32114d2d429e715e58`; the timing correction is
+  commit `28de4244ed1e3478cbae4bcf03c7af7d8da076f6`. This governance
+  classification changes no normative specification, implementation, blocker,
+  implementation version, runtime, native boundary or license terms and creates
+  no implementation follow-up.
+
 Required procedure: 1. Continue backwards through the remaining unresolved decisions in D044, and finally D002 and D016 and D018.
 2. For each decision, reconstruct the alternatives, recommendation, published normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or PROVENANCE_UNRESOLVED. Executing or publishing a patch is not sufficient approval evidence.
 4. Present every substantive unresolved choice to the project owner under the current explicit design-approval gate. Do not silently preserve, replace, or reopen semantics.
 5. Keep D046 outside AUD001 and do not let this audit overwrite or pre-empt its separate review. Next audit work: 1. Complete the separate D044 review already in progress, considering only as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D002 and D016 and D018 under the required procedure above. AUD001 closes only when D002 and D016-D019, and D044, except D046, have an explicit classification,
+2. Continue backwards through the remaining unresolved decisions in D002 and D016 and D018 under the required procedure above. AUD001 closes only when D016-D019, and D044, except D046, have an explicit classification,
 the project owner has decided every NEEDS_USER_DECISION item, relevant
 provenance is recorded durably, and all affected project ledgers are reconciled.
 Any later normative correction must be a separately approved specification
