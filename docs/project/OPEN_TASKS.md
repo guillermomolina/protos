@@ -62,7 +62,7 @@ publication evidence.
 
 Current triage: - D038 has explicit project-owner confirmation and needs only have that evidence recorded.
 - D044 remains the priority review item because no recovered evidence yet demonstrates explicit project-owner selection of its complete published semantics. is not ratification.
-- D002 and D010 and D016 and D018-D019 are expected to be predominantly project-owner decisions, but their approval evidence must be checked rather than inferred. Recorded review results:
+- D002 and D016 and D018-D019 are expected to be predominantly project-owner decisions, but their approval evidence must be checked rather than inferred. Recorded review results:
 
 - D017 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
   retaining D017 / specification `0.1.357` after retrospective reconstruction,
@@ -223,6 +223,40 @@ Current triage: - D038 has explicit project-owner confirmation and needs only ha
   concurrency semantics remain separate explicit design decisions. This
   governance classification changes no normative specification or implementation
   and does not classify D002 or D005-D019 by transitivity.
+
+- D010 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved retaining
+  D010 / specification `0.1.350` after comparison with Erlang/OTP, Akka Typed,
+  Pony, Node.js, Julia, Rust/Rayon, E/object-capability systems, WASI and
+  Capsicum plus adversarial and future-scalability review. Actor creation keeps
+  the destination-loadable code-identity-plus-explicit-values model:
+  `Actor.spawn(moduleSpecifier, bindingName, arguments...)` resolves one canonical
+  module identity in the creator environment, transfers only the permitted
+  initialization graph and returns the new incarnation's `ActorRef` without
+  transferring a creator Closure/context or exposing scheduler/worker machinery.
+  `Actor.current()` remains the minimal self-reference acquisition operation;
+  `ActorRef.send`, `request` and graceful `stop` retain their ordinary public roles,
+  while `SendOperation.cancel` / `retry` remain the deliberately small explicit
+  control surface for pre-acceptance cancellation and user-selected retry rather
+  than hidden replay/status/transport APIs. P remains a semantic isolated parallel
+  execution domain entered through ordinary `Closure.parallel`,
+  `Bytes.parallelRange` and `ByteRegion.parallelRange`; Core v0.1 gains no public
+  `P` object, capability, namespace, keyword, worker/pool handle or syntax.
+  `Process` remains an authority-free standard prototype, while the actual
+  Process capability is provisioned only as the RootActor initial-module local
+  `process` endowment. Imports and newly created Actors receive no Process
+  authority implicitly; explicit Actor delegation rematerializes only the same
+  logical authority without amplification; Process does not imply Filesystem,
+  network, subprocess, Node, Cluster or arbitrary native authority and has no P
+  transfer contract. D010's historical statements that the then-current surface
+  was complete/exact are understood at the `0.1.350` publication point: they do
+  not roll back or reclassify later independently owned compatible extensions
+  such as `Actor.group(...)` and `ActorRef.termination()`. Future placement/resource
+  Spawner capabilities, supervision/discovery, parallel-executor/QoS facilities,
+  capability attenuation and similar mechanisms remain separate designs that
+  must earn their own semantics. The original D010 publication is commit
+  `c99d12625b5536927bb91782872194adc8d9e282`. This governance classification
+  changes no normative specification or implementation and does not classify
+  D008-D009, D011-D019, D039 or other later Actor/Process decisions by transitivity.
 
 - D011 is `RATIFIED` in its effective current form. On 2026-09-08 the
   project owner explicitly approved retaining the public Filesystem/I/O surface
@@ -952,13 +986,13 @@ Current triage: - D038 has explicit project-owner confirmation and needs only ha
   changes no normative specification or implementation and creates no
   implementation follow-up.
 
-Required procedure: 1. Continue backwards through the remaining unresolved decisions in D044, and finally D002 and D010 and D016 and D018-D019.
+Required procedure: 1. Continue backwards through the remaining unresolved decisions in D044, and finally D002 and D016 and D018-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or PROVENANCE_UNRESOLVED. Executing or publishing a patch is not sufficient approval evidence.
 4. Present every substantive unresolved choice to the project owner under the current explicit design-approval gate. Do not silently preserve, replace, or reopen semantics.
-5. Keep D046 outside AU and do not let this audit overwrite or pre-empt its separate review. Next audit work: 1. Complete the separate D044 review already in progress, considering only as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D002 and D010 and D016 and D018-D019 under the required procedure above. AU closes only when D002 and D010 and D016-D019, and D044, except D046, have an explicit classification,
+5. Keep D046 outside AUD001 and do not let this audit overwrite or pre-empt its separate review. Next audit work: 1. Complete the separate D044 review already in progress, considering only as a ratified dependency where their semantics interact.
+2. Continue backwards through the remaining unresolved decisions in D002 and D016 and D018-D019 under the required procedure above. AUD001 closes only when D002 and D016-D019, and D044, except D046, have an explicit classification,
 the project owner has decided every NEEDS_USER_DECISION item, relevant
 provenance is recorded durably, and all affected project ledgers are reconciled.
 Any later normative correction must be a separately approved specification
-change; AU itself authorizes no specification or implementation change.
+change; AUD001 itself authorizes no specification or implementation change.
