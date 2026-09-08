@@ -570,30 +570,71 @@ Such an environment limitation also does not by itself prevent patch authoring
 when the required repository contents can be inspected and the generated patch
 is intended to be executed and validated later in the user's real checkout.
 
-### Isolated worktree publication for generated patch launchers
+### Serialized direct-to-main publication for generated patch launchers
 
 Publication-capable generated patch launchers MUST isolate their mutable Git
 state from the caller's checkout instead of requiring that checkout to be clean,
 on `main`, or synchronized with `origin/main`.
 
+The normal project workflow serializes **publication** even when several agents
+prepare independent work concurrently: the user executes one publication
+launcher at a time. A launcher must therefore treat the `origin/main` fetched at
+the start of its invocation as its definitive `PUBLICATION_BASE`. It may rely on
+that base remaining unchanged while it prepares and validates its isolated
+commit, but it MUST verify that assumption again immediately before push.
+
 For the standard direct-to-`main` publication workflow, a launcher MUST:
 
 1. verify that the supplied path belongs to the intended repository and validate
    the configured `origin` repository coordinate;
-2. fetch `origin/main` without changing the caller checkout, index, current
-   branch, staged state, modified tracked files, or untracked files;
-3. create a uniquely named **local-only temporary branch** from the exact fetched
-   `origin/main` and check it out in a temporary `git worktree` outside the
+2. fetch `origin/main` without changing the caller checkout and record the exact
+   fetched commit as `PUBLICATION_BASE`;
+3. create a uniquely named **local-only temporary branch** from exactly
+   `PUBLICATION_BASE` and check it out in a temporary `git worktree` outside the
    caller checkout;
-4. apply the patch, stage only explicit patch-owned paths, validate, and create
-   the patch commit entirely inside that isolated worktree;
-5. before publication, fetch `origin/main` again; if it advanced, rebase only the
-   isolated patch-owned commit(s) onto the new `origin/main` and rerun every
-   validation required for the resulting rebased delta;
-6. publish only with a non-force fast-forward push from the validated isolated
-   commit to `refs/heads/main`; never push the temporary branch itself; and
-7. on success **or failure**, remove the temporary worktree and delete the
-   temporary local branch created by that invocation.
+4. inspect and materialize the requested delta against the files that actually
+   exist in that worktree. Generated changes MUST NOT assume that a textual diff
+   authored against an older `main` will still apply to the newly fetched base;
+5. derive moving repository metadata from `PUBLICATION_BASE` when the requested
+   change owns that metadata. In particular, an executable implementation change
+   that must bump the Maven implementation patch version reads the version from
+   the worktree's current `pom.xml` and computes the next required patch version
+   from that value; changelog/status edits likewise preserve unrelated entries
+   already present on `PUBLICATION_BASE`;
+6. enforce semantic preconditions that matter to the work being published
+   (expected work-item status, required symbols/contracts, allowed changed-file
+   set, version format, etc.). Do not use an old whole-file blob hash or old line
+   number as a substitute for a semantic precondition when unrelated concurrent
+   work may legitimately have changed the file;
+7. stage only explicit patch-owned paths, run the adaptive validation required by
+   the actual definitive delta, and create the patch commit entirely inside the
+   isolated worktree;
+8. immediately before publication, fetch `origin/main` again and require its SHA
+   to be **exactly equal** to `PUBLICATION_BASE`. If it differs, abort without
+   rebasing, merging, regenerating, repairing, or pushing. A changed main means
+   the patch must be re-audited/materialized from the new base in a new
+   invocation;
+9. when `origin/main == PUBLICATION_BASE`, publish only with a non-force
+   fast-forward push from the validated isolated commit to
+   `refs/heads/main`. A non-fast-forward rejection is a hard publication failure,
+   not permission to retry with rebase or force; and
+10. on success **or failure**, remove the temporary worktree and delete the
+    temporary local branch created by that invocation.
+
+This model intentionally separates **parallel preparation** from **serialized
+publication**. Agents may investigate and prepare unrelated work at the same
+time, including work that will eventually touch common files such as `pom.xml`,
+`CHANGELOG.md`, or project ledgers. The launcher that is actually executed owns
+one stable publication window: it starts from the then-current `main`, derives
+its common-file edits from that state, validates one commit, verifies `main` did
+not move, and pushes that commit.
+
+Generated patch artifacts SHOULD therefore encode the requested transformation
+and its semantic preconditions, not merely a stale line-oriented diff. A unified
+diff remains appropriate when it is generated from the same `PUBLICATION_BASE`
+or when its target context is intentionally an exact precondition, but launchers
+for moving shared files SHOULD use a robust baseline-aware transformation
+instead of depending on obsolete line numbers or surrounding prose.
 
 The launcher MUST NOT require the caller checkout to be clean as a condition for
 this standard isolated workflow. The caller may be on another branch, behind or
@@ -604,16 +645,10 @@ user-owned and MUST remain untouched. In particular, the launcher MUST NOT use
 pre-existing state.
 
 A launcher may manage only the temporary branch/worktree and patch-owned state it
-created itself. A conflict while rebasing the isolated patch, an unexpected
-change inside the isolated worktree, failure to revalidate after a rebase, or a
-non-fast-forward publication race is a reason to retry only through a bounded
-fetch/rebase/revalidate cycle or abort. It is never permission to repair or
-rewrite the caller checkout, force-push `main`, or discard another agent's work.
-
-If a push race requires rebasing onto a newer `origin/main`, passing validation
-before that rebase is not sufficient: the rebased result MUST be validated again
-before the next push attempt. Publication retries MUST be bounded so a rapidly
-moving `main` cannot create an unending validation loop.
+created itself. An unexpected worktree change, failed validation, changed
+`origin/main`, or failed fast-forward publication is a reason to abort. It is
+never permission to repair or rewrite the caller checkout, force-push `main`, or
+discard another agent's work.
 
 Temporary publication branches are implementation machinery, not project work
 items. They MUST remain local, MUST NOT be pushed to `origin`, and MUST be deleted
@@ -633,12 +668,16 @@ Inspect the applicable environment and build declarations such as
 `.devcontainer/`, `pom.xml`, `Makefile`, and repository scripts before choosing
 helper-tool requirements.
 
-Patch application SHOULD minimize incidental tool dependencies. For ordinary
-textual patching, prefer a checked-in unified diff applied with `git apply` (or
-an equally baseline-compatible repository tool) over generating an ad-hoc
-Python program. Do not introduce a Python, Node, Ruby, Perl, or other scripting
-runtime dependency merely because that runtime happens to be present in the
-authoring environment.
+Patch materialization SHOULD minimize incidental tool dependencies, but
+**reliability against `PUBLICATION_BASE` is more important than forcing every
+change through `git apply`**. Use the simplest repository-declared or
+baseline-compatible mechanism that can express the requested transformation
+safely. For stable files an ordinary unified diff is often ideal. For moving
+shared files such as `pom.xml`, `CHANGELOG.md`, and canonical ledgers, a bounded
+state-aware edit that reads and validates the current worktree content is
+preferred when that avoids stale-context failures. Any helper runtime must still
+satisfy the version/toolchain checks below; do not add incidental dependencies
+merely for convenience.
 
 Never assume an unversioned command name implies a modern runtime. In particular,
 `python3` may denote an older system Python. If a helper language is genuinely
