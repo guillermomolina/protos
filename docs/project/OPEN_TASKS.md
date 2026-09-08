@@ -42,7 +42,7 @@ Current triage:
 
 - D037 and D038 have explicit project-owner confirmation and need only have that
   evidence recorded.
-- D020 and the still-unratified decisions in D039-D044 require priority review
+- D020 and the still-unratified decisions in D040-D044 require priority review
   because no recovered evidence yet demonstrates explicit project-owner selection
   of their complete published semantics.
 - D021-D036 require provenance and substance review; publication alone is not
@@ -150,9 +150,32 @@ Recorded review results:
   decision. This governance classification changes no normative specification
   or implementation.
 
+- D039 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved retaining
+  the complete published Core v0.1 public ActorGroup acquisition design after
+  comparative and scalability review. `Actor.group(firstMember,
+  additionalMembers...) -> GroupRef` remains the only direct Core acquisition
+  surface; it accepts one or more explicit ActorRef communication capabilities,
+  validates the complete vector before one synchronous creation cutover, creates
+  one fresh Group identity plus one fresh GroupRef acquisition, and treats initial
+  membership as a set of concrete Actor incarnations rather than weighted duplicate
+  references. The caller Actor's Process remains the Core-created Group lifetime
+  scope; creator-Actor death alone does not terminate the Group, owning-Process
+  termination does, Group termination does not terminate member Actors, and remote
+  or aliased GroupRefs do not extend Group lifetime or retarget after termination.
+  Creation grants routing/communication capability only: it does not create, move,
+  restart or rehost members, does not wait for READY/reachability/routability, and
+  does not grant member lifecycle or Group-control Authority. Core v0.1 continues
+  to expose no public post-creation membership/controller/desired-cardinality/
+  termination/placement surface, no Group identity handle or GroupRef reacquisition
+  selector, and no registry, service-discovery, name/rebinding, endpoint or
+  transport-selection API. Durable service ownership, discovery, dynamic Group
+  control and related distributed institutions remain separate future design work.
+  This ratification confirms D039 / specification `0.1.376` without normative or
+  implementation change.
+
 Required procedure:
 
-1. Continue backwards through the remaining unresolved decisions in D044-D039,
+1. Continue backwards through the remaining unresolved decisions in D044-D040,
    then D020, D021-D036, and finally D001-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published
    normative result, downstream implementation, and owner-approval evidence.
@@ -169,7 +192,7 @@ Next audit work:
 
 1. Complete the separate D044 review already in progress, considering D045 only
    as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D043-D039, then D020, D021-D036 and D001-D019
+2. Continue backwards through the remaining unresolved decisions in D043-D040, then D020, D021-D036 and D001-D019
    under the required procedure above.
 
 AUD001 closes only when D001-D045, except D046, have an explicit classification,
