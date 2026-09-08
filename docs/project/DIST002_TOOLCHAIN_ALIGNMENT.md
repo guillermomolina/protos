@@ -218,6 +218,34 @@ D2 closes only this observed EOF-handling defect. DIST002-D remains READY until
 both primary workflows complete green on a revision containing C + D1 + D2,
 followed by the final local cross-environment gate and status reconciliation.
 
+## DIST002-D3 CI workspace Git trust correction
+
+Post-D2 GitHub Actions proves the checksum/bootstrap correction itself is now
+healthy. On revision `fab881f88b9bf89b36326bc21aeaba7257a73872`, `Tests` run
+34223295064 completed successfully, while `Distribution snapshot` run
+34223295074 passed Maven bootstrap, checkout, zero-drift toolchain verification
+and the full 1096-test Maven suite before failing only when
+`dist/build_portable.py` invoked `git status`. The job container runs as root so
+it can provision its OS/Maven prerequisites, but `actions/checkout` records its
+`safe.directory` entry under the action's temporary HOME. After the action
+returns to the job's real `HOME=/github/home`, Git therefore rejects the
+runner-owned mounted workspace as dubious ownership and exits 128.
+
+DIST002-D3 keeps the selected root container and all toolchain coordinates
+unchanged. Immediately after checkout, the distribution workflow explicitly
+adds the exact `$GITHUB_WORKSPACE` path to the real job user's global Git
+`safe.directory`, then executes the same `git status --porcelain=v1
+--untracked-files=all` shape required by the portable builder and emits
+`CI_GIT_SAFE_DIRECTORY_CHECK: PASS`. The trust is limited to the repository
+workspace already selected by GitHub Actions; it does not use `safe.directory=*`,
+disable Git's ownership protection, alter repository contents or weaken source
+identity checks.
+
+D3 closes only this observed CI ownership-context defect. DIST002-D remains
+READY until a revision containing C + D1 + D2 + D3 completes both primary
+workflows green, followed by the final local cross-environment gate and status
+reconciliation.
+
 ## Current observed mismatch
 
 At the time this item was opened:
@@ -261,7 +289,8 @@ pattern.
 | DIST002-C | CLOSED | Live Maven/Truffle dependencies, distribution metadata, launcher/runtime gates and distribution CI now use/check the canonical JDK25.0.4.1/Graal-Truffle25.3.4.1 contract; historical DIST001 evidence is retained. |
 | DIST002-D1 | CLOSED | Correct the Maven 3.9.9 CI-bootstrap SHA-512 verifier for Apache's digest-only metadata format; both primary workflows retain exact checksum validation. |
 | DIST002-D2 | CLOSED | Correct the no-trailing-newline EOF handling in the Maven `.sha512` bootstrap while retaining D1's exact 128-hex and independently calculated SHA-512 checks. |
-| DIST002-D | READY | Await green post-D2 Tests + Distribution snapshot evidence, then run final cross-environment conformance/documentation reconciliation and close DIST002. |
+| DIST002-D3 | CLOSED | Restore Git workspace ownership trust in distribution CI after checkout without weakening Git's safe-directory protection. |
+| DIST002-D | READY | Await green post-D3 Tests + Distribution snapshot evidence, then run final cross-environment conformance/documentation reconciliation and close DIST002. |
 
 Opening DIST002 changes no Protos semantics, implementation version, current
 DIST001 candidate, runtime support promise, tag, GitHub Release, or release

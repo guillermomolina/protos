@@ -59,6 +59,14 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
+      - name: Trust checked-out workspace for Git
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git status --porcelain=v1 --untracked-files=all >/dev/null
+          echo "CI_GIT_SAFE_DIRECTORY_CHECK: PASS"
+
       - name: Verify selected toolchain
         shell: bash
         run: |
