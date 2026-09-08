@@ -62,7 +62,34 @@ publication evidence.
 
 Current triage: - D038 has explicit project-owner confirmation and needs only have that evidence recorded.
 - D044 remains the priority review item because no recovered evidence yet demonstrates explicit project-owner selection of its complete published semantics. is not ratification.
-- D002 and D016 and D018-D019 are expected to be predominantly project-owner decisions, but their approval evidence must be checked rather than inferred. Recorded review results:
+- D002 and D016 and D018 are expected to be predominantly project-owner decisions, but their approval evidence must be checked rather than inferred. Recorded review results:
+
+- D019 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D019 / specification `0.1.360` after retrospective reconstruction,
+  comparison with Erlang/OTP, Akka Classic/Typed, Ray, Orleans and Pony plus
+  adversarial, capability-security, distributed and future-scalability review.
+  Actor creation genealogy, communication capability and failure/lifecycle
+  authority remain separate relationships. `Actor.spawn(...)` gives the creator
+  the new concrete Actor's `ActorRef`, but creation alone gives the created Actor
+  no `parentActor`, creator lookup, reverse `ActorRef`, durable implicit reply
+  channel or other authority toward the creator. A capability back to the creator
+  must be provisioned explicitly through an existing permitted mechanism, for
+  example by passing `Actor.current()` in initialization data; that value is then
+  an ordinary ActorRef with no special parent identity or lifetime semantics.
+  Absence of ambient creator authority is transitive and also applies when
+  creation is coordinated by bootstrap, Group reconciliation, runtime
+  infrastructure or remote placement. Implementations may retain genealogy,
+  placement, scheduling, diagnostics or failure-accounting metadata internally,
+  but such metadata does not become a Core capability and need not synthesize
+  reverse routing or program-visible lifetime retention. Creator termination
+  alone does not terminate a child, and failure authority remains independently
+  owned. D019 introduces no Supervisor/SupervisorRef, actor ownership/fate-sharing
+  scope, link/monitor API, durable service identity, replacement-following
+  reference, creator-tree reflection or new capability kind; those remain
+  separate explicit future designs. The original normative D019 publication is
+  commit `9cb567a0626414e2dac7351fc49174b3dc9cb581`. This governance classification changes no normative
+  specification, implementation, blocker, implementation version, runtime,
+  native boundary or license terms and does not classify D018 by transitivity.
 
 - D018 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
   retaining the canonical Process-bootstrap snapshot identity decision after
@@ -1021,12 +1048,12 @@ Current triage: - D038 has explicit project-owner confirmation and needs only ha
   changes no normative specification or implementation and creates no
   implementation follow-up.
 
-Required procedure: 1. Continue backwards through the remaining unresolved decisions in D044, and finally D002 and D016 and D018-D019.
+Required procedure: 1. Continue backwards through the remaining unresolved decisions in D044, and finally D002 and D016 and D018.
 2. For each decision, reconstruct the alternatives, recommendation, published normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or PROVENANCE_UNRESOLVED. Executing or publishing a patch is not sufficient approval evidence.
 4. Present every substantive unresolved choice to the project owner under the current explicit design-approval gate. Do not silently preserve, replace, or reopen semantics.
 5. Keep D046 outside AUD001 and do not let this audit overwrite or pre-empt its separate review. Next audit work: 1. Complete the separate D044 review already in progress, considering only as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D002 and D016 and D018-D019 under the required procedure above. AUD001 closes only when D002 and D016-D019, and D044, except D046, have an explicit classification,
+2. Continue backwards through the remaining unresolved decisions in D002 and D016 and D018 under the required procedure above. AUD001 closes only when D002 and D016-D019, and D044, except D046, have an explicit classification,
 the project owner has decided every NEEDS_USER_DECISION item, relevant
 provenance is recorded durably, and all affected project ledgers are reconciled.
 Any later normative correction must be a separately approved specification
