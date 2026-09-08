@@ -45,10 +45,12 @@ Current triage:
 - D044 remains the priority review item because no recovered evidence yet
   demonstrates explicit project-owner selection of its complete published semantics.
   is not ratification.
-- D001-D019 are expected to be predominantly project-owner decisions, but their
+- D002-D019 are expected to be predominantly project-owner decisions, but their
   approval evidence must be checked rather than inferred.
 
 Recorded review results:
+
+- D001 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved retaining D001 / specification `0.1.341` after cross-language comparison, adversarial review and dedicated future-scalability analysis. The semantic `Sequence` remains one general left-to-right expression-sequence mechanism: on normal completion, a non-empty Sequence returns the exact result of its final expression and a zero-expression Sequence returns canonical `null`. Error signaling/unwind, non-local return, cooperative cancellation and other control transfers that leave the Sequence are not converted into `null` and yield no normal Sequence result. The same rule applies to source module/program bodies, braced Closure bodies and other semantic expression-sequences, while `object-body-sequence` and object construction remain independently owned and are not redefined by empty-Sequence semantics. Core v0.1 therefore introduces no `Unit`, `undefined`, EmptySequence value, empty-body Error or receiver/context-dependent result merely to represent zero expressions. Implementations may erase, inline, constant-fold or otherwise optimize Sequence machinery provided the observable result/control behavior stays exact. A future type system may separately design a `Unit` or no-useful-result abstraction without being pre-created by D001. The original normative D001 publication is commit `6724c6e63750cd777ea74fc5d8ae24de7c02cf34`; this governance classification changes no normative specification or implementation and does not classify D002-D019 by transitivity.
 
 - D024 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
   retaining D024 / specification `0.1.367` after comparative, adversarial and
