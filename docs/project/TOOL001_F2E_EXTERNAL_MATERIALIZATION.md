@@ -1,6 +1,6 @@
 # TOOL001-F2E — External Immutable-Package Execution
 
-Status: **IN_PROGRESS — F2E1 CLOSED; I024/B009 CLOSED; F2E2 READY**
+Status: **IN_PROGRESS — F2E1 CLOSED; I024/B009 CLOSED; F2E2 IN_PROGRESS; F2E2A READY**
 Nature: non-normative Package Tool / host-integration project record
 Allocated after: `TOOL001-F2D` workspace-only execution closure
 
@@ -98,7 +98,10 @@ F2E1  protos-package-tree-v1 ContentIdentity contract              CLOSED
 F2E1A logical-tree domain + portable path/entry-kind contract       CLOSED
 F2E1B canonical byte stream + method/hash contract                  CLOSED
 F2E1C independent conformance vectors + F2E1 closure                CLOSED
-F2E2  verified read-only package-store binding                     READY
+F2E2  verified read-only package-store binding                     IN_PROGRESS
+F2E2A captured-Filesystem ContentIdentity canonicalizer/verifier   READY
+F2E2B exact selected-root capture + verified-capture host custody  BLOCKED_BY_DEPENDENCIES
+F2E2C same-capture integration + F2E2 closure                      BLOCKED_BY_DEPENDENCIES
 F2E3  external-node execution-plan construction                    BLOCKED_BY_DEPENDENCIES
 F2E4  external canonical ModuleKey + source resolver               BLOCKED_BY_DEPENDENCIES
 F2E5  public run integration + F2 external-execution closure       BLOCKED_BY_DEPENDENCIES
@@ -298,3 +301,107 @@ mutable/source store tree after verification and must not introduce package-only
 Java/NIO traversal.
 
 F2E3/F2E4/F2E5 remain dependency-gated in order behind F2E2.
+
+## F2E2 decomposition refinement
+
+The post-I024 audit confirms that the missing work is no longer one indivisible
+implementation step. Three responsibilities have different semantic and host
+failure surfaces and must remain separate:
+
+```text
+F2E2   verified read-only package-store binding                    IN_PROGRESS
+F2E2A  captured-Filesystem ContentIdentity canonicalizer/verifier  READY
+F2E2B  exact selected-root capture + verified-capture host custody BLOCKED_BY_DEPENDENCIES
+F2E2C  same-capture integration + F2E2 closure                     BLOCKED_BY_DEPENDENCIES
+```
+
+### F2E2A — captured-Filesystem ContentIdentity policy
+
+A owns package policy and is implemented in bundled Protos.
+
+Its input is already the immutable read-only Filesystem produced by D046. A
+must implement the closed `protos-package-tree-v1` contract without acquiring,
+discovering or reopening a store root:
+
+- enumerate recursively only through `Filesystem.entries`;
+- reject link/other entries rather than following or silently ignoring them;
+- validate the exact canonical portable path domain, including sibling ASCII
+  case-fold collisions;
+- require exact root regular `protos.toml`;
+- include every valid regular-file leaf and treat directories only as structure;
+- read exact regular bytes through ordinary Filesystem/File facilities;
+- serialize the frozen E1B path/content map exactly, including arbitrary-size
+  minimal base-128 varuint framing and canonical unsigned ASCII path order;
+- support the mandatory `protos-package-tree-v1` + `sha256` pair through the
+  existing standard SHA256 library;
+- compare exact lowercase digest identity fail-closed; and
+- on successful verification, return/pass through the **same supplied captured
+  Filesystem** rather than another path, re-capture or reconstructed authority.
+
+`std:io/Files.readAllBytes` may provide the already-published complete binary
+File-read/cleanup mechanism. A must not duplicate host traversal in Java, decide
+package-store layout, fetch content, scan by PackageId/version, mutate the lock,
+extend PackageExecutionPlan, install a resolver, or choose how captured backing
+crosses the later host boundary.
+
+A is independently executable because ContentIdentity membership,
+canonicalization, method/algorithm support and verification semantics are already
+closed by F2E1 and D046.
+
+### F2E2B — exact selected-root capture and host custody
+
+B owns the irreducible host-mechanical boundary deliberately excluded from A.
+
+It starts from **one exact store entry already selected by the caller/upper
+mechanism**. It must not infer that entry from PackageId, version, locator,
+registry authority, Git URL, directory basename or ambient store contents.
+
+B must provision/confine the general read-only Filesystem authority for that
+selected root, obtain one D046 immutable capture, expose that capture to A for
+verification, and preserve custody of that exact verified captured backing for
+the later F2E3/F2E4 handoff. The concrete custody representation is intentionally
+not selected by this decomposition: B must re-audit current I024 captured-backend
+and Package Tool Process-lifetime mechanics before choosing it.
+
+The important invariant is fixed now:
+
+```text
+selected mutable/materialized root M
+        |
+        | capture exactly once for this binding
+        v
+immutable capture C
+        |
+        | A verifies ContentIdentity(C)
+        v
+verified C
+        |
+        +----> later planning/resolver handoff uses C
+```
+
+No step after verification may re-open `M` to obtain executable bytes.
+
+B remains host mechanism only. It must not reimplement canonical path/hash policy,
+parse locks/manifests, solve versions, scan/fetch the store, or make an external
+node executable.
+
+### F2E2C — integrated same-capture closure
+
+C composes A and B and publishes final F2E2 evidence.
+
+It must exercise the frozen F2E1 fixed vectors through the production
+ContentIdentity implementation and prove at the integration boundary that:
+
+- valid exact content verifies;
+- mismatched content/method/algorithm and invalid tree shapes fail closed;
+- source/store mutation after capture cannot alter the verified bytes;
+- the authority handed forward is the same immutable capture that was verified;
+- Package Tool verification receives no ambient store visibility; and
+- no package-specific Java/NIO tree walker appears.
+
+C closes F2E2 only after those properties and the full applicable test suite pass.
+At that point `TOOL001-F2E3` becomes READY. F2E4/F2E5 remain dependency-gated.
+
+This decomposition does not change F2E1, D046, I024, lock format, ContentIdentity
+bytes, package-store physical layout, acquisition/fetch policy or public run
+semantics.
