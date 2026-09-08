@@ -17,15 +17,32 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.TruffleLanguage;
+import com.oracle.truffle.api.source.Source;
 import java.util.Objects;
 
 /** Host-side state owned by one initialized Polyglot Protos context. */
 final class ProtosLanguageContext {
+    private static final TruffleLanguage.ContextReference<ProtosLanguageContext> REFERENCE =
+            TruffleLanguage.ContextReference.create(ProtosLanguage.class);
+
     private final TruffleLanguage.Env env;
 
     ProtosLanguageContext(TruffleLanguage.Env env) {
         this.env = Objects.requireNonNull(env, "env");
+    }
+
+    static ProtosLanguageContext current() {
+        return REFERENCE.get(null);
+    }
+
+    CallTarget parsePublic(Source source) {
+        Objects.requireNonNull(source, "source");
+        if (!ProtosLanguage.ID.equals(source.getLanguage())) {
+            throw new IllegalArgumentException("Source belongs to another language");
+        }
+        return env.parsePublic(source);
     }
 
     TruffleLanguage.Env env() {
