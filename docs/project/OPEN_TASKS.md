@@ -44,7 +44,6 @@ Current triage:
   recorded.
 - D044 remains the priority review item because no recovered evidence yet
   demonstrates explicit project-owner selection of its complete published semantics.
-- D021 require provenance and substance review; publication alone
   is not ratification.
 - D001-D019 are expected to be predominantly project-owner decisions, but their
   approval evidence must be checked rather than inferred.
@@ -542,10 +541,35 @@ Recorded review results:
   behavior remain exact. This governance classification changes no normative
   specification or implementation.
 
+- D021 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D021 / specification `0.1.358` after comparative review spanning
+  Akka, Orleans, Java RMI, Erlang, E/object-capability systems and Cap'n Proto
+  plus adversarial and future-scalability analysis. D021 keeps three identities
+  distinct: target Group identity, semantic GroupRef capability identity and
+  physical proxy/wrapper/address/cache representation. A particular acquired
+  GroupRef remains the same identity-bearing communication capability across
+  ordinary Actor/Process transfer, repeated transfer, round-trip return and
+  rematerialization. Any materialization of that same semantic GroupRef therefore
+  preserves primitive `===`, `identityHashOf(...)` and IdentityMap key identity
+  even if the runtime uses different physical proxies. Conversely, independently
+  acquired GroupRefs are not collapsed merely because they denote the same Group
+  or currently carry equivalent effective communication permissions; distinct
+  effective capability/restriction state necessarily denotes distinct GroupRef
+  identity. The selected rule does not make Group identity, routing or membership
+  state observable through reference identity and requires no global interning,
+  permanent wrapper registry, stable address, Group-to-GroupRef registry, proxy
+  cache lifetime tied to Group lifetime or network coordination. Retaining or
+  transferring a GroupRef does not extend Group lifetime or grant Group/Cluster
+  Authority. Future attenuation/revocation, discovery/reacquisition, durable
+  service naming and any explicit target-equality/joining facility remain
+  separately designable rather than being hidden inside `===`. This governance
+  classification changes no normative specification or implementation and does
+  not classify D024.
+
 Required procedure:
 
 1. Continue backwards through the remaining unresolved decisions in D044-D040,
-   then D021-D022, and finally D001-D019.
+ and finally D001-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published
    normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or
@@ -561,10 +585,10 @@ Next audit work:
 
 1. Complete the separate D044 review already in progress, considering D045 only
    as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D043-D040, then D021-D022 and D001-D019
+2. Continue backwards through the remaining unresolved decisions in D043-D040, then D001-D019
    under the required procedure above.
 
-AUD001 closes only when D001-D022, D024-D025, D027-D028 and D030-D045, except D046, have an explicit classification,
+AUD001 closes only when D001-D020, D025, D027-D028 and D030-D045, except D046, have an explicit classification,
 the project owner has decided every NEEDS_USER_DECISION item, relevant
 provenance is recorded durably, and all affected project ledgers are reconciled.
 Any later normative correction must be a separately approved specification
