@@ -736,3 +736,16 @@ needed for a portable verifier: confined directory enumeration, entry-kind
 observation without following links/special entries, and stable regular-file
 snapshot acquisition. That missing general semantic boundary is recorded as
 B009. F2E2 therefore becomes `BLOCKED (B009)`, not READY.
+
+## Post-F2E1 tree-observation dependency resolution
+
+D046 / specification revision `0.1.383` resolves B009's normative
+tree-observation gap with general `Filesystem.entries` and
+`Filesystem.captureTree`.
+
+The ContentIdentity contract is unchanged. A verifier hashes one immutable
+captured Filesystem and, on a match, passes that **same captured authority**
+forward. It must not hash a mutable source tree and later re-open source Paths.
+
+The remaining prerequisite is I024 implementation; F2E2 stays dependency-blocked
+until that general capability is published.

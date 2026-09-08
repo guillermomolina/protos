@@ -422,45 +422,52 @@ closure.
 
 ## B009 — Portable Filesystem tree observation for immutable package verification
 
-Status: BLOCKED
+Status: READY
 
 Implementation area:
-`TOOL001-F2E2` verified read-only package-store binding and later package
-execution that must prove a materialized external payload matches its locked
-`protos-package-tree-v1` ContentIdentity before code authority begins.
+`I024 — Filesystem directory observation + captured-tree capability`, followed by
+`TOOL001-F2E2` verified read-only package-store binding.
 
 Normative dependency:
-F2E1 now fixes the exact package observations, but current Core Filesystem does
-not define a portable general protocol for confined directory enumeration and
-entry-kind observation. The current surface is `open`, `replace`, and `remove`;
-the LIB004 design explicitly states that ordinary library code cannot manufacture
-directory enumeration/stat/symlink inspection from ambient host APIs.
+Satisfied by D046 / specification revision `0.1.383`.
+
+D046 adds exactly the general capability boundary required by the closed F2E1
+ContentIdentity contract:
+
+```text
+filesystem.entries(path)     -> Future<Array>
+filesystem.captureTree(path) -> Future<Filesystem>
+```
+
+`entries` exposes exact direct-child names plus no-follow entry kind as inert
+frozen descriptor data. `captureTree` returns a fresh immutable read-only
+Filesystem containing the recursively captured structure/regular-file bytes and
+never follows captured child links.
+
+The capture is intentionally not an atomic point-in-time snapshot of a mutable
+source. The returned captured Filesystem itself is the stable logical tree.
+Verify-then-use code validates and later consumes that same capability,
+eliminating the source-tree TOCTOU re-read.
 
 Specification authority:
-- `spec/io/FILESYSTEM.md`;
-- any future normative design revision owning portable namespace/tree
-  observation;
-- `docs/design/PACKAGE_CONTENT_IDENTITY.md` as the non-normative package consumer.
+- `spec/io/FILESYSTEM.md` section 20.4 / D046;
+- `spec/io/IO_CORE.md` for Future-shaped I/O failures;
+- existing Path/File/Filesystem authority, confinement and cancellation rules.
 
 Objective unblock condition:
-The normative Filesystem contract must let independent implementations determine:
-
-1. exact direct-child enumeration under explicit confined Filesystem authority;
-2. entry-kind observation sufficient to accept directories/regular files and
-   reject symlink/reparse/special traversal entries without first following them;
-3. exact stored-name/case and confinement behavior while traversing;
-4. regular-file acquisition/snapshot behavior that either observes one stable
-   logical tree or fails instead of hashing mixed states;
-5. Future/cancellation/error/authority behavior for those observations.
-
-No particular API spelling (`entries`, `stat`, iterator, snapshot handle, etc.) is
-required; the portable semantics are.
+Satisfied. Two independent implementations can now determine exact direct-child
+observation, no-follow kind classification, name/case behavior, confinement,
+stable captured-tree authority, concurrent-source semantics and
+Future/cancellation/error behavior.
 
 Current consequence:
-F2E2 is BLOCKED. Do not introduce `PackageNative.walkTree`,
-`java.nio.file.Files.walk`, ambient store scans, or another package-specific
-Java-only stat/symlink escape hatch.
+B009 is READY, not CLOSED. `I024` must implement and validate the general Core
+surface. `TOOL001-F2E2` is dependency-blocked on I024 and must not use a
+package-specific Java/NIO tree walker.
+
+B009 becomes CLOSED only after the general D046 `entries` + `captureTree`
+implementation and integrated Protos conformance are published.
 
 Independent work:
-F2E1 remains CLOSED; fetch/network/store-write design and unrelated Filesystem
-work may proceed independently. F2E3/F2E4/F2E5 remain gated behind F2E2.
+F2E1 remains CLOSED; package acquisition/network/store-write remain independently
+scoped; F2E3/F2E4/F2E5 remain gated behind F2E2.

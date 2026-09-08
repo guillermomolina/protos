@@ -1388,3 +1388,19 @@ native boundary. Explicit whole-file operations and explicit Process text-adapte
 composition solve concrete ergonomics while policy-heavy copy, publication,
 directory, subprocess, and generic resource-scope questions remain independent
 future design work.
+
+## Post-design D046 Filesystem observation note
+
+D046 / specification revision `0.1.383` was published after this LIB004
+design closure. It adds general Core `Filesystem.entries(path)` and
+`Filesystem.captureTree(path)` semantics for capability-confined directory
+observation and immutable read-only captured trees.
+
+Historical statements above that Core lacked directory enumeration/stat-like
+entry-kind observation describe the pre-D046 surface. D046 intentionally does
+not add general existence queries, mkdir/mkdirs, recursive removal, generic
+metadata/stat records, symlink-target reading, generic move, or OS-process
+authority.
+
+This later Core capability does not silently expand or reopen the bounded LIB004
+implementation program.

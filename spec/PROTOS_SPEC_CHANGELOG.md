@@ -9,6 +9,48 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.383] - 2026-09-08
+
+### Capability-confined directory observation and captured trees (D046)
+- Resolves the normative part of B009 by adding exactly two general
+  Filesystem operations: `filesystem.entries(path) -> Future<Array>` and
+  `filesystem.captureTree(path) -> Future<Filesystem>`.
+- `entries` returns a fresh Array of fresh frozen ordinary descriptor objects
+  with exactly local `name` and `kind` slots. `name` is the exact stored
+  one-component String; `kind` is exactly one of `"regular"`, `"directory"`,
+  `"link"`, or `"other"`. Child kind observation never follows the child
+  indirection, descriptors carry no authority, synthetic `.`/`..` entries are
+  excluded, and result ordering is deliberately unspecified.
+- `captureTree` selects a directory under the receiver Filesystem authority
+  without following the final selected indirection and recursively captures a
+  finite authority-confined tree into a fresh Filesystem capability. It follows
+  no captured child link, copies exact regular-file bytes from stable selected
+  resources, preserves directory structure and opaque link/other entry kinds,
+  and returns a permanently read-only immutable captured namespace.
+- The capture is intentionally not a source transaction: concurrent source
+  mutation may affect what is selected while capture runs, and Protos does not
+  require all captured source names/bytes to have coexisted at one instant.
+  The returned capability itself is the stable result; after success its
+  namespace, entry kinds and regular-file bytes never change.
+- Both operations remain Future-shaped, capability-confined and side-effect-free
+  with respect to the source namespace. Invalid invocation/Path domains use the
+  existing `InvalidIOArgument` Future failure boundary; unsupported,
+  non-directory, confinement, traversal, resource or capture failures use the
+  existing `IOError` family.
+- No `Directory`, `DirectoryEntry`, metadata/stat object, ambient Filesystem,
+  path-string API, symlink-target API, recursive mutation API, new syntax, or
+  package-specific native primitive is introduced.
+
+### Compatibility and implementation state
+- Existing `open`, `replace`, `remove`, Path, File, Process and authority
+  semantics are unchanged. Programs that do not invoke the new operations pay
+  no semantic/runtime cost for tree capture.
+- B009 moves `BLOCKED -> READY`: the normative contract is independently
+  implementable. New implementation item `I024 — Filesystem directory
+  observation + captured-tree capability` is READY.
+- `TOOL001-F2E2` remains blocked by implementation dependency I024.
+- No implementation version, license term or existing native boundary changes.
+
 ## [0.1.382] - 2026-09-07
 
 ### Task-scoped structured Future ownership (D045)

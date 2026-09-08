@@ -1,6 +1,6 @@
 # TOOL001-F2E — External Immutable-Package Execution
 
-Status: **IN_PROGRESS — F2E1 ContentIdentity CLOSED; F2E2 BLOCKED by B009**
+Status: **IN_PROGRESS — F2E1 CLOSED; F2E2 blocked by general I024 implementation**
 Nature: non-normative Package Tool / host-integration project record
 Allocated after: `TOOL001-F2D` workspace-only execution closure
 
@@ -98,7 +98,7 @@ F2E1  protos-package-tree-v1 ContentIdentity contract              CLOSED
 F2E1A logical-tree domain + portable path/entry-kind contract       CLOSED
 F2E1B canonical byte stream + method/hash contract                  CLOSED
 F2E1C independent conformance vectors + F2E1 closure                CLOSED
-F2E2  verified read-only package-store binding                     BLOCKED
+F2E2  verified read-only package-store binding                     BLOCKED_BY_DEPENDENCIES
 F2E3  external-node execution-plan construction                    BLOCKED_BY_DEPENDENCIES
 F2E4  external canonical ModuleKey + source resolver               BLOCKED_BY_DEPENDENCIES
 F2E5  public run integration + F2 external-execution closure       BLOCKED_BY_DEPENDENCIES
@@ -262,3 +262,26 @@ tree-observation boundary. LIB004 already records that directory
 enumeration/stat/symlink inspection cannot be manufactured from ambient host
 APIs. A package-only Java/NIO recursive verifier would violate F2E0, so B009
 records the missing general semantic owner and F2E2 is BLOCKED.
+
+## D046 / B009 normative resolution
+
+D046 / specification revision `0.1.383` closes the semantic gap identified
+after F2E1 without moving Package Tool policy into Java.
+
+The general Core surface is:
+
+```text
+Filesystem.entries(path)
+Filesystem.captureTree(path)
+```
+
+The critical pattern is **capture then verify then use the same captured
+Filesystem**. `captureTree` need not freeze a hostile mutable source at one
+physical instant. It produces a fresh immutable logical tree from exact
+race-safe selections; F2E2 will compute the closed `protos-package-tree-v1`
+identity over that captured capability and only admit it when the digest matches
+the lock. Execution must then bind the same verified capture, never re-open the
+original store Paths.
+
+B009 therefore moves to READY. F2E2 remains dependency-blocked until I024
+publishes the general D046 implementation.

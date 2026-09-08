@@ -261,3 +261,15 @@ archive canonicalization, or external-node execution.
 
 F2E2 is blocked by B009 until the general Filesystem tree-observation semantics
 needed to verify these vectors are normatively available.
+
+## Post-D046 dependency note
+
+The closure statement above records the state when F2E1C was published.
+
+D046 / specification revision `0.1.383` subsequently satisfies B009's
+normative tree-observation requirement with general `Filesystem.entries` and
+`Filesystem.captureTree` semantics. F2E2 therefore no longer waits on an
+unresolved specification question; it is dependency-blocked on implementation
+item I024 until that general Core capability is published.
+
+The fixed ContentIdentity vectors and all expected digests remain unchanged.
