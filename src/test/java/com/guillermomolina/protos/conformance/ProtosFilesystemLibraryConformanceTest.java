@@ -65,7 +65,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 /**
- * LIB004-A1/A2/A3/B integration harness.
+ * LIB004-A1/A2/A3/B/C integration harness.
  *
  * <p>The behavior assertions live in Protos source. Java is restricted to provisioning the
  * confined Filesystem/standard-library resolver and inspecting the host fixture or exact Core
@@ -423,6 +423,92 @@ final class ProtosFilesystemLibraryConformanceTest {
     }
 
 
+
+
+    @Test
+    void wholeTextHelpersBehaviorIsDrivenByProtosCases() throws Exception {
+        runWriteCase(
+                "read-all-text-latin1.protos",
+                WriteMode.SUCCESS,
+                new byte[] {99, 97, 102, (byte) 0xe9},
+                0,
+                0);
+        runWriteCase(
+                "read-all-text-utf8-strict-error.protos",
+                WriteMode.SUCCESS,
+                new byte[] {(byte) 0xc3, 0x28},
+                0,
+                0);
+        runWriteCase(
+                "read-all-text-no-default-encoding.protos",
+                WriteMode.SUCCESS,
+                "unchanged".getBytes(StandardCharsets.ISO_8859_1),
+                0,
+                0);
+
+        WriteFixture write =
+                runWriteCase(
+                        "write-all-text-utf16be.protos",
+                        WriteMode.SUCCESS,
+                        "stale".getBytes(StandardCharsets.ISO_8859_1),
+                        0,
+                        0);
+        assertWriteOpen(write.backend());
+
+        WriteFixture encodingFailure =
+                runWriteCase(
+                        "write-all-text-encoding-error-before-io.protos",
+                        WriteMode.SUCCESS,
+                        "unchanged".getBytes(StandardCharsets.ISO_8859_1),
+                        0,
+                        0);
+        assertEquals(0, encodingFailure.backend().writeOpenCount());
+
+        WriteFixture missingEncoding =
+                runWriteCase(
+                        "write-all-text-no-default-encoding.protos",
+                        WriteMode.SUCCESS,
+                        "unchanged".getBytes(StandardCharsets.ISO_8859_1),
+                        0,
+                        0);
+        assertEquals(0, missingEncoding.backend().writeOpenCount());
+
+        WriteFixture cancelled =
+                runWriteCase(
+                        "write-all-text-cancel-pending-write.protos",
+                        WriteMode.PENDING_UNCOMMITTED_WRITE,
+                        "old".getBytes(StandardCharsets.ISO_8859_1),
+                        0,
+                        0);
+        assertEquals(1, cancelled.resource().writeCancellations());
+
+        WriteFixture closeFailure =
+                runWriteCase(
+                        "write-all-text-close-failure.protos",
+                        WriteMode.CLOSE_FAILURE,
+                        new byte[0],
+                        0,
+                        0);
+        assertEquals(1, closeFailure.resource().closeStarts());
+    }
+
+    @Test
+    void readAllTextCloseFailureIsObservedByProtosCase() throws Exception {
+        ControlledFixture fixture = controlledFixture(ReadMode.EOF);
+        ExecutorService executor = daemonExecutor();
+        CompletableFuture<Object> execution =
+                executeAsync("read-all-text-close-failure.protos", fixture.activation(), executor);
+        try {
+            assertTrue(fixture.resource().awaitCloseStarted(), "File close did not start");
+            fixture.resource().failClose();
+            assertSame(ProtosBooleanValue.TRUE, execution.get(5, TimeUnit.SECONDS));
+        } finally {
+            fixture.resource().succeedCloseIfPending();
+            shutdown(executor);
+        }
+    }
+
+
     private Fixture fixture() throws Exception {
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap()
@@ -510,7 +596,11 @@ final class ProtosFilesystemLibraryConformanceTest {
             throws Exception {
         WriteFixture fixture =
                 writeFixture(mode, initialContent, failurePrefix, injectedPayloadSize);
-        assertSame(ProtosBooleanValue.TRUE, execute(file, fixture.activation()));
+        try {
+            assertSame(ProtosBooleanValue.TRUE, execute(file, fixture.activation()), file);
+        } catch (ProtosSignalException signal) {
+            throw new AssertionError("Protos conformance case signalled unexpectedly: " + file, signal);
+        }
         return fixture;
     }
 

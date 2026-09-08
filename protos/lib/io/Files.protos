@@ -160,3 +160,20 @@ writeAllBytes: (filesystem, path, bytes) => {
         })
     }).future()
 }
+
+readAllText: (filesystem, path, encoding) => {
+    (() => {
+        // readAllBytes owns acquisition/read/close. Decode only after that Future
+        // resolves, so no text conversion can weaken its resource-lifetime rules.
+        bytes: readAllBytes(filesystem, path).value()
+        encoding.decode(bytes)
+    }).future()
+}
+
+writeAllText: (filesystem, path, text, encoding) => {
+    // One-shot conversion is synchronous and happens before writeAllBytes can
+    // perform any Filesystem effect. EncodingError therefore cannot truncate or
+    // partially rewrite the destination. No ambient/default Encoding exists.
+    bytes: encoding.encode(text)
+    writeAllBytes(filesystem, path, bytes)
+}
