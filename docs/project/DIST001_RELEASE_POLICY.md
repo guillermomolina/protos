@@ -291,7 +291,7 @@ publication:
       origin tag-availability guards. The audit requires publication authorization
       to remain false. No candidate is selected and no tag/GitHub Release is
       created by E3.
-- `DIST001-E4` — exact candidate selection and validation — IN_PROGRESS:
+- `DIST001-E4` — exact candidate selection and validation — CLOSED:
   - `DIST001-E4A` — exact selection freeze — CLOSED. Persist the explicitly
     authorized baseline `3c23eaaccecbdcc7c2bcd86bc30c445403cfb047` / `0.2.236-SNAPSHOT` -> `0.2.236`,
     future tag `v0.2.236`, current specification revision `0.1.382`, and the
@@ -360,20 +360,41 @@ publication:
       candidate selection authorized, capabilities/limitations/blockers reviews
       PASS and `release_publication_authorized=false`; retain byte-identical main
       and candidate-local audit copies with SHA-256 `0f3ea9a321a462e977f4f33a2b4c24754a5cacbd8e45e0df8bc6639d4286692b`.
-  - `DIST001-E4D` — immutable full candidate validation and E4 closure — IN_PROGRESS:
+  - `DIST001-E4D` — immutable full candidate validation and E4 closure — CLOSED:
     - `DIST001-E4D1` — envelope/audit/record consistency — CLOSED.
     - `DIST001-E4D2` — extracted release-aware B5 candidate gate — CLOSED.
     - `DIST001-E4D3` — candidate claims/blockers/spec audit — CLOSED.
-    - `DIST001-E4D4` — tag/Release collision + publication guard — READY.
-    - `DIST001-E4D5` — full Maven + cross-E3/E4 validation — `BLOCKED_BY_DEPENDENCIES` on E4D4.
-    - `DIST001-E4D6` — freeze candidate SHA/assets + close E4 — `BLOCKED_BY_DEPENDENCIES` on E4D5.
-- `DIST001-E5` — first GitHub pre-release publication —
-  `BLOCKED_BY_DEPENDENCIES` on the explicitly selected, fully validated E4
-  candidate. This is the first slice allowed to create the public tag, GitHub
-  pre-release, and release assets.
-- `DIST001-E6` — post-publication verification and DIST001 closure —
-  `BLOCKED_BY_DEPENDENCIES` on E5. Verify tag/source identity, release metadata,
-  assets/checksums and downloadability, then close DIST001.
+    - `DIST001-E4D4` — tag/Release collision + publication guard — CLOSED.
+    - `DIST001-E4D5` — full Maven + cross-E3/E4 validation — CLOSED.
+    - `DIST001-E4D6` — freeze candidate SHA/assets + close E4 — CLOSED.
+- `DIST001-E5` — first GitHub pre-release publication — CLOSED. Explicit user authorization published tag `v0.2.236` at candidate `957b1e16793a682de1d6406e37b5734c44d32d19`, GitHub pre-release `Protos 0.2.236`, and the verified portable ZIP/checksum/manifest assets.
+- `DIST001-E6` — post-publication verification and DIST001 closure — CLOSED. Independent public verification confirms tag `v0.2.236` resolves to `957b1e16793a682de1d6406e37b5734c44d32d19`, the Release is a non-draft pre-release, and downloaded archive/checksum/manifest digests match the frozen release identity. DIST001 is CLOSED.
+
+## Observed first public pre-release
+
+DIST001 completed with the public GitHub pre-release:
+
+```text
+release_version=0.2.236
+release_tag=v0.2.236
+release_title=Protos 0.2.236
+candidate_source_revision=957b1e16793a682de1d6406e37b5734c44d32d19
+archive_name=protos-0.2.236-posix-jvm.zip
+archive_sha256=b1a58ba445d082156bd4eb637ee6df70c046abdee600d468c0fac29be065e296
+github_release_prerelease=true
+github_release_draft=false
+release_publication_complete=true
+```
+
+The tag points directly to the frozen release-only candidate. The public Release
+assets were downloaded after publication and re-hashed successfully. The exact
+observed publication identity and retained validation evidence are recorded in
+`docs/project/DIST001_FIRST_PRERELEASE_PUBLICATION.txt`.
+
+D4-D6 and E5-E6 are reconciled from that already-completed publication
+transaction rather than rerunning candidate Maven/B5 or coupling release closure
+to later `main` documentation/implementation work. Those later changes remain
+independent development after the 0.2.236 candidate.
 
 The detailed E1 readiness envelope is recorded in
 `docs/project/DIST001_FIRST_PRERELEASE_READINESS.md`.
@@ -449,8 +470,8 @@ A does not claim that the archive has passed outside-checkout execution merely
 because construction and structural validation pass. Parent B closes only after
 B5.
 
-DIST001 as a whole remains open until the required distribution and first-release
-work is complete.
+DIST001 is CLOSED: the required distribution and first public pre-release work
+is complete for Protos 0.2.236.
 
 ## Non-goals
 
