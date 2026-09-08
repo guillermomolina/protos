@@ -510,7 +510,11 @@ filesystem.captureTree(path) -> Future<Filesystem>
 
 These operations do not create a standard `Directory` or `DirectoryEntry`
 prototype. They extend an explicitly provisioned `Filesystem` capability and
-therefore cannot be used without that authority.
+therefore cannot be used without that authority. A backend may use an open
+directory handle, secure relative descriptor, directory stream, or equivalent
+resource internally, but such machinery does not become a distinct
+Protos-visible Directory identity, authority or lifetime merely because the
+backend uses it.
 
 #### 20.4.1 Common invocation, authority, failure, and cancellation rules
 
@@ -608,6 +612,14 @@ The Array order is deliberately unspecified. Portable programs that need an
 order establish it themselves from descriptor data. A successful result contains
 at most one descriptor for each exact direct-child name.
 
+The successful Array is the complete finite direct-child observation produced by
+that invocation. Core v0.1 deliberately does not expose a standard incremental
+directory iterator, stream, cursor, callback walker, pagination token, or chunked
+`entries` variant. An implementation may enumerate incrementally internally, but
+`entries` resolves only with the complete Array result. A future independently
+designed incremental facility may coexist with this operation without changing
+its semantics.
+
 On a mutable source Filesystem, `entries` is an observation operation rather than
 a directory transaction. An entry added or removed while the operation is in
 flight may or may not appear. However each returned descriptor's `name` and
@@ -670,6 +682,22 @@ the exact finite byte sequence that the capture operation successfully obtained
 from its stable selected resource. If the backend cannot finish a finite
 standard read/capture under the concurrent resource behavior it encounters, it
 fails rather than publish an incomplete or uncertain file.
+
+Successful capture transfers no programmer-managed release obligation for the
+returned captured Filesystem. Core v0.1 does not make that Filesystem a standard
+`Closable` receiver merely because capture may require resourceful backend
+machinery. Its continued validity does not depend on the caller retaining,
+closing, releasing, or otherwise managing a source traversal handle or temporary
+capture resource. Source-observation resources and tentative partial-capture
+resources remain under implementation custody.
+
+An implementation may retain managed immutable backing storage or internal
+resources required to represent the completed captured tree. Their physical
+representation, sharing, deduplication, spill strategy, content-addressing,
+copy-on-write/versioning and reclamation are implementation choices and must not
+create an undisclosed caller cleanup protocol. Files subsequently opened from the
+captured Filesystem keep the ordinary File capability/lifecycle rules, including
+`Closable` where the File contract requires it.
 
 The returned Filesystem is permanently read-only:
 

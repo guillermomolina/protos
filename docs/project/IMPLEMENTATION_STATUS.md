@@ -62,27 +62,28 @@ an item.
 | I021 | Filesystem namespace replacement/removal | CLOSED | `SAME_COMMIT` | I021-A/B/C complete; D042 / spec `0.1.379`; production confined namespace backend and Protos-visible integrated conformance published; B006 CLOSED by package-tool Filesystem Slice 2B metadata publication integration |
 | I022 | Dynamic Error handlers / unwind-safe cleanup | CLOSED | `SAME_COMMIT` | I022-A/B/C/D/E/F complete; D043 / spec `0.1.380`; replay-stable Error handlers, unwind-safe `ensure`, suspension, later-transfer precedence, cooperative cancellation, structured lifetime and task/Actor isolation have final adversarial closure evidence |
 | I023 | Standard `while` protocol | CLOSED | `SAME_COMMIT` | D044 / spec `0.1.381` + D045 / spec `0.1.382`; I023-A/B/C/D complete; B007 CLOSED; DOC001-E subsequently published and CLOSED. |
-| I024 | Filesystem directory observation + captured-tree capability | IN_PROGRESS | I024-A `SAME_COMMIT`; D046 / spec `0.1.383`; B009 READY | A host-neutral result/custody flow is CLOSED; B public Filesystem materialization is READY; C secure NIO/captured backend and D integrated conformance/B009 closure remain dependency-gated. |
+| I024 | Filesystem directory observation + captured-tree capability | IN_PROGRESS | I024-A `SAME_COMMIT`; D046 / spec `0.1.384`; B009 READY | A host-neutral result/custody flow remains CLOSED evidence; A2 post-D046 compatibility re-audit is READY; B public materialization is blocked on A2; C/D remain dependency-gated. |
 
 ### I024 — Filesystem directory observation + captured-tree capability
 
 Status: IN_PROGRESS
 
-Purpose: implement D046 / specification revision `0.1.383` as one general
-capability-confined Filesystem mechanism, close B009, and then unblock
+Purpose: implement D046 as amended by specification revision `0.1.384` as one
+general capability-confined Filesystem mechanism, close B009, and then unblock
 TOOL001-F2E2 without adding a package-specific host filesystem path.
 
 Planned slices:
 
 | Slice | Status | Version | Closure evidence | Scope / unblock condition |
 |---|---|---|---|---|
-| I024-A | CLOSED | `0.2.249-SNAPSHOT` | `SAME_COMMIT` | Host-neutral D046 tree-observation flow: Path preflight before backend authority, exact-name/no-follow-kind DTOs, defensive result snapshots, independent Future/Actor/cancellation lifecycle, and captured-tree custody release when cancellation/failure wins. No public entries/captureTree selector and no NIO implementation yet. |
-| I024-B | READY | — | — | Extend the existing host-provisioned standard Filesystem bridge with both D046 operations. Materialize a fresh Array of fresh frozen ordinary name/kind descriptors and a fresh captured Filesystem capability from A's opaque capture result. Preserve the existing shared Filesystem native-Closure provider shape. |
-| I024-C | BLOCKED_BY_DEPENDENCIES | — | — | Depends on I024-B. Implement secure NIO direct-child no-follow observation, recursive capture without following child links, immutable read-only captured-tree backend, source/captured authority separation and retained open behavior. |
-| I024-D | BLOCKED_BY_DEPENDENCIES | — | — | Depends on I024-C. Publish Protos-visible integrated D046 conformance including kinds, exact names, read-only capture, source mutation independence, cancellation/failure and verify-use stability; reconcile native-boundary inventory, close B009 and I024, and make TOOL001-F2E2 READY. |
+| I024-A | CLOSED | `0.2.249-SNAPSHOT` | `SAME_COMMIT` | Published host-neutral D046 tree-observation flow. It remains implementation evidence, not design authority; A2 must verify it against the explicitly approved 0.1.384 amendment before dependent public work proceeds. |
+| I024-A2 | READY | — | — | Post-D046/0.1.384 compatibility re-audit. Verify eager complete-result `List<Entry>` compatibility, exact-name uniqueness/fail-closed behavior, cancellation/custody cleanup, absence of public Directory/stream identity, and that backend release callbacks do not create a Protos-visible captured-Filesystem close obligation. Correct A only if the audit finds an incompatibility. |
+| I024-B | BLOCKED_BY_DEPENDENCIES | — | — | Depends on I024-A2. Extend the existing host-provisioned standard Filesystem bridge with both D046 operations. Materialize a fresh Array of fresh frozen ordinary name/kind descriptors and a fresh captured Filesystem capability without adding standard `Closable` to the captured Filesystem. Preserve the existing shared Filesystem native-Closure provider shape. |
+| I024-C | BLOCKED_BY_DEPENDENCIES | — | — | Depends on I024-B. Implement secure NIO direct-child no-follow observation and scalable recursive capture into implementation-managed immutable backing, without following child links or exposing a Directory/lifetime subsystem. Preserve source/captured authority separation and retained open behavior. |
+| I024-D | BLOCKED_BY_DEPENDENCIES | — | — | Depends on I024-C. Publish Protos-visible integrated D046 conformance including kinds, exact names/uniqueness, eager complete entries, read-only capture, no captured-Filesystem close obligation, source mutation independence, cancellation/failure and verify-use stability; reconcile native-boundary inventory, close B009 and I024, and make TOOL001-F2E2 READY. |
 
 Dependencies:
-- D046 / specification revision `0.1.383` — CLOSED normative contract;
+- D046 / specification revision `0.1.384` — CLOSED normative contract after explicit re-evaluation/amendment;
 - I009 Future/Task — CLOSED;
 - I013 Path — CLOSED;
 - I016 Filesystem/File — CLOSED;
@@ -91,7 +92,10 @@ Dependencies:
 
 I024-A deliberately does not publish the new messages. It establishes the
 host-neutral producer/result lifecycle so later materialization and NIO work do
-not duplicate cancellation/custody semantics.
+not duplicate cancellation/custody semantics. Because A predates the explicit
+D046 re-evaluation, I024-A2 must now verify that this machinery implements rather
+than silently defines the approved 0.1.384 semantics. I024-B cannot start until
+A2 closes.
 
 ### I023 — Standard `while` protocol
 
@@ -942,7 +946,7 @@ forward.
 | TOOL001-F2D3C3 | public workspace-run wiring + F2D3/F2D closure | CLOSED | `SAME_COMMIT` | C3A CLI-neutral driver plus C3B explicit public `protos run <entry> [args...]` wiring complete the workspace-run boundary. |
 | TOOL001-F2D3C3A | TOOL001 F2D3 public-run integration: CLI-neutral workspace-run driver | CLOSED | `8769e106dceeb7b7d6bf2c888a24a74f18b08e6e` | CLI-neutral C1->C2 workspace-run driver with explicit project root and logical entry. |
 | TOOL001-F2D3C3B | TOOL001 F2D3 public-run integration: public `protos run` wiring + final F2D3/F2D closure | CLOSED | `SAME_COMMIT` | Public CLI selects the current directory as project root and requires an explicit root-package logical entry; application args start after the entry, diagnostics translate the closed driver outcome, and no default application Filesystem is granted. |
-| TOOL001-F2E | external immutable-package execution continuation | IN_PROGRESS | F2E0/F2E1 CLOSED; D046/spec `0.1.383` | ContentIdentity is CLOSED; B009 semantics are READY under D046. F2E2 waits for general Core implementation I024. |
+| TOOL001-F2E | external immutable-package execution continuation | IN_PROGRESS | F2E0/F2E1 CLOSED; D046/spec `0.1.384` | ContentIdentity is CLOSED; B009 semantics are READY under D046. F2E2 waits for general Core implementation I024. |
 | TOOL001-F2E0 | external materialization prerequisite audit + decomposition | CLOSED | `SAME_COMMIT` | Fresh post-F2D audit preserves fail-closed external execution and allocates E1-E5 without an executable shortcut. |
 | TOOL001-F2E1 | `protos-package-tree-v1` ContentIdentity canonical tree contract | CLOSED | `SAME_COMMIT` | E1A logical tree/path domain, E1B canonical stream + sha256 relation, and E1C independent fixed vectors are published; protos-package-tree-v1 is frozen. |
 | TOOL001-F2E1A | ContentIdentity logical-tree domain + portable path/entry-kind contract | CLOSED | `SAME_COMMIT` | Define ContentIdentity over the already-materialized payload, include every valid regular-file path+bytes, require root `protos.toml`, make directories structural/empty directories non-semantic, reject symlink/special entries, ignore host metadata and freeze conservative portable ASCII artifact paths/collision rules. |

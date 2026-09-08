@@ -9,6 +9,50 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.384] - 2026-09-08
+
+### D046 re-evaluation — scalable enumeration, authority reuse, and captured Filesystem lifetime
+- Records the explicit user design-approval checkpoint after re-evaluating only
+  three previously under-justified D046 choices against additional prior art,
+  future extensibility, scalability, and the established Protos design
+  philosophy.
+- Reaffirms `filesystem.entries(path) -> Future<Array>` for Core v0.1 as a
+  deliberately eager complete direct-child observation. The operation accepts
+  its O(number-of-direct-children) result materialization cost; Core v0.1 does
+  not introduce a filesystem-specific iterator, stream, cursor, callback walker,
+  pagination protocol, or chunked variant. A separately designed future
+  incremental facility may coexist without changing `entries`.
+- Reaffirms `Filesystem` as the namespace-authority abstraction and retains
+  `filesystem.captureTree(path) -> Future<Filesystem>`. No standard `Directory`
+  or `DirectoryEntry` capability family is introduced. Host directory handles,
+  secure relative descriptors, or equivalent objects remain permitted backend
+  mechanisms rather than new Protos-visible identities.
+- Clarifies the captured-result lifetime boundary: successful `captureTree`
+  imposes no programmer-managed release obligation and does not make the returned
+  captured Filesystem a standard `Closable` receiver. Source traversal and
+  tentative capture resources remain implementation custody; completed immutable
+  backing representation and reclamation remain implementation strategy. Files
+  subsequently opened from the captured Filesystem retain their ordinary File /
+  `Closable` lifetime.
+- Retains D046's existing exact-name/no-follow-kind rules, unspecified Array
+  ordering, at-most-one descriptor per exact direct-child name, fail-closed
+  handling when a finite non-duplicated result cannot be represented, immutable
+  read-only capture, opaque link/other capture, and non-point-in-time source
+  capture semantics.
+
+### Compatibility and implementation state
+- This is an amendment/re-evaluation of D046 rather than a new Filesystem design
+  family. Existing `open`, `replace`, `remove`, Path, File, Process, authority,
+  Future and cancellation semantics remain unchanged.
+- B009 remains normatively `READY`: the approved amendment strengthens the
+  captured Filesystem lifetime contract without changing Package Tool's
+  capture-verify-use requirement.
+- Published I024-A remains historical implementation evidence, not design
+  authority. New `I024-A2` is `READY` to re-audit A against D046/0.1.384 before
+  public materialization proceeds; I024-B becomes dependency-blocked on A2.
+- No implementation version, runtime/source, native-boundary or license-term
+  change is introduced by this specification/design publication.
+
 ## [0.1.383] - 2026-09-08
 
 ### Capability-confined directory observation and captured trees (D046)

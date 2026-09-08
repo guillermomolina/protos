@@ -430,7 +430,7 @@ Implementation area:
 `TOOL001-F2E2` verified read-only package-store binding.
 
 Normative dependency:
-Satisfied by D046 / specification revision `0.1.383`.
+Satisfied by D046 as amended by specification revision `0.1.384`.
 
 D046 adds exactly the general capability boundary required by the closed F2E1
 ContentIdentity contract:
@@ -441,9 +441,13 @@ filesystem.captureTree(path) -> Future<Filesystem>
 ```
 
 `entries` exposes exact direct-child names plus no-follow entry kind as inert
-frozen descriptor data. `captureTree` returns a fresh immutable read-only
-Filesystem containing the recursively captured structure/regular-file bytes and
-never follows captured child links.
+frozen descriptor data and deliberately resolves with one complete eager Array
+for the selected directory in Core v0.1. `captureTree` returns a fresh immutable
+read-only Filesystem containing the recursively captured structure/regular-file
+bytes and never follows captured child links. No standard Directory/DirectoryEntry
+identity is introduced. The captured Filesystem itself carries no
+programmer-managed close/release obligation; implementation-managed immutable
+backing remains behind the Filesystem semantic boundary.
 
 The capture is intentionally not an atomic point-in-time snapshot of a mutable
 source. The returned captured Filesystem itself is the stable logical tree.
@@ -457,9 +461,10 @@ Specification authority:
 
 Objective unblock condition:
 Satisfied. Two independent implementations can now determine exact direct-child
-observation, no-follow kind classification, name/case behavior, confinement,
-stable captured-tree authority, concurrent-source semantics and
-Future/cancellation/error behavior.
+observation, eager complete-result behavior, no-follow kind classification,
+name/case/uniqueness behavior, confinement, stable captured-tree authority, the
+absence of a captured-Filesystem caller-managed close obligation,
+concurrent-source semantics and Future/cancellation/error behavior.
 
 Current consequence:
 B009 is READY, not CLOSED. `I024` must implement and validate the general Core
@@ -473,8 +478,10 @@ Implementation progress:
 I024-A host-neutral tree-observation flow is published at `0.2.249-SNAPSHOT`. It
 establishes Path preflight, exact-name/no-follow-kind DTOs, defensive snapshot,
 Future/cancellation/Actor lifecycle and captured-result custody release without
-publishing the language selectors or adding NIO traversal. I024-B is READY.
-B009 remains READY until complete D046 implementation/conformance closes it.
+publishing the language selectors or adding NIO traversal. After the explicit
+D046/0.1.384 re-evaluation, I024-A2 is READY to re-audit that substrate and
+I024-B is BLOCKED_BY_DEPENDENCIES on A2. B009 itself remains READY until complete
+D046 implementation/conformance closes it.
 
 
 Independent work:

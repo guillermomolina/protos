@@ -1241,8 +1241,8 @@ material inside a documentation-only slice.
 
 ## Current implementation boundary: D046 is specified, I024 is still open
 
-Specification revision `0.1.383` defines two additional general Filesystem
-operations:
+D046 as amended by specification revision `0.1.384` defines two additional
+general Filesystem operations:
 
 ```text
 filesystem.entries(path) -> Future<Array>
@@ -1250,7 +1250,11 @@ filesystem.captureTree(path) -> Future<Filesystem>
 ```
 
 They provide capability-confined directory observation and an immutable
-read-only captured-tree Filesystem.
+read-only captured-tree Filesystem. The v0.1 `entries` result is deliberately one
+complete eager Array rather than a live directory stream. The captured Filesystem
+itself does not gain a standard `close()` obligation; any implementation-managed
+immutable backing remains behind that capability boundary, while Files opened
+from it keep their ordinary File/`Closable` lifecycle.
 
 However, on the current reference implementation baseline for this chapter,
 `I024 — Filesystem directory observation + captured-tree capability` remains
