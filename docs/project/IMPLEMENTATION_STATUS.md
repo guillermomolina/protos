@@ -1156,6 +1156,7 @@ repository when formally introduced rather than relying on chat/prompt history.
 | DIST001-E4D6 | Freeze candidate SHA/assets + close E4 | BLOCKED_BY_DEPENDENCIES | — | Depends on E4D5; freeze exact candidate/archive/envelope/audit identity for E5 while keeping publication separately unauthorized. |
 | DIST001-E5 | First GitHub pre-release publication | BLOCKED_BY_DEPENDENCIES | — | Depends on the explicitly selected, fully validated E4 candidate; first slice allowed to create the public tag, GitHub pre-release and release assets. |
 | DIST001-E6 | Published pre-release verification and DIST001 closure | BLOCKED_BY_DEPENDENCIES | — | Depends on E5; independently verify tag/source identity, pre-release metadata, downloadable assets/checksums and runtime/source disclosures, then close DIST001. |
+| DIST002 | Development/release toolchain alignment | OPEN | — | Deferred follow-up, intentionally not a dependency of the frozen DIST001 0.2.236 candidate. Centralize Java bytecode/GraalVM/JDK/Truffle/Maven coordinates; align devcontainer + ordinary CI + release validation; pre-provision the primary runtime so normal gates do not download JDKs on demand; make future runtime migrations explicit. See `docs/project/DIST002_TOOLCHAIN_ALIGNMENT.md`. |
 
 DIST001-A/B/C/D and DIST001-E1/E2/E3 are closed. DIST001-E4 is READY for an
 explicit exact development-baseline/public-version selection decision. The
