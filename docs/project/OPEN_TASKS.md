@@ -64,6 +64,42 @@ Current triage: - D038 has explicit project-owner confirmation and needs only ha
 - D044 remains the priority review item because no recovered evidence yet demonstrates explicit project-owner selection of its complete published semantics. is not ratification.
 - D002 and D010 and D016-D019 are expected to be predominantly project-owner decisions, but their approval evidence must be checked rather than inferred. Recorded review results:
 
+- D016 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D016 / specification `0.1.354` after comparison with Erlang/OTP,
+  Akka Typed, Ray, Orleans and Elixir/GenServer plus adversarial, distributed and
+  future-scalability review. `Actor.spawn(...) -> ActorRef` remains the sole Core
+  Actor-creation result. Creator-side module resolution, argument validation and
+  complete transfer/delegation occur synchronously before the semantic creation
+  cutover; failure there creates no observable partial Actor. At the cutover
+  exactly one Actor incarnation, incarnation identity and `ActorRef` exist, and
+  the returned reference denotes that same incarnation for its lifetime. Runtime
+  placement/admission, bootstrap execution and the `READY` transition occur after
+  that cutover and cannot replace the result with a `SpawnOperation`, Future,
+  admission handle, placement handle or other public coordination identity.
+  Temporary capacity shortage delays progress of the already-created incarnation
+  through `INITIALIZING`; it is not a synchronous `spawn` failure, does not imply
+  unlimited oversubscription, and does not create an implicit timeout, deadline
+  or creation-specific cancellation protocol. `ActorRef.stop()` remains the
+  ordinary public termination request even while initialization is pending.
+  Pre-`READY` send/request activity uses the existing bounded routing,
+  acceptance, backpressure, cancellation, failure and uncertainty rules, with no
+  bootstrap mailbox or second message-delivery universe; application behavior is
+  not dispatched before `READY`. Admission retains weak fairness for a
+  continuously eligible incarnation when compatible opportunities recur, while
+  queueing, scheduler, placement, resource-accounting and provisioning machinery
+  remain unobservable implementation choices. Group reconciliation may count a
+  known live in-flight Actor candidate toward one observed membership deficit
+  without making that candidate routing-eligible before ordinary readiness and
+  membership eligibility. Future readiness observation, explicit placement or
+  reservation facilities, admission deadlines/priorities, virtual/durable Actor
+  layers, autoscaling controls and infrastructure-controller APIs remain separate
+  explicit designs rather than retroactive changes to Core `spawn`. The original
+  normative D016 publication is commit
+  `d4e20835078429b291db00aad4554dab3218a473`. This governance classification
+  changes no normative specification, implementation, blocker, implementation
+  version, runtime, native boundary or license terms, creates no implementation
+  follow-up, and does not classify D015 or D017-D019 by transitivity.
+
 - D014 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
   retaining D014 / specification `0.1.356` after recovered historical owner
   selection plus renewed cross-language, adversarial and future-scalability
