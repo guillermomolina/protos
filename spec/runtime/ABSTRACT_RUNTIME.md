@@ -1728,10 +1728,13 @@ function transferToHandler(frame, error):
 If `unwindThroughProtectedExtent(frame)` completes normally, control reaches the
 selected handler closure with the frame already inactive.
 
-If cleanup during that unwind signals `cleanupError`, the existing cleanup Error
-precedence replaces the pending transfer to `frame`. Handler search for
-`cleanupError` cannot include `frame`; it begins from the remaining active
-dynamic handler context at the cleanup signaling point.
+If an Error transfer initiated during that unwind escapes the cleanup Closure, the
+existing cleanup Error precedence replaces the pending transfer to `frame`. Handler
+search for the replacement Error cannot include `frame`; it begins from the
+remaining active dynamic handler context at the escaping cleanup transfer point.
+If an Error is completely handled inside cleanup and cleanup then completes
+normally, no replacement transfer escapes and the original pending route to
+`frame` continues.
 
 No implementation may defer semantic frame deactivation until after cleanup in a
 way that makes the selected handler recursively catch a cleanup failure merely

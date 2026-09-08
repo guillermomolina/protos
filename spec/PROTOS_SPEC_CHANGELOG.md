@@ -9,6 +9,20 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.385] - 2026-09-08
+
+### AUD001 D043 ratification clarification — cleanup escape, handler destination, and lifetime boundaries
+- Records explicit project-owner ratification of D043 after comparative, adversarial and future-scale review. The published ordinary Closure `ensure(cleanup)` model remains selected: eager Closure validation, one protected dynamic extent, suspension/replay stability, exactly-once LIFO cleanup on semantic exit, exact normal-result preservation, explicit asynchronous waiting, and later escaping-transfer precedence.
+- Clarifies that later Error precedence is triggered only by an Error transfer that escapes the cleanup Closure. An Error signaled and completely handled inside cleanup does not replace the previously pending completion/transfer; if cleanup then completes normally, the original pending outcome continues.
+- Clarifies selected-handler ordering as a one-shot unwind destination: selection consumes that handler frame before crossed cleanup runs. Normal crossed cleanup reaches the selected destination; a later transfer that escapes cleanup supersedes the original transfer and abandons that destination, so the replacement transfer searches only still-active outer handlers or handlers explicitly installed by cleanup.
+- Clarifies cancellation shielding composition with the existing idempotent `Future.cancel()` contract: repeated calls do not create a distinct or stronger cancellation request and therefore do not pierce shielding of the already-honored request while its cleanup is running. This remains narrow shielding, not a general cancellation mask.
+- Clarifies the lifetime/scale boundary: D043 exactly-once cleanup is a semantic-unwind guarantee while the owning execution remains capable of executing Protos cleanup. Fail-stop loss or forced termination that prevents Protos execution is outside that guarantee. Live dynamic `ensure` state is not transferred across asynchronous execution-domain, Actor, Process/Node, restart, or distribution boundaries merely because values/Futures cross them.
+- Keeps future resumable recovery, continuations/effects, durable workflows, distributed compensation, hard termination and multi-shot continuation duplication as separately designed mechanisms. They may compose with D043 only through explicit contracts and cannot retroactively reinterpret Core v0.1 `Error.signal()` or silently clone a live `ensure` installation.
+
+### Compatibility and implementation state
+- This amendment clarifies the already-published D043 semantics and records owner approval; it does not require a runtime behavior change. Existing I022 conformance already covers selected-handler inactivity, cleanup suspension/replay, Error/non-local-return precedence, cancellation cleanup and task-local control isolation.
+- No implementation version, native-boundary, license-term, syntax, public Task, destructor, suppressed-error/cause-chain, implicit Future-await, distributed-cleanup or restart mechanism is introduced.
+
 ## [0.1.384] - 2026-09-08
 
 ### D046 re-evaluation — scalable enumeration, authority reuse, and captured Filesystem lifetime

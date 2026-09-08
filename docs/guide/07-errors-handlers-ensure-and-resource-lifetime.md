@@ -335,19 +335,23 @@ dynamically innermost matching handler.
 You do not construct or order a separate handler list. Ordinary nesting defines
 the dynamic order.
 
-## A selected handler is consumed before it runs
+## A selected handler is a one-shot unwind destination
 
 When a matching handler is selected, its handler frame becomes inactive before
-unwinding reaches and invokes the handler Closure.
+unwinding crosses `ensure` scopes and before the handler Closure is invoked. Think
+of that selection as committing one unwind destination for the original Error.
 
-That gives this important rule:
+If crossed cleanup completes normally, control reaches that destination and the
+handler receives the original Error. If crossed cleanup escapes with a later
+transfer, that later transfer supersedes the original one and the consumed
+destination is abandoned rather than reused for the replacement transfer.
+
+The same consumption also gives this important rule:
 
 > The selected handler cannot catch an Error raised by its own handler Closure.
 
 If that Closure signals another Error, handler search continues among still
 active outer handlers.
-
-This prevents accidental recursive self-catching.
 
 ## A handler receives the exact signaled Error
 
@@ -621,14 +625,17 @@ Cleanup is ordinary executable code and can itself transfer control.
 If cleanup begins a new transfer that leaves cleanup, that **later** transfer
 supersedes the pending earlier one.
 
-For Error precedence:
+For Error precedence, when the cleanup Error **escapes cleanup**:
 
 ```text
 body signals originalError
 cleanup signals cleanupError
+cleanupError escapes cleanup
 ```
 
-the active transfer becomes `cleanupError`.
+the active transfer becomes `cleanupError`. If cleanup installs a handler that
+completely handles `cleanupError` inside cleanup and cleanup then completes
+normally, no replacement transfer escapes and `originalError` remains pending.
 
 Core does not automatically create:
 
@@ -650,16 +657,16 @@ There is an important interaction between `handle` and `ensure`.
 Suppose a handler has already been selected for `originalError`, and unwinding
 toward that handler crosses an `ensure` scope.
 
-The selected handler is already inactive while that cleanup runs.
+The selected handler is already inactive while that cleanup runs: it is the
+one-shot destination chosen for `originalError`.
 
-Therefore, if cleanup signals `cleanupError`, the consumed handler cannot
-recursively catch that cleanup failure.
+If cleanup completes normally, the unwind reaches that destination and the
+selected handler receives `originalError`.
 
-If cleanup completes normally, the originally selected handler receives
-`originalError`.
-
-If cleanup signals a new Error, the cleanup Error takes precedence and normal
-outer handler search applies.
+If a new Error escapes cleanup, it supersedes `originalError`; the consumed
+destination is abandoned and normal search among still-active outer or
+cleanup-installed handlers applies. The consumed handler is not reused even if
+the replacement Error would also match it.
 
 ## Cancellation-safe cleanup is narrowly protected
 
@@ -670,7 +677,9 @@ re-delivered at suspension boundaries inside that cleanup.
 This lets cleanup perform asynchronous release without immediately being
 interrupted by the very cancellation it is processing.
 
-This is not a general cancellation mask.
+This is not a general cancellation mask. `Future.cancel()` is idempotent, so
+repeating `cancel()` on that same pending Future does not manufacture a stronger
+request that pierces the shielding of the request already being unwound.
 
 Cleanup can still fail with ordinary Errors or encounter other independent
 outcomes.
@@ -704,6 +713,11 @@ deterministic external resources.
 
 Core provides no guarantee that a GC finalizer or reachability callback will run
 at the semantic point when a resource must be released.
+
+Likewise, `ensure` is an unwind guarantee while the owning execution can still
+run Protos code; it is not a promise that cleanup runs after fail-stop Process/Node
+loss or forced termination that prevents further execution. Durable or distributed
+recovery requires an explicit higher-level protocol.
 
 The safe mental model is:
 

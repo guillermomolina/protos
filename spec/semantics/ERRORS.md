@@ -250,24 +250,33 @@ because the new error also matches `matchPrototype`.
 
 ### Selected handler deactivation precedes unwind cleanup
 
-Selecting a matching handler consumes that dynamic handler frame before control
-begins unwinding protected scopes toward the handler boundary.
+Selecting a matching handler consumes that dynamic handler frame as a one-shot unwind
+destination before control begins unwinding protected scopes toward the
+handler boundary. Consumption makes the frame inactive for new matching, but the
+selected destination is still invoked if the original Error reaches it after all
+crossed cleanup completes normally.
 
 Therefore any `ensure` cleanup executed while unwinding toward the selected
-handler runs with that selected handler already inactive. If such cleanup
-signals a new `Error`, the cleanup Error follows ordinary handler search among
-still-active outer handlers and any handlers explicitly installed by the cleanup
-itself. It cannot select the already-consumed handler frame.
+handler runs with that selected handler already inactive. If an Error transfer
+initiated by such cleanup escapes the cleanup Closure, that Error follows ordinary
+handler search among still-active outer handlers and any handlers explicitly
+installed by cleanup. It cannot select the already-consumed handler frame.
 
-This ordering applies even when the cleanup Error would also match the selected
-handler's `matchPrototype`. The selected handler does not recursively catch a
-failure that occurs while unwinding toward itself.
+This ordering applies even when the escaping cleanup Error would also match the
+selected handler's `matchPrototype`. The selected destination is abandoned when
+the escaping cleanup transfer supersedes the original transfer; it is not reused as
+a handler for the replacement Error.
+
+An Error signaled and completely handled inside cleanup does not escape cleanup.
+If that cleanup then completes normally, the original Error remains pending and the
+already-selected destination is invoked with that original Error under the existing
+rules.
 
 If all crossed cleanup completes normally, the originally selected handler is
-invoked with the original Error under the existing rules. If cleanup instead
-signals a new Error, the general cleanup-Error precedence rule supersedes the
-original transfer; the originally selected handler is not invoked for either
-Error unless some separate still-active installation selects it independently.
+invoked with the original Error under the existing rules. If an Error transfer from
+cleanup instead escapes and supersedes the original transfer, the originally
+selected handler is not invoked for either Error unless some separate still-active
+installation selects the replacement Error independently.
 
 Nested `handle` calls define ordering structurally: the dynamically innermost
 matching handler is selected first. Core v0.1 therefore needs no separate

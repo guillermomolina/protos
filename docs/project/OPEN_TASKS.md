@@ -52,6 +52,27 @@ Current triage:
 
 Recorded review results:
 
+- D043 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved the
+  complete reviewed standard Closure `ensure(cleanup)` design and the bounded
+  clarification published as specification `0.1.385`. `ensure` remains an ordinary
+  Closure/message protocol with eager validation, one task-local protected dynamic
+  extent, suspension/replay stability, exactly-once LIFO cleanup on normal, `^`,
+  Error and cooperative-cancellation exits, exact normal-result preservation, no
+  implicit Future wait/adoption, no automatic Error mutation/cause/suppression/
+  composite wrapping, and precedence for a later transfer only when it escapes
+  cleanup. An Error handled completely inside cleanup does not supersede
+  the pending transfer. A selected Error handler is a consumed one-shot unwind
+  destination: normal crossed cleanup reaches it, while an escaping replacement
+  transfer abandons it and searches only still-active handlers. The already-honored
+  cancellation request remains narrowly shielded during cleanup; repeated
+  idempotent `Future.cancel()` calls are not a stronger request. D043 guarantees
+  semantic-unwind cleanup while execution remains capable of running Protos code,
+  not deterministic GC/destructor cleanup or cleanup after fail-stop/forced loss,
+  and live dynamic cleanup state does not
+  become cross-Task/P/Actor/Process/Node or restart/distribution state. Future
+  resumable recovery, continuations/effects, multi-shot duplication, hard
+  termination, durable workflows and distributed compensation remain separate
+  explicit design work rather than reinterpretations of Core v0.1 `ensure`.
 - D045 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved retaining
   its task-scoped ownership core: synchronous Closure/method activations do not create
   structured scopes; returning, storing or wrapping a pending Future does not alter

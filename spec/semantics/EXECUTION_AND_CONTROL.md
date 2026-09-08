@@ -527,6 +527,13 @@ invocation returns. Non-detached child work can still delay terminal completion 
 the enclosing owning asynchronous computation, while detached work does not extend
 that structured lifetime.
 
+The live `ensure` installation is task-local dynamic control state. It is not
+copied or transferred merely because protected code creates or returns a
+Future, begins isolated parallel execution, transfers values/capabilities to
+another Actor or Process/Node, or because a separate/later Actor incarnation is
+created. Those execution domains own their own control/lifetime state; only code
+actually executing inside this installation participates in its protected extent.
+
 ### Suspension is not scope exit
 
 Suspending the protected execution does not trigger cleanup.
@@ -610,10 +617,16 @@ by Core.
 Cleanup-triggered Error precedence and handler-search consequences are owned by
 `ERRORS.md`.
 
-If cleanup signals `cleanupError`, that Error becomes the active transfer and
-supersedes any pending normal completion, non-local return, Error unwind, or
-cancellation unwind. The superseded transfer does not become active again if
-`cleanupError` is subsequently handled.
+If an Error transfer initiated by cleanup escapes the cleanup Closure, that Error
+becomes the active transfer and supersedes any pending normal completion,
+non-local return, Error unwind, or cancellation unwind. Once that escaping Error
+has superseded the earlier transfer, the superseded transfer does not become
+active again if the cleanup Error is subsequently handled outside cleanup.
+
+An Error signaled and completely handled inside cleanup does not escape the
+cleanup Closure and therefore does not supersede the pending transfer. If cleanup
+then completes normally, the previously pending completion or transfer continues
+unchanged.
 
 Core does not implicitly combine the old and new failures as a composite Error,
 suppressed-error list, cause chain, or wrapper. Libraries may build explicit
@@ -621,8 +634,11 @@ reporting conventions with ordinary objects and handlers.
 
 When an Error handler was selected before unwind crossed this `ensure` scope,
 the selected handler is already inactive while cleanup runs under the ordering
-owned by `ERRORS.md`; cleanup cannot recursively re-select that consumed handler
-merely because its own Error also matches it.
+owned by `ERRORS.md`. That selected frame is a one-shot unwind destination: normal
+crossed cleanup preserves the route to it, while a later transfer that escapes
+cleanup supersedes the original transfer and abandons that selected destination.
+The replacement transfer cannot re-select the consumed handler merely because it
+also matches; it uses the still-active handler context defined by `ERRORS.md`.
 
 ### Cancellation-safe cleanup
 
@@ -642,6 +658,12 @@ control transfers into successful cleanup. An implementation may represent this
 with masking, an unwind phase, continuation metadata, or other machinery, but
 the distinction is not otherwise observable.
 
+Under the idempotent request contract owned by
+`../concurrency/FUTURES_AND_TASKS.md`, repeated `Future.cancel()` calls while the
+same Future remains pending do not create a distinct or stronger cancellation
+request. Repeating `cancel()` therefore does not pierce the shielding of the
+already-honored request while cleanup for that unwind is running.
+
 If cleanup completes normally during cancellation unwind, cancellation
 continues afterward. A task's Future reaches terminal cancelled state only after
 all applicable cleanup and the structured-cancellation requirements owned by
@@ -656,7 +678,16 @@ transfer that reaches this cleanup rule has abandoned the signaling continuation
 a handler cannot keep the protected computation active by returning, resuming,
 retrying, or supplying a value to the signal point. A future recovery facility,
 if standardized, must be a distinct control mechanism with its own cleanup
-contract rather than an alternate interpretation of Core `Error.signal()`.
+contract rather than an alternate interpretation of Core `Error.signal()`. A
+future continuation/effect contract must explicitly define capture, resumption,
+abandonment and any multi-shot duplication relative to cleanup; D043 itself defines
+no continuation cloning or duplication semantics.
+
+The exactly-once guarantee above applies to semantic exits while the owning
+execution remains capable of running Protos cleanup code. Fail-stop loss or forced
+termination of the execution environment that prevents further Protos execution is
+not a semantic unwind and carries no D043 guarantee that cleanup will run. Durable
+or distributed recovery/compensation requires its own explicit protocol.
 
 Higher-level resource protocols such as `use`, `withOpen`, or similar APIs may
 be implemented on top of this guarantee using ordinary messages and closures.
