@@ -236,3 +236,29 @@ Protos source. The historical bare package entry remains distinct from the
 TOOL001 closes only when the bounded Package Tool outcome selected by its current
 architecture/project plan is implemented, validated, and published. Completion
 of one legacy or TOOL001 sub-slice never closes the parent by implication.
+
+## Temporary single Java runner for TOOL001 Protos tests
+
+Until TOOL002 owns the project test-execution boundary, TOOL001 observable
+behavior that can be expressed in Protos remains under
+`protos/tests/package-tool/**` and is executed through exactly one TOOL001-owned
+Java bridge:
+
+```text
+src/test/java/com/guillermomolina/protos/execution/ProtosPackageToolProtosTest.java
+```
+
+Do not add another Java test class whose responsibility is merely to compile and
+execute a TOOL001 Protos fixture/corpus. Migrate additional corpora into this
+runner in bounded slices. Separate Java tests remain appropriate for genuinely
+Java-side mechanics, but those tests must not become a second owner for
+executing TOOL001 Protos fixture sources.
+
+The runner executes source through `ProtosRootTaskExecution` rather than direct
+`CallTarget.call(activation)`. Therefore fixture code runs in a real
+RootActor-local task and can suspend through ordinary `Future.value()` when later
+TOOL001 corpora require it.
+
+Runner-A migrates only the existing `version` and `lock` manifest-driven corpora.
+Filesystem-backed and host-stateful corpora remain on their existing wrappers
+until later bounded migration slices.
