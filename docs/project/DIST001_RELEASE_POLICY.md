@@ -361,8 +361,8 @@ publication:
       PASS and `release_publication_authorized=false`; retain byte-identical main
       and candidate-local audit copies with SHA-256 `0f3ea9a321a462e977f4f33a2b4c24754a5cacbd8e45e0df8bc6639d4286692b`.
   - `DIST001-E4D` — immutable full candidate validation and E4 closure — IN_PROGRESS:
-    - `DIST001-E4D1` — envelope/audit/record consistency — READY.
-    - `DIST001-E4D2` — extracted release-aware B5 candidate gate — `BLOCKED_BY_DEPENDENCIES` on E4D1.
+    - `DIST001-E4D1` — envelope/audit/record consistency — CLOSED.
+    - `DIST001-E4D2` — extracted release-aware B5 candidate gate — READY.
     - `DIST001-E4D3` — candidate claims/blockers/spec audit — `BLOCKED_BY_DEPENDENCIES` on E4D2.
     - `DIST001-E4D4` — tag/Release collision + publication guard — `BLOCKED_BY_DEPENDENCIES` on E4D3.
     - `DIST001-E4D5` — full Maven + cross-E3/E4 validation — `BLOCKED_BY_DEPENDENCIES` on E4D4.

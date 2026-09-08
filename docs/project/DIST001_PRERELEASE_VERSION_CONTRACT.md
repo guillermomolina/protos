@@ -597,3 +597,36 @@ full candidate/B5 gate; immutable full candidate validation remains E4D.
 E4C is now closed. E4D is decomposed into independent validation leaves starting
 with E4D1 envelope/audit consistency. Release publication remains separately
 unauthorized; no tag, GitHub Release, or asset upload exists.
+
+## E4D1 immutable consistency checkpoint
+
+E4D begins with an independent consistency pass over the already prepared
+candidate state. The pass is intentionally narrower than later E4D leaves: it
+does not execute release-aware B5, re-audit claim truth, or check tag/GitHub
+Release collisions.
+
+The fixed identity is:
+
+```text
+release_baseline_revision=3c23eaaccecbdcc7c2bcd86bc30c445403cfb047
+candidate_source_revision=957b1e16793a682de1d6406e37b5734c44d32d19
+release_version=0.2.236
+release_tag=v0.2.236
+specification_revision=0.1.382
+archive_sha256=b1a58ba445d082156bd4eb637ee6df70c046abdee600d468c0fac29be065e296
+claims_sha256=ad0b77ae5bd41bc16e306487072620c99581643d68ed5141011e7537c0439e33
+release_notes_sha256=98684922feebb1cec41da2a51fca6776cd76aa5c99561b37adb733e5b944ed36
+release_manifest_sha256=2d71e48bf27e52d76bd4bd9166dca4298487532b1de08e832758c7f2abe7dcd4
+portable_checksum_sha256=34b2d9a86c0e136ac2f9d92c8edf94563b9ea941c896f54eddce929680969035
+candidate_audit_sha256=0f3ea9a321a462e977f4f33a2b4c24754a5cacbd8e45e0df8bc6639d4286692b
+d1_record_consistency=PASS
+release_publication_authorized=false
+```
+
+The independent D1 verifier cross-checks the selection, artifact, claims,
+envelope and audit schemas against that frozen identity, then verifies the exact
+candidate-local archive/envelope/audit bytes and the byte-identical main/local
+candidate audit. It also requires the candidate worktree to remain clean and
+detached. The result is persisted in `DIST001_E4_VALIDATION.txt`.
+
+E4D2 is now READY and owns the extracted release-aware B5 candidate gate.
