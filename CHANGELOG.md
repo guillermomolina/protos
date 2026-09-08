@@ -1,3 +1,8 @@
+## 0.2.247-SNAPSHOT
+
+- Publish `TOOL002-F3C1B2A1P1 — standard Object.hasSlot reflection prerequisite`. The F3C1B2 live-inspector audit exposed that the already-normative inherited `Object.hasSlot(name)` selector was absent from Core. Implement exactly that general reflection operation as one reviewed `ProtosStandardObjectProtocol` representation bridge: require one semantic String argument, inspect only the receiver's own local slot table, return canonical true/false, and treat opaque represented values as having no representation-owned local slots. Non-String or invalid arity signals the ordinary Error.
+- Add Protos conformance for local-only/non-delegating presence, represented-value false, invalid-name and arity failure. Reconcile the executable/native architecture inventory from 111 to 112 Core construction sites and Object provider 5 to 6. `slotNames`, `slotValue`, and `removeSlot` remain out of scope; Test Tool Runner, `executionInspect`, Future policy and canonical TOOL002 ledgers are unchanged. No normative specification change.
+
 ## 0.2.246-SNAPSHOT
 
 

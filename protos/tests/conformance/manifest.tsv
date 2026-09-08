@@ -627,3 +627,7 @@ control/while-condition-every-iteration-suspends-exact-once.protos	future-intege
 control/while-body-every-iteration-suspends-exact-once.protos	future-integer	322223
 control/while-cancellation-no-loop-poll-ensure-once.protos	future-integer	22110
 control/while-condition-body-repeated-suspension-exact-once.protos	future-integer	443343016
+reflection/has-slot-local-only.protos	boolean	true
+reflection/has-slot-represented-values.protos	boolean	true
+reflection/has-slot-invalid-name.protos	error	-
+reflection/has-slot-arity.protos	error	-

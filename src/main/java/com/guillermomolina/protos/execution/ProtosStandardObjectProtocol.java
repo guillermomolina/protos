@@ -27,6 +27,7 @@ import com.guillermomolina.protos.runtime.ProtosNonLocalReturnException;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import java.util.List;
@@ -59,6 +60,12 @@ public final class ProtosStandardObjectProtocol {
                 if (!supplied.isEmpty()) throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
                 return new com.guillermomolina.protos.runtime.ProtosIntegerValue(com.guillermomolina.protos.runtime.ProtosIdentity.identityHash(activation.receiver()));
             }));
+        }
+        if (!object.hasLocalSlot("hasSlot")) {
+            object.createLocalSlot(
+                    "hasSlot",
+                    ProtosClosureValue.nativeClosure(
+                            ProtosStandardObjectProtocol::hasSlot));
         }
         if (!object.hasLocalSlot("parent")) {
             object.createLocalSlot(
@@ -93,6 +100,19 @@ public final class ProtosStandardObjectProtocol {
                     "while",
                     ProtosClosureValue.nativeClosure(ProtosStandardObjectProtocol::whileLoop));
         }
+    }
+
+    private static Object hasSlot(ProtosActivation activation, List<?> supplied) {
+        if (supplied.size() != 1
+                || !(supplied.get(0) instanceof ProtosStringValue name)) {
+            throw invalid(activation);
+        }
+
+        Object receiver = activation.receiver();
+        if (receiver instanceof ProtosObjectValue ordinary) {
+            return ProtosBooleanValue.of(ordinary.hasLocalSlot(name.value()));
+        }
+        return ProtosBooleanValue.FALSE;
     }
 
     private static Object whileLoop(ProtosActivation activation, List<?> supplied) {
