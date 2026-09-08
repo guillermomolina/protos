@@ -535,3 +535,35 @@ Programming Guide coverage.
 E4C3 does not render `RELEASE_NOTES.md`. E4C4 owns deterministic E3B envelope
 generation from this exact ordered claim set. No claim-selection result creates
 a tag, GitHub Release, release asset, or release-publication authorization.
+
+## E4C4 deterministic release-envelope checkpoint
+
+The frozen E4C3 claims have been rendered through the already-published E3B
+metadata generator into one persistent candidate-local envelope:
+
+```text
+release_baseline_revision=3c23eaaccecbdcc7c2bcd86bc30c445403cfb047
+candidate_source_revision=957b1e16793a682de1d6406e37b5734c44d32d19
+release_version=0.2.236
+specification_revision=0.1.382
+archive_name=protos-0.2.236-posix-jvm.zip
+archive_sha256=b1a58ba445d082156bd4eb637ee6df70c046abdee600d468c0fac29be065e296
+claims_sha256=ad0b77ae5bd41bc16e306487072620c99581643d68ed5141011e7537c0439e33
+envelope_directory_name=release-envelope-0.2.236
+release_notes_sha256=98684922feebb1cec41da2a51fca6776cd76aa5c99561b37adb733e5b944ed36
+release_manifest_sha256=2d71e48bf27e52d76bd4bd9166dca4298487532b1de08e832758c7f2abe7dcd4
+portable_checksum_sha256=34b2d9a86c0e136ac2f9d92c8edf94563b9ea941c896f54eddce929680969035
+deterministic_generation_verified=true
+e3c2_envelope_verification=PASS
+release_publication_authorized=false
+```
+
+E4C4 generated the envelope twice from the same fixed archive and ordered C3
+claim record and required byte-identical outputs before retaining the persistent
+copy. It then ran the already-published independent E3C2 envelope verifier and
+checked that the rendered capability and limitation bullets preserve the C3
+ordering and text exactly.
+
+The envelope remains local release-preparation state under the detached candidate
+worktree. E4C5 owns candidate-audit materialization. No Git tag, GitHub Release,
+asset upload, or release-publication authorization is created here.

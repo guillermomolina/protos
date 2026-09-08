@@ -351,10 +351,11 @@ publication:
       `protos-0.2.236-posix-jvm.zip` / `b1a58ba445d082156bd4eb637ee6df70c046abdee600d468c0fac29be065e296`. Candidate B001-B008 blocker review is PASS;
       Package Tool/Test Tool/documentation incompleteness and exact runtime scope
       are disclosed. Publication remains unauthorized.
-    - `DIST001-E4C4` — deterministic release-envelope generation — READY.
+    - `DIST001-E4C4` — deterministic release-envelope generation — CLOSED.
       Render the E3B release notes/manifest/basename-only checksum from the exact
       C3 claim record and already-verified archive without changing claim text.
-    - `DIST001-E4C5` — candidate-audit materialization — `BLOCKED_BY_DEPENDENCIES` on E4C4.
+      Exact envelope identity: `protos-0.2.236-posix-jvm.zip` / `b1a58ba445d082156bd4eb637ee6df70c046abdee600d468c0fac29be065e296`, claims `ad0b77ae5bd41bc16e306487072620c99581643d68ed5141011e7537c0439e33`, notes `98684922feebb1cec41da2a51fca6776cd76aa5c99561b37adb733e5b944ed36`, manifest `2d71e48bf27e52d76bd4bd9166dca4298487532b1de08e832758c7f2abe7dcd4`, checksum-file `34b2d9a86c0e136ac2f9d92c8edf94563b9ea941c896f54eddce929680969035`. Two independent generations are byte-identical and E3C2 verification passes; publication remains unauthorized.
+    - `DIST001-E4C5` — candidate-audit materialization — READY.
   - `DIST001-E4D` — immutable full candidate validation and E4 closure —
     `BLOCKED_BY_DEPENDENCIES` on E4C. Freeze the exact validated candidate SHA
     and assets for E5 while keeping release publication separately unauthorized.
