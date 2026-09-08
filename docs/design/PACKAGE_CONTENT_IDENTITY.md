@@ -1,6 +1,6 @@
 # Protos Package ContentIdentity — canonical logical tree v1
 
-Status: **IN_PROGRESS through CLOSED TOOL001-F2E1A**
+Status: **IN_PROGRESS through CLOSED TOOL001-F2E1B**
 Nature: non-normative Package Tool/package-artifact design
 Owning work: `TOOL001-F2E1`
 
@@ -40,8 +40,8 @@ become executable source authority.
 
 ```text
 F2E1A  logical-tree domain + portable path/entry-kind contract     CLOSED
-F2E1B  canonical byte stream + method/hash contract                READY
-F2E1C  independent conformance vectors + F2E1 closure              BLOCKED_BY_DEPENDENCIES
+F2E1B  canonical byte stream + method/hash contract                CLOSED
+F2E1C  independent conformance vectors + F2E1 closure              READY
 ```
 
 E1A answers **what the logical tree is**. It does not answer how that tree is
@@ -412,22 +412,262 @@ E1A does **not** yet define:
 
 Those belong to E1B/E1C or later F2E work.
 
-## F2E1B exact next scope
+## F2E1B selected canonical byte-stream and digest contract
 
-E1B must serialize exactly E1A's finite map and no additional filesystem facts.
+E1B serializes exactly E1A's finite map and no additional filesystem facts.
 
-It must freeze:
-- one total canonical order over canonical path bytes;
-- unambiguous framing/domain separation for paths and file contents;
-- exact integer/length encoding;
-- method identifier `protos-package-tree-v1`;
-- initial supported hash algorithm and digest computation;
-- algorithm agility without allowing the same method token to mean different
-  tree semantics;
-- streaming equivalence: a streaming verifier and in-memory reference algorithm
-  must hash exactly the same canonical byte stream.
+The design deliberately hashes one canonical stream directly rather than
+constructing a Merkle tree or a second per-file hash vocabulary. Implementations
+may internally parallelize reads or pre-hash chunks as an optimization only when
+the final digest is exactly the digest of the byte stream defined here.
 
-E1B must not reopen E1A's file membership, metadata, symlink or path rules.
+### Canonical path order
+
+For every valid E1A tree, sort entries by ordinary unsigned lexicographic order
+of the complete `CanonicalPackagePathV1` ASCII byte sequence.
+
+Comparison is byte-by-byte:
+- the first unequal byte decides;
+- the lower unsigned octet sorts first;
+- if one path is an exact prefix of another, the shorter path sorts first.
+
+There is no locale collation, natural-number ordering, segment-by-segment
+case-folding, Unicode comparison or host directory iteration order.
+
+Because E1A already rejects ASCII-case-fold sibling collisions, this exact byte
+order is both deterministic and independent of case-insensitive materialization
+behavior.
+
+### Canonical stream grammar
+
+The complete stream is:
+
+```text
+stream =
+    MAGIC
+    *FILE-RECORD
+    END
+
+MAGIC =
+    ASCII("protos-package-tree-v1")
+    0x00
+
+FILE-RECORD =
+    0x01
+    varuint(path-byte-length)
+    path-bytes
+    varuint(content-byte-length)
+    content-bytes
+
+END =
+    0x00
+```
+
+`FILE-RECORD` values appear exactly once for every E1A map entry and in the
+canonical path order above.
+
+There is:
+- no file count;
+- no directory record;
+- no padding;
+- no checksum inside a file record;
+- no newline/text delimiter;
+- no archive/store path;
+- no trailing octet after END.
+
+The ASCII bytes `protos-package-tree-v1` followed by one NUL octet are the
+method-domain separator. The method token therefore cannot silently be reused
+for a different serialization in the future.
+
+The FILE tag is the single octet `0x01`.
+The END tag is the single octet `0x00`.
+
+Since E1A requires root regular file `protos.toml`, a valid v1 tree currently has
+at least one FILE record. The END tag remains mandatory so the grammar is
+self-terminating and future readers do not infer completion from EOF alone.
+
+### `varuint` — canonical arbitrary-precision natural integer
+
+Lengths use one canonical unsigned base-128 varuint encoding.
+
+For natural integer `n >= 0`:
+1. split `n` into 7-bit groups from least significant to most significant;
+2. emit the least-significant group first;
+3. set bit 7 (`0x80`) on every emitted octet except the final group;
+4. the final octet has bit 7 clear;
+5. zero is encoded as exactly `0x00`;
+6. no other leading/redundant zero group is permitted.
+
+Equivalently, decoding accumulates each octet's low seven bits at successive
+shifts `0, 7, 14, ...` until the first octet whose high bit is clear.
+
+Examples:
+
+```text
+0       -> 00
+1       -> 01
+127     -> 7f
+128     -> 80 01
+255     -> ff 01
+300     -> ac 02
+16384   -> 80 80 01
+```
+
+This encoding is minimal. For example `80 00` is an invalid non-canonical
+encoding of zero.
+
+The abstract format imposes no fixed 32- or 64-bit semantic ceiling on a finite
+path/content length. A concrete implementation may fail because it cannot
+materialize or address a package of some size, but it must not compute a
+different digest by truncating/wrapping a length.
+
+### Path bytes
+
+`path-bytes` are the exact ASCII bytes of the E1A canonical relative path,
+including literal `/` separators.
+
+The path length counts those octets only. It does not include:
+- a NUL terminator;
+- a platform separator conversion;
+- a root/store prefix;
+- the FILE tag;
+- the encoded length itself.
+
+No path normalization occurs in E1B.
+
+### Content bytes
+
+`content-bytes` are the exact finite regular-file bytes from the E1A logical
+tree.
+
+The content length is the exact octet count before hashing. Empty files are
+encoded with content length `0` followed by no content octets.
+
+Text files receive no newline, encoding or Unicode normalization. Binary
+resources use the same record form.
+
+### Prefix/framing properties
+
+The stream is unambiguous because:
+- MAGIC has fixed bytes and a fixed NUL terminator;
+- FILE versus END is distinguished by one tag octet;
+- both variable fields are preceded by canonical self-delimiting lengths;
+- path bytes cannot be confused with content bytes;
+- an empty file still has an explicit zero content length;
+- record boundaries do not depend on path/content sentinel characters.
+
+No pair such as:
+
+```text
+path="a", content="bc"
+path="ab", content="c"
+```
+
+can serialize identically.
+
+### Streaming equivalence
+
+The defined identity is the hash of the logical canonical byte stream, not a
+requirement to allocate that stream contiguously.
+
+A verifier may:
+- emit MAGIC directly into the hash state;
+- enumerate/sort canonical path descriptors;
+- emit each record header;
+- stream the corresponding file content through the same hash state in chunks;
+- emit END.
+
+Chunk boundaries, I/O buffer sizes and read-call counts are non-semantic.
+
+The implementation must establish the one stable E1A snapshot. If content or
+entry identity changes so the emitted stream could combine states, verification
+fails instead of accepting a mixed digest.
+
+### Method token and hash algorithm are orthogonal
+
+`protos-package-tree-v1` identifies:
+- E1A logical-tree membership/path/entry semantics; and
+- this E1B canonical serialization.
+
+It does **not** mean "SHA-256". The persisted `ContentIdentity` separately names
+the digest algorithm:
+
+```text
+protos-package-tree-v1 sha256:<64-lowercase-hex>
+```
+
+Changing E1A membership/path rules or E1B serialization requires a new method
+token even when the hash algorithm remains SHA-256.
+
+Adding a future approved digest algorithm over the **same canonical stream**
+does not require renaming `protos-package-tree-v1`; the algorithm token changes
+instead.
+
+A reader must reject an unsupported method/algorithm pair. It never guesses an
+algorithm from digest length or silently substitutes another digest function.
+
+### Initial mandatory algorithm: `sha256`
+
+For the initial package ContentIdentity support policy:
+
+```text
+method     = protos-package-tree-v1
+algorithm  = sha256
+digest     = SHA-256(stream)
+text       = 64 lowercase hexadecimal digits
+```
+
+`sha256` means the standard SHA-256 function over the complete canonical byte
+stream. NIST FIPS 180-4 is the selected primary algorithm reference; a future
+standards-document revision that preserves SHA-256's mathematical definition
+does not create a new Protos algorithm token.
+
+Writers creating current lock-format-1 ContentIdentity values emit `sha256`.
+Readers/verifiers required to support F2E v1 support `sha256`.
+
+The lock grammar can lexically represent future algorithm tokens, but lexical
+validity is not support. An unknown algorithm remains a fail-closed package-state
+condition.
+
+Primary reference:
+- https://csrc.nist.gov/pubs/fips/180-4/upd1/final
+
+### Why direct canonical streaming
+
+Go module `h1` is useful precedent for stable names+contents identity, but it
+hashes every file and then hashes a textual summary. Protos does not need that
+second vocabulary because E1A already restricts paths enough for a simple binary
+framing contract.
+
+Nix NAR demonstrates a more general canonical binary tree serialization with
+explicit lengths and deterministic entry order. Protos borrows the useful
+framing principle but does not inherit NAR directory/symlink/executable metadata,
+which E1A intentionally excluded.
+
+Primary references:
+- https://go.dev/src/cmd/vendor/golang.org/x/mod/sumdb/dirhash/hash.go
+- https://nix.dev/manual/nix/2.35/protocols/nix-archive/
+
+## F2E1B closure
+
+E1B closes the canonical byte-stream and method/hash boundary.
+
+It does not publish a production canonicalizer/verifier and deliberately does
+not embed an expected reference digest in this slice. E1C owns independently
+computed positive/negative vectors so the final contract is tested without
+declaring prose plus one implementation self-validating.
+
+E1C is now READY.
+
+After E1B publication:
+
+```text
+TOOL001-F2E1   IN_PROGRESS
+TOOL001-F2E1A  CLOSED
+TOOL001-F2E1B  CLOSED
+TOOL001-F2E1C  READY
+TOOL001-F2E2   BLOCKED_BY_DEPENDENCIES: TOOL001-F2E1
+```
 
 ## F2E1C closure requirement
 

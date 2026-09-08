@@ -1,6 +1,6 @@
 # TOOL001-F2E — External Immutable-Package Execution
 
-Status: **IN_PROGRESS through CLOSED F2E1A logical-tree domain/path contract**
+Status: **IN_PROGRESS through CLOSED F2E1B canonical byte-stream/hash contract**
 Nature: non-normative Package Tool / host-integration project record
 Allocated after: `TOOL001-F2D` workspace-only execution closure
 
@@ -96,8 +96,8 @@ F2E   external immutable-package execution                         IN_PROGRESS
 F2E0  prerequisite audit + decomposition                           CLOSED
 F2E1  protos-package-tree-v1 ContentIdentity contract              IN_PROGRESS
 F2E1A logical-tree domain + portable path/entry-kind contract       CLOSED
-F2E1B canonical byte stream + method/hash contract                  READY
-F2E1C independent conformance vectors + F2E1 closure                BLOCKED_BY_DEPENDENCIES
+F2E1B canonical byte stream + method/hash contract                  CLOSED
+F2E1C independent conformance vectors + F2E1 closure                READY
 F2E2  verified read-only package-store binding                     BLOCKED_BY_DEPENDENCIES
 F2E3  external-node execution-plan construction                    BLOCKED_BY_DEPENDENCIES
 F2E4  external canonical ModuleKey + source resolver               BLOCKED_BY_DEPENDENCIES
@@ -228,3 +228,21 @@ reserved-name rejection.
 E1A does not yet define the canonical byte stream or digest. E1B owns that
 serialization/hash boundary. E1C then publishes independent fixed vectors and
 closes parent E1. F2E2 remains blocked on the whole E1 parent, not merely E1A.
+
+## F2E1B closure — canonical stream + digest support
+
+E1B freezes one binary serialization over the E1A map. Entries sort by exact
+unsigned ASCII path bytes. The stream begins with the method-domain separator
+`protos-package-tree-v1` plus NUL, then zero or more tagged FILE records and one
+END tag. Each path/content field is length-prefixed with the canonical minimal
+arbitrary-precision unsigned base-128 varuint; file bytes are fed directly and no
+directory/metadata/per-file-hash records are introduced.
+
+Current ContentIdentity support hashes that complete canonical stream with
+standard SHA-256 and emits 64 lowercase hexadecimal digits under the separately
+persisted `sha256` algorithm token. Method and digest algorithm remain orthogonal:
+tree/serialization changes require a new method token, while a future hash
+transition over exactly the same stream may use a new algorithm token.
+
+E1C is now READY to publish independently computed fixed vectors and close F2E1.
+F2E2 remains blocked on the parent F2E1 closure.
