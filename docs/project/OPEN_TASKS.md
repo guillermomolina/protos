@@ -42,9 +42,9 @@ Current triage:
 
 - D037 and D038 have explicit project-owner confirmation and need only have that
   evidence recorded.
-- D020 and D039-D044 require priority review because no recovered evidence yet
-  demonstrates explicit project-owner selection of their complete published
-  semantics.
+- D020 and the still-unratified decisions in D039-D044 require priority review
+  because no recovered evidence yet demonstrates explicit project-owner selection
+  of their complete published semantics.
 - D021-D036 require provenance and substance review; publication alone is not
   ratification.
 - D001-D019 are expected to be predominantly project-owner decisions, but their
@@ -76,11 +76,23 @@ Recorded review results:
   Explicit fail-fast/supervision or aggregation remains possible future
   library/design work rather than universal `future()` behavior. This
   ratification is independent of D045's separately ratified ownership-scope core.
+- D042 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining the complete published race-safe Filesystem namespace-entry
+  correction after comparative review against POSIX/Unix, Java NIO, Rust, Go,
+  Python and .NET. Final Path components are selected as namespace entries
+  without following final symbolic-link/reparse/other indirection and without a
+  separate mutable file-kind preclassification; `replace`/`remove` may operate
+  on entry kinds when the backend can provide the required atomic transition;
+  unsupported atomic entry-kind/source-target combinations fail as `IOError`
+  rather than being emulated through check-then-act; and `remove` remains
+  non-recursive. This ratifies D042 / specification `0.1.379` only; D041's
+  separate atomicity, commitment, cancellation, stable-open-File and durability
+  package remains subject to its own AUD001 review.
 
 Required procedure:
 
-1. Continue backwards from D044, reviewing D044-D039 first, then D020, D021-D036,
-   and finally D001-D019.
+1. Continue backwards through the remaining unresolved decisions in D044-D039,
+   then D020, D021-D036, and finally D001-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published
    normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or
@@ -96,7 +108,7 @@ Next audit work:
 
 1. Complete the separate D044 review already in progress, considering D045 only
    as a ratified dependency where their semantics interact.
-2. Continue backwards through D043-D039, then D020, D021-D036 and D001-D019
+2. Continue backwards through the remaining unresolved decisions in D043-D039, then D020, D021-D036 and D001-D019
    under the required procedure above.
 
 AUD001 closes only when D001-D045, except D046, have an explicit classification,
