@@ -43,7 +43,7 @@ final class ProtosTestToolFutureStoredInspectionFixtureSuiteTest {
     private static final Path TOOL_ROOT = Path.of("protos", "tools", "test");
     private static final Path TOOLING_ROOT = Path.of("protos", "tests", "tooling");
     private static final Path MANIFEST =
-            TOOLING_ROOT.resolve("tool002-f3c1b2-inspection-fixtures.tsv");
+            TOOLING_ROOT.resolve("tool002-f3c1b-inspection-fixtures.tsv");
     private static final Path RETAINED_SOURCE =
             Path.of(
                     "protos",
@@ -137,7 +137,7 @@ final class ProtosTestToolFutureStoredInspectionFixtureSuiteTest {
 
         String caseId = fields.get(0);
         Path fixture = Path.of(fields.get(1));
-        if (!caseId.startsWith("TOOL002-F3C1B2")) {
+        if (!caseId.startsWith("TOOL002-F3C1B")) {
             throw new IllegalArgumentException("unexpected inspection fixture case id: " + caseId);
         }
         if (fixture.isAbsolute()

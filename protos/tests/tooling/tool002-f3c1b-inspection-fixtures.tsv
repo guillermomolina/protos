@@ -1,4 +1,4 @@
-# TOOL002 F3C1B2 live-inspection Protos fixture suite
+# TOOL002 F3C1B live-inspection Protos fixture suite
 # case-id<TAB>fixture-basename
 TOOL002-F3C1B2A0	tool002-f3c1b2a0-retained-source-inert-inspection.protos
 TOOL002-F3C1B2A1R	tool002-f3c1b2a1r-future-slot-regression.protos
