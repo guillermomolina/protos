@@ -785,7 +785,7 @@ documentation tooling.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| DOC001 | Protos Programming Documentation | IN_PROGRESS | `docs/project/DOC001_PROGRAMMING_DOCUMENTATION.md` | A/B/C/D/E CLOSED; I023/B007 CLOSED; F-L READY independently; M toolchain-gated; N final closure. |
+| DOC001 | Protos Programming Documentation | IN_PROGRESS | `docs/project/DOC001_PROGRAMMING_DOCUMENTATION.md` | A/B/C/D/E/F CLOSED; I023/B007 CLOSED; G-L READY independently; M toolchain-gated; N final closure. |
 
 ### DOC001 — Protos Programming Documentation
 
