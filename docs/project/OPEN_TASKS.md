@@ -189,6 +189,23 @@ Recorded review results:
   control and related distributed institutions remain separate future design work.
   This ratification confirms D039 / specification `0.1.376` without normative or
   implementation change.
+- D038 is `RATIFIED` from recovered explicit project-owner selection. The
+  recovered 2026-09-04 decision sequence shows that the project owner accepted
+  the bounded D038 Encoding membership/receiver-domain closure package before
+  publication and then explicitly confirmed D038 as published/closed. Retain
+  specification `0.1.375`: Encoding descriptors are semantic Encoding values
+  produced/provisioned only through normative Encoding-producing operations or
+  explicitly permitted host Encoding-provisioning boundaries; delegation,
+  copying, composition, similarly named slots and structural/protocol
+  compatibility do not confer membership; Encoding-descriptor parameters do
+  neither duck typing nor implicit coercion; and standard Encoding-family
+  behavior uses the general semantic-family receiver-domain rule, validating
+  the original receiver after ordinary lookup so an incompatible receiver
+  signals the ordinary invalid-receiver `Error` before family-specific
+  computation/state effects and without fallback dispatch. User-defined
+  overrides remain ordinary behavior under their own receiver contracts. This
+  records already-selected/published semantics; it changes no normative
+  specification or implementation.
 
 Required procedure:
 
