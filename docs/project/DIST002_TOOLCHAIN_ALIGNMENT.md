@@ -171,6 +171,31 @@ repository toolchain audit is zero-drift across development, ordinary CI and
 distribution bindings. DIST002-D remains responsible for final cross-environment
 closure/reconciliation.
 
+## DIST002-D1 CI bootstrap checksum portability correction
+
+The first GitHub Actions runs after DIST002-C exposed one CI-bootstrap portability
+bug before repository checkout or any Java/Maven test executed. Exact C commit
+`996fed0393c15b122bec6541bf8394bdb15a96c8` produced failing push runs
+`Tests` 34221407013 and `Distribution snapshot` 34221407000; both failed in
+`Provision CI bootstrap tools` because Apache Maven's 3.9.9 `.sha512` endpoint
+contains one bare 128-hex SHA-512 digest, while `sha512sum --check` requires a
+checksum line that also names a file.
+
+DIST002-D1 preserves the same Maven 3.9.9 archive and SHA-512 authority but
+validates the upstream metadata in its actual portable form: read the first
+digest token, require exactly 128 hexadecimal characters, calculate the local
+archive SHA-512 independently, compare case-insensitively, and only then extract
+Maven. Both primary workflows use the same fail-closed check and emit
+`MAVEN_ARCHIVE_SHA512_CHECK: PASS` on success. No JDK, GraalVM, Truffle, Maven,
+Java-bytecode, runtime/distribution, Protos implementation or public-release
+coordinate changes.
+
+D1 closes the observed bootstrap defect only. DIST002-D remains READY until
+post-D1 GitHub Actions provides green `Tests` and `Distribution snapshot`
+evidence on a revision containing the zero-drift C migration, after which the
+final local cross-environment gate and project-state reconciliation may close
+DIST002.
+
 ## Current observed mismatch
 
 At the time this item was opened:
@@ -212,7 +237,8 @@ pattern.
 | DIST002-A | CLOSED | Selected exact canonical coordinates are persisted in root `toolchain.json`; tested contract/static-binding drift audit is published. |
 | DIST002-B | CLOSED | Existing devcontainer binding is verified against A; ordinary Tests CI runs in the exact primary GraalVM image with exact Maven and a development-scope drift/runtime gate. |
 | DIST002-C | CLOSED | Live Maven/Truffle dependencies, distribution metadata, launcher/runtime gates and distribution CI now use/check the canonical JDK25.0.4.1/Graal-Truffle25.3.4.1 contract; historical DIST001 evidence is retained. |
-| DIST002-D | READY | Cross-environment conformance, documentation/status reconciliation, and DIST002 closure after the zero-drift C migration. |
+| DIST002-D1 | CLOSED | Correct the Maven 3.9.9 CI-bootstrap SHA-512 verifier for Apache's digest-only metadata format; both primary workflows retain exact checksum validation. |
+| DIST002-D | READY | Await green post-D1 Tests + Distribution snapshot evidence, then run final cross-environment conformance/documentation reconciliation and close DIST002. |
 
 Opening DIST002 changes no Protos semantics, implementation version, current
 DIST001 candidate, runtime support promise, tag, GitHub Release, or release

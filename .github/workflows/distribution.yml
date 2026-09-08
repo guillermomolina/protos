@@ -38,7 +38,19 @@ jobs:
           base="https://archive.apache.org/dist/maven/maven-3/${PROTOS_MAVEN_VERSION}/binaries"
           curl --fail --location --silent --show-error "$base/$archive" --output "/tmp/$archive"
           curl --fail --location --silent --show-error "$base/$archive.sha512" --output "/tmp/$archive.sha512"
-          (cd /tmp && sha512sum --check --strict "$archive.sha512")
+          IFS=' ' read -r expected_sha512 _ < "/tmp/$archive.sha512"
+          test -n "$expected_sha512"
+          test "${#expected_sha512}" -eq 128
+          case "$expected_sha512" in
+            *[!0-9A-Fa-f]*)
+              echo "invalid Maven SHA-512 metadata" >&2
+              exit 1
+              ;;
+          esac
+          actual_sha512="$(sha512sum "/tmp/$archive")"
+          actual_sha512="${actual_sha512%% *}"
+          test "${actual_sha512,,}" = "${expected_sha512,,}"
+          echo "MAVEN_ARCHIVE_SHA512_CHECK: PASS"
           tar --extract --gzip --file "/tmp/$archive" --directory /opt
           ln --symbolic "/opt/apache-maven-${PROTOS_MAVEN_VERSION}" /opt/maven
           echo "/opt/maven/bin" >> "$GITHUB_PATH"
