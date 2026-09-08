@@ -127,6 +127,46 @@ policyError: () => {
     Error().signal()
 }
 
+futureStoredObservationInspectorSource: () => {
+    "(subject) => {\n" +
+    "    storedError: subject.slotValue(\"error\")\n" +
+    "    observe: subject.slotValue(\"observe\")\n" +
+    "    same: false\n" +
+    "    Error.handle(\n" +
+    "        () => {\n" +
+    "            observe()\n" +
+    "            null\n" +
+    "        },\n" +
+    "        (caught) => {\n" +
+    "            same = caught === storedError\n" +
+    "            null\n" +
+    "        }\n" +
+    "    )\n" +
+    "    same\n" +
+    "}"
+}
+
+evaluateFutureStoredObservation: (spec, source, inspectorExecutor) => {
+    isFutureStoredObservationExpectation(spec).ifFalse(() => {
+        policyError()
+    })
+
+    observation: inspectorExecutor(
+        source,
+        futureStoredObservationInspectorSource()
+    )
+
+    passed: observation.state === "completed"
+    passed.ifTrue(() => {
+        passed = observation.error === null
+    })
+    passed.ifTrue(() => {
+        passed = observation.value === true
+    })
+
+    resultTuple(passed, observation)
+}
+
 parseExpectedInteger: (text) => {
     source: Encoding.UTF8.encode(text)
     (source.size() == 0).ifTrue(() => { policyError() })

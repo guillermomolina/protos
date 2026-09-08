@@ -1,3 +1,7 @@
+## 0.2.250-SNAPSHOT
+
+- Publish `TOOL002-F3C1B3 — stored observation evaluator composition`. Bundled `Runner.protos` composes the already-closed exact `future-observation-error-identity / stored:Error` classifier with one positive same-Process `executionInspect`-compatible inspector: the inspector reads only retained local `error`/`observe`, invokes `observe()` once, and returns inert Boolean evidence for exact caught-versus-stored Error identity. A Protos-owned fixture passes the retained CaseSpec, retained source and bootstrap-local `executionInspect` through the evaluator. `isDExpectation`, public `runSimple`, fresh mode, stored negatives and canonical TOOL002 ledgers remain unchanged until their later slices. No normative specification or Java host-mechanism change.
+
 ## 0.2.249-SNAPSHOT
 
 - Add an explicit user design-approval gate and replace generated patch launchers' clean-caller-checkout requirement with isolated local worktree publication. Agents must research, compare, falsify, and recommend substantive design choices without self-selecting or closing them; publication launchers must build/validate on a temporary local branch rooted at current `origin/main`, rebase/revalidate on concurrent advancement, fast-forward push only the validated commit to `main`, and remove their temporary local worktree/branch on success or failure while leaving caller state untouched. Governance/documentation only: no normative Protos semantic, implementation-version, runtime, native-boundary, or license-term change.
