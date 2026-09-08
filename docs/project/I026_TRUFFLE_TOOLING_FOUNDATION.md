@@ -1,6 +1,6 @@
 # I026 — Truffle tooling foundation
 
-Status: **READY**
+Status: **IN_PROGRESS**
 
 Nature: non-normative runtime/compiler tooling implementation
 
@@ -41,19 +41,32 @@ I026 implements the selected AUD002 direction under these constraints:
 
 ## Planned slices
 
-| Slice | Status | Dependencies | Scope / exit condition |
-|---|---|---|---|
-| I026-A | READY | — | Register Protos as a real `TruffleLanguage` and preserve Truffle `Source` ownership through the compilation/root boundary without changing observable Protos behavior. |
-| I026-B | BLOCKED_BY_DEPENDENCIES | I026-A | Map the existing exact `SourceSpan` ranges to valid Truffle `SourceSection` values on roots/execution nodes, with focused Java-side integration evidence. |
-| I026-C | BLOCKED_BY_DEPENDENCIES | I026-B | Make the relevant AST nodes instrumentable and expose the minimal faithful `StandardTags` needed for source execution/stepping; do not tag nodes merely to satisfy a debugger UI. |
-| I026-D | BLOCKED_BY_DEPENDENCIES | I026-A | Expose semantically faithful Truffle interop/debug views for Protos runtime values needed by tooling, without changing Protos identity or access semantics. |
-| I026-E | BLOCKED_BY_DEPENDENCIES | I026-C + I026-D | Bridge top/local debugger scopes from the existing Protos activation/context model and prove visible names/values match Protos lookup boundaries. |
-| I026-F | BLOCKED_BY_DEPENDENCIES | I026-C + I026-E | Run a real GraalVM DAP smoke gate over Protos source: source breakpoint, stepping, stack frames, scopes and representative values. Only successful evidence permits a Protos DAP-support claim. |
-| I026-G | BLOCKED_BY_DEPENDENCIES | I026-C + I026-E | Run a GraalVM dynamic-LSP smoke gate and record exactly which useful runtime-derived capabilities work for Protos. Do not treat this as a replacement for static Protos language intelligence. |
+Before executable I026 work began, the project owner explicitly rejected treating
+the current direct `compile(String).call(...)` CLI/runtime path as an
+architectural compatibility constraint. The original I026-A planning slice is
+therefore refined before implementation into A1-A4. The migration may preserve
+an old path temporarily between slices only as staging machinery; I026-A4 must
+retire it as a separate primary runtime entry path rather than institutionalize a
+permanent compatibility layer.
 
-I026-D is intentionally allowed to proceed independently from I026-B/C after
-I026-A. The dependency graph therefore preserves parallelizable work rather than
-serializing source mapping and value interop without cause.
+| Slice | Status | Version | Dependencies | Scope / exit condition |
+|---|---|---|---|---|
+| I026-A1 | CLOSED | `0.2.260-SNAPSHOT` | — | Register `ProtosLanguage` and one per-Polyglot-context `ProtosLanguageContext`, enable the official Truffle registration annotation processor, and prove Polyglot discovery plus `Context.initialize("protos")`. Parsing/execution is intentionally not connected by this slice. |
+| I026-A2 | READY | — | I026-A1 | Make `ParsingRequest.getSource()` the canonical top-level compilation input; lower that exact Truffle `Source` through the real parser/canonical AST path and associate produced roots with the active `ProtosLanguage`. Internal Closure/object roots must preserve the same source ownership rather than falling back to anonymous direct compilation. |
+| I026-A3 | BLOCKED_BY_DEPENDENCIES | — | I026-A2 | Preserve canonical module source identity together with `ModuleKey`; stop reducing resolver-loaded modules to identity-free source Strings before compilation. |
+| I026-A4 | BLOCKED_BY_DEPENDENCIES | — | I026-A2 + I026-A3 | Cut CLI, REPL and top-level execution drivers over to the real Polyglot/Truffle language entry boundary and retire the old direct top-level `compile(String).call(...)` route as a separate primary runtime architecture. Public CLI UX need not change merely because its implementation does. |
+| I026-B | BLOCKED_BY_DEPENDENCIES | — | I026-A4 | Map the existing exact `SourceSpan` ranges to valid Truffle `SourceSection` values on roots/execution nodes, with focused Java-side integration evidence. |
+| I026-C | BLOCKED_BY_DEPENDENCIES | — | I026-B | Make the relevant AST nodes instrumentable and expose the minimal faithful `StandardTags` needed for source execution/stepping; do not tag nodes merely to satisfy a debugger UI. |
+| I026-D | READY | — | I026-A1 | Expose semantically faithful Truffle interop/debug views for Protos runtime values needed by tooling, without changing Protos identity or access semantics. This may proceed independently from A2-A4. |
+| I026-E | BLOCKED_BY_DEPENDENCIES | — | I026-C + I026-D | Bridge top/local debugger scopes from the existing Protos activation/context model and prove visible names/values match Protos lookup boundaries. |
+| I026-F | BLOCKED_BY_DEPENDENCIES | — | I026-C + I026-E | Run a real GraalVM DAP smoke gate over Protos source: source breakpoint, stepping, stack frames, scopes and representative values. Only successful evidence permits a Protos DAP-support claim. |
+| I026-G | BLOCKED_BY_DEPENDENCIES | — | I026-C + I026-E | Run a GraalVM dynamic-LSP smoke gate and record exactly which useful runtime-derived capabilities work for Protos. Do not treat this as a replacement for static Protos language intelligence. |
+
+After I026-A1, source-boundary work (A2) and value-interop work (D) are both
+ready and independent. The runtime-entry migration remains deliberately staged,
+but staging compatibility is not a design requirement: A4 owns deletion of the
+old top-level direct-entry architecture once the real Source/module boundary is
+available.
 
 ## Deferred ownership
 

@@ -5,7 +5,7 @@
 
     <groupId>com.guillermomolina</groupId>
     <artifactId>protos</artifactId>
-    <version>0.2.259-SNAPSHOT</version>
+    <version>0.2.260-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Protos</name>
@@ -43,6 +43,11 @@
             <version>${graalvm.version}</version>
         </dependency>
         <dependency>
+            <groupId>org.graalvm.polyglot</groupId>
+            <artifactId>polyglot</artifactId>
+            <version>${graalvm.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.graalvm.truffle</groupId>
             <artifactId>truffle-api</artifactId>
             <version>${graalvm.version}</version>
@@ -64,6 +69,13 @@
                 <configuration>
                     <release>${maven.compiler.release}</release>
                     <showWarnings>true</showWarnings>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.graalvm.truffle</groupId>
+                            <artifactId>truffle-dsl-processor</artifactId>
+                            <version>${graalvm.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
                     <compilerArgs>
                         <arg>-Xlint:all</arg>
                     </compilerArgs>
