@@ -50,6 +50,28 @@ Current triage:
 
 Recorded review results:
 
+- D009 is `RATIFIED`. AUD001 recovered explicit project-owner approval of
+  specification `0.1.349`, and on 2026-09-08 the project owner reaffirmed the
+  decision after comparison with Java/JVMS, ECMAScript abstract operations,
+  WebAssembly specification layering and Rust plus adversarial and
+  future-scalability review. Every observable normative rule continues to have
+  one primary owning specification/domain document. Other normative documents
+  may reference and depend on that rule, define a genuine domain-specific
+  specialization, or own additional cross-domain interaction semantics, but they
+  do not duplicate the complete contract as an independent authority. Grammar
+  remains the owner of syntax and mandatory lowering rather than semantic rules
+  owned by other domains, and the current `runtime/ABSTRACT_RUNTIME.md` remains
+  informative pseudocode that must follow normative owners rather than override
+  them. This ratification does not freeze the current physical document split:
+  ownership may be moved explicitly, documents may be split or merged, generated
+  combined views may be added, and a future formal semantics may become normative
+  through an explicit design change, provided the same observable rule does not
+  acquire conflicting independent authorities. The original normative D009
+  publication is commit `6d0606c19eea3c77bffd67a69a42417ec8f6e0b1`.
+  This governance classification changes no normative specification,
+  implementation, implementation version, runtime, native boundary or license
+  terms and does not classify adjacent Dxxx decisions by transitivity.
+
 - D005 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved retaining D005 / specification `0.1.345` after cross-language comparison, adversarial review and dedicated future-scalability analysis. Every independent standard failure occurrence continues to produce a fresh ordinary Error identity delegating to the normatively promised prototype; standard Error prototypes remain shared category/protocol objects, never implicit singleton runtime-failure instances. When semantics already identifies an Error object `e`, signaling, re-signaling, handler delivery and same-domain recording preserve exactly `e`. A same-domain FAILED Future therefore re-signals its exact stored Error, while a CANCELLED Future stores only cancellation state and every `value()` observation creates its own fresh `Cancelled` occurrence. Error identity remains ordinary object identity within its value/isolation domain, with no global ID, interning registry or cross-domain identity channel; reconstruction boundaries use their ordinary graph-transfer rules and Actor-fatal Errors remain Actor-local unless another protocol explicitly transfers data. Core `Error.signal()` remains non-resumable, and category/handler matching remains ordinary delegation rather than a hidden tag/class matcher. The portable Core taxonomy stays deliberately shallow: D005's explicit Error/I/O categories remain portable, host errno/status/detail categories do not leak into Core ancestry merely because a backend exposes them, and retry safety remains a property of operation commitment/effects rather than Error prototype. Fresh semantic identity does not prescribe physical allocation, so scalar replacement/virtualization/elision remain permitted when identity cannot be observed. Diagnostics, cause/tracing facilities, explicit recovery/restart mechanisms, later Error prototypes and later handler/`ensure` clarifications remain separate decisions. The original normative D005 publication is commit `8563dcb670e538de3f54f60d1c8a67d0ec9a911e`; this governance classification changes no normative specification or implementation and does not classify D002/D006-D019 or later Error-design decisions by transitivity.
 
 - D006 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
