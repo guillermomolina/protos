@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-07
+Last updated: 2026-09-08
 
 This document is the primary normative owner of execution contexts, lookup/control foundations, intrinsic execution references, evaluation order, iteration/loop control, and related execution semantics.
 
@@ -178,15 +178,31 @@ For bare assignment:
 x = value
 ```
 
-the right-hand side is evaluated under the ordinary evaluation-order rules, then the destination is selected as follows:
+the assignment destination is selected before the right-hand side is evaluated. Destination selection proceeds as follows:
 
 1. Starting at the current execution context, inspect only local slots for `x`; if absent, continue through immediate lexical parents, again inspecting local slots only.
-2. The first lexical context with a local slot named `x` is the selected destination. If that selected slot cannot be modified under the ordinary object-state rules, assignment fails there; it does not continue to an outer lexical context or to `this`.
+2. The first lexical context with a local slot named `x` is the selected destination. Selection does not skip that binding based on whether the later mutation attempt will succeed; it does not continue to an outer lexical context or to `this`.
 3. If the complete lexical chain contains no local slot named `x` and the current execution has an ordinary receiver `this`, inspect **only `this`'s own local slots**. If `this` has a local `x`, that slot is the selected destination.
 4. Do not follow ordinary delegation from any lexical context or from `this` while selecting an assignment destination. In particular, an inherited receiver slot is readable through the §6 receiver fallback but is not a destination for bare `=`.
 5. If no destination exists, signal a fresh standard `SlotNotFound` failure under the Error-object construction and identity rules owned by `ERRORS.md`. Bare assignment never creates a slot.
 
-This search is for the nearest existing local binding, not for the nearest writable binding. A local binding that exists but is frozen, closed against the requested mutation, or otherwise non-modifiable wins the search and then causes the ordinary assignment failure; lookup does not skip it in search of a farther binding.
+This search is for the nearest existing local binding, not for the nearest writable binding. A local binding that exists but is frozen, closed against the requested mutation, or otherwise non-modifiable wins destination selection; lookup does not skip it in search of a farther binding.
+
+Once a bare-assignment destination has been selected, that exact local slot
+remains the destination for the rest of that assignment expression. Only after
+successful destination selection is the right-hand side evaluated. If destination
+selection finds no eligible existing binding, a fresh standard `SlotNotFound` is
+signaled before right-hand-side evaluation begins. If right-hand-side evaluation
+performs a control transfer, no assignment write is attempted.
+
+After the right-hand side completes normally, assignment attempts to write the
+exact object produced by that evaluation into the previously selected local slot.
+The destination is **not re-resolved** after right-hand-side effects, even if those
+effects create, remove, shadow, freeze, close, or otherwise alter same-named slots
+elsewhere in the lexical/receiver search space. Ordinary object-state mutation
+validation applies to the already-selected destination at this write attempt; a
+failure there does not cause lookup to continue to another binding, and effects
+already produced by right-hand-side evaluation are not rolled back.
 
 Bare creation:
 

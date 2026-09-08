@@ -9,6 +9,18 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.387] - 2026-09-08
+
+### D002 bare-assignment target-selection timing correction
+- Corrects one accidental timing mismatch in the already-published D002 bare-assignment contract after explicit project-owner approval under AUD001. For `x = rhs`, destination selection now occurs before right-hand-side evaluation: the nearest existing lexical local slot wins, otherwise an own local slot of `this` may win, and delegated slots never become assignment destinations.
+- If no destination exists, a fresh standard `SlotNotFound` is signaled before `rhs` begins. Once a destination exists, that exact local slot remains selected while `rhs` executes; same-named slots created, removed, shadowed, or otherwise changed by `rhs` do not retarget the in-progress assignment.
+- After `rhs` completes normally, the exact produced object is written to that preselected destination. Ordinary mutation-state validation occurs at the write attempt; failure does not resume lookup at another binding and completed RHS effects are not rolled back. If `rhs` transfers control, no write is attempted.
+- Bare reads, lexical-parent traversal, receiver fallback, bare `:` creation, the prohibition on delegated writes, Closure capture, module/prelude lookup and execution intrinsics are unchanged.
+
+### Compatibility and implementation state
+- This amendment aligns the normative contract with the target-before-RHS evaluator behavior already present when D002/0.1.348 was published and still present in the current implementation; no production runtime change or implementation-version bump is required.
+- Adds Protos-level conformance for stable destination selection across RHS shadow creation and for missing-destination failure before RHS effects. D002's final AUD001 governance classification remains a separate follow-up publication.
+
 ## [0.1.386] - 2026-09-08
 
 ### AUD001 D003 ratification amendment — useful positional default ordering

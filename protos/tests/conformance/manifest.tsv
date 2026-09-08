@@ -635,3 +635,5 @@ reflection/slot-value-exact-local-identity.protos	boolean	true
 reflection/slot-value-does-not-delegate.protos	error	-
 reflection/slot-value-invalid-name.protos	error	-
 reflection/slot-value-represented-absent.protos	error	-
+control/bare-assignment-target-fixed-before-rhs.protos	integer	95
+control/bare-assignment-missing-target-before-rhs.protos	boolean	false
