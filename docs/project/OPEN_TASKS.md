@@ -42,7 +42,7 @@ Current triage:
 
 - D037 and D038 have explicit project-owner confirmation and need only have that
   evidence recorded.
-- D020 and D039-D045 require priority review because no recovered evidence yet
+- D020 and D039-D044 require priority review because no recovered evidence yet
   demonstrates explicit project-owner selection of their complete published
   semantics.
 - D021-D036 require provenance and substance review; publication alone is not
@@ -75,11 +75,11 @@ Recorded review results:
   children and waits for cleanup. No hidden failure-consumption state is added.
   Explicit fail-fast/supervision or aggregation remains possible future
   library/design work rather than universal `future()` behavior. This
-  ratification is independent of the still-unratified D045 ownership-scope core.
+  ratification is independent of D045's separately ratified ownership-scope core.
 
 Required procedure:
 
-1. Work backwards from D045, reviewing D045-D039 first, then D020, D021-D036,
+1. Continue backwards from D044, reviewing D044-D039 first, then D020, D021-D036,
    and finally D001-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published
    normative result, downstream implementation, and owner-approval evidence.
