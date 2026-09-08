@@ -660,6 +660,60 @@ scope, audit, validation, specification, versioning, license, or explicit user
 approval requirements, and it does not authorize a patch to incorporate or
 publish changes from the caller checkout.
 
+### Generated patch artifact acceptance gate
+
+A generated patch ZIP and its launcher are executable project work, not merely a
+transport wrapper around an intended diff. An agent MUST validate the artifact
+itself before presenting it to the user as ready to execute.
+
+Before delivering a generated publication ZIP, the authoring agent MUST, to the
+extent the required repository content is available:
+
+1. establish the exact current `origin/main` revision used as the candidate
+   `PUBLICATION_BASE`;
+2. run syntax/parse checks for every generated executable helper, including
+   `bash -n` for shell launchers and the applicable compile/parse check for any
+   Python, Java, Node, Ruby, Perl, or other generated helper;
+3. execute every generated **content transformation** against the exact
+   `PUBLICATION_BASE` contents of each patch-owned file it will modify. A
+   hand-written or synthetic fixture may add edge-case coverage, but MUST NOT
+   substitute for the exact-current-file transformation test;
+4. verify that those transformations produce exactly the intended changed-file
+   set and satisfy the patch's semantic/static postconditions. For shared moving
+   files, verify preservation of unrelated current content as well as the
+   intended edit;
+5. verify the final ZIP/archive structure and integrity, including the expected
+   single package root, required files, executable permission bits where
+   relevant, and successful archive integrity/CRC inspection;
+6. inspect the generated launcher as one whole workflow for its Git-state
+   preconditions, isolated-worktree lifecycle, explicit staging scope,
+   adaptive-validation commands, `PUBLICATION_BASE` stability check, publication
+   command, cleanup path, and final report;
+7. when the authoring environment provides a disposable Git checkout or can
+   construct a faithful local Git harness without changing project semantics,
+   execute an end-to-end launcher dry run through materialization, staging,
+   validation selection and commit/publication-precondition checking with the
+   actual push disabled or redirected to a disposable local remote; and
+8. never report an artifact-level check as `PASS` unless that exact check was
+   actually executed successfully.
+
+A generated artifact that fails any authoring-time acceptance check MUST be fixed
+and re-tested before it is shown to the user. Do not intentionally use the
+user's real checkout as the first test of a generated parser, patch hunk,
+replacement anchor, helper script, ZIP layout, Git worktree flow, or similar
+deterministic launcher machinery.
+
+If the authoring environment cannot execute a required acceptance check, report
+that specific limitation accurately. Lack of one unavailable check does not
+justify inventing `PASS`, but agents should still perform every exact-content,
+syntax, archive and static workflow check that their available tools permit.
+
+This acceptance gate is distinct from project behavioral validation. Maven focal
+or full-suite tests are still selected from the definitive repository delta by
+the adaptive validation matrix. Artifact acceptance exists to establish that the
+generated launcher can correctly materialize and orchestrate that delta before
+the user's checkout becomes its first execution environment.
+
 ### Environment and toolchain discipline for generated patches
 
 Generated patches and their launchers MUST run against the repository's declared
