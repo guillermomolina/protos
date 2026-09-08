@@ -50,7 +50,7 @@ See `docs/project/AUD002_GRAALVM_EDITOR_TOOLING_AUDIT.md` and
 
 ### AUD001 — Retrospective design-decision ratification audit
 
-Status: **OPEN**
+Status: **CLOSED**
 Priority: **HIGH**
 Nature: non-normative governance and provenance audit
 
@@ -60,9 +60,52 @@ purpose is to distinguish explicit project-owner selection from agent-authored
 recommendations, broad implementation instructions, patch execution, and
 publication evidence.
 
-Current triage: - D038 has explicit project-owner confirmation and needs only have that evidence recorded.
-- D044 remains the priority review item because no recovered evidence yet demonstrates explicit project-owner selection of its complete published semantics. is not ratification.
-- D002 and D016 and D018 are expected to be predominantly project-owner decisions, but their approval evidence must be checked rather than inferred. Recorded review results:
+Closure result:
+
+- D001-D045 all have an explicit AUD001 classification and every project-owner
+  decision required by this audit is resolved.
+- D044 is the final classification and is `RATIFIED` by explicit project-owner
+  approval on 2026-09-08 after comparative, adversarial and future-scalability
+  review; specification `0.1.381` is retained without normative amendment.
+- D046 remains outside AUD001 and is not classified by this audit.
+
+Recorded review results:
+
+- D044 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D044 / specification `0.1.381` after retrospective comparison with
+  Self, Smalltalk/Pharo, Kotlin, Scala, Rust, JavaScript and Ruby plus adversarial
+  and future-scalability review. Core v0.1 keeps one pre-test loop as the ordinary
+  Closure-specific message `condition.while(body)`: `while` is an ordinary local
+  Closure-valued `Object` slot, the standard behavior requires a semantic Closure
+  receiver and exactly one semantic Closure body, and ordinary lookup, reflection,
+  extraction, shadowing and user overrides remain authoritative. Receiver/argument
+  evaluation and standard receiver/exact-arity/body validation complete before
+  the first condition activation; condition and body are activated with zero
+  supplied arguments only when reached, and callback-declared arity/default/rest
+  behavior remains ordinary activation-time binding. Each condition result must
+  be exactly canonical `true` or `false`; every other normal result, including a
+  Future, signals a fresh standard Error rather than truthiness, coercion, implicit
+  invocation, awaiting or Future adoption. Canonical `false` terminates, canonical
+  `true` activates the body and repeats, body normal results are ignored, and every
+  normal loop completion returns canonical `null`. Error, valid non-local return,
+  InvalidReturn, suspension/replay, cooperative cancellation, `ensure` and task/
+  Future ownership compose through their existing rules; `while` adds no hidden
+  task, Future, handler, cleanup scope, scheduler boundary, cancellation mask,
+  polling/preemption point or implicit asynchronous scope. D045 remains the
+  independent owner of task-scoped structured Future ownership and confirms that
+  synchronous `while` callback activations are not concurrency scopes. I023's
+  published implementation/conformance closure, including bounded replay retention
+  whose retained state depends on the active callback trace rather than completed
+  iteration count, supplies downstream scalability evidence without constraining
+  D044 to that implementation shape. Implementations remain free to inline,
+  specialize or compile the loop while preserving observations. Future `while (...)`
+  syntax, loop-local `break`/`continue`, value-producing loops, pattern loops and
+  async-specific loop facilities remain separate explicit designs. The original
+  normative D044 publication is commit
+  `4ab6c48d31a969ac0d8ad050bf3fb3beaab6c62b`. This governance classification
+  changes no normative specification, implementation, blocker, implementation
+  version, runtime, native boundary or license terms and creates no implementation
+  follow-up.
 
 - D019 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
   retaining D019 / specification `0.1.360` after retrospective reconstruction,
@@ -1080,13 +1123,14 @@ Current triage: - D038 has explicit project-owner confirmation and needs only ha
   implementation version, runtime, native boundary or license terms and creates
   no implementation follow-up.
 
-Required procedure: 1. Continue backwards through the remaining unresolved decisions in D044, and finally D002 and D016 and D018.
-2. For each decision, reconstruct the alternatives, recommendation, published normative result, downstream implementation, and owner-approval evidence.
-3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or PROVENANCE_UNRESOLVED. Executing or publishing a patch is not sufficient approval evidence.
-4. Present every substantive unresolved choice to the project owner under the current explicit design-approval gate. Do not silently preserve, replace, or reopen semantics.
-5. Keep D046 outside AUD001 and do not let this audit overwrite or pre-empt its separate review. Next audit work: 1. Complete the separate D044 review already in progress, considering only as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D002 and D016 and D018 under the required procedure above. AUD001 closes only when D016-D019, and D044, except D046, have an explicit classification,
-the project owner has decided every NEEDS_USER_DECISION item, relevant
-provenance is recorded durably, and all affected project ledgers are reconciled.
+AUD001 closure:
+
+D001-D045 all have an explicit classification under the required retrospective
+procedure, every `NEEDS_USER_DECISION` decision presented by the audit has been
+resolved by the project owner, and the final unresolved decision D044 is now
+`RATIFIED`. D046 remains outside AUD001 and is not reclassified by this closure.
+Relevant provenance is recorded in the per-decision entries above and the
+canonical implementation-status ledger is reconciled in the same publication.
+
 Any later normative correction must be a separately approved specification
 change; AUD001 itself authorizes no specification or implementation change.
