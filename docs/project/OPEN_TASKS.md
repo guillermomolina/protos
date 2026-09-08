@@ -73,6 +73,36 @@ Current triage:
 
 Recorded review results:
 
+- D011 is `RATIFIED` in its effective current form. On 2026-09-08 the
+  project owner explicitly approved retaining the public Filesystem/I/O surface
+  introduced by specification `0.1.351` after comparison with WASI/capability
+  filesystem design, Rust and Deno open options, Java NIO/Charset, Python pathlib
+  and codecs, and wrapper-lifecycle approaches in Java, Rust and Go, plus
+  adversarial and future-scalability review. `Path` remains a portable immutable
+  authority-free value; Filesystem authority remains an explicit non-ambient
+  capability with no standard public authority-manufacturing constructor, and an
+  optional Root default is bootstrap-local rather than prelude/global/imported
+  state. Portable `filesystem.open(path[, options])` keeps its closed six-slot
+  local-only Boolean option surface, deterministic defaults, fail-closed unknown
+  options/combinations and invocation-time semantic snapshot before asynchronous
+  namespace/backend work. Portable Path construction remains synchronous and free
+  of implicit String/native-path coercion; host separators, drives, UNC syntax and
+  normalization do not enter portable Path identity. Standard Encoding values
+  remain authority-free descriptors, and standard byte/text wrappers continue to
+  borrow by default with `.owning(...)` as the explicit lifecycle-ownership form.
+  D011 is not recorded as literally unchanged from `0.1.351`: its original
+  `path.parent()` construction spelling was later superseded by independently
+  ratified D028 / specification `0.1.369`, so the effective retained constructor
+  is `path.parentComponent()` while ordinary `path.parent()` remains delegation
+  reflection. That prior D028 change is not reopened or reclassified by this
+  ratification. Future private/virtual Filesystem construction, additional open
+  capabilities/options, codec discovery/registries, convenience Path parsers or
+  native-path boundaries remain separate explicit designs. The original D011
+  publication is commit `b9f97758fb5083957d44df827aac0c65ddd3d574`.
+  This governance classification changes no normative specification,
+  implementation, blocker, implementation version, runtime, native boundary or
+  license terms and creates no implementation follow-up.
+
 - D009 is `RATIFIED`. AUD001 recovered explicit project-owner approval of
   specification `0.1.349`, and on 2026-09-08 the project owner reaffirmed the
   decision after comparison with Java/JVMS, ECMAScript abstract operations,
