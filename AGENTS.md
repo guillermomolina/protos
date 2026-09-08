@@ -570,71 +570,107 @@ Such an environment limitation also does not by itself prevent patch authoring
 when the required repository contents can be inspected and the generated patch
 is intended to be executed and validated later in the user's real checkout.
 
-### Serialized direct-to-main publication for generated patch launchers
+### Forward-compatible serialized publication for generated patch launchers
 
 Publication-capable generated patch launchers MUST isolate their mutable Git
 state from the caller's checkout instead of requiring that checkout to be clean,
 on `main`, or synchronized with `origin/main`.
 
-The normal project workflow serializes **publication** even when several agents
-prepare independent work concurrently: the user executes one publication
-launcher at a time. A launcher must therefore treat the `origin/main` fetched at
-the start of its invocation as its definitive `PUBLICATION_BASE`. It may rely on
-that base remaining unchanged while it prepares and validates its isolated
-commit, but it MUST verify that assumption again immediately before push.
+Patch **preparation** may happen in parallel while patch **publication** is
+serialized by the user. These are deliberately different timelines.
+
+A generated artifact therefore distinguishes:
+
+- `AUTHORING_BASE` — the repository revision inspected while the agent designs,
+  builds, and acceptance-tests the artifact. It is evidence for what the agent
+  saw; it is **not** a publication pin and does not by itself expire the ZIP.
+- `PUBLICATION_BASE` — the exact `origin/main` fetched by the launcher when the
+  user actually executes that ZIP. All definitive materialization, moving
+  metadata derivation, validation, commit creation, and publication occur from
+  this execution-time base.
+
+An advance from `AUTHORING_BASE` to a later `PUBLICATION_BASE` is normal. It MUST
+NOT by itself cause the agent to discard/regenerate the artifact or the launcher
+to abort. A prepared patch is expected to survive unrelated commits published by
+other agents before the user gets to it.
 
 For the standard direct-to-`main` publication workflow, a launcher MUST:
 
 1. verify that the supplied path belongs to the intended repository and validate
    the configured `origin` repository coordinate;
-2. fetch `origin/main` without changing the caller checkout and record the exact
-   fetched commit as `PUBLICATION_BASE`;
+2. fetch `origin/main` without changing the caller checkout and record that
+   execution-time commit as `PUBLICATION_BASE`;
 3. create a uniquely named **local-only temporary branch** from exactly
    `PUBLICATION_BASE` and check it out in a temporary `git worktree` outside the
    caller checkout;
-4. inspect and materialize the requested delta against the files that actually
-   exist in that worktree. Generated changes MUST NOT assume that a textual diff
-   authored against an older `main` will still apply to the newly fetched base;
-5. derive moving repository metadata from `PUBLICATION_BASE` when the requested
-   change owns that metadata. In particular, an executable implementation change
-   that must bump the Maven implementation patch version reads the version from
-   the worktree's current `pom.xml` and computes the next required patch version
-   from that value; changelog/status edits likewise preserve unrelated entries
-   already present on `PUBLICATION_BASE`;
-6. enforce semantic preconditions that matter to the work being published
-   (expected work-item status, required symbols/contracts, allowed changed-file
-   set, version format, etc.). Do not use an old whole-file blob hash or old line
-   number as a substitute for a semantic precondition when unrelated concurrent
-   work may legitimately have changed the file;
-7. stage only explicit patch-owned paths, run the adaptive validation required by
+4. inspect the files that actually exist in that worktree and evaluate the
+   artifact's **semantic preconditions** there. Preconditions should describe
+   facts the slice genuinely depends on: required symbols/contracts, expected
+   task state, absence of the slice's already-published result, version format,
+   or similarly meaningful invariants;
+5. materialize the requested delta against those execution-time files. The
+   artifact SHOULD encode a bounded/state-aware transformation rather than a
+   stale whole-file diff whenever the target is expected to move between
+   preparation and publication;
+6. derive moving repository metadata from `PUBLICATION_BASE`. In particular, an
+   implementation-version bump reads the version in that worktree's current
+   `pom.xml` and computes the required next patch version from it; changelog,
+   status, blocker, task and other shared-document edits preserve unrelated
+   entries already present at execution time;
+7. treat unrelated movement as compatible. A changed whole-file blob hash, line
+   number, preceding changelog entry, current Maven patch number, or unrelated
+   ledger row MUST NOT be used as a reason to reject the artifact unless that
+   exact state is a genuine semantic precondition of the slice;
+8. abort before publication when a **relevant semantic precondition** no longer
+   holds or the requested transformation overlaps incompatibly with already
+   published work. Report the specific failed invariant/path; do not silently
+   overwrite or guess through a real overlap;
+9. stage only explicit patch-owned paths, run the adaptive validation required by
    the actual definitive delta, and create the patch commit entirely inside the
    isolated worktree;
-8. immediately before publication, fetch `origin/main` again and require its SHA
-   to be **exactly equal** to `PUBLICATION_BASE`. If it differs, abort without
-   rebasing, merging, regenerating, repairing, or pushing. A changed main means
-   the patch must be re-audited/materialized from the new base in a new
-   invocation;
-9. when `origin/main == PUBLICATION_BASE`, publish only with a non-force
-   fast-forward push from the validated isolated commit to
-   `refs/heads/main`. A non-fast-forward rejection is a hard publication failure,
-   not permission to retry with rebase or force; and
-10. on success **or failure**, remove the temporary worktree and delete the
+10. immediately before publication, fetch `origin/main` again and require its SHA
+    to be **exactly equal** to the execution-time `PUBLICATION_BASE`. If it
+    differs during that one launcher invocation, abort without rebasing,
+    merging, repairing, or pushing. The user serializes publication, so this is
+    an exceptional publication-window race, not the normal way prepared patches
+    advance between one another;
+11. when `origin/main == PUBLICATION_BASE`, publish only with a non-force
+    fast-forward push from the validated isolated commit to
+    `refs/heads/main`. A non-fast-forward rejection is a hard publication
+    failure; and
+12. on success **or failure**, remove the temporary worktree and delete the
     temporary local branch created by that invocation.
 
-This model intentionally separates **parallel preparation** from **serialized
-publication**. Agents may investigate and prepare unrelated work at the same
-time, including work that will eventually touch common files such as `pom.xml`,
-`CHANGELOG.md`, or project ledgers. The launcher that is actually executed owns
-one stable publication window: it starts from the then-current `main`, derives
-its common-file edits from that state, validates one commit, verifies `main` did
-not move, and pushes that commit.
+The key rule is:
 
-Generated patch artifacts SHOULD therefore encode the requested transformation
-and its semantic preconditions, not merely a stale line-oriented diff. A unified
-diff remains appropriate when it is generated from the same `PUBLICATION_BASE`
-or when its target context is intentionally an exact precondition, but launchers
-for moving shared files SHOULD use a robust baseline-aware transformation
-instead of depending on obsolete line numbers or surrounding prose.
+```text
+parallel preparation
+    artifact A prepared on main=N
+    artifact B prepared on main=N
+    artifact C prepared on main=N
+
+serialized publication
+    run A -> PUBLICATION_BASE=N   -> publish N+1
+    run B -> PUBLICATION_BASE=N+1 -> materialize B there -> publish N+2
+    run C -> PUBLICATION_BASE=N+2 -> materialize C there -> publish N+3
+```
+
+B and C do not restart merely because A published first. Their execution-time
+materializers consume the newer common-file state. Only a genuine overlap with
+their own semantic substrate requires regeneration/re-audit.
+
+Generated artifacts MUST NOT embed `AUTHORING_BASE` as an exact execution
+precondition unless the task itself truly requires publication from that exact
+historical revision. Recording `AUTHORING_BASE` in README/reporting is useful
+provenance; requiring `origin/main == AUTHORING_BASE` at execution is normally
+wrong for this project workflow.
+
+A unified diff remains acceptable for a target whose exact surrounding content
+is intentionally stable or is itself a semantic precondition. For files expected
+to receive independent edits between preparation and publication—especially
+`pom.xml`, `CHANGELOG.md`, canonical status/blocker/task ledgers, and other shared
+governance documents—the default should be a bounded semantic/state-aware edit
+performed against `PUBLICATION_BASE`.
 
 The launcher MUST NOT require the caller checkout to be clean as a condition for
 this standard isolated workflow. The caller may be on another branch, behind or
@@ -645,10 +681,11 @@ user-owned and MUST remain untouched. In particular, the launcher MUST NOT use
 pre-existing state.
 
 A launcher may manage only the temporary branch/worktree and patch-owned state it
-created itself. An unexpected worktree change, failed validation, changed
-`origin/main`, or failed fast-forward publication is a reason to abort. It is
-never permission to repair or rewrite the caller checkout, force-push `main`, or
-discard another agent's work.
+created itself. An unexpected worktree change, failed validation, relevant
+semantic-precondition failure, execution-window movement of `origin/main`, or
+failed fast-forward publication is a reason to abort. It is never permission to
+repair or rewrite the caller checkout, force-push `main`, or discard another
+agent's work.
 
 Temporary publication branches are implementation machinery, not project work
 items. They MUST remain local, MUST NOT be pushed to `origin`, and MUST be deleted
@@ -669,33 +706,47 @@ itself before presenting it to the user as ready to execute.
 Before delivering a generated publication ZIP, the authoring agent MUST, to the
 extent the required repository content is available:
 
-1. establish the exact current `origin/main` revision used as the candidate
+1. establish and record the exact `AUTHORING_BASE` used for repository audit and
+   artifact acceptance. Do **not** treat that value as the future
    `PUBLICATION_BASE`;
 2. run syntax/parse checks for every generated executable helper, including
    `bash -n` for shell launchers and the applicable compile/parse check for any
    Python, Java, Node, Ruby, Perl, or other generated helper;
 3. execute every generated **content transformation** against the exact
-   `PUBLICATION_BASE` contents of each patch-owned file it will modify. A
+   `AUTHORING_BASE` contents of each patch-owned file it will modify. A
    hand-written or synthetic fixture may add edge-case coverage, but MUST NOT
-   substitute for the exact-current-file transformation test;
-4. verify that those transformations produce exactly the intended changed-file
-   set and satisfy the patch's semantic/static postconditions. For shared moving
-   files, verify preservation of unrelated current content as well as the
-   intended edit;
-5. verify the final ZIP/archive structure and integrity, including the expected
+   substitute for this exact-current-file transformation test;
+4. for every patch-owned file explicitly classified as moving/shared, also test
+   **forward compatibility** by applying representative unrelated preceding
+   changes before running the transformation. At minimum, when applicable,
+   exercise a changed Maven patch version, additional unrelated changelog
+   entries, and unrelated status/blocker/ledger edits, and verify that the
+   artifact derives from and preserves that newer state rather than requiring
+   the authoring snapshot;
+5. verify that transformations produce exactly the intended changed-file set and
+   satisfy semantic/static postconditions. For shared moving files, verify
+   preservation of unrelated content as well as the intended edit;
+6. verify the final ZIP/archive structure and integrity, including the expected
    single package root, required files, executable permission bits where
    relevant, and successful archive integrity/CRC inspection;
-6. inspect the generated launcher as one whole workflow for its Git-state
-   preconditions, isolated-worktree lifecycle, explicit staging scope,
-   adaptive-validation commands, `PUBLICATION_BASE` stability check, publication
-   command, cleanup path, and final report;
-7. when the authoring environment provides a disposable Git checkout or can
+7. inspect the generated launcher as one whole workflow for its Git-state
+   preconditions, isolated-worktree lifecycle, execution-time
+   `PUBLICATION_BASE`, dynamic shared-file materialization, explicit staging
+   scope, adaptive-validation commands, publication-base stability check,
+   publication command, cleanup path, and final report;
+8. verify explicitly that the launcher does **not** require
+   `PUBLICATION_BASE == AUTHORING_BASE` and does not reject benign main movement
+   merely because an old whole-file hash, line number, version, changelog header,
+   or unrelated ledger text changed;
+9. when the authoring environment provides a disposable Git checkout or can
    construct a faithful local Git harness without changing project semantics,
-   execute an end-to-end launcher dry run through materialization, staging,
-   validation selection and commit/publication-precondition checking with the
-   actual push disabled or redirected to a disposable local remote; and
-8. never report an artifact-level check as `PASS` unless that exact check was
-   actually executed successfully.
+   execute an end-to-end launcher dry run with a remote whose `main` has advanced
+   benignly beyond `AUTHORING_BASE`; require the artifact to materialize and
+   reach the publication gate successfully from that newer
+   `PUBLICATION_BASE`. Keep the actual push disabled or redirect it to the
+   disposable local remote; and
+10. never report an artifact-level check as `PASS` unless that exact check was
+    actually executed successfully.
 
 A generated artifact that fails any authoring-time acceptance check MUST be fixed
 and re-tested before it is shown to the user. Do not intentionally use the
@@ -703,16 +754,26 @@ user's real checkout as the first test of a generated parser, patch hunk,
 replacement anchor, helper script, ZIP layout, Git worktree flow, or similar
 deterministic launcher machinery.
 
+If `origin/main` advances while an agent is still authoring a patch, that fact
+alone does not reset the work. The agent may continue preparing the
+forward-compatible artifact from its audited `AUTHORING_BASE`; before delivery,
+it should use the newest repository content available to test compatibility of
+the semantic transformation where practical. Re-audit/regeneration is required
+only when new evidence changes the slice's relevant semantics/preconditions or
+the artifact cannot forward-materialize safely.
+
 If the authoring environment cannot execute a required acceptance check, report
 that specific limitation accurately. Lack of one unavailable check does not
 justify inventing `PASS`, but agents should still perform every exact-content,
-syntax, archive and static workflow check that their available tools permit.
+forward-compatibility, syntax, archive and static workflow check that their
+available tools permit.
 
 This acceptance gate is distinct from project behavioral validation. Maven focal
-or full-suite tests are still selected from the definitive repository delta by
-the adaptive validation matrix. Artifact acceptance exists to establish that the
-generated launcher can correctly materialize and orchestrate that delta before
-the user's checkout becomes its first execution environment.
+or full-suite tests are still selected from the definitive execution-time
+repository delta by the adaptive validation matrix. Artifact acceptance exists
+to establish that the generated launcher can correctly materialize and
+orchestrate that delta across normal intervening publications before the user's
+checkout becomes its first real execution environment.
 
 ### Environment and toolchain discipline for generated patches
 
