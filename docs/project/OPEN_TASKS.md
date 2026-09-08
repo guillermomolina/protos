@@ -44,7 +44,7 @@ Current triage:
   recorded.
 - D044 remains the priority review item because no recovered evidence yet
   demonstrates explicit project-owner selection of its complete published semantics.
-- D021-D030 require provenance and substance review; publication alone
+- D021-D029 require provenance and substance review; publication alone
   is not ratification.
 - D001-D019 are expected to be predominantly project-owner decisions, but their
   approval evidence must be checked rather than inferred.
@@ -291,6 +291,27 @@ Recorded review results:
   This governance classification changes no normative specification or
   implementation.
 
+- D030 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved retaining
+  D030 / specification `0.1.372` after comparison with Java, Scala, Rust, C#,
+  JavaScript, Python, Self and Smalltalk plus adversarial and future-scalability
+  review. `Future.then(transform)` continues to accept the existing ordinary-
+  invokable protocol rather than requiring semantic Closure identity or creating a
+  hidden Callback/Function category. After ordinary receiver/argument evaluation,
+  the exact transform value is eagerly validated by read-only ordinary `call` lookup
+  before any destination Future, continuation task, registration or scheduling state
+  is created, independently of whether the source Future is pending, resolved, failed
+  or cancelled. This validation does not invoke the transform and does not preflight
+  declared arity, defaults or rest binding. It also does not pin/cache the Closure
+  selected during inspection: when a resolved source later runs the continuation,
+  ordinary polymorphic invocation performs a fresh `call` lookup, so legitimate
+  intervening mutation or shadowing remains observable. A program that wants to keep
+  a currently selected behavior can explicitly retain the ordinary extracted Closure
+  instead of receiving implicit `then`-specific capture semantics. This keeps dataflow
+  composition distinct from the separately ratified D034 Closure-only dynamic-control
+  boundary and leaves future executable kinds, static signature introspection, remote
+  continuation transfer and other callable institutions as separate explicit designs.
+  This governance classification changes no normative specification or implementation.
+
 - D032 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved retaining
   D032 / specification `0.1.370` after comparative review across JavaScript, Python,
   Ruby, Smalltalk, Self, Java/.NET and Go plus dedicated future-scalability analysis.
@@ -361,7 +382,7 @@ Recorded review results:
 Required procedure:
 
 1. Continue backwards through the remaining unresolved decisions in D044-D040,
-   then D021-D030, and finally D001-D019.
+   then D021-D029, and finally D001-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published
    normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or
@@ -377,7 +398,7 @@ Next audit work:
 
 1. Complete the separate D044 review already in progress, considering D045 only
    as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D043-D040, then D021-D030 and D001-D019
+2. Continue backwards through the remaining unresolved decisions in D043-D040, then D021-D029 and D001-D019
    under the required procedure above.
 
 AUD001 closes only when D001-D045, except D046, have an explicit classification,
