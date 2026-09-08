@@ -431,6 +431,28 @@ work is too large, costly, risky, or uncertain to implement safely as one
 monolithic change. When coherent independent boundaries exist, prefer a sequence
 of smaller implementation slices over one oversized patch.
 
+This assessment is continuous, not a one-time pre-implementation gate. If work
+that initially looked bounded becomes materially costly, slow, context-heavy,
+failure-prone, or repeatedly requires broadening the patch or reworking the same
+surface, the agent MUST stop expanding the current slice and automatically
+subdivide the remaining work before continuing whenever independently valid
+boundaries exist. Do not wait until an oversized patch, harness, or validation
+cycle has already become difficult to reason about.
+
+Automatic decomposition of already-approved implementation work does not require
+user approval when it preserves the requested parent outcome, approved
+semantics, priorities, and dependency order. The agent should choose the
+smallest useful next slice, complete and publish that slice under the ordinary
+validation/publication rules, then re-audit current `origin/main` before the next
+slice.
+
+Ask the user before decomposition only when the proposed split would itself make
+or expose a substantive design choice, alter the requested outcome or priority,
+require an independently invalid intermediate state, or leave multiple materially
+different dependency orders whose choice has project-level consequences. Cost or
+agent difficulty alone is not a reason to return the decomposition decision to
+the user.
+
 Signals that decomposition is appropriate include, without being mechanical
 thresholds:
 
