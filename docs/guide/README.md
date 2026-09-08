@@ -42,6 +42,7 @@ documentation areas whose semantics and implementation are already closed.
 5. [Values, identity, equality, and collections](05-values-identity-equality-and-collections.md)
 6. [Modules and imports](06-modules-and-imports.md)
 7. [Errors, handlers, `ensure`, and resource lifetime](07-errors-handlers-ensure-and-resource-lifetime.md)
+8. [Futures and structured concurrency](08-futures-and-structured-concurrency.md)
 
 ## Current guide state
 
@@ -70,18 +71,22 @@ ordinary `import(...)`, canonical ModuleKeys, Actor-local module instances,
 cache-before-execute cycles, failure/retry semantics, and the resolver-policy
 boundary.
 
-`DOC001-H` is now CLOSED with
+`DOC001-H` is CLOSED with
 [chapter 07](07-errors-handlers-ensure-and-resource-lifetime.md), which explains
 Error objects, non-resumable signaling, dynamic handlers, unwind-safe `ensure`,
-cleanup precedence, and deterministic explicit resource release. The next
-independently READY Programming Guide slice is `DOC001-I` for Futures and
-structured concurrency.
+cleanup precedence, and deterministic explicit resource release.
+
+`DOC001-I` is now CLOSED with
+[chapter 08](08-futures-and-structured-concurrency.md), which explains Future
+identity/state and observation, adoption, `then`, deterministic `Future.all`,
+cooperative cancellation, task-scoped structured ownership, and `detach()`. The
+next independently READY Programming Guide slice is `DOC001-J` for isolated
+parallel execution.
 
 ## Planned progression
 
 Future chapters should cover, as the guide grows:
 
-- Futures and structured concurrency;
 - isolated parallel execution;
 - Actors and Actor groups;
 - Process, I/O, filesystem capabilities, and authority;
