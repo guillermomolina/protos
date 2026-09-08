@@ -45,6 +45,40 @@ When asked "how should Protos implement X?", interpret the task as:
 
 Do not answer only with the first technically workable solution.
 
+## User design-closure authority
+
+Research and recommendation are not design approval. The user/project owner
+decides when the evidence is sufficient to close a substantive language-design
+question and which recommended semantics, if any, become normative Protos.
+
+An agent MUST NOT convert its own research conclusion into a normative decision
+merely because it believes the investigation is complete, one alternative now
+dominates, or no unresolved ambiguity remains in the agent's analysis. Even a
+recommendation of "only one coherent option survived" remains a recommendation
+until the user explicitly approves it or has explicitly delegated that bounded
+decision.
+
+Before a new or reopened design question may cause any of the following, present
+the researched alternatives, trade-offs, recommendation, consequences, and
+remaining deferred choices to the user and obtain explicit approval:
+
+- new or changed normative semantics;
+- a `Dxxx` or equivalent design resolution becoming selected/closed;
+- an exploratory design record becoming a normative implementation contract;
+- a blocker becoming semantically ready because of newly designed behavior; or
+- downstream implementation proceeding on a substantive semantic/architectural
+  choice that was not previously approved.
+
+A broad implementation request does not waive this checkpoint. `Implement Ixxx`,
+`continue`, permission to subdivide work, or permission to publish validated
+implementation slices authorizes work under already-approved semantics; it does
+not authorize the agent to settle newly discovered language design on the user's
+behalf.
+
+Existing normative rules that are not being reopened remain authoritative and do
+not require ceremonial re-approval. The gate applies to genuinely new,
+unresolved, or explicitly reopened design choices.
+
 ## Design by attempted falsification
 
 Do not only look for evidence that a proposed design works. Actively try to
@@ -186,10 +220,19 @@ For an unresolved language-design question, work in this order:
     explicitly part of the intended semantics.
 14. State the semantics precisely enough for independent implementation.
 15. Resolve grammar ambiguity structurally before adding new syntax categories.
-16. Only then design syntax and implementation strategy.
+16. Prepare the recommended semantics, syntax, and implementation strategy
+    precisely enough for the user to evaluate the actual choice.
+17. Present the alternatives, trade-offs, recommendation, downstream
+    consequences, and intentionally deferred questions to the user as a pending
+    design decision.
+18. Obtain explicit user approval or an explicit bounded delegation before
+    publishing the choice as normative semantics or allowing dependent
+    implementation to treat it as settled.
 
-If a genuine design choice remains after this process, present the alternatives,
-trade-offs, recommendation, and consequences instead of silently choosing.
+Whether or not the agent believes a genuine design choice still remains after
+this process, a new or reopened normative question crosses the explicit approval
+gate above. The agent's conclusion that one option is uniquely coherent is useful
+decision evidence; it is not self-approval.
 
 ## Recommendation format
 
@@ -201,7 +244,9 @@ A substantive design recommendation should normally make clear:
 4. which alternatives conflict with Protos principles and why;
 5. the recommended Protos design;
 6. consequences and scaling characteristics;
-7. unresolved semantic questions requiring an explicit decision.
+7. unresolved semantic questions requiring an explicit decision; and
+8. the exact decision being requested from the user, including what would become
+   selected/closed if approved.
 
 ## Specification authority
 

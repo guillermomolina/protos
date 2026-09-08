@@ -8,6 +8,93 @@ The project deliberately separates language design from implementation. The impl
 
 When behavior is unclear, incomplete, or contradictory, do not invent semantics. Report the ambiguity and ask for a design decision.
 
+## Design authority and explicit approval gate
+
+The user/project owner is the final authority on when a substantive design
+investigation is sufficient and when a design choice becomes selected, closed,
+or ready to become project or language policy. Agents are expected to research,
+compare, falsify, and recommend designs; they MUST NOT treat their own confidence
+or completeness judgment as approval to close the design. This applies even when
+an agent believes one alternative is clearly superior or that all competing
+alternatives have been eliminated.
+
+Unless the user explicitly delegates a specific bounded design decision to the
+agent, a substantive design decision requires explicit user selection or
+approval before the repository may treat it as settled.
+
+For this rule, a substantive design decision includes a choice that does one or
+more of the following:
+
+- changes, narrows, or newly defines observable Protos semantics, syntax, public
+  protocols, public Standard Library/tool behavior, or compatibility promises;
+- selects capability, authority, ownership, lifetime, cancellation, resource,
+  identity, equality, hashing, canonicalization, persistence, distribution,
+  concurrency, ordering, isolation, security, or portability semantics;
+- selects a durable architecture that materially constrains later
+  implementations, tools, packages, libraries, runtimes, or ecosystem behavior;
+- moves a design question from exploratory, `OPEN`, `PENDING`, or blocked state
+  to `SELECTED`, `READY`, `CLOSED`, or equivalent settled state;
+- creates or closes a `Dxxx` resolution, changes normative specification text to
+  resolve a design question, or changes a blocker from unresolved to ready on
+  the basis of newly selected semantics; or
+- embeds an unresolved design choice inside an `Ixxx`, `LIBxxx`, `TOOLxxx`,
+  `CLIxxx`, `PERFxxx`, documentation, distribution, or other implementation
+  slice as though that choice had already been approved.
+
+Routine implementation machinery that cannot change observable behavior and
+does not establish a durable architectural constraint does not require a design
+approval checkpoint. Agents may also decompose already-approved work into
+implementation slices, choose local names/internal representations consistent
+with existing rules, and make other mechanically necessary implementation
+choices. Slice autonomy is not design authority: if decomposition exposes a new
+substantive choice, that choice crosses this approval gate before a dependent
+slice proceeds.
+
+Before requesting approval, the agent SHOULD do enough work to make the user's
+decision useful rather than merely returning an unexplored question. For a
+substantive choice, present a decision packet that normally includes:
+
+1. the exact problem and why a decision is needed;
+2. relevant current Protos constraints and previously approved decisions;
+3. meaningful alternatives and prior art from comparable languages, runtimes,
+   ecosystems, or systems where applicable;
+4. trade-offs, failure modes, scaling/security/lifetime consequences, and
+   attempted counterexamples;
+5. the agent's recommendation and why;
+6. downstream consequences for specification, implementation, compatibility,
+   blockers, and later work; and
+7. any choices that remain intentionally deferred.
+
+The recommendation MUST be labelled and treated as a proposal pending user
+approval. Research completeness, a strong recommendation, passing tests, an
+existing exploratory document, a previously published implementation slice, or
+an apparently obvious choice does not turn the proposal into a project decision.
+
+Do not infer design approval from a broad instruction such as "implement X",
+"continue", "go ahead", "complete Ixxx", or permission to investigate a problem.
+Do not infer it from silence, lack of objection, approval of an earlier slice,
+permission to commit/push unrelated work, or an agent's earlier self-authored
+status text. Approval applies only to the substantive choices that were actually
+presented or otherwise explicitly delegated. If a materially new choice appears
+later, present that new choice before crossing its decision boundary.
+
+The user may explicitly delegate a bounded decision (for example, "decide this
+one yourself after the comparison"). In that case the agent may select within
+that stated scope, SHOULD record the delegated scope and rationale in the
+resulting design record, and MUST NOT generalize the delegation to adjacent or
+future design questions.
+
+An agent MAY allocate a design identifier or blocker to record an unresolved
+question when repository tracking rules require it, but such a record must stay
+clearly unresolved (`OPEN`, `PENDING`, `BLOCKED`, or equivalent) until the design
+is explicitly approved. Allocation is not selection.
+
+Already-normative, already-closed repository decisions remain authoritative for
+ordinary implementation work and do not require repeated approval merely because
+a new agent encounters them. If the user explicitly asks to re-evaluate or
+reopen such a decision, treat it as open for the requested review and do not
+advance dependent new design work until the user approves the resulting choice.
+
 ## Current project coordinates
 
 The following identifiers are the repository's current operational coordinates.
@@ -328,7 +415,9 @@ The required reasoning order is:
             ↓
     derive constraints
             ↓
-    design
+    design / compare alternatives
+            ↓
+    explicit user approval when a substantive design choice is required
             ↓
     implementation
 
@@ -481,41 +570,60 @@ Such an environment limitation also does not by itself prevent patch authoring
 when the required repository contents can be inspected and the generated patch
 is intended to be executed and validated later in the user's real checkout.
 
-### Clean repository precondition for patch launchers
+### Isolated worktree publication for generated patch launchers
 
-Publication-capable patch launchers MUST treat pre-existing repository state as
-a precondition, not as state they are authorized to repair. Before the launcher
-modifies any repository file, index entry, commit, branch position, or other
-working state, it MUST verify the repository is suitable for automated work.
+Publication-capable generated patch launchers MUST isolate their mutable Git
+state from the caller's checkout instead of requiring that checkout to be clean,
+on `main`, or synchronized with `origin/main`.
 
-For the standard direct-to-`main` publication workflow:
+For the standard direct-to-`main` publication workflow, a launcher MUST:
 
-- the launcher MUST verify it is operating at the intended repository root;
-- the current branch MUST be `main`;
-- no merge, rebase, cherry-pick, revert, bisect, or similar Git operation may be
-  in progress;
-- `git status --porcelain=v1 --untracked-files=all` MUST be empty before the
-  launcher makes repository changes; staged files, modified tracked files, and
-  untracked files all make the precondition fail;
-- after `git fetch origin main`, pre-existing local commits ahead of or divergent
-  from `origin/main` make the precondition fail. A clean `main` that is only
-  behind `origin/main` may be advanced with a fast-forward-only update before the
-  definitive baseline is recorded.
+1. verify that the supplied path belongs to the intended repository and validate
+   the configured `origin` repository coordinate;
+2. fetch `origin/main` without changing the caller checkout, index, current
+   branch, staged state, modified tracked files, or untracked files;
+3. create a uniquely named **local-only temporary branch** from the exact fetched
+   `origin/main` and check it out in a temporary `git worktree` outside the
+   caller checkout;
+4. apply the patch, stage only explicit patch-owned paths, validate, and create
+   the patch commit entirely inside that isolated worktree;
+5. before publication, fetch `origin/main` again; if it advanced, rebase only the
+   isolated patch-owned commit(s) onto the new `origin/main` and rerun every
+   validation required for the resulting rebased delta;
+6. publish only with a non-force fast-forward push from the validated isolated
+   commit to `refs/heads/main`; never push the temporary branch itself; and
+7. on success **or failure**, remove the temporary worktree and delete the
+   temporary local branch created by that invocation.
 
-If any precondition fails, print enough status to identify the condition and
-abort non-zero before applying the patch. Do not attempt to infer ownership of
-pre-existing changes and do not try to make the repository clean. In particular,
-a launcher MUST NOT use `git stash`, `git reset --hard`, `git restore`,
-`git checkout -- <path>`, `git clean`, an unrelated commit, or similar repair /
-cleanup operations to dispose of state that existed before the launcher began.
-The user owns that state and decides how to resolve it.
+The launcher MUST NOT require the caller checkout to be clean as a condition for
+this standard isolated workflow. The caller may be on another branch, behind or
+ahead locally, and may contain staged, modified, or untracked work. That state is
+user-owned and MUST remain untouched. In particular, the launcher MUST NOT use
+`git stash`, `git reset --hard`, `git restore`, `git checkout -- <path>`,
+`git clean`, or a commit in the caller checkout to dispose of or absorb
+pre-existing state.
 
-After the precondition passes, a launcher may manage only state that it can prove
-it created itself during the current invocation. This includes staging only its
-explicit patch-owned paths and, when `origin/main` advances concurrently,
-rebasing or rematerializing only its own known patch commit/change after
-re-verifying that no foreign local state appeared. A conflict or unexpected
-local change is a reason to abort, not an invitation to repair the repository.
+A launcher may manage only the temporary branch/worktree and patch-owned state it
+created itself. A conflict while rebasing the isolated patch, an unexpected
+change inside the isolated worktree, failure to revalidate after a rebase, or a
+non-fast-forward publication race is a reason to retry only through a bounded
+fetch/rebase/revalidate cycle or abort. It is never permission to repair or
+rewrite the caller checkout, force-push `main`, or discard another agent's work.
+
+If a push race requires rebasing onto a newer `origin/main`, passing validation
+before that rebase is not sufficient: the rebased result MUST be validated again
+before the next push attempt. Publication retries MUST be bounded so a rapidly
+moving `main` cannot create an unending validation loop.
+
+Temporary publication branches are implementation machinery, not project work
+items. They MUST remain local, MUST NOT be pushed to `origin`, and MUST be deleted
+when the launcher terminates. The launcher SHOULD report a cleanup failure
+explicitly if Git cannot remove state that the launcher itself created.
+
+This isolation changes only patch-publication mechanics. It does not weaken
+scope, audit, validation, specification, versioning, license, or explicit user
+approval requirements, and it does not authorize a patch to incorporate or
+publish changes from the caller checkout.
 
 ### Environment and toolchain discipline for generated patches
 
