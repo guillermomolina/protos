@@ -1,0 +1,60 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Manifest: import("self:Manifest")
+Runner: import("self:Runner")
+
+spec: Manifest.parseLine(
+    "future/x.protos\tfuture-observation-error-identity\tstored:Error"
+)
+
+identityMismatchSource:
+    "storedError: Error()\n" +
+    "observedError: Error()\n" +
+    "future: (() => { observedError.signal() }).future()\n" +
+    "{\n" +
+    "    future: future\n" +
+    "    error: storedError\n" +
+    "    observe: () => { future.value() }\n" +
+    "}"
+
+parentMismatchSource:
+    "storedError: Cancelled()\n" +
+    "future: (() => { storedError.signal() }).future()\n" +
+    "{\n" +
+    "    future: future\n" +
+    "    error: storedError\n" +
+    "    observe: () => { future.value() }\n" +
+    "}"
+
+inertFalse: (evaluation) => {
+    observation: Runner.resultObservation(evaluation)
+    passed: Runner.resultPassed(evaluation) === false
+    passed.ifTrue(() => { passed = observation.state === "completed" })
+    passed.ifTrue(() => { passed = observation.error === null })
+    passed.ifTrue(() => { passed = observation.value === false })
+    passed
+}
+
+passed: inertFalse(
+    Runner.evaluateFutureObservation(spec, identityMismatchSource, executionInspect)
+)
+passed.ifTrue(() => {
+    passed = inertFalse(
+        Runner.evaluateFutureObservation(spec, parentMismatchSource, executionInspect)
+    )
+})
+
+passed

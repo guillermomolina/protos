@@ -3,3 +3,6 @@
 TOOL002-F3E1	tool002-f3e1-observation-policy-parser.protos
 TOOL002-F3E2	tool002-f3e2-fresh-observation-evaluator.protos
 TOOL002-F3E3A	tool002-f3e3a-unified-private-observation.protos
+TOOL002-F3E3B-A	tool002-f3e3b-malformed-unified-policy.protos
+TOOL002-F3E3B-B	tool002-f3e3b-stored-mismatches.protos
+TOOL002-F3E3B-C	tool002-f3e3b-fresh-mismatches.protos
