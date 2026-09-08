@@ -18,7 +18,7 @@ Runner: import("self:Runner")
 
 evaluate: (line, source, expectedPassed) => {
     spec: Manifest.parseLine(line)
-    result: Runner.evaluateFutureTerminal(spec, source, execution)
+    result: Runner.evaluateFutureTerminal(spec, source, executionInspect)
     observation: Runner.resultObservation(result)
 
     passed: Runner.resultPassed(result) === expectedPassed

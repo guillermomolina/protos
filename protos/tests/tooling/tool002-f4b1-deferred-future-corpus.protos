@@ -1,0 +1,106 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Manifest: import("self:Manifest")
+Runner: import("self:Runner")
+
+isObservationExpectation: (spec) => {
+    Manifest.caseExpectation(spec) === "future-observation-error-identity"
+}
+
+isFutureExpectation: (spec) => {
+    supported: Runner.isFutureResolvedExpectation(spec)
+    Runner.isFutureTerminalExpectation(spec).ifTrue(() => {
+        supported = true
+    })
+    isObservationExpectation(spec).ifTrue(() => {
+        supported = true
+    })
+    supported
+}
+
+plan: Manifest.load(filesystem)
+cases: Manifest.planCases(plan)
+futureCount: 0
+passedCount: 0
+firstFailure: null
+
+cases.each((spec) => {
+    isFutureExpectation(spec).ifTrue(() => {
+        futureCount = futureCount + 1
+        source: Runner.readSource(spec, filesystem)
+        evaluation: null
+
+        Runner.isFutureResolvedExpectation(spec).ifTrue(() => {
+            evaluation = Runner.evaluateFutureResolved(
+                spec,
+                source,
+                executionInspect
+            )
+        })
+
+        (evaluation === null).ifTrue(() => {
+            Runner.isFutureTerminalExpectation(spec).ifTrue(() => {
+                evaluation = Runner.evaluateFutureTerminal(
+                    spec,
+                    source,
+                    executionInspect
+                )
+            })
+        })
+
+        (evaluation === null).ifTrue(() => {
+            isObservationExpectation(spec).ifTrue(() => {
+                evaluation = Runner.evaluateFutureObservation(
+                    spec,
+                    source,
+                    executionInspect
+                )
+            })
+        })
+
+        (evaluation === null).ifTrue(() => {
+            (firstFailure === null).ifTrue(() => {
+                firstFailure = Manifest.caseId(spec)
+            })
+        })
+        (evaluation === null).ifFalse(() => {
+            Runner.resultPassed(evaluation).ifTrue(() => {
+                passedCount = passedCount + 1
+            })
+            Runner.resultPassed(evaluation).ifFalse(() => {
+                (firstFailure === null).ifTrue(() => {
+                    firstFailure = Manifest.caseId(spec)
+                })
+            })
+        })
+    })
+})
+
+result: firstFailure
+(firstFailure === null).ifTrue(() => {
+    complete: futureCount > 0
+    complete.ifTrue(() => {
+        complete = passedCount == futureCount
+    })
+    complete.ifTrue(() => {
+        result = true
+    })
+    complete.ifFalse(() => {
+        result = "tool002-f4b1-count-mismatch"
+    })
+})
+
+result
