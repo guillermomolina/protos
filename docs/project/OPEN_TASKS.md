@@ -62,7 +62,7 @@ publication evidence.
 
 Current triage: - D038 has explicit project-owner confirmation and needs only have that evidence recorded.
 - D044 remains the priority review item because no recovered evidence yet demonstrates explicit project-owner selection of its complete published semantics. is not ratification.
-- D002 and D010 and D013 and D015-D019 are expected to be predominantly project-owner decisions, but their approval evidence must be checked rather than inferred. Recorded review results:
+- D002 and D010 and D016-D019 are expected to be predominantly project-owner decisions, but their approval evidence must be checked rather than inferred. Recorded review results:
 
 - D014 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
   retaining D014 / specification `0.1.356` after recovered historical owner
@@ -861,12 +861,36 @@ Current triage: - D038 has explicit project-owner confirmation and needs only ha
   single-primary-owner invariant. This governance classification changes no
   normative specification or implementation and does not classify D011 or D013.
 
-Required procedure: 1. Continue backwards through the remaining unresolved decisions in D044, and finally D002 and D010 and D013 and D015-D019.
+- D015 is `RATIFIED`. On 2026-09-08 the project owner explicitly approved
+  retaining D015 / specification `0.1.353` after comparison with Erlang/OTP,
+  Java, Smalltalk resumable exceptions and Akka supervision plus adversarial and
+  future-scalability review. Actor code continues to use the single Core
+  non-resumable Error protocol: selecting a matching handler abandons the
+  continuation at `Error.signal()` and unwinds to the handler boundary; a normal
+  handler result is the result of the enclosing `handle` operation and is never
+  a replacement value injected at the abandoned signal point. A handled Error
+  is not Actor failure merely because it occurred; only an Error that ultimately
+  escapes the Actor turn unhandled reaches the fatal Actor-failure boundary.
+  Mutation, I/O, messages and other effects completed before the Error retain
+  their ordinary contracts, with no implicit rollback, replay or retry; any
+  retry or compensation is a new explicit program action under the relevant
+  operation's commitment semantics. An Error signaled by the selected handler
+  follows ordinary outer-handler search rather than reusing that one-shot
+  handler destination. Synchronous Actor Error escape remains distinct from an
+  asynchronous child-Future failed outcome. D015 does not classify D017
+  failure-authority/supervision policy, D034 exact handler validation/timing,
+  D043 ensure/unwind cleanup, D045 structured task ownership, or future explicit
+  restart, resumable-condition, transactional or compensation mechanisms.
+  Those remain independent authorities/designs. This governance classification
+  changes no normative specification or implementation and creates no
+  implementation follow-up.
+
+Required procedure: 1. Continue backwards through the remaining unresolved decisions in D044, and finally D002 and D010 and D016-D019.
 2. For each decision, reconstruct the alternatives, recommendation, published normative result, downstream implementation, and owner-approval evidence.
 3. Classify it as RATIFIED, NEEDS_USER_DECISION, SUPERSEDED, or PROVENANCE_UNRESOLVED. Executing or publishing a patch is not sufficient approval evidence.
 4. Present every substantive unresolved choice to the project owner under the current explicit design-approval gate. Do not silently preserve, replace, or reopen semantics.
 5. Keep D046 outside AU and do not let this audit overwrite or pre-empt its separate review. Next audit work: 1. Complete the separate D044 review already in progress, considering only as a ratified dependency where their semantics interact.
-2. Continue backwards through the remaining unresolved decisions in D002 and D010 and D013 and D015-D019 under the required procedure above. AU closes only when D002 and D010 and D013-D019,, and D044, except D046, have an explicit classification,
+2. Continue backwards through the remaining unresolved decisions in D002 and D010 and D016-D019 under the required procedure above. AU closes only when D002 and D010 and D016-D019, and D044, except D046, have an explicit classification,
 the project owner has decided every NEEDS_USER_DECISION item, relevant
 provenance is recorded durably, and all affected project ledgers are reconciled.
 Any later normative correction must be a separately approved specification
