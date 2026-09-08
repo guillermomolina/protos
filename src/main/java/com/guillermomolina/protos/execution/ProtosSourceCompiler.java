@@ -45,6 +45,17 @@ public final class ProtosSourceCompiler {
         return compileCharacters(source, lowerer, lowerer.rootFactory());
     }
 
+    public CallTarget compile(ProtosModuleSource moduleSource) {
+        Objects.requireNonNull(moduleSource, "moduleSource");
+        Source source = moduleSource.source();
+        ProtosRootFactory roots = ProtosRootFactory.sourceOnly(source);
+        CanonicalToTruffleLowerer sourceLowerer = lowerer.withRootFactory(roots);
+        return compileCharacters(
+                source.getCharacters().toString(),
+                sourceLowerer,
+                roots);
+    }
+
     CallTarget compile(Source source, ProtosLanguage language) {
         Objects.requireNonNull(source, "source");
         Objects.requireNonNull(language, "language");

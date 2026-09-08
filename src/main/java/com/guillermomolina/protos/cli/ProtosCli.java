@@ -301,7 +301,8 @@ public final class ProtosCli {
                         err);
         try {
             provisioner.provision(session);
-            String source = resolver.loadSource(resolver.entryModule(entryModuleName));
+            ProtosModuleKey entryModule = resolver.entryModule(entryModuleName);
+            ProtosModuleSource source = resolver.loadSource(entryModule).requireKey(entryModule);
             executeStandaloneRootTask(session.compiler.compile(source), session.activation);
             return 0;
         } catch (ParseError e) {

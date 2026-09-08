@@ -10,7 +10,7 @@ import java.util.Optional;
 /** Host boundary for canonical module resolution and source retrieval. */
 public interface ProtosModuleResolver {
     ProtosModuleKey resolve(String exactSpecifier, Optional<ProtosModuleKey> importingModule) throws Exception;
-    String loadSource(ProtosModuleKey key) throws Exception;
+    ProtosModuleSource loadSource(ProtosModuleKey key) throws Exception;
 
     static ProtosModuleResolver rejecting() {
         return new ProtosModuleResolver() {
@@ -20,7 +20,7 @@ public interface ProtosModuleResolver {
                 throw new Exception("no host module resolver configured");
             }
             @Override
-            public String loadSource(ProtosModuleKey key) throws Exception {
+            public ProtosModuleSource loadSource(ProtosModuleKey key) throws Exception {
                 throw new Exception("no host module resolver configured");
             }
         };

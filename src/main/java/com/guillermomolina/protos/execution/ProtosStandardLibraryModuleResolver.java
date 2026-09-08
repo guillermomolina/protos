@@ -16,7 +16,6 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -75,10 +74,11 @@ public final class ProtosStandardLibraryModuleResolver implements ProtosModuleRe
     }
 
     @Override
-    public String loadSource(ProtosModuleKey key) throws IOException {
+    public ProtosModuleSource loadSource(ProtosModuleKey key) throws IOException {
         Objects.requireNonNull(key, "key");
         String logicalName = requireStandardLogicalName(key.canonicalId());
-        return Files.readString(sourcePath(logicalName), StandardCharsets.UTF_8);
+        Path source = sourcePath(logicalName);
+        return ProtosModuleSource.fromPath(key, source);
     }
 
     private Path sourcePath(String logicalName) throws IOException {

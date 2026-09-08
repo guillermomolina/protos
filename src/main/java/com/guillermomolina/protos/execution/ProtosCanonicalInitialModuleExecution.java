@@ -19,7 +19,7 @@ public final class ProtosCanonicalInitialModuleExecution {
   ProtosActorModuleState state=initialActivation.actorModuleState();
   if(state.lookup(key).isPresent()) throw new IOException("canonical initial module is already cached");
   final CallTarget target;
-  try { target=new ProtosSourceCompiler().compile(Objects.requireNonNull(resolver.loadSource(key),"module source")); }
+  try { target=new ProtosSourceCompiler().compile(Objects.requireNonNull(resolver.loadSource(key),"module source").requireKey(key)); }
   catch(IOException e){throw e;} catch(Exception e){throw new IOException("canonical initial module preparation failed",e);}
   ProtosObjectValue instance=initialActivation.context(); ProtosActorModuleState.ModuleRecord record=new ProtosActorModuleState.ModuleRecord(instance); state.put(key,record);
   ProtosActivation activation=prelude.newModuleActivation(state,key,instance,initialActivation.executionDomain());

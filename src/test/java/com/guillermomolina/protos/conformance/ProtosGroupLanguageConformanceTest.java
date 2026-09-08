@@ -11,6 +11,8 @@
 
 package com.guillermomolina.protos.conformance;
 
+
+import com.guillermomolina.protos.execution.ProtosModuleSource;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -281,7 +283,7 @@ final class ProtosGroupLanguageConformanceTest {
         }
 
         @Override
-        public String loadSource(ProtosModuleKey key) throws IOException {
+        public ProtosModuleSource loadSource(ProtosModuleKey key) throws IOException {
             String canonical = key.canonicalId();
             if (!canonical.startsWith(PREFIX)) {
                 throw new IOException("foreign LM005-C Group module key: " + canonical);
@@ -290,7 +292,7 @@ final class ProtosGroupLanguageConformanceTest {
             if (source == null) {
                 throw new IOException("unknown LM005-C Group module key: " + canonical);
             }
-            return Files.readString(source, StandardCharsets.UTF_8);
+            return ProtosModuleSource.fromCharacters(key, Files.readString(source, StandardCharsets.UTF_8));
         }
     }
 

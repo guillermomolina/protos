@@ -96,17 +96,17 @@ final class ProtosWorkspacePackageModuleResolverTest {
         ProtosModuleKey helper =
                 ProtosWorkspacePackageModuleKey.encode("root-pkg", "Internal/Helper");
 
-        String source = resolver.loadSource(helper);
+        String source = resolver.loadSource(helper).characters();
         org.junit.jupiter.api.Assertions.assertTrue(source.contains("value: 41"));
         assertThrows(
                 IOException.class,
-                () -> resolver.loadSource(new ProtosModuleKey("std:collections/Array")));
+                () -> resolver.loadSource(new ProtosModuleKey("std:collections/Array")).characters());
         assertThrows(
                 IOException.class,
                 () ->
                         resolver.loadSource(
                                 ProtosWorkspacePackageModuleKey.encode(
-                                        "outside-plan", "Internal/Helper")));
+                                        "outside-plan", "Internal/Helper")).characters());
     }
 
     private static ProtosWorkspacePackageModuleResolver resolver(

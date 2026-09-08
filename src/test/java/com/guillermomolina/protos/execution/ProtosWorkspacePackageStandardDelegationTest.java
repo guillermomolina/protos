@@ -35,9 +35,9 @@ final class ProtosWorkspacePackageStandardDelegationTest {
         ProtosModuleKey entry=r.entryModule("Main");
         ProtosModuleKey key=r.resolve("std:probe/Thing",Optional.of(entry));
         assertEquals(new ProtosModuleKey("std:probe/Thing"),key);
-        assertEquals("value: 88",r.loadSource(key));
+        assertEquals("value: 88",r.loadSource(key).characters());
         assertThrows(IOException.class,()->r.resolve("probe/Thing",Optional.of(entry)));
-        assertThrows(IOException.class,()->r.loadSource(new ProtosModuleKey("foreign:Thing")));
+        assertThrows(IOException.class,()->r.loadSource(new ProtosModuleKey("foreign:Thing")).characters());
     }
 
     @Test void packageOnlyConstructorKeepsStdClosedAndForeignDelegatedKeyFails() throws Exception {
@@ -46,7 +46,7 @@ final class ProtosWorkspacePackageStandardDelegationTest {
         assertThrows(Exception.class,()->p.resolve("std:probe/Thing",Optional.of(entry)));
         ProtosModuleResolver bad = new ProtosModuleResolver(){
             public ProtosModuleKey resolve(String s, Optional<ProtosModuleKey> i){return new ProtosModuleKey("foreign:Thing");}
-            public String loadSource(ProtosModuleKey k){return "value: 1";}
+            public ProtosModuleSource loadSource(ProtosModuleKey k){return ProtosModuleSource.fromCharacters(k, "value: 1");}
         };
         ProtosWorkspacePackageModuleResolver r=new ProtosWorkspacePackageModuleResolver(PROJECT,plan(),bad);
         assertThrows(IOException.class,()->r.resolve("std:probe/Thing",Optional.of(entry)));
@@ -60,6 +60,6 @@ final class ProtosWorkspacePackageStandardDelegationTest {
     private static final class RecordingStd implements ProtosModuleResolver {
         AtomicInteger resolveCalls=new AtomicInteger(), loadCalls=new AtomicInteger(); String specifier; Optional<ProtosModuleKey> importer;
         public ProtosModuleKey resolve(String s, Optional<ProtosModuleKey> i) throws IOException {resolveCalls.incrementAndGet();specifier=s;importer=i;if(!s.equals("std:probe/Thing"))throw new IOException();return new ProtosModuleKey(s);}
-        public String loadSource(ProtosModuleKey k) throws IOException {loadCalls.incrementAndGet();if(!k.equals(new ProtosModuleKey("std:probe/Thing")))throw new IOException();return "value: 88";}
+        public ProtosModuleSource loadSource(ProtosModuleKey k) throws IOException {loadCalls.incrementAndGet();if(!k.equals(new ProtosModuleKey("std:probe/Thing")))throw new IOException();return ProtosModuleSource.fromCharacters(k, "value: 88");}
     }
 }

@@ -16,6 +16,8 @@
  */
 package com.guillermomolina.protos.runtime;
 
+
+import com.guillermomolina.protos.execution.ProtosModuleSource;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.execution.ProtosCoreBootstrap;
@@ -400,13 +402,13 @@ final class ProtosActorPublicApiTest {
         }
 
         @Override
-        public String loadSource(ProtosModuleKey key) throws Exception {
+        public ProtosModuleSource loadSource(ProtosModuleKey key) throws Exception {
             loadCounts.merge(key.canonicalId(), 1, Integer::sum);
             String source = sources.get(key.canonicalId());
             if (source == null) {
                 throw new java.io.IOException("module not found: " + key.canonicalId());
             }
-            return source;
+            return ProtosModuleSource.fromCharacters(key, source);
         }
     }
 }

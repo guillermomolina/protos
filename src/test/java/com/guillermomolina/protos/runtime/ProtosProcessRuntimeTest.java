@@ -16,6 +16,8 @@
  */
 package com.guillermomolina.protos.runtime;
 
+
+import com.guillermomolina.protos.execution.ProtosModuleSource;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.execution.ProtosActorBootstrap;
@@ -97,8 +99,8 @@ final class ProtosProcessRuntimeTest {
                     }
 
                     @Override
-                    public String loadSource(ProtosModuleKey key) {
-                        return "boot: () => { 7 }";
+                    public ProtosModuleSource loadSource(ProtosModuleKey key) {
+                        return ProtosModuleSource.fromCharacters(key, "boot: () => { 7 }");
                     }
                 };
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
@@ -171,8 +173,8 @@ final class ProtosProcessRuntimeTest {
                     }
 
                     @Override
-                    public String loadSource(ProtosModuleKey key) {
-                        return "boot: () => { {} }";
+                    public ProtosModuleSource loadSource(ProtosModuleKey key) {
+                        return ProtosModuleSource.fromCharacters(key, "boot: () => { {} }");
                     }
                 };
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);

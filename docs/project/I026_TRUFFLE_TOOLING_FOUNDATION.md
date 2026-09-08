@@ -53,8 +53,8 @@ permanent compatibility layer.
 |---|---|---|---|---|
 | I026-A1 | CLOSED | `0.2.260-SNAPSHOT` | — | Register `ProtosLanguage` and one per-Polyglot-context `ProtosLanguageContext`, enable the official Truffle registration annotation processor, and prove Polyglot discovery plus `Context.initialize("protos")`. Parsing/execution is intentionally not connected by this slice. |
 | I026-A2 | CLOSED | `0.2.263-SNAPSHOT` | I026-A1 | `ParsingRequest.getSource()` is now the canonical Polyglot parse input. The exact Truffle `Source` is retained by the top-level and derived Closure/object roots together with the active `ProtosLanguage`; Closure-plan rematerialization preserves that same ownership. Parsing is connected, but CLI/runtime execution cutover remains A4. |
-| I026-A3 | READY | — | I026-A2 | Preserve canonical module source identity together with `ModuleKey`; stop reducing resolver-loaded modules to identity-free source Strings before compilation. |
-| I026-A4 | BLOCKED_BY_DEPENDENCIES | — | I026-A2 + I026-A3 | Cut CLI, REPL and top-level execution drivers over to the real Polyglot/Truffle language entry boundary and retire the old direct top-level `compile(String).call(...)` route as a separate primary runtime architecture. Public CLI UX need not change merely because its implementation does. |
+| I026-A3 | CLOSED | `0.2.265-SNAPSHOT` | I026-A2 | Resolver-loaded modules now cross the host boundary as one `ProtosModuleSource` carrying the exact canonical `ModuleKey` plus a character Truffle `Source`. Standard-library, bundled-tool and workspace-package file resolvers attach the exact file URI; delegated resolvers preserve the returned Source unchanged. Module runtime, RootActor initial-module execution and bundled-tool staging compile the `ProtosModuleSource` directly, preserve its Source on top-level/derived roots even before A4 supplies an active language instance, and fail closed on key/source mismatch. No identity-free String fallback remains in the resolver contract. |
+| I026-A4 | READY | — | I026-A2 + I026-A3 | Cut CLI, REPL and top-level execution drivers over to the real Polyglot/Truffle language entry boundary and retire the old direct top-level `compile(String).call(...)` route as a separate primary runtime architecture. Public CLI UX need not change merely because its implementation does. |
 | I026-B | BLOCKED_BY_DEPENDENCIES | — | I026-A4 | Map the existing exact `SourceSpan` ranges to valid Truffle `SourceSection` values on roots/execution nodes, with focused Java-side integration evidence. |
 | I026-C | BLOCKED_BY_DEPENDENCIES | — | I026-B | Make the relevant AST nodes instrumentable and expose the minimal faithful `StandardTags` needed for source execution/stepping; do not tag nodes merely to satisfy a debugger UI. |
 | I026-D | READY | — | I026-A1 | Expose semantically faithful Truffle interop/debug views for Protos runtime values needed by tooling, without changing Protos identity or access semantics. This may proceed independently from A2-A4. |
@@ -62,13 +62,13 @@ permanent compatibility layer.
 | I026-F | BLOCKED_BY_DEPENDENCIES | — | I026-C + I026-E | Run a real GraalVM DAP smoke gate over Protos source: source breakpoint, stepping, stack frames, scopes and representative values. Only successful evidence permits a Protos DAP-support claim. |
 | I026-G | BLOCKED_BY_DEPENDENCIES | — | I026-C + I026-E | Run a GraalVM dynamic-LSP smoke gate and record exactly which useful runtime-derived capabilities work for Protos. Do not treat this as a replacement for static Protos language intelligence. |
 
-After I026-A2, the public Polyglot parse boundary reaches the real Protos
-parser/canonical/lowering pipeline and every root produced from that compilation
-retains one exact language/source owner. `Context.parse(...)` is therefore a real
-parse path, but A2 does not claim that executing the returned value is a complete
-standalone Protos session: A3 still owns module source identity and A4 owns
-runtime bootstrap plus CLI/REPL/top-level cutover and deletion of the old primary
-direct-entry architecture. I026-D remains independently READY.
+After I026-A3, top-level Polyglot parsing and resolver-loaded modules both retain
+real Truffle Source identity instead of collapsing source units to anonymous
+Strings. `ModuleKey` remains the sole Core module-cache identity; the attached
+Truffle Source is implementation/tooling metadata and does not change Actor-local
+module semantics. A4 is now READY to move CLI, REPL and remaining top-level
+execution drivers through the initialized Polyglot language/context boundary and
+retire the staged direct-entry architecture. I026-D remains independently READY.
 
 ## Deferred ownership
 

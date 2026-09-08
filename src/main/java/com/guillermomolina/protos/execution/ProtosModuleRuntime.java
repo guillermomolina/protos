@@ -126,7 +126,9 @@ public final class ProtosModuleRuntime {
         actorState.put(key, record); // normative cache-before-execute point
 
         try {
-            String source = Objects.requireNonNull(resolver.loadSource(key), "module source");
+            ProtosModuleSource source =
+                    Objects.requireNonNull(resolver.loadSource(key), "module source")
+                            .requireKey(key);
             ProtosActivation moduleActivation =
                     prelude.newModuleActivation(
                             actorState,

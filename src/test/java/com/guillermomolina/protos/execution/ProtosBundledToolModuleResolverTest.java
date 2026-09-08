@@ -49,7 +49,7 @@ final class ProtosBundledToolModuleResolverTest {
         assertEquals(new ProtosModuleKey("bundled-tool:package/Main"), entry);
         assertEquals(new ProtosModuleKey("bundled-tool:package/Helper"), helperFromEntry);
         assertEquals(helperFromEntry, helperFromHelper);
-        assertEquals("banner: \"hello\"", resolver.loadSource(helperFromEntry));
+        assertEquals("banner: \"hello\"", resolver.loadSource(helperFromEntry).characters());
 
         assertThrows(
                 IOException.class,
@@ -80,9 +80,9 @@ final class ProtosBundledToolModuleResolverTest {
                     }
 
                     @Override
-                    public String loadSource(ProtosModuleKey key) {
+                    public ProtosModuleSource loadSource(ProtosModuleKey key) {
                         assertEquals(new ProtosModuleKey("std:probe/Module"), key);
-                        return "value: 7";
+                        return ProtosModuleSource.fromCharacters(key, "value: 7");
                     }
                 };
         ProtosBundledToolModuleResolver resolver =
@@ -90,7 +90,7 @@ final class ProtosBundledToolModuleResolverTest {
 
         ProtosModuleKey key = resolver.resolve("std:probe/Module", Optional.empty());
         assertEquals(new ProtosModuleKey("std:probe/Module"), key);
-        assertEquals("value: 7", resolver.loadSource(key));
+        assertEquals("value: 7", resolver.loadSource(key).characters());
     }
 
     private void writeModule(String logicalName, String source) throws IOException {

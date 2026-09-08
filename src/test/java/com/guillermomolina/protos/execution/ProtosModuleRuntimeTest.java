@@ -123,9 +123,9 @@ class ProtosModuleRuntimeTest {
         AtomicInteger attempt = new AtomicInteger();
         MemoryResolver resolver = new MemoryResolver() {
             @Override
-            public String loadSource(ProtosModuleKey key) {
+            public ProtosModuleSource loadSource(ProtosModuleKey key) {
                 loadCounts.merge(key.canonicalId(), 1, Integer::sum);
-                return attempt.getAndIncrement() == 0 ? "broken: (" : "ok: 42";
+                return ProtosModuleSource.fromCharacters(key, attempt.getAndIncrement() == 0 ? "broken: (" : "ok: 42");
             }
         }.module("retry", "ignored");
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
@@ -144,7 +144,7 @@ class ProtosModuleRuntimeTest {
             @Override public ProtosModuleKey resolve(String s, Optional<ProtosModuleKey> from) throws Exception {
                 throw new java.io.IOException("host detail");
             }
-            @Override public String loadSource(ProtosModuleKey key) { return ""; }
+            @Override public ProtosModuleSource loadSource(ProtosModuleKey key) { return ProtosModuleSource.fromCharacters(key, ""); }
         };
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
         assertThrows(ProtosSignalException.class,
@@ -168,11 +168,11 @@ class ProtosModuleRuntimeTest {
             return new ProtosModuleKey(key);
         }
 
-        @Override public String loadSource(ProtosModuleKey key) throws Exception {
+        @Override public ProtosModuleSource loadSource(ProtosModuleKey key) throws Exception {
             loadCounts.merge(key.canonicalId(), 1, Integer::sum);
             String source = sources.get(key.canonicalId());
             if (source == null) throw new java.io.IOException("not found");
-            return source;
+            return ProtosModuleSource.fromCharacters(key, source);
         }
     }
 }

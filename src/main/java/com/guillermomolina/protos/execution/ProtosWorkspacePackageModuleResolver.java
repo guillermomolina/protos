@@ -19,8 +19,6 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -84,7 +82,7 @@ public final class ProtosWorkspacePackageModuleResolver implements ProtosModuleR
     }
 
     @Override
-    public String loadSource(ProtosModuleKey key) throws IOException {
+    public ProtosModuleSource loadSource(ProtosModuleKey key) throws IOException {
         Objects.requireNonNull(key, "key");
         if (key.canonicalId().startsWith(STD_PREFIX)) {
             try { return standardLibraryResolver.loadSource(key); }
@@ -94,7 +92,7 @@ public final class ProtosWorkspacePackageModuleResolver implements ProtosModuleR
         ProtosWorkspacePackageModuleKey.Address address =
                 ProtosWorkspacePackageModuleKey.decode(key);
         Path source = sourceLookup.requireSource(address.packageId(), address.logicalModule());
-        return Files.readString(source, StandardCharsets.UTF_8);
+        return ProtosModuleSource.fromPath(key, source);
     }
 
     private ProtosModuleKey resolveStandard(

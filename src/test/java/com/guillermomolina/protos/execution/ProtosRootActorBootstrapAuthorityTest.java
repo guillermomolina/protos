@@ -295,12 +295,12 @@ final class ProtosRootActorBootstrapAuthorityTest {
         }
 
         @Override
-        public String loadSource(ProtosModuleKey key) {
+        public ProtosModuleSource loadSource(ProtosModuleKey key) {
             String source = sources.get(key.canonicalId());
             if (source == null) {
                 throw new IllegalArgumentException("unknown module: " + key.canonicalId());
             }
-            return source;
+            return ProtosModuleSource.fromCharacters(key, source);
         }
     }
 }

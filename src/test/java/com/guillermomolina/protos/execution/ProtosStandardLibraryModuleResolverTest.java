@@ -85,7 +85,7 @@ class ProtosStandardLibraryModuleResolverTest {
 
         ProtosModuleKey key =
                 resolver.resolve("std:collections/TextProbe", Optional.empty());
-        assertEquals("value: \"olá\"", resolver.loadSource(key));
+        assertEquals("value: \"olá\"", resolver.loadSource(key).characters());
     }
 
     @Test

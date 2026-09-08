@@ -18,7 +18,6 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -93,7 +92,7 @@ public final class ProtosBundledToolModuleResolver implements ProtosModuleResolv
     }
 
     @Override
-    public String loadSource(ProtosModuleKey key) throws Exception {
+    public ProtosModuleSource loadSource(ProtosModuleKey key) throws Exception {
         Objects.requireNonNull(key, "key");
         String canonicalId = key.canonicalId();
         if (canonicalId.startsWith("std:")) {
@@ -105,7 +104,8 @@ public final class ProtosBundledToolModuleResolver implements ProtosModuleResolv
 
         String logicalName =
                 requireLogicalName(canonicalId.substring(canonicalPrefix.length()));
-        return Files.readString(sourcePath(logicalName), StandardCharsets.UTF_8);
+        Path source = sourcePath(logicalName);
+        return ProtosModuleSource.fromPath(key, source);
     }
 
     private Path sourcePath(String logicalName) throws IOException {

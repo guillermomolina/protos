@@ -206,13 +206,13 @@ final class ProtosActorBootstrapTest {
         }
 
         @Override
-        public String loadSource(ProtosModuleKey key) throws Exception {
+        public ProtosModuleSource loadSource(ProtosModuleKey key) throws Exception {
             loads.merge(key.canonicalId(), 1, Integer::sum);
             String source = sources.get(key.canonicalId());
             if (source == null) {
                 throw new java.io.IOException("module not found: " + key.canonicalId());
             }
-            return source;
+            return ProtosModuleSource.fromCharacters(key, source);
         }
     }
 }

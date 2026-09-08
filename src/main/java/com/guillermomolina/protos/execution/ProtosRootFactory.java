@@ -36,6 +36,10 @@ final class ProtosRootFactory {
         return new ProtosRootFactory(null, null);
     }
 
+    static ProtosRootFactory sourceOnly(Source source) {
+        return new ProtosRootFactory(null, Objects.requireNonNull(source, "source"));
+    }
+
     static ProtosRootFactory sourceBound(ProtosLanguage language, Source source) {
         return new ProtosRootFactory(
                 Objects.requireNonNull(language, "language"),
@@ -44,7 +48,7 @@ final class ProtosRootFactory {
 
     CallTarget createCallTarget(ProtosExpressionNode body) {
         Objects.requireNonNull(body, "body");
-        if (language == null) {
+        if (language == null && source == null) {
             return ProtosExecution.createCallTarget(body);
         }
         return new ProtosRootNode(language, source, body).getCallTarget();
