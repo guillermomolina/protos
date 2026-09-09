@@ -34,10 +34,9 @@ writer: TextWriter(flushableTarget, Encoding.UTF8)
 plainWriter: TextWriter(plainTarget, Encoding.UTF8)
 writer.flush().then((first) => {
     plainWriter.flush().then((second) => {
-        (first === writer).and() {
-            (second === plainWriter).and() {
-                (flushableState.flushes == 1).and() { plainState.writes == 0 }
-            }
-        }
+        (first === writer) &&
+            (second === plainWriter) &&
+            (flushableState.flushes == 1) &&
+            (plainState.writes == 0)
     })
 })

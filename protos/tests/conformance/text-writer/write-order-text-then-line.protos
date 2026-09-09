@@ -45,15 +45,11 @@ writer: TextWriter(target, Encoding.UTF8)
 writer.writeText("A")
 second: writer.writeLine("B")
 second.then((result) => {
-    (result === writer).and() {
-        (state.writes == 2).and() {
-            (state.firstSize == 1).and() {
-                (state.first0 == 65).and() {
-                    (state.secondSize == 2).and() {
-                        (state.second0 == 66).and() { state.second1 == 10 }
-                    }
-                }
-            }
-        }
-    }
+    (result === writer) &&
+        (state.writes == 2) &&
+        (state.firstSize == 1) &&
+        (state.first0 == 65) &&
+        (state.secondSize == 2) &&
+        (state.second0 == 66) &&
+        (state.second1 == 10)
 })

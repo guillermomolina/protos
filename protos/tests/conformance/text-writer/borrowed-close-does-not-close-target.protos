@@ -25,5 +25,6 @@ target: {
 }
 writer: TextWriter(target, Encoding.UTF8)
 writer.close().then((result) => {
-    (result === writer).and() { state.closes == 0 }
+    (result === writer) &&
+        (state.closes == 0)
 })

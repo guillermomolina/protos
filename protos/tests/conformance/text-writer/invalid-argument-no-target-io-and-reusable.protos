@@ -32,9 +32,8 @@ writer: TextWriter(target, Encoding.UTF8)
 writer.writeText(1)
 valid: writer.writeText("A")
 valid.then((result) => {
-    (result === writer).and() {
-        (state.writes == 1).and() {
-            (state.size == 1).and() { state.byte0 == 65 }
-        }
-    }
+    (result === writer) &&
+        (state.writes == 1) &&
+        (state.size == 1) &&
+        (state.byte0 == 65)
 })
