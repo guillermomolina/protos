@@ -35,10 +35,7 @@ handled: Error.handle(
     },
     (caught) => caught === expected
 )
-handled.and() {
-    (conditionCalls == 1).and() {
-        (bodyCalls == 1).and() {
-            afterLoop == 0
-        }
-    }
-}
+handled &&
+    (conditionCalls == 1) &&
+    (bodyCalls == 1) &&
+    (afterLoop == 0)

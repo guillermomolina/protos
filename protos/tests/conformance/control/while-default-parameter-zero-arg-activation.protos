@@ -30,10 +30,7 @@ condition: (value = nextCondition()) => value
 result: condition.while((ignored = bodyDefault()) => {
     bodyCalls = bodyCalls + 1
 })
-(result === null).and() {
-    (conditionCalls == 2).and() {
-        (bodyDefaultCalls == 1).and() {
-            bodyCalls == 1
-        }
-    }
-}
+(result === null) &&
+    (conditionCalls == 2) &&
+    (bodyDefaultCalls == 1) &&
+    (bodyCalls == 1)

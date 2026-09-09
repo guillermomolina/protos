@@ -37,6 +37,5 @@ outer: (() => {
 
 outer.value()
 
-(order == 12).and() {
-    iterations == 1
-}
+(order == 12) &&
+    (iterations == 1)
