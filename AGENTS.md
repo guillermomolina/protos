@@ -1756,6 +1756,46 @@ The launcher report MUST preserve the runner's `VALIDATION_IMPACT`,
 continue to use the existing adaptive validation rules and do not invoke this
 runner merely to obtain a no-test classification.
 
+<!-- PERF005-C RETIREMENT-CONDITION -->
+#### Retirement of the temporary host-side execution bridge
+
+The impact-aware publication-validation **policy and classification contract are
+not temporary merely because PERF005 introduced them**. They may remain useful
+after TOOL002 matures. The temporary component is the host-side Maven execution
+bridge currently implemented by `scripts/publication_validation.py`.
+
+Retire or replace that host-side execution bridge only when the official
+`protos test` / TOOL002 execution path demonstrably owns the publication
+validation execution contract while preserving all of these properties:
+
+1. it receives the deterministic affected test set selected from the definitive
+   `PUBLICATION_BASE..CANDIDATE_SHA` delta, or provides an equivalent first-class
+   Test Tool selection model with the same coverage;
+2. it preserves the selected corpus and failure propagation rather than silently
+   narrowing, skipping, or reinterpreting the routed test set;
+3. it preserves the fresh semantic Process / RootActor isolation required by the
+   ratified Test Tool contract;
+4. it can execute complete validation for shared, unknown, cross-tool, and
+   top-level closure/reconciliation candidates;
+5. unknown, malformed, or unsupported selection state still fails closed rather
+   than silently omitting validation;
+6. it reports auditable selected, passed, failed, and skipped evidence suitable
+   for the owning GitHub Issue publication log; and
+7. the transition does not introduce a competing host scheduler, silently select
+   worker-count/timeout/resource semantics, resume suspended TOOL002-H work, or
+   change observable Protos behavior.
+
+Nominal existence of TOOL002, completion of unrelated Test Tool slices, or the
+availability of a `protos test` command is not sufficient to retire the bridge.
+Retirement occurs only after the official path has demonstrated ownership of the
+required publication-validation execution contract.
+
+When that condition is met, prefer replacing only the host-side execution bridge
+first. Keep or evolve the impact selector/routing policy independently if it
+still provides useful deterministic dependency classification. Do not couple
+retirement of execution machinery to deletion of the routing policy without
+separate evidence that the policy itself is obsolete.
+
 
 Impact-aware publication validation is a bounded exception for intermediate
 executable/test-impact slices whose definitive publication delta is
