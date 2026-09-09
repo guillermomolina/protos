@@ -30,8 +30,8 @@ import java.util.function.Supplier;
  * <p>A Process is semantic runtime capacity, not an operating-system process. This class performs
  * no OS termination. It owns the current local Process incarnation, its unique RootActor, hosted
  * Actor incarnations, stable bootstrap state, and the runtime authority behind represented Process
- * capability proxies. The optional default Filesystem grant remains separate authority and is
- * exposed only to RootActor bootstrap machinery.
+ * capability proxies. Optional default Filesystem and Network grants remain separate authority
+ * and are exposed only to RootActor bootstrap machinery.
  */
 public final class ProtosProcessRuntime {
     public enum LifecycleState {
@@ -67,6 +67,7 @@ public final class ProtosProcessRuntime {
 
     private final ProtosActor rootActor;
     private final ProtosFilesystemValue rootFilesystem;
+    private final ProtosNetworkCapabilityValue rootNetwork;
     private final Set<ProtosActor> liveActors = new LinkedHashSet<>();
     private final Set<ProtosActorGroupRuntime> ownedGroups = new LinkedHashSet<>();
     private LifecycleState lifecycle = LifecycleState.RUNNING;
@@ -93,24 +94,34 @@ public final class ProtosProcessRuntime {
     private ProtosProcessExecutionHost executionHost;
 
     /**
-     * Creates one Process incarnation together with its unique RootActor and no default
-     * Filesystem grant.
+     * Creates one Process incarnation together with its unique RootActor and no optional
+     * Filesystem or Network grant.
      */
     public ProtosProcessRuntime(ProtosObjectValue actorRefPrototype) {
-        this(actorRefPrototype, null);
+        this(actorRefPrototype, null, null);
     }
 
-    /**
-     * Creates one Process incarnation with its bootstrap-stable optional default Filesystem grant.
-     *
-     * <p>The Filesystem capability is separate from Process authority. A null host argument means
-     * the RootActor initial module receives no local {@code filesystem} slot; the choice is fixed
-     * for this Process incarnation and is never recoverable through Process.
-     */
+    /** Creates one Process incarnation with an optional default Filesystem grant only. */
     public ProtosProcessRuntime(
             ProtosObjectValue actorRefPrototype,
             ProtosFilesystemValue rootFilesystem) {
+        this(actorRefPrototype, rootFilesystem, null);
+    }
+
+    /**
+     * Creates one Process incarnation with bootstrap-stable optional default Filesystem and
+     * Network grants.
+     *
+     * <p>Both capabilities remain separate from Process authority. A null grant means the
+     * RootActor initial module receives no corresponding local slot; each choice is fixed for this
+     * Process incarnation and is never recoverable through the public Process capability.
+     */
+    public ProtosProcessRuntime(
+            ProtosObjectValue actorRefPrototype,
+            ProtosFilesystemValue rootFilesystem,
+            ProtosNetworkCapabilityValue rootNetwork) {
         this.rootFilesystem = rootFilesystem;
+        this.rootNetwork = rootNetwork;
         rootActor =
                 new ProtosActor(
                         Objects.requireNonNull(actorRefPrototype, "actorRefPrototype"),
@@ -172,6 +183,11 @@ public final class ProtosProcessRuntime {
     /** Optional default Filesystem authority granted only to the RootActor initial module. */
     public Optional<ProtosFilesystemValue> rootFilesystemForRuntime() {
         return Optional.ofNullable(rootFilesystem);
+    }
+
+    /** Optional default Network authority granted only to the RootActor initial module. */
+    public Optional<ProtosNetworkCapabilityValue> rootNetworkForRuntime() {
+        return Optional.ofNullable(rootNetwork);
     }
 
     /**

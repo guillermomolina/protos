@@ -161,6 +161,16 @@ public final class ProtosActorBootstrap {
                         prelude.processPrototype()));
         process.rootFilesystemForRuntime()
                 .ifPresent(filesystem -> locals.put("filesystem", filesystem));
+        process.rootNetworkForRuntime()
+                .ifPresent(
+                        network -> {
+                            if (network.representedDelegationParent(prelude)
+                                    != prelude.networkPrototype()) {
+                                throw new IllegalStateException(
+                                        "RootActor Network grant belongs to another Core prelude");
+                            }
+                            locals.put("network", network);
+                        });
         return Map.copyOf(locals);
     }
 

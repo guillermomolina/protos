@@ -30,8 +30,8 @@ normal implementation dependencies established as A-F progresses.
 - **B — Network capability + bootstrap provisioning — IN_PROGRESS:** PLAT002 selects a represented live Network authority below a canonical source-backed prototype; B1 publishes only that prototype/architecture record and B2-B5 implement the capability, bootstrap confinement and closure without selecting the TCP backend.
   - **B1 — canonical Network prototype — CLOSED (`0.2.282-SNAPSHOT` / `SAME_COMMIT`):** publish frozen source-backed standard `Network` in Prelude, register ratified PLAT002, update exact Core inventories and retain zero authority/backend/native-Closure construction.
   - **B2 — represented Network capability + transfer confinement — CLOSED (`0.2.283-SNAPSHOT` / `SAME_COMMIT`):** implement the PLAT002 represented wrapper with canonical Network parent, opaque host target and explicit Actor/P fail-closed transfer, including authority-bearing descendants; no RootActor endowment or TCP operations.
-  - **B3 — optional RootActor `network` bootstrap endowment — READY:** consume B2 and provision host-granted Network only in the initial RootActor module context, absent when not granted and never imported/ambient.
-  - **B4 — ambient/import/Actor/P confinement conformance — BLOCKED_BY_DEPENDENCIES:** prove prototype possession/ordinary derivation cannot manufacture authority and no implicit import/new-Actor/P recovery path exists.
+  - **B3 — optional RootActor `network` bootstrap endowment — CLOSED (`0.2.284-SNAPSHOT` / `SAME_COMMIT`):** host-granted represented Network is an optional exact local `network` only on the initial RootActor module/standalone entry; absence is a missing slot, imports/new Actors receive no ambient grant, and Process exposes no Network accessor.
+  - **B4 — ambient/import/Actor/P confinement conformance — READY:** retain broader authority-confinement evidence over prototype-vs-capability distinction, import/new-Actor/P boundaries and non-recovery paths.
   - **B5 — close B — BLOCKED_BY_DEPENDENCIES:** reconcile retained evidence and close Network capability/bootstrap provisioning before TCP acquisition implementation proceeds.
 - **C — TCP connection + `connectTcp`:** async acquisition, cancellation/late
   resource custody, Byte I/O/close/half-close composition, endpoint observation.
@@ -42,6 +42,18 @@ normal implementation dependencies established as A-F progresses.
   subdivide mechanically if required.
 - **F — cross-slice conformance/native-boundary closure:** cancellation races,
   late custody, multiple-accept scale evidence and Actor/P non-transferability.
+
+## I028-B3 closure
+
+Published at implementation version `0.2.284-SNAPSHOT`. B3 consumes the already-ratified D047/PLAT002 authority
+model without adding a backend: one host-granted `ProtosNetworkCapabilityValue` may be retained as
+bootstrap-stable Process-host state and is exposed only as the exact local `network` slot of the
+initial RootActor module (or equivalent standalone initial activation) before its first source
+expression. A missing grant produces no slot rather than `null`. Imported modules and newly hosted
+Actors receive no implicit `network` local. The public Process protocol is unchanged and provides no
+Network recovery path. The standalone host-neutral bootstrap preserves its prior signature and adds
+an overload for an already-provisioned Network capability. No connect/listen/TCP/backend/native
+Closure/specification change is included; B4 is released for retained confinement closure evidence.
 
 ## I028-B2 closure
 

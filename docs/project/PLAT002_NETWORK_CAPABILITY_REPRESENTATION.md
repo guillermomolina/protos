@@ -86,8 +86,8 @@ review, not a language-specification revision merely because backend machinery c
 |---|---|---|
 | I028-B1 | CLOSED | Publish the canonical frozen source-backed `Network` prototype, register PLAT002, and close Core/Prelude/source inventories without creating authority or selecting a TCP backend. |
 | I028-B2 | CLOSED | Implemented represented Network wrapper with canonical parent/opaque host target plus explicit Actor/P rejection for the capability and authority-bearing descendants; no bootstrap/TCP. |
-| I028-B3 | READY | Add optional RootActor initial-module local `network` provisioning with absence/import/new-Actor confinement; no ambient recovery. |
-| I028-B4 | BLOCKED_BY_DEPENDENCIES | Retained Protos/JVM conformance for prototype-vs-capability distinction and bootstrap/import/Actor/P authority confinement. |
+| I028-B3 | CLOSED | Optional exact RootActor initial-module `network` endowment from an already-provisioned represented capability; absent grant means absent slot, imports/new Actors receive no ambient grant, and Process has no Network accessor. |
+| I028-B4 | READY | Retained Protos/JVM conformance for prototype-vs-capability distinction and bootstrap/import/Actor/P authority confinement. |
 | I028-B5 | BLOCKED_BY_DEPENDENCIES | Reconcile B evidence and close the Network capability/bootstrap slice before TCP implementation proceeds. |
 
 ## B2 implementation evidence
@@ -100,6 +100,18 @@ NonParallel set. Because both copiers traverse delegation parents before copying
 authority-bearing ordinary child is rejected as well. An ordinary child of the authority-free Network prototype
 remains copyable, preserving the PLAT002 prototype/capability distinction. No generic HostCapability base,
 backend interface, RootActor endowment or TCP mechanism is introduced.
+
+## B3 implementation evidence
+
+I028-B3 closes in `0.2.284-SNAPSHOT`. `ProtosProcessRuntime` may retain one optional already-provisioned
+`ProtosNetworkCapabilityValue` solely as RootActor bootstrap state alongside the pre-existing
+optional Filesystem grant. `ProtosActorBootstrap` validates that the capability delegates to the
+exact Network prototype of the active Prelude and places it only in the initial RootActor module's
+local `network` slot. Missing authority means no slot. Ordinary imports and non-root Actor bootstrap
+continue through paths that never receive root bootstrap locals. The host-neutral standalone
+assembler retains its existing API and adds an overload accepting the exact represented Network
+capability. Process protocol selectors, Actor/P transfer rules, Network representation, native
+Closure inventory and backend identity remain unchanged.
 
 ## Deliberately deferred
 

@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
+import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
@@ -32,8 +33,9 @@ import java.util.Objects;
  *
  * <p>This class does not discover host facilities. The launcher supplies already-captured
  * application arguments and Environment entries/name-domain, independently optional standard byte
- * backends with their host-selected Encoding descriptors, and an optional already-provisioned
- * default Filesystem capability. The resulting non-importable entry activation receives the exact
+ * backends with their host-selected Encoding descriptors, plus independently optional already-
+ * provisioned default Filesystem and Network capabilities. The resulting non-importable entry
+ * activation receives the exact
  * E2 bootstrap-local authority model before its first source expression.
  */
 public final class ProtosStandaloneProcessBootstrap {
@@ -58,6 +60,34 @@ public final class ProtosStandaloneProcessBootstrap {
             ProtosEncodingValue stdoutEncoding,
             ProtosEncodingValue stderrEncoding,
             ProtosFilesystemValue defaultFilesystem) {
+        return create(
+                prelude,
+                applicationArguments,
+                environmentNameDomain,
+                environmentEntries,
+                stdinBackend,
+                stdoutBackend,
+                stderrBackend,
+                stdinEncoding,
+                stdoutEncoding,
+                stderrEncoding,
+                defaultFilesystem,
+                null);
+    }
+
+    public static Result create(
+            ProtosPrelude prelude,
+            List<String> applicationArguments,
+            ProtosEnvironmentValue.NativeNameDomain environmentNameDomain,
+            List<ProtosEnvironmentValue.NativeEntry> environmentEntries,
+            ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+            ProtosProcessStandardStreamBinding.WritableBackend stderrBackend,
+            ProtosEncodingValue stdinEncoding,
+            ProtosEncodingValue stdoutEncoding,
+            ProtosEncodingValue stderrEncoding,
+            ProtosFilesystemValue defaultFilesystem,
+            ProtosNetworkCapabilityValue defaultNetwork) {
         Objects.requireNonNull(prelude, "prelude");
         Objects.requireNonNull(applicationArguments, "applicationArguments");
         Objects.requireNonNull(environmentNameDomain, "environmentNameDomain");
@@ -66,7 +96,8 @@ public final class ProtosStandaloneProcessBootstrap {
         ProtosProcessRuntime process =
                 new ProtosProcessRuntime(
                         prelude.actorRefPrototypeForRuntime(),
-                        defaultFilesystem);
+                        defaultFilesystem,
+                        defaultNetwork);
 
         process.establishArgumentsForRuntime(
                 ProtosStandardProcessArgumentsProtocol.createPrototype(),
