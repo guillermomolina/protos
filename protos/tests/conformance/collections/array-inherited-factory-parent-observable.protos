@@ -14,10 +14,7 @@ MyArray: Array {
 }
 xs: MyArray(10, 20)
 
-(xs.size() == 2).and() {
-    (xs.at(0) == 10).and() {
-        (xs.at(1) == 20).and() {
-            xs.label == 9
-        }
-    }
-}
+(xs.size() == 2) &&
+    (xs.at(0) == 10) &&
+    (xs.at(1) == 20) &&
+    (xs.label == 9)

@@ -13,8 +13,6 @@ m: IdentityMap()
 m.atPut(1, 10)
 m.atPut(1.0, 20)
 
-(m.size() == 2).and() {
-    (m.at(1) == 10).and() {
-        m.at(1.0) == 20
-    }
-}
+(m.size() == 2) &&
+    (m.at(1) == 10) &&
+    (m.at(1.0) == 20)

@@ -20,12 +20,8 @@ missing: m.containsKey(absent)
 old: m.remove(key)
 after: m.containsKey(key)
 
-(before).and() {
-    (missing == false).and() {
-        (old == 7).and() {
-            (after == false).and() {
-                m.size() == 0
-            }
-        }
-    }
-}
+before &&
+    (missing == false) &&
+    (old == 7) &&
+    (after == false) &&
+    (m.size() == 0)

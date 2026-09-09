@@ -14,14 +14,9 @@ first: Array(1, marker)
 second: Array(1, marker)
 singleton: Array(3)
 
-(first !== second).and() {
-    (first.size() == 2).and() {
-        (first.at(0) == 1).and() {
-            (first.at(1) === marker).and() {
-                (singleton.size() == 1).and() {
-                    singleton.at(0) == 3
-                }
-            }
-        }
-    }
-}
+(first !== second) &&
+    (first.size() == 2) &&
+    (first.at(0) == 1) &&
+    (first.at(1) === marker) &&
+    (singleton.size() == 1) &&
+    (singleton.at(0) == 3)
