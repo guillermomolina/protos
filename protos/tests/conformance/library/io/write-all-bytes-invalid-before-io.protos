@@ -30,8 +30,6 @@ Error.handle(
 )
 
 actual: Files.readAllBytes(filesystem, path).value()
-handled.and() {
-    (actual.size() == 9).and() {
-        actual.at(0) == 117
-    }
-}
+handled &&
+    (actual.size() == 9) &&
+    (actual.at(0) == 117)

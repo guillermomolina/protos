@@ -31,8 +31,6 @@ IOError.handle(
 )
 
 actual: Files.readAllBytes(filesystem, path).value()
-failed.and() {
-    (actual.size() == 9).and() {
-        actual.at(0) == 117
-    }
-}
+failed &&
+    (actual.size() == 9) &&
+    (actual.at(0) == 117)

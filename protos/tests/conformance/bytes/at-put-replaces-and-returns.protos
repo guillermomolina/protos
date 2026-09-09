@@ -22,8 +22,6 @@ bytes.add(2)
 replacement: UInt16(255)
 result: bytes.atPut(0, replacement)
 
-(result === replacement).and() {
-    (bytes.at(0) === replacement).and() {
-        bytes.size() == 2
-    }
-}
+(result === replacement) &&
+    (bytes.at(0) === replacement) &&
+    (bytes.size() == 2)

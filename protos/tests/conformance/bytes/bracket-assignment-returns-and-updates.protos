@@ -23,8 +23,6 @@ result: (() => {
     bytes[1] = 7
 })()
 
-(result == 7).and() {
-    (bytes.at(1) == 7).and() {
-        bytes.size() == 2
-    }
-}
+(result == 7) &&
+    (bytes.at(1) == 7) &&
+    (bytes.size() == 2)
