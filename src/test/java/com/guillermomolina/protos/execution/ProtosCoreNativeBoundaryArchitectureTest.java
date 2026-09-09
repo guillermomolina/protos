@@ -57,6 +57,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardFilesystemProtocol.java", 1),
                     Map.entry("execution/ProtosStandardPathProtocol.java", 6),
                     Map.entry("execution/ProtosStandardIpAddressProtocol.java", 4),
+                    Map.entry("execution/ProtosStandardIpEndpointProtocol.java", 4),
                     Map.entry("execution/ProtosStandardArrayProtocol.java", 5),
                     Map.entry("execution/ProtosStandardProcessArgumentsProtocol.java", 3),
                     Map.entry("execution/ProtosStandardEnvironmentProtocol.java", 3),
@@ -115,8 +116,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         }
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
-        assertEquals(31, actualCore.size());
-        assertEquals(119, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(32, actualCore.size());
+        assertEquals(123, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
         String inventory =
@@ -235,6 +236,15 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertNativeSelectors(
                 "IpAddress",
                 ipAddressPrototype,
+                Set.of("init", "recognizes", "==", "hash"));
+        ProtosObjectValue ipEndpointPrototype = ordinaryBinding(prelude, "IpEndpoint");
+        assertTrue(ipEndpointPrototype.isFrozen(), "standard IpEndpoint prototype must be frozen");
+        assertTrue(
+                ipEndpointPrototype.parent().orElse(null) == ProtosObjectValue.rootObject(),
+                "standard IpEndpoint prototype must delegate directly to Object");
+        assertNativeSelectors(
+                "IpEndpoint",
+                ipEndpointPrototype,
                 Set.of("init", "recognizes", "==", "hash"));
         assertNativeSelectors(
                 "Future",

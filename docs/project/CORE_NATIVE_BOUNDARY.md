@@ -1,3 +1,19 @@
+## I028-A2 — standard `IpEndpoint` ordinary-object bridge
+
+I028-A2 publishes the already-ratified D048 `IpEndpoint(address, port)` factory/prototype
+without introducing a Java runtime value family. `IpEndpoint.protos` owns the canonical ordinary
+prototype identity; a bounded four-Closure representation bridge validates that `address` is a
+recognized standard `IpAddress` and `port` is an exact unbounded Integer in `1..65535`, freezes
+successful fresh children, performs callback-free transparent recognition, and implements
+structural `==` / `hash` by canonical IpAddress state plus port. The exact supplied recognized
+IpAddress object is retained in the endpoint's public `address` slot.
+
+A2 reuses A1's internal direct IpAddress state inspection rather than duplicating IPv4/IPv6
+membership rules or invoking candidate behavior. The audited Core boundary advances from
+**119 sites / 31 providers** to **123 sites / 32 providers**.
+Actor/P transfer remains deferred to I028-A3; no Network/TCP authority, backend, DNS, UDP, TLS,
+normative specification or public syntax/API change is included.
+
 ## I028-A1 — standard `IpAddress` ordinary-object bridge
 
 I028-A1 publishes the already-ratified D048 `IpAddress(version, bits)` factory/prototype
@@ -207,6 +223,7 @@ the standard native boundary.
 | `ProtosStandardBytesProtocol.java` | 7 | representation bridge | Bytes owns octet-indexed mutable state, reservation state, exact octet validation, snapshot iteration, and P-region interaction. Its standard prototype identity is already source-backed and construction-only. |
 | `ProtosStandardPathProtocol.java` | 6 | representation bridge | Path construction, components, structural equality, and structural hash operate on the immutable Path representation. |
 | `ProtosStandardIpAddressProtocol.java` | 4 | representation bridge | D048 construction and recognition require exact unbounded-Integer/range validation, fresh ordinary-object state publication plus freeze, and direct inspection of frozen state, immediate canonical parent and exact local-slot shape without invoking candidate behavior; structural equality/hash read only the same canonical `version`/`bits` state. |
+| `ProtosStandardIpEndpointProtocol.java` | 4 | representation bridge | D048 endpoint construction and recognition require direct recognized-IpAddress validation, exact unbounded-Integer port validation, fresh ordinary-object state publication plus freeze, and direct frozen/immediate-parent/exact-local-slot inspection without candidate callbacks; structural equality/hash compose the same canonical IpAddress state with port. |
 | `ProtosStandardErrorProtocol.java` | 2 | host-irreducible | `Error.signal` performs the language Error control transfer with exact signaled-object preservation; `Error.handle` installs and consumes the dynamic handler frame whose selection precedes unwind cleanup. |
 | `ProtosStandardFutureProtocol.java` | 2 | concurrency/runtime bridge | `future`, `value`, `cancel`, `detach`, `then`, and `all` depend on Task ownership, suspension, observation, terminal states, cancellation, and Actor-local execution domains. |
 | `ProtosParallelRuntime.java` | 2 | concurrency/runtime bridge | `parallel`, Array parallel operations, Bytes/ByteRegion `parallelRange`, snapshot transfer, reservations, commitment, and bounded host carriers form the P execution substrate. |
@@ -217,7 +234,7 @@ the standard native boundary.
 | `ProtosStandardFileProtocol.java` | 10 | resource/capability bridge | File objects are acquired resource capabilities whose exact local surface depends on backend-provided authority and whose operations own cursor/append/sync/close/commitment state. |
 | `ProtosStandardFilesystemProtocol.java` | 1 | resource/capability bridge | Host-provisioned Filesystem authority exposes standard `open`, `replace`, `remove`, `entries`, and `captureTree` through one shared audited operation-Closure construction helper. Open retains confined/race-free acquisition and File materialization; D041 namespace mutation uses the host-neutral effect/commit cutover; D046 tree observation reuses the host-neutral I024 flow, materializes inert Array descriptors or a fresh structurally read-only Filesystem, and leaves unsupported backends default-fail without adding a Directory or Filesystem-close boundary. |
 
-Total audited Core production construction sites: **115 across 30 providers**.
+Total audited Core production construction sites: **123 across 32 providers**.
 
 CLI/launcher-owned host conveniences are not Core standard behavior and therefore
 do not change that 30-provider / 113-site Core boundary. They are nevertheless
@@ -226,7 +243,7 @@ kept explicit rather than allowed to accumulate invisibly:
 | Non-Core provider | Native Closure sites | Boundary | Reason |
 |---|---:|---|---|
 | `ProtosCliPrintFacility.java` | 1 | standalone CLI host/display bridge | Installs one ordinary initial-context `print` Closure only for normal standalone CLI sessions. General value rendering is CLI policy; output is delegated through a borrowing standard `TextWriter` over the already-provisioned Process stdout capability and Encoding. Bundled tools, Core bootstrap, imported modules and non-root Actor bootstrap do not receive this binding. |
-| `ProtosExactExecutionFacility.java` | 2 | bundled-tool bootstrap execution bridges | Installs the ordinary initial-context `execution` Closure plus the opt-in `executionInspect` Closure only when the host explicitly grants those tooling capabilities. `execution` delegates to the existing fresh-Process/root-task/private-capture machinery; `executionInspect` delegates to the C1A same-Process live-result inspection boundary and detaches only the inspector terminal observation. Neither is a Core/prelude binding, so the 30-provider / 113-site Core standard native boundary remains unchanged while the audited non-Core provider count for this file increases from one construction site to two. |
+| `ProtosExactExecutionFacility.java` | 2 | bundled-tool bootstrap execution bridges | Installs the ordinary initial-context `execution` Closure plus the opt-in `executionInspect` Closure only when the host explicitly grants those tooling capabilities. `execution` delegates to the existing fresh-Process/root-task/private-capture machinery; `executionInspect` delegates to the C1A same-Process live-result inspection boundary and detaches only the inspector terminal observation. Neither is a Core/prelude binding, so the 32-provider / 123-site Core standard native boundary remains unchanged while the audited non-Core provider count for this file increases from one construction site to two. |
 
 
 ### TOOL002-D3B2A Object.parent reflection prerequisite

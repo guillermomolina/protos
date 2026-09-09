@@ -682,3 +682,7 @@ network/ip-address-construction.protos	boolean	true
 network/ip-address-validation.protos	boolean	true
 network/ip-address-recognition.protos	boolean	true
 network/ip-address-equality-hash.protos	boolean	true
+network/ip-endpoint-construction.protos	boolean	true
+network/ip-endpoint-validation.protos	boolean	true
+network/ip-endpoint-recognition.protos	boolean	true
+network/ip-endpoint-equality-hash.protos	boolean	true

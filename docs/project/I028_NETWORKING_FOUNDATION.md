@@ -25,8 +25,8 @@ normal implementation dependencies established as A-F progresses.
 
 - **A — address/endpoint ordinary-object foundation — IN_PROGRESS:** mechanically subdivided into independently publishable A1/A2/A3 slices without changing D047/D048.
   - **A1 — IpAddress local foundation — CLOSED (`0.2.278-SNAPSHOT` / `SAME_COMMIT`):** source-backed canonical ordinary prototype, `IpAddress(version, bits)` through ordinary invocation, exact unbounded-Integer IPv4/IPv6 validation, transparent `recognizes`, structural `==`/`hash`, frozen successful values and frozen Prelude prototype, plus ordinary-Protos conformance. No `IpEndpoint` or Actor/P transfer.
-  - **A2 — IpEndpoint local foundation — READY:** factory, address/port validation, transparent recognition, structural equality/hash, freeze and Prelude publication only.
-  - **A3 — Actor/P transfer + close A — BLOCKED_BY_DEPENDENCIES:** after A2, prove ordinary snapshot/rematerialization across Actor/P preserves canonical parent, exact slots, frozen state and equality/hash, then close A.
+  - **A2 — IpEndpoint local foundation — CLOSED (`0.2.279-SNAPSHOT` / `SAME_COMMIT`):** canonical frozen ordinary Prelude factory/prototype, recognized-IpAddress + exact unbounded-Integer port validation, transparent recognition, structural equality/hash, exact address retention and ordinary-Protos conformance. No Actor/P transfer.
+  - **A3 — Actor/P transfer + close A — READY:** A1/A2 local factories are closed; prove ordinary snapshot/rematerialization across Actor/P preserves canonical parent, exact slots, frozen state and equality/hash, then close A.
 - **B — Network capability + bootstrap provisioning:** host-neutral live
   capability shape and optional initial-module `network` endowment; no ambient
   recovery.
@@ -51,6 +51,18 @@ conformance covers construction/freshness/freeze, boundary and fixed-width rejec
 recognition receiver/arity/shape behavior, equality/hash and Map-key coherence. The native
 boundary is explicitly re-audited at 119 sites / 31 providers. `IpEndpoint`, Actor/P transfer
 and every Network/TCP/backend concern remain untouched.
+
+## I028-A2 closure
+
+Published at implementation version `0.2.279-SNAPSHOT`. `IpEndpoint` is now the second canonical
+frozen ordinary D048 data factory/prototype. Successful construction retains the exact supplied
+recognized `IpAddress`, validates an exact unbounded Integer port in `1..65535`, publishes exactly
+`address` / `port`, and freezes the fresh endpoint. Transparent recognition and structural
+endpoint equality/hash inspect only canonical frozen state; equal-but-distinct IpAddress objects
+therefore compose into equal endpoint values and coherent Map keys. The bridge reuses A1's direct
+IpAddress invariant implementation and advances the audited native boundary to 123 sites /
+32 providers. Actor/P transfer remains entirely in A3, which is now READY; every
+Network/TCP/backend concern remains untouched.
 
 ## Exclusions
 

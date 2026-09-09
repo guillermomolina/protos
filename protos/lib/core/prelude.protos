@@ -55,6 +55,7 @@ _corePreludeBindings: Context {
     IdentityMap: IdentityMap
     Path: Path
     IpAddress: IpAddress
+    IpEndpoint: IpEndpoint
     Future: Future
     Actor: Actor
     Process: Process

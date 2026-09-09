@@ -120,9 +120,7 @@ public final class ProtosStandardIpAddressProtocol {
 
         ProtosObjectValue left = (ProtosObjectValue) activation.receiver();
         ProtosObjectValue right = (ProtosObjectValue) other;
-        return ProtosBooleanValue.of(
-                integerSlot(left, "version").value().equals(integerSlot(right, "version").value())
-                        && integerSlot(left, "bits").value().equals(integerSlot(right, "bits").value()));
+        return ProtosBooleanValue.of(sameCanonicalState(left, right));
     }
 
     private static Object hash(
@@ -134,12 +132,10 @@ public final class ProtosStandardIpAddressProtocol {
             throw invalid(activation);
         }
         ProtosObjectValue address = (ProtosObjectValue) activation.receiver();
-        BigInteger version = integerSlot(address, "version").value();
-        BigInteger bits = integerSlot(address, "bits").value();
-        return new ProtosIntegerValue(bits.multiply(HASH_MULTIPLIER).add(version));
+        return new ProtosIntegerValue(canonicalHash(address));
     }
 
-    private static boolean recognizesValue(Object candidate, ProtosObjectValue prototype) {
+    static boolean recognizesValue(Object candidate, ProtosObjectValue prototype) {
         if (!(candidate instanceof ProtosObjectValue address)
                 || !address.isFrozen()
                 || address.parent().orElse(null) != prototype) {
@@ -169,6 +165,17 @@ public final class ProtosStandardIpAddressProtocol {
             return bitsNumber.compareTo(IPV6_MAX) <= 0;
         }
         return false;
+    }
+
+    static boolean sameCanonicalState(ProtosObjectValue left, ProtosObjectValue right) {
+        return integerSlot(left, "version").value().equals(integerSlot(right, "version").value())
+                && integerSlot(left, "bits").value().equals(integerSlot(right, "bits").value());
+    }
+
+    static BigInteger canonicalHash(ProtosObjectValue address) {
+        BigInteger version = integerSlot(address, "version").value();
+        BigInteger bits = integerSlot(address, "bits").value();
+        return bits.multiply(HASH_MULTIPLIER).add(version);
     }
 
     private static ProtosIntegerValue integerSlot(ProtosObjectValue address, String name) {
