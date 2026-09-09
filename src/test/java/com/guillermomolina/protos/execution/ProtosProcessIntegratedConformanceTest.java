@@ -217,6 +217,106 @@ final class ProtosProcessIntegratedConformanceTest {
         assertPRejected(existingStdin, fixture.activation);
     }
 
+
+
+    // LIB004-D-PROCESS-STREAMS-CONFORMANCE
+    @Test
+    void processStreamsLibraryAdaptersAreDrivenByProtosCases() throws Exception {
+        for (String file :
+                List.of(
+                        "process-streams-fresh-wrappers.protos",
+                        "process-streams-process-encodings.protos",
+                        "process-streams-borrowing-close.protos",
+                        "process-streams-explicit-process.protos")) {
+            LibraryFixture fixture = libraryFixture();
+            Object result = executeLibraryCase(file, fixture.activation());
+            assertSame(ProtosBooleanValue.TRUE, result, file);
+        }
+    }
+
+    private static LibraryFixture libraryFixture() throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(
+                                CORE,
+                                new ProtosStandardLibraryModuleResolver(
+                                        Path.of("protos", "lib")));
+        ProtosEncodingValue latin1 =
+                assertInstanceOf(
+                        ProtosEncodingValue.class,
+                        prelude.encodingPrototype().readLocalSlot("Latin1").orElseThrow());
+        ProtosEncodingValue utf16be =
+                assertInstanceOf(
+                        ProtosEncodingValue.class,
+                        prelude.encodingPrototype().readLocalSlot("UTF16BE").orElseThrow());
+        ProtosBytesValue stdoutCapture =
+                new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
+        ProtosBytesValue stderrCapture =
+                new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
+        java.util.concurrent.atomic.AtomicBoolean stdinDelivered =
+                new java.util.concurrent.atomic.AtomicBoolean();
+
+        ProtosStandaloneProcessBootstrap.Result bootstrap =
+                ProtosStandaloneProcessBootstrap.create(
+                        prelude,
+                        List.of(),
+                        exactEnvironmentDomain(),
+                        List.of(),
+                        (maxBytes, completion) -> {
+                            if (stdinDelivered.compareAndSet(false, true)) {
+                                completion.data(new byte[] {(byte) 0xe9});
+                            } else {
+                                completion.eof();
+                            }
+                            return () -> {};
+                        },
+                        (bytes, completion) -> {
+                            appendCapturedBytes(stdoutCapture, bytes);
+                            completion.succeeded();
+                            return () -> {};
+                        },
+                        (bytes, completion) -> {
+                            appendCapturedBytes(stderrCapture, bytes);
+                            completion.succeeded();
+                            return () -> {};
+                        },
+                        latin1,
+                        utf16be,
+                        latin1,
+                        null);
+
+        bootstrap.activation().context().createLocalSlot("stdoutCapture", stdoutCapture);
+        bootstrap.activation().context().createLocalSlot("stderrCapture", stderrCapture);
+        return new LibraryFixture(bootstrap.activation());
+    }
+
+    private static void appendCapturedBytes(ProtosBytesValue capture, byte[] bytes) {
+        for (byte value : bytes) {
+            capture.indexedAdd(new ProtosIntegerValue(BigInteger.valueOf(value & 0xff)));
+        }
+    }
+
+    private static Object executeLibraryCase(String file, ProtosActivation activation)
+            throws Exception {
+        String source =
+                java.nio.file.Files.readString(
+                        Path.of("protos", "tests", "conformance", "library", "io", file),
+                        java.nio.charset.StandardCharsets.UTF_8);
+        ProtosExecutionOutcome outcome =
+                ProtosRootTaskExecution.execute(
+                        new ProtosSourceCompiler().compile(source), activation);
+        return switch (outcome.state()) {
+            case COMPLETED -> outcome.value();
+            case FAILED -> throw new AssertionError(
+                    "LIB004-D Protos case failed: " + file,
+                    new ProtosSignalException(outcome.error()));
+            case CANCELLED -> throw new AssertionError(
+                    "LIB004-D Protos case unexpectedly cancelled: " + file);
+        };
+    }
+
+    private record LibraryFixture(ProtosActivation activation) {}
+
     private static Fixture fixture(ProtosFilesystemValue filesystem) throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
         ProtosEncodingValue utf8 =
