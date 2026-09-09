@@ -420,3 +420,16 @@ that mechanically direct module/root entry with the ordinary public-parse RootAc
 No global Engine is introduced, no Process identity is collapsed into a Context, and no Context is
 reused as another semantic Process. `ContextPolicy.EXCLUSIVE` remains active; `REUSE` and `SHARED`
 remain deferred.
+
+## A4B3 final production-entry closure
+
+I026-A4B3, I026-A4B and I026-A4 close in `0.2.301-SNAPSHOT`. Every source/main owner that creates a standalone
+semantic Process is now structurally guarded to bind that Process to its Process-scoped Polyglot
+Context before guest source entry; production Process creators may not directly enter guest source
+through `new ProtosSourceCompiler().compile(...)`. Compiler/bootstrap/test-harness use outside a
+production Process remains implementation machinery and does not constitute a second hosting
+architecture.
+
+The PLAT001 decision itself is unchanged: one multithread Context per hosted Process, an Engine may
+be shared across Process Contexts, no global guest lock/GIL is introduced, `ContextPolicy.EXCLUSIVE`
+remains active, and `REUSE`/`SHARED` remain deferred.

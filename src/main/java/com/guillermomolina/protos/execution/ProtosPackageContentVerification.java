@@ -6,7 +6,10 @@ import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
+import com.oracle.truffle.api.source.Source;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
@@ -100,34 +103,48 @@ final class ProtosPackageContentVerification {
                             null);
             ProtosProcessRuntime process = bootstrap.process();
 
-            try {
-                processObserver.accept(process);
-                ProtosFilesystemValue capturedFilesystem =
-                        custody.materialize(bootstrap.activation());
-                bindVerificationInputs(
-                        bootstrap,
-                        capturedFilesystem,
-                        expectedMethod,
-                        expectedAlgorithm,
-                        expectedHex);
+            try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
+                try {
+                    ProtosPolyglotProcessContext processContext =
+                            runtimeHost.hostProcess(
+                                    process,
+                                    InputStream.nullInputStream(),
+                                    OutputStream.nullOutputStream(),
+                                    OutputStream.nullOutputStream());
+                    processObserver.accept(process);
+                    ProtosFilesystemValue capturedFilesystem =
+                            custody.materialize(bootstrap.activation());
+                    bindVerificationInputs(
+                            bootstrap,
+                            capturedFilesystem,
+                            expectedMethod,
+                            expectedAlgorithm,
+                            expectedHex);
 
-                ProtosExecutionOutcome outcome =
-                        ProtosRootTaskExecution.execute(
-                                new ProtosSourceCompiler().compile(VERIFY_SOURCE),
-                                bootstrap.activation());
-                if (outcome.state() != ProtosExecutionOutcome.State.COMPLETED
-                        || outcome.value() != capturedFilesystem) {
+                    Source verifySource =
+                            Source.newBuilder(
+                                            ProtosLanguage.ID,
+                                            VERIFY_SOURCE,
+                                            "<package-content-verification>")
+                                    .mimeType(ProtosLanguage.MIME_TYPE)
+                                    .build();
+                    ProtosExecutionOutcome outcome =
+                            processContext.execute(verifySource, bootstrap.activation());
+                    if (outcome.state() != ProtosExecutionOutcome.State.COMPLETED
+                            || outcome.value() != capturedFilesystem) {
+                        throw new IOException(
+                                "captured package ContentIdentity verification failed");
+                    }
+                    transferred = true;
+                    return custody;
+                } catch (IOException failure) {
+                    throw failure;
+                } catch (RuntimeException failure) {
                     throw new IOException(
-                            "captured package ContentIdentity verification failed");
+                            "captured package ContentIdentity verification failed", failure);
+                } finally {
+                    process.requestTerminationForRuntime();
                 }
-                transferred = true;
-                return custody;
-            } catch (IOException failure) {
-                throw failure;
-            } catch (RuntimeException failure) {
-                throw new IOException("captured package ContentIdentity verification failed", failure);
-            } finally {
-                process.requestTerminationForRuntime();
             }
         } finally {
             if (!transferred) {

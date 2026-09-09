@@ -152,8 +152,10 @@ public final class ProtosModuleRuntime {
      * Executes one resolved module in the owning Process Context when that Process is hosted.
      *
      * <p>Module identity, Actor-local cache state and cache-before-execute remain entirely outside
-     * this implementation placement helper. The direct compiler path is retained only for the
-     * explicitly unhosted staging consumers that A4B3's final retirement phase still owns.
+     * this implementation placement helper. Process-backed production drivers bind their Process
+     * before guest execution and therefore use public parse. The direct branch remains only for
+     * deliberately unhosted/non-Process Java semantic harnesses; it is not a production Process
+     * entry architecture.
      */
     private Object executeModuleSource(
             ProtosModuleSource source,

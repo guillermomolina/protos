@@ -1,6 +1,6 @@
 # I026-A4B3 — Production driver cutover and legacy-entry retirement
 
-Status: **IN_PROGRESS**
+Status: **CLOSED**
 
 Live coordination: GitHub Issue #89 (I026-A4B3), parent Issue #42, under current GITHUB001 coordination
 Platform authority: PLAT001 (RATIFIED)
@@ -99,15 +99,36 @@ RootActor task to a terminal outcome. Workspace application no longer wraps the 
 second staging `callForRuntime`; hosting remains one application Process -> one Process Context on the
 driver-owned RuntimeHost/Engine.
 
-The direct `ProtosSourceCompiler` branches remain only as explicit fallback for unhosted Java/staging
-consumers. Retiring those final fallback entry points and adding the architecture guard is the last
-mechanical A4B3 phase. `ContextPolicy.EXCLUSIVE` remains active; `REUSE` and `SHARED` remain deferred.
+The direct compiler branches that remain in module helpers are explicitly non-production
+Java semantic-harness fallbacks. Production Process creators are guarded separately and cannot use
+them as an alternate entry architecture. `ContextPolicy.EXCLUSIVE` remains active; `REUSE` and
+`SHARED` remain deferred.
+
+## Published phase — final production-entry retirement and architecture guard
+
+Published in `0.2.301-SNAPSHOT`: the remaining source/main Process creator that still compiled guest source
+directly (`ProtosPackageContentVerification`) now creates an inert Truffle `Source`, binds its fresh
+semantic Process to a Process-scoped Polyglot Context, and executes through that Context's public
+parse/root-task route. The retained architecture guard walks all production Java sources and requires
+every `ProtosStandaloneProcessBootstrap.create(...)` owner to bind a Process Context before guest
+entry while forbidding direct `new ProtosSourceCompiler().compile(...)` entry in those Process
+creators.
+
+The compiler remains an ordinary implementation component: `ProtosLanguage` uses it behind the
+public Truffle parse boundary, Core/bootstrap source preparation may use it before a Process exists,
+and deliberately unhosted Java semantic harnesses may still exercise direct compiler behavior. None
+of those cases is a second production Process-entry architecture. Hosted ordinary modules and
+importable RootActor initial modules continue to use the public parse route published in
+`0.2.297-SNAPSHOT`.
+
+This completes the A4B3 driver cutover. I026-A4B3, I026-A4B and I026-A4 are CLOSED. PLAT001 remains
+unchanged: one multithread Context per hosted semantic Process, shareable Engine ownership,
+`ContextPolicy.EXCLUSIVE` active, and `REUSE`/`SHARED` deferred. No Protos semantics, specification,
+I028/networking contract, native boundary or license term changes in this closure.
 
 ## Remaining mechanical phases inside I026-A4B3
 
-1. final direct-production-entry retirement, architecture guard, and A4B3/A4B/A4 closure.
-
-These remain inside Issue #89 as mechanical phases unless one later exposes an independently blockable/reviewable durable unit. Issue #42 remains the parent I026 outcome. `ContextPolicy.EXCLUSIVE` remains active; `REUSE` and `SHARED` remain deferred.
+None. I026-A4B3 is CLOSED; the production-entry migration is complete. Issue #42 remains the parent I026 outcome for later I026-B through I026-G work. `ContextPolicy.EXCLUSIVE` remains active; `REUSE` and `SHARED` remain deferred.
 
 ## Evidence
 

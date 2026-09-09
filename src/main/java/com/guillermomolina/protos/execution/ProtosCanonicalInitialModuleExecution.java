@@ -69,6 +69,10 @@ public final class ProtosCanonicalInitialModuleExecution {
         }
     }
 
+    /**
+     * Uses public parse for every hosted Process. The direct branch below is retained solely for
+     * deliberately unhosted Java semantic harnesses and is not reachable from a production driver.
+     */
     private static ProtosExecutionOutcome executeSource(
             ProtosModuleSource source,
             ProtosActivation activation) {
