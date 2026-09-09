@@ -23,8 +23,6 @@ environmentResult: environment.each((name, value) => {
     null
 })
 
-(argsResult === argumentSnapshot).and() {
-    (environmentResult === environment).and() {
-        calls == 0
-    }
-}
+(argsResult === argumentSnapshot) &&
+    (environmentResult === environment) &&
+    (calls == 0)

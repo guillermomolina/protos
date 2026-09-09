@@ -14,8 +14,6 @@ f: () => args
 first: f()
 second: f()
 
-(first !== second).and() {
-    (first.size() == 0).and() {
-        second.size() == 0
-    }
-}
+(first !== second) &&
+    (first.size() == 0) &&
+    (second.size() == 0)

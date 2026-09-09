@@ -294,6 +294,35 @@ B1 remains `IN_PROGRESS`: B1b owns the substantially larger `.and() { ... }`
 trailing-Closure population and must classify Closure-body shape before rewrite.
 No implementation-version change. Execution-time version: `0.2.302-SNAPSHOT`.
 
+### AUD003-B1b1 retained evidence
+
+GitHub coordination: Issue `#114` (`AUD003-B1`).
+
+B1b is mechanically subdivided because trailing braced Closures require body-shape
+classification before a sugar rewrite is safe. B1b1 migrated only reviewed chains
+in which every trailing parameterless Closure body contains exactly one expression;
+there is therefore no sequence-to-expression conversion and no additional Closure
+introduced by the source cleanup.
+
+Execution-time B1b1 migration set:
+
+- `protos/tests/conformance/call/args-zero-fresh-empty.protos`
+- `protos/tests/conformance/encoding/latin1-roundtrip.protos`
+- `protos/tests/conformance/library/text/import-cache.protos`
+- `protos/tests/conformance/process/args-sequential.protos`
+- `protos/tests/conformance/process/empty-snapshots-each.protos`
+- `protos/tests/conformance/process/snapshot-identity.protos`
+
+Each nested `left.and() { right }` level maps directly to the already-specified
+lazy conjunction lowering of `left && right`. The rewritten chains preserve
+left-to-right receiver evaluation and short-circuit behavior. This tranche does
+not classify or rewrite multi-expression trailing Closure bodies, custom/direct
+Boolean protocol tests, or unrelated canonical spellings.
+
+B1 remains `IN_PROGRESS` after B1b1. Subsequent B1b tranches continue classifying
+the remaining ordinary trailing-Closure population. No implementation-version
+change. Execution-time version: `0.2.302-SNAPSHOT`.
+
 ## Migration discipline
 
 Each executable-source slice must:

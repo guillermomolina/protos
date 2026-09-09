@@ -23,18 +23,11 @@ callback: {
 
 result: snapshot.each(callback)
 
-(snapshot.size() == 3).and() {
-    (snapshot.at(0) == "alpha").and() {
-        (snapshot.at(1) == "\u{3b2}").and() {
-            (snapshot.at(2) == "\u{1f600}").and() {
-                (result === snapshot).and() {
-                    (seen.at(0) == "alpha").and() {
-                        (seen.at(1) == "\u{3b2}").and() {
-                            seen.at(2) == "\u{1f600}"
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+(snapshot.size() == 3) &&
+    (snapshot.at(0) == "alpha") &&
+    (snapshot.at(1) == "\u{3b2}") &&
+    (snapshot.at(2) == "\u{1f600}") &&
+    (result === snapshot) &&
+    (seen.at(0) == "alpha") &&
+    (seen.at(1) == "\u{3b2}") &&
+    (seen.at(2) == "\u{1f600}")

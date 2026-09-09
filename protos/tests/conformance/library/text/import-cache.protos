@@ -24,10 +24,7 @@ utf16beSecond: import("std:text/UTF16BE")
 latin1First: import("std:text/Latin1")
 latin1Second: import("std:text/Latin1")
 
-(utf8First === utf8Second).and() {
-    (utf16leFirst === utf16leSecond).and() {
-        (utf16beFirst === utf16beSecond).and() {
-            latin1First === latin1Second
-        }
-    }
-}
+(utf8First === utf8Second) &&
+    (utf16leFirst === utf16leSecond) &&
+    (utf16beFirst === utf16beSecond) &&
+    (latin1First === latin1Second)

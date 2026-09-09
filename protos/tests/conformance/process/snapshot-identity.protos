@@ -17,10 +17,7 @@ environment1: process.environment()
 environment2: process.environment()
 otherEnvironment: otherProcess.environment()
 
-(args1 === args2).and() {
-    (args1 !== otherArgs).and() {
-        (environment1 === environment2).and() {
-            environment1 !== otherEnvironment
-        }
-    }
-}
+(args1 === args2) &&
+    (args1 !== otherArgs) &&
+    (environment1 === environment2) &&
+    (environment1 !== otherEnvironment)

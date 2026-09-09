@@ -12,12 +12,8 @@
 text: "\u{0}\u{80}\u{ff}"
 bytes: Encoding.Latin1.encode(text)
 
-(bytes.size() == 3).and() {
-    (bytes.at(0) == 0).and() {
-        (bytes.at(1) == 128).and() {
-            (bytes.at(2) == 255).and() {
-                Encoding.Latin1.decode(bytes) == text
-            }
-        }
-    }
-}
+(bytes.size() == 3) &&
+    (bytes.at(0) == 0) &&
+    (bytes.at(1) == 128) &&
+    (bytes.at(2) == 255) &&
+    (Encoding.Latin1.decode(bytes) == text)
