@@ -36,6 +36,7 @@ I026 implements the selected AUD002 direction under these constraints:
   implementation-only state as if they were Protos-visible slots or values.
 - Ordinary execution that is not using tooling should not acquire unnecessary
   observation, synchronization, or retained-state cost.
+- Ratified `PLAT004` owns `SourceSection` placement: executable roots own exact Truffle `Source` identity, execution nodes retain only compact source ranges, and `SourceSection` is projected on demand after adoption rather than eagerly retained per node.
 - GraalVM DAP/LSP compatibility is a claim to be demonstrated by smoke evidence,
   not inferred merely from API integration.
 
@@ -70,7 +71,7 @@ see `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md`.
 | I026-A4B2B3A | CLOSED | `0.2.277-SNAPSHOT` | I026-A4B2B2 + D049 | Publish one atomic frozen standard-root cutover plus frozen shared standard graph/captures; concurrent bootstraps reuse and validate the completed required root surface without a guest execution lock. |
 | I026-A4B2B3B | CLOSED | `0.2.280-SNAPSHOT` | I026-A4B2B3A + PLAT001 A+ | Globally shared source-backed root Closure plans project through a bounded cache owned by the entered `ProtosLanguageContext`; two Process Contexts on one Engine overlap while using distinct plans and parameter/body CallTargets; EXCLUSIVE retained. |
 | I026-A4B3 | CLOSED | `0.2.301-SNAPSHOT` | I026-A4B2 | CLI/REPL, bundled tools, exact/fresh/captured/workspace, ordinary modules, RootActor initial modules and the remaining production Process creator all use Process-scoped public-parse hosting; the final architecture guard prevents direct compiler entry from returning in Process creators. EXCLUSIVE retained; REUSE/SHARED deferred. |
-| I026-B | READY | — | I026-A4 | Map the existing exact `SourceSpan` ranges to valid Truffle `SourceSection` values on roots/execution nodes, with focused Java-side integration evidence. |
+| I026-B | READY | — | I026-A4 + PLAT004 | Map the existing exact `SourceSpan` ranges to valid Truffle `SourceSection` values on roots/execution nodes under ratified PLAT004 root-owned Source / node-local range / on-demand projection, with focused Java-side integration evidence. |
 | I026-C | BLOCKED_BY_DEPENDENCIES | — | I026-B | Make the relevant AST nodes instrumentable and expose the minimal faithful `StandardTags` needed for source execution/stepping; do not tag nodes merely to satisfy a debugger UI. |
 | I026-D | READY | — | I026-A1 | Expose semantically faithful Truffle interop/debug views for Protos runtime values needed by tooling, without changing Protos identity or access semantics. This may proceed independently from A2-A4. |
 | I026-E | BLOCKED_BY_DEPENDENCIES | — | I026-C + I026-D | Bridge top/local debugger scopes from the existing Protos activation/context model and prove visible names/values match Protos lookup boundaries. |
@@ -142,3 +143,5 @@ Java semantic harnesses; those uses are not production Process entry points.
 
 A4B3 and A4B therefore close with A4. `ContextPolicy.EXCLUSIVE` remains active and
 `REUSE`/`SHARED` remain deferred. I026-B is released to READY; I026-D remains independently READY.
+
+PLAT004 is RATIFIED and is the durable platform owner for I026-B source-section placement. I026-B remains READY after publication of that decision; I026-C continues to own instrumentability and tag selection.
