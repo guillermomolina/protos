@@ -6,3 +6,5 @@ member-mismatch	member-mismatch-error.protos	error
 external-node	external-node-error.protos	error
 missing-edge	missing-edge-error.protos	error
 registry-dependency	registry-dependency-error.protos	error
+registry-leaf-v2	registry-leaf-v2.protos	true
+registry-leaf-v2	registry-leaf-v2-content-mismatch-error.protos	error

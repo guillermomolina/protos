@@ -1,0 +1,10 @@
+manifest-version = 1
+
+[package]
+id = "root"
+version = "1.0.0"
+
+[dependencies.reg]
+authority = "public"
+package = "pkg"
+version = "1.0.0"

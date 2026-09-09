@@ -1,0 +1,73 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+Plan: import("self:ExecutionPlan")
+Version: import("self:ReleaseVersion")
+
+exports: Map()
+exports["Public"] = "internal/Thing"
+
+verified:
+    Array(
+        {
+            ref: {
+                kind: "registry"
+                packageId: "external-id"
+                version: Version.parse("1.0.0")
+            }
+            content: {
+                method: "protos-package-tree-v1"
+                algorithm: "sha256"
+                hex: "1111111111111111111111111111111111111111111111111111111111111111"
+            }
+            exports: exports
+        }
+    )
+
+plan:
+    Plan.buildV2FromVerifiedLeaves(
+        projectTreeFilesystem,
+        verified
+    )
+
+ok: plan.generation == 2
+(plan.root.kind == "workspace").ifFalse(() => { ok = false })
+(plan.root.packageId == "root").ifFalse(() => { ok = false })
+(plan.packages.size() == 2).ifFalse(() => { ok = false })
+(plan.dependencies.size() == 1).ifFalse(() => { ok = false })
+
+rootPackage: plan.packages[0]
+externalPackage: plan.packages[1]
+edge: plan.dependencies[0]
+
+(rootPackage.ref.kind == "workspace").ifFalse(() => { ok = false })
+(rootPackage.ref.packageId == "root").ifFalse(() => { ok = false })
+
+(externalPackage.ref.kind == "registry").ifFalse(() => { ok = false })
+(externalPackage.ref.packageId == "external-id").ifFalse(() => { ok = false })
+(externalPackage.ref.version.text == "1.0.0").ifFalse(() => { ok = false })
+(externalPackage.content.method == "protos-package-tree-v1").ifFalse(() => { ok = false })
+(externalPackage.content.algorithm == "sha256").ifFalse(() => { ok = false })
+(externalPackage.content.hex == "1111111111111111111111111111111111111111111111111111111111111111").ifFalse(() => { ok = false })
+(externalPackage.exports["Public"] == "internal/Thing").ifFalse(() => { ok = false })
+
+(edge.declaring.kind == "workspace").ifFalse(() => { ok = false })
+(edge.declaring.packageId == "root").ifFalse(() => { ok = false })
+(edge.alias == "reg").ifFalse(() => { ok = false })
+(edge.target.kind == "registry").ifFalse(() => { ok = false })
+(edge.target.packageId == "external-id").ifFalse(() => { ok = false })
+(edge.target.version.text == "1.0.0").ifFalse(() => { ok = false })
+
+ok

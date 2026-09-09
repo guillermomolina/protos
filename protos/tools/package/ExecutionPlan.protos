@@ -17,6 +17,8 @@ Root: import("self:ResolutionRoot")
 LockFile: import("self:LockFile")
 Input: import("self:ResolutionInput")
 Names: import("self:RuntimeNames")
+Syntax: import("self:LockSyntax")
+Constraint: import("self:DependencyConstraint")
 
 fail: () => {
     Error().signal()
@@ -155,6 +157,351 @@ validatePackageDependencies: (lock, package) => {
     })
 
     planDependencies
+}
+
+copyNodeRef: (ref) => {
+    Syntax.parseNodeRef(Syntax.renderNodeRef(ref))
+}
+
+nodeRefKey: (ref) => {
+    Syntax.renderNodeRef(ref)
+}
+
+copyContentIdentity: (content) => {
+    {
+        method: content.method
+        algorithm: content.algorithm
+        hex: content.hex
+    }
+}
+
+sameContentIdentity: (left, right) => {
+    same: left.method == right.method
+    same.ifTrue(() => {
+        same = left.algorithm == right.algorithm
+    })
+    same.ifTrue(() => {
+        same = left.hex == right.hex
+    })
+    same
+}
+
+copyExternalExports: (exports) => {
+    result: Map()
+
+    exports.each((publicName, internalName) => {
+        Names.requireLogicalName(publicName)
+        Names.requireLogicalName(internalName)
+        result[publicName] = internalName
+    })
+
+    result
+}
+
+lockedExternalNodeAt: (lock, ref) => {
+    found: null
+    key: nodeRefKey(ref)
+
+    lock.registryNodes.each((node) => {
+        (nodeRefKey(node.ref) == key).ifTrue(() => {
+            found = node
+        })
+    })
+
+    lock.gitNodes.each((node) => {
+        (nodeRefKey(node.ref) == key).ifTrue(() => {
+            found = node
+        })
+    })
+
+    found
+}
+
+validateV2WorkspaceDependencies: (lock, package) => {
+    currentDependencies: package.projected.dependencies
+
+    (countLockDependencies(lock, package.packageId) == currentDependencies.size()).ifFalse(() => {
+        fail()
+    })
+
+    result: Array()
+
+    currentDependencies.each((dependency) => {
+        Names.requireAlias(dependency.alias)
+
+        locked:
+            lockDependencyAt(
+                lock,
+                package.packageId,
+                dependency.alias
+            )
+
+        (locked === null).ifTrue(() => {
+            fail()
+        })
+
+        known: false
+
+        (dependency.kind == "path").ifTrue(() => {
+            known = true
+            workspaceRefMatches(
+                locked.target,
+                dependency.targetPackageId
+            ).ifFalse(() => {
+                fail()
+            })
+        })
+
+        (dependency.kind == "registry").ifTrue(() => {
+            known = true
+
+            (locked.target.kind == "registry").ifFalse(() => {
+                fail()
+            })
+
+            lockedNode: lockedExternalNodeAt(lock, locked.target)
+            (lockedNode === null).ifTrue(() => {
+                fail()
+            })
+
+            (lockedNode.authority == dependency.authority).ifFalse(() => {
+                fail()
+            })
+            (lockedNode.locator == dependency.packageId).ifFalse(() => {
+                fail()
+            })
+            Constraint.satisfies(
+                dependency.constraint,
+                locked.target.version
+            ).ifFalse(() => {
+                fail()
+            })
+        })
+
+        (dependency.kind == "git").ifTrue(() => {
+            known = true
+
+            (locked.target.kind == "git").ifFalse(() => {
+                fail()
+            })
+
+            lockedNode: lockedExternalNodeAt(lock, locked.target)
+            (lockedNode === null).ifTrue(() => {
+                fail()
+            })
+
+            (lockedNode.fetch == dependency.repository).ifFalse(() => {
+                fail()
+            })
+            (locked.target.revision == dependency.revision).ifFalse(() => {
+                fail()
+            })
+        })
+
+        known.ifFalse(() => {
+            fail()
+        })
+
+        result =
+            Array(
+                ...result,
+                {
+                    declaring: workspaceRef(package.packageId)
+                    alias: dependency.alias
+                    target: copyNodeRef(locked.target)
+                }
+            )
+    })
+
+    result
+}
+
+// F2E3 bounded constructor: generation-2 planning for already-verified immutable
+// external leaf packages. The supplied descriptors are inert data only; the
+// caller remains responsible for admitting them from F2E2 verified custody.
+// External-declared dependency validation remains later F2E3 work.
+buildV2FromVerifiedLeaves: (projectTreeFilesystem, verifiedExternalPackages) => {
+    state: Root.assembleState(projectTreeFilesystem)
+    resolutionRoot: state.resolutionRoot
+    lock: LockFile.load(projectTreeFilesystem)
+
+    Input.matchesHeader(resolutionRoot, lock.header).ifFalse(() => {
+        fail()
+    })
+
+    workspaceRefMatches(
+        lock.root,
+        resolutionRoot.root.packageId
+    ).ifFalse(() => {
+        fail()
+    })
+
+    (lock.workspaceMembers.size() == resolutionRoot.members.size()).ifFalse(() => {
+        fail()
+    })
+
+    resolutionRoot.members.each((member) => {
+        locked: lockMemberAt(lock, member.location)
+
+        (locked === null).ifTrue(() => {
+            fail()
+        })
+
+        workspaceRefMatches(
+            locked.ref,
+            member.packageId
+        ).ifFalse(() => {
+            fail()
+        })
+    })
+
+    // This bounded slice admits only external leaves. A later F2E3 slice will
+    // validate dependencies declared by the same verified external captures.
+    lock.dependencies.each((dependency) => {
+        (dependency.declaring.kind == "workspace").ifFalse(() => {
+            fail()
+        })
+    })
+
+    lockedExternal: Map()
+
+    lock.registryNodes.each((node) => {
+        key: nodeRefKey(node.ref)
+        lockedExternal.containsKey(key).ifTrue(() => {
+            fail()
+        })
+        lockedExternal[key] = node
+    })
+
+    lock.gitNodes.each((node) => {
+        key: nodeRefKey(node.ref)
+        lockedExternal.containsKey(key).ifTrue(() => {
+            fail()
+        })
+        lockedExternal[key] = node
+    })
+
+    verifiedByRef: Map()
+
+    verifiedExternalPackages.each((verified) => {
+        kind: verified.ref.kind
+        external: kind == "registry"
+        (kind == "git").ifTrue(() => {
+            external = true
+        })
+        external.ifFalse(() => {
+            fail()
+        })
+
+        key: nodeRefKey(verified.ref)
+
+        verifiedByRef.containsKey(key).ifTrue(() => {
+            fail()
+        })
+        lockedExternal.containsKey(key).ifFalse(() => {
+            fail()
+        })
+
+        lockedNode: lockedExternal[key]
+        sameContentIdentity(
+            verified.content,
+            lockedNode.content
+        ).ifFalse(() => {
+            fail()
+        })
+
+        verifiedByRef[key] = verified
+    })
+
+    (verifiedByRef.size() == lockedExternal.size()).ifFalse(() => {
+        fail()
+    })
+
+    rootPackage: packageAt(state.packages, "")
+    planPackages:
+        Array(
+            {
+                ref: workspaceRef(rootPackage.packageId)
+                location: ""
+                exports: copyExports(rootPackage.manifest)
+            }
+        )
+
+    lock.workspaceMembers.each((lockedMember) => {
+        package:
+            packageAt(
+                state.packages,
+                lockedMember.declaration
+            )
+
+        (package.packageId == lockedMember.ref.packageId).ifFalse(() => {
+            fail()
+        })
+
+        planPackages =
+            Array(
+                ...planPackages,
+                {
+                    ref: workspaceRef(package.packageId)
+                    location: package.location
+                    exports: copyExports(package.manifest)
+                }
+            )
+    })
+
+    appendExternal: (lockedNode) => {
+        key: nodeRefKey(lockedNode.ref)
+        verifiedByRef.containsKey(key).ifFalse(() => {
+            fail()
+        })
+        verified: verifiedByRef[key]
+
+        planPackages =
+            Array(
+                ...planPackages,
+                {
+                    ref: copyNodeRef(lockedNode.ref)
+                    content: copyContentIdentity(lockedNode.content)
+                    exports: copyExternalExports(verified.exports)
+                }
+            )
+    }
+
+    lock.registryNodes.each((node) => {
+        appendExternal(node)
+    })
+    lock.gitNodes.each((node) => {
+        appendExternal(node)
+    })
+
+    planDependencies: Array()
+
+    state.packages.each((package) => {
+        packageDependencies:
+            validateV2WorkspaceDependencies(
+                lock,
+                package
+            )
+
+        packageDependencies.each((dependency) => {
+            planDependencies =
+                Array(
+                    ...planDependencies,
+                    dependency
+                )
+        })
+    })
+
+    (planDependencies.size() == lock.dependencies.size()).ifFalse(() => {
+        fail()
+    })
+
+    {
+        generation: 2
+        root: workspaceRef(resolutionRoot.root.packageId)
+        packages: planPackages
+        dependencies: planDependencies
+    }
 }
 
 build: (projectTreeFilesystem) => {

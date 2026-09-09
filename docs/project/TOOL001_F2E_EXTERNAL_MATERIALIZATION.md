@@ -1,6 +1,6 @@
 # TOOL001-F2E — External Immutable-Package Execution
 
-Status: **IN_PROGRESS — F2E1/F2E2 CLOSED; F2E3 READY (D053 RATIFIED); F2E4/F2E5 dependency-gated**
+Status: **IN_PROGRESS — F2E1/F2E2 CLOSED; F2E3 IN_PROGRESS (D053 RATIFIED); F2E4/F2E5 dependency-gated**
 Nature: non-normative Package Tool / host-integration project record
 Allocated after: `TOOL001-F2D` workspace-only execution closure
 
@@ -632,3 +632,49 @@ No normative Protos specification, lock format, ContentIdentity bytes, captured-
 semantics, package-store physical layout, acquisition/fetch policy, PackageExecutionPlan authority,
 ModuleKey identity, resolver behavior, public-run semantics or capture-backing policy changes in
 F2E2C.
+
+## F2E3 implementation progress — generation-2 external-leaf construction
+
+F2E3 has started under ratified D053 without modifying generation 1.
+
+The first bounded executable slice adds a separate bundled-Protos constructor:
+
+```text
+ExecutionPlan.buildV2FromVerifiedLeaves(
+    projectTreeFilesystem,
+    verifiedExternalPackages
+)
+```
+
+It is intentionally not wired to public run or the Java host adapter yet.
+
+This constructor preserves the existing V1 `build(projectTreeFilesystem)` path
+unchanged and constructs the D053 generation-2 single mixed graph only from:
+
+- the current non-stale workspace resolution state;
+- canonical lock-format-1 workspace/registry/Git refs;
+- exact lock `ContentIdentity`; and
+- caller-supplied inert external descriptors whose ref/content exactly match
+  locked external nodes and whose exports pass the existing runtime-name rules.
+
+Workspace dependency reconciliation remains fail-closed. Path dependencies retain
+the exact workspace target check. Registry dependencies additionally reconcile
+the locked target against the declared authority/locator and selected version
+constraint; Git dependencies reconcile fetch provenance and exact revision.
+Those provenance fields are validation inputs only and do not enter the emitted
+V2 plan.
+
+This first slice deliberately admits only **external leaf packages**: any lock
+edge declared by registry/Git is rejected. That is not a generation-2 semantic
+restriction; it is the bounded implementation frontier. The remaining F2E3 work
+must derive/validate each external package's manifest/exports/dependency
+declarations from the same F2E2 verified custody, then allow the uniform mixed
+edge relation already ratified by D053.
+
+The slice also keeps the crucial authority boundary explicit: the V2 constructor
+accepts only inert descriptors and emits only inert plan data. It accepts no
+Filesystem, captured backend, custody object, host path, resolver, locator,
+credentials or host handle.
+
+F2E3 therefore remains **IN_PROGRESS** after this slice. F2E4 and F2E5 remain
+dependency-gated.
