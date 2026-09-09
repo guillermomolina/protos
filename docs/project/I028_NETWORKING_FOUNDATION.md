@@ -27,9 +27,12 @@ normal implementation dependencies established as A-F progresses.
   - **A1 — IpAddress local foundation — CLOSED (`0.2.278-SNAPSHOT` / `SAME_COMMIT`):** source-backed canonical ordinary prototype, `IpAddress(version, bits)` through ordinary invocation, exact unbounded-Integer IPv4/IPv6 validation, transparent `recognizes`, structural `==`/`hash`, frozen successful values and frozen Prelude prototype, plus ordinary-Protos conformance. No `IpEndpoint` or Actor/P transfer.
   - **A2 — IpEndpoint local foundation — CLOSED (`0.2.279-SNAPSHOT` / `SAME_COMMIT`):** canonical frozen ordinary Prelude factory/prototype, recognized-IpAddress + exact unbounded-Integer port validation, transparent recognition, structural equality/hash, exact address retention and ordinary-Protos conformance. No Actor/P transfer.
   - **A3 — Actor/P transfer + close A — CLOSED (`0.2.280-SNAPSHOT` / `SAME_COMMIT`; implementation version unchanged):** retained Protos-source conformance proves Actor and P rematerialization preserve canonical IpAddress/IpEndpoint parents, exact recognized frozen state, nested address data, structural equality/hash and fresh destination identities; Actor uses its deterministic harness and P uses existing P runtime-test orchestration because Test Tool direct inspection intentionally requires cooperative idle before Future inspection; no production transfer special case is added.
-- **B — Network capability + bootstrap provisioning:** host-neutral live
-  capability shape and optional initial-module `network` endowment; no ambient
-  recovery.
+- **B — Network capability + bootstrap provisioning — IN_PROGRESS:** PLAT002 selects a represented live Network authority below a canonical source-backed prototype; B1 publishes only that prototype/architecture record and B2-B5 implement the capability, bootstrap confinement and closure without selecting the TCP backend.
+  - **B1 — canonical Network prototype — CLOSED (`0.2.282-SNAPSHOT` / `SAME_COMMIT`):** publish frozen source-backed standard `Network` in Prelude, register ratified PLAT002, update exact Core inventories and retain zero authority/backend/native-Closure construction.
+  - **B2 — represented Network capability + transfer confinement — READY:** implement the PLAT002 `ProtosNetworkCapabilityValue` wrapper and explicit Actor/P non-transferability; no RootActor endowment or TCP operations.
+  - **B3 — optional RootActor `network` bootstrap endowment — BLOCKED_BY_DEPENDENCIES:** consume B2 and provision host-granted Network only in the initial RootActor module context, absent when not granted and never imported/ambient.
+  - **B4 — ambient/import/Actor/P confinement conformance — BLOCKED_BY_DEPENDENCIES:** prove prototype possession/ordinary derivation cannot manufacture authority and no implicit import/new-Actor/P recovery path exists.
+  - **B5 — close B — BLOCKED_BY_DEPENDENCIES:** reconcile retained evidence and close Network capability/bootstrap provisioning before TCP acquisition implementation proceeds.
 - **C — TCP connection + `connectTcp`:** async acquisition, cancellation/late
   resource custody, Byte I/O/close/half-close composition, endpoint observation.
 - **D — TCP listener + `listenTcp`:** exact request snapshot/validation,
@@ -39,6 +42,17 @@ normal implementation dependencies established as A-F progresses.
   subdivide mechanically if required.
 - **F — cross-slice conformance/native-boundary closure:** cancellation races,
   late custody, multiple-accept scale evidence and Actor/P non-transferability.
+
+## I028-B1 / PLAT002 publication
+
+Published at implementation version `0.2.282-SNAPSHOT`. The project-owner-ratified PLAT002 architecture
+selects the existing represented-value mechanism for future concrete Network capabilities while
+leaving D047 as the sole owner of observable networking semantics. B1 itself publishes only the
+canonical source-backed frozen `Network` standard prototype in Prelude and the retained Protos
+prototype conformance case. It introduces no `ProtosNetworkCapabilityValue` yet, no RootActor
+`network` endowment, no connect/listen/TCP resource, no backend/event-loop/selector state and no
+native Closure site. The audited Core native boundary therefore remains 123 sites / 32 providers.
+B2 is READY for the represented capability and explicit Actor/P fail-closed transfer evidence.
 
 ## I028-A1 closure
 

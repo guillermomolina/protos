@@ -33,7 +33,12 @@ process remains authoritative first.
 | Item | Decision | Status | Approval | Primary consumers |
 |---|---|---|---|---|
 | PLAT001 | Truffle runtime hosting topology | RATIFIED | Explicit project-owner approval, 2026-09-08; 2026-09-09 A+ executable-layer amendment explicitly approved | I026-A4 and later Truffle-hosted runtime/tooling work |
+| PLAT002 | Network capability represented-value architecture | RATIFIED | Explicit project-owner approval, 2026-09-09 after cross-language/runtime/capability/scalability review | I028-B and later Network/TCP runtime implementation |
 
 See `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md` for the selected topology,
 its non-semantic boundary, alternatives, scaling rationale, invariants, and
 explicitly deferred choices.
+
+See `docs/project/PLAT002_NETWORK_CAPABILITY_REPRESENTATION.md` for the selected
+Network represented-capability boundary, rejected alternatives, scalability rationale and
+backend choices deliberately deferred to later I028 slices.

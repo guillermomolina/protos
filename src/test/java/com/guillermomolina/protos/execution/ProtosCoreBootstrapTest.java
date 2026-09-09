@@ -86,6 +86,13 @@ class ProtosCoreBootstrapTest {
                 invalidReturnPrototype,
                 prelude.newInvalidReturn().parent().orElseThrow());
 
+        ProtosObjectValue networkPrototype =
+                assertInstanceOf(
+                        ProtosObjectValue.class,
+                        bindings.readLocalSlot("Network").orElseThrow());
+        assertSame(ProtosObjectValue.rootObject(), networkPrototype.parent().orElseThrow());
+        assertTrue(networkPrototype.isFrozen());
+
         ProtosObjectValue futurePrototype = prelude.futurePrototype();
         assertSame(futurePrototype, bindings.readLocalSlot("Future").orElseThrow());
         assertSame(ProtosObjectValue.rootObject(), futurePrototype.parent().orElseThrow());
@@ -152,6 +159,7 @@ class ProtosCoreBootstrapTest {
                         "Path",
                         "IpAddress",
                         "IpEndpoint",
+                        "Network",
                         "Future",
                         "Actor",
                         "Process",

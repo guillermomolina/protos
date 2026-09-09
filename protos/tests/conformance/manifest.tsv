@@ -703,3 +703,4 @@ surface-sugar/expression-closure-equivalence.protos	integer	4242
 surface-sugar/expression-closure-right-association.protos	integer	42
 surface-sugar/trailing-closure-equivalence.protos	integer	4242
 surface-sugar/trailing-closure-lazy.protos	integer	420
+network/network-prototype.protos	boolean	true

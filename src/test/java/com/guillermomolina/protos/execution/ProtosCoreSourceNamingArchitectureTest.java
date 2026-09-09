@@ -56,6 +56,7 @@ class ProtosCoreSourceNamingArchitectureTest {
                     "Path.protos",
                     "IpAddress.protos",
                     "IpEndpoint.protos",
+                    "Network.protos",
                     "Future.protos",
                     "Actor.protos",
                     "Process.protos",

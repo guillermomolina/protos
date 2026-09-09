@@ -130,6 +130,9 @@ public final class ProtosCoreBootstrap {
                 .load(coreDirectory.resolve("IpEndpoint.protos"))
                 .call(bootstrapActivation);
         sourceLoader
+                .load(coreDirectory.resolve("Network.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
                 .load(coreDirectory.resolve("Future.protos"))
                 .call(bootstrapActivation);
         sourceLoader
@@ -279,6 +282,8 @@ public final class ProtosCoreBootstrap {
                 requirePrototype(
                         bootstrapContext, "IpEndpoint", ProtosObjectValue.rootObject());
         ProtosStandardIpEndpointProtocol.install(ipEndpointPrototype, ipAddressPrototype);
+        requirePrototype(
+                bootstrapContext, "Network", ProtosObjectValue.rootObject());
         ProtosObjectValue futurePrototype = requirePrototype(bootstrapContext, "Future", ProtosObjectValue.rootObject());
         ProtosStandardFutureProtocol.install(futurePrototype);
         ProtosObjectValue processObject =
