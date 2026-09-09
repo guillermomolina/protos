@@ -21,12 +21,8 @@ Thing: {
 first: Thing(42)
 second: Thing(43)
 
-(first !== second).and() {
-    (first !== Thing).and() {
-        (first.value == 42).and() {
-            (second.value == 43).and() {
-                first.inheritedValue == 9
-            }
-        }
-    }
-}
+(first !== second) &&
+    (first !== Thing) &&
+    (first.value == 42) &&
+    (second.value == 43) &&
+    (first.inheritedValue == 9)

@@ -20,6 +20,5 @@ outer: (value) => {
 
 snapshot: outer(11)
 
-(snapshot.size() == 1).and() {
-    snapshot.at(0) == 11
-}
+(snapshot.size() == 1) &&
+    (snapshot.at(0) == 11)
