@@ -28,10 +28,9 @@ firstClose: writer.close()
 secondClose: writer.close()
 firstClose.then((first) => {
     secondClose.then((second) => {
-        (firstClose !== secondClose).and() {
-            (first === writer).and() {
-                (second === writer).and() { state.closes == 1 }
-            }
-        }
+        (firstClose !== secondClose) &&
+            (first === writer) &&
+            (second === writer) &&
+            (state.closes == 1)
     })
 })
