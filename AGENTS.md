@@ -1131,8 +1131,74 @@ New actionable formal work SHOULD have a GitHub Issue when it is allocated. An
 operational identifier MUST NOT exist only in a prompt/chat. When the work also
 has an owning durable repository record, persist the identifier there no later
 than the first repository publication that materially establishes the work.
-Before allocating the next identifier in a family, check both current repository
-records and GitHub Issues so migration/backfill cannot create a collision.
+
+<!-- GITHUB001-A2 FAMILY-IDENTIFIER-POLICY -->
+##### Family labels
+
+Every GitHub Issue that represents a formal actionable Protos work item MUST
+carry exactly one stable family-classification label named `family:<FAMILY>`,
+where `<FAMILY>` is the identifier prefix. Examples include `family:I`,
+`family:LIB`, `family:TOOL`, `family:CLI`, `family:PERF`, `family:DOC`,
+`family:DIST`, `family:AUD`, `family:LM`, and `family:GITHUB`.
+
+A formal sub-issue keeps the same family label as its formal identifier. The
+family label classifies durable project ownership only. Do not encode live
+status, priority, roadmap position, assignee, blocking state, or parent/child
+structure in family labels; those belong to the Issue/Project/native hierarchy.
+Ordinary community Issues that do not have a formal Protos work identifier do not
+need a family label.
+
+`Dxxx`, `PLATxxx`, and `Bxxx` remain repository-owned decision/blocker families
+rather than ordinary actionable Issue families. When an actionable Issue consumes
+or is blocked by one of those records, label the Issue by its owning actionable
+family and link the applicable `Dxxx`/`PLATxxx`/`Bxxx` authority instead of
+reclassifying the decision/blocker as project work.
+
+GitHub's numeric Issue identifier and a Protos formal identifier are independent
+namespaces. For example, GitHub Issue `#73` may own `I031`; agents MUST NOT try to
+make those numbers coincide.
+
+##### Collision-safe formal identifier allocation
+
+Top-level formal family numbers are monotonic allocation identifiers, not a
+reusable pool. Closed, cancelled, superseded, retrospectively imported, or
+otherwise previously allocated identifiers remain consumed. Do not fill an old
+gap merely because its number appears unused in the current active-work view.
+Slice suffixes such as `I031-A` or `TOOL003-B2` do not allocate another top-level
+family number.
+
+Before allocating a new top-level identifier, the coordinating agent MUST:
+
+1. verify that the work genuinely belongs to that formal family and deserves a
+   new durable work identity rather than a Discussion, ordinary Issue, existing
+   parent, or mechanical slice;
+2. search current durable repository records plus all relevant GitHub Issues,
+   including closed/historical Issues, for allocated identifiers in that family;
+3. choose the next number after the greatest already allocated top-level number;
+4. create the GitHub Issue immediately with a title beginning
+   `<IDENTIFIER> — ...` and apply the matching `family:<FAMILY>` label; and
+5. re-search the candidate identifier after creation before treating the
+   allocation as confirmed.
+
+The post-create re-search is the concurrency gate. If two agents race and create
+the same previously-free identifier, the Issue with the lower GitHub Issue number
+keeps that Protos identifier. Every later colliding Issue MUST re-scan repository
+and GitHub state, choose the then-next family number, rename itself, and repeat
+the uniqueness check until it owns a unique identifier. If the candidate already
+belongs to a durable repository record, that repository allocation wins and the
+new Issue must be renumbered regardless of GitHub Issue ordering.
+
+Do not publish a new durable repository record, changelog entry, source reference,
+or implementation under a newly allocated identifier until that identifier has
+passed the post-create uniqueness check. If GitHub Issue creation or verification
+is unavailable, report the coordination limitation rather than reserving a new
+formal identifier only in chat or a local patch.
+
+Historical migration is different from new allocation: an already-established
+repository identifier keeps its historical number. Backfill creates the
+retrospective Issue with that same identifier and never renumbers historical
+project work merely to obtain a contiguous sequence or to match GitHub Issue
+numbers.
 
 Standard Library work uses `LIBxxx`; documentation initiatives use `DOCxxx`;
 official bundled tools use `TOOLxxx`; performance work uses `PERFxxx`; Language
