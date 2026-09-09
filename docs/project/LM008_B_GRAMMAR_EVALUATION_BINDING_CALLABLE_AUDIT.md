@@ -131,3 +131,59 @@ already-retained Protos conformance instead of duplicating it.
 `LM008-B` remains `IN_PROGRESS`. `B3` is next: Closure forms, invocation,
 parameters/default/rest/spread and trailing Closure syntax. B3 must cross-check
 the closed I025 parameter-ordering evidence instead of duplicating it.
+
+## B3 checkpoint
+
+Checkpoint state: COMPLETE
+
+Validation class: `TEST_IMPACT`
+
+Normative authorities:
+
+- `spec/PROTOS_GRAMMAR.md` for Closure source forms, parameter-list syntax, call
+  arguments/spread and trailing-Closure attachment/desugaring;
+- `spec/semantics/CALLABLES.md` for Closure creation/capture, invocation,
+  caller-supplied argument-vector formation and parameter/default/rest binding;
+- the D003 / I025 closure-parameter-ordering resolution already closed before
+  LM008-A.
+
+B3 changes no normative specification, production implementation, public API or
+implementation version. Existing language-level conformance is reused whenever
+it already proves a row directly.
+
+### Evidence matrix
+
+| Surface row | Normative requirement | Retained language-level evidence | Supplementary mechanism evidence | Classification |
+|---|---|---|---|---|
+| Closure source forms / one Closure kind | Bare single-simple-parameter shorthand, parenthesized parameter lists, expression bodies and braced bodies all create the same ordinary Closure semantics; zero-parameter form uses `()` | existing `surface-sugar/expression-closure-equivalence.protos` plus `core-surface/closure-form-equivalence.protos`, including bare shorthand, zero-parameter and nested right-associated expression bodies | `ProtosParserClosureTest`, `Canonicalizer` | `COVERED` |
+| Lexical capture by reference | A Closure captures genuine lexical execution contexts by reference, so later invocations share/observe the same captured slots | existing `regression/two-closures-share-captured-binding.protos` and retained closure regressions | Closure activation/capture runtime tests | `COVERED` |
+| Plain/direct Closure invocation | `()` invokes the evaluated callable target through the ordinary call path; direct Closure calls produce the Closure result | existing `call/plain-closure-call.protos` and `core-surface/direct-call-argument-vector-order.protos` | `ProtosCallNode` / invocation tests | `COVERED` |
+| Call target and explicit argument order | Call target is evaluated before argument-vector items; ordinary and spread argument expressions are each evaluated once in strict left-to-right source order before binding begins | `core-surface/direct-call-argument-vector-order.protos`; existing `call/message-send-spread-left-to-right.protos` supplies message-send evidence | `ProtosArgumentVectorNode` | `COVERED` |
+| Spread expansion | A spread expression is evaluated once at its position and contributes a shallow ascending-index snapshot of a standard Array to the same supplied vector | existing `call/message-send-spread-left-to-right.protos`, `call/super-spread-uses-ordinary-argument-vector.protos`, and direct-call B3 probe | `ProtosArgumentVectorNode` | `COVERED` |
+| Invalid spread source / failure timing | A non-Array spread operand signals Error after that operand expression but before any later argument expression | `core-surface/spread-non-array-stops-later-argument.protos` | `ProtosArgumentVectorNode` checks the evaluated item before advancing | `COVERED` |
+| Required/default/rest declaration ordering | Required non-rest parameters precede all defaulted parameters and optional rest is final | existing I025 `regression/closure-parameter-ordering-valid.protos`; invalid `closure-required-after-default-rejected.protos`; B3 non-final-rest source fixture | `ProtosParserClosureTest`, `ProtosParameterBindingNode` | `COVERED` |
+| Parameter-name uniqueness | Required/default/rest parameter names may not duplicate within one Closure declaration | `lm008-b3-duplicate-parameter-rejected.protos` through the B3 parser-source harness | `ProtosParserClosureTest` | `INTENTIONAL_ABSENCE_COVERED` |
+| Left-to-right parameter binding and defaults | Parameters bind in declaration order; a supplied argument wins without evaluating its default; a missing defaulted argument evaluates its default in the real activation after earlier bindings exist | existing `regression/default-reads-earlier-parameter.protos` plus `core-surface/default-rest-binding.protos` | `ProtosParameterBindingNode` | `COVERED` |
+| Missing required / excess without rest | A missing required parameter and supplied arguments remaining after the final non-rest parameter signal ordinary Error | existing `regression/closure-missing-required-argument-error.protos`; full parameter-binding mechanism tests retain the excess-argument branch | `ProtosParameterBindingNodeTest` | `COVERED` |
+| Rest binding and `args` independence | Final rest receives the unconsumed supplied suffix as a frozen standard Array; `args` remains the original caller-supplied vector and defaults do not append to it | existing `regression/rest-arguments-preserve-supplied-vector.protos`, `call/args-*` corpus, and `core-surface/default-rest-binding.protos` | `ProtosParameterBindingNode` | `COVERED` |
+| Trailing Closure desugaring/equivalence | Same-line `{ ... }` after an eligible completed call suffix appends one ordinary parameterless Closure as the final argument | existing `surface-sugar/trailing-closure-equivalence.protos` and `surface-sugar/trailing-closure-lazy.protos` | `ProtosParserTrailingClosureTest`, `CanonicalizerCallTest` | `COVERED` |
+| Trailing Closure newline boundary | A logical newline after a completed call separates the following `{ ... }`; it must not attach as a trailing Closure | `core-surface/trailing-closure-newline-separation.protos` | `ProtosParserTrailingClosureTest` | `COVERED` |
+| At most one trailing Closure | One call suffix cannot consume a second trailing Closure | `lm008-b3-second-trailing-closure-rejected.protos` through the B3 parser-source harness | `ProtosParserTrailingClosureTest` | `INTENTIONAL_ABSENCE_COVERED` |
+
+The already-published I025 source fixture remains the canonical negative evidence
+for the D003 required-after-default restriction. B3 does not duplicate it.
+
+Parser-invalid B3 fixtures intentionally stay outside the runtime conformance
+manifest because frontend rejection is the required observable boundary.
+
+### B3 audit result
+
+No B3 row requires a new semantic or architectural choice.
+
+No already-normative B3 promise was found missing from the current guest-visible
+implementation. The new tests close focused evidence gaps; the majority of B3 is
+already covered by retained ordinary-Protos call, regression and surface-sugar
+conformance.
+
+`LM008-B` remains `IN_PROGRESS`. `B4` is next: receiver binding/extraction,
+`super`, non-local return and final B reconciliation.

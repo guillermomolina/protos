@@ -579,6 +579,11 @@ core-surface/member-assignment-target-before-rhs.protos	integer	12707
 core-surface/indexed-assignment-evaluation-order.protos	integer	12347
 core-surface/binary-operator-evaluation-order.protos	integer	1242
 core-surface/object-parent-composition-evaluation-order.protos	integer	12394
+core-surface/closure-form-equivalence.protos	integer	23455
+core-surface/direct-call-argument-vector-order.protos	integer	123234
+core-surface/default-rest-binding.protos	integer	40204101
+core-surface/trailing-closure-newline-separation.protos	integer	11
+core-surface/spread-non-array-stops-later-argument.protos	boolean	true
 control/ensure-body-nonlocal-return-runs-cleanup.protos	integer	112
 control/ensure-cleanup-error-supersedes-normal.protos	boolean	true
 control/ensure-cleanup-invokable-not-closure.protos	error	-
