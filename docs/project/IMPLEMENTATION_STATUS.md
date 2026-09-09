@@ -1102,7 +1102,7 @@ record distributable Standard Library functionality.
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
 | TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | D/E/F1 and F2D are CLOSED; F2E2 is CLOSED and F2E3 is READY for the active external immutable-package execution continuation. |
-| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D/E/F CLOSED; F4 ownership cutover is reconciled through F4A/F4B1/F4B2/F4C; TOOL002-G READY; H-J remain dependency-ordered. |
+| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D/E/F/G CLOSED; Actor/Group corpus policy is fully owned by bundled Protos with duplicate Java owners retired; TOOL002-H READY; I-J remain dependency-ordered. |
 
 ### TOOL001 — Package Tool
 
@@ -1270,8 +1270,13 @@ the initial TOOL002 closure.
 | TOOL002-F4B1 | CLOSED | `16b818a42f6c8fc99e3c33fd1b72683c596b8e51` / `0.2.259-SNAPSHOT`; F1/F2 switch to generic same-Process root-preserving `executionInspect`, and one private fixture proves every deferred Future manifest row before public selection. |
 | TOOL002-F4B2 | CLOSED | `fed58149ec5af3e1d95f79e99d28a6032f581af7` / `0.2.261-SNAPSHOT`; atomically selects all retained `future-*` families in generic Runner, provisions inspection in real `protos test`, proves selected==passed==all and skipped==0, and removes the duplicate Java manifest owner. |
 | TOOL002-F4C | CLOSED | Documentation/governance-only final reconciliation; closes TOOL002-F/F4 and makes TOOL002-G READY with no executable, specification, native-boundary or implementation-version change. |
-| TOOL002-G | READY | TOOL002-F CLOSED; migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |
-| TOOL002-H | BLOCKED_BY_DEPENDENCIES | TOOL002-G; bounded parallel scheduling of independent fresh Processes with independent output capture and deterministic reporting. |
+| TOOL002-G | CLOSED | G1/G1A production-scheduler cooperative inspection + G2 Actor migration + G3 Group/`future-integer-one-of` migration + G4 duplicate Java owner retirement complete the scheduler-sensitive corpus cutover. |
+| TOOL002-G1 | CLOSED | `52428e82dcb57137fa1d180a9319c873450d25f9`; cooperative live-result inspection executes the inspector as real RootActor task while production Actor scheduling supplies progress. |
+| TOOL002-G1A | CLOSED | `6e6fe84348380b2c9b8816bf4dab13589ceb53d6`; intermediate cooperative idle may retain suspended source tasks, with post-inspector zero-live-task invariant preserved. |
+| TOOL002-G2 | CLOSED | `e5c4a3972ff45b95aa50cefa57617318a5cf308a` / `0.2.300-SNAPSHOT`; complete retained Actor manifest moved to bundled-Protos Runner ownership; legacy Java owner retained only until G4. |
+| TOOL002-G3 | CLOSED | `ab7b1e3590ea6747da7b8d1321db5bdf5c489256` / `0.2.302-SNAPSHOT`; complete retained Group manifest plus value-membership-only `future-integer-one-of` moved to bundled-Protos Runner ownership without routing-order selection. |
+| TOOL002-G4 | CLOSED | `SAME_COMMIT`; remove duplicate Java Actor/Group corpus-policy owners, retain host-mechanical/full-corpus evidence and architecture guard, close G and release H; no implementation-version change. |
+| TOOL002-H | READY | TOOL002-G CLOSED; bounded parallel scheduling of independent fresh Processes with independent output capture and deterministic reporting. |
 | TOOL002-I | BLOCKED_BY_DEPENDENCIES | TOOL002-H; explicit resource constraints/private capabilities for real external-resource sharing. |
 | TOOL002-J | BLOCKED_BY_DEPENDENCIES | TOOL002-I; CI/launcher integration: Java implementation tests first, then the Protos test tool for the Protos corpus. |
 

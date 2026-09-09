@@ -66,8 +66,8 @@ freeze those decisions unless their own audited scope requires and resolves them
 | TOOL002-D | CLOSED | D1-D4 are published; all retained non-Future main-manifest expectation policy is owned by bundled Protos. D4 closes at `0.2.211-SNAPSHOT`; `future-*` remains TOOL002-F. |
 | TOOL002-E | CLOSED | E1A/E1B/E2A/E2B/E3/E4 complete the retained Package/TOML migration: bundled Protos owns planning, confined source loading, Package execution, Boolean/Error expectation policy and aggregation; duplicate Java corpus-policy ownership is removed. |
 | TOOL002-F | CLOSED | F1/F2/F3 plus the F4 cutover program are published: bundled Protos now owns all retained Future expectation policy and the complete main manifest; duplicate Java Future policy is retired. |
-| TOOL002-G | READY | TOOL002-F is CLOSED; migrate Actor/Group scheduler-sensitive language coverage without a test-only concurrency model. |
-| TOOL002-H | BLOCKED_BY_DEPENDENCIES | After G, add bounded parallel scheduling of independent fresh Processes, private output capture, and deterministic reporting. |
+| TOOL002-G | CLOSED | G1/G1A establish production-scheduler cooperative inspection; G2/G3 migrate the complete retained Actor/Group manifests into bundled-Protos Runner ownership; G4 retires the duplicate Java corpus-policy owners and reconciles closure. |
+| TOOL002-H | READY | TOOL002-G is CLOSED; add bounded parallel scheduling of independent fresh Processes, private output capture, and deterministic reporting. |
 | TOOL002-I | BLOCKED_BY_DEPENDENCIES | After H, add explicit resource constraints/private capabilities where real external-resource sharing requires them. |
 | TOOL002-J | BLOCKED_BY_DEPENDENCIES | After I, integrate the final Java-first / Protos-tool-second validation pipeline. |
 
@@ -774,6 +774,33 @@ TOOL002-F4B1 is CLOSED.
 TOOL002-F4B2 is CLOSED.
 TOOL002-F4C is CLOSED.
 TOOL002-G is READY.
+
+## TOOL002-G closure
+
+TOOL002-G is CLOSED after the scheduler-sensitive Actor/Group migration was
+completed without introducing a test-only concurrency model:
+
+- **G1** (`52428e82dcb57137fa1d180a9319c873450d25f9`) moved exact live-result
+  inspection onto a real RootActor-local cooperative inspector task while
+  production Actors continue only through the production scheduler.
+- **G1A** (`6e6fe84348380b2c9b8816bf4dab13589ceb53d6`) corrected the
+  intermediate-idle boundary exposed by the retained chained-Future Actor case:
+  suspended source work may remain live at intermediate idle, while the existing
+  post-inspector zero-live-task invariant remains mandatory.
+- **G2** (`e5c4a3972ff45b95aa50cefa57617318a5cf308a`) moved the complete
+  retained Actor manifest to bundled-Protos Runner ownership using a separate
+  read-only corpus capability and exact `workers` module overlay.
+- **G3** (`ab7b1e3590ea6747da7b8d1321db5bdf5c489256`) moved the complete
+  retained Group manifest to the same ownership model and added
+  `future-integer-one-of` strictly as resolved-value membership policy, without
+  selecting or observing a routing member or introducing Group routing order.
+- **G4** (`SAME_COMMIT`) removes the two legacy Java/JUnit Actor/Group
+  corpus-policy owners and retains a test-only architecture guard plus the G2/G3
+  full-corpus harnesses as host-mechanical evidence.
+
+Actor and Group manifests remain unchanged by G4. Java continues to validate
+host/runtime mechanics, while observable corpus expectation policy belongs to
+ordinary bundled Protos. TOOL002-H is READY.
 
 ## TOOL002-A closure
 
