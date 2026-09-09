@@ -130,7 +130,7 @@ not be repaired or tested as though they were one operation.
 |---|---|---|
 | `LM008-A` | CLOSED | Establish normative-owner inventory, audit classifications, evidence rules, decomposition and seed findings from current repository state. Documentation/governance only. |
 | `LM008-B` | CLOSED | Grammar/evaluation/binding/callable surface audit complete through B1-B4: lexical/literal/separator grammar; binding/writes/lowering/evaluation/object composition; Closure/invocation/parameter/default/rest/spread/trailing-Closure surface; receiver binding/extraction, `super`, non-local return and final B reconciliation. No new semantic decision or production implementation gap was found; retained Protos evidence is recorded in `LM008_B_GRAMMAR_EVALUATION_BINDING_CALLABLE_AUDIT.md`. |
-| `LM008-C` | READY | Audit object structural/reflection/mutation surface: local/delegated slot observation, parent, composition, `hasSlot`, `slotValue`, `slotNames`, `removeSlot`, `without`, `alias`, `close`, `freeze`, open/closed/frozen behavior and guest-visible publication. |
+| `LM008-C` | BLOCKED_BY_DEPENDENCIES | Object structural/reflection/mutation audit has confirmed four already-normative guest-publication gaps: `Object.slotNames()`, `removeSlot(name)`, structural `close()` and `freeze()`. They are tracked by I031 / GitHub #242 as separate A-D implementation slices; all other audited C rows are covered by retained Protos evidence. C resumes after I031 closure for positive regression reconciliation. |
 | `LM008-D` | READY | Audit values and Core collections: canonical null/Booleans, Boolean control protocols, equality/identity/hash, numeric families/conversions/operators, String, Array, Map and IdentityMap fundamental guest-visible surface. |
 | `LM008-E` | READY | Audit control/errors/modules/prelude surface: `while`, `ensure`, Error signaling/handling, module contexts/import/cache-visible rules, and required/forbidden Core prelude bindings. |
 | `LM008-F` | BLOCKED_BY_DEPENDENCIES | Final reconciliation: cross-check retained LM005/LM006 advanced-domain evidence, require every matrix row to have an explained state, require all discovered implementation gaps to have owners/regressions, rerun the complete retained surface corpus and close LM008 without inventing semantics. |
@@ -146,6 +146,16 @@ The bounded B audit matrix and checkpoint evidence live in
 evidence, no new design decision and no production implementation finding.
 Parent LM008 remains IN_PROGRESS for independent C/D/E fronts and final F
 reconciliation.
+
+## LM008-C detailed audit record
+
+The bounded object structural/reflection/mutation audit matrix lives in
+`docs/project/LM008_C_OBJECT_STRUCTURAL_REFLECTION_MUTATION_AUDIT.md`.
+LM008-C has confirmed four implementation/publication gaps against
+already-closed Object semantics and allocated I031 / GitHub #242 as the
+single implementation owner with separate A-D slices. LM008-C is
+`BLOCKED_BY_DEPENDENCIES` until I031 publishes positive ordinary-Protos
+regressions; no new Dxxx/PLATxxx decision is required by this checkpoint.
 
 ## Interaction with implementation findings
 
