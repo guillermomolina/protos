@@ -824,7 +824,7 @@ the already-published implementation commit.
 | LM003 | Language interaction conformance | CLOSED | `dbc086ed294ead0b4219952c02b00ec28a492472` | Retrospective canonical ID; delegation, dynamic receiver, captured-state and inherited-call interaction coverage. |
 | LM004 | Extended language interaction conformance | CLOSED | `d390c0c642c5d2d907fcf9e384d1cbc080dd4783` | Retrospective canonical ID; deeper delegation/call-argument interactions plus Map/IdentityMap Path-key behavior. |
 | LM005 | Concurrent Language Maturity | CLOSED | `SAME_COMMIT` | LM005-A Future, LM005-B Actor, and LM005-C Group/GroupRef conformance/examples/tutorials complete; no runtime or normative feature added. |
-| LM006 | System & Resource Language Maturity | IN_PROGRESS | — | LM006-A Bytes/Encoding composition maturity closes in this publication; LM006-B/C/D/E remain independently READY and LM006-F is dependency-gated. No runtime or normative feature is owned by LM006. |
+| LM006 | System & Resource Language Maturity | IN_PROGRESS | — | closed slices: A/B; READY: C/D/E; dependency-gated: F; No runtime or normative feature is owned by LM006. |
 
 ### LM005 — Concurrent Language Maturity
 
@@ -864,11 +864,16 @@ before dependent maturity work proceeds.
 | Slice | Status | Closure evidence | Surface |
 |---|---|---|---|
 | LM006-A | CLOSED | `SAME_COMMIT` | Bytes/Encoding composition maturity: manually built mutable byte sequences decoded through mandatory portable encodings, decode-after-mutation, fresh encode-result independence under mutation, UTF-16BE byte construction, and malformed-after-mutation failure. Ordinary Protos central-manifest coverage only; no Java harness, runtime, specification, API or implementation-version change. |
-| LM006-B | READY | — | File/Filesystem/Path maturity over already-closed open/read/write/position/namespace/directory/captured-tree semantics; prefer ordinary Protos cases and add host orchestration only where a real capability/backend boundary requires it. |
+| LM006-B | CLOSED | `SAME_COMMIT` | File/Filesystem/Path interaction maturity: five ordinary Protos programs over a host-only deterministic capability backend cover Path-driven open, read/seek/position/size composition, independent logical cursors over one shared resource, positioned write growth with portable zero gap, truncate with cursor preservation and cross-open visibility, and seekToEnd followed by ordinary positioned write. No namespace/captured-tree duplication, runtime/specification/API or implementation-version change. |
 | LM006-C | READY | — | Process and standard-stream maturity over closed Process bootstrap/I/O plus `std:io/ProcessStreams`, including explicit authority/Encoding and borrowing-lifetime composition; no ambient Process or default Encoding may be invented. |
 | LM006-D | READY | — | Resource lifetime, Error and `ensure` maturity across already-closed File/text/Future cleanup and failure-precedence semantics. |
 | LM006-E | READY | — | End-to-end system/resource programs composing already-closed Path, Filesystem/File, byte/text I/O, Process, collections, Errors and Futures without introducing pairwise special semantics. |
 | LM006-F | BLOCKED_BY_DEPENDENCIES | — | Executable examples/tutorial progression plus final cross-slice reconciliation and LM006 closure after B-E are closed. |
+
+LM006-B closure evidence:
+- five Protos sources own the observable expectations; the Java test harness only provisions one deterministic in-memory Filesystem backend and shared selected-resource storage;
+- the cases deliberately avoid namespace replacement/removal and captured-tree behavior already covered by I021/I024, and avoid cleanup/Error precedence reserved for LM006-D;
+- no I026 machinery, production Java/runtime, normative specification, public API, native boundary or implementation version is changed.
 
 Coordination:
 - LM006-B, LM006-C, LM006-D and LM006-E are intentionally independent work
