@@ -46,6 +46,22 @@ Project participation is governed by
 [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md), and general support routing is
 documented in [SUPPORT.md](SUPPORT.md).
 
+## Claiming work
+<!-- GITHUB002-B PR-FIRST-CONTRIBUTOR-WORKFLOW -->
+
+An assignee means active responsibility for the Issue; it does not mean repository
+ownership.
+
+A `Ready` Issue with no assignee is normally available to be claimed. If GitHub
+does not let you self-assign, leave a short comment saying you would like to work
+on it and a maintainer can assign it. `good first issue` identifies bounded work
+suited to a first contribution; `help wanted` means contributions are welcome but
+the task may require more project/domain context.
+
+Do not start broad implementation from an exploratory Discussion. Once the work
+is bounded, create or use the corresponding Issue first so scope and acceptance
+criteria have a stable coordination point.
+
 ## AI-assisted development
 
 **AI-assisted and fully AI-generated contributions are welcome in Protos.**
@@ -164,17 +180,47 @@ apply to the work being performed.
 
 ## Pull requests
 
-A useful pull request description normally contains:
+The normal contribution path is:
 
+```text
+Issue → branch/fork → local validation → Pull Request → CI/review → squash merge
+```
+
+Create a narrow branch for the claimed Issue. Contributors without direct
+repository write access normally work from a fork; maintainers and project
+automation may use a dedicated branch in the repository. Do not develop the
+change directly on `main`.
+
+Link the Pull Request to its Issues deliberately:
+
+- use `Closes #N`, `Fixes #N`, or `Resolves #N` only when merging the PR fully
+  satisfies that leaf Issue's acceptance criteria;
+- use `Refs #N` for parent, related, or partially advanced work that must remain
+  open; and
+- never close a parent work item merely because one child/slice was implemented.
+
+A useful Pull Request description normally contains:
+
+- the leaf Issue linkage and any parent/related references;
 - a concise statement of the problem and result;
 - the important semantic/design constraints when relevant;
-- the validation performed and its results;
+- the exact local validation performed and its results;
+- meaningful review evidence for substantive changes;
 - any known limitations, deferred work, or blockers; and
 - a brief AI-assistance disclosure when AI materially produced the change.
 
+Opening a Pull Request is not publication. The PR must satisfy the repository's
+current CI/check, review, conversation-resolution, and branch-freshness rules
+before merge. The ordinary merge strategy is squash merge so `main` receives one
+coherent publication commit for the accepted PR.
+
+The repository currently requires no mandatory GitHub approval count while there
+is only one regular maintainer. That does **not** remove the substantive-review
+expectation above. If another regular maintainer joins, the project may require
+one approval without changing this contribution flow.
+
 Contributions are evaluated on correctness, coherence, reviewability, evidence,
-and maintainability. They are not graded by the mechanism used to type the
-code.
+and maintainability. They are not graded by the mechanism used to type the code.
 
 ## Licensing
 

@@ -652,115 +652,132 @@ Such an environment limitation also does not by itself prevent patch authoring
 when the required repository contents can be inspected and the generated patch
 is intended to be executed and validated later in the user's real checkout.
 
-### Forward-compatible serialized publication for generated patch launchers
+### Forward-compatible PR-first publication for generated patch launchers
+<!-- GITHUB002-B PR-FIRST-PUBLICATION-CONTRACT -->
 
-Publication-capable generated patch launchers MUST isolate their mutable Git
-state from the caller's checkout instead of requiring that checkout to be clean,
-on `main`, or synchronized with `origin/main`.
+The ordinary Protos contribution/publication path is now **Pull-Request first**.
+Generated launchers prepare and validate a candidate on an isolated branch, push
+that candidate to a dedicated remote head branch, and open a Pull Request against
+`main`. Opening a PR is not publication; publication occurs only when the PR is
+merged into `main`.
 
-Patch **preparation** may happen in parallel while patch **publication** is
-serialized by the user. These are deliberately different timelines.
+This cutover preserves the existing separation between parallel preparation and
+repository integration, but removes the old requirement that every prepared
+launcher serialize by directly fast-forwarding `main`.
 
-A generated artifact therefore distinguishes:
+Transition rule:
 
-- `AUTHORING_BASE` — the repository revision inspected while the agent designs,
-  builds, and acceptance-tests the artifact. It is evidence for what the agent
-  saw; it is **not** a publication pin and does not by itself expire the ZIP.
-- `PUBLICATION_BASE` — the exact `origin/main` fetched by the launcher when the
-  user actually executes that ZIP. All definitive materialization, moving
-  metadata derivation, validation, commit creation, and publication occur from
-  this execution-time base.
+- this `GITHUB002-B` publication is the final newly generated governance launcher
+  allowed to use the pre-cutover direct-to-`main` contract;
+- launchers already generated or already executing before this cutover may finish
+  under their original contract, including the explicitly in-flight I026/I028
+  work;
+- after this cutover, newly generated ordinary launchers MUST use the PR-first
+  contract below;
+- repository enforcement of PR-only `main` is deliberately later than launcher
+  support: `GITHUB002-D` must establish the standard launcher mechanics before
+  `GITHUB002-C` enables the enforcing `main` ruleset.
 
-An advance from `AUTHORING_BASE` to a later `PUBLICATION_BASE` is normal. It MUST
-NOT by itself cause the agent to discard/regenerate the artifact or the launcher
-to abort. A prepared patch is expected to survive unrelated commits published by
-other agents before the user gets to it.
+Patch **preparation** may happen in parallel, Pull Requests may exist in parallel,
+and final merges are serialized by GitHub's branch/update/check rules.
 
-For the standard direct-to-`main` publication workflow, a launcher MUST:
+A generated artifact distinguishes:
+
+- `AUTHORING_BASE` — the revision inspected while the agent designs and
+  acceptance-tests the artifact. It is provenance only and MUST NOT be treated as
+  a future execution pin.
+- `PR_BASE` — the exact `origin/main` fetched by the launcher when the user
+  executes it. Definitive materialization and local validation begin from this
+  execution-time base.
+
+An advance from `AUTHORING_BASE` to a later `PR_BASE` is normal and MUST NOT by
+itself invalidate a prepared artifact.
+
+For the ordinary PR-first workflow, a generated launcher MUST:
 
 1. verify that the supplied path belongs to the intended repository and validate
-   the configured `origin` repository coordinate;
+   the configured `origin` coordinate;
 2. fetch `origin/main` without changing the caller checkout and record that
-   execution-time commit as `PUBLICATION_BASE`;
-3. create a uniquely named **local-only temporary branch** from exactly
-   `PUBLICATION_BASE` and check it out in a temporary `git worktree` outside the
-   caller checkout;
-4. inspect the files that actually exist in that worktree and evaluate the
-   artifact's **semantic preconditions** there. Preconditions should describe
-   facts the slice genuinely depends on: required symbols/contracts, expected
-   task state, absence of the slice's already-published result, version format,
-   or similarly meaningful invariants;
-5. materialize the requested delta against those execution-time files. The
-   artifact SHOULD encode a bounded/state-aware transformation rather than a
-   stale whole-file diff whenever the target is expected to move between
-   preparation and publication;
-6. derive moving repository metadata from `PUBLICATION_BASE`. In particular, an
-   implementation-version bump reads the version in that worktree's current
-   `pom.xml` and computes the required next patch version from it; changelog,
-   status, blocker, task and other shared-document edits preserve unrelated
-   entries already present at execution time;
-7. treat unrelated movement as compatible. A changed whole-file blob hash, line
-   number, preceding changelog entry, current Maven patch number, or unrelated
-   ledger row MUST NOT be used as a reason to reject the artifact unless that
-   exact state is a genuine semantic precondition of the slice;
-8. abort before publication when a **relevant semantic precondition** no longer
-   holds or the requested transformation overlaps incompatibly with already
-   published work. Report the specific failed invariant/path; do not silently
-   overwrite or guess through a real overlap;
-9. stage only explicit patch-owned paths, run the adaptive validation required by
-   the actual definitive delta, and create the patch commit entirely inside the
-   isolated worktree;
-10. immediately before publication, fetch `origin/main` again and require its SHA
-    to be **exactly equal** to the execution-time `PUBLICATION_BASE`. If it
-    differs during that one launcher invocation, abort without rebasing,
-    merging, repairing, or pushing. The user serializes publication, so this is
-    an exceptional publication-window race, not the normal way prepared patches
-    advance between one another;
-11. when `origin/main == PUBLICATION_BASE`, publish only with a non-force
-    fast-forward push from the validated isolated commit to
-    `refs/heads/main`. A non-fast-forward rejection is a hard publication
-    failure; and
-12. on success **or failure**, remove the temporary worktree and delete the
-    temporary local branch created by that invocation.
+   execution-time commit as `PR_BASE`;
+3. create a uniquely named launcher-owned local branch from exactly `PR_BASE` and
+   check it out in a temporary `git worktree` outside the caller checkout;
+4. inspect the files that actually exist in that worktree and evaluate semantic
+   preconditions there;
+5. materialize the requested bounded/state-aware delta against those
+   execution-time files;
+6. derive moving repository metadata from `PR_BASE`, preserving unrelated
+   execution-time content in shared files;
+7. treat unrelated movement since `AUTHORING_BASE` as compatible unless it
+   violates a real semantic precondition;
+8. abort before creating a candidate when a relevant semantic precondition no
+   longer holds or the requested transformation overlaps incompatibly with
+   already published work;
+9. stage only explicit patch-owned paths, run the adaptive local validation
+   required by the definitive delta, and create the candidate commit entirely
+   inside the isolated worktree;
+10. push the validated candidate to a **dedicated remote PR head branch** with a
+    non-force push. It MUST NOT push that candidate directly to
+    `refs/heads/main`;
+11. open a Pull Request targeting `main` (or reconcile an already-existing PR
+    only when the launcher can prove it owns that same head branch). The PR body
+    MUST record the relevant Issue linkage, local validation, scope/authority
+    context, and any known limitations;
+12. use `Closes #N`, `Fixes #N`, or `Resolves #N` only for the leaf Issue whose
+    complete acceptance criteria are satisfied by merging that PR. Parent or
+    related work that remains open MUST use a non-closing reference such as
+    `Refs #N`;
+13. never merge the PR merely because the launcher opened it. CI, review,
+    conversation-resolution, branch freshness, and the repository's current
+    merge rules own merge readiness; and
+14. remove the launcher-owned temporary worktree and local branch on success or
+    failure. A remote head branch with a successfully opened PR remains until the
+    PR is merged/closed and normal branch-cleanup policy removes it. If branch
+    push succeeds but PR creation fails, the launcher SHOULD remove only the
+    remote branch it created in that invocation and report any cleanup failure.
 
-The key rule is:
+Movement of `origin/main` after `PR_BASE` is no longer, by itself, a reason to
+discard a valid candidate or abort PR creation. The launcher MUST NOT silently
+rebase, merge, or rewrite the candidate merely to catch up. The PR/CI workflow
+will expose whether the candidate is behind, conflicting, or requires an explicit
+update. Once `main` protection is active, a candidate may merge only after the
+required up-to-date/check policy is satisfied.
+
+The key rule becomes:
 
 ```text
-parallel preparation
-    artifact A prepared on main=N
-    artifact B prepared on main=N
-    artifact C prepared on main=N
+parallel preparation / PR creation
+    A -> PR_BASE=N   -> PR A
+    B -> PR_BASE=N   -> PR B
+    C -> PR_BASE=N+1 -> PR C
 
-serialized publication
-    run A -> PUBLICATION_BASE=N   -> publish N+1
-    run B -> PUBLICATION_BASE=N+1 -> materialize B there -> publish N+2
-    run C -> PUBLICATION_BASE=N+2 -> materialize C there -> publish N+3
+integration
+    CI/review/freshness gates each PR
+    GitHub serializes accepted merges into main
 ```
 
-B and C do not restart merely because A published first. Their execution-time
-materializers consume the newer common-file state. Only a genuine overlap with
-their own semantic substrate requires regeneration/re-audit.
+A launcher MUST NOT print `PUBLISHED` merely because it pushed a head branch or
+opened a Pull Request. Recommended successful candidate reporting is:
+
+```text
+PR_OPENED
+PR_BASE=<sha>
+HEAD_BRANCH=<branch>
+PR_URL=<url>
+LOCAL_VALIDATION: PASS
+```
+
+`PUBLISHED` is reserved for evidence that the accepted change actually reached
+`main` (normally the squash-merge commit observed after merge).
 
 Generated artifacts MUST NOT embed `AUTHORING_BASE` as an exact execution
-precondition unless the task itself truly requires publication from that exact
-historical revision. Recording `AUTHORING_BASE` in README/reporting is useful
-provenance; requiring `origin/main == AUTHORING_BASE` at execution is normally
-wrong for this project workflow.
+precondition unless the task itself genuinely requires that historical state.
+A whole-file hash, line number, Maven patch number, changelog header, or unrelated
+ledger row is not a semantic precondition merely because it matched during
+authoring.
 
-A unified diff remains acceptable for a target whose exact surrounding content
-is intentionally stable or is itself a semantic precondition. For files expected
-to receive independent edits between preparation and publication—especially
-`pom.xml`, `CHANGELOG.md`, canonical status/blocker/task ledgers, and other shared
-governance documents—the default should be a bounded semantic/state-aware edit
-performed against `PUBLICATION_BASE`.
-
-The launcher MUST NOT require the caller checkout to be clean as a condition for
-this standard isolated workflow. The caller may be on another branch, behind or
-ahead locally, and may contain staged, modified, or untracked work. That state is
-user-owned and MUST remain untouched. In particular, the launcher MUST NOT use
-`git stash`, `git reset --hard`, `git restore`, `git checkout -- <path>`,
-`git clean`, or a commit in the caller checkout to dispose of or absorb
-pre-existing state.
+A unified diff remains acceptable where exact surrounding content is
+intentionally stable or itself semantically relevant. Shared/moving files should
+continue to use bounded semantic transformations against `PR_BASE`.
 
 ### Caller-checkout isolation is operational, not a frozen-state assertion
 
@@ -791,31 +808,33 @@ CALLER_WORKTREE_TOUCHED_BY_LAUNCHER: NO
 rather than claiming that the caller checkout itself stayed globally unchanged
 while unrelated tools or the user may have modified it.
 
-A launcher MUST NOT print `PUBLISHED` until the remote fast-forward push has
-succeeded. Once that push succeeds, the publication result is final for that
-invocation: later cleanup of launcher-owned temporary worktree/branch state MUST
-NOT convert the already-successful publication into a generic failure or
-non-zero exit solely because cleanup or a caller-state observation failed.
-Cleanup failure after publication MUST be reported explicitly as a warning with
-the launcher-owned path/branch that may remain, for example
-`CLEANUP_WARNING`, while preserving successful publication status.
+Under the PR-first contract, local candidate success and repository publication
+are different events. A launcher MUST NOT print `PUBLISHED` merely because the
+remote head branch was pushed or the Pull Request was opened. It SHOULD report
+`PR_OPENED`/`PR_UPDATED` plus the PR URL and local-validation result. `PUBLISHED`
+is reserved for later evidence that the change was actually merged into `main`.
 
-Before push, failure to remove unexpected launcher-owned state, failed validation,
-or movement of `origin/main` away from `PUBLICATION_BASE` remains a normal hard
-failure. This rule changes only caller-state observation and post-publication
-cleanup reporting; it does not weaken validation or publication-base stability.
+Cleanup failure after a PR has been successfully opened MUST be reported
+explicitly as a warning for launcher-owned local state and MUST NOT misrepresent
+the PR as absent. Before PR creation, unexpected launcher-owned state, failed
+validation, relevant semantic-precondition failure, or failure to push the
+launcher-owned head branch remains a hard failure.
 
-A launcher may manage only the temporary branch/worktree and patch-owned state it
-created itself. An unexpected worktree change, failed validation, relevant
-semantic-precondition failure, execution-window movement of `origin/main`, or
-failed fast-forward publication is a reason to abort. It is never permission to
-repair or rewrite the caller checkout, force-push `main`, or discard another
-agent's work.
+A launcher may manage only the local/remote branch state, worktree, and patch-owned
+state it created itself. An unexpected launcher-owned worktree change, failed
+validation, relevant semantic-precondition failure, failed head-branch push, or
+failed PR creation is a reason to abort. Movement of `origin/main` after `PR_BASE`
+is reported to the PR/CI freshness workflow rather than repaired inside the
+launcher. No failure is permission to rewrite the caller checkout, force-push
+`main`, or discard another agent's work.
 
-Temporary publication branches are implementation machinery, not project work
-items. They MUST remain local, MUST NOT be pushed to `origin`, and MUST be deleted
-when the launcher terminates. The launcher SHOULD report a cleanup failure
-explicitly if Git cannot remove state that the launcher itself created.
+Launcher branches are implementation machinery, not project work items. The
+temporary worktree/local branch MUST be removed when the launcher terminates.
+For PR-first launchers, the validated candidate is additionally pushed to a
+dedicated remote **PR head branch**; that remote branch is allowed to remain only
+while the corresponding PR needs it and is subject to the repository's normal
+post-merge/closed-PR cleanup policy. Launchers MUST NOT force-push that branch or
+reuse an unrelated contributor's branch.
 
 This isolation changes only patch-publication mechanics. It does not weaken
 scope, audit, validation, specification, versioning, license, or explicit user
