@@ -39,14 +39,9 @@ callable: {
 
 result: bytes.each(callable)
 
-(result === bytes).and() {
-    (seen == 123).and() {
-        (bytes.size() == 3).and() {
-            (bytes.at(0) == 1).and() {
-                (bytes.at(1) == 99).and() {
-                    bytes.at(2) == 4
-                }
-            }
-        }
-    }
-}
+(result === bytes) &&
+    (seen == 123) &&
+    (bytes.size() == 3) &&
+    (bytes.at(0) == 1) &&
+    (bytes.at(1) == 99) &&
+    (bytes.at(2) == 4)

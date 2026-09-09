@@ -20,6 +20,4 @@ payload: Encoding.Latin1.encode("")
 sameFilesystem: Files.writeAllBytes(filesystem, path, payload).value() === filesystem
 actual: Files.readAllBytes(filesystem, path).value()
 
-sameFilesystem.and() {
-    actual.size() == 0
-}
+sameFilesystem && (actual.size() == 0)
