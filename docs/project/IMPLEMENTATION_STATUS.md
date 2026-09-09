@@ -824,7 +824,7 @@ the already-published implementation commit.
 | LM003 | Language interaction conformance | CLOSED | `dbc086ed294ead0b4219952c02b00ec28a492472` | Retrospective canonical ID; delegation, dynamic receiver, captured-state and inherited-call interaction coverage. |
 | LM004 | Extended language interaction conformance | CLOSED | `d390c0c642c5d2d907fcf9e384d1cbc080dd4783` | Retrospective canonical ID; deeper delegation/call-argument interactions plus Map/IdentityMap Path-key behavior. |
 | LM005 | Concurrent Language Maturity | CLOSED | `SAME_COMMIT` | LM005-A Future, LM005-B Actor, and LM005-C Group/GroupRef conformance/examples/tutorials complete; no runtime or normative feature added. |
-| LM006 | System & Resource Language Maturity | IN_PROGRESS | — | closed slices: A/B/C; READY: D/E; dependency-gated: F; No runtime or normative feature is owned by LM006. |
+| LM006 | System & Resource Language Maturity | IN_PROGRESS | — | closed slices: A/B/C/D; READY: E; dependency-gated: F; No runtime or normative feature is owned by LM006. |
 
 ### LM005 — Concurrent Language Maturity
 
@@ -866,7 +866,7 @@ before dependent maturity work proceeds.
 | LM006-A | CLOSED | `SAME_COMMIT` | Bytes/Encoding composition maturity: manually built mutable byte sequences decoded through mandatory portable encodings, decode-after-mutation, fresh encode-result independence under mutation, UTF-16BE byte construction, and malformed-after-mutation failure. Ordinary Protos central-manifest coverage only; no Java harness, runtime, specification, API or implementation-version change. |
 | LM006-B | CLOSED | `SAME_COMMIT` | File/Filesystem/Path interaction maturity: five ordinary Protos programs over a host-only deterministic capability backend cover Path-driven open, read/seek/position/size composition, independent logical cursors over one shared resource, positioned write growth with portable zero gap, truncate with cursor preservation and cross-open visibility, and seekToEnd followed by ordinary positioned write. No namespace/captured-tree duplication, runtime/specification/API or implementation-version change. |
 | LM006-C | CLOSED | `SAME_COMMIT` | Process/standard-stream interaction maturity: five Protos programs over the existing host-neutral Process harness prove shared stdin consumption across root/delegated Process capability proxies, root/delegated `ProcessStreams` stdout composition, raw-byte plus text output on one Process binding, independent stream availability, and args/environment-to-text-output composition through the Process-selected Encoding. No ambient Process/default Encoding, runtime/specification/API or implementation-version change. |
-| LM006-D | READY | — | Resource lifetime, Error and `ensure` maturity across already-closed File/text/Future cleanup and failure-precedence semantics. |
+| LM006-D | CLOSED | `SAME_COMMIT` | Resource-lifetime/Error/ensure maturity: five Protos programs over one host-only deterministic File backend cover exact normal-result preservation through owned cleanup, exact body-Error preservation through successful close, later close-IOError precedence over an already-selected body Error, borrowing TextReader failure with outer File ownership, and Future recording/re-signaling of the later cleanup Error. Existing I022/LIB004 cancellation-race coverage is reused rather than duplicated; no runtime/specification/API or implementation-version change. |
 | LM006-E | READY | — | End-to-end system/resource programs composing already-closed Path, Filesystem/File, byte/text I/O, Process, collections, Errors and Futures without introducing pairwise special semantics. |
 | LM006-F | BLOCKED_BY_DEPENDENCIES | — | Executable examples/tutorial progression plus final cross-slice reconciliation and LM006 closure after B-E are closed. |
 
@@ -879,6 +879,11 @@ LM006-C closure evidence:
 - five Protos sources own the observable expectations; the existing Process integrated Java harness only provisions deterministic bootstrap data, byte backends, one delegated Process proxy and capture storage;
 - the cases extend beyond LIB004-D wrapper freshness/Encoding/borrowing checks by composing the same logical Process bindings across raw byte access, explicit adapters, delegated Process authority and independently unavailable streams;
 - Process termination/lifetime failure precedence stays with existing I017 and LM006-D coverage; no I026 machinery, ambient Process, default Encoding, production Java/runtime, normative specification, public API, native boundary or implementation version is changed.
+
+LM006-D closure evidence:
+- five Protos sources own the observable expectations; one new Java test harness only provisions a deterministic readable File resource and selects successful versus failing close at the host boundary;
+- the cases compose already-closed I015/I016/I022/I009 semantics instead of duplicating I022 and LIB004-A cancellation races: borrowing TextReader cleanup never substitutes for outer owned-File release, successful cleanup preserves the pending result/Error, and a later escaping close IOError supersedes the pending transfer;
+- the Future case additionally proves the superseding cleanup Error is the terminal recorded failure and repeated `value()` observations re-signal that recorded Error identity; no I026 machinery, production Java/runtime, normative specification, public API, native boundary or implementation version is changed.
 
 Coordination:
 - LM006-B, LM006-C, LM006-D and LM006-E are intentionally independent work
