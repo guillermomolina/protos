@@ -1,0 +1,89 @@
+name: Tracked project work
+description: Create an already-actionable formal Protos work item; exploratory ideas and unresolved design belong in Discussions first.
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form only for actionable tracked work.
+
+        `spec/`, ratified `Dxxx` / `PLATxxx`, and repository blocker records remain
+        authoritative where applicable. This Issue coordinates work; it cannot approve
+        or redefine Protos semantics or durable architecture.
+
+        Formal identifiers are maintainer-allocated under the collision-safe allocation
+        rule in `AGENTS.md`. Creating an Issue reserves a candidate; uniqueness must be
+        rechecked before any durable publication under a newly allocated identifier.
+
+  - type: input
+    id: work-item
+    attributes:
+      label: Work item
+      description: Maintainer-allocated formal identifier and short name.
+      placeholder: "I031 — Short descriptive name"
+    validations:
+      required: true
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What concrete outcome should this work produce?
+    validations:
+      required: true
+
+  - type: textarea
+    id: authority
+    attributes:
+      label: Authority and design records
+      description: Link the specification, ratified Dxxx/PLATxxx, blocker, project record, or prior Discussion that constrains this work.
+      placeholder: |
+        - spec/...
+        - D0xx / PLAT0xx / B0xx
+        - Discussion #...
+    validations:
+      required: true
+
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies
+      description: List work items, blockers, decisions, or external prerequisites that must already be satisfied.
+      placeholder: |
+        - #...
+        - B0xx
+        - none
+
+  - type: textarea
+    id: non-goals
+    attributes:
+      label: Non-goals
+      description: What is deliberately outside this work item?
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: State observable completion criteria. Prefer explicit, testable conditions.
+      placeholder: |
+        - [ ] ...
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: validation
+    attributes:
+      label: Validation
+      description: What focused/static/full-suite evidence is required before publication or closure?
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: governance
+    attributes:
+      label: Governance boundary
+      options:
+        - label: This Issue coordinates actionable work and does not itself approve Protos semantics or durable architecture.
+          required: true

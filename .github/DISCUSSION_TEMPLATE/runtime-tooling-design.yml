@@ -1,0 +1,83 @@
+title: "[Runtime & Tooling Design] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this category for durable implementation architecture, runtime hosting,
+        tooling, packaging, performance infrastructure, or platform-bound design.
+
+        A Discussion does not ratify architecture. If the result materially constrains
+        future implementations, persist the approved choice in the appropriate PLATxxx
+        or project/design record after the explicit project-owner approval gate.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What implementation/runtime/tooling problem requires a durable design choice?
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-architecture
+    attributes:
+      label: Current architecture and constraints
+      description: Describe the existing Protos architecture, already-ratified decisions, host/runtime constraints, and relevant invariants.
+    validations:
+      required: true
+
+  - type: textarea
+    id: requirements
+    attributes:
+      label: Required properties
+      description: What must the solution preserve or enable?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Compare viable architectures and important rejected approaches.
+    validations:
+      required: true
+
+  - type: textarea
+    id: prior-art
+    attributes:
+      label: Prior art
+      description: Relevant language runtimes, VMs, build/package systems, tools, or distributed systems and their transferable lessons.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scalability
+    attributes:
+      label: Scalability, concurrency, lifecycle, and failure modes
+      description: Cover expected scale, coordination cost, ownership/lifetime, concurrency and failure behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: semantic-risk
+    attributes:
+      label: Semantic and portability boundary
+      description: Explain why the choice is semantically invisible, or identify any semantic question that must be routed to Dxxx/specification before implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and migration
+      description: Consequences for current implementation, tools, tests, releases, contributors, and future backends.
+    validations:
+      required: true
+
+  - type: textarea
+    id: open-questions
+    attributes:
+      label: Open questions and deferred choices
+      description: What remains unresolved or intentionally deferred?
+    validations:
+      required: true

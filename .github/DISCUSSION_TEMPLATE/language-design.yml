@@ -1,0 +1,84 @@
+title: "[Language Design] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this category to investigate unresolved Protos language or public-library
+        design. A Discussion is exploratory evidence, not a ratified decision.
+
+        Before dependent implementation treats a substantive choice as selected, it must
+        cross the explicit project-owner approval gate and be persisted in the appropriate
+        repository authority (`spec/`, Dxxx, or another approved durable record).
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What exact ambiguity, limitation, or design pressure requires investigation?
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivating-example
+    attributes:
+      label: Motivating example
+      description: Show the smallest concrete Protos example or scenario that exposes the problem.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: current-rule
+    attributes:
+      label: Current Protos rule
+      description: What does the current normative specification or ratified design already say?
+    validations:
+      required: true
+
+  - type: textarea
+    id: desired-property
+    attributes:
+      label: Property we want
+      description: State the invariant or capability the solution should provide without assuming a specific syntax or mechanism.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Compare the meaningful designs, including why apparently-simple alternatives may fail.
+    validations:
+      required: true
+
+  - type: textarea
+    id: prior-art
+    attributes:
+      label: Prior art
+      description: Relevant languages, runtimes, research, or ecosystems and what can actually be learned from them.
+    validations:
+      required: true
+
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and migration
+      description: Consequences for existing Protos programs, specification, implementation, tools, libraries, and future evolution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: concurrency-distribution
+    attributes:
+      label: Concurrency, distribution, lifetime, and scalability
+      description: Analyze these dimensions when relevant; explicitly say why a dimension is not relevant rather than silently omitting a material one.
+    validations:
+      required: true
+
+  - type: textarea
+    id: open-questions
+    attributes:
+      label: Open questions
+      description: What remains unresolved or deliberately deferred after this discussion?
+    validations:
+      required: true
