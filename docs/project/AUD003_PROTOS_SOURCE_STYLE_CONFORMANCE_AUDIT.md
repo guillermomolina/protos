@@ -132,7 +132,7 @@ listed in one table.
 | AUD003-A1 | CLOSED | User-facing indexing cleanup in examples/tutorials, published historically as `SOURCE-STYLE-INDEXING-A1` at `a848371a6428cb1d80b688a9a27e6b74ec61f28a`. |
 | AUD003-A2 | CLOSED | Standard Library indexing audit/migration: ordinary indexing debt migrated across six reviewed modules; no current stdlib result-sensitive/direct-protocol/bootstrap exception remained; validated under `0.2.293-SNAPSHOT`. |
 | AUD003-A3 | CLOSED | Bundled-tool indexing audit/migration: ordinary indexing debt migrated across 16 execution-time Package/Test Tool modules; no result-sensitive/protocol/bootstrap exception was rewritten; validated under `0.2.295-SNAPSHOT`. |
-| AUD003-A4 | OPEN | Benchmarks and remaining ordinary-program indexing audit/migration. |
+| AUD003-A4 | CLOSED | Benchmarks and remaining ordinary-program indexing audit/migration: the final reviewed debt across two benchmark workloads and one user-facing tutorial was migrated; the complete benchmarks/examples/tutorials executable-source rescan is clean. |
 | AUD003-B1 | OPEN | Ordinary lazy Boolean spelling audit for explicit `and`/`or`, including representative conformance tests whose subject is not the Boolean protocol itself. |
 | AUD003-B2 | OPEN | Ordinary unary spelling audit for explicit `not`/`negated`, retaining protocol/lowering tests. |
 | AUD003-C | OPEN | Conformance-corpus exception classification: make deliberate canonical/protocol cases explicit and migrate ordinary-code cases. |
@@ -225,6 +225,33 @@ equivalence family.
 Executable validation covers the Package Tool Protos corpus and Test Tool
 implementation tests, followed by the complete Maven test suite. No
 specification or public API change. Implementation version: `0.2.295-SNAPSHOT`.
+
+### AUD003-A4 retained evidence
+
+GitHub coordination: Issue `#113` (`AUD003-A4`).
+
+The execution-time ordinary-program/user-facing executable inventory rescanned
+all Protos source under `protos/benchmarks/**`, `protos/examples/**`, and
+`protos/tutorials/**`. Explicit indexing remained only in these three reviewed
+files:
+
+- `protos/benchmarks/collections/array-sort.protos`
+- `protos/benchmarks/collections/map-lookup-update.protos`
+- `protos/tutorials/08-language-interactions/03-equality-and-identity-keys.protos`
+
+The benchmark reads and tutorial writes are ordinary indexing. All migrated
+`atPut` calls are complete standalone statements whose returned value is ignored.
+No indexing-protocol, parser/lowering, reflection/dispatch, bootstrap/layering,
+or result-contract exception was rewritten.
+
+The launcher rejects any newly indexing-bearing file outside this reviewed A4
+set and requires a zero-debt post-materialization rescan over all three domains.
+
+Focal executable validation builds the current runtime and directly executes the
+two benchmark workloads plus the tutorial through `bin/protos`, followed by the
+complete Maven test suite. This ordinary benchmark/tutorial source-style cleanup
+does not change the implementation version. Execution-time version: `0.2.301-SNAPSHOT`.
+No specification or public API change.
 
 ## Migration discipline
 

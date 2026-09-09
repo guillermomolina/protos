@@ -23,27 +23,27 @@ repeat: (count, operation) => {
 }
 
 values: Map()
-values.atPut(1, 10)
-values.atPut(2, 20)
-values.atPut(3, 30)
-values.atPut(4, 40)
-values.atPut(5, 50)
-values.atPut(6, 60)
-values.atPut(7, 70)
-values.atPut(8, 80)
-values.atPut(9, 90)
-values.atPut(10, 100)
-values.atPut(11, 110)
-values.atPut(12, 120)
-values.atPut(13, 130)
-values.atPut(14, 140)
-values.atPut(15, 150)
-values.atPut(16, 160)
+values[1] = 10
+values[2] = 20
+values[3] = 30
+values[4] = 40
+values[5] = 50
+values[6] = 60
+values[7] = 70
+values[8] = 80
+values[9] = 90
+values[10] = 100
+values[11] = 110
+values[12] = 120
+values[13] = 130
+values[14] = 140
+values[15] = 150
+values[16] = 160
 
 sink: 0
 repeat(1000, () => {
-    values.atPut(8, values.at(8) + 1)
-    sink = values.at(1) + values.at(8) + values.at(16)
+    values[8] = values[8] + 1
+    sink = values[1] + values[8] + values[16]
 })
 
 sink

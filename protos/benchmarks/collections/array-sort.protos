@@ -35,4 +35,4 @@ repeat(100, () => {
     result = Arrays.sort(source, (left, right) => { left < right })
 })
 
-result.at(0) + (result.at(15) * 100) + (result.at(31) * 10000)
+result[0] + (result[15] * 100) + (result[31] * 10000)

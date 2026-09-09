@@ -15,10 +15,10 @@ right: Path.relative().child("docs")
 print(left == right)
 print(left === right)
 byValue: Map()
-byValue.atPut(left, 1)
-byValue.atPut(right, 2)
+byValue[left] = 1
+byValue[right] = 2
 print(byValue.size())
 byIdentity: IdentityMap()
-byIdentity.atPut(left, 1)
-byIdentity.atPut(right, 2)
+byIdentity[left] = 1
+byIdentity[right] = 2
 print(byIdentity.size())
