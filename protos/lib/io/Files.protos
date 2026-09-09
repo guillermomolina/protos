@@ -40,7 +40,7 @@ readAllBytes: (filesystem, path) => {
                 pending: Array(...batchTemplate)
                 issueIndex: 0
                 batchTemplate.each((ignored) => {
-                    pending.atPut(issueIndex, file.read(65536))
+                    pending[issueIndex] = file.read(65536)
                     issueIndex = issueIndex + 1
                 })
 
@@ -125,7 +125,7 @@ writeAllBytes: (filesystem, path, bytes) => {
                 chunk: Encoding.UTF8.encode("")
                 chunkIndex: 0
                 (() => chunkIndex < chunkSize).while(() => {
-                    chunk.add(snapshot.at(offset + chunkIndex))
+                    chunk.add(snapshot[offset + chunkIndex])
                     chunkIndex = chunkIndex + 1
                 })
 

@@ -114,7 +114,7 @@ object: (...nameNodePairs) => {
             result.containsKey(pendingName).ifTrue(() => {
                 Error().signal()
             })
-            result.atPut(pendingName, entry)
+            result[pendingName] = entry
             pendingName = null
             expectingName = true
         })
@@ -277,14 +277,14 @@ parse: (text) => {
         present: frame.chunks.containsKey(level)
 
         present.ifTrue(() => {
-            left: frame.chunks.at(level)
+            left: frame.chunks[level]
             frame.chunks.remove(level)
             merged: Array(...left, ...chunk)
             carryArrayChunk(frame, merged, level + 1)
         })
 
         present.ifFalse(() => {
-            frame.chunks.atPut(level, chunk)
+            frame.chunks[level] = chunk
             (level > frame.maxLevel).ifTrue(() => {
                 frame.maxLevel = level
             })
@@ -303,7 +303,7 @@ parse: (text) => {
         (level >= 0).ifTrue(() => {
             nextResult: result
             frame.chunks.containsKey(level).ifTrue(() => {
-                nextResult = Array(...result, ...frame.chunks.at(level))
+                nextResult = Array(...result, ...frame.chunks[level])
             })
             finalResult = collectArrayChunks(frame, level - 1, nextResult)
         })
@@ -338,7 +338,7 @@ parse: (text) => {
                 (frame.phase == "value").ifFalse(() => {
                     fail()
                 })
-                frame.entries.atPut(frame.pendingName, node)
+                frame.entries[frame.pendingName] = node
                 frame.pendingName = null
                 frame.phase = "commaOrEnd"
             })
@@ -1153,7 +1153,7 @@ encode: (root) => {
             active.containsKey(node).ifTrue(() => {
                 fail()
             })
-            active.atPut(node, true)
+            active[node] = true
 
             output.add(91)
             first: true
@@ -1174,7 +1174,7 @@ encode: (root) => {
             active.containsKey(node).ifTrue(() => {
                 fail()
             })
-            active.atPut(node, true)
+            active[node] = true
 
             output.add(123)
             first: true
@@ -1463,7 +1463,7 @@ eventParser: (emit) => {
             frame.names.containsKey(decoded).ifTrue(() => {
                 fail()
             })
-            frame.names.atPut(decoded, true)
+            frame.names[decoded] = true
             publish("name", decoded)
             frame.phase = "colon"
         })
@@ -2264,7 +2264,7 @@ eventWriter: (emit) => {
         frame.names.containsKey(name).ifTrue(() => {
             fail()
         })
-        frame.names.atPut(name, true)
+        frame.names[name] = true
 
         frame.first.ifFalse(() => {
             append(",")

@@ -68,13 +68,13 @@ digest: (bytes) => {
     }
 
     logicalShiftRight: (value, count) => {
-        word32(value).div(powers.at(count))
+        word32(value).div(powers[count])
     }
 
     rotateRight: (value, count) => {
         source: word32(value)
-        lowPower: powers.at(count)
-        wrapPower: powers.at(32 - count)
+        lowPower: powers[count]
+        wrapPower: powers[32 - count]
 
         word32(
             source.div(lowPower) +
@@ -291,35 +291,35 @@ digest: (bytes) => {
             (scheduleIndex < 16).ifTrue(() => {
                 offset: blockOffset + scheduleIndex * 4
                 value:
-                    message.at(offset) * 16777216 +
-                    message.at(offset + 1) * 65536 +
-                    message.at(offset + 2) * 256 +
-                    message.at(offset + 3)
+                    message[offset] * 16777216 +
+                    message[offset + 1] * 65536 +
+                    message[offset + 2] * 256 +
+                    message[offset + 3]
 
-                schedule.atPut(scheduleIndex, value)
+                schedule[scheduleIndex] = value
             })
 
             (scheduleIndex >= 16).ifTrue(() => {
                 value:
-                    schedule.at(scheduleIndex - 16) +
-                    lowerSigma0(schedule.at(scheduleIndex - 15)) +
-                    schedule.at(scheduleIndex - 7) +
-                    lowerSigma1(schedule.at(scheduleIndex - 2))
+                    schedule[scheduleIndex - 16] +
+                    lowerSigma0(schedule[scheduleIndex - 15]) +
+                    schedule[scheduleIndex - 7] +
+                    lowerSigma1(schedule[scheduleIndex - 2])
 
-                schedule.atPut(scheduleIndex, word32(value))
+                schedule[scheduleIndex] = word32(value)
             })
 
             scheduleIndex = scheduleIndex + 1
         })
 
-        a: state.at(0)
-        b: state.at(1)
-        c: state.at(2)
-        d: state.at(3)
-        e: state.at(4)
-        f: state.at(5)
-        g: state.at(6)
-        h: state.at(7)
+        a: state[0]
+        b: state[1]
+        c: state[2]
+        d: state[3]
+        e: state[4]
+        f: state[5]
+        g: state[6]
+        h: state[7]
 
         roundIndex: 0
         roundConstants.each((constant) => {
@@ -328,7 +328,7 @@ digest: (bytes) => {
                 upperSigma1(e) +
                 choose(e, f, g) +
                 constant +
-                schedule.at(roundIndex)
+                schedule[roundIndex]
             )
 
             temporary2: word32(
@@ -348,14 +348,14 @@ digest: (bytes) => {
             roundIndex = roundIndex + 1
         })
 
-        state.atPut(0, word32(state.at(0) + a))
-        state.atPut(1, word32(state.at(1) + b))
-        state.atPut(2, word32(state.at(2) + c))
-        state.atPut(3, word32(state.at(3) + d))
-        state.atPut(4, word32(state.at(4) + e))
-        state.atPut(5, word32(state.at(5) + f))
-        state.atPut(6, word32(state.at(6) + g))
-        state.atPut(7, word32(state.at(7) + h))
+        state[0] = word32(state[0] + a)
+        state[1] = word32(state[1] + b)
+        state[2] = word32(state[2] + c)
+        state[3] = word32(state[3] + d)
+        state[4] = word32(state[4] + e)
+        state[5] = word32(state[5] + f)
+        state[6] = word32(state[6] + g)
+        state[7] = word32(state[7] + h)
     }
 
     processBlocks: null

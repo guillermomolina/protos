@@ -1,3 +1,7 @@
+## 0.2.293-SNAPSHOT
+
+- Close `AUD003-A2 — Standard Library indexing audit/migration` by classifying the current `protos/lib/**` explicit indexing sites and migrating the ordinary readability-only `at` / result-ignored `atPut` calls in `collections/Array`, `collections/Set`, `collections/IdentitySet`, `crypto/SHA256`, `io/Files`, and `json/JSON` to the already-specified bracket read/assignment syntax. Preserve dispatch, evaluation order, mutation/result semantics and all public APIs; no result-sensitive/direct-protocol/bootstrap exception is rewritten, no specification or license-term change is introduced, and the Standard Library scan is clean for this confirmed equivalence family. Implementation version becomes `0.2.293-SNAPSHOT`.
+
 ## 0.2.292-SNAPSHOT
 
 - Refine GitHub-native coordination discipline: make the owning GitHub Issue the compact execution diary for materially significant work outcomes and confirmed publications, require concise evidence/result/state comments after publication, and reserve `CHANGELOG.md` for published durable project/artifact changes rather than failed attempts, validation-only runs, or live coordination transitions. Issue closure alone does not imply a changelog entry, while a material published change may still be logged before its parent Issue closes. Governance/documentation only: no specification, runtime, implementation-version, native-boundary, or license-term change.

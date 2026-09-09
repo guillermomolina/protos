@@ -18,7 +18,7 @@ map: (array, transform) => {
     result: Array(...snapshot)
     index: 0
     snapshot.each((element) => {
-        result.atPut(index, transform(element))
+        result[index] = transform(element)
         index = index + 1
     })
     result
@@ -36,7 +36,7 @@ filter: (array, predicate) => {
         })
 
         (length == 1).ifTrue(() => {
-            element: snapshot.at(start)
+            element: snapshot[start]
             decision: predicate(element)
 
             (decision === true).ifTrue(() => {
@@ -97,21 +97,21 @@ reduce: (array, reducer, ...initial) => {
     accumulator: null
 
     (initialSize == 1).ifTrue(() => {
-        accumulator = initial.at(0)
+        accumulator = initial[0]
     })
 
     (initialSize == 0).ifTrue(() => {
         (snapshotSize == 0).ifTrue(() => {
             ^null
         })
-        accumulator = snapshot.at(0)
+        accumulator = snapshot[0]
     })
 
     foldRange: (start, end) => {
         length: end - start
 
         (length == 1).ifTrue(() => {
-            accumulator = reducer(accumulator, snapshot.at(start))
+            accumulator = reducer(accumulator, snapshot[start])
         })
 
         (length > 1).ifTrue(() => {
@@ -142,19 +142,19 @@ sort: (array, less) => {
                 rightDone: rightIndex == rightSize
 
                 leftDone.ifTrue(() => {
-                    result.atPut(start, right.at(rightIndex))
+                    result[start] = right[rightIndex]
                     rightIndex = rightIndex + 1
                 })
 
                 leftDone.ifFalse(() => {
                     rightDone.ifTrue(() => {
-                        result.atPut(start, left.at(leftIndex))
+                        result[start] = left[leftIndex]
                         leftIndex = leftIndex + 1
                     })
 
                     rightDone.ifFalse(() => {
-                        leftValue: left.at(leftIndex)
-                        rightValue: right.at(rightIndex)
+                        leftValue: left[leftIndex]
+                        rightValue: right[rightIndex]
                         lr: less(leftValue, rightValue)
 
                         (lr === true).ifFalse(() => {
@@ -175,17 +175,17 @@ sort: (array, less) => {
                             (rl === true).ifTrue(() => {
                                 InvalidComparatorOrder().signal()
                             })
-                            result.atPut(start, leftValue)
+                            result[start] = leftValue
                             leftIndex = leftIndex + 1
                         })
 
                         (lr === false).ifTrue(() => {
                             (rl === true).ifTrue(() => {
-                                result.atPut(start, rightValue)
+                                result[start] = rightValue
                                 rightIndex = rightIndex + 1
                             })
                             (rl === false).ifTrue(() => {
-                                result.atPut(start, leftValue)
+                                result[start] = leftValue
                                 leftIndex = leftIndex + 1
                             })
                         })
@@ -215,7 +215,7 @@ sort: (array, less) => {
         })
 
         (length == 1).ifTrue(() => {
-            result = Array(snapshot.at(start))
+            result = Array(snapshot[start])
         })
 
         (length > 1).ifTrue(() => {

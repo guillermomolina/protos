@@ -130,7 +130,7 @@ listed in one table.
 | Slice | Status | Scope / exit condition |
 |---|---|---|
 | AUD003-A1 | CLOSED | User-facing indexing cleanup in examples/tutorials, published historically as `SOURCE-STYLE-INDEXING-A1` at `a848371a6428cb1d80b688a9a27e6b74ec61f28a`. |
-| AUD003-A2 | READY | Standard Library indexing audit/migration: review `protos/lib/**` `.at`/`.atPut` use site by use site; preserve deliberate protocol/bootstrap/result-sensitive forms. |
+| AUD003-A2 | CLOSED | Standard Library indexing audit/migration: ordinary indexing debt migrated across six reviewed modules; no current stdlib result-sensitive/direct-protocol/bootstrap exception remained; validated under `0.2.293-SNAPSHOT`. |
 | AUD003-A3 | OPEN | Bundled-tool indexing audit/migration under `protos/tools/**`. |
 | AUD003-A4 | OPEN | Benchmarks and remaining ordinary-program indexing audit/migration. |
 | AUD003-B1 | OPEN | Ordinary lazy Boolean spelling audit for explicit `and`/`or`, including representative conformance tests whose subject is not the Boolean protocol itself. |
@@ -158,6 +158,33 @@ Changed source:
 
 The slice used idiomatic bracket indexing/assignment in user-facing source and
 changed no specification or implementation version.
+
+### AUD003-A2 retained evidence
+
+GitHub coordination: Issue `#111` (`AUD003-A2`).
+
+The execution-time Standard Library inventory found explicit `.at(...)` /
+`.atPut(...)` indexing debt only in the six reviewed modules below:
+
+- `protos/lib/collections/Array.protos`
+- `protos/lib/collections/Set.protos`
+- `protos/lib/collections/IdentitySet.protos`
+- `protos/lib/crypto/SHA256.protos`
+- `protos/lib/io/Files.protos`
+- `protos/lib/json/JSON.protos`
+
+Every migrated `atPut` use is a standalone statement whose own return value is
+ignored. Reads are ordinary indexing uses. No direct indexing-protocol test,
+reflection/dispatch site, bootstrap/layering requirement, or result-sensitive
+`atPut` exception remained under current `protos/lib/**`.
+
+The launcher rejects any execution-time indexing occurrence outside that
+reviewed file set, rejects non-standalone `atPut`, and rescans the entire
+Standard Library after materialization.
+
+Executable validation covers collections, SHA-256, JSON and Files focal
+conformance plus the complete Maven test suite. No specification or public API
+changes. Implementation version: `0.2.293-SNAPSHOT`.
 
 ## Migration discipline
 

@@ -16,7 +16,7 @@
 call: (...elements) => {
     result: Map()
     elements.each((element) => {
-        result.atPut(element, true)
+        result[element] = true
     })
     result
 }
@@ -30,7 +30,7 @@ size: (set) => {
 }
 
 add: (set, element) => {
-    set.atPut(element, true)
+    set[element] = true
     set
 }
 
@@ -49,10 +49,10 @@ each: (set, block) => {
 union: (left, right) => {
     result: Map()
     left.each((element, marker) => {
-        result.atPut(element, true)
+        result[element] = true
     })
     right.each((element, marker) => {
-        result.atPut(element, true)
+        result[element] = true
     })
     result
 }
@@ -61,7 +61,7 @@ intersection: (left, right) => {
     result: Map()
     left.each((element, marker) => {
         right.containsKey(element).ifTrue(() => {
-            result.atPut(element, true)
+            result[element] = true
         })
     })
     result
@@ -71,7 +71,7 @@ difference: (left, right) => {
     result: Map()
     left.each((element, marker) => {
         right.containsKey(element).ifFalse(() => {
-            result.atPut(element, true)
+            result[element] = true
         })
     })
     result
