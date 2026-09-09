@@ -118,6 +118,10 @@ less-ordinary Protos representation merely as a memory optimization.
 - Backend-specific socket/channel objects in Protos semantics: violates D047 portability and D052
   ordinary-object topology.
 
+## I028-D5 integrated closure evidence
+
+D5 closes the I028-D consumer at implementation version `0.2.300-SNAPSHOT` without changing PLAT003. One integrated conformance harness starts from the real host-neutral `Network.listenTcp` path and verifies that the published listener retains the ordinary D1 object topology, D2 observation/Closable lifecycle, D3 multiple-pending accept/cancellation/late-custody behavior, Actor/P confinement, and materialization of the already-standardized C-family TcpConnection with recognized endpoint observations. Listener-close cutover and cancelled listener acquisition both retain explicit late-resource custody. The executable native-boundary guard remains 135/35. No production backend, new runtime category, scheduling identity or endpoint object-identity rule is introduced. I028-E may now audit/select a scalable host backend under the separate explicit approval gate.
+
 ## I028-D4 implementation evidence
 
 D4 realizes the already-specified `listenTcp` acquisition contract at implementation version `0.2.298-SNAPSHOT` without changing PLAT003 or selecting a production backend. `ProtosStandardNetworkProtocol` snapshots the exact local listen-request shape before exercising the represented Network target, then `ProtosNetworkListenFlow` reuses the C4-style `ProtosIoOperation` commitment/cancellation/late-custody boundary. The host-neutral completion descriptor contains only opaque listener state, the acquired non-zero local port, the D3 listener backend and explicit untransferred-resource release custody. Successful materialization creates the existing ordinary accept-enabled TcpListener; fixed requested-port mismatch and malformed backend descriptors fail before transfer. The existing Network provider grows by one native Closure, so the total native boundary becomes 135/35. Backend choice remains I028-E work.
