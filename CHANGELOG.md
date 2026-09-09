@@ -1,3 +1,17 @@
+## 0.2.313-SNAPSHOT
+
+- Close `I028-E3B — NIO read lane + independent readiness` under the existing
+  ByteReadable contract and ratified PLAT003/PLAT006/PLAT009. Extend the connected
+  NIO TcpConnection backend with one poller-owned read request, immediate
+  non-blocking `SocketChannel.read`, `OP_READ` continuation after zero progress,
+  short data, EOF, cancellation retirement without socket close, and whole-close
+  cleanup. Preserve future write readiness by changing only the read interest bit,
+  and rely on existing ByteIoFlow commit/rebuffer semantics when cancellation wins
+  after physical bytes were consumed. Add real loopback evidence and release E3C.
+  Specification, public Protos API, native boundary, poller cardinality/sharding/
+  affinity and license terms are unchanged. Implementation version becomes
+  `0.2.313-SNAPSHOT`.
+
 ## 0.2.312-SNAPSHOT
 
 - Ratify `PLAT010 — Bounded reusable platform carriers for normal Actor guest execution` and `PLAT011 — RuntimeHost-owned shared Actor carrier substrate across local Processes` after explicit project-owner approval following the PERF001-F #239 fresh-startup failure and exhaustive BEAM/Go/Tokio/Akka/Orleans/Pony/Swift/Kotlin/GHC/OCaml/Java-Loom plus Truffle scalability review. Replace virtual threads as the default normal Actor guest carrier with bounded reusable platform carriers, and place their finite physical capacity at the RuntimeHost/shared-Engine ownership boundary so Actors and local Processes are multiplexed without `O(processes × cores)` platform threads. Preserve one multithread Polyglot Context per hosted Process, concurrent unrelated Actor execution, carrier invisibility, a separate future blocking/offload lane, and future work-stealing/sharding/NUMA/cgroup/resource-governance evolution. Keep PERF001-F #239 open until a bounded implementation repeats the production Actor fan-out at 1/2/4/8 (including repeated width 8) and the full correctness suite. Governance/documentation only: no Protos specification, executable implementation, Maven implementation version, native boundary or license terms change.

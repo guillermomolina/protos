@@ -19,10 +19,12 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosByteIoFlow;
 import com.guillermomolina.protos.runtime.ProtosTcpConnectionFlow;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.SocketChannel;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Physical NIO state for one acquired TcpConnection.
@@ -32,10 +34,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 final class ProtosNioTcpConnectionBackend
         implements ProtosTcpConnectionFlow.Backend, ProtosNioHostIoPoller.SelectionHandler {
     private static final ProtosByteIoFlow.Cancellation NO_CANCELLATION = () -> {};
+    // Implementation-local tuning only; not portable behavior.
+    private static final int READ_CHUNK_BYTES = 64 * 1024;
 
     private final ProtosNioHostIoPoller poller;
     private final SocketChannel channel;
     private final AtomicBoolean physicalClosed = new AtomicBoolean();
+    private final AtomicReference<ReadRequest> pendingRead = new AtomicReference<>();
     private volatile SelectionKey key;
 
     ProtosNioTcpConnectionBackend(
@@ -60,8 +65,21 @@ final class ProtosNioTcpConnectionBackend
     @Override
     public ProtosByteIoFlow.Cancellation read(
             int maxBytes, ProtosByteIoFlow.ReadCompletion completion) {
-        Objects.requireNonNull(completion, "completion").failed();
-        return NO_CANCELLATION;
+        Objects.requireNonNull(completion, "completion");
+        if (maxBytes <= 0 || physicalClosed.get() || !channel.isOpen()) {
+            reportReadFailure(completion);
+            return NO_CANCELLATION;
+        }
+
+        ReadRequest request = new ReadRequest(maxBytes, completion);
+        try {
+            poller.submit(
+                    () -> startReadOnPoller(request),
+                    ignored -> request.reportFailure());
+        } catch (RuntimeException unavailablePoller) {
+            request.reportFailure();
+        }
+        return request::cancel;
     }
 
     @Override
@@ -92,18 +110,187 @@ final class ProtosNioTcpConnectionBackend
     }
 
     @Override
-    public void ready(SelectionKey key) {
-        // E2 keeps zero post-connect interests. E3 owns connected readiness.
+    public void ready(SelectionKey selectedKey) {
+        if (selectedKey.isReadable()) {
+            serviceReadOnPoller();
+        }
+        // E3C later adds OP_WRITE handling independently.
     }
 
     @Override
     public void failed(Exception failure) {
         physicalClosed.set(true);
+        failPendingRead();
     }
 
     @Override
     public void closed() {
         physicalClosed.set(true);
+        failPendingRead();
+    }
+
+    private void startReadOnPoller(ReadRequest request) {
+        if (request.cancelled.get()) {
+            request.reportFailure();
+            return;
+        }
+        if (physicalClosed.get() || !channel.isOpen() || key == null || !key.isValid()) {
+            request.reportFailure();
+            return;
+        }
+        if (!pendingRead.compareAndSet(null, request)) {
+            request.reportFailure();
+            return;
+        }
+        serviceReadOnPoller();
+    }
+
+    private void serviceReadOnPoller() {
+        ReadRequest request = pendingRead.get();
+        if (request == null) {
+            disableReadInterestBestEffort();
+            return;
+        }
+        if (request.cancelled.get()) {
+            finishReadFailure(request);
+            return;
+        }
+
+        ByteBuffer buffer = ByteBuffer.allocate(Math.min(request.maxBytes, READ_CHUNK_BYTES));
+        final int count;
+        try {
+            count = channel.read(buffer);
+        } catch (IOException readFailure) {
+            finishReadFailure(request);
+            return;
+        }
+
+        if (count > 0) {
+            byte[] bytes = new byte[count];
+            buffer.flip();
+            buffer.get(bytes);
+            finishReadData(request, bytes);
+            return;
+        }
+        if (count < 0) {
+            finishReadEof(request);
+            return;
+        }
+
+        if (request.cancelled.get()) {
+            finishReadFailure(request);
+            return;
+        }
+        enableReadInterest();
+    }
+
+    private void finishReadData(ReadRequest request, byte[] bytes) {
+        if (!pendingRead.compareAndSet(request, null)) return;
+        disableReadInterestBestEffort();
+        request.reportData(bytes);
+    }
+
+    private void finishReadEof(ReadRequest request) {
+        if (!pendingRead.compareAndSet(request, null)) return;
+        disableReadInterestBestEffort();
+        request.reportEof();
+    }
+
+    private void finishReadFailure(ReadRequest request) {
+        if (!pendingRead.compareAndSet(request, null)) return;
+        disableReadInterestBestEffort();
+        request.reportFailure();
+    }
+
+    private void cancelReadOnPoller(ReadRequest request) {
+        if (!pendingRead.compareAndSet(request, null)) return;
+        disableReadInterestBestEffort();
+        request.reportFailure();
+    }
+
+    private void enableReadInterest() {
+        SelectionKey current = key;
+        if (current == null || !current.isValid()) {
+            ReadRequest request = pendingRead.get();
+            if (request != null) finishReadFailure(request);
+            return;
+        }
+        int currentOps = current.interestOps();
+        int desired = currentOps | SelectionKey.OP_READ;
+        if (desired != currentOps) poller.interestOps(current, desired);
+    }
+
+    private void disableReadInterestBestEffort() {
+        SelectionKey current = key;
+        if (current == null || !current.isValid()) return;
+        try {
+            int currentOps = current.interestOps();
+            int desired = currentOps & ~SelectionKey.OP_READ;
+            if (desired != currentOps) poller.interestOps(current, desired);
+        } catch (RuntimeException ignored) {
+            // Physical close/poller failure owns an invalid key.
+        }
+    }
+
+    private void failPendingRead() {
+        ReadRequest request = pendingRead.getAndSet(null);
+        if (request != null) request.reportFailure();
+    }
+
+    private static void reportReadFailure(ProtosByteIoFlow.ReadCompletion completion) {
+        try {
+            completion.failed();
+        } catch (RuntimeException ignored) {
+            // A defective completion callback cannot create a second backend outcome.
+        }
+    }
+
+    private final class ReadRequest {
+        private final int maxBytes;
+        private final ProtosByteIoFlow.ReadCompletion completion;
+        private final AtomicBoolean cancelled = new AtomicBoolean();
+        private final AtomicBoolean reported = new AtomicBoolean();
+
+        private ReadRequest(int maxBytes, ProtosByteIoFlow.ReadCompletion completion) {
+            this.maxBytes = maxBytes;
+            this.completion = completion;
+        }
+
+        private void cancel() {
+            if (!cancelled.compareAndSet(false, true) || reported.get()) return;
+            try {
+                poller.submit(
+                        () -> cancelReadOnPoller(this),
+                        ignored -> {
+                            // Poller terminal cleanup retires a registered request.
+                        });
+            } catch (RuntimeException unavailablePoller) {
+                // A stopped poller closes registered channels and invokes closed()/failed().
+            }
+        }
+
+        private void reportData(byte[] bytes) {
+            if (!reported.compareAndSet(false, true)) return;
+            try {
+                completion.data(bytes);
+            } catch (RuntimeException ignored) {
+                // Physical input was already obtained; ByteIoFlow owns logical aftermath.
+            }
+        }
+
+        private void reportEof() {
+            if (!reported.compareAndSet(false, true)) return;
+            try {
+                completion.eof();
+            } catch (RuntimeException ignored) {
+                // EOF already owns this backend request.
+            }
+        }
+
+        private void reportFailure() {
+            if (!reported.compareAndSet(false, true)) return;
+            reportReadFailure(completion);
+        }
     }
 
     private void requestPhysicalClose(ProtosByteIoFlow.ReceiverCompletion completion) {
@@ -135,6 +322,7 @@ final class ProtosNioTcpConnectionBackend
         if (!physicalClosed.compareAndSet(false, true)) return true;
         SelectionKey current = key;
         if (current != null) current.cancel();
+        failPendingRead();
         try {
             channel.close();
             return true;
