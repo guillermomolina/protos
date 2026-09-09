@@ -333,6 +333,20 @@ public final class ProtosParser {
             consumeNewlines();
         }
 
+        boolean sawDefaultedParameter = false;
+        for (SurfaceParameter parameter : parameters) {
+            if (!parameter.rest()
+                    && parameter.defaultValue().isEmpty()
+                    && sawDefaultedParameter) {
+                throw new ParseError(
+                        "Required non-rest Closure parameters must precede defaulted parameters",
+                        parameter.span());
+            }
+            if (parameter.defaultValue().isPresent()) {
+                sawDefaultedParameter = true;
+            }
+        }
+
         cursor.consume(TokenType.RPAREN, "')'");
         cursor.consume(TokenType.FAT_ARROW, "'=>'");
         return parseClosureBody(parameters, open.span().startOffset());

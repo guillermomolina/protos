@@ -16,20 +16,15 @@
  */
 
 conditionCalls: 0
-defaultCalls: 0
 bodyCalls: 0
 handled: false
-touch: () => {
-    defaultCalls = defaultCalls + 1
-    7
-}
 condition: () => {
     conditionCalls = conditionCalls + 1
     true
 }
 Error.handle(
     () => {
-        condition.while((first = touch(), required) => {
+        condition.while((required) => {
             bodyCalls = bodyCalls + 1
         })
         null
@@ -41,8 +36,6 @@ Error.handle(
 )
 handled.and() {
     (conditionCalls == 1).and() {
-        (defaultCalls == 1).and() {
-            bodyCalls == 0
-        }
+        bodyCalls == 0
     }
 }

@@ -31,6 +31,8 @@ import com.guillermomolina.protos.parser.ast.SurfaceName;
 import com.guillermomolina.protos.parser.ast.SurfaceObject;
 import com.guillermomolina.protos.parser.ast.SurfaceParameter;
 import com.guillermomolina.protos.parser.ast.SurfaceSequence;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -58,6 +60,39 @@ class ProtosParserClosureTest {
         assertParameter("b", true, false, closure.parameters().get(1));
         assertName("fallback", closure.parameters().get(1).defaultValue().orElseThrow());
         assertParameter("rest", false, true, closure.parameters().get(2));
+    }
+
+    @Test
+    void rejectsRequiredNonRestParameterAfterDefaultedParameter() {
+        ParseError error = assertThrows(
+                ParseError.class,
+                () -> only("(first = fallback, required) => required"));
+        assertEquals(
+                "Required non-rest Closure parameters must precede defaulted parameters",
+                error.getMessage());
+
+        assertThrows(
+                ParseError.class,
+                () -> only("(first = fallback, second = other, required) => required"));
+        assertThrows(
+                ParseError.class,
+                () -> only("(first = fallback, required, ...rest) => required"));
+    }
+
+    @Test
+    void rejectsRequiredAfterDefaultFromProtosSyntaxFixture() throws Exception {
+        String source = Files.readString(
+                Path.of(
+                        "protos",
+                        "tests",
+                        "parser",
+                        "closure-required-after-default-rejected.protos"));
+        ParseError error = assertThrows(
+                ParseError.class,
+                () -> new ProtosParser(source).parseProgram());
+        assertEquals(
+                "Required non-rest Closure parameters must precede defaulted parameters",
+                error.getMessage());
     }
 
     @Test

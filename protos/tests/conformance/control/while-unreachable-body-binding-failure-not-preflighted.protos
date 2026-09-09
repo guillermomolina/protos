@@ -15,17 +15,10 @@
  * the specific language governing rights and limitations under the License.
  */
 
-defaultCalls: 0
 bodyCalls: 0
-touch: () => {
-    defaultCalls = defaultCalls + 1
-    7
-}
-result: (() => false).while((first = touch(), required) => {
+result: (() => false).while((required) => {
     bodyCalls = bodyCalls + 1
 })
 (result === null).and() {
-    (defaultCalls == 0).and() {
-        bodyCalls == 0
-    }
+    bodyCalls == 0
 }

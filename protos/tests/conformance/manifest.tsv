@@ -146,6 +146,7 @@ regression/delegated-shadowing.protos	integer	2
 collections/array-construction-and-indexing.protos	boolean	true
 collections/array-replacement-keeps-size.protos	boolean	true
 regression/rest-arguments-preserve-supplied-vector.protos	integer	360
+regression/closure-parameter-ordering-valid.protos	integer	42
 regression/default-reads-earlier-parameter.protos	integer	42
 regression/closure-missing-required-argument-error.protos	error-parent	Error
 regression/delegated-method-uses-dynamic-receiver.protos	integer	7
