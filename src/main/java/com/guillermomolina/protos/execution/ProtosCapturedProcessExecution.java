@@ -22,7 +22,9 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.source.Source;
 import java.io.ByteArrayOutputStream;
@@ -142,10 +144,12 @@ public final class ProtosCapturedProcessExecution {
     }
 
     /**
-     * Executes one exact source directly in a fresh Process, drains its cooperative Actor-domain
-     * work to idle, then invokes one exact inspector Closure with the still-live source result.
-     * Source parsing, cooperative child-domain drain, inspector parsing and inspector invocation
-     * all occur in that Process Context.
+     * Executes one exact source directly in a fresh Process, drains its RootActor-local
+     * cooperative work to idle, then invokes one exact inspector Closure with the still-live
+     * source result as a real RootActor-local cooperative task. The inspector may therefore
+     * suspend through ordinary Future semantics while other Actors in the Process progress only
+     * through the production Actor scheduler. Source parsing, cooperative dispatch, inspector
+     * parsing and inspector execution all remain inside that Process Context.
      */
     public static Result executeThenInspect(Request request, Source inspector) {
         Objects.requireNonNull(request, "request");
@@ -216,18 +220,30 @@ public final class ProtosCapturedProcessExecution {
                     throw new IllegalStateException(
                             "direct inspection inspector source must evaluate to Closure");
                 }
-                Object inspected =
-                        processContext.callForRuntime(
-                                () ->
-                                        ProtosClosureInvoker.invoke(
-                                                inspectorClosure,
-                                                List.of(subject),
-                                                activation));
+                ProtosTask inspectorTask =
+                        activation.executionDomain()
+                                .createTask(
+                                        null,
+                                        null,
+                                        task ->
+                                                task.executeAction(
+                                                        () ->
+                                                                ProtosClosureInvoker.invokeInTask(
+                                                                        inspectorClosure,
+                                                                        List.of(subject),
+                                                                        activation,
+                                                                        task)));
+                processContext.callForRuntime(
+                        () -> {
+                            activation.executionDomain()
+                                    .dispatchUntilTerminal(inspectorTask, () -> false);
+                            return null;
+                        });
                 if (activation.executionDomain().liveTaskCount() != 0) {
                     throw new IllegalStateException(
-                            "direct inspection inspector left live tasks");
+                            "cooperative inspection inspector left live RootActor tasks");
                 }
-                outcome = ProtosExecutionOutcome.completed(inspected);
+                outcome = taskOutcome(inspectorTask);
             } catch (ProtosSignalException signal) {
                 outcome = ProtosExecutionOutcome.failed(signal.error());
             }
@@ -236,6 +252,35 @@ public final class ProtosCapturedProcessExecution {
         } finally {
             bootstrap.process().requestTerminationForRuntime();
         }
+    }
+
+    private static ProtosExecutionOutcome taskOutcome(ProtosTask task) {
+        return switch (task.state()) {
+            case COMPLETED ->
+                    ProtosExecutionOutcome.completed(
+                            task.result()
+                                    .orElseThrow(
+                                            () ->
+                                                    new IllegalStateException(
+                                                            "completed inspection task has no result")));
+            case FAILED -> {
+                Object failure =
+                        task.failure()
+                                .orElseThrow(
+                                        () ->
+                                                new IllegalStateException(
+                                                        "failed inspection task has no error"));
+                if (!(failure instanceof ProtosObjectValue error)) {
+                    throw new IllegalStateException(
+                            "inspection task failed with a non-Protos error value");
+                }
+                yield ProtosExecutionOutcome.failed(error);
+            }
+            case CANCELLED -> ProtosExecutionOutcome.cancelled();
+            default ->
+                    throw new IllegalStateException(
+                            "inspection task returned before reaching a terminal state");
+        };
     }
 
     private static final class PrivateReadableBackend {
