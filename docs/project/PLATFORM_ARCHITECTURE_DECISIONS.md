@@ -36,6 +36,7 @@ process remains authoritative first.
 | PLAT002 | Network capability represented-value architecture | RATIFIED | Explicit project-owner approval, 2026-09-09 after cross-language/runtime/capability/scalability review | I028-B and later Network/TCP runtime implementation |
 | PLAT003 | JVM TCP live-resource and duplex-I/O architecture | RATIFIED | Explicit project-owner approval, 2026-09-09 after cross-language/runtime/full-duplex/future-scalability review | I028-C/D/E |
 | PLAT004 | Truffle SourceSection ownership and materialization | RATIFIED | Explicit project-owner approval, 2026-09-09 after Truffle guidance + SimpleLanguage/TruffleRuby/GraalJS/FastR/Sulong/Apple Pkl scalability review | I026-B/C/F/G |
+| PLAT005 | Truffle instrumentation coverage and StandardTags architecture | RATIFIED | Explicit project-owner approval, 2026-09-09 after Truffle + SimpleLanguage/TruffleRuby/GraalJS/Apple Pkl/GraalPy/Sulong/Espresso scalability review | I026-C/E/F/G |
 | PLAT006 | JVM TCP host I/O operation engine architecture | RATIFIED | Explicit project-owner approval, 2026-09-09 after cross-language/runtime/readiness/completion/cancellation/scalability review | I028-E/F |
 
 See `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md` for the selected topology,
@@ -51,5 +52,7 @@ ordinary-resource representation, host-neutral acquisition custody and independe
 progress architecture; D052 remains authoritative for every observable TCP object-topology rule.
 
 See `docs/project/PLAT004_TRUFFLE_SOURCE_SECTION_OWNERSHIP.md` for the selected root-owned exact Source + node-local compact range + on-demand SourceSection projection, its cross-language rationale, scaling invariants and deliberately deferred instrumentation/tooling choices.
+
+See `docs/project/PLAT005_TRUFFLE_INSTRUMENTATION_ARCHITECTURE.md` for the selected layered semantic-minimum instrumentation architecture: common source-node mechanism, explicit Statement/Call baseline tags, replay-aware wrapper placement, deferred root/expression/value/yield surfaces, and scaling rationale.
 
 See `docs/project/PLAT006_TCP_HOST_IO_OPERATION_ENGINE.md` for the selected host-neutral I/O operation-engine boundary, initial bounded JDK NIO readiness backend, cross-runtime/scalability rationale, future completion/native-backend compatibility constraints, and deliberately deferred tuning choices.
