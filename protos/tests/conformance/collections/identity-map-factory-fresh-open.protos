@@ -14,8 +14,6 @@ b: IdentityMap()
 
 a.atPut("x", 1)
 
-(a !== b).and() {
-    (a.size() == 1).and() {
-        b.size() == 0
-    }
-}
+(a !== b) &&
+    (a.size() == 1) &&
+    (b.size() == 0)

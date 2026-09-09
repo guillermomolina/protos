@@ -12,10 +12,7 @@
 a: Array(1)
 b: Array(1)
 
-(a == a).and() {
-    (a === a).and() {
-        ((a == b) == false).and() {
-            (a === b) == false
-        }
-    }
-}
+(a == a) &&
+    (a === a) &&
+    ((a == b) == false) &&
+    ((a === b) == false)

@@ -17,6 +17,5 @@ result: xs.each((value) => {
     null
 })
 
-(result === xs).and() {
-    seen == 123
-}
+(result === xs) &&
+    (seen == 123)

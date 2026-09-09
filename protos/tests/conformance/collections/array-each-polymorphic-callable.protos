@@ -22,6 +22,5 @@ callable: {
 
 result: xs.each(callable)
 
-(result === xs).and() {
-    seen == 45
-}
+(result === xs) &&
+    (seen == 45)

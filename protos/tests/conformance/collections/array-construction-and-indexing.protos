@@ -5,6 +5,6 @@
  */
 
 values: Array(10, 20, 30)
-(values.size() == 3).and() {
-    (values.at(0) == 10).and() { values.at(2) == 30 }
-}
+(values.size() == 3) &&
+    (values.at(0) == 10) &&
+    (values.at(2) == 30)
