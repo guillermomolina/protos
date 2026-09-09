@@ -88,8 +88,8 @@ when a later approved platform decision replaces it.
 | I026-A4B2A | Shared Engine + Process Context lifecycle | CLOSED | `SAME_COMMIT` | `0.2.269-SNAPSHOT`; explicit non-singleton Engine owner, distinct Context per bound Process, fixed host binding, termination-triggered deferred-safe Context cleanup, sibling-Process lifecycle isolation, and no host-close semantic authority. |
 | I026-A4B2B | Actor/P Context routing + concurrent Core bootstrap | IN_PROGRESS | — | Mechanically refined into B2B1 Actor routing, B2B2 P routing and B2B3 concurrent Core bootstrap closure. |
 | I026-A4B2B1 | Actor carrier Process-Context routing | CLOSED | `SAME_COMMIT` | `0.2.271-SNAPSHOT`; control, Task and mailbox scheduler segments run inside the fixed Process execution host; two distinct Actor carriers prove one exact Process `ProtosLanguageContext`. |
-| I026-A4B2B2 | P carrier Process-Context routing | READY | — | Depends on A4B2B1; propagate Process hosting through isolated/nested P without weakening P semantics or parallelism. |
-| I026-A4B2B3 | Concurrent Core bootstrap closure | BLOCKED_BY_DEPENDENCIES | — | Depends on A4B2B2; resolve/prove safe Core-root publication across concurrent Processes, close A4B2B/A4B2 and release A4B3. |
+| I026-A4B2B2 | P carrier Process-Context routing | CLOSED | `SAME_COMMIT` | `0.2.273-SNAPSHOT`; P-domain placement metadata routes sibling and nested guest execution through the originating Process Context without transferring Process authority or adding carrier affinity. |
+| I026-A4B2B3 | Concurrent Core bootstrap closure | READY | — | Depends on closed A4B2B2; resolve/prove safe Core-root publication across concurrent Processes, close A4B2B/A4B2 and release A4B3. |
 | I026-A4B3 | Production driver cutover + legacy-entry retirement | BLOCKED_BY_DEPENDENCIES | — | I026-A4B2; migrate CLI/REPL/bundled-tool/workspace/remaining drivers and retire direct compiler/call entry as a separate primary architecture. |
 
 ### I024 — Filesystem directory observation + captured-tree capability

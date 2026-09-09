@@ -141,8 +141,7 @@ public final class ProtosClosureInvoker {
             if (closure.nativeBody().isPresent()) {
                 return closure.nativeBody().orElseThrow().execute(activation, supplied);
             }
-            ProtosClosureExecutionPlan plan = closure.executionPlan().orElseThrow(
-                    () -> new IllegalStateException("Closure invocation requires a prepared execution plan"));
+            ProtosClosureExecutionPlan plan = closure.executionPlanForRuntimeInvocation();
             plan.bind(activation);
             return plan.executeBody(activation);
         } catch (ProtosSignalException transfer) {

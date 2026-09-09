@@ -65,8 +65,8 @@ see `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md`.
 | I026-A4B2A | CLOSED | `0.2.269-SNAPSHOT` | I026-A4B1 | Establish one explicit shareable Engine owner, distinct Process-scoped Contexts, one fixed implementation-only Process-host binding, semantic-termination-triggered Context cleanup, and lifecycle isolation across independent Processes. No Actor/P carrier routing or Core-bootstrap concurrency claim yet. |
 | I026-A4B2B | IN_PROGRESS | — | I026-A4B2A | Implement Actor/P/bootstrap integration through ordered A4B2B1-A4B2B3; B2B closes only after Actor routing, P routing and concurrent Core bootstrap are all published. |
 | I026-A4B2B1 | CLOSED | `0.2.271-SNAPSHOT` | I026-A4B2A | Route every scheduled Actor control/Task/mailbox segment through its owning Process execution host; prove two distinct Actor carriers enter one exact Process `ProtosLanguageContext` with no Context-per-Actor mapping or carrier affinity. |
-| I026-A4B2B2 | READY | — | I026-A4B2B1 | Route isolated P carriers, including nested P, through the originating Process host while preserving P transfer/isolation and physical parallelism. |
-| I026-A4B2B3 | BLOCKED_BY_DEPENDENCIES | — | I026-A4B2B2 | Close concurrent Core-root bootstrap publication across hosted Processes, then close A4B2B/A4B2 and release A4B3. |
+| I026-A4B2B2 | CLOSED | `0.2.273-SNAPSHOT` | I026-A4B2B1 | Propagate Process host placement through isolated P domains, enter the owning Process Context around guest execution, preserve sibling physical parallelism, and prove nested P inherits the same Context without exposing Process authority. |
+| I026-A4B2B3 | READY | — | I026-A4B2B2 | Close concurrent Core-root bootstrap publication across hosted Processes, then close A4B2B/A4B2 and release A4B3. |
 | I026-A4B3 | BLOCKED_BY_DEPENDENCIES | — | I026-A4B2 | Cut CLI, REPL, bundled-tool, workspace and remaining production drivers onto the PLAT001 substrate and retire direct compiler/call entry as a separate primary production architecture. |
 | I026-B | BLOCKED_BY_DEPENDENCIES | — | I026-A4 | Map the existing exact `SourceSpan` ranges to valid Truffle `SourceSection` values on roots/execution nodes, with focused Java-side integration evidence. |
 | I026-C | BLOCKED_BY_DEPENDENCIES | — | I026-B | Make the relevant AST nodes instrumentable and expose the minimal faithful `StandardTags` needed for source execution/stepping; do not tag nodes merely to satisfy a debugger UI. |
@@ -94,10 +94,11 @@ coordination. A4B2 is now IN_PROGRESS through A4B2A-A4B2B. A4B2A publishes the
 explicit shareable Engine owner and one distinct Context per bound semantic Process, with Context
 cleanup following already-complete Process termination and no host shutdown authority over live
 Processes. A4B2B is now IN_PROGRESS through A4B2B1-A4B2B3. A4B2B1 routes every Actor
-scheduler segment through the owning Process execution host and is CLOSED; A4B2B2 is READY for
-isolated P carrier routing, while A4B2B3 remains dependency-blocked on P routing before it closes
-concurrent Core-root bootstrap publication. Only A4B2B3 closure releases A4B3. I026-D remains
-independently READY.
+scheduler segment through the owning Process execution host and is CLOSED. A4B2B2 is also CLOSED:
+isolated P domains now retain implementation-only Process host placement, sibling P carriers enter the
+same Process Context concurrently, and nested P inherits that placement without gaining Process
+authority. A4B2B3 is READY for the remaining concurrent Core-root bootstrap closure. Only A4B2B3
+closure releases A4B3. I026-D remains independently READY.
 
 ## Deferred ownership
 

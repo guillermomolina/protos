@@ -196,12 +196,32 @@ retain their existing direct path.
 
 Focused integration evidence runs two Actors of one hosted Process concurrently on two distinct
 carrier threads and proves both observe one exact `ProtosLanguageContext`. No global execution
-lock, semantic ThreadLocal or carrier affinity is introduced. A4B2B2 is READY for isolated P
-carrier routing; A4B2B3 remains blocked on B2B2 before closing concurrent Core-root bootstrap
-publication and A4B2 itself.
+lock, semantic ThreadLocal or carrier affinity is introduced. A4B2B2 subsequently closes the P carrier placement requirement; A4B2B3 is now READY for the
+remaining concurrent Core-root bootstrap publication and A4B2 closure.
 
 `ContextPolicy.SHARED` remains deferred; explicit Engine sharing here does not change the default
 EXCLUSIVE language-context policy.
+
+## A4B2B2 implementation evidence
+
+I026-A4B2B2 closes in `0.2.273-SNAPSHOT`. The existing P-domain registry now retains
+implementation-only Process host placement in addition to P membership. Snapshot creation obtains
+that placement from the originating Actor's Process host or, for nested P, from the parent P domain.
+The placement pointer never enters the P value-transfer graph and exposes no Process, Actor, I/O,
+scheduler or Context capability to Protos code.
+
+Guest invocation inside each P domain enters the retained Process execution host. Before the P root
+invokes guest code, its module activation is attached to that exact root `ProtosTask`; nested
+`Future.value()` therefore uses the existing cooperative suspension/replay machinery and nested P
+producer work remains structurally owned by the current P task rather than becoming an unowned root.
+Two sibling P computations remain physically concurrent on distinct carriers while observing the exact
+same `ProtosLanguageContext` as their hosted Process, and nested P creates a fresh isolated P domain
+while inheriting that same hosting placement. Queueing, snapshotting and deterministic result
+bookkeeping remain outside Context entry when they do not execute guest code. Standalone/unbound
+migration paths remain direct.
+
+A4B2B3 is READY and remains the sole owner of concurrent Core-root bootstrap publication. Only its
+closure may close A4B2B/A4B2 and release A4B3. `ContextPolicy.SHARED` remains deferred.
 
 ## Explicitly deferred choices
 

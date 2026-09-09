@@ -15,8 +15,9 @@ public final class ProtosParallelRuntime {
             CARRIERS,CARRIERS,30L,TimeUnit.SECONDS,new LinkedBlockingQueue<>(),
             new ThreadFactory(){private final AtomicInteger n=new AtomicInteger();
                 public Thread newThread(Runnable r){Thread t=new Thread(r,"protos-p-"+n.incrementAndGet());t.setDaemon(true);return t;}});
-    private static final Set<ProtosActorExecutionDomain> P_DOMAINS=
-            Collections.newSetFromMap(new ConcurrentHashMap<>());
+    private record PPlacement(ProtosProcessExecutionHost host) {}
+    private static final Map<ProtosActorExecutionDomain,PPlacement> P_DOMAINS=
+            new ConcurrentHashMap<>();
     static { EXECUTOR.allowCoreThreadTimeOut(true); }
     private ProtosParallelRuntime(){}
 
@@ -187,7 +188,7 @@ public final class ProtosParallelRuntime {
     private static boolean bool(Object v){return v==ProtosBooleanValue.TRUE||v==ProtosBooleanValue.FALSE;}
 
     private static Object parallelRange(Object receiver,ProtosActivation a,List<?> supplied){
-        if(!P_DOMAINS.contains(a.executionDomain()))
+        if(!P_DOMAINS.containsKey(a.executionDomain()))
             throw signal(a,ProtosCoreErrors.StandardError.PARALLEL_REGION_OUTSIDE_P);
         if(supplied.size()<3)throw error(a);
         BigInteger start=integer(supplied.get(0),a);if(start.signum()<0)throw error(a);
@@ -289,11 +290,17 @@ public final class ProtosParallelRuntime {
     }
 
     private static Outcome runInline(Snapshot s){
-        ProtosActorExecutionDomain d=new ProtosActorExecutionDomain();P_DOMAINS.add(d);
+        if(s.executionHost==null)return runInlinePlaced(s);
+        return s.executionHost.callForRuntime(()->runInlinePlaced(s));
+    }
+
+    private static Outcome runInlinePlaced(Snapshot s){
+        ProtosActorExecutionDomain d=new ProtosActorExecutionDomain();
+        P_DOMAINS.put(d,new PPlacement(s.executionHost));
         try{
             ProtosActivation creator=s.caller.prelude().orElseThrow().newModuleActivation(
                     new ProtosActorModuleState(),null,s.caller.prelude().orElseThrow().newExecutionContext(),d);
-            ProtosTask root=d.createTask(null,t->t.executeAction(()->ProtosInvocation.invoke(s.callable,s.args,creator)));
+            ProtosTask root=d.createTask(null,t->{creator.attachTask(t);t.executeAction(()->ProtosInvocation.invoke(s.callable,s.args,creator));});
             d.dispatchUntilTerminal(root,()->{
                 Runnable helper=EXECUTOR.getQueue().poll();if(helper==null)return false;helper.run();return true;
             });
@@ -309,14 +316,26 @@ public final class ProtosParallelRuntime {
         }finally{P_DOMAINS.remove(d);}
     }
 
+    private static ProtosProcessExecutionHost executionHost(ProtosActivation caller){
+        PPlacement placement=P_DOMAINS.get(caller.executionDomain());
+        if(placement!=null)return placement.host();
+        return caller.executionDomain().currentActorForRuntime()
+                .flatMap(ProtosActor::processForRuntime)
+                .flatMap(ProtosProcessRuntime::executionHostForRuntime)
+                .orElse(null);
+    }
+
     private static final class Snapshot {
         final Object callable;final List<Object> args;final ProtosActivation caller;
-        Snapshot(Object c,List<Object> a,ProtosActivation caller){callable=c;args=List.copyOf(a);this.caller=caller;}
+        final ProtosProcessExecutionHost executionHost;
+        Snapshot(Object c,List<Object> a,ProtosActivation caller,ProtosProcessExecutionHost executionHost){
+            callable=c;args=List.copyOf(a);this.caller=caller;this.executionHost=executionHost;
+        }
         static Snapshot capture(Object callable,List<?> args,ProtosActivation caller){
             IdentityHashMap<Object,Object> memo=new IdentityHashMap<>();
             Object c=Transfer.copy(callable,caller,memo);
             ArrayList<Object> a=new ArrayList<>();for(Object v:args)a.add(Transfer.copy(v,caller,memo));
-            return new Snapshot(c,a,caller);
+            return new Snapshot(c,a,caller,executionHost(caller));
         }
     }
     private static final class Staged {
@@ -356,8 +375,18 @@ public final class ProtosParallelRuntime {
             ProtosPrelude p=a.prelude().orElseThrow();
             if(v==ProtosObjectValue.rootObject()||prelude(v,p))return v;
             if(v instanceof ProtosClosureValue x){
-                ProtosClosureExecutionPlan plan=x.definition()==null?null:x.executionPlan().map(existing->existing.rebuild(x.definition())).orElseGet(()->new CanonicalToTruffleLowerer().lowerClosurePlan(x.definition()));
-                ProtosClosureValue y=x.parallelProjection(List.of(p.newExecutionContext()),ProtosNullValue.INSTANCE,p,plan);
+                java.util.function.Supplier<ProtosClosureExecutionPlan> rematerializer=null;
+                if(x.definition()!=null){
+                    rematerializer=x.executionPlanRematerializerForParallelRuntime().orElseGet(
+                            ()->x.executionPlan()
+                                    .<java.util.function.Supplier<ProtosClosureExecutionPlan>>map(
+                                            existing->()->existing.rebuild(x.definition()))
+                                    .orElseGet(
+                                            ()->()->new CanonicalToTruffleLowerer()
+                                                    .lowerClosurePlan(x.definition())));
+                }
+                ProtosClosureValue y=x.parallelProjectionDeferred(
+                        List.of(p.newExecutionContext()),ProtosNullValue.INSTANCE,p,rematerializer);
                 memo.put(v,y);slots(x,y,a,memo);state(x,y);return y;
             }
             if(v instanceof ProtosArrayValue x){
