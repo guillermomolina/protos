@@ -10,6 +10,5 @@ values: Set()
 identities: IdentitySet()
 same: Set.each(values, 42)
 sameIdentity: IdentitySet.each(identities, 42)
-((same === values).and(() => { Set.size(values) == 0 })).and(() => {
-    (sameIdentity === identities).and(() => { IdentitySet.size(identities) == 0 })
-})
+((same === values) && (Set.size(values) == 0)) &&
+    ((sameIdentity === identities) && (IdentitySet.size(identities) == 0))

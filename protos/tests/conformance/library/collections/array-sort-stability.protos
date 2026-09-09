@@ -16,6 +16,5 @@ sorted: Arrays.sort(
     }
 )
 
-((sorted.at(0) === zero).and(() => { sorted.at(1) === first })).and(() => {
-    sorted.at(2) === second
-})
+((sorted.at(0) === zero) && (sorted.at(1) === first)) &&
+    (sorted.at(2) === second)

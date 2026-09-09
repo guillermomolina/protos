@@ -133,7 +133,7 @@ listed in one table.
 | AUD003-A2 | CLOSED | Standard Library indexing audit/migration: ordinary indexing debt migrated across six reviewed modules; no current stdlib result-sensitive/direct-protocol/bootstrap exception remained; validated under `0.2.293-SNAPSHOT`. |
 | AUD003-A3 | CLOSED | Bundled-tool indexing audit/migration: ordinary indexing debt migrated across 16 execution-time Package/Test Tool modules; no result-sensitive/protocol/bootstrap exception was rewritten; validated under `0.2.295-SNAPSHOT`. |
 | AUD003-A4 | CLOSED | Benchmarks and remaining ordinary-program indexing audit/migration: the final reviewed debt across two benchmark workloads and one user-facing tutorial was migrated; the complete benchmarks/examples/tutorials executable-source rescan is clean. |
-| AUD003-B1 | OPEN | Ordinary lazy Boolean spelling audit for explicit `and`/`or`, including representative conformance tests whose subject is not the Boolean protocol itself. |
+| AUD003-B1 | IN_PROGRESS | Lazy Boolean spelling audit: B1a closed the reviewed explicit `and(() => ...)` / `or(() => ...)` ordinary tranche while retaining direct Boolean-protocol cases; B1b still owns the separately classified trailing-Closure `.and() { ... }` population. |
 | AUD003-B2 | OPEN | Ordinary unary spelling audit for explicit `not`/`negated`, retaining protocol/lowering tests. |
 | AUD003-C | OPEN | Conformance-corpus exception classification: make deliberate canonical/protocol cases explicit and migrate ordinary-code cases. |
 | AUD003-D | OPEN | Prevention gate: add a bounded source-style guard that understands path/purpose exceptions or an explicit allowlist; a repository-wide dumb grep that bans canonical forms is not acceptable. |
@@ -252,6 +252,47 @@ two benchmark workloads plus the tutorial through `bin/protos`, followed by the
 complete Maven test suite. This ordinary benchmark/tutorial source-style cleanup
 does not change the implementation version. Execution-time version: `0.2.301-SNAPSHOT`.
 No specification or public API change.
+
+### AUD003-B1a retained evidence
+
+GitHub coordination: Issue `#114` (`AUD003-B1`).
+
+B1 is intentionally subdivided mechanically rather than treating all historical
+lazy-Boolean spellings as one blind rewrite. B1a classified the explicit
+parameterless-Closure forms first.
+
+Execution-time ordinary migration set:
+
+- `protos/tests/conformance/control/ensure-error-cleanup-preserves-original.protos`
+- `protos/tests/conformance/library/collections/array-filter-snapshot.protos`
+- `protos/tests/conformance/library/collections/array-reduce-trivial-inputs-do-not-inspect-reducer.protos`
+- `protos/tests/conformance/library/collections/array-results-are-open.protos`
+- `protos/tests/conformance/library/collections/array-sort-stability.protos`
+- `protos/tests/conformance/library/collections/set-empty-each-does-not-inspect-callback.protos`
+- `protos/tests/conformance/library/json/parse-unicode-escapes-and-surrogate-pair.protos`
+
+Each migrated use has an already-reviewed single-expression RHS Closure and
+therefore maps directly to the grammar-owned lowering `left && right ->
+left.and(() => right)` or `left || right -> left.or(() => right)`. The slice
+does not rewrite arbitrary selectors named `and`/`or`, parameterized Closures,
+or trailing braced Closure bodies.
+
+Direct Boolean-protocol conformance remains deliberate canonical evidence under
+`protos/tests/conformance/boolean/**`. The execution-time explicit-Closure
+exception files retained by this tranche are:
+
+- `protos/tests/conformance/boolean/and-invalid-result.protos`
+- `protos/tests/conformance/boolean/and-selected-false.protos`
+- `protos/tests/conformance/boolean/or-invalid-result.protos`
+- `protos/tests/conformance/boolean/or-selected-true.protos`
+
+The launcher rescans every current `protos/**/*.protos` file and aborts if a new
+explicit `and(() => ...)` / `or(() => ...)` occurrence appears outside the
+reviewed B1a source set and the Boolean-protocol exception root.
+
+B1 remains `IN_PROGRESS`: B1b owns the substantially larger `.and() { ... }`
+trailing-Closure population and must classify Closure-body shape before rewrite.
+No implementation-version change. Execution-time version: `0.2.302-SNAPSHOT`.
 
 ## Migration discipline
 

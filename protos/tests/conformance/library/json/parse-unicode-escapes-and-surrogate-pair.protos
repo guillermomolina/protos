@@ -21,8 +21,5 @@ ascii: JSON.parse("\"\\u0041\"")
 music: JSON.parse("\"\\uD834\\uDD1E\"")
 emoji: JSON.parse("\"😀\"")
 
-((ascii.value == "A").and(() => {
-    music.value == "𝄞"
-})).and(() => {
-    emoji.value == "😀"
-})
+((ascii.value == "A") && (music.value == "𝄞")) &&
+    (emoji.value == "😀")

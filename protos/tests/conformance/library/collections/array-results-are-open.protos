@@ -31,8 +31,5 @@ mapped.lib001Probe: 1
 filtered.lib001Probe: 2
 sorted.lib001Probe: 3
 
-((mapped.lib001Probe == 1).and(() => {
-    filtered.lib001Probe == 2
-})).and(() => {
-    sorted.lib001Probe == 3
-})
+((mapped.lib001Probe == 1) && (filtered.lib001Probe == 2)) &&
+    (sorted.lib001Probe == 3)

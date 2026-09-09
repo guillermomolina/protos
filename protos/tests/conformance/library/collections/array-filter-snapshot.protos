@@ -14,7 +14,7 @@ filtered: Arrays.filter(source, (element) => {
         source.atPut(1, 99)
     })
     calls = calls + 1
-    (element == 2).or(() => { element == 4 })
+    (element == 2) || (element == 4)
 })
 filtered.atPut(0, filtered.at(0))
 ok: true

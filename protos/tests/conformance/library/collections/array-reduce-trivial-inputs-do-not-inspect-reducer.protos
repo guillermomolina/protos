@@ -9,6 +9,5 @@ marker: Array(7)
 empty: Arrays.reduce(Array(), 42)
 singleton: Arrays.reduce(Array(marker), 42)
 seededEmpty: Arrays.reduce(Array(), 42, marker)
-((empty === null).and(() => { singleton === marker })).and(() => {
-    seededEmpty === marker
-})
+((empty === null) && (singleton === marker)) &&
+    (seededEmpty === marker)

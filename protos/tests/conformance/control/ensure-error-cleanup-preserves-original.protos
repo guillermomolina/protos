@@ -21,5 +21,5 @@ original.handle(() => {
         cleaned = true
     })
 }, (caught) => {
-    (caught === original).and(() => cleaned)
+    (caught === original) && cleaned
 })
