@@ -10,6 +10,7 @@ import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.util.Map;
@@ -135,7 +136,7 @@ public final class ProtosModuleRuntime {
                             key,
                             moduleInstance,
                             caller.executionDomain());
-            compiler.compile(source).call(moduleActivation);
+            executeModuleSource(source, moduleActivation);
             record.markReady();
             return moduleInstance;
         } catch (ProtosSignalException signal) {
@@ -145,5 +146,30 @@ public final class ProtosModuleRuntime {
             actorState.removeIfSame(key, record);
             throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
         }
+    }
+
+    /**
+     * Executes one resolved module in the owning Process Context when that Process is hosted.
+     *
+     * <p>Module identity, Actor-local cache state and cache-before-execute remain entirely outside
+     * this implementation placement helper. The direct compiler path is retained only for the
+     * explicitly unhosted staging consumers that A4B3's final retirement phase still owns.
+     */
+    private Object executeModuleSource(
+            ProtosModuleSource source,
+            ProtosActivation activation) {
+        ProtosProcessRuntime process =
+                activation.executionDomain()
+                        .currentActorForRuntime()
+                        .flatMap(actor -> actor.processForRuntime())
+                        .orElse(null);
+        if (process == null || process.executionHostForRuntime().isEmpty()) {
+            return compiler.compile(source).call(activation);
+        }
+        return process.callInExecutionHostForRuntime(
+                () ->
+                        ProtosLanguageContext.current()
+                                .parsePublic(source.source())
+                                .call(activation));
     }
 }

@@ -78,15 +78,34 @@ Context. This removes the cross-layer AST handoff while preserving Process argum
 private captured streams, detached result observation and fresh-Process semantics.
 
 `ProtosWorkspaceRunDriver` owns one explicit RuntimeHost for a run. Package preflight and application
-remain separate Processes and separate Contexts on that Engine. The application Process enters its
-Context before the existing `ProtosCanonicalInitialModuleExecution` runs, preventing direct roots from
-being born in a foreign sharing layer without pre-empting the next mechanical phase, which still owns
-ordinary module + RootActor initial-module public-parse cutover.
+remain separate Processes and separate Contexts on that Engine. In `0.2.291-SNAPSHOT` the application
+Process entered its Context around the existing canonical initial-module mechanism as deliberate
+staging. The next published phase below removes that mechanically direct module/root entry while
+preserving the same Process/Context topology.
+
+## Published phase — ordinary module + RootActor initial-module public parse
+
+Published in `0.2.297-SNAPSHOT`: resolver-loaded ordinary modules in a hosted Process now parse their exact
+`ProtosModuleSource.source()` through the current `ProtosLanguageContext.parsePublic(...)` path and
+execute in the existing module activation. The Actor-local `ModuleKey -> ModuleRecord` cache remains
+unchanged: the instance is created and cached as `INITIALIZING` before the body executes, recursive
+imports observe that same partial instance, successful initialization marks the exact record `READY`,
+and failure removes it. No module wrapper, second identity or new suspension point is introduced.
+
+Importable RootActor initial modules now use the same public parse boundary and retain the existing
+`ProtosRootTaskExecution` lifecycle. `ProtosCanonicalInitialModuleExecution` enters the already-bound
+Process host itself, parses the exact module Source inside that Context, and then drives the same
+RootActor task to a terminal outcome. Workspace application no longer wraps the canonical helper in a
+second staging `callForRuntime`; hosting remains one application Process -> one Process Context on the
+driver-owned RuntimeHost/Engine.
+
+The direct `ProtosSourceCompiler` branches remain only as explicit fallback for unhosted Java/staging
+consumers. Retiring those final fallback entry points and adding the architecture guard is the last
+mechanical A4B3 phase. `ContextPolicy.EXCLUSIVE` remains active; `REUSE` and `SHARED` remain deferred.
 
 ## Remaining mechanical phases inside I026-A4B3
 
-1. ordinary module + RootActor initial-module execution cutover;
-2. final direct-production-entry retirement, architecture guard, and A4B3/A4B/A4 closure.
+1. final direct-production-entry retirement, architecture guard, and A4B3/A4B/A4 closure.
 
 These remain inside Issue #89 as mechanical phases unless one later exposes an independently blockable/reviewable durable unit. Issue #42 remains the parent I026 outcome. `ContextPolicy.EXCLUSIVE` remains active; `REUSE` and `SHARED` remain deferred.
 

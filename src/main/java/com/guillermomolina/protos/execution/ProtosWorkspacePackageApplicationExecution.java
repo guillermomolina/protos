@@ -133,29 +133,17 @@ public final class ProtosWorkspacePackageApplicationExecution {
         ProtosProcessRuntime process = bootstrap.process();
 
         try {
-            ProtosPolyglotProcessContext processContext =
-                    runtimeHost.hostProcess(
-                            process,
-                            InputStream.nullInputStream(),
-                            OutputStream.nullOutputStream(),
-                            OutputStream.nullOutputStream());
+            runtimeHost.hostProcess(
+                    process,
+                    InputStream.nullInputStream(),
+                    OutputStream.nullOutputStream(),
+                    OutputStream.nullOutputStream());
             processObserver.accept(process);
-            try {
-                return processContext.callForRuntime(
-                        () -> {
-                            try {
-                                return ProtosCanonicalInitialModuleExecution.execute(
-                                        prelude,
-                                        resolver,
-                                        entryKey,
-                                        bootstrap.activation());
-                            } catch (IOException failure) {
-                                throw new CanonicalModuleIOException(failure);
-                            }
-                        });
-            } catch (CanonicalModuleIOException failure) {
-                throw failure.ioFailure();
-            }
+            return ProtosCanonicalInitialModuleExecution.execute(
+                    prelude,
+                    resolver,
+                    entryKey,
+                    bootstrap.activation());
         } catch (IOException failure) {
             throw failure;
         } catch (RuntimeException failure) {
@@ -165,18 +153,6 @@ public final class ProtosWorkspacePackageApplicationExecution {
         }
     }
 
-    private static final class CanonicalModuleIOException extends RuntimeException {
-        private final IOException ioFailure;
-
-        CanonicalModuleIOException(IOException ioFailure) {
-            super(null, null, false, false);
-            this.ioFailure = Objects.requireNonNull(ioFailure, "ioFailure");
-        }
-
-        IOException ioFailure() {
-            return ioFailure;
-        }
-    }
 
     private static ProtosEncodingValue requireEncoding(
             ProtosPrelude prelude, String exactBinding) throws IOException {
