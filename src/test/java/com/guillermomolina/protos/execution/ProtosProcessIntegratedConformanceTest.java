@@ -234,6 +234,137 @@ final class ProtosProcessIntegratedConformanceTest {
         }
     }
 
+
+    // LM006-C-PROCESS-STREAM-MATURITY
+    @Test
+    void lm006CProcessAndStandardStreamMaturityIsDrivenByProtosCases() throws Exception {
+        for (String file :
+                List.of(
+                        "delegated-process-shares-stdin-sequence.protos",
+                        "root-delegated-processstreams-share-stdout.protos",
+                        "raw-and-text-share-stdout.protos",
+                        "process-bootstrap-data-to-stdout.protos")) {
+            MaturityFixture fixture = maturityFixture(true);
+            Object result = executeMaturityCase(file, fixture.activation());
+            assertSame(ProtosBooleanValue.TRUE, result, file);
+        }
+
+        MaturityFixture unavailableStdin = maturityFixture(false);
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                executeMaturityCase(
+                        "unavailable-stdin-independent-stdout.protos",
+                        unavailableStdin.activation()));
+    }
+
+    private static MaturityFixture maturityFixture(boolean stdinAvailable) throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(
+                                CORE,
+                                new ProtosStandardLibraryModuleResolver(
+                                        Path.of("protos", "lib")));
+        ProtosEncodingValue latin1 =
+                assertInstanceOf(
+                        ProtosEncodingValue.class,
+                        prelude.encodingPrototype().readLocalSlot("Latin1").orElseThrow());
+        ProtosEncodingValue utf16be =
+                assertInstanceOf(
+                        ProtosEncodingValue.class,
+                        prelude.encodingPrototype().readLocalSlot("UTF16BE").orElseThrow());
+        ProtosBytesValue stdoutCapture =
+                new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
+        ProtosBytesValue stderrCapture =
+                new ProtosBytesValue(prelude.bytesPrototypeForRuntime());
+        byte[] stdinBytes = new byte[] {65, 66};
+        java.util.concurrent.atomic.AtomicInteger stdinOffset =
+                new java.util.concurrent.atomic.AtomicInteger();
+
+        ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend =
+                stdinAvailable
+                        ? (maxBytes, completion) -> {
+                            int start = stdinOffset.get();
+                            if (start >= stdinBytes.length) {
+                                completion.eof();
+                                return () -> {};
+                            }
+                            int length = Math.min(maxBytes, stdinBytes.length - start);
+                            int end = start + length;
+                            byte[] delivered = java.util.Arrays.copyOfRange(stdinBytes, start, end);
+                            stdinOffset.set(end);
+                            completion.data(delivered);
+                            return () -> {};
+                        }
+                        : null;
+
+        ProtosStandaloneProcessBootstrap.Result bootstrap =
+                ProtosStandaloneProcessBootstrap.create(
+                        prelude,
+                        List.of("alpha"),
+                        exactEnvironmentDomain(),
+                        List.of(new ProtosEnvironmentValue.NativeEntry("MODE", "beta")),
+                        stdinBackend,
+                        (bytes, completion) -> {
+                            appendCapturedBytes(stdoutCapture, bytes);
+                            completion.succeeded();
+                            return () -> {};
+                        },
+                        (bytes, completion) -> {
+                            appendCapturedBytes(stderrCapture, bytes);
+                            completion.succeeded();
+                            return () -> {};
+                        },
+                        stdinAvailable ? latin1 : null,
+                        utf16be,
+                        latin1,
+                        null);
+
+        ProtosProcessCapabilityValue processCapability =
+                assertInstanceOf(
+                        ProtosProcessCapabilityValue.class,
+                        bootstrap.activation()
+                                .context()
+                                .readLocalSlot("process")
+                                .orElseThrow());
+        ProtosProcessCapabilityValue delegatedProcess =
+                assertInstanceOf(
+                        ProtosProcessCapabilityValue.class,
+                        ProtosActorValueTransfer.snapshotValue(
+                                processCapability, bootstrap.activation()));
+
+        bootstrap.activation().context().createLocalSlot("delegatedProcess", delegatedProcess);
+        bootstrap.activation().context().createLocalSlot("stdoutCapture", stdoutCapture);
+        bootstrap.activation().context().createLocalSlot("stderrCapture", stderrCapture);
+        return new MaturityFixture(bootstrap.activation());
+    }
+
+    private static Object executeMaturityCase(String file, ProtosActivation activation)
+            throws Exception {
+        String source =
+                java.nio.file.Files.readString(
+                        Path.of(
+                                "protos",
+                                "tests",
+                                "conformance",
+                                "maturity",
+                                "process",
+                                file),
+                        java.nio.charset.StandardCharsets.UTF_8);
+        ProtosExecutionOutcome outcome =
+                ProtosRootTaskExecution.execute(
+                        new ProtosSourceCompiler().compile(source), activation);
+        return switch (outcome.state()) {
+            case COMPLETED -> outcome.value();
+            case FAILED -> throw new AssertionError(
+                    "LM006-C Protos case failed: " + file,
+                    new ProtosSignalException(outcome.error()));
+            case CANCELLED -> throw new AssertionError(
+                    "LM006-C Protos case unexpectedly cancelled: " + file);
+        };
+    }
+
+    private record MaturityFixture(ProtosActivation activation) {}
+
     private static LibraryFixture libraryFixture() throws Exception {
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap()
