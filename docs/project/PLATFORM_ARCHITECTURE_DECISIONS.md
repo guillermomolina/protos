@@ -32,7 +32,7 @@ process remains authoritative first.
 
 | Item | Decision | Status | Approval | Primary consumers |
 |---|---|---|---|---|
-| PLAT001 | Truffle runtime hosting topology | RATIFIED | Explicit project-owner approval, 2026-09-08 | I026-A4 and later Truffle-hosted runtime/tooling work |
+| PLAT001 | Truffle runtime hosting topology | RATIFIED | Explicit project-owner approval, 2026-09-08; 2026-09-09 A+ executable-layer amendment explicitly approved | I026-A4 and later Truffle-hosted runtime/tooling work |
 
 See `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md` for the selected topology,
 its non-semantic boundary, alternatives, scaling rationale, invariants, and

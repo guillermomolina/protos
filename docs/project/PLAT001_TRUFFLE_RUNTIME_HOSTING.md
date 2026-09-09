@@ -223,10 +223,86 @@ migration paths remain direct.
 A4B2B3 is READY and remains the sole owner of concurrent Core-root bootstrap publication. Only its
 closure may close A4B2B/A4B2 and release A4B3. `ContextPolicy.SHARED` remains deferred.
 
+
+<!-- I026-A4B2B3-A-PLUS: v1 -->
+## A4B2B3 executable-layer ownership amendment
+
+Approved by project owner: **2026-09-09**
+
+Blocker: **B010**
+
+The A4B2B3 Truffle execution-layer question was re-audited against current
+Truffle practice, including Apple Pkl, GraalJS, GraalPy, GraalWasm and Truffle
+SimpleLanguage, and against the official `EXCLUSIVE` / `REUSE` / `SHARED`
+context-policy progression. The project owner explicitly approved the resulting
+**A+** direction after scalability review.
+
+For the current I026 implementation:
+
+- `TruffleLanguage.ContextPolicy.EXCLUSIVE` remains the active policy;
+- the standard `Object` role and its source-backed `init`, `==` and `!=`
+  behavior remain semantic/runtime values rather than being replaced by native
+  per-Context builtins;
+- a source-backed Closure that can be reached from more than one Process Context
+  must not own one JVM-global sharing-layer-bound `ExecutionPlan` or
+  `CallTarget`;
+- the executable projection for such a Closure belongs to the current
+  `ProtosLanguageContext` under `EXCLUSIVE`, is cached only within that Context,
+  and becomes unreachable with that Context;
+- no JVM-global `Context -> ExecutionPlan` map is introduced on the Closure or
+  root object;
+- synchronization may protect narrow one-time Core publication, but ordinary
+  guest invocation must not pass through a global execution lock or GIL.
+
+The intended current shape is therefore:
+
+```text
+semantic source-backed behavior
+            |
+            +-- Process Context A -> execution plan / CallTarget A
+            +-- Process Context B -> execution plan / CallTarget B
+```
+
+This is intentionally an implementation-layer split: Protos Closure semantics,
+receiver binding, lexical capture, root delegation and source provenance do not
+change merely because the Truffle executable material is context-local.
+
+### Scalability and future policy progression
+
+Under the current policy, executable memory scales with the number of active
+Process Contexts times the bounded set of shared source-backed roots that need a
+context-local projection. Ordinary invocation has no global lock and no scan of
+other Contexts. Context teardown also tears down its executable cache by normal
+reachability.
+
+`ContextPolicy.REUSE` is now recorded as an explicit future intermediate audit
+point: it can validate context-independent AST reuse after a Context is disposed
+without yet permitting concurrent active Contexts to share one language
+instance. `ContextPolicy.SHARED` remains the later, stronger optimization and
+still requires a complete context-independence / concurrent-AST audit plus
+benchmarks. Neither policy is approved by this amendment.
+
+The A+ boundary is deliberately compatible with that progression: future
+`REUSE` or `SHARED` work may widen the owner of executable material without
+changing Protos callable semantics if and only if the stronger Truffle contracts
+are proven.
+
+### Separate root-state semantic gate
+
+This amendment does **not** ratify a new observable mutation rule for the
+standard `Object`, does not make JVM object identity a language promise, and does
+not approve freezing, per-Actor root copies, copy-on-write overlays or another
+structural-state model by implication. The A4B2B3 audit found that the current
+open JVM-global root is reachable through the shared standard prelude while the
+normative module/isolation model forbids physically shared mutable Protos state.
+That independent observable question is recorded as **B010** and must be
+resolved normatively before A4B2B3 can close.
+
 ## Explicitly deferred choices
 
 PLAT001 does **not** ratify any of the following:
 
+- `TruffleLanguage.ContextPolicy.REUSE`;
 - `TruffleLanguage.ContextPolicy.SHARED`;
 - an exact number of Engines per host/JVM/Node;
 - Context pooling or reuse after Process termination;
