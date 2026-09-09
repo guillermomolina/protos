@@ -1,5 +1,14 @@
 ## 0.2.276-SNAPSHOT
 
+- Ratify `D051 — Conditional surface syntax boundary` as specification revision
+  `0.1.392`. Keep `if` and `else` ordinary identifiers, preserve
+  `if(condition) { ... }` as an ordinary call with a trailing Closure, and
+  explicitly reject dedicated/contextual `if`/`else` syntax for Core v0.1 while
+  retaining D050's Boolean protocol as the canonical conditional mechanism. Add
+  two Protos-source compatibility cases. Specification/test/governance only: no
+  production implementation, new `Ixxx`, reserved word, native boundary,
+  implementation-version or license-term change.
+
 - Close `I030 — Standard Object structural-view publication`, a runtime implementation finding exposed by LM007-D. Publish the already-normative inherited `Object.without(name)` and `Object.alias(sourceName, aliasName)` messages through the existing ordinary-object representation bridge, reusing the existing shallow `ProtosObjectValue` structural helpers. Add ordinary-Protos coverage for symbolic selector aliasing with receiver binding, exact shallow value preservation, fresh Object-parented results, local-only source selection, and alias conflict failure; update the audited native boundary from 113 to 115 construction sites while keeping 30 providers. No normative specification, grammar, public semantic contract, license term, or LM007 test expectation changes. Implementation version becomes `0.2.276-SNAPSHOT`.
 
 ## 0.2.275-SNAPSHOT

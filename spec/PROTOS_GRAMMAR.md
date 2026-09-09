@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-08
+Last updated: 2026-09-09
 ## Prelude Binding Note
 
 Prelude bindings introduce no additional grammar. The shared standard prelude is frozen by runtime semantics. Therefore `name = value` cannot modify a binding found only in the prelude; `name: value` creates a local slot and may explicitly shadow that name.
@@ -2154,23 +2154,46 @@ This is control flow, not an ordinary message send.
 
 ## 36. Optional Control-flow Sugar
 
-The following forms are not part of Core Grammar v0.1 but may later be defined as sugar.
+Core v0.1 defines **no dedicated `if` / `else` conditional syntax**.
+
+The spellings `if` and `else` remain ordinary identifiers under the exact
+reserved-word rule above. The parser, canonicalizer, runtime, and tools must not
+assign either spelling special conditional authority merely because of its
+name.
+
+In particular, a source form such as:
 
 ```js
-if (condition) {
+if(condition) {
     yes()
 }
 ```
 
-may lower to:
+is governed by the ordinary identifier, call, and trailing-Closure grammar. When
+`if` resolves to an ordinary invokable value, the form is an ordinary call whose
+final argument is the parameterless trailing Closure. It is **not** a conditional
+construct and is not reserved for later reinterpretation within Core v0.1.
 
-```js
-condition.ifTrue() {
-    yes()
-}
-```
+Likewise, `else` has no special continuation role. It may be used wherever an
+ordinary identifier is accepted, subject to the same separator and expression
+grammar as any other identifier. Core v0.1 does not define an
+`if (...) { ... } else { ... }` pairing.
 
-A `while` form may lower to a message sent to a condition closure.
+Canonical conditional execution is expressed through the ordinary strict-Boolean
+protocol defined by `semantics/VALUES_AND_COLLECTIONS.md`, including
+`ifTrue(block)`, `ifFalse(block)`, and
+`ifTrueIfFalse(trueBlock, falseBlock)`. D051 adds no second conditional
+semantics and no truthiness rule.
+
+A future language version may reconsider conditional surface ergonomics only as
+a separate explicit design decision. Such a future design must account for the
+fact that Core v0.1 already assigns ordinary-call meaning to source forms such as
+`if(condition) { ... }`; it must not silently retroactively reinterpret Core
+v0.1 source.
+
+Other possible control-flow surface conveniences remain independent questions.
+For example, a future `while` form may lower to a message sent to a condition
+Closure, and:
 
 ```js
 return value

@@ -9,6 +9,36 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.392] - 2026-09-09
+
+### D051 — Conditional surface syntax boundary
+- Records explicit project-owner approval after comparative review of no-sugar,
+  reserved-keyword, contextual-keyword, ternary, ordinary-helper and general
+  Closure/syntax-extensibility approaches.
+- Core v0.1 defines no dedicated `if` / `else` conditional syntax. `if` and
+  `else` remain ordinary identifiers and are not added to the reserved-word set.
+- `if(condition) { ... }` retains its existing ordinary
+  call-plus-trailing-Closure grammar and must not be reinterpreted from the
+  spelling `if`; `else` has no special continuation role and Core v0.1 defines
+  no `if (...) { ... } else { ... }` pairing.
+- Canonical conditional execution remains the strict ordinary Boolean protocol
+  (`ifTrue`, `ifFalse`, `ifTrueIfFalse`) completed by D050. No truthiness,
+  hidden conditional primitive, second branch semantics or syntax-specific
+  dispatch rule is introduced.
+- A future language version may reconsider conditional surface ergonomics only
+  as a separate explicit compatibility-aware design decision; D051 does not
+  approve multi-trailing-Closure syntax, macros, ternary syntax or another
+  general syntax-extension mechanism.
+
+### Compatibility and implementation state
+- The current parser already conforms; no production implementation, AST node,
+  lexer token, reserved word, runtime primitive or new `Ixxx` is required.
+- Add two Protos-source conformance cases proving ordinary `if` call behavior and
+  ordinary bare `else` binding behavior.
+- Normative documents changed: `PROTOS_GRAMMAR.md` and
+  `PROTOS_LANGUAGE_SPEC.md`.
+- Maven implementation version is unchanged.
+
 ## [0.1.391] - 2026-09-09
 
 ### D048 — IpAddress / IpEndpoint construction and recognition

@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-04
+Last updated: 2026-09-09
 Normative I/O-domain semantics are defined in `io/IO_CORE.md`.
 
 Normative semantic-domain ownership is modularized under `semantics/`: `OBJECT_MODEL.md`, `EXECUTION_AND_CONTROL.md`, `CALLABLES.md`, `MODULES.md`, `ERRORS.md`, and `VALUES_AND_COLLECTIONS.md`. Compatibility headings retained in this document are navigation only.
@@ -225,7 +225,15 @@ throw
 finally
 ```
 
-`return`, `if`, `else`, and `while` may eventually exist as syntactic sugar.
+`if` and `else` remain ordinary identifiers in Core v0.1 and have no dedicated
+conditional syntax; `if(condition) { ... }` retains its ordinary
+call-plus-trailing-Closure grammar rather than being reserved for conditional
+reinterpretation. Canonical conditional execution is the ordinary Boolean
+protocol owned by `semantics/VALUES_AND_COLLECTIONS.md` and its surface grammar
+boundary is owned by `PROTOS_GRAMMAR.md`.
+
+`return` and `while` remain independent possible future syntactic-sugar
+questions.
 
 ## 34. Core Language Invariants
 
