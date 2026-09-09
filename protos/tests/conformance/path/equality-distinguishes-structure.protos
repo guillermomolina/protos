@@ -10,8 +10,6 @@
  */
 
 a: Path.relative().child("x")
-(a != Path.relative().child("y")).and() {
-    (a != Path.relative().parentComponent()).and() {
-        a != 1
-    }
-}
+(a != Path.relative().child("y")) &&
+    (a != Path.relative().parentComponent()) &&
+    (a != 1)

@@ -11,4 +11,5 @@
 
 a: Path.relative().child("same")
 b: Path.relative().child("same")
-(a == b).and() { a.hash() == b.hash() }
+(a == b) &&
+    (a.hash() == b.hash())
