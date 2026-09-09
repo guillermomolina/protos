@@ -35,4 +35,4 @@ D049 introduces no deep-freeze operation, Realm/isolate object model, owner-Acto
 
 ## Implementation handoff
 
-D049 satisfies B010's normative unblock condition. I026-A4B2B3 is now mechanically split into A/B implementation slices: A is CLOSED with one-time frozen Core publication and shared-standard graph sealing; B is READY for the already-approved A+ `ProtosLanguageContext` executable projection and final concurrent multi-Process evidence. B010 deliberately remains READY until B closes the complete B2B3 obligation, after which A4B2B/A4B2 may close and A4B3 may become READY.
+D049 is fully implemented by I026-A4B2B3 in `0.2.280-SNAPSHOT`. Slice A publishes the frozen Core/standard graph before guest observation; slice B keeps the shared semantic root Closures while projecting sharing-layer-bound executable plans into the entered `ProtosLanguageContext` with distinct CallTargets across Process Contexts and no global guest lock. B010, A4B2B3, A4B2B and A4B2 are CLOSED; A4B3 is READY. The ratified normative decision and specification revision remain unchanged.

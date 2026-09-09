@@ -485,7 +485,7 @@ scoped; F2E3/F2E4/F2E5 remain gated behind F2E2.
 
 ## B010 — Shared root `Object` structural mutability under Process hosting
 
-Status: READY
+Status: CLOSED
 
 Implementation area:
 `I026-A4B2B3` concurrent Core-root publication and the closure gate for
@@ -515,17 +515,15 @@ semantically immutable. No hidden overlay, per-Actor root identity or global
 mutable singleton is required.
 
 Current consequence:
-`I026-A4B2B3` is IN_PROGRESS through mechanical A/B implementation slices.
-A is published: the standard root has one bounded atomic frozen publication
-cutover and each per-bootstrap shared standard graph, including semantic Closure
-captures, is sealed before Prelude exposure. B remains READY for the already
-approved A+ `ProtosLanguageContext`-local executable projection and final
-concurrent multi-Process evidence.
-
-B010 deliberately remains READY until B publishes the no-cross-Context
-`ExecutionPlan` / `CallTarget` evidence required by this blocker's original exit
-condition. Only B may close B010 together with I026-A4B2B3/A4B2B/A4B2 and release
-I026-A4B3.
+`I026-A4B2B3` is CLOSED in `0.2.280-SNAPSHOT`. A publishes the standard root through one bounded
+atomic frozen cutover and seals each shared standard graph before Prelude exposure.
+B publishes the approved A+ executable split: globally shared source-backed root
+Closures retain their semantic/template identity while each entered
+`ProtosLanguageContext` owns distinct language-bound plans and CallTargets. Two
+Process Contexts on one Engine execute the same shared root behavior concurrently
+and overlap without a global guest lock; neither projected plan is written back to
+the shared Closure. The blocker's full semantic and executable-layer exit condition
+is therefore satisfied. A4B2B/A4B2 are CLOSED and I026-A4B3 is READY.
 
 History:
 B010 was introduced when A4B2B3 exposed that a bootstrap lock could remove a

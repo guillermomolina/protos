@@ -34,7 +34,7 @@ public final class ProtosLanguage extends TruffleLanguage<ProtosLanguageContext>
 
     @Override
     protected ProtosLanguageContext createContext(Env env) {
-        return new ProtosLanguageContext(env);
+        return new ProtosLanguageContext(this, env);
     }
 
     /**

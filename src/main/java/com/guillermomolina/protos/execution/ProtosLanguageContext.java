@@ -17,24 +17,66 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.TruffleLanguage;
 import com.oracle.truffle.api.source.Source;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 
 /** Host-side state owned by one initialized Polyglot Protos context. */
 final class ProtosLanguageContext {
     private static final TruffleLanguage.ContextReference<ProtosLanguageContext> REFERENCE =
             TruffleLanguage.ContextReference.create(ProtosLanguage.class);
 
+    private final ProtosLanguage language;
     private final TruffleLanguage.Env env;
+    private final ConcurrentMap<ProtosClosureExecutionPlan, ProtosClosureExecutionPlan>
+            sharedExecutionPlans = new ConcurrentHashMap<>();
 
-    ProtosLanguageContext(TruffleLanguage.Env env) {
+    ProtosLanguageContext(ProtosLanguage language, TruffleLanguage.Env env) {
+        this.language = Objects.requireNonNull(language, "language");
         this.env = Objects.requireNonNull(env, "env");
     }
 
     static ProtosLanguageContext current() {
         return REFERENCE.get(null);
+    }
+
+    ProtosClosureExecutionPlan executionPlanForSharedClosure(ProtosClosureValue closure) {
+        Objects.requireNonNull(closure, "closure");
+        if (!closure.requiresContextLocalExecutionProjectionForRuntime()) {
+            throw new IllegalArgumentException(
+                    "Closure does not require Context-local execution projection");
+        }
+        ProtosClosureExecutionPlan template =
+                closure.executionPlan()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "shared Closure has no execution-plan template"));
+        return sharedExecutionPlans.computeIfAbsent(
+                template,
+                ignored ->
+                        template.rebuildForLanguage(
+                                Objects.requireNonNull(
+                                        closure.definition(),
+                                        "shared Closure definition"),
+                                language));
+    }
+
+    ProtosClosureExecutionPlan projectedExecutionPlanForTesting(ProtosClosureValue closure) {
+        Objects.requireNonNull(closure, "closure");
+        return closure.executionPlan().map(sharedExecutionPlans::get).orElse(null);
+    }
+
+    int projectedExecutionPlanCountForTesting() {
+        return sharedExecutionPlans.size();
+    }
+
+    ProtosLanguage languageForTesting() {
+        return language;
     }
 
     CallTarget parsePublic(Source source) {

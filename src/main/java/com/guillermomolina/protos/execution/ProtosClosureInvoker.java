@@ -141,7 +141,15 @@ public final class ProtosClosureInvoker {
             if (closure.nativeBody().isPresent()) {
                 return closure.nativeBody().orElseThrow().execute(activation, supplied);
             }
-            ProtosClosureExecutionPlan plan = closure.executionPlanForRuntimeInvocation();
+            ProtosClosureExecutionPlan plan;
+            if (closure.requiresContextLocalExecutionProjectionForRuntime()
+                    && ProtosPolyglotExecutionContext.hasEnteredContextForRuntime()) {
+                plan =
+                        ProtosLanguageContext.current()
+                                .executionPlanForSharedClosure(closure);
+            } else {
+                plan = closure.executionPlanForRuntimeInvocation();
+            }
             plan.bind(activation);
             return plan.executeBody(activation);
         } catch (ProtosSignalException transfer) {

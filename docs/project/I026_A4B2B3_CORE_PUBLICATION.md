@@ -1,6 +1,6 @@
 # I026-A4B2B3 — Concurrent Core bootstrap closure
 
-Status: **IN_PROGRESS**
+Status: **CLOSED in `0.2.280-SNAPSHOT`**
 
 Normative dependency: D049 / specification `0.1.389` — RATIFIED
 Platform dependency: PLAT001 A+ — RATIFIED
@@ -17,12 +17,12 @@ slices. This split introduces no new semantic or platform decision.
   standard graph (including semantic Closure captures) before the Prelude is
   exposed. Concurrent bootstraps reuse and validate the already-published required root surface;
   ordinary guest execution acquires no global lock.
-- **I026-A4B2B3B — A+ executable projection + final concurrency closure:** READY.
-  Move sharing-layer-bound execution plans for the globally shared source-backed
-  root Closures into the current `ProtosLanguageContext`, retain EXCLUSIVE, prove
-  distinct Process Contexts never execute one another's CallTarget, and publish
-  the final concurrent multi-Process evidence. Only B may close B010, B2B3,
-  A4B2B and A4B2 and release A4B3.
+- **I026-A4B2B3B — A+ executable projection + final concurrency closure:** CLOSED in `0.2.280-SNAPSHOT`.
+  Globally shared source-backed root Closures keep one semantic/template identity,
+  while each entered `ProtosLanguageContext` owns a bounded projection cache keyed
+  by that template and therefore owns distinct language-bound execution plans and
+  CallTargets. EXCLUSIVE remains active; B010/B2B3/A4B2B/A4B2 are CLOSED and A4B3
+  is READY.
 
 ## A — publication boundary
 
@@ -59,6 +59,29 @@ Focused conformance includes:
 - the retained native-boundary architecture guard proving no B2B3A-owned standard
   native selector/provider expansion.
 
-B010 remains READY because its recorded exit condition intentionally includes the
-A+ multi-Process executable-layer evidence owned by B. `I026-A4B3` therefore
-remains dependency-blocked after A.
+## B — A+ executable ownership boundary
+
+The three globally shared source-backed root behaviors (`init`, `==`, `!=`) are
+marked with implementation-only projection metadata before root publication. The
+shared Closure keeps its exact semantic identity, canonical definition, captures and
+template plan. A bound method keeps the same projection requirement and template key,
+so cache cardinality is bounded by shared behavior rather than lookup/receiver count.
+
+When such a Closure is invoked inside an entered Polyglot Process Context, the current
+`ProtosLanguageContext` uses a per-Context concurrent cache to rebuild a fresh
+language-bound execution plan from the shared canonical definition. Source provenance
+is retained when the template has one. No projected plan is written back to the shared
+Closure and no static Context-to-plan registry exists. When there is no entered Protos
+Context, the staged direct template remains usable until A4B3 retires that primary path.
+
+Focused multi-Process evidence executes the exact same global source-backed `Object.!=`
+behavior simultaneously from two distinct Process Contexts sharing one Engine. Both
+executions reach a blocking guest-dispatch probe before either is released, excluding a
+global guest lock around the source-backed invocation. Each Context retains exactly one
+projection for the shared template used by the test; the projected plans, parameter
+binding CallTargets and body CallTargets are pairwise distinct and owned by the
+corresponding EXCLUSIVE `ProtosLanguage` instance, while the shared template remains
+unchanged.
+
+B010 is CLOSED by this final evidence. `I026-A4B2B3`, `I026-A4B2B` and `I026-A4B2`
+are CLOSED in `0.2.280-SNAPSHOT`; `I026-A4B3` is READY.

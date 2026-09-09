@@ -412,6 +412,9 @@ public final class ProtosCoreBootstrap {
             ProtosParallelRuntime.installObjectParallel();
 
             validateRootSurface(object);
+            requireContextLocalRootExecutionProjection(object, "init");
+            requireContextLocalRootExecutionProjection(object, "==");
+            requireContextLocalRootExecutionProjection(object, "!=");
             freezeSharedStandardGraph(object);
             validatePublishedRoot(object);
         }
@@ -446,11 +449,44 @@ public final class ProtosCoreBootstrap {
         validateExistingSourceBackedClosure(object, "!=");
     }
 
+    private static void requireContextLocalRootExecutionProjection(
+            ProtosObjectValue object, String selector) {
+        Object value =
+                object.readLocalSlot(selector)
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "standard Object." + selector + " is missing"));
+        if (!(value instanceof ProtosClosureValue closure)
+                || closure.definition() == null
+                || closure.executionPlan().isEmpty()
+                || closure.nativeBody().isPresent()) {
+            throw new IllegalStateException(
+                    "standard Object." + selector + " is not source-backed");
+        }
+        closure.requireContextLocalExecutionProjectionForRuntime();
+    }
+
+    private static void validateContextLocalRootExecutionProjection(
+            ProtosObjectValue object, String selector) {
+        Object value = object.readLocalSlot(selector).orElse(null);
+        if (!(value instanceof ProtosClosureValue closure)
+                || !closure.requiresContextLocalExecutionProjectionForRuntime()) {
+            throw new IllegalStateException(
+                    "standard Object."
+                            + selector
+                            + " is missing Context-local executable projection metadata");
+        }
+    }
+
     private static void validatePublishedRoot(ProtosObjectValue object) {
         validateRootSurface(object);
         if (!object.isFrozen()) {
             throw new IllegalStateException("standard Object root was not published frozen");
         }
+        validateContextLocalRootExecutionProjection(object, "init");
+        validateContextLocalRootExecutionProjection(object, "==");
+        validateContextLocalRootExecutionProjection(object, "!=");
         for (Object value : object.localSlotsSnapshot().values()) {
             if (!(value instanceof ProtosClosureValue closure) || !closure.isFrozen()) {
                 throw new IllegalStateException(

@@ -53,12 +53,27 @@ public final class ProtosClosureExecutionPlan {
                 .lowerClosurePlan(Objects.requireNonNull(definition, "definition"));
     }
 
+    ProtosClosureExecutionPlan rebuildForLanguage(
+            CanonicalClosure definition, ProtosLanguage language) {
+        return new CanonicalToTruffleLowerer(
+                        rootFactory.withLanguage(Objects.requireNonNull(language, "language")))
+                .lowerClosurePlan(Objects.requireNonNull(definition, "definition"));
+    }
+
     Optional<ProtosLanguage> language() {
         return rootFactory.language();
     }
 
     Optional<Source> source() {
         return rootFactory.source();
+    }
+
+    CallTarget parameterBindingTargetForTesting() {
+        return parameterBindingTarget;
+    }
+
+    CallTarget bodyTargetForTesting() {
+        return bodyTarget;
     }
 
     public void bind(ProtosActivation activation) {

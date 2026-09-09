@@ -40,6 +40,12 @@ import org.graalvm.polyglot.Engine;
  * Semantic execution state remains explicit in {@link ProtosActivation}.
  */
 public final class ProtosPolyglotExecutionContext implements AutoCloseable {
+    /*
+     * Host-only dynamic marker for the staged direct/Polyglot split before A4B3.
+     * It carries no Protos Process, Actor, Task, Context identity or guest state.
+     */
+    private static final ThreadLocal<Boolean> ENTERED_CONTEXT = new ThreadLocal<>();
+
     private final Context context;
     private final ReentrantReadWriteLock lifecycle = new ReentrantReadWriteLock(true);
     private final Lock executionLock = lifecycle.readLock();
@@ -113,6 +119,8 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
         try {
             requireOpen();
             context.enter();
+            Boolean previousEntryMarker = ENTERED_CONTEXT.get();
+            ENTERED_CONTEXT.set(Boolean.TRUE);
             Throwable failure = null;
             try {
                 return action.get();
@@ -128,12 +136,22 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
                     } else {
                         throw leaveFailure;
                     }
+                } finally {
+                    if (previousEntryMarker == null) {
+                        ENTERED_CONTEXT.remove();
+                    } else {
+                        ENTERED_CONTEXT.set(previousEntryMarker);
+                    }
                 }
             }
         } finally {
             executionLock.unlock();
             finishRequestedClose();
         }
+    }
+
+    static boolean hasEnteredContextForRuntime() {
+        return Boolean.TRUE.equals(ENTERED_CONTEXT.get());
     }
 
     private void requireOpen() {

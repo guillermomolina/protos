@@ -75,7 +75,7 @@ bounded carrier count, caller-domain Future ownership and deterministic failure 
 
 ## Remaining A4B2B work
 
-**I026-A4B2B3 — concurrent Core bootstrap closure** is now **IN_PROGRESS** through mechanical A/B implementation slices. A is CLOSED with D049-aligned atomic frozen Core publication and shared-standard graph sealing; B is READY for the already-approved A+ `ProtosLanguageContext`-local executable projection and final concurrent multi-Process evidence. Only B may close B010/A4B2B3/A4B2B/A4B2 and release A4B3.
+**I026-A4B2B3 — concurrent Core bootstrap closure** is now **CLOSED** in `0.2.280-SNAPSHOT`: A publishes D049-aligned atomic frozen Core publication/shared-standard graph sealing and B publishes the already-approved A+ `ProtosLanguageContext`-local executable projection with final concurrent multi-Process evidence. B010, A4B2B and A4B2 are CLOSED; A4B3 is READY.
 
 `ContextPolicy.SHARED` remains deferred.
 

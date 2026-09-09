@@ -196,9 +196,9 @@ retain their existing direct path.
 
 Focused integration evidence runs two Actors of one hosted Process concurrently on two distinct
 carrier threads and proves both observe one exact `ProtosLanguageContext`. No global execution
-lock, semantic ThreadLocal or carrier affinity is introduced. A4B2B2 subsequently closes the P carrier placement requirement; A4B2B3 is now IN_PROGRESS
-through mechanical A/B implementation slices, with A frozen publication CLOSED and B A+ executable
-projection/final concurrency closure READY.
+lock, semantic ThreadLocal or carrier affinity is introduced. A4B2B2 subsequently closes the P carrier placement requirement; A4B2B3 and A4B2 are now CLOSED
+in `0.2.280-SNAPSHOT`: A publishes frozen Core state and B publishes A+ Context-local executable projection
+with final multi-Process no-cross-CallTarget/no-global-lock evidence. A4B3 is READY.
 
 `ContextPolicy.SHARED` remains deferred; explicit Engine sharing here does not change the default
 EXCLUSIVE language-context policy.
@@ -221,10 +221,9 @@ while inheriting that same hosting placement. Queueing, snapshotting and determi
 bookkeeping remain outside Context entry when they do not execute guest code. Standalone/unbound
 migration paths remain direct.
 
-A4B2B3 is IN_PROGRESS through mechanical A/B implementation slices. A is CLOSED with atomic
-frozen Core publication; B is READY for the already-approved A+ context-local executable projection
-and final multi-Process evidence. Only B may close A4B2B/A4B2 and release A4B3.
-`ContextPolicy.SHARED` remains deferred.
+A4B2B3 and A4B2 are CLOSED in `0.2.280-SNAPSHOT`. A publishes atomic frozen Core state; B implements the
+already-approved A+ context-local executable projection and final multi-Process evidence. A4B3
+is READY. `ContextPolicy.SHARED` remains deferred.
 
 
 <!-- I026-A4B2B3-A-PLUS: v1 -->
@@ -297,13 +296,42 @@ question was recorded as B010 and is now normatively resolved by **D049** /
 specification revision `0.1.389`: a standard object physically shared through the
 prelude and exposing ordinary structural state is published frozen before guest
 observation, and the unique root `Object` is explicitly covered. B010 therefore
-remains READY while A4B2B3 implements that semantic boundary. B2B3A has now published the
-frozen Core-publication half; B2B3B remains READY for A+ executable projection and final closure.
+remains READY while A4B2B3 implements that semantic boundary. B2B3A publishes the frozen Core-publication half and B2B3B closes the A+ executable half in
+`0.2.280-SNAPSHOT`; B010 and A4B2 are now CLOSED and A4B3 is READY.
 
 D049 remains normative language authority, not a PLAT001 decision. PLAT001 still
 owns only the Truffle execution-layer consequence: shared semantic behavior may
 exist while sharing-layer-bound executable material remains context-local under
 `ContextPolicy.EXCLUSIVE`.
+
+## A4B2B3B implementation evidence
+
+I026-A4B2B3B closes in `0.2.280-SNAPSHOT` without changing the ratified A+ architecture. The
+globally shared source-backed `Object.init`, `Object.==` and `Object.!=` Closures retain
+their semantic identity, canonical definition, captures and one shared executable template.
+Before root publication they are marked as requiring Context-local execution projection.
+
+An entered invocation resolves the current `ProtosLanguageContext` and uses a cache owned
+by that Context, keyed by the shared template plan. The cached value is rebuilt from the
+canonical definition using the current EXCLUSIVE `ProtosLanguage`, retaining the template's
+Truffle Source when present. Bound-method materialization carries the marker and exact same
+template, so repeated receiver binding does not increase cache cardinality. The cache has no
+static/JVM-global owner and becomes unreachable with its Context.
+
+The staged unentered path continues to execute the existing template directly until A4B3
+retires direct compiler/call entry as a primary production architecture. Hosted invocation
+never writes a projected plan into the shared Closure. No guest-visible identity, lookup,
+callable or Process rule changes.
+
+Focused evidence hosts two distinct Process Contexts on one explicit shared Engine, invokes
+the same global source-backed `Object.!=` behavior on separate carriers and blocks inside
+ordinary guest dispatch until both Contexts have arrived. This proves physical overlap rather
+than serialized admission. The two Context caches contain distinct projected plans with
+distinct parameter-binding and body CallTargets owned by their respective language instances;
+the shared template remains unchanged. There is no global guest execution lock or GIL.
+
+B010, A4B2B3, A4B2B and A4B2 are CLOSED; A4B3 is READY. EXCLUSIVE remains active and
+REUSE/SHARED remain deferred exactly as ratified.
 
 ## Explicitly deferred choices
 

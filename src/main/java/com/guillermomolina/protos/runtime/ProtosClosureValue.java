@@ -32,6 +32,7 @@ public final class ProtosClosureValue extends ProtosObjectValue {
     private volatile ProtosClosureExecutionPlan executionPlan;
     private final java.util.function.Supplier<ProtosClosureExecutionPlan> executionPlanRematerializer;
     private final ProtosNativeClosureBody nativeBody;
+    private volatile boolean contextLocalExecutionProjectionRequired;
 
     public ProtosClosureValue(
             CanonicalClosure definition,
@@ -170,6 +171,23 @@ public final class ProtosClosureValue extends ProtosObjectValue {
         return java.util.Optional.ofNullable(executionPlanRematerializer);
     }
 
+    /** Implementation-only marker for semantic Closures shared across Truffle Contexts. */
+    public boolean requiresContextLocalExecutionProjectionForRuntime() {
+        return contextLocalExecutionProjectionRequired;
+    }
+
+    /**
+     * Requires entered Polyglot execution to use a Context-owned executable projection.
+     * The semantic Closure and its template plan remain unchanged.
+     */
+    public void requireContextLocalExecutionProjectionForRuntime() {
+        if (definition == null || nativeBody != null || executionPlan == null) {
+            throw new IllegalStateException(
+                    "context-local execution projection requires a prepared source-backed Closure");
+        }
+        contextLocalExecutionProjectionRequired = true;
+    }
+
     public ProtosClosureExecutionPlan executionPlanForRuntimeInvocation() {
         ProtosClosureExecutionPlan plan = executionPlan;
         if (plan != null) return plan;
@@ -213,6 +231,9 @@ public final class ProtosClosureValue extends ProtosObjectValue {
                 definition, capturedLexicalContexts, Objects.requireNonNull(receiver, "receiver"),
                 Objects.requireNonNull(home, "home"), returnHome, prelude, executionPlan, nativeBody,
                 executionPlanRematerializer);
+        if (contextLocalExecutionProjectionRequired) {
+            bound.requireContextLocalExecutionProjectionForRuntime();
+        }
         for (java.util.Map.Entry<String, Object> entry : localSlotsSnapshot().entrySet()) {
             bound.createLocalSlot(entry.getKey(), entry.getValue());
         }
