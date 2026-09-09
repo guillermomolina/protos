@@ -652,132 +652,91 @@ Such an environment limitation also does not by itself prevent patch authoring
 when the required repository contents can be inspected and the generated patch
 is intended to be executed and validated later in the user's real checkout.
 
-### Forward-compatible PR-first publication for generated patch launchers
-<!-- GITHUB002-B PR-FIRST-PUBLICATION-CONTRACT -->
+### Proportional hybrid contribution and publication workflow
+<!-- GITHUB002-C HYBRID-CONTRIBUTION-PUBLICATION-CONTRACT -->
 
-The ordinary Protos contribution/publication path is now **Pull-Request first**.
-Generated launchers prepare and validate a candidate on an isolated branch, push
-that candidate to a dedicated remote head branch, and open a Pull Request against
-`main`. Opening a PR is not publication; publication occurs only when the PR is
-merged into `main`.
+Protos uses GitHub Discussions, Issues, the `Protos Development` Project, and
+Pull Requests where each mechanism adds value, but it does **not** require every
+maintainer/agent-generated patch to pay the cost of a remote PR + CI lifecycle.
 
-This cutover preserves the existing separation between parallel preparation and
-repository integration, but removes the old requirement that every prepared
-launcher serialize by directly fast-forwarding `main`.
+The current proportional model is:
 
-Transition rule:
+- **Discussions** own exploration, questions, early ideas, and pre-decision
+  conversation.
+- **Issues + Project** own actionable live coordination, assignment, status,
+  priority, and roadmap.
+- **External contributions** normally use a branch/fork + Pull Request + CI/review
+  before merge.
+- **Maintainer/agent-generated patches** may use the governed isolated
+  direct-to-`main` launcher workflow below after the required adaptive local
+  validation passes.
+- **Maintainer Pull Requests are optional** and SHOULD be used when their review,
+  integration, audit, or collaboration value justifies their operational cost.
 
-- this `GITHUB002-B` publication is the final newly generated governance launcher
-  allowed to use the pre-cutover direct-to-`main` contract;
-- launchers already generated or already executing before this cutover may finish
-  under their original contract, including the explicitly in-flight I026/I028
-  work;
-- after this cutover, newly generated ordinary launchers MUST use the PR-first
-  contract below;
-- repository enforcement of PR-only `main` is deliberately later than launcher
-  support: `GITHUB002-D` must establish the standard launcher mechanics before
-  `GITHUB002-C` enables the enforcing `main` ruleset.
+This is an intentional scaling rule: collaboration infrastructure should become
+stricter as real contributor/concurrency needs appear. Do not impose future-scale
+coordination cost on routine current-scale work merely because that machinery may
+be useful later.
 
-Patch **preparation** may happen in parallel, Pull Requests may exist in parallel,
-and final merges are serialized by GitHub's branch/update/check rules.
+`GITHUB002-B` temporarily made PR-first mandatory for newly generated internal
+launchers. `GITHUB002-D`/PR #153 demonstrated that mechanism successfully, but the
+project owner explicitly rejected its routine operational cost at the current
+stage. `GITHUB002-C` supersedes that mandatory-PR rule. The experiment remains
+historical evidence; it is not the current publication contract.
 
-A generated artifact distinguishes:
-
-- `AUTHORING_BASE` — the revision inspected while the agent designs and
-  acceptance-tests the artifact. It is provenance only and MUST NOT be treated as
-  a future execution pin.
-- `PR_BASE` — the exact `origin/main` fetched by the launcher when the user
-  executes it. Definitive materialization and local validation begin from this
-  execution-time base.
-
-An advance from `AUTHORING_BASE` to a later `PR_BASE` is normal and MUST NOT by
-itself invalidate a prepared artifact.
-
-For the ordinary PR-first workflow, a generated launcher MUST:
+For the ordinary maintainer/agent direct-to-`main` publication workflow, a
+generated launcher MUST:
 
 1. verify that the supplied path belongs to the intended repository and validate
    the configured `origin` coordinate;
-2. fetch `origin/main` without changing the caller checkout and record that
-   execution-time commit as `PR_BASE`;
-3. create a uniquely named launcher-owned local branch from exactly `PR_BASE` and
-   check it out in a temporary `git worktree` outside the caller checkout;
+2. fetch `origin/main` without changing the caller checkout and record that exact
+   execution-time commit as `PUBLICATION_BASE`;
+3. create a uniquely named **local-only temporary branch** from exactly
+   `PUBLICATION_BASE` and check it out in a temporary `git worktree` outside the
+   caller checkout;
 4. inspect the files that actually exist in that worktree and evaluate semantic
    preconditions there;
-5. materialize the requested bounded/state-aware delta against those
+5. materialize only the requested bounded/state-aware delta against those
    execution-time files;
-6. derive moving repository metadata from `PR_BASE`, preserving unrelated
+6. derive moving repository metadata from `PUBLICATION_BASE`, preserving unrelated
    execution-time content in shared files;
 7. treat unrelated movement since `AUTHORING_BASE` as compatible unless it
    violates a real semantic precondition;
-8. abort before creating a candidate when a relevant semantic precondition no
-   longer holds or the requested transformation overlaps incompatibly with
-   already published work;
-9. stage only explicit patch-owned paths, run the adaptive local validation
-   required by the definitive delta, and create the candidate commit entirely
-   inside the isolated worktree;
-10. push the validated candidate to a **dedicated remote PR head branch** with a
-    non-force push. It MUST NOT push that candidate directly to
-    `refs/heads/main`;
-11. open a Pull Request targeting `main` (or reconcile an already-existing PR
-    only when the launcher can prove it owns that same head branch). The PR body
-    MUST record the relevant Issue linkage, local validation, scope/authority
-    context, and any known limitations;
-12. use `Closes #N`, `Fixes #N`, or `Resolves #N` only for the leaf Issue whose
-    complete acceptance criteria are satisfied by merging that PR. Parent or
-    related work that remains open MUST use a non-closing reference such as
-    `Refs #N`;
-13. never merge the PR merely because the launcher opened it. CI, review,
-    conversation-resolution, branch freshness, and the repository's current
-    merge rules own merge readiness; and
+8. abort before publication when a relevant semantic precondition no longer
+   holds or the requested transformation overlaps incompatibly with already
+   published work;
+9. stage only explicit patch-owned paths and run the adaptive local validation
+   required by the definitive delta;
+10. create the candidate commit entirely inside the isolated worktree;
+11. fetch `origin/main` again immediately before publication and require it still
+    equals `PUBLICATION_BASE` for this invocation;
+12. publish only by a non-force fast-forward push of the exact candidate commit
+    to `refs/heads/main`;
+13. never rebase/merge/retry onto a newer `main` inside the same invocation; if
+    `origin/main` moved during the publication window, abort and let the user
+    rerun the same ZIP so it rematerializes from the new execution-time base; and
 14. remove the launcher-owned temporary worktree and local branch on success or
-    failure. A remote head branch with a successfully opened PR remains until the
-    PR is merged/closed and normal branch-cleanup policy removes it. If branch
-    push succeeds but PR creation fails, the launcher SHOULD remove only the
-    remote branch it created in that invocation and report any cleanup failure.
+    failure without modifying the caller checkout.
 
-Movement of `origin/main` after `PR_BASE` is no longer, by itself, a reason to
-discard a valid candidate or abort PR creation. The launcher MUST NOT silently
-rebase, merge, or rewrite the candidate merely to catch up. The PR/CI workflow
-will expose whether the candidate is behind, conflicting, or requires an explicit
-update. Once `main` protection is active, a candidate may merge only after the
-required up-to-date/check policy is satisfied.
+The direct-to-`main` path is not permission to bypass validation. Local adaptive
+validation is the merge gate for this governed maintainer path. Documentation or
+governance-only changes should not start unrelated heavyweight runtime/test
+containers merely to imitate an external PR pipeline.
 
-The key rule becomes:
+If a maintainer deliberately chooses a Pull Request for a change, the normal PR
+rules still apply:
 
-```text
-parallel preparation / PR creation
-    A -> PR_BASE=N   -> PR A
-    B -> PR_BASE=N   -> PR B
-    C -> PR_BASE=N+1 -> PR C
+- use `Closes #N` / `Fixes #N` / `Resolves #N` only for a leaf Issue fully
+  completed by merge;
+- use `Refs #N` for parents/related work that must remain open;
+- report the local validation performed;
+- let the repository's PR CI run;
+- do not call an open PR `PUBLISHED`; publication occurs when the accepted change
+  reaches `main`.
 
-integration
-    CI/review/freshness gates each PR
-    GitHub serializes accepted merges into main
-```
-
-A launcher MUST NOT print `PUBLISHED` merely because it pushed a head branch or
-opened a Pull Request. Recommended successful candidate reporting is:
-
-```text
-PR_OPENED
-PR_BASE=<sha>
-HEAD_BRANCH=<branch>
-PR_URL=<url>
-LOCAL_VALIDATION: PASS
-```
-
-`PUBLISHED` is reserved for evidence that the accepted change actually reached
-`main` (normally the squash-merge commit observed after merge).
-
-Generated artifacts MUST NOT embed `AUTHORING_BASE` as an exact execution
-precondition unless the task itself genuinely requires that historical state.
-A whole-file hash, line number, Maven patch number, changelog header, or unrelated
-ledger row is not a semantic precondition merely because it matched during
-authoring.
-
-A unified diff remains acceptable where exact surrounding content is
-intentionally stable or itself semantically relevant. Shared/moving files should
-continue to use bounded semantic transformations against `PR_BASE`.
+`main` is intentionally not PR-only protected at this stage. Reconsider required
+PRs/checks/reviews when sustained external contribution volume or maintainer
+concurrency makes the additional coordination cost worthwhile.
 
 ### Caller-checkout isolation is operational, not a frozen-state assertion
 
@@ -808,33 +767,30 @@ CALLER_WORKTREE_TOUCHED_BY_LAUNCHER: NO
 rather than claiming that the caller checkout itself stayed globally unchanged
 while unrelated tools or the user may have modified it.
 
-Under the PR-first contract, local candidate success and repository publication
-are different events. A launcher MUST NOT print `PUBLISHED` merely because the
-remote head branch was pushed or the Pull Request was opened. It SHOULD report
-`PR_OPENED`/`PR_UPDATED` plus the PR URL and local-validation result. `PUBLISHED`
-is reserved for later evidence that the change was actually merged into `main`.
+For a governed direct-to-`main` launcher, `PUBLISHED` may be printed only after the
+non-force fast-forward push of the exact validated candidate to `main` succeeds.
+Once that push succeeds, later failure to remove launcher-owned local temporary
+state MUST be reported as `CLEANUP_WARNING` and MUST NOT rewrite the already true
+publication result into a generic failure.
 
-Cleanup failure after a PR has been successfully opened MUST be reported
-explicitly as a warning for launcher-owned local state and MUST NOT misrepresent
-the PR as absent. Before PR creation, unexpected launcher-owned state, failed
-validation, relevant semantic-precondition failure, or failure to push the
-launcher-owned head branch remains a hard failure.
+Before publication, failed validation, relevant semantic-precondition failure,
+unexpected launcher-owned state, publication-window movement of `origin/main`, or
+failed fast-forward push remains a hard failure. For an optional Pull Request
+workflow, opening the PR is not publication and MUST be reported separately.
 
-A launcher may manage only the local/remote branch state, worktree, and patch-owned
-state it created itself. An unexpected launcher-owned worktree change, failed
-validation, relevant semantic-precondition failure, failed head-branch push, or
-failed PR creation is a reason to abort. Movement of `origin/main` after `PR_BASE`
-is reported to the PR/CI freshness workflow rather than repaired inside the
-launcher. No failure is permission to rewrite the caller checkout, force-push
-`main`, or discard another agent's work.
+A launcher may manage only the temporary branch/worktree and patch-owned state it
+created itself. An unexpected launcher-owned worktree change, failed validation,
+relevant semantic-precondition failure, execution-window movement of
+`origin/main`, or failed fast-forward publication is a reason to abort. It is
+never permission to repair or rewrite the caller checkout, force-push `main`, or
+discard another agent's work.
 
-Launcher branches are implementation machinery, not project work items. The
-temporary worktree/local branch MUST be removed when the launcher terminates.
-For PR-first launchers, the validated candidate is additionally pushed to a
-dedicated remote **PR head branch**; that remote branch is allowed to remain only
-while the corresponding PR needs it and is subject to the repository's normal
-post-merge/closed-PR cleanup policy. Launchers MUST NOT force-push that branch or
-reuse an unrelated contributor's branch.
+Temporary publication branches used by the ordinary maintainer direct-to-`main`
+launcher are implementation machinery, not project work items. They MUST remain
+local, MUST NOT be pushed to `origin`, and MUST be deleted when the launcher
+terminates. An optional Pull Request deliberately uses its own remote head branch
+under the PR workflow instead; do not conflate that contributor/review branch
+with the launcher's local publication machinery.
 
 This isolation changes only patch-publication mechanics. It does not weaken
 scope, audit, validation, specification, versioning, license, or explicit user

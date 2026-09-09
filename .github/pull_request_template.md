@@ -1,4 +1,4 @@
-<!-- GITHUB002-B PR-FIRST-TEMPLATE -->
+<!-- GITHUB002-C HYBRID-PR-TEMPLATE -->
 ## Summary
 
 What problem does this change address, and what is the resulting behavior or
@@ -30,11 +30,11 @@ results. Do not describe skipped validation as passing validation.
 
 ## CI and merge readiness
 
-GitHub Actions runs repository validation for the Pull Request. Do not treat this
-PR as published until it is merged into `main`.
+When a Pull Request is used, GitHub Actions provides the repository's remote PR
+validation. Do not treat this PR as published until it is merged into `main`.
 
-- [ ] Required CI/checks are green, or are still pending and this PR is not being merged yet.
-- [ ] The branch is current enough to satisfy the repository's merge/freshness policy.
+- [ ] Applicable CI/checks are green, or are still pending and this PR is not being merged yet.
+- [ ] Any relevant branch conflicts/freshness issues have been handled explicitly.
 - [ ] Review conversations that block merge are resolved.
 
 ## Review

@@ -47,7 +47,7 @@ Project participation is governed by
 documented in [SUPPORT.md](SUPPORT.md).
 
 ## Claiming work
-<!-- GITHUB002-B PR-FIRST-CONTRIBUTOR-WORKFLOW -->
+<!-- GITHUB002-C HYBRID-CONTRIBUTOR-WORKFLOW -->
 
 An assignee means active responsibility for the Issue; it does not mean repository
 ownership.
@@ -180,47 +180,50 @@ apply to the work being performed.
 
 ## Pull requests
 
-The normal contribution path is:
+Pull Requests are the normal integration boundary for **external
+contributions**:
 
 ```text
-Issue → branch/fork → local validation → Pull Request → CI/review → squash merge
+Issue → branch/fork → local validation → Pull Request → CI/review → merge
 ```
 
-Create a narrow branch for the claimed Issue. Contributors without direct
-repository write access normally work from a fork; maintainers and project
-automation may use a dedicated branch in the repository. Do not develop the
-change directly on `main`.
+Contributors without direct repository publication authority should work on a
+branch/fork and open a Pull Request. Do not assume that being able to open an
+Issue grants authority to publish directly to `main`.
 
-Link the Pull Request to its Issues deliberately:
+Maintainer/project automation uses a separate governed path described in
+`AGENTS.md`: an isolated execution-time-base worktree, bounded materialization,
+adaptive local validation, and serialized non-force fast-forward publication to
+`main`. Maintainers may still choose a Pull Request whenever review,
+collaboration, or integration visibility is worth the additional remote/CI cost.
+
+For every Pull Request that is opened, link Issues deliberately:
 
 - use `Closes #N`, `Fixes #N`, or `Resolves #N` only when merging the PR fully
   satisfies that leaf Issue's acceptance criteria;
 - use `Refs #N` for parent, related, or partially advanced work that must remain
   open; and
-- never close a parent work item merely because one child/slice was implemented.
+- never close a parent merely because one child/slice was implemented.
 
 A useful Pull Request description normally contains:
 
 - the leaf Issue linkage and any parent/related references;
 - a concise statement of the problem and result;
-- the important semantic/design constraints when relevant;
+- important semantic/design constraints when relevant;
 - the exact local validation performed and its results;
 - meaningful review evidence for substantive changes;
-- any known limitations, deferred work, or blockers; and
+- known limitations, deferred work, or blockers; and
 - a brief AI-assistance disclosure when AI materially produced the change.
 
-Opening a Pull Request is not publication. The PR must satisfy the repository's
-current CI/check, review, conversation-resolution, and branch-freshness rules
-before merge. The ordinary merge strategy is squash merge so `main` receives one
-coherent publication commit for the accepted PR.
-
-The repository currently requires no mandatory GitHub approval count while there
-is only one regular maintainer. That does **not** remove the substantive-review
-expectation above. If another regular maintainer joins, the project may require
-one approval without changing this contribution flow.
+Opening a Pull Request is not publication. External PRs should pass the
+repository's applicable CI and review expectations before merge. The project
+currently keeps `main` unprotected and does not require a mandatory GitHub
+approval count while there is only one regular maintainer; stricter enforcement
+can be introduced when actual contributor volume justifies it.
 
 Contributions are evaluated on correctness, coherence, reviewability, evidence,
-and maintainability. They are not graded by the mechanism used to type the code.
+and maintainability, not on whether the project used the maintainer direct-publish
+path or the contributor PR path.
 
 ## Licensing
 
