@@ -1,6 +1,6 @@
 # TOOL001-F2E — External Immutable-Package Execution
 
-Status: **IN_PROGRESS — F2E1/F2E2 CLOSED; F2E3 IN_PROGRESS (D053 RATIFIED); F2E4/F2E5 dependency-gated**
+Status: **IN_PROGRESS — F2E1/F2E2 CLOSED; F2E3 IN_PROGRESS (D053/D056 RATIFIED); F2E4/F2E5 dependency-gated**
 Nature: non-normative Package Tool / host-integration project record
 Allocated after: `TOOL001-F2D` workspace-only execution closure
 
@@ -102,7 +102,7 @@ F2E2  verified read-only package-store binding                     CLOSED
 F2E2A  captured-Filesystem ContentIdentity canonicalizer/verifier  CLOSED
 F2E2B  exact selected-root capture + verified-capture host custody CLOSED
 F2E2C same-capture integration + F2E2 closure                      CLOSED
-F2E3  external-node execution-plan construction                    READY — D053 RATIFIED
+F2E3  external-node execution-plan construction                    IN_PROGRESS — D053/D056 RATIFIED
 F2E4  external canonical ModuleKey + source resolver               BLOCKED_BY_DEPENDENCIES
 F2E5  public run integration + F2 external-execution closure       BLOCKED_BY_DEPENDENCIES
 ```
@@ -678,3 +678,36 @@ credentials or host handle.
 
 F2E3 therefore remains **IN_PROGRESS** after this slice. F2E4 and F2E5 remain
 dependency-gated.
+
+## D056 ratification — external immutable packages cannot operationalize `path`
+
+D056 is RATIFIED by explicit project-owner approval on 2026-09-09 after an
+expanded cross-ecosystem review covering Cargo, npm/Yarn/pnpm, Go, Bazel,
+Gradle, Python/uv, Ruby, Dart, Hex/Rebar3, Composer, Cabal, opam, Conan, vcpkg,
+NuGet, SwiftPM and Nix.
+
+The selected A+ rule is:
+
+```text
+mutable workspace/local-development package
+    path dependency
+        -> permitted under workspace policy
+
+immutable registry/Git package
+    path dependency
+        -> fail closed
+
+future override/vendor/patch
+    -> may be designed explicitly as resolution-root-owned policy
+       that produces an ordinary exact graph
+```
+
+The same F2E2 verified capture may now be used to read the external ManifestV1.
+F2E3 must reject external `path` declarations, validate registry/Git declarations
+against the exact root-owned lock and emit only the D053 inert typed graph.
+
+D056 does not add publish-time manifest rewriting, override syntax, nested
+multi-package immutable bundle identity or any PackageExecutionPlan path/host
+authority. Those remain future decisions if real use cases justify them.
+
+F2E3 remains **IN_PROGRESS** and is no longer decision-blocked.

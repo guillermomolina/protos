@@ -383,9 +383,24 @@ The value is a non-empty String.
 It is an explicit local development relation, not an ambient package search
 path.
 
-Path interpretation, workspace membership validation, canonical filesystem
-identity, and publication restrictions belong to later workspace/package-store
-work.
+Workspace path interpretation, workspace membership validation and canonical
+filesystem identity are owned by the existing workspace/package-resolution
+policy.
+
+D056 ratifies the immutable-consumption boundary: a `path` declaration is valid
+only as mutable workspace/local-development input. When a manifest is consumed
+as an immutable registry or exact-Git package instance, an operational `path`
+dependency is invalid and normal package preflight fails closed rather than
+resolving it against the consumer workspace, package store or ambient
+filesystem.
+
+This does not change ManifestV1 structural parsing and does not select a future
+publication projection or override syntax. A future local/vendor/patch
+substitution, if designed, must be explicit resolution-root-owned policy that
+produces an ordinary exact graph; it is not inherited transitively from an
+immutable package's `path` spelling. A future explicitly designed immutable
+multi-package source/bundle model is also not prohibited by D056, but must define
+its own package/source identity instead of implicitly reusing `path`.
 
 ### Source-form exclusivity
 
