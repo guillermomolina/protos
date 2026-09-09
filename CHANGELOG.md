@@ -1,5 +1,7 @@
 ## 0.2.275-SNAPSHOT
 
+- Refresh closed `DOC001-E` Guide 04 after D050 / specification `0.1.390`: document strict Boolean `not()` and unary `!`, ordinary two-way `ifTrueIfFalse(trueBlock, falseBlock)` selection, eager callback-producing argument-expression evaluation with selected-only callback validation/invocation, and representative Protos conformance links. Documentation only: no normative specification, implementation, tests, native boundary, implementation-version or license-term change.
+
 - Ratify `D048 — IpAddress / IpEndpoint construction and recognition` as specification revision `0.1.391` after explicit project-owner approval of the bounded post-D047 checkpoint. Select canonical frozen prelude `IpAddress`/`IpEndpoint` factory-prototypes invoked through ordinary call syntax, fresh frozen ordinary-object results with exact transparent local state, exact immediate canonical parent recognition without hidden branding, and explicit `recognizes(value)` predicates. Preserve D047 numeric address/endpoint laws, ordinary object identity, explicit Network authority and DNS/UDP/TLS exclusions; reconcile I028 from OPEN to READY and release I028-A without implementing networking. Specification/governance only: no production implementation, persisted tests, Maven implementation-version bump, native-Closure boundary or license-term change.
 
 

@@ -54,6 +54,57 @@ kind for "blocks" or a dedicated conditional callback mechanism.
 The selected callback follows ordinary Closure invocation rules. The unselected
 callback is not invoked.
 
+D050 completes this standard Boolean protocol with a two-way selector:
+
+```protos
+result: ready.ifTrueIfFalse(
+    () => { start() },
+    () => { wait() }
+)
+```
+
+For canonical Booleans:
+
+```text
+true.ifTrueIfFalse(yes, no)  -> invoke yes() exactly once; return its exact normal result
+false.ifTrueIfFalse(yes, no) -> invoke no() exactly once; return its exact normal result
+```
+
+Both callback-producing argument expressions are evaluated by ordinary call
+semantics before the Boolean message is invoked. After that evaluation, only the
+selected callback is validated for callability and invoked; the unselected
+callback is never invoked. The selected callback receives zero supplied
+arguments, and its exact normal result is returned unchanged.
+
+This gives an ordinary-protocol spelling for a complete two-branch conditional
+without introducing `if` or `else` as Core v0.1 syntax.
+
+## Boolean negation and two-way selection
+
+Canonical Booleans also provide ordinary zero-argument `not()`:
+
+```text
+true.not()  -> false
+false.not() -> true
+```
+
+The unary operator `!` is existing Core syntax whose mandatory lowering is an
+ordinary `not()` message send:
+
+```text
+!condition  -> condition.not()
+```
+
+So these two forms have the same standard meaning:
+
+```protos
+ready.not()
+!ready
+```
+
+The standard behavior remains strict: its receiver must be exactly canonical
+`true` or canonical `false`. There is no truthiness conversion.
+
 ## `and` and `or` are lazy protocol operations too
 
 Short-circuit Boolean composition uses the same pattern:
@@ -412,25 +463,39 @@ created.
    Closures.
 2. Remember that trailing Closure syntax supplies an ordinary call argument; it
    does not create a separate control construct.
-3. Use `ifTrue` and `ifFalse` when one canonical Boolean should lazily select a
-   callback.
-4. Use `and` and `or` for lazy Boolean short-circuiting, and return an actual
+3. Use `ifTrue` or `ifFalse` for one-branch conditional execution, and
+   `ifTrueIfFalse` when exactly one of two lazy callbacks must be selected.
+4. Use `not()` or unary `!` for strict canonical-Boolean negation.
+5. Use `and` and `or` for lazy Boolean short-circuiting, and return an actual
    Boolean from a selected callback.
-5. Model a `while` condition as a zero-argument Closure that recomputes a
+6. Model a `while` condition as a zero-argument Closure that recomputes a
    canonical Boolean every time it is invoked.
-6. Do not rely on truthiness or implicit Future awaiting for loop decisions.
-7. Treat normal body values as discarded; normal loop completion is `null`.
-8. Expect Error and valid non-local return to propagate through a reached
+7. Do not rely on truthiness or implicit Future awaiting for loop decisions.
+8. Treat normal body values as discarded; normal loop completion is `null`.
+9. Expect Error and valid non-local return to propagate through a reached
    callback normally.
-9. Remember that selector names still participate in ordinary lookup and may be
+10. Remember that selector names still participate in ordinary lookup and may be
    shadowed by nearer user-defined behavior.
-10. Keep task/Future ownership separate from the loop's ignored body-result
+11. Keep task/Future ownership separate from the loop's ignored body-result
     rule.
 
 ## Run the executable conformance examples
 
-The current conformance corpus contains direct executable evidence for the
-standard loop behavior discussed here:
+The current conformance corpus contains direct executable evidence for both
+the D050 Boolean completion and the standard loop behavior discussed here.
+
+Representative Boolean cases include:
+
+- [`../../protos/tests/conformance/boolean/not-operator-true.protos`](../../protos/tests/conformance/boolean/not-operator-true.protos)
+  demonstrates `!` through the mandatory `not()` lowering;
+- [`../../protos/tests/conformance/boolean/iftrueiffalse-true-selected.protos`](../../protos/tests/conformance/boolean/iftrueiffalse-true-selected.protos)
+  demonstrates true-branch selection and exact result propagation;
+- [`../../protos/tests/conformance/boolean/iftrueiffalse-unselected-noninvokable.protos`](../../protos/tests/conformance/boolean/iftrueiffalse-unselected-noninvokable.protos)
+  demonstrates that an unselected non-invokable value is tolerated;
+- [`../../protos/tests/conformance/boolean/iftrueiffalse-argument-expressions-eager.protos`](../../protos/tests/conformance/boolean/iftrueiffalse-argument-expressions-eager.protos)
+  demonstrates ordinary eager evaluation of callback-producing argument expressions.
+
+Representative loop cases include:
 
 - [`../../protos/tests/conformance/control/while-multiple-iterations.protos`](../../protos/tests/conformance/control/while-multiple-iterations.protos)
   demonstrates repeated pre-test iteration;
@@ -456,8 +521,8 @@ For exact behavior, consult:
   for iteration order, strict loop decisions, normal completion, control
   transfer, suspension, and cancellation composition;
 - [`../../spec/semantics/VALUES_AND_COLLECTIONS.md`](../../spec/semantics/VALUES_AND_COLLECTIONS.md)
-  for canonical Booleans and the standard `ifTrue`, `ifFalse`, `and`, and `or`
-  protocols;
+  for canonical Booleans and the standard `not`, `ifTrue`, `ifFalse`,
+  `ifTrueIfFalse`, `and`, and `or` protocols;
 - [`../../spec/semantics/CALLABLES.md`](../../spec/semantics/CALLABLES.md) for
   Closure receiver domains, ordinary `Object.while` placement, lookup,
   extraction, shadowing, and activation;

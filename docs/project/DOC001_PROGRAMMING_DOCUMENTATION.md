@@ -119,6 +119,13 @@ normative specification authoritative. The chapter describes the current
 runnable standard Boolean and `Object.while` behavior without copying
 project-ledger prose or redefining the language.
 
+Post-closure maintenance after D050 / specification `0.1.390` refreshes chapter
+04 to cover the now-runnable `not()` / unary `!` path and
+`ifTrueIfFalse(trueBlock, falseBlock)`, including the ordinary eager
+argument-expression / selected-only callback boundary. This maintenance does
+not reopen DOC001-E and introduces no new documentation slice or normative
+authority.
+
 B007/I023 no longer gate DOC001. DOC001-L is now CLOSED after its own
 current-main audit and publication. DOC001-M remains toolchain-gated and
 DOC001-N remains the final consistency closure.
