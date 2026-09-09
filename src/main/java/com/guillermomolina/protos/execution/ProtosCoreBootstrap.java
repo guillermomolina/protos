@@ -285,8 +285,10 @@ public final class ProtosCoreBootstrap {
                 requirePrototype(
                         bootstrapContext, "IpEndpoint", ProtosObjectValue.rootObject());
         ProtosStandardIpEndpointProtocol.install(ipEndpointPrototype, ipAddressPrototype);
-        requirePrototype(
-                bootstrapContext, "Network", ProtosObjectValue.rootObject());
+        ProtosObjectValue networkPrototype =
+                requirePrototype(
+                        bootstrapContext, "Network", ProtosObjectValue.rootObject());
+        ProtosStandardNetworkProtocol.install(networkPrototype);
         ProtosObjectValue tcpConnectionPrototype =
                 requirePrototype(
                         bootstrapContext,

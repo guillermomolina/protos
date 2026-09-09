@@ -14,7 +14,7 @@ public final class ProtosIoLifecycle {
     @FunctionalInterface public interface ReleaseStarter { void start(ReleaseCompletion completion); }
     public interface ReleaseCompletion { void succeeded(); void failed(ProtosObjectValue error); }
 
-    private final ProtosObjectValue receiver;
+    private final Object receiver;
     private final ProtosObjectValue futurePrototype;
     private final ProtosActorExecutionDomain domain;
     private final ReleaseStarter releaseStarter;
@@ -25,7 +25,7 @@ public final class ProtosIoLifecycle {
     private ProtosActivation closeActivation;
     private boolean releaseStarted;
 
-    public ProtosIoLifecycle(ProtosObjectValue receiver, ProtosObjectValue futurePrototype,
+    public ProtosIoLifecycle(Object receiver, ProtosObjectValue futurePrototype,
             ProtosActorExecutionDomain domain, ReleaseStarter releaseStarter) {
         this.receiver=Objects.requireNonNull(receiver,"receiver");
         this.futurePrototype=Objects.requireNonNull(futurePrototype,"futurePrototype");

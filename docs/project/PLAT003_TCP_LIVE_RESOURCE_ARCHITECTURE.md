@@ -118,6 +118,21 @@ less-ordinary Protos representation merely as a memory optimization.
 - Backend-specific socket/channel objects in Protos semantics: violates D047 portability and D052
   ordinary-object topology.
 
+## I028-C4 implementation evidence
+
+C4 realizes the ratified connect-acquisition architecture at implementation version `0.2.289-SNAPSHOT` without
+choosing a production network backend. `ProtosNetworkConnectFlow` reuses `ProtosIoOperation` and the
+existing cancellation-registration race bridge pattern: recognized endpoint preflight precedes the
+host-neutral backend call, operation commitment occurs only when an acquired resource can be handed
+off, and every late/duplicate/unmaterializable acquired descriptor has explicit release custody.
+`ProtosStandardNetworkProtocol` adds one shared native `connectTcp` bridge to the authority-free
+Network prototype, but exercises it only for the represented Network capability and interprets its
+opaque host target only through the C4 host-neutral Backend interface. `ProtosIoLifecycle`'s internal
+receiver type is widened to `Object` so the same operation machinery can own a represented capability;
+its semantics and all existing ordinary-object consumers are unchanged. Fresh successful connections
+reuse the C1-C3 ordinary-object/duplex/endpoint machinery. No socket/channel/reactor/thread/event-loop
+identity or endpoint-identity strengthening is introduced.
+
 ## I028-C3 implementation evidence
 
 C3 completes the shared TcpConnection protocol surface at implementation version `0.2.288-SNAPSHOT` by adding the

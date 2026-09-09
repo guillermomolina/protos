@@ -54,8 +54,8 @@ READY to implement `connectTcp`; I028-D will consume the same topology for liste
   - **C1 — ordinary TcpConnection resource/prototype + transfer foundation — CLOSED (`0.2.285-SNAPSHOT` / publication commit):** source-owned runtime-only frozen authority-free protocol parent, ordinary OPEN `ProtosTcpConnectionValue` with opaque host state and ordinary application slots, exact canonical parent preservation, no public TcpConnection Prelude binding, plus explicit Actor/P rejection of the live capability and authority-bearing descendants. No TCP selector, acquisition or backend yet; native boundary remains 123/32.
   - **C2 — TcpConnection protocol + duplex lifecycle foundation — CLOSED (`0.2.286-SNAPSHOT` / publication commit):** install the five D052 Byte I/O/lifecycle selectors once on the shared hidden protocol parent; compose two independent existing Byte-I/O lanes over one shared Closable lifecycle so read and write progress do not head-of-line block each other; retain bounded write snapshots, cancellation, close and directional-shutdown contracts without selecting a network backend. Endpoint observations remain C3.
   - **C3 — endpoint observations — CLOSED (`0.2.288-SNAPSHOT` / publication commit):** complete `localEndpoint` / `remoteEndpoint` as synchronous recognized `IpEndpoint` observations over runtime-held logical snapshots, with receiver-domain/arity validation and no network/backend work; no endpoint `===` identity relation is selected.
-  - **C4 — host-neutral `connectTcp` acquisition — READY:** validation/capture, Future commitment/cancellation and explicit late-resource custody; no concrete production backend.
-  - **C5 — integrated C conformance + closure — dependency-gated on C1-C4:** receiver-domain, ordinary-object/shadowing, Actor/P, acquisition races and C-level native-boundary reconciliation.
+  - **C4 — host-neutral `connectTcp` acquisition — CLOSED (`0.2.289-SNAPSHOT` / publication commit):** install the single standard Network `connectTcp` selector, require an actual represented Network capability plus recognized endpoint before authority exercise, reuse ordinary I/O Future commitment/cancellation, materialize the fresh TcpConnection only at successful handoff, and explicitly release late/duplicate/unmaterializable backend resources; no concrete production backend or endpoint identity strengthening.
+  - **C5 — integrated C conformance + closure — READY:** receiver-domain, ordinary-object/shadowing, Actor/P, acquisition races and C-level native-boundary reconciliation.
 - **D — TCP listener + `listenTcp`:** exact request snapshot/validation,
   `localPort`, concurrent pending accepts, lifecycle/admission behavior.
 - **E — production backend portability/scalability:** preserve D047 independently
@@ -63,6 +63,27 @@ READY to implement `connectTcp`; I028-D will consume the same topology for liste
   subdivide mechanically if required.
 - **F — cross-slice conformance/native-boundary closure:** cancellation races,
   late custody, multiple-accept scale evidence and Actor/P non-transferability.
+
+## I028-C4 host-neutral `connectTcp` acquisition
+
+Published at implementation version `0.2.289-SNAPSHOT`. C4 installs `connectTcp` once on the canonical frozen
+Network prototype while requiring the original receiver to be an actual `ProtosNetworkCapabilityValue`
+whose opaque authority target supplies the host-neutral acquisition contract. The complete D048
+endpoint is recognized before the backend is invoked, so invalid requests exercise no network
+authority. Each valid invocation starts one independent `ProtosIoOperation`; ordinary pre-commit
+Future cancellation and Actor termination can win, while a successful backend resource commits only
+at result handoff. Late, duplicate, cancelled or unmaterializable acquired resources carry an explicit
+release callback and are never abandoned to GC/finalization. Backend failures and invalid backend
+descriptors map through the existing portable `IOError` boundary.
+
+Successful materialization creates one fresh operational `TcpConnection` with its backend-supplied
+recognized logical local endpoint and the captured recognized request as its logical remote endpoint.
+C4 relies only on D047 structural remote-endpoint equality and deliberately adds no `===` identity
+contract. `ProtosIoLifecycle` is generalized internally from a `ProtosObjectValue` owner field to
+`Object` solely so represented Network authority can reuse the established I/O-operation machinery;
+this changes no Protos-visible lifecycle rule. No socket, channel, selector, reactor, event loop or
+production backend is selected. Native Closure inventory becomes 131 sites across 34 providers. C5
+is READY.
 
 ## I028-C3 TcpConnection endpoint observations
 
