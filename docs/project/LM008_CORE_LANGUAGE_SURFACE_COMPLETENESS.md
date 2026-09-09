@@ -129,7 +129,7 @@ not be repaired or tested as though they were one operation.
 | Slice | State | Purpose |
 |---|---|---|
 | `LM008-A` | CLOSED | Establish normative-owner inventory, audit classifications, evidence rules, decomposition and seed findings from current repository state. Documentation/governance only. |
-| `LM008-B` | READY | Audit grammar, evaluation, binding and callable surface: literals/identifiers/separators, creation/assignment, member/index/operator lowering, composition syntax, Closures, invocation, receiver/super, parameters/default/rest/spread and non-local return. Cross-check the closed I025 evidence rather than duplicating it. |
+| `LM008-B` | IN_PROGRESS | Audit grammar, evaluation, binding and callable surface: literals/identifiers/separators, creation/assignment, member/index/operator lowering, composition syntax, Closures, invocation, receiver/super, parameters/default/rest/spread and non-local return. B1 lexical/literal/separator evidence is complete in `LM008_B_GRAMMAR_EVALUATION_BINDING_CALLABLE_AUDIT.md`; B2-B4 remain. Cross-check the closed I025 evidence rather than duplicating it. |
 | `LM008-C` | READY | Audit object structural/reflection/mutation surface: local/delegated slot observation, parent, composition, `hasSlot`, `slotValue`, `slotNames`, `removeSlot`, `without`, `alias`, `close`, `freeze`, open/closed/frozen behavior and guest-visible publication. |
 | `LM008-D` | READY | Audit values and Core collections: canonical null/Booleans, Boolean control protocols, equality/identity/hash, numeric families/conversions/operators, String, Array, Map and IdentityMap fundamental guest-visible surface. |
 | `LM008-E` | READY | Audit control/errors/modules/prelude surface: `while`, `ensure`, Error signaling/handling, module contexts/import/cache-visible rules, and required/forbidden Core prelude bindings. |
@@ -137,6 +137,13 @@ not be repaired or tested as though they were one operation.
 
 B-E are independent audit fronts after A. F depends on B-E and on any
 implementation owners opened by their confirmed findings.
+
+## LM008-B detailed audit record
+
+The bounded B audit matrix and checkpoint evidence live in
+`docs/project/LM008_B_GRAMMAR_EVALUATION_BINDING_CALLABLE_AUDIT.md`. The B1
+lexical/literal/separator checkpoint is complete without a design decision or
+production implementation finding; LM008-B remains `IN_PROGRESS` for B2-B4.
 
 ## Interaction with implementation findings
 

@@ -858,7 +858,7 @@ the already-published implementation commit.
 | LM005 | Concurrent Language Maturity | CLOSED | `SAME_COMMIT` | LM005-A Future, LM005-B Actor, and LM005-C Group/GroupRef conformance/examples/tutorials complete; no runtime or normative feature added. |
 | LM006 | System & Resource Language Maturity | CLOSED | `SAME_COMMIT` | LM006-A/B/C/D/E/F system/resource maturity complete; executable learning material and final cross-slice reconciliation are published; no runtime or normative feature was added by LM006. |
 | LM007 | Object Model Maturity | CLOSED | `SAME_COMMIT` | LM007-A/B/C/D/E are CLOSED after final cross-slice execution of all 16 retained object-model maturity programs, the complete Test Tool corpus and the repository full suite. Findings I027 and I030 are CLOSED under their implementation owners; LM007 owns no runtime or normative feature. |
-| LM008 | Core Language Surface Completeness | IN_PROGRESS | — | LM008-A inventory/methodology is published; LM008-B/C/D/E are READY and LM008-F is dependency-gated. Audits normative Core -> guest-visible path -> Protos conformance without defining new semantics. |
+| LM008 | Core Language Surface Completeness | IN_PROGRESS | — | LM008-A inventory/methodology is published; LM008-B is IN_PROGRESS with its B1 lexical/literal/separator checkpoint complete, LM008-C/D/E remain READY, and LM008-F is dependency-gated. Audits normative Core -> guest-visible path -> Protos conformance without inventing semantics. |
 
 ### LM005 — Concurrent Language Maturity
 
@@ -1025,7 +1025,7 @@ production fixes inside maturity work.
 | Slice | Status | Closure evidence | Surface |
 |---|---|---|---|
 | LM008-A | CLOSED | `SAME_COMMIT` | Normative-owner inventory, surface-row classifications, evidence hierarchy, bounded B-F decomposition and seed findings. Records four candidate standard Object guest-publication gaps (`slotNames`, `removeSlot`, structural `close`, structural `freeze`) for executable verification under LM008-C and records the now-closed I025 parser/conformance repair as a covered baseline rather than duplicating it. Documentation/governance only. |
-| LM008-B | READY | — | Grammar, evaluation, binding and callable surface completeness, including mandatory lowering and cross-check of the now-closed D003/I025 evidence. |
+| LM008-B | IN_PROGRESS | — | Grammar/evaluation/binding/callable surface audit. B1 lexical/literal/separator evidence is complete: five positive central-corpus probes plus seven retained source-rejection fixtures cover Unicode/NFC/reserved names, numeric and String forms, exact whitespace/newline/comment rules and continuation/separation. No specification, production implementation, implementation version or design decision changed; B2-B4 remain. |
 | LM008-C | READY | — | Object structural/reflection/mutation guest-surface completeness and focused verification of the four A seed findings. |
 | LM008-D | READY | — | Canonical values, Boolean protocols, equality/identity/hash, numbers, String and fundamental Array/Map/IdentityMap surface completeness. |
 | LM008-E | READY | — | `while`, `ensure`, Error handling/signaling, modules/import and required/forbidden Core prelude surface completeness. |
