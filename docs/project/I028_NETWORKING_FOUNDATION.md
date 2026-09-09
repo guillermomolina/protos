@@ -3,7 +3,7 @@
 Status: **IN_PROGRESS**
 Normative dependencies: D047 / specification revision `0.1.388` — RATIFIED; D048 / specification revision `0.1.391` — RATIFIED
 Additional C/D topology dependency: D052 / specification revision `0.1.393` — RATIFIED
-Platform architecture dependencies: PLAT002 — RATIFIED; PLAT003 — RATIFIED
+Platform architecture dependencies: PLAT002 — RATIFIED; PLAT003 — RATIFIED; PLAT006 — RATIFIED
 Consumer: `LIB005 — Networking`
 
 ## Purpose
@@ -62,9 +62,34 @@ READY to implement `connectTcp`; I028-D will consume the same topology for liste
   - **D3 — `accept()` + concurrent pending accepts + cancellation/late custody — CLOSED (`0.2.294-SNAPSHOT` / publication commit):** install one shared `accept` selector; admit each call as an independent operation on the D2 lifecycle, support multiple pending Futures without a semantic FIFO/owner-thread rule, reuse pre-commit/Actor cancellation and close cutover, materialize fresh accepted TcpConnections only from recognized logical endpoint snapshots, and explicitly release late/duplicate/unmaterializable resources. No `listenTcp` or production backend yet; native boundary becomes 134/35.
   - **D4 — `Network.listenTcp(localRequest)` + exact request validation/capture + listener acquisition — CLOSED (`0.2.298-SNAPSHOT` / publication commit):** install the second shared Network acquisition selector; validate/capture exactly local `ipVersion`/`address`/`port` before backend effect, preserve canonical-null address/port request semantics, reuse ordinary Future cancellation/commitment and late-resource custody, and materialize one fresh accept-enabled D1-D3 TcpListener with its acquired non-zero port. No production backend or host wildcard/ephemeral convention is selected; native boundary becomes 135/35.
   - **D5 — integrated D conformance + closure — CLOSED (`0.2.300-SNAPSHOT` / publication commit; implementation version unchanged):** an actual D4-acquired listener retains the ordinary D1 family, D2 observation/close lifecycle, D3 concurrent accept/custody and Actor/P confinement; accepted resources remain the existing C-family TcpConnections. Native-boundary evidence remains 135/35. I028-D is CLOSED.
-- **E — production backend portability/scalability — READY FOR DESIGN/AUDIT:** D is closed and the host-neutral contracts are ready for backend architecture comparison. Any durable backend/reactor/poller/threading selection still requires the explicit approval gate; preserve D047 independently of NIO/epoll/kqueue/io_uring/IOCP/Network.framework choices.
+- **E — production backend portability/scalability — READY:** PLAT006 ratifies a host-neutral I/O operation engine independent of readiness-vs-completion machinery and selects bounded non-blocking JDK NIO (`SocketChannel` / `ServerSocketChannel` + `Selector`) as the initial JVM production backend. Implement without exposing thread/selector/event-loop/channel identity; exact poller count, sharding, affinity and future native backend selection remain deliberately deferred.
 - **F — cross-slice conformance/native-boundary closure:** cancellation races,
   late custody, multiple-accept scale evidence and Actor/P non-transferability.
+
+## I028-E production-backend checkpoint — RELEASED by PLAT006
+
+PLAT006 is RATIFIED after explicit project-owner approval following an expanded
+cross-language/runtime review. The durable JVM architecture is a host I/O
+operation engine whose upper contract is independent of readiness-vs-completion
+machinery. The initial production implementation is bounded non-blocking JDK NIO
+using `SocketChannel` / `ServerSocketChannel` plus `Selector` readiness
+multiplexing.
+
+Backend host/system threads never execute Protos code or enter a Protos Truffle
+Context merely to service network I/O. Existing D047/D052/PLAT003
+Future/commit/cancel/late-custody, listener-close, independent accept,
+full-duplex and Actor/P confinement behavior remains authoritative above the
+engine. No thread, selector, event-loop, fd, JVM-channel or backend identity
+becomes observable Protos semantics.
+
+Exact poller cardinality, sharding, affinity, buffer tuning and any future
+epoll/kqueue/io_uring/IOCP/Netty backend remain deliberately deferred. A future
+completion/native backend must preserve the same logical operation boundary and
+pass equivalent cancellation/lifetime/late-completion/custody conformance.
+
+I028-E is released to bounded implementation decomposition. If implementation
+exposes another substantive durable architecture decision, the affected slice
+must stop and cross the normal explicit approval gate before proceeding.
 
 ## I028-D5 / I028-D closure
 
