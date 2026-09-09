@@ -20,6 +20,7 @@ import com.guillermomolina.protos.execution.*;
 import com.guillermomolina.protos.parser.ParseError;
 import com.guillermomolina.protos.runtime.*;
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.source.Source;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.*;
@@ -28,6 +29,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import org.jline.reader.*;
 import org.jline.reader.impl.history.DefaultHistory;
@@ -81,7 +83,7 @@ public final class ProtosCli {
             if (args[0].equals("-e")) {
                 if (args.length < 2) return usage(err, "-e requires a source argument");
                 return evalOneShot(
-                        args[1],
+                        sourceFromCharacters(args[1], "<eval>"),
                         applicationArguments(args, 2),
                         in,
                         out,
@@ -91,9 +93,10 @@ public final class ProtosCli {
                 return usage(err, "unknown option: " + args[0]);
             }
 
+            Path sourcePath = Path.of(args[0]);
             String src;
             try {
-                src = Files.readString(Path.of(args[0]), StandardCharsets.UTF_8);
+                src = Files.readString(sourcePath, StandardCharsets.UTF_8);
             } catch (IOException e) {
                 err.println(
                         "protos: cannot read "
@@ -103,7 +106,7 @@ public final class ProtosCli {
                 return 1;
             }
             return evalOneShot(
-                    src,
+                    sourceFromPath(sourcePath, src),
                     applicationArguments(args, 1),
                     in,
                     out,
@@ -292,7 +295,7 @@ public final class ProtosCli {
                         toolRoot,
                         new ProtosStandardLibraryModuleResolver(core.getParent()));
         Session session =
-                session(
+                legacyToolSession(
                         core,
                         resolver,
                         applicationArguments(args, 0),
@@ -353,29 +356,23 @@ public final class ProtosCli {
     }
 
     private int evalOneShot(
-            String source,
+            Source source,
             List<String> applicationArguments,
             InputStream in,
             PrintStream out,
             PrintStream err)
             throws IOException {
-        Session session = session(applicationArguments, in, out, err);
-        try {
+        try (Session session = session(applicationArguments, in, out, err)) {
             return eval(source, session, err);
-        } finally {
-            session.terminate();
         }
     }
 
     private int repl(InputStream in, PrintStream out, PrintStream err) throws IOException {
-        Session s = session(List.of(), in, out, err);
-        try {
+        try (Session s = session(List.of(), in, out, err)) {
             out.println("Protos REPL\nType :help for help, :quit to exit.");
             return in == System.in
                     ? interactiveRepl(s, out, err)
                     : streamRepl(in, s, out, err);
-        } finally {
-            s.terminate();
         }
     }
 
@@ -478,7 +475,7 @@ public final class ProtosCli {
         try {
             out.println(
                     renderer.render(
-                            s.compiler.compile(input).call(s.activation)));
+                            s.evaluatePersistent(sourceFromCharacters(input, "<repl>"))));
             return ReplInputResult.COMPLETE;
         } catch (ParseError e) {
             if (e.isUnexpectedEndOfSource()) {
@@ -538,6 +535,43 @@ public final class ProtosCli {
             PrintStream out,
             PrintStream err)
             throws IOException {
+        return createSession(
+                core,
+                moduleResolver,
+                applicationArguments,
+                in,
+                out,
+                err,
+                true);
+    }
+
+    private Session legacyToolSession(
+            Path core,
+            ProtosModuleResolver moduleResolver,
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream out,
+            PrintStream err)
+            throws IOException {
+        return createSession(
+                core,
+                moduleResolver,
+                applicationArguments,
+                in,
+                out,
+                err,
+                false);
+    }
+
+    private Session createSession(
+            Path core,
+            ProtosModuleResolver moduleResolver,
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream out,
+            PrintStream err,
+            boolean hosted)
+            throws IOException {
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap().bootstrap(core, moduleResolver);
         ProtosEncodingValue utf8 = utf8(prelude);
@@ -556,10 +590,33 @@ public final class ProtosCli {
                         utf8,
                         null);
 
-        return new Session(
-                new ProtosSourceCompiler(),
-                bootstrap.activation(),
-                bootstrap.process());
+        if (!hosted) {
+            return new Session(
+                    new ProtosSourceCompiler(),
+                    bootstrap.activation(),
+                    bootstrap.process(),
+                    null,
+                    null);
+        }
+
+        ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
+        boolean bound = false;
+        try {
+            ProtosPolyglotProcessContext processContext =
+                    runtimeHost.hostProcess(bootstrap.process(), in, out, err);
+            bound = true;
+            return new Session(
+                    new ProtosSourceCompiler(),
+                    bootstrap.activation(),
+                    bootstrap.process(),
+                    runtimeHost,
+                    processContext);
+        } finally {
+            if (!bound) {
+                bootstrap.process().requestTerminationForRuntime();
+                runtimeHost.close();
+            }
+        }
     }
 
     private static ProtosEncodingValue utf8(ProtosPrelude prelude) {
@@ -715,9 +772,9 @@ public final class ProtosCli {
         };
     }
 
-    private int eval(String src, Session s, PrintStream err) {
+    private int eval(Source source, Session s, PrintStream err) {
         try {
-            executeStandaloneRootTask(s.compiler.compile(src), s.activation);
+            executeStandaloneRootTask(s.execute(source));
             return 0;
         } catch (ParseError e) {
             err.println("Syntax error: " + e.getMessage());
@@ -747,6 +804,36 @@ public final class ProtosCli {
                     throw new IllegalStateException(
                             "standalone root task was cancelled before entry completion");
         };
+    }
+
+    private static Object executeStandaloneRootTask(ProtosExecutionOutcome outcome) {
+        return switch (outcome.state()) {
+            case COMPLETED -> outcome.value();
+            case FAILED -> throw new ProtosSignalException(outcome.error());
+            case CANCELLED ->
+                    throw new IllegalStateException(
+                            "standalone root task was cancelled before entry completion");
+        };
+    }
+
+    private static Source sourceFromCharacters(String characters, String name) {
+        Objects.requireNonNull(characters, "characters");
+        Objects.requireNonNull(name, "name");
+        return Source.newBuilder(ProtosLanguage.ID, characters, name)
+                .mimeType(ProtosLanguage.MIME_TYPE)
+                .build();
+    }
+
+    private static Source sourceFromPath(Path path, String characters) {
+        Path exact = Objects.requireNonNull(path, "path").toAbsolutePath().normalize();
+        Objects.requireNonNull(characters, "characters");
+        return Source.newBuilder(
+                        ProtosLanguage.ID,
+                        characters,
+                        exact.getFileName().toString())
+                .uri(exact.toUri())
+                .mimeType(ProtosLanguage.MIME_TYPE)
+                .build();
     }
 
     private static Path core() throws IOException {
@@ -811,9 +898,37 @@ public final class ProtosCli {
     private record Session(
             ProtosSourceCompiler compiler,
             ProtosActivation activation,
-            ProtosProcessRuntime process) {
+            ProtosProcessRuntime process,
+            ProtosPolyglotRuntimeHost runtimeHost,
+            ProtosPolyglotProcessContext processContext) implements AutoCloseable {
+        ProtosExecutionOutcome execute(Source source) {
+            if (processContext == null) {
+                throw new IllegalStateException(
+                        "session is not bound to a Polyglot Process Context");
+            }
+            return processContext.execute(
+                    Objects.requireNonNull(source, "source"), activation);
+        }
+
+        Object evaluatePersistent(Source source) {
+            if (processContext == null) {
+                throw new IllegalStateException(
+                        "session is not bound to a Polyglot Process Context");
+            }
+            return processContext.evaluatePersistent(
+                    Objects.requireNonNull(source, "source"), activation);
+        }
+
         void terminate() {
             process.requestTerminationForRuntime();
+            if (runtimeHost != null) {
+                runtimeHost.close();
+            }
+        }
+
+        @Override
+        public void close() {
+            terminate();
         }
     }
 }

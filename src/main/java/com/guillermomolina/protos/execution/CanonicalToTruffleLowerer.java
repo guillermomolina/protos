@@ -88,7 +88,7 @@ public final class CanonicalToTruffleLowerer {
             return new ProtosObjectLiteralNode(
                     object.span(),
                     parentNode,
-                    rootFactory.createCallTarget(
+                    rootFactory.createLazyCallTarget(
                             lowerObjectBody(object)));
         }
         if (expression instanceof CanonicalIdentity identity) {

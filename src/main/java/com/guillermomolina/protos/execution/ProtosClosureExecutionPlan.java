@@ -26,8 +26,8 @@ import java.util.Optional;
 
 public final class ProtosClosureExecutionPlan {
     private final ProtosRootFactory rootFactory;
-    private final CallTarget parameterBindingTarget;
-    private final CallTarget bodyTarget;
+    private final ProtosRootFactory.LazyCallTarget parameterBindingTarget;
+    private final ProtosRootFactory.LazyCallTarget bodyTarget;
 
     public ProtosClosureExecutionPlan(
             ProtosParameterBindingNode parameterBinding,
@@ -41,10 +41,10 @@ public final class ProtosClosureExecutionPlan {
             ProtosRootFactory rootFactory) {
         this.rootFactory = Objects.requireNonNull(rootFactory, "rootFactory");
         this.parameterBindingTarget =
-                rootFactory.createCallTarget(
+                rootFactory.createLazyCallTarget(
                         Objects.requireNonNull(parameterBinding, "parameterBinding"));
         this.bodyTarget =
-                rootFactory.createCallTarget(
+                rootFactory.createLazyCallTarget(
                         Objects.requireNonNull(body, "body"));
     }
 
@@ -69,20 +69,20 @@ public final class ProtosClosureExecutionPlan {
     }
 
     CallTarget parameterBindingTargetForTesting() {
-        return parameterBindingTarget;
+        return parameterBindingTarget.get();
     }
 
     CallTarget bodyTargetForTesting() {
-        return bodyTarget;
+        return bodyTarget.get();
     }
 
     public void bind(ProtosActivation activation) {
-        parameterBindingTarget.call(
+        parameterBindingTarget.get().call(
                 Objects.requireNonNull(activation, "activation"));
     }
 
     public Object executeBody(ProtosActivation activation) {
-        return bodyTarget.call(
+        return bodyTarget.get().call(
                 Objects.requireNonNull(activation, "activation"));
     }
 }

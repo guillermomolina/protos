@@ -57,12 +57,65 @@ final class ProtosRootFactory {
                 : sourceBound(projectedLanguage, source);
     }
 
+    LazyCallTarget createLazyCallTarget(ProtosExpressionNode body) {
+        return new LazyCallTarget(this, Objects.requireNonNull(body, "body"));
+    }
+
     CallTarget createCallTarget(ProtosExpressionNode body) {
         Objects.requireNonNull(body, "body");
         if (language == null && source == null) {
             return ProtosExecution.createCallTarget(body);
         }
         return new ProtosRootNode(language, source, body).getCallTarget();
+    }
+
+    private CallTarget materializeNestedCallTarget(ProtosExpressionNode body) {
+        Objects.requireNonNull(body, "body");
+        if (language == null) {
+            // A source-only/direct compilation has no Truffle language instance to remap.
+            // Creating its RootNode on first use lets Truffle capture the actually current layer.
+            return createCallTarget(body);
+        }
+        if (!ProtosPolyglotExecutionContext.hasEnteredContextForRuntime()) {
+            throw new IllegalStateException(
+                    "language-bound nested Protos CallTarget requires an entered Polyglot Context");
+        }
+        ProtosLanguage currentLanguage =
+                ProtosLanguageContext.current().languageForRuntime();
+        return new ProtosRootNode(currentLanguage, source, body).getCallTarget();
+    }
+
+    static final class LazyCallTarget {
+        private final ProtosRootFactory rootFactory;
+        private final ProtosExpressionNode body;
+        private volatile CallTarget target;
+
+        private LazyCallTarget(
+                ProtosRootFactory rootFactory,
+                ProtosExpressionNode body) {
+            this.rootFactory = Objects.requireNonNull(rootFactory, "rootFactory");
+            this.body = Objects.requireNonNull(body, "body");
+            // Preserve the published direct/source-only staging behavior exactly. Only roots
+            // that already carry a Truffle language instance need Context-bound first-use
+            // materialization; otherwise delaying creation could accidentally adopt an unrelated
+            // entered sharing layer during the remaining A4B3 migration.
+            if (rootFactory.language == null) {
+                this.target = rootFactory.createCallTarget(body);
+            }
+        }
+
+        CallTarget get() {
+            CallTarget current = target;
+            if (current != null) {
+                return current;
+            }
+            synchronized (this) {
+                if (target == null) {
+                    target = rootFactory.materializeNestedCallTarget(body);
+                }
+                return target;
+            }
+        }
     }
 
     Optional<ProtosLanguage> language() {

@@ -141,15 +141,17 @@ public final class ProtosClosureInvoker {
             if (closure.nativeBody().isPresent()) {
                 return closure.nativeBody().orElseThrow().execute(activation, supplied);
             }
-            ProtosClosureExecutionPlan plan;
-            if (closure.requiresContextLocalExecutionProjectionForRuntime()
-                    && ProtosPolyglotExecutionContext.hasEnteredContextForRuntime()) {
-                plan =
-                        ProtosLanguageContext.current()
-                                .executionPlanForSharedClosure(closure);
-            } else {
-                plan = closure.executionPlanForRuntimeInvocation();
-            }
+            ProtosClosureExecutionPlan template =
+                    closure.executionPlanForRuntimeInvocation();
+            boolean needsEnteredContextProjection =
+                    closure.requiresContextLocalExecutionProjectionForRuntime()
+                            || template.language().isEmpty();
+            ProtosClosureExecutionPlan plan =
+                    ProtosPolyglotExecutionContext.hasEnteredContextForRuntime()
+                                    && needsEnteredContextProjection
+                            ? ProtosLanguageContext.current()
+                                    .executionPlanForEnteredClosure(closure, template)
+                            : template;
             plan.bind(activation);
             return plan.executeBody(activation);
         } catch (ProtosSignalException transfer) {

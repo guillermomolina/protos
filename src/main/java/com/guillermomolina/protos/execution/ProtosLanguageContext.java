@@ -44,6 +44,20 @@ final class ProtosLanguageContext {
         return REFERENCE.get(null);
     }
 
+    ProtosClosureExecutionPlan executionPlanForEnteredClosure(
+            ProtosClosureValue closure, ProtosClosureExecutionPlan template) {
+        Objects.requireNonNull(closure, "closure");
+        Objects.requireNonNull(template, "template");
+        return sharedExecutionPlans.computeIfAbsent(
+                template,
+                ignored ->
+                        template.rebuildForLanguage(
+                                Objects.requireNonNull(
+                                        closure.definition(),
+                                        "entered Closure definition"),
+                                language));
+    }
+
     ProtosClosureExecutionPlan executionPlanForSharedClosure(ProtosClosureValue closure) {
         Objects.requireNonNull(closure, "closure");
         if (!closure.requiresContextLocalExecutionProjectionForRuntime()) {
@@ -56,14 +70,7 @@ final class ProtosLanguageContext {
                                 () ->
                                         new IllegalStateException(
                                                 "shared Closure has no execution-plan template"));
-        return sharedExecutionPlans.computeIfAbsent(
-                template,
-                ignored ->
-                        template.rebuildForLanguage(
-                                Objects.requireNonNull(
-                                        closure.definition(),
-                                        "shared Closure definition"),
-                                language));
+        return executionPlanForEnteredClosure(closure, template);
     }
 
     ProtosClosureExecutionPlan projectedExecutionPlanForTesting(ProtosClosureValue closure) {
@@ -75,8 +82,12 @@ final class ProtosLanguageContext {
         return sharedExecutionPlans.size();
     }
 
-    ProtosLanguage languageForTesting() {
+    ProtosLanguage languageForRuntime() {
         return language;
+    }
+
+    ProtosLanguage languageForTesting() {
+        return languageForRuntime();
     }
 
     CallTarget parsePublic(Source source) {

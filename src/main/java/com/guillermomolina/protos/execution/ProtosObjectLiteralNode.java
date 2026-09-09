@@ -20,25 +20,26 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.source.SourceSpan;
-import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.DirectCallNode;
+import java.util.concurrent.locks.Lock;
 import com.oracle.truffle.api.nodes.Node.Child;
 import java.util.Objects;
 
 public final class ProtosObjectLiteralNode extends ProtosExpressionNode {
     @Child private ProtosExpressionNode parentNode;
     @Child private DirectCallNode bodyCallNode;
+    private final ProtosRootFactory.LazyCallTarget bodyCallTarget;
 
     public ProtosObjectLiteralNode(
             SourceSpan span,
             ProtosExpressionNode parentNode,
-            CallTarget bodyCallTarget) {
+            ProtosRootFactory.LazyCallTarget bodyCallTarget) {
         super(span);
         this.parentNode = parentNode;
-        this.bodyCallNode =
-                DirectCallNode.create(
-                        Objects.requireNonNull(bodyCallTarget, "bodyCallTarget"));
+        this.bodyCallTarget =
+                Objects.requireNonNull(bodyCallTarget, "bodyCallTarget");
     }
 
     @Override
@@ -55,7 +56,27 @@ public final class ProtosObjectLiteralNode extends ProtosExpressionNode {
         ProtosActivation construction =
                 ProtosActivation.forObjectConstruction(object, enclosing);
 
-        bodyCallNode.call(construction);
+        bodyCallNode().call(construction);
         return object;
+    }
+
+    private DirectCallNode bodyCallNode() {
+        DirectCallNode current = bodyCallNode;
+        if (current != null) {
+            return current;
+        }
+        CompilerDirectives.transferToInterpreterAndInvalidate();
+        Lock lock = getLock();
+        lock.lock();
+        try {
+            current = bodyCallNode;
+            if (current == null) {
+                current = insert(DirectCallNode.create(bodyCallTarget.get()));
+                bodyCallNode = current;
+            }
+            return current;
+        } finally {
+            lock.unlock();
+        }
     }
 }

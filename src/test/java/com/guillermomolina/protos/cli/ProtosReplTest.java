@@ -159,16 +159,20 @@ final class ProtosReplTest {
                 "processReturnedInput", String.class, session.getClass(), PrintStream.class, PrintStream.class);
         method.setAccessible(true);
 
-        Object result = method.invoke(
-                cli,
-                "x: 10\nx\nx + 5",
-                session,
-                new PrintStream(out),
-                new PrintStream(err));
+        try {
+            Object result = method.invoke(
+                    cli,
+                    "x: 10\nx\nx + 5",
+                    session,
+                    new PrintStream(out),
+                    new PrintStream(err));
 
-        assertEquals("COMPLETE", result.toString());
-        assertEquals("15\n", out.toString(StandardCharsets.UTF_8));
-        assertTrue(err.toString(StandardCharsets.UTF_8).isBlank());
+            assertEquals("COMPLETE", result.toString());
+            assertEquals("15\n", out.toString(StandardCharsets.UTF_8));
+            assertTrue(err.toString(StandardCharsets.UTF_8).isBlank());
+        } finally {
+            terminateSession(session);
+        }
     }
 
     @Test
@@ -183,16 +187,20 @@ final class ProtosReplTest {
                 "processReturnedInput", String.class, session.getClass(), PrintStream.class, PrintStream.class);
         method.setAccessible(true);
 
-        Object result = method.invoke(
-                cli,
-                "make: () => {\n    () => {\n        5\n    }\n}\ninner: make()\ninner()",
-                session,
-                new PrintStream(out),
-                new PrintStream(err));
+        try {
+            Object result = method.invoke(
+                    cli,
+                    "make: () => {\n    () => {\n        5\n    }\n}\ninner: make()\ninner()",
+                    session,
+                    new PrintStream(out),
+                    new PrintStream(err));
 
-        assertEquals("COMPLETE", result.toString());
-        assertEquals("5\n", out.toString(StandardCharsets.UTF_8));
-        assertTrue(err.toString(StandardCharsets.UTF_8).isBlank());
+            assertEquals("COMPLETE", result.toString());
+            assertEquals("5\n", out.toString(StandardCharsets.UTF_8));
+            assertTrue(err.toString(StandardCharsets.UTF_8).isBlank());
+        } finally {
+            terminateSession(session);
+        }
     }
 
     @Test
@@ -211,6 +219,12 @@ final class ProtosReplTest {
         assertEquals(0, r.c);
         assertTrue(r.o.contains("protos> 3628800\n"), r.o);
         assertTrue(r.e.isBlank(), r.e);
+    }
+
+    private static void terminateSession(Object session) throws Exception {
+        Method terminate = session.getClass().getDeclaredMethod("terminate");
+        terminate.setAccessible(true);
+        terminate.invoke(session);
     }
 
     @Test

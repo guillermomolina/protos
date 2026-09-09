@@ -198,7 +198,7 @@ Focused integration evidence runs two Actors of one hosted Process concurrently 
 carrier threads and proves both observe one exact `ProtosLanguageContext`. No global execution
 lock, semantic ThreadLocal or carrier affinity is introduced. A4B2B2 subsequently closes the P carrier placement requirement; A4B2B3 and A4B2 are now CLOSED
 in `0.2.280-SNAPSHOT`: A publishes frozen Core state and B publishes A+ Context-local executable projection
-with final multi-Process no-cross-CallTarget/no-global-lock evidence. A4B3 is READY.
+with final multi-Process no-cross-CallTarget/no-global-lock evidence. A4B3 is IN_PROGRESS; ordinary CLI/REPL production entry is published through Process-scoped hosting in `0.2.287-SNAPSHOT`, while the remaining production-driver cutover stays under I026-A4B3.
 
 `ContextPolicy.SHARED` remains deferred; explicit Engine sharing here does not change the default
 EXCLUSIVE language-context policy.
@@ -223,7 +223,49 @@ migration paths remain direct.
 
 A4B2B3 and A4B2 are CLOSED in `0.2.280-SNAPSHOT`. A publishes atomic frozen Core state; B implements the
 already-approved A+ context-local executable projection and final multi-Process evidence. A4B3
-is READY. `ContextPolicy.SHARED` remains deferred.
+is IN_PROGRESS after the ordinary CLI/REPL production-entry cutover in `0.2.287-SNAPSHOT`; remaining production-driver migration stays under the same I026-A4B3 work item. `ContextPolicy.SHARED` remains deferred.
+
+
+## A4B3 production-driver cutover evidence — ordinary CLI/REPL phase
+
+In `0.2.287-SNAPSHOT`, each ordinary CLI/REPL session creates one explicit
+`ProtosPolyglotRuntimeHost`, binds its exact semantic Process once to one
+`ProtosPolyglotProcessContext`, and routes `-e`, file and persistent REPL Sources through the
+registered language's public parse boundary while that Context is entered. REPL units intentionally
+keep the existing persistent task-free activation and therefore parse/call directly inside the
+Process Context rather than manufacturing a new root task for every line.
+
+File execution retains the normalized file URI on its Truffle Source; `-e` and REPL evaluations use
+synthetic source names and reuse the same Process Context for the whole session. Language-bound
+nested roots keep their exact Source metadata but defer executable RootNode/CallTarget
+materialization until first execution under the entered Process Context. Direct/source-only staging
+templates preserve their previously eager construction outside entered Contexts; when a source-backed
+Closure prepared before Context entry is invoked while a Process Context is entered, the existing
+per-Context execution-plan projection rebuilds/caches its executable plan for that exact Context
+before invocation. For language-bound plans,
+the nested RootNode is constructed with the exact current `ProtosLanguage` resolved from that
+entered Context rather than reusing the parser's earlier language instance. Source-backed Closure
+plans prepared before any Process Context exists (notably Core bootstrap Closures) use the already
+selected Context-local execution-projection mechanism: the semantic Closure/template remains
+unchanged, while each entered Context owns the executable plan rebuilt for its language instance. Closure parameter/body
+roots and object-literal body roots therefore cannot be pinned to a foreign Truffle sharing layer,
+without adding a new semantic cache or per-Closure-instance executable plan; the already-existing
+Context-owned projection map remains the only cross-sharing-layer executable cache. The semantic Process still owns explicit
+Process I/O, arguments, environment and Actor/Task state; Polyglot Context identity does not become
+guest authority. Terminating the semantic Process uses the already-published Process-host callback to request close
+of that exact Context; after a successfully terminal root task or task-free REPL unit, semantic
+termination can therefore complete before the embedding-owned Engine closes. This phase adds no
+second termination scheduler, polling loop, or host-side semantic authority.
+`ProtosPolyglotRuntimeHost.close()` remains fail-fast for live Process Contexts.
+
+Bundled tools remain on the explicit staged direct path for now. Test Tool performs nested
+exact-source fresh-Process execution, and executing that direct child AST beneath an entered
+unrelated Context is rejected by Truffle's sharing-layer checks. The next mechanical phase of the
+same I026-A4B3 work item therefore owns the outer bundled-tool plus nested exact/fresh/captured/
+workspace cutover as one sharing-layer-safe change.
+
+Remaining module/initial-module routing and final direct-entry retirement also remain in I026-A4B3.
+No new ContextPolicy is selected: `EXCLUSIVE` remains active and `REUSE`/`SHARED` remain deferred.
 
 
 <!-- I026-A4B2B3-A-PLUS: v1 -->

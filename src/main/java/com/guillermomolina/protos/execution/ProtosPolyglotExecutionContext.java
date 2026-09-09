@@ -113,6 +113,22 @@ public final class ProtosPolyglotExecutionContext implements AutoCloseable {
                 });
     }
 
+    /**
+     * Parses and evaluates one persistent top-level unit without manufacturing a new RootActor task.
+     *
+     * <p>The caller owns the persistent activation contract (currently the REPL). Guest execution
+     * still occurs only while this Process Context is entered.
+     */
+    Object evaluatePersistent(Source source, ProtosActivation activation) {
+        Objects.requireNonNull(source, "source");
+        Objects.requireNonNull(activation, "activation");
+        return callEntered(
+                () -> {
+                    CallTarget target = ProtosLanguageContext.current().parsePublic(source);
+                    return target.call(activation);
+                });
+    }
+
     <T> T callEntered(Supplier<T> action) {
         Objects.requireNonNull(action, "action");
         executionLock.lock();

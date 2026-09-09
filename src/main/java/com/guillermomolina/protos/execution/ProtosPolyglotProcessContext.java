@@ -47,6 +47,18 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
 
     public ProtosExecutionOutcome execute(Source source, ProtosActivation activation) {
         Objects.requireNonNull(source, "source");
+        requireActivationProcess(activation);
+        return context.execute(source, activation);
+    }
+
+    /** Persistent top-level evaluation for REPL-like drivers inside this exact Process Context. */
+    public Object evaluatePersistent(Source source, ProtosActivation activation) {
+        Objects.requireNonNull(source, "source");
+        requireActivationProcess(activation);
+        return context.evaluatePersistent(source, activation);
+    }
+
+    private void requireActivationProcess(ProtosActivation activation) {
         Objects.requireNonNull(activation, "activation");
         ProtosProcessRuntime activationProcess =
                 activation.executionDomain()
@@ -57,7 +69,6 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
             throw new IllegalArgumentException(
                     "entry activation belongs to another or unhosted Protos Process");
         }
-        return context.execute(source, activation);
     }
 
     @Override
