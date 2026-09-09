@@ -1063,11 +1063,15 @@ The authority split is:
   for `Bxxx` normative unblock conditions;
 - GitHub Discussions is the preferred public surface for questions, ideas,
   investigation, and pre-decision design discussion;
-- GitHub Issues is the canonical live coordination surface for actionable
-  project work such as `Ixxx`, `CLIxxx`, `TOOLxxx`, `PERFxxx`, `DISTxxx`,
-  `DOCxxx`, `LIBxxx`, `AUDxxx`, `LMxxx`, and comparable work families;
+- GitHub Issues is the canonical visible coordination/history representation for
+  every formal Protos identifier. For actionable work families, the owning Issue
+  is also the canonical live coordination surface. For `Dxxx`, `PLATxxx`, and
+  `Bxxx`, Issue state represents coordination/history only and does not replace
+  the durable repository authority described above;
 - the `Protos Development` GitHub Project is the canonical live scheduling and
-  prioritization view once an Issue is present there; and
+  prioritization view for actionable Issues deliberately tracked there. Closed
+  retrospective decision/blocker representations do not require Project
+  membership merely to reproduce historical inventory; and
 - merged/published repository state, owning project records, tests, changelog
   entries, and Git history retain durable implementation/closure evidence.
 
@@ -1216,19 +1220,24 @@ syntax alone does not establish authority: discover existing identifiers and
 family semantics from current repository records and migrated GitHub history,
 not from chat memory or a token that merely looks like `I123`.
 
-New actionable formal work SHOULD have a GitHub Issue when it is allocated. An
-operational identifier MUST NOT exist only in a prompt/chat. When the work also
-has an owning durable repository record, persist the identifier there no later
-than the first repository publication that materially establishes the work.
+Every newly allocated formal Protos identifier MUST have a GitHub Issue
+representation as part of allocation, including `Dxxx`, `PLATxxx`, and `Bxxx`.
+For actionable work, that Issue owns live coordination; for decisions/blockers,
+the Issue provides visible coordination/history while durable authority remains
+in the repository. A formal identifier MUST NOT exist only in a prompt/chat.
+When the identifier also has an owning durable repository record, persist it
+there no later than the first repository publication that materially establishes
+the work.
 
 <!-- GITHUB001-A2 FAMILY-IDENTIFIER-POLICY -->
 ##### Family labels
 
-Every GitHub Issue that represents a formal actionable Protos work item MUST
-carry exactly one stable family-classification label named `family:<FAMILY>`,
-where `<FAMILY>` is the identifier prefix. Examples include `family:I`,
-`family:LIB`, `family:TOOL`, `family:CLI`, `family:PERF`, `family:DOC`,
-`family:DIST`, `family:AUD`, `family:LM`, and `family:GITHUB`.
+Every GitHub Issue that represents a formal Protos identifier MUST carry exactly
+one stable family-classification label named `family:<FAMILY>`, where `<FAMILY>`
+is the identifier prefix. Examples include `family:I`, `family:LIB`,
+`family:TOOL`, `family:CLI`, `family:PERF`, `family:DOC`, `family:DIST`,
+`family:AUD`, `family:LM`, `family:GITHUB`, `family:D`, `family:PLAT`, and
+`family:B`.
 
 A formal sub-issue keeps the same family label as its formal identifier. The
 family label classifies durable project ownership only. Do not encode live
@@ -1237,11 +1246,14 @@ structure in family labels; those belong to the Issue/Project/native hierarchy.
 Ordinary community Issues that do not have a formal Protos work identifier do not
 need a family label.
 
-`Dxxx`, `PLATxxx`, and `Bxxx` remain repository-owned decision/blocker families
-rather than ordinary actionable Issue families. When an actionable Issue consumes
-or is blocked by one of those records, label the Issue by its owning actionable
-family and link the applicable `Dxxx`/`PLATxxx`/`Bxxx` authority instead of
-reclassifying the decision/blocker as project work.
+`Dxxx`, `PLATxxx`, and `Bxxx` keep their repository-owned decision/blocker
+authority while also having first-class GitHub Issue representations. Their
+Issues MUST carry `family:D`, `family:PLAT`, or `family:B` respectively. An
+Issue state, Project field, reaction, or comment cannot ratify, redefine, or
+clear the underlying durable decision/blocker by itself. When another actionable
+Issue consumes or is blocked by one of these records, link the formal
+decision/blocker Issue and its durable repository authority rather than
+duplicating semantic authority in the consuming Issue.
 
 GitHub's numeric Issue identifier and a Protos formal identifier are independent
 namespaces. For example, GitHub Issue `#73` may own `I031`; agents MUST NOT try to
