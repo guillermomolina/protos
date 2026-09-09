@@ -836,6 +836,7 @@ the already-published implementation commit.
 | LM005 | Concurrent Language Maturity | CLOSED | `SAME_COMMIT` | LM005-A Future, LM005-B Actor, and LM005-C Group/GroupRef conformance/examples/tutorials complete; no runtime or normative feature added. |
 | LM006 | System & Resource Language Maturity | CLOSED | `SAME_COMMIT` | LM006-A/B/C/D/E/F system/resource maturity complete; executable learning material and final cross-slice reconciliation are published; no runtime or normative feature was added by LM006. |
 | LM007 | Object Model Maturity | CLOSED | `SAME_COMMIT` | LM007-A/B/C/D/E are CLOSED after final cross-slice execution of all 16 retained object-model maturity programs, the complete Test Tool corpus and the repository full suite. Findings I027 and I030 are CLOSED under their implementation owners; LM007 owns no runtime or normative feature. |
+| LM008 | Core Language Surface Completeness | IN_PROGRESS | — | LM008-A inventory/methodology is published; LM008-B/C/D/E are READY and LM008-F is dependency-gated. Audits normative Core -> guest-visible path -> Protos conformance without defining new semantics. |
 
 ### LM005 — Concurrent Language Maturity
 
@@ -989,6 +990,40 @@ Coordination:
   discovered implementation defect is fixed under its proper owner and then
   consumed by LM007 conformance.
 - Plan: `docs/project/LM007_OBJECT_MODEL_MATURITY_PLAN.md`.
+
+### LM008 — Core Language Surface Completeness
+
+Status: IN_PROGRESS
+
+Scope: audit already-normative Core from its owning specification through the
+reference implementation's actual guest-visible path to retained executable
+Protos conformance. LM008 does not define new semantics and does not hide
+production fixes inside maturity work.
+
+| Slice | Status | Closure evidence | Surface |
+|---|---|---|---|
+| LM008-A | CLOSED | `SAME_COMMIT` | Normative-owner inventory, surface-row classifications, evidence hierarchy, bounded B-F decomposition and seed findings. Records four candidate standard Object guest-publication gaps (`slotNames`, `removeSlot`, structural `close`, structural `freeze`) for executable verification under LM008-C and records the now-closed I025 parser/conformance repair as a covered baseline rather than duplicating it. Documentation/governance only. |
+| LM008-B | READY | — | Grammar, evaluation, binding and callable surface completeness, including mandatory lowering and cross-check of the now-closed D003/I025 evidence. |
+| LM008-C | READY | — | Object structural/reflection/mutation guest-surface completeness and focused verification of the four A seed findings. |
+| LM008-D | READY | — | Canonical values, Boolean protocols, equality/identity/hash, numbers, String and fundamental Array/Map/IdentityMap surface completeness. |
+| LM008-E | READY | — | `while`, `ensure`, Error handling/signaling, modules/import and required/forbidden Core prelude surface completeness. |
+| LM008-F | BLOCKED_BY_DEPENDENCIES | — | Final matrix reconciliation, LM005/LM006 advanced-domain cross-check, discovered-owner/regression accounting and complete retained-corpus/full-suite closure gate. |
+
+Coordination:
+- B-E are independent audit fronts after A; they may proceed without serializing
+  unrelated inspection merely for tracking convenience.
+- A maturity classification never overrides normative specification authority.
+  A new semantic ambiguity becomes a Dxxx decision/blocker rather than a test
+  assumption.
+- Java/runtime tests may prove mechanisms, but a positive guest-visible Core row
+  is not `COVERED` without executable Protos-level evidence.
+- Production implementation changes remain outside LM008 slices. Confirmed
+  mismatches are repaired under the narrow proper implementation owner and then
+  consumed by LM008 regression/conformance.
+- Capabilities intentionally outside current Core, including D044-deferred
+  loop-local `break`/`continue`, are not implementation defects merely because
+  another language commonly provides them.
+- Plan: `docs/project/LM008_CORE_LANGUAGE_SURFACE_COMPLETENESS.md`.
 
 New Language Maturity work MUST allocate and persist its `LMxxx` identifier in
 the repository at publication time rather than relying on chat/prompt history.
