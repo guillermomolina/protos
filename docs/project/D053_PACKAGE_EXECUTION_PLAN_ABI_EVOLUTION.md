@@ -1,11 +1,12 @@
 # D053 — PackageExecutionPlan ABI evolution and external-package representation
 
-Status: **NEEDS_USER_DECISION**
+Status: **RATIFIED**
 Allocated: **2026-09-09**
+Explicit project-owner approval: **2026-09-09**
 Nature: implementation-independent Package Tool ABI / compatibility decision
 Triggered by: `TOOL001-F2E3`
 Blocks: `TOOL001-F2E3`
-Specification revision: **UNCHANGED while unresolved**
+Specification revision: **UNCHANGED** — Package Tool ABI/compatibility decision; no Core language semantic change
 
 ## Decision boundary
 
@@ -91,9 +92,279 @@ Define when a future change requires another generation and when acquisition,
 store layout, mirror, transport, digest-algorithm support or other machinery may
 evolve without changing the plan ABI.
 
+## Ratified decision — generation 2 single mixed graph (B2)
+
+D053 ratifies a new `PackageExecutionPlan` **generation 2** for the
+external-capable execution-plan ABI.
+
+Generation 1 is semantically frozen permanently as the exact workspace-only ABI
+already published by F2D1. A future implementation is not required to support
+generation 1 forever, but no implementation may reinterpret `generation: 1` to
+mean a different shape or set of invariants.
+
+Generation 2 is one ordinary inert dependency graph:
+
+```text
+PackageExecutionPlanV2 {
+    generation: 2
+    root: workspace-node-ref
+
+    packages: [
+        workspace-package {
+            ref: workspace-node-ref
+            location
+            exports
+        }
+
+        external-package {
+            ref:
+                registry(PackageId, exact ReleaseVersion)
+                | git(PackageId, exact revision)
+            content: ContentIdentity(method, algorithm, hex)
+            exports
+        }
+    ]
+
+    dependencies: [
+        {
+            declaring: node-ref
+            alias
+            target: node-ref
+        }
+    ]
+}
+```
+
+The conceptual forms above freeze the semantic domains, not a second lock
+grammar. F2E3 should reuse the already-published ordinary lock/ref value model
+where mechanically appropriate rather than inventing parallel spellings. Local
+implementation representation remains free only where it cannot change the
+generation-2 ABI semantics fixed here.
+
+### Node identity and uniqueness
+
+A workspace ref is the existing workspace `PackageId` identity within the
+selected workspace execution context.
+
+A registry ref is `PackageId + exact ReleaseVersion`. A Git ref is
+`PackageId + exact revision`.
+
+`ContentIdentity` is mandatory exactly once on every immutable external package
+node. The complete immutable external package instance is therefore:
+
+```text
+registry-ref + ContentIdentity
+git-ref      + ContentIdentity
+```
+
+Dependency edges carry compact node refs and do not repeat ContentIdentity.
+
+Generation-2 package uniqueness is by exact typed node ref, **not by PackageId
+alone**. Multiple exact versions/revisions of one PackageId may coexist in one
+graph. Conversely, one exact registry `(PackageId, ReleaseVersion)` or one exact
+Git `(PackageId, revision)` cannot appear with conflicting ContentIdentity.
+
+Dependency alias remains an edge-local lookup relation and is never package or
+module identity.
+
+### One graph, not a sidecar
+
+Generation 2 has exactly one `packages` relation and one `dependencies` relation
+for workspace and external nodes. D053 rejects a second external dependency
+sidecar graph.
+
+The structural edge form is uniform:
+
+```text
+declaring node-ref + alias -> target node-ref
+```
+
+D053 does not authorize dependency relations that the manifest/lock/resolution
+model does not already permit. It only ensures that any already-valid exact
+mixed graph can be represented without changing graph universes.
+
+### Authority and provenance exclusion
+
+Generation 2 remains ordinary inert data. It contains no:
+
+```text
+Filesystem / File / Process / Closure
+resolver
+host handle or capability token
+verified-custody object
+absolute external source/store/cache path
+registry endpoint, CDN or mirror
+Git fetch URL
+PackageLocator
+ArtifactDigest
+credentials or proxy state
+network/store authority
+mutable cursor or package-manager object
+```
+
+Registry locator/authority and Git fetch information remain
+resolution/acquisition provenance. F2E2 verified custody remains host authority.
+F2E4 mechanically associates exact package identity with the already-verified
+custody without inserting that authority into PackageExecutionPlan.
+
+### Root boundary
+
+Generation 2 keeps the current resolution root as a workspace ref. D053 does not
+generalize execution to a registry/Git package as resolution root.
+
+Generation 2 is nevertheless structurally capable of a workspace-only graph.
+D053 does not require current workspace-only producers to migrate from V1: they
+may continue to emit V1. A future producer may choose V2 for workspace-only input
+without changing V2 semantics.
+
+## Compatibility and future-generation rule
+
+`generation` identifies the complete structural/semantic ABI contract, not the
+Package Tool implementation version.
+
+A new generation is required when a change would invalidate assumptions that a
+consumer of the current generation is entitled to make, including at least:
+
+- changing mandatory plan/package/ref/dependency structure;
+- changing the semantic identity carried by a ref;
+- introducing a new semantic node-ref family with distinct identity rules;
+- changing dependency-edge meaning;
+- changing the root semantic category; or
+- introducing authority/capability semantics into the plan boundary.
+
+A new generation is **not** required merely for:
+
+- a registry endpoint, mirror, CDN or PackageLocator change;
+- a Git retrieval-locator move that preserves exact package identity;
+- package-store or cache layout/replacement;
+- local versus shared/distributed verified custody;
+- archive/transport representation changes;
+- ArtifactDigest additions outside logical package identity;
+- a new acquisition mechanism that yields an existing exact immutable identity;
+- host/runtime/backend changes; or
+- a newly supported ContentIdentity method/hash algorithm represented inside the
+  already-versioned `method + algorithm + hex` domain.
+
+An unsupported plan generation fails closed. D053 does not adopt a tolerant
+"approximately compatible" reader rule.
+
+## Scalability result
+
+The selected model admits direct indexing by typed node ref and validation over
+one package pass plus one dependency pass. For `P` package nodes and `E`
+dependency edges, the graph representation and ordinary indexed validation are
+`O(P + E)` rather than requiring cross-sidecar reconciliation.
+
+ContentIdentity is stored once per immutable external node rather than repeated
+on incoming/outgoing edges. Multiple aliases targeting the same exact external
+package therefore add edges, not duplicate package instances or content digests.
+
+Numeric/local surrogate node IDs may be used as an internal detached-host
+optimization if ever justified, but they are not part of the generation-2 ABI.
+
+## Cross-ecosystem review result
+
+The decision was stress-tested against mature package/build ecosystems,
+including Cargo, npm/pnpm, Go modules, Maven/Gradle, NuGet, SwiftPM, Python
+lockfile tooling, Bazel and Nix.
+
+The selected design deliberately follows the durable patterns that survived that
+comparison:
+
+- explicit format/generation evolution instead of retroactively redefining an
+  old generation;
+- exact resolved graph data rather than performing fresh solving during normal
+  execution;
+- node-local integrity rather than repeating full content identity on every
+  dependency edge;
+- multiple exact versions of one logical package when the graph requires them;
+- content identity separated from retrieval URL, mirror and physical store path;
+- fail-closed handling of unsupported structural generations.
+
+It deliberately rejects ecosystem patterns that conflict with existing Protos
+design: physical install path as logical identity, source URL as PackageId,
+major-version path rewriting as durable package identity, duplicated compatibility
+graphs, tolerant interpretation of unknown generations, and content hash as the
+only package-lineage identity.
+
+## Why this is the Protos choice
+
+B2 preserves one small universe: packages are nodes and dependencies are edges at
+both small and large scale. It makes semantic distinctions visible without
+creating separate graph institutions for external packages.
+
+It satisfies the project principles:
+
+- **ordinary things remain ordinary** — the plan is inert ordinary data;
+- **general rules beat special cases** — one graph and one edge relation;
+- **pay only for what you use** — V1 workspace-only execution need not acquire
+  external verification/store machinery;
+- **scale by composition, not by changing universes** — larger/mixed graphs use
+  the same node/edge model;
+- **generality must be earned** — no premature numeric IDs, feature-bit
+  negotiation, generic source-kind universe or external-root execution;
+- **minimize shared mutable state / prefer independence** — verified custody is
+  kept out of the logical graph and no sidecar graph requires coordinated
+  mutation/reconciliation;
+- **keep platform differences at the boundary** — no JVM/Path/Filesystem/host
+  token enters the ABI.
+
+## Rejected alternatives
+
+### A — extend generation 1 in place
+
+Rejected because F2D1 and the production adapter already define generation 1 as
+an exact workspace-only shape. Reinterpreting it would break the meaning of a
+published generation identifier.
+
+### B1 — generation 2 with full ContentIdentity repeated in refs/edges
+
+Rejected because it adds no semantic information and amplifies representation,
+copy and comparison cost with edge count. ContentIdentity belongs once to the
+external package node.
+
+### C — V1 workspace graph plus external sidecar graph
+
+Rejected because one dependency graph would have two structural authorities,
+cross-graph referential integrity and permanent coordination complexity.
+
+### D — host handles/capability tokens in the plan
+
+Rejected because a token whose meaning lives in host mutable state leaks
+authority/lifetime/implementation identity across an intentionally inert
+boundary.
+
+### E — ContentIdentity as the sole external package identity
+
+Rejected because content verification is not a replacement for PackageId
+lineage plus exact release/revision identity.
+
+### F — numeric node IDs as ABI identity
+
+Rejected as an unearned representation optimization. A host may intern refs
+internally without exposing that machinery as durable ABI.
+
+## Intentionally deferred
+
+D053 does not decide:
+
+- physical package-store or distributed-CAS layout;
+- F2E4's concrete custody-to-resolver host data structure;
+- host interning/hash-map implementation details;
+- acquisition/fetch protocol or credentials;
+- registry trust/authentication protocol;
+- package publication;
+- executable registry/Git resolution roots;
+- future new source kinds whose identity semantics differ from workspace,
+  registry and Git;
+- conditional/platform package-resolution semantics not already selected
+  elsewhere; or
+- when a future producer should stop emitting generation 1 for workspace-only
+  projects.
+
 ## Candidate design families for review
 
-No option is selected by allocation of D053.
+Allocation selected no option. After cross-ecosystem, scalability, compatibility and Protos-design review, the project owner explicitly ratified the B2 family defined below.
 
 ### A — extend generation 1 in place
 
@@ -164,20 +435,24 @@ At minimum, D053 must explain these cases:
 9. a future acquisition mechanism supplies the same immutable package identity
    without deserving a new runtime/module identity.
 
-## Ratification gate
+## Ratification closure
 
-D053 remains `NEEDS_USER_DECISION` until the project owner explicitly approves
-one concrete contract after the comparison, scalability review and attempted
-falsification.
+The project owner explicitly approved the B2 decision on 2026-09-09 after the
+cross-ecosystem comparison, future/scalability review and Protos-design
+evaluation.
 
-Ratification must state:
+D053 is therefore `RATIFIED`.
 
-- the exact generation/compatibility rule;
-- the exact inert package/ref/content/dependency shape or structural invariants;
-- what generation 1 means permanently;
-- what does and does not require a future generation;
-- intentionally deferred choices; and
-- the resulting unblock condition for `TOOL001-F2E3`.
+Ratification itself changes no Core normative Protos specification, executable
+implementation, Maven implementation version, lock-format bytes or license
+terms. It establishes the durable PackageExecutionPlan compatibility contract
+that `TOOL001-F2E3` may now implement.
 
-Allocation of D053 changes no normative Protos specification, implementation
-version, executable code, lock-format bytes or PackageExecutionPlan ABI.
+Result:
+
+```text
+D053           RATIFIED
+TOOL001-F2E3   READY
+TOOL001-F2E4   BLOCKED_BY_DEPENDENCIES: TOOL001-F2E3
+TOOL001-F2E5   BLOCKED_BY_DEPENDENCIES: TOOL001-F2E4
+```
