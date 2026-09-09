@@ -52,8 +52,8 @@ READY to implement `connectTcp`; I028-D will consume the same topology for liste
   - **B5 — close B — CLOSED (`0.2.284-SNAPSHOT` / `SAME_COMMIT`; implementation version unchanged):** reconcile B1-B4 retained evidence, close the represented Network capability/bootstrap boundary, and release I028-C without selecting a TCP backend.
 - **C — TCP connection + `connectTcp` — IN_PROGRESS under D052/PLAT003:** ordinary live-resource topology, host-neutral async acquisition, cancellation/late resource custody, independent read/write progress with shared close/half-close lifecycle, and endpoint observation without strengthening endpoint `===` identity.
   - **C1 — ordinary TcpConnection resource/prototype + transfer foundation — CLOSED (`0.2.285-SNAPSHOT` / publication commit):** source-owned runtime-only frozen authority-free protocol parent, ordinary OPEN `ProtosTcpConnectionValue` with opaque host state and ordinary application slots, exact canonical parent preservation, no public TcpConnection Prelude binding, plus explicit Actor/P rejection of the live capability and authority-bearing descendants. No TCP selector, acquisition or backend yet; native boundary remains 123/32.
-  - **C2 — TcpConnection protocol + duplex lifecycle foundation — READY:** install the D052 selector surface once on the shared protocol parent and realize PLAT003 independent read/write lanes with shared close/half-close lifecycle, still host-neutral.
-  - **C3 — endpoint observations — dependency-gated on C2:** `localEndpoint` / `remoteEndpoint` snapshots without strengthening endpoint `===` identity.
+  - **C2 — TcpConnection protocol + duplex lifecycle foundation — CLOSED (`0.2.286-SNAPSHOT` / publication commit):** install the five D052 Byte I/O/lifecycle selectors once on the shared hidden protocol parent; compose two independent existing Byte-I/O lanes over one shared Closable lifecycle so read and write progress do not head-of-line block each other; retain bounded write snapshots, cancellation, close and directional-shutdown contracts without selecting a network backend. Endpoint observations remain C3.
+  - **C3 — endpoint observations — READY:** complete the remaining `localEndpoint` / `remoteEndpoint` protocol selectors and snapshots without strengthening endpoint `===` identity.
   - **C4 — host-neutral `connectTcp` acquisition — dependency-gated on C2/C3:** validation/capture, Future commitment/cancellation and explicit late-resource custody; no concrete production backend.
   - **C5 — integrated C conformance + closure — dependency-gated on C1-C4:** receiver-domain, ordinary-object/shadowing, Actor/P, acquisition races and C-level native-boundary reconciliation.
 - **D — TCP listener + `listenTcp`:** exact request snapshot/validation,
@@ -63,6 +63,26 @@ READY to implement `connectTcp`; I028-D will consume the same topology for liste
   subdivide mechanically if required.
 - **F — cross-slice conformance/native-boundary closure:** cancellation races,
   late custody, multiple-accept scale evidence and Actor/P non-transferability.
+
+## I028-C2 TcpConnection shared protocol + duplex lifecycle foundation
+
+Published at implementation version `0.2.286-SNAPSHOT`. C2 installs `read`, `write`, `close`,
+`shutdownRead`, and `shutdownWrite` exactly once on the hidden frozen TcpConnection protocol parent.
+An inherited standard selector accepts only an operational `ProtosTcpConnectionValue` whose immediate
+parent is that exact prototype; ordinary descendants may inherit lookup but fail the standard
+receiver-domain check before resource state is exercised. Semantic I/O argument validation remains in
+the existing Future-returning Byte-I/O path, while receiver/arity failure remains ordinary synchronous
+invocation failure.
+
+The host-neutral `ProtosTcpConnectionFlow` composes two distinct `ProtosByteIoFlow` instances, one
+read lane and one write lane, over one injected `ProtosIoLifecycle`. Reads remain ordered only with
+reads and writes with writes, so a pending read cannot block an admissible write; both lanes reuse the
+existing bounded write-snapshot, cancellation/rebuffering, Future commitment and directional-shutdown
+machinery. The shared lifecycle establishes one close cutover across both lanes and one backend-release
+outcome. Resource close never invokes structural `Object.close()`, so ordinary OPEN/CLOSED/FROZEN state
+remains independent. No `localEndpoint`/`remoteEndpoint`, `connectTcp`, socket/channel/event-loop or
+production network backend is included. The audited native boundary is 128 construction sites across
+33 providers. C3 is READY.
 
 ## I028-C1 TcpConnection ordinary-resource foundation
 

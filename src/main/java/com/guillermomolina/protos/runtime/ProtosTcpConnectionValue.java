@@ -24,20 +24,71 @@ import java.util.Objects;
  *
  * <p>D052 owns the Protos-visible object topology. PLAT003 keeps backend/resource state outside
  * ordinary Protos slots while preserving ordinary local slots, mutation state, delegation and
- * reflection inherited from {@link ProtosObjectValue}. C1 intentionally installs no TCP behavior;
- * later I028-C slices attach the already-ratified protocol to the shared runtime-only parent.
+ * reflection inherited from {@link ProtosObjectValue}. C2 attaches one host-neutral duplex flow only
+ * to runtime-created operational connections; standard selectors remain shared on the hidden parent.
  */
 public final class ProtosTcpConnectionValue extends ProtosObjectValue {
     private final Object resourceState;
+    private final ProtosTcpConnectionFlow flow;
 
+    /** C1-compatible non-operational host representation used before standardized acquisition exists. */
     public ProtosTcpConnectionValue(ProtosPrelude prelude, Object resourceState) {
         super(requirePrototype(prelude));
         this.resourceState = Objects.requireNonNull(resourceState, "resourceState");
+        this.flow = null;
+    }
+
+    /** Runtime construction path for an acquired/operational TCP connection. */
+    public ProtosTcpConnectionValue(
+            ProtosPrelude prelude,
+            Object resourceState,
+            ProtosActivation activation,
+            ProtosTcpConnectionFlow.Backend backend) {
+        super(requirePrototype(prelude));
+        this.resourceState = Objects.requireNonNull(resourceState, "resourceState");
+        this.flow =
+                new ProtosTcpConnectionFlow(
+                        this,
+                        Objects.requireNonNull(prelude, "prelude").bytesPrototypeForRuntime(),
+                        Objects.requireNonNull(activation, "activation"),
+                        Objects.requireNonNull(backend, "backend"));
     }
 
     /** Opaque host/runtime state. This value is never an ordinary Protos slot. */
     public Object resourceStateForRuntime() {
         return resourceState;
+    }
+
+    /** True only for a runtime connection carrying the standardized live protocol state. */
+    public boolean hasProtocolFlowForRuntime() {
+        return flow != null;
+    }
+
+    public ProtosFutureValue readForRuntime(ProtosActivation activation, Object maxBytes) {
+        return requireFlow().read(activation, maxBytes);
+    }
+
+    public ProtosFutureValue writeForRuntime(ProtosActivation activation, Object bytes) {
+        return requireFlow().write(activation, bytes);
+    }
+
+    public ProtosFutureValue closeForRuntime(ProtosActivation activation) {
+        return requireFlow().close(activation);
+    }
+
+    public ProtosFutureValue shutdownReadForRuntime(ProtosActivation activation) {
+        return requireFlow().shutdownRead(activation);
+    }
+
+    public ProtosFutureValue shutdownWriteForRuntime(ProtosActivation activation) {
+        return requireFlow().shutdownWrite(activation);
+    }
+
+    private ProtosTcpConnectionFlow requireFlow() {
+        if (flow == null) {
+            throw new IllegalStateException("TcpConnection has no operational runtime flow");
+        }
+        return flow;
     }
 
     private static ProtosObjectValue requirePrototype(ProtosPrelude prelude) {

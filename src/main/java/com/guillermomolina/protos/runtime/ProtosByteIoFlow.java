@@ -99,6 +99,38 @@ public final class ProtosByteIoFlow {
 
     public ProtosByteIoFlow(ProtosObjectValue receiver, ProtosObjectValue bytesPrototype,
             ProtosActivation activation, Backend backend, int maxRetainedWriteBytes) {
+        this(
+                receiver,
+                bytesPrototype,
+                activation,
+                backend,
+                maxRetainedWriteBytes,
+                independentLifecycle(receiver, activation));
+    }
+
+    /** Runtime-internal composition point for distinct protocol lanes sharing one Closable lifecycle. */
+    ProtosByteIoFlow(
+            ProtosObjectValue receiver,
+            ProtosObjectValue bytesPrototype,
+            ProtosActivation activation,
+            Backend backend,
+            ProtosIoLifecycle lifecycle) {
+        this(
+                receiver,
+                bytesPrototype,
+                activation,
+                backend,
+                DEFAULT_MAX_RETAINED_WRITE_BYTES,
+                lifecycle);
+    }
+
+    private ProtosByteIoFlow(
+            ProtosObjectValue receiver,
+            ProtosObjectValue bytesPrototype,
+            ProtosActivation activation,
+            Backend backend,
+            int maxRetainedWriteBytes,
+            ProtosIoLifecycle lifecycle) {
         this.receiver=Objects.requireNonNull(receiver,"receiver");
         this.bytesPrototype=Objects.requireNonNull(bytesPrototype,"bytesPrototype");
         Objects.requireNonNull(activation,"activation");
@@ -106,7 +138,18 @@ public final class ProtosByteIoFlow {
         this.backend=Objects.requireNonNull(backend,"backend");
         if(maxRetainedWriteBytes<0)throw new IllegalArgumentException("negative retained-write bound");
         this.maxRetainedWriteBytes=maxRetainedWriteBytes;
-        this.lifecycle=new ProtosIoLifecycle(receiver,activation.prelude().orElseThrow().futurePrototype(),domain,c->c.succeeded());
+        this.lifecycle=Objects.requireNonNull(lifecycle,"lifecycle");
+    }
+
+    private static ProtosIoLifecycle independentLifecycle(
+            ProtosObjectValue receiver, ProtosActivation activation) {
+        Objects.requireNonNull(receiver,"receiver");
+        Objects.requireNonNull(activation,"activation");
+        return new ProtosIoLifecycle(
+                receiver,
+                activation.prelude().orElseThrow().futurePrototype(),
+                activation.executionDomain(),
+                completion -> completion.succeeded());
     }
 
     public ProtosFutureValue read(ProtosActivation activation,Object maxBytesValue){

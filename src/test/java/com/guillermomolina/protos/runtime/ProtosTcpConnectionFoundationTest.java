@@ -43,7 +43,9 @@ final class ProtosTcpConnectionFoundationTest {
 
         assertSame(ProtosObjectValue.rootObject(), prototype.parent().orElseThrow());
         assertTrue(prototype.isFrozen());
-        assertTrue(prototype.localSlotsSnapshot().isEmpty());
+        assertEquals(
+                java.util.Set.of("read", "write", "close", "shutdownRead", "shutdownWrite"),
+                prototype.localSlotsSnapshot().keySet());
         assertTrue(prelude.bindings().readLocalSlot("TcpConnection").isEmpty());
         assertTrue(prelude.bindings().readLocalSlot("_coreTcpConnectionPrototype").isEmpty());
     }

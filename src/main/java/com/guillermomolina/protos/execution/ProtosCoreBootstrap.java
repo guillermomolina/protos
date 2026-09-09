@@ -292,6 +292,7 @@ public final class ProtosCoreBootstrap {
                         bootstrapContext,
                         "_coreTcpConnectionPrototype",
                         ProtosObjectValue.rootObject());
+        ProtosStandardTcpConnectionProtocol.install(tcpConnectionPrototype);
         bootstrapContext.removeLocalSlot("_coreTcpConnectionPrototype");
         ProtosObjectValue futurePrototype = requirePrototype(bootstrapContext, "Future", ProtosObjectValue.rootObject());
         ProtosStandardFutureProtocol.install(futurePrototype);

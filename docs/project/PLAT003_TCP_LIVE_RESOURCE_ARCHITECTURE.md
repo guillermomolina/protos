@@ -118,6 +118,20 @@ less-ordinary Protos representation merely as a memory optimization.
 - Backend-specific socket/channel objects in Protos semantics: violates D047 portability and D052
   ordinary-object topology.
 
+## I028-C2 implementation evidence
+
+C2 closes at implementation version `0.2.286-SNAPSHOT` with the selected duplex architecture realized
+without choosing a network backend. `ProtosStandardTcpConnectionProtocol` installs five shared
+I/O/lifecycle Closures on the hidden family prototype, never per resource. Each operational
+`ProtosTcpConnectionValue` owns one host-neutral `ProtosTcpConnectionFlow`; that flow injects one
+`ProtosIoLifecycle` into two independent existing `ProtosByteIoFlow` instances. The input lane therefore
+retains ByteReadable ordering/cancellation/rebuffering while the output lane independently retains
+ByteWritable snapshot/admission/ordering, and neither lane's pending head serializes the other.
+Directional shutdown stays lane-local while whole-resource close cuts over the shared lifecycle and
+performs one backend-release action only after the shared logical operation set permits it. Resource
+close does not mutate ordinary Protos structural state. C2 adds no endpoint observation, acquisition,
+NIO/socket/reactor identity, or production backend; C3 remains the endpoint-observation slice.
+
 ## I028-C1 implementation evidence
 
 C1 publishes the first concrete consumer of this architecture at implementation version `0.2.285-SNAPSHOT`. The
