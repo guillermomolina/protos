@@ -118,6 +118,16 @@ less-ordinary Protos representation merely as a memory optimization.
 - Backend-specific socket/channel objects in Protos semantics: violates D047 portability and D052
   ordinary-object topology.
 
+## I028-C3 implementation evidence
+
+C3 completes the shared TcpConnection protocol surface at implementation version `0.2.288-SNAPSHOT` by adding the
+two endpoint-observation Closures to the existing provider. Endpoint backing is retained as opaque
+runtime state on operational resources and validated against the existing D048 representation bridge
+before synchronous exposure; no backend query, network effect, new resource category or endpoint
+identity contract is introduced. The provider therefore grows from five to seven native Closure
+construction sites while the provider count remains unchanged. C4 consumes these observations during
+host-neutral connect acquisition.
+
 ## I028-C2 implementation evidence
 
 C2 closes at implementation version `0.2.286-SNAPSHOT` with the selected duplex architecture realized

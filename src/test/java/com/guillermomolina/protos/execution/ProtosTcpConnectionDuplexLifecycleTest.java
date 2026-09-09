@@ -54,7 +54,7 @@ final class ProtosTcpConnectionDuplexLifecycleTest {
         ProtosObjectValue prototype = prelude.tcpConnectionPrototypeForRuntime();
 
         assertEquals(
-                java.util.Set.of("read", "write", "close", "shutdownRead", "shutdownWrite"),
+                java.util.Set.of("read", "write", "close", "shutdownRead", "shutdownWrite", "localEndpoint", "remoteEndpoint"),
                 prototype.localSlotsSnapshot().keySet());
         assertTrue(prototype.isFrozen());
         assertTrue(first.localSlotsSnapshot().isEmpty());

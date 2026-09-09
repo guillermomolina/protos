@@ -75,6 +75,22 @@ public final class ProtosStandardTcpConnectionProtocol {
                         (activation, supplied) ->
                                 requireConnection(activation, supplied, 0, prototype)
                                         .shutdownWriteForRuntime(activation)));
+        prototype.createLocalSlot(
+                "localEndpoint",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) ->
+                                endpointSnapshot(
+                                        requireEndpointConnection(activation, supplied, prototype),
+                                        true,
+                                        activation)));
+        prototype.createLocalSlot(
+                "remoteEndpoint",
+                ProtosClosureValue.nativeClosure(
+                        (activation, supplied) ->
+                                endpointSnapshot(
+                                        requireEndpointConnection(activation, supplied, prototype),
+                                        false,
+                                        activation)));
     }
 
     private static ProtosTcpConnectionValue requireConnection(
@@ -89,6 +105,36 @@ public final class ProtosStandardTcpConnectionProtocol {
             throw invalid(activation);
         }
         return connection;
+    }
+
+    private static ProtosTcpConnectionValue requireEndpointConnection(
+            ProtosActivation activation,
+            List<?> supplied,
+            ProtosObjectValue prototype) {
+        ProtosTcpConnectionValue connection =
+                requireConnection(activation, supplied, 0, prototype);
+        if (!connection.hasEndpointSnapshotsForRuntime()) {
+            throw invalid(activation);
+        }
+        return connection;
+    }
+
+    private static ProtosObjectValue endpointSnapshot(
+            ProtosTcpConnectionValue connection, boolean local, ProtosActivation activation) {
+        ProtosObjectValue endpoint =
+                local
+                        ? connection.localEndpointForRuntime()
+                        : connection.remoteEndpointForRuntime();
+        var prelude = activation.prelude().orElseThrow();
+        Object endpointBinding = prelude.bindings().readLocalSlot("IpEndpoint").orElse(null);
+        Object addressBinding = prelude.bindings().readLocalSlot("IpAddress").orElse(null);
+        if (!(endpointBinding instanceof ProtosObjectValue endpointPrototype)
+                || !(addressBinding instanceof ProtosObjectValue addressPrototype)
+                || !ProtosStandardIpEndpointProtocol.recognizesValue(
+                        endpoint, endpointPrototype, addressPrototype)) {
+            throw invalid(activation);
+        }
+        return endpoint;
     }
 
     private static ProtosSignalException invalid(ProtosActivation activation) {

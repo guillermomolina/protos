@@ -53,8 +53,8 @@ READY to implement `connectTcp`; I028-D will consume the same topology for liste
 - **C — TCP connection + `connectTcp` — IN_PROGRESS under D052/PLAT003:** ordinary live-resource topology, host-neutral async acquisition, cancellation/late resource custody, independent read/write progress with shared close/half-close lifecycle, and endpoint observation without strengthening endpoint `===` identity.
   - **C1 — ordinary TcpConnection resource/prototype + transfer foundation — CLOSED (`0.2.285-SNAPSHOT` / publication commit):** source-owned runtime-only frozen authority-free protocol parent, ordinary OPEN `ProtosTcpConnectionValue` with opaque host state and ordinary application slots, exact canonical parent preservation, no public TcpConnection Prelude binding, plus explicit Actor/P rejection of the live capability and authority-bearing descendants. No TCP selector, acquisition or backend yet; native boundary remains 123/32.
   - **C2 — TcpConnection protocol + duplex lifecycle foundation — CLOSED (`0.2.286-SNAPSHOT` / publication commit):** install the five D052 Byte I/O/lifecycle selectors once on the shared hidden protocol parent; compose two independent existing Byte-I/O lanes over one shared Closable lifecycle so read and write progress do not head-of-line block each other; retain bounded write snapshots, cancellation, close and directional-shutdown contracts without selecting a network backend. Endpoint observations remain C3.
-  - **C3 — endpoint observations — READY:** complete the remaining `localEndpoint` / `remoteEndpoint` protocol selectors and snapshots without strengthening endpoint `===` identity.
-  - **C4 — host-neutral `connectTcp` acquisition — dependency-gated on C2/C3:** validation/capture, Future commitment/cancellation and explicit late-resource custody; no concrete production backend.
+  - **C3 — endpoint observations — CLOSED (`0.2.288-SNAPSHOT` / publication commit):** complete `localEndpoint` / `remoteEndpoint` as synchronous recognized `IpEndpoint` observations over runtime-held logical snapshots, with receiver-domain/arity validation and no network/backend work; no endpoint `===` identity relation is selected.
+  - **C4 — host-neutral `connectTcp` acquisition — READY:** validation/capture, Future commitment/cancellation and explicit late-resource custody; no concrete production backend.
   - **C5 — integrated C conformance + closure — dependency-gated on C1-C4:** receiver-domain, ordinary-object/shadowing, Actor/P, acquisition races and C-level native-boundary reconciliation.
 - **D — TCP listener + `listenTcp`:** exact request snapshot/validation,
   `localPort`, concurrent pending accepts, lifecycle/admission behavior.
@@ -63,6 +63,18 @@ READY to implement `connectTcp`; I028-D will consume the same topology for liste
   subdivide mechanically if required.
 - **F — cross-slice conformance/native-boundary closure:** cancellation races,
   late custody, multiple-accept scale evidence and Actor/P non-transferability.
+
+## I028-C3 TcpConnection endpoint observations
+
+Published at implementation version `0.2.288-SNAPSHOT`. C3 completes the seven-selector D052 TcpConnection
+protocol by adding synchronous `localEndpoint` and `remoteEndpoint` observation on the shared hidden
+family parent. Operational runtime construction may retain recognized logical endpoint snapshots
+outside ordinary Protos slots; the standard observation bridge revalidates D048 recognized
+`IpEndpoint` shape before exposure and performs no backend/network operation. Ordinary descendants,
+wrong arity and runtime-only endpointless fixtures fail the standard receiver-domain boundary. C3
+makes no assertion about endpoint object identity across repeated calls or relative to a future
+`connectTcp` argument; only the D047 structural remote-endpoint equality requirement remains
+normative. Native Closure inventory is 130 sites across 33 providers. C4 is READY.
 
 ## I028-C2 TcpConnection shared protocol + duplex lifecycle foundation
 

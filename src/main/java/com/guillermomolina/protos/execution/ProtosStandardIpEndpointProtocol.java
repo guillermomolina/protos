@@ -174,7 +174,7 @@ public final class ProtosStandardIpEndpointProtocol {
         return new ProtosIntegerValue(addressHash.multiply(HASH_MULTIPLIER).add(port));
     }
 
-    private static boolean recognizesValue(
+    static boolean recognizesValue(
             Object candidate,
             ProtosObjectValue prototype,
             ProtosObjectValue ipAddressPrototype) {

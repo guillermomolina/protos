@@ -30,12 +30,16 @@ import java.util.Objects;
 public final class ProtosTcpConnectionValue extends ProtosObjectValue {
     private final Object resourceState;
     private final ProtosTcpConnectionFlow flow;
+    private final ProtosObjectValue localEndpointSnapshot;
+    private final ProtosObjectValue remoteEndpointSnapshot;
 
     /** C1-compatible non-operational host representation used before standardized acquisition exists. */
     public ProtosTcpConnectionValue(ProtosPrelude prelude, Object resourceState) {
         super(requirePrototype(prelude));
         this.resourceState = Objects.requireNonNull(resourceState, "resourceState");
         this.flow = null;
+        this.localEndpointSnapshot = null;
+        this.remoteEndpointSnapshot = null;
     }
 
     /** Runtime construction path for an acquired/operational TCP connection. */
@@ -52,6 +56,30 @@ public final class ProtosTcpConnectionValue extends ProtosObjectValue {
                         Objects.requireNonNull(prelude, "prelude").bytesPrototypeForRuntime(),
                         Objects.requireNonNull(activation, "activation"),
                         Objects.requireNonNull(backend, "backend"));
+        this.localEndpointSnapshot = null;
+        this.remoteEndpointSnapshot = null;
+    }
+
+    /** Runtime construction path for an acquired connection with logical endpoint snapshots. */
+    public ProtosTcpConnectionValue(
+            ProtosPrelude prelude,
+            Object resourceState,
+            ProtosActivation activation,
+            ProtosTcpConnectionFlow.Backend backend,
+            ProtosObjectValue localEndpointSnapshot,
+            ProtosObjectValue remoteEndpointSnapshot) {
+        super(requirePrototype(prelude));
+        this.resourceState = Objects.requireNonNull(resourceState, "resourceState");
+        this.flow =
+                new ProtosTcpConnectionFlow(
+                        this,
+                        Objects.requireNonNull(prelude, "prelude").bytesPrototypeForRuntime(),
+                        Objects.requireNonNull(activation, "activation"),
+                        Objects.requireNonNull(backend, "backend"));
+        this.localEndpointSnapshot =
+                Objects.requireNonNull(localEndpointSnapshot, "localEndpointSnapshot");
+        this.remoteEndpointSnapshot =
+                Objects.requireNonNull(remoteEndpointSnapshot, "remoteEndpointSnapshot");
     }
 
     /** Opaque host/runtime state. This value is never an ordinary Protos slot. */
@@ -82,6 +110,24 @@ public final class ProtosTcpConnectionValue extends ProtosObjectValue {
 
     public ProtosFutureValue shutdownWriteForRuntime(ProtosActivation activation) {
         return requireFlow().shutdownWrite(activation);
+    }
+
+    public boolean hasEndpointSnapshotsForRuntime() {
+        return localEndpointSnapshot != null && remoteEndpointSnapshot != null;
+    }
+
+    public ProtosObjectValue localEndpointForRuntime() {
+        if (!hasEndpointSnapshotsForRuntime()) {
+            throw new IllegalStateException("TcpConnection has no logical endpoint snapshots");
+        }
+        return localEndpointSnapshot;
+    }
+
+    public ProtosObjectValue remoteEndpointForRuntime() {
+        if (!hasEndpointSnapshotsForRuntime()) {
+            throw new IllegalStateException("TcpConnection has no logical endpoint snapshots");
+        }
+        return remoteEndpointSnapshot;
     }
 
     private ProtosTcpConnectionFlow requireFlow() {
