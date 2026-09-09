@@ -14,10 +14,7 @@ second: Encoding.UTF8.encode("")
 
 first.add(7)
 
-(first !== second).and() {
-    (first.size() == 1).and() {
-        (first.at(0) == 7).and() {
-            second.size() == 0
-        }
-    }
-}
+(first !== second) &&
+    (first.size() == 1) &&
+    (first.at(0) == 7) &&
+    (second.size() == 0)
