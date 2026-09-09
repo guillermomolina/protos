@@ -1120,6 +1120,70 @@ confirmed as successful may the coordinating agent update the corresponding
 GitHub live state. If the agent cannot perform that GitHub write, it must report
 the exact coordination update still required rather than pretending it happened.
 
+<!-- GITHUB001 ISSUE-WORK-LOG-CHANGELOG-DISCIPLINE -->
+#### Issue work log and changelog discipline
+
+For actionable work with an owning GitHub Issue, that Issue thread is the live
+execution diary. After an outcome is known, agents with GitHub mutation
+capability MUST record materially significant execution outcomes on the directly
+owning Issue. This includes:
+
+- confirmed publications, with the exact published commit and the validation
+  evidence relevant to that bounded change;
+- failed or unpublished attempts when they expose a real blocker, invalidate a
+  working assumption, reveal a relevant repository/precondition conflict, or
+  otherwise change the next action; trivial authoring mistakes before meaningful
+  execution need not be logged;
+- validation or diagnostic results that materially affect closure, readiness, or
+  the interpretation of the work;
+- explicit project-owner-approved design decisions encountered by the work,
+  linking to the durable repository authority rather than treating the Issue
+  comment itself as design authority; and
+- dependency/blocker transitions or child outcomes when they materially change
+  what work is actionable next.
+
+Record the outcome on the most specific durable Issue that owns the work. Update
+an umbrella/parent Issue as well only when the outcome materially changes that
+parent's live state or summary. Mechanical micro-slices that do not have their
+own durable Issue remain logged on their owning durable parent when the outcome
+is significant.
+
+Issue comments MUST summarize evidence and outcomes rather than paste raw build
+or terminal transcripts. Prefer a compact entry that states the scope, exact
+publication/evidence identity when applicable, relevant PASS/FAIL results, the
+finding or resulting state, and the next released/blocked step. `WORK UPDATE`,
+`BLOCKER`, `PUBLICATION`, and `DECISION` are recommended comment headings when
+one of those labels makes the history easier to scan; the headings are not new
+formal work-item states.
+
+`CHANGELOG.md` records **published durable changes to Protos and its maintained
+artifacts**. It MUST NOT be used as the work-item execution diary. In particular:
+
+- failed/unpublished attempts, validation-only runs, diagnostics with no durable
+  publication, and live assignee/priority/roadmap/status changes do not receive a
+  changelog entry merely because they happened;
+- dependency or blocker coordination changes that publish no durable artifact do
+  not by themselves require a changelog entry;
+- closing, reopening, blocking, or unblocking a GitHub Issue does not by itself
+  require a changelog entry;
+- conversely, a materially published implementation, specification,
+  documentation, tooling, governance, or other maintained-artifact change may
+  require a changelog entry even while its owning parent Issue remains open; and
+- a status-only reconciliation SHOULD NOT create a repository commit merely to
+  manufacture a changelog entry.
+
+When one publication both changes durable repository artifacts and changes live
+Issue state, the changelog describes **what changed in the published project**;
+the Issue comment records **what was attempted/validated and how the live work
+state changed**. Do not duplicate the full execution narrative in both places.
+
+The patch launcher remains GitHub-credential-independent as required above. The
+coordinating agent performs the Issue comment only after confirmed publication.
+If GitHub mutation is unavailable, report the exact Issue update still required
+instead of omitting it silently or moving that execution history into the
+changelog.
+
+
 The standard isolated direct-to-`main` publication workflow remains valid. Moving
 project coordination to GitHub does not by itself require every agent-generated
 change to use a pull request. Use a PR when the contribution workflow, review

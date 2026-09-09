@@ -1,5 +1,7 @@
 ## 0.2.292-SNAPSHOT
 
+- Refine GitHub-native coordination discipline: make the owning GitHub Issue the compact execution diary for materially significant work outcomes and confirmed publications, require concise evidence/result/state comments after publication, and reserve `CHANGELOG.md` for published durable project/artifact changes rather than failed attempts, validation-only runs, or live coordination transitions. Issue closure alone does not imply a changelog entry, while a material published change may still be logged before its parent Issue closes. Governance/documentation only: no specification, runtime, implementation-version, native-boundary, or license-term change.
+
 - Close `I028-D2 — TcpListener localPort + close lifecycle` under ratified D047/D052/PLAT003. Install two shared native selectors on the hidden frozen TcpListener protocol, retain the acquired non-zero local port as synchronous runtime observation with no backend effect, and reuse `ProtosIoLifecycle` for one Closable resource cutover whose release result is shared by fresh close Futures while remaining orthogonal to structural Object close. Add no `accept`, `listenTcp`, production backend, endpoint-identity rule or host socket/channel/reactor identity. Native boundary becomes 133 construction sites / 35 providers; release I028-D3. Specification and legacy live ledgers unchanged. Implementation version becomes `0.2.292-SNAPSHOT`.
 
 ## 0.2.291-SNAPSHOT
