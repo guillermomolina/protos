@@ -827,7 +827,7 @@ the already-published implementation commit.
 | LM004 | Extended language interaction conformance | CLOSED | `d390c0c642c5d2d907fcf9e384d1cbc080dd4783` | Retrospective canonical ID; deeper delegation/call-argument interactions plus Map/IdentityMap Path-key behavior. |
 | LM005 | Concurrent Language Maturity | CLOSED | `SAME_COMMIT` | LM005-A Future, LM005-B Actor, and LM005-C Group/GroupRef conformance/examples/tutorials complete; no runtime or normative feature added. |
 | LM006 | System & Resource Language Maturity | IN_PROGRESS | — | closed slices: A/B/C/D; READY: E; dependency-gated: F; No runtime or normative feature is owned by LM006. |
-| LM007 | Object Model Maturity | IN_PROGRESS | — | LM007-A/B object-model maturity slices are CLOSED; LM007-C/D/E remain READY. No runtime or normative feature is owned by LM007. |
+| LM007 | Object Model Maturity | IN_PROGRESS | — | LM007-A/B/C object-model maturity slices are CLOSED; LM007-D/E remain READY. No runtime or normative feature is owned by LM007. |
 
 ### LM005 — Concurrent Language Maturity
 
@@ -914,7 +914,7 @@ the ordinary Dxxx approval gate before dependent maturity work proceeds.
 |---|---|---|---|
 | LM007-A | CLOSED | `SAME_COMMIT` | Integrated object workflows: post-capture receiver-local mutation, inherited/extracted receiver-preserving methods and nested Closures, Error-handled delegated pipelines, and Array/Map/IdentityMap transport. Ordinary Protos central-manifest coverage only; no Java harness, runtime, specification, API or implementation-version change. |
 | LM007-B | CLOSED | `SAME_COMMIT` | Deep prototype-chain lookup with preserved receiver/methodHome through extracted and nested-super Closures, repeated sibling invocation under later receiver/ancestor mutation, post-capture creation of local shadows over inherited state, and old-versus-fresh extraction across method-slot replacement. Ordinary Protos central-manifest coverage only; no Java harness, runtime, specification, API or implementation-version change. |
-| LM007-C | READY | — | Error boundaries across delegated methods, lexical handler state, receiver state and collection callbacks. |
+| LM007-C | CLOSED | `SAME_COMMIT` | Dynamic Error boundaries across delegated receiver methods and Array callbacks: whole-collection unwinding preserves pre-signal receiver effects, per-element handlers share captured lexical state, a selected inner handler cannot catch its own replacement signal, and nested delegation-based Error categories select the dynamically innermost matching handler. Ordinary Protos central-manifest coverage only; no Java harness, runtime, specification, API or implementation-version change. |
 | LM007-D | READY | — | Long-form object/collection workflows with registries, repeated state transitions and equality/identity-sensitive lookup. |
 | LM007-E | READY | — | Cross-slice reconciliation, minimal retained regressions, semantic-gap accounting and final LM007 closure. |
 
@@ -923,6 +923,12 @@ LM007-B closure evidence:
 - sibling extractions and returned nested Closures remain independently receiver-bound across repeated collection-driven invocation, while a later member read of a stored Closure performs the already-defined fresh extraction for its new receiver;
 - post-capture local slot creation shadows inherited state immediately for the retained receiver, while later mutations of now-shadowed ancestors no longer affect lookup; replacing a prototype method slot changes future extraction but not an already-extracted Closure;
 - no Java harness, production runtime, normative specification, public API, native boundary or implementation version is changed.
+
+LM007-C closure evidence:
+- four ordinary Protos cases keep Error handling inside the existing object/callable model while crossing delegated receiver methods and Array callback boundaries; no host test harness participates in the observable result;
+- one outer handler proves collection callback signaling is ordinary unwinding: effects completed before the signal remain on the receiver, the signaling continuation and later callbacks do not resume, and the exact signaled Error reaches the selected handler;
+- independently installed per-element handlers preserve shared lexical recovery state across callbacks while delegated method state remains receiver-local; a selected inner `Error` handler is inactive during its handler Closure, so a replacement Error reaches the still-active outer handler with exact identity;
+- custom `ValidationError -> Error` and `FatalValidation -> ValidationError` prototypes exercise ordinary delegation matching and dynamically innermost handler selection inside callbacks; no Java harness, production runtime, normative specification, public API, native boundary or implementation version is changed.
 
 Coordination:
 - LM007 is intentionally independent of LM006 system/resource maturity and does

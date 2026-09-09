@@ -1,0 +1,82 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE.
+ */
+
+Arrays: import("std:collections/Array")
+
+machine: {
+    step: (value) => {
+        attempts = attempts + 1
+        (value == 2).ifTrue(() => {
+            problem.signal()
+        })
+        successes = successes + 1
+        value * 10
+    }
+}
+
+worker: machine {
+    attempts: 0
+    successes: 0
+    problem: Error()
+}
+
+replacement: Error()
+innerCalls: 0
+innerIdentity: 0
+outerCalls: 0
+outerIdentity: 0
+afterReplacementSignal: 0
+postMap: 0
+
+outerResult: Error.handle(
+    () => {
+        Arrays.map(Array(1, 2, 3), (value) => {
+            Error.handle(
+                () => {
+                    worker.step(value)
+                },
+                (caught) => {
+                    innerCalls = innerCalls + 1
+                    (caught === worker.problem).ifTrue(() => {
+                        innerIdentity = innerIdentity + 1
+                    })
+                    // The selected inner Error handler is already inactive here.
+                    // This replacement Error must therefore select the still-active
+                    // outer Error handler rather than recursively selecting itself.
+                    replacement.signal()
+                    afterReplacementSignal = afterReplacementSignal + 1
+                    88
+                }
+            )
+        })
+        postMap = postMap + 1
+        99
+    },
+    (caught) => {
+        outerCalls = outerCalls + 1
+        (caught === replacement).ifTrue(() => {
+            outerIdentity = outerIdentity + 1
+        })
+        66
+    }
+)
+
+result:
+    (outerResult * 10000000) +
+    (worker.attempts * 1000000) +
+    (worker.successes * 100000) +
+    (innerCalls * 10000) +
+    (innerIdentity * 1000) +
+    (outerCalls * 100) +
+    (outerIdentity * 10) +
+    (afterReplacementSignal * 2) +
+    postMap
+result

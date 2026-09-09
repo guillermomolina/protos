@@ -1,0 +1,86 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE.
+ */
+
+Arrays: import("std:collections/Array")
+
+ValidationError: Error {}
+FatalValidation: ValidationError {}
+
+engine: {
+    classify: (value) => {
+        calls = calls + 1
+        (value == 2).ifTrue(() => {
+            minor.signal()
+        })
+        (value == 4).ifTrue(() => {
+            major.signal()
+        })
+        successes = successes + 1
+        value * 10
+    }
+}
+
+worker: engine {
+    calls: 0
+    successes: 0
+    recoveries: 0
+    minor: ValidationError()
+    major: FatalValidation()
+}
+
+minorHits: 0
+majorHits: 0
+identityHits: 0
+
+safe: (value) => {
+    ValidationError.handle(
+        () => {
+            FatalValidation.handle(
+                () => {
+                    worker.classify(value)
+                },
+                (caught) => {
+                    majorHits = majorHits + 1
+                    (caught === worker.major).ifTrue(() => {
+                        identityHits = identityHits + 1
+                    })
+                    worker.recoveries = worker.recoveries + 1
+                    400 + value
+                }
+            )
+        },
+        (caught) => {
+            minorHits = minorHits + 1
+            (caught === worker.minor).ifTrue(() => {
+                identityHits = identityHits + 1
+            })
+            worker.recoveries = worker.recoveries + 1
+            200 + value
+        }
+    )
+}
+
+sum: Arrays.reduce(Array(1, 2, 3, 4, 5), (total, value) => {
+    total + safe(value)
+}, 0)
+
+// Minor ValidationError bypasses the nonmatching FatalValidation handler and is
+// caught by the outer category. FatalValidation matches both categories, so the
+// dynamically innermost matching handler wins. The results are 10,202,30,404,50.
+result:
+    (sum * 1000000) +
+    (worker.calls * 100000) +
+    (worker.successes * 10000) +
+    (worker.recoveries * 1000) +
+    (identityHits * 100) +
+    (minorHits * 10) +
+    majorHits
+result

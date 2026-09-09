@@ -651,3 +651,7 @@ maturity/object-model/deep-extracted-super-chain-mutation.protos	integer	2613462
 maturity/object-model/sibling-extractions-repeated-rounds.protos	integer	66155101
 maturity/object-model/post-capture-deep-shadowing.protos	integer	245458606363
 maturity/object-model/method-slot-replacement-after-extraction.protos	integer	6105011110231
+maturity/object-model/collection-unwind-preserves-receiver-state.protos	integer	77321110
+maturity/object-model/per-element-handler-lexical-state.protos	integer	109422222
+maturity/object-model/handler-resignal-escapes-selected-handler.protos	integer	662111110
+maturity/object-model/delegated-error-category-selection-in-callbacks.protos	integer	696532211

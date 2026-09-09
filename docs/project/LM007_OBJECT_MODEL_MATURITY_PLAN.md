@@ -54,7 +54,7 @@ gate before dependent maturity work continues.
 |---|---|---|
 | `LM007-A` | CLOSED | Integrated object workflows combining delegation, local slot mutation, nested/extracted receiver-preserving Closures, Error handling and Array/Map/IdentityMap transport. |
 | `LM007-B` | CLOSED | Deep prototype chains, method extraction and mutation after capture/extraction, including repeated invocation, retained `super` lookup origin, post-capture local shadowing, ancestor mutation, and method-slot replacement. |
-| `LM007-C` | READY | Error boundaries across delegated methods, lexical handler state, receiver state and collection callbacks. |
+| `LM007-C` | CLOSED | Error boundaries across delegated methods and collection callbacks, including whole-operation unwind, repeated per-callback recovery, selected-handler deactivation/re-signal, exact Error identity and nested delegation-category matching. |
 | `LM007-D` | READY | Long-form registries/pipelines with repeated state transitions and equality/identity-sensitive collection lookup. |
 | `LM007-E` | READY | Reconcile findings, reduce failures to minimal regressions, document gaps and close LM007 only after the integrated invariants remain stable. |
 
@@ -81,6 +81,18 @@ The four deterministic integer expectations are `118663`, `3171`, `72` and
 
 Deterministic integer expectations are `2613462350255427`, `66155101`,
 `245458606363`, and `6105011110231` respectively.
+
+## LM007-C coverage
+
+| Program | Error / unwind pressure | Receiver / lexical / collection pressure |
+|---|---|---|
+| `collection-unwind-preserves-receiver-state.protos` | Exact receiver-owned Error escapes the third Array reduce callback to one outer `Error.handle`; signaling continuation, later callback and post-collection continuation are abandoned | Delegated method mutations completed before signaling remain on the original receiver; handler mutates receiver recovery state plus captured lexical counters |
+| `per-element-handler-lexical-state.protos` | Two occurrences of the same exact Error are independently handled by separately installed per-element handlers | Four Array callbacks share lexical fallback/handler counters while one delegated receiver separately tracks attempts, successes and failures |
+| `handler-resignal-escapes-selected-handler.protos` | An inner `Error` handler catches the receiver Error and signals a replacement Error from its handler Closure; the selected inner frame is already inactive, so the still-active outer `Error` handler receives the exact replacement | The failure originates in an inherited method reached from an Array callback; pre-signal receiver state remains while the callback/collection continuations are abandoned |
+| `delegated-error-category-selection-in-callbacks.protos` | Ordinary `ValidationError -> Error` and `FatalValidation -> ValidationError` categories prove nonmatching pass-through and dynamically innermost matching selection with exact caught identities | Nested handlers execute per Array callback around one delegated receiver whose success/recovery state spans all callbacks |
+
+Deterministic integer expectations are `77321110`, `109422222`, `662111110`,
+and `696532211` respectively.
 
 ## Closure criteria
 
