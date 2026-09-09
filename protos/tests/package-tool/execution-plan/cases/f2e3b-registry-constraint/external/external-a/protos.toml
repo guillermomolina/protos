@@ -1,0 +1,10 @@
+manifest-version = 1
+
+[package]
+id = "external-a"
+version = "1.0.0"
+
+[dependencies.depreg]
+authority = "public"
+package = "pkg-b"
+version = "^3.0.0"

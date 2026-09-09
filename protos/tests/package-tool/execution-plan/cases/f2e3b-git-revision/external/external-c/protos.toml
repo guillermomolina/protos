@@ -1,0 +1,8 @@
+manifest-version = 1
+
+[package]
+id = "external-c"
+version = "9.9.9"
+
+[exports]
+PublicC = "ThingC"

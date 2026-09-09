@@ -1,0 +1,5 @@
+manifest-version = 1
+
+[package]
+id = "external-c"
+version = "not-a-version"

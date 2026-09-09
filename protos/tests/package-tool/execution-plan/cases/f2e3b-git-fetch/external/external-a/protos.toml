@@ -1,0 +1,9 @@
+manifest-version = 1
+
+[package]
+id = "external-a"
+version = "1.0.0"
+
+[dependencies.depgit]
+git = "https://wrong.invalid/c.git"
+rev = "abc123"

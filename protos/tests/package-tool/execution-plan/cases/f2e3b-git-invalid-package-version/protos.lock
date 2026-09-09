@@ -1,0 +1,9 @@
+lock-format 1
+resolver-version 1
+resolution-input protos-resolution-input-v1 sha256:6f2526d30fdc07e44c319bdb194eb0e7fafadcd61768eb36fc13917abf2fc2c5
+
+root workspace "root"
+registry-node registry "external-a" "1.0.0" locator "pkg" authority "public" content protos-package-tree-v1 sha256:afa172bb166330a2254f75b9443beeeb4302bf8741c1eb9f91b3e8cccf0626cc
+git-node git "external-c" "abc123" fetch "https://example.invalid/c.git" content protos-package-tree-v1 sha256:b361cc74aa384afbdca8b21370680b0bdc4d1455472c2449679760105705d1d5
+dependency workspace "root" alias "reg" target registry "external-a" "1.0.0"
+dependency registry "external-a" "1.0.0" alias "depgit" target git "external-c" "abc123"

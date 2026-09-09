@@ -1,0 +1,5 @@
+manifest-version = 1
+
+[package]
+id = "wrong-id"
+version = "1.0.0"

@@ -1,0 +1,17 @@
+manifest-version = 1
+
+[package]
+id = "external-a"
+version = "1.0.0"
+
+[exports]
+PublicA = "ThingA"
+
+[dependencies.depgit]
+git = "https://example.invalid/c.git"
+rev = "abc123"
+
+[dependencies.depreg]
+authority = "public"
+package = "pkg-b"
+version = "^2.0.0"

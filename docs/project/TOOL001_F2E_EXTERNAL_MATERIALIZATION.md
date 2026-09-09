@@ -745,3 +745,37 @@ transitive dependency declarations against the exact root-owned lock, and emit
 only inert generation-2 plan data.
 
 F2E3 remains **IN_PROGRESS**. F2E4/F2E5 remain dependency-gated.
+
+## F2E3B closure — verified external manifest + transitive graph construction
+
+F2E3B is CLOSED by this executable slice under D053, D056 and D057.
+
+The bundled-Protos execution planner now has a separate
+`buildV2FromVerifiedCaptures(projectTreeFilesystem, verifiedExternalPackages)`
+path. Each supplied external item carries only the exact locked ref,
+ContentIdentity evidence and the **same already-verified captured Filesystem**
+owned by F2E2. F2E3B reads exact `protos.toml` through
+`ManifestCommand.load(capturedFilesystem)`, derives exports/dependencies from
+that manifest and never accepts caller-authored export/dependency policy.
+
+Preflight now enforces exact PackageId, ReleaseVersion validity, registry
+release equality, exact active LanguageCompatibilityId when declared, D056
+external-path rejection, D057 external-workspace rejection, exact
+registry/Git provenance and constraint/revision reconciliation, complete
+external descriptor coverage and exact dependency-edge accounting.
+
+The resulting generation-2 plan still contains only typed NodeRefs,
+ContentIdentity, exports and dependency edges. Captured Filesystem/custody,
+physical/source/store paths, registry locator/authority, Git fetch provenance,
+resolver authority and host handles do not cross into PackageExecutionPlan.
+
+Focused conformance includes one mixed workspace -> registry ->
+{registry, exact-Git} graph plus fail-closed identity/version/compatibility,
+D056/D057, provenance, edge-accounting, descriptor, duplicate-edge and
+dangling-target evidence. Git manifest `package.version` is validated as
+ReleaseVersion metadata but does not replace exact revision identity.
+
+F2E3 remains **IN_PROGRESS**. The remaining parent work is the final
+verified-custody/composition boundary that will connect F2E2 host custody to
+this Protos-owned V2 construction before F2E4 host detach/resolver work can
+begin.
