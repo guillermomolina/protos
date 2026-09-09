@@ -1,3 +1,7 @@
+## 0.2.276-SNAPSHOT
+
+- Close `I030 — Standard Object structural-view publication`, a runtime implementation finding exposed by LM007-D. Publish the already-normative inherited `Object.without(name)` and `Object.alias(sourceName, aliasName)` messages through the existing ordinary-object representation bridge, reusing the existing shallow `ProtosObjectValue` structural helpers. Add ordinary-Protos coverage for symbolic selector aliasing with receiver binding, exact shallow value preservation, fresh Object-parented results, local-only source selection, and alias conflict failure; update the audited native boundary from 113 to 115 construction sites while keeping 30 providers. No normative specification, grammar, public semantic contract, license term, or LM007 test expectation changes. Implementation version becomes `0.2.276-SNAPSHOT`.
+
 ## 0.2.275-SNAPSHOT
 
 - Refresh closed `DOC001-E` Guide 04 after D050 / specification `0.1.390`: document strict Boolean `not()` and unary `!`, ordinary two-way `ifTrueIfFalse(trueBlock, falseBlock)` selection, eager callback-producing argument-expression evaluation with selected-only callback validation/invocation, and representative Protos conformance links. Documentation only: no normative specification, implementation, tests, native boundary, implementation-version or license-term change.

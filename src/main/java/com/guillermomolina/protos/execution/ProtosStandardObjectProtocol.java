@@ -73,6 +73,18 @@ public final class ProtosStandardObjectProtocol {
                     ProtosClosureValue.nativeClosure(
                             ProtosStandardObjectProtocol::slotValue));
         }
+        if (!object.hasLocalSlot("without")) {
+            object.createLocalSlot(
+                    "without",
+                    ProtosClosureValue.nativeClosure(
+                            ProtosStandardObjectProtocol::without));
+        }
+        if (!object.hasLocalSlot("alias")) {
+            object.createLocalSlot(
+                    "alias",
+                    ProtosClosureValue.nativeClosure(
+                            ProtosStandardObjectProtocol::alias));
+        }
         if (!object.hasLocalSlot("parent")) {
             object.createLocalSlot(
                     "parent",
@@ -137,6 +149,36 @@ public final class ProtosStandardObjectProtocol {
             throw invalid(activation);
         }
         return value.orElseThrow();
+    }
+
+    private static Object without(ProtosActivation activation, List<?> supplied) {
+        if (supplied.size() != 1
+                || !(supplied.get(0) instanceof ProtosStringValue name)) {
+            throw invalid(activation);
+        }
+        if (!(activation.receiver() instanceof ProtosObjectValue receiver)) {
+            throw invalid(activation);
+        }
+        if (!receiver.hasLocalSlot(name.value())) {
+            throw invalid(activation);
+        }
+        return receiver.withoutLocalSlot(name.value());
+    }
+
+    private static Object alias(ProtosActivation activation, List<?> supplied) {
+        if (supplied.size() != 2
+                || !(supplied.get(0) instanceof ProtosStringValue sourceName)
+                || !(supplied.get(1) instanceof ProtosStringValue aliasName)) {
+            throw invalid(activation);
+        }
+        if (!(activation.receiver() instanceof ProtosObjectValue receiver)) {
+            throw invalid(activation);
+        }
+        if (!receiver.hasLocalSlot(sourceName.value())
+                || receiver.hasLocalSlot(aliasName.value())) {
+            throw invalid(activation);
+        }
+        return receiver.aliasLocalSlot(sourceName.value(), aliasName.value());
     }
 
     private static Object whileLoop(ProtosActivation activation, List<?> supplied) {

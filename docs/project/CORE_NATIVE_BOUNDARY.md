@@ -1,3 +1,19 @@
+## I030 — standard `Object.without` / `Object.alias` structural views
+
+LM007-D exposed that the already-normative structural-view helpers existed in
+`ProtosObjectValue` but their ordinary inherited `Object` messages were not
+published to guest Protos code. I030 publishes exactly `without(name)` and
+`alias(sourceName, aliasName)` through `ProtosStandardObjectProtocol`.
+
+These operations are representation bridges: their contract dynamically reads
+receiver-local slot names and constructs a fresh ordinary local-slot snapshot,
+which cannot be expressed faithfully through the currently published guest
+reflection surface. Each selector therefore adds one reviewed native Closure
+construction site. The audited Core boundary becomes **115 native Closure
+construction sites across 30 providers**, with `ProtosStandardObjectProtocol.java`
+at nine sites. `slotNames`, `removeSlot`, structural `close`, and structural
+`freeze` remain outside this bounded implementation finding.
+
 # Core Native Boundary
 
 ## I029 — D050 Boolean protocol completion
@@ -154,7 +170,7 @@ the standard native boundary.
 
 | Provider | Native Closure sites | Classification | Audited reason for remaining native |
 |---|---:|---|---|
-| `ProtosStandardObjectProtocol.java` | 7 | host-irreducible / representation bridge | Generic polymorphic `call` performs Closure invocation or ordinary instance construction; `identityHash` exposes semantic identity without dynamic-dispatch substitution; inherited `hasSlot` validates one semantic String and projects exact receiver-local slot presence; inherited `slotValue` validates one semantic String, reads only an ordinary receiver local binding and returns the exact stored value or signals Error when absent; `ensure` establishes the D043 Closure-only protected dynamic extent and executes unwind cleanup before normal/return/Error propagation; inherited `parent` projects the exact immutable semantic delegation parent across ordinary and opaque represented values and signals for the unique root because no structural parent exists; `while` establishes the D044 Closure-only iterative control boundary while reusing ordinary Closure invocation, replay, suspension, cancellation and task ownership machinery. |
+| `ProtosStandardObjectProtocol.java` | 9 | host-irreducible / representation bridge | Generic polymorphic `call` performs Closure invocation or ordinary instance construction; `identityHash` exposes semantic identity without dynamic-dispatch substitution; inherited `hasSlot` validates one semantic String and projects exact receiver-local slot presence; inherited `slotValue` validates one semantic String, reads only an ordinary receiver local binding and returns the exact stored value or signals Error when absent; inherited `without` / `alias` validate semantic String names, inspect only receiver-local ordinary-object structure, and construct fresh Object-parented shallow views; `ensure` establishes the D043 Closure-only protected dynamic extent and executes unwind cleanup before normal/return/Error propagation; inherited `parent` projects the exact immutable semantic delegation parent across ordinary and opaque represented values and signals for the unique root because no structural parent exists; `while` establishes the D044 Closure-only iterative control boundary while reusing ordinary Closure invocation, replay, suspension, cancellation and task ownership machinery. |
 | `ProtosStandardBooleanProtocol.java` | 1 | host-irreducible | `not`/`ifTrue`/`ifFalse`/`ifTrueIfFalse`/`and`/`or` are the primitive Boolean/control surface, including canonical negation and path-sensitive callback selection/validation. |
 | `ProtosStandardHashSupport.java` | 3 | representation bridge | Object identity hashing and Number/String hashing depend on semantic identity or exact represented values and must not be redefined through overrideable message sends. |
 | `ProtosStandardNumberEqualityProtocol.java` | 1 | representation bridge | Exact cross-family Number equality needs Integer/fixed/binary64 representation knowledge, including NaN and exact-integral Float handling. |
@@ -185,7 +201,7 @@ the standard native boundary.
 | `ProtosStandardFileProtocol.java` | 10 | resource/capability bridge | File objects are acquired resource capabilities whose exact local surface depends on backend-provided authority and whose operations own cursor/append/sync/close/commitment state. |
 | `ProtosStandardFilesystemProtocol.java` | 1 | resource/capability bridge | Host-provisioned Filesystem authority exposes standard `open`, `replace`, `remove`, `entries`, and `captureTree` through one shared audited operation-Closure construction helper. Open retains confined/race-free acquisition and File materialization; D041 namespace mutation uses the host-neutral effect/commit cutover; D046 tree observation reuses the host-neutral I024 flow, materializes inert Array descriptors or a fresh structurally read-only Filesystem, and leaves unsupported backends default-fail without adding a Directory or Filesystem-close boundary. |
 
-Total audited Core production construction sites: **113 across 30 providers**.
+Total audited Core production construction sites: **115 across 30 providers**.
 
 CLI/launcher-owned host conveniences are not Core standard behavior and therefore
 do not change that 30-provider / 113-site Core boundary. They are nevertheless
