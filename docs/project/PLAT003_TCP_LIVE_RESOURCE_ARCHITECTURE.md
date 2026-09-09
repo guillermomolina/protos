@@ -118,6 +118,17 @@ less-ordinary Protos representation merely as a memory optimization.
 - Backend-specific socket/channel objects in Protos semantics: violates D047 portability and D052
   ordinary-object topology.
 
+## I028-C5 integrated closure evidence
+
+C5 closes the I028-C consumer at implementation version `0.2.289-SNAPSHOT` without changing PLAT003. One integrated
+conformance harness starts from the real host-neutral `Network.connectTcp` acquisition path and verifies
+that the published result retains the ordinary TcpConnection topology, application-local slot/shadowing
+semantics, strict live-family receiver domain, Actor/P confinement, endpoint structural observations and
+pre-commit cancellation/late-resource custody already established by C1-C4. The retained native-boundary
+guard remains 131 sites across 34 providers. No production backend, new runtime category, scheduling
+identity, endpoint object-identity rule or additional native Closure is introduced. I028-D may now reuse
+the same ratified live-resource architecture for TcpListener/accept work.
+
 ## I028-C4 implementation evidence
 
 C4 realizes the ratified connect-acquisition architecture at implementation version `0.2.289-SNAPSHOT` without

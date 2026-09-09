@@ -50,19 +50,36 @@ READY to implement `connectTcp`; I028-D will consume the same topology for liste
   - **B3 — optional RootActor `network` bootstrap endowment — CLOSED (`0.2.284-SNAPSHOT` / `SAME_COMMIT`):** host-granted represented Network is an optional exact local `network` only on the initial RootActor module/standalone entry; absence is a missing slot, imports/new Actors receive no ambient grant, and Process exposes no Network accessor.
   - **B4 — ambient/import/Actor/P confinement conformance — CLOSED (`0.2.284-SNAPSHOT` / `SAME_COMMIT`; implementation version unchanged):** retained integrated evidence proves the authority-free Network prototype and Process protocol cannot recover a concrete grant, imports/non-root Actors cannot resolve RootActor `network` ambiently, and the exact B3 bootstrap capability is rejected by Actor/P transfer; no production or TCP/backend change.
   - **B5 — close B — CLOSED (`0.2.284-SNAPSHOT` / `SAME_COMMIT`; implementation version unchanged):** reconcile B1-B4 retained evidence, close the represented Network capability/bootstrap boundary, and release I028-C without selecting a TCP backend.
-- **C — TCP connection + `connectTcp` — IN_PROGRESS under D052/PLAT003:** ordinary live-resource topology, host-neutral async acquisition, cancellation/late resource custody, independent read/write progress with shared close/half-close lifecycle, and endpoint observation without strengthening endpoint `===` identity.
+- **C — TCP connection + `connectTcp` — CLOSED under D052/PLAT003:** ordinary live-resource topology, host-neutral async acquisition, cancellation/late resource custody, independent read/write progress with shared close/half-close lifecycle, endpoint observation, transfer confinement and integrated C-level conformance are complete without strengthening endpoint `===` identity or selecting a production backend.
   - **C1 — ordinary TcpConnection resource/prototype + transfer foundation — CLOSED (`0.2.285-SNAPSHOT` / publication commit):** source-owned runtime-only frozen authority-free protocol parent, ordinary OPEN `ProtosTcpConnectionValue` with opaque host state and ordinary application slots, exact canonical parent preservation, no public TcpConnection Prelude binding, plus explicit Actor/P rejection of the live capability and authority-bearing descendants. No TCP selector, acquisition or backend yet; native boundary remains 123/32.
   - **C2 — TcpConnection protocol + duplex lifecycle foundation — CLOSED (`0.2.286-SNAPSHOT` / publication commit):** install the five D052 Byte I/O/lifecycle selectors once on the shared hidden protocol parent; compose two independent existing Byte-I/O lanes over one shared Closable lifecycle so read and write progress do not head-of-line block each other; retain bounded write snapshots, cancellation, close and directional-shutdown contracts without selecting a network backend. Endpoint observations remain C3.
   - **C3 — endpoint observations — CLOSED (`0.2.288-SNAPSHOT` / publication commit):** complete `localEndpoint` / `remoteEndpoint` as synchronous recognized `IpEndpoint` observations over runtime-held logical snapshots, with receiver-domain/arity validation and no network/backend work; no endpoint `===` identity relation is selected.
   - **C4 — host-neutral `connectTcp` acquisition — CLOSED (`0.2.289-SNAPSHOT` / publication commit):** install the single standard Network `connectTcp` selector, require an actual represented Network capability plus recognized endpoint before authority exercise, reuse ordinary I/O Future commitment/cancellation, materialize the fresh TcpConnection only at successful handoff, and explicitly release late/duplicate/unmaterializable backend resources; no concrete production backend or endpoint identity strengthening.
-  - **C5 — integrated C conformance + closure — READY:** receiver-domain, ordinary-object/shadowing, Actor/P, acquisition races and C-level native-boundary reconciliation.
-- **D — TCP listener + `listenTcp`:** exact request snapshot/validation,
+  - **C5 — integrated C conformance + closure — CLOSED (`0.2.289-SNAPSHOT` / publication commit; implementation version unchanged):** an acquired C4 connection is retained as the same ordinary C1-C3 resource family, preserves ordinary local-slot/shadowing behavior, rejects authority manufacture through descendants, remains non-transferable through Actor/P, and preserves pre-commit cancellation/late-resource custody; retained native-boundary evidence remains 131/34. I028-C is CLOSED.
+- **D — TCP listener + `listenTcp` — READY:** exact request snapshot/validation,
   `localPort`, concurrent pending accepts, lifecycle/admission behavior.
 - **E — production backend portability/scalability:** preserve D047 independently
   of NIO/epoll/kqueue/io_uring/IOCP/Network.framework implementation choices;
   subdivide mechanically if required.
 - **F — cross-slice conformance/native-boundary closure:** cancellation races,
   late custody, multiple-accept scale evidence and Actor/P non-transferability.
+
+## I028-C5 / I028-C closure
+
+Closed at implementation version `0.2.289-SNAPSHOT` without an implementation-version, production-runtime,
+specification or native-boundary change. C5 adds one integrated retained harness over the actual
+C4 acquisition result: the acquired value remains the ordinary OPEN C1 TcpConnection family, C3
+endpoint observations preserve recognized structural equality without an identity strengthening,
+ordinary application local slots may shadow inherited protocol names, a descendant cannot use
+inherited standard TCP selectors to manufacture resource authority, and the acquired capability
+plus authority-bearing descendants remain rejected by Actor/P transfer. A pre-commit-cancelled
+connect remains cancelled when a resource arrives late and the explicit release callback owns that
+late custody.
+
+C5 also re-runs the retained C1-C4 focal suites and the executable Core native-boundary guard. The
+Core boundary remains **131 sites / 34 providers**: C5 adds no production native Closure, selector,
+backend, socket/channel/reactor identity or endpoint `===` contract. I028-C is CLOSED and I028-D is
+READY to consume the already-ratified TcpListener topology under D047/D052/PLAT003.
 
 ## I028-C4 host-neutral `connectTcp` acquisition
 
