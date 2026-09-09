@@ -9,3 +9,4 @@ state-persists-between-requests.protos	future-integer	12
 stop-termination-same-ref.protos	future-boolean	true
 invalid-spawn-specifier.protos	error	-
 spawn-rejects-nontransferable.protos	error	-
+ip-data-transfer.protos	future-boolean	true

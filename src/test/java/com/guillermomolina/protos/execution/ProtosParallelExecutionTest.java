@@ -28,4 +28,18 @@ class ProtosParallelExecutionTest{
  @Test void executorBounded()throws Exception{core();assertTrue(ProtosParallelRuntime.configuredCarrierLimit()>=2);assertTrue(ProtosParallelRuntime.liveCarrierCountForTesting()<=ProtosParallelRuntime.configuredCarrierLimit());}
  @Test void parallelReturnsCallerDomainFuture()throws Exception{var p=core();var d=new ProtosActorExecutionDomain();var a=p.newModuleActivation(new ProtosActorModuleState(),null,p.newExecutionContext(),d);var f=(ProtosFutureValue)eval(p,a,"((x) => x).parallel(42)");assertSame(d,f.domain());while(f.isPending()){d.dispatchUntilIdle();Thread.onSpinWait();}assertEquals(BigInteger.valueOf(42),((ProtosIntegerValue)f.resolvedValue().orElseThrow()).value());}
  @Test void highIndexCompletionCannotSelectFailure()throws Exception{var p=core();var d=new ProtosActorExecutionDomain();var a=p.newModuleActivation(new ProtosActorModuleState(),null,p.newExecutionContext(),d);CountDownLatch high=new CountDownLatch(1),lowRelease=new CountDownLatch(1);a.context().createLocalSlot("worker",ProtosClosureValue.nativeClosure((x,args)->{int n=((ProtosIntegerValue)args.get(0)).value().intValueExact();try{if(n==1){high.await();lowRelease.await();}else high.countDown();}catch(InterruptedException e){Thread.currentThread().interrupt();throw new AssertionError(e);}throw new ProtosSignalException(ProtosCoreErrors.newError(x));}));a.context().createLocalSlot("xs",p.newArray(List.of(new ProtosIntegerValue(BigInteger.ONE),new ProtosIntegerValue(BigInteger.TWO))));var f=(ProtosFutureValue)eval(p,a,"xs.parallelMap(worker)");assertTrue(high.await(5,TimeUnit.SECONDS));lowRelease.countDown();while(f.isPending()){d.dispatchUntilIdle();Thread.onSpinWait();}assertEquals(ProtosFutureValue.State.FAILED,f.state());}
+
+ @Test void ipDataTransferConformanceSourceRoundTripsThroughP()throws Exception{
+  var p=core();var d=new ProtosActorExecutionDomain();
+  var a=p.newModuleActivation(new ProtosActorModuleState(),null,p.newExecutionContext(),d);
+  var source=java.nio.file.Files.readString(
+      Path.of("protos","tests","conformance","network","ip-data-parallel-transfer.protos"),
+      java.nio.charset.StandardCharsets.UTF_8);
+  var f=assertInstanceOf(ProtosFutureValue.class,eval(p,a,source));
+  while(f.isPending()){d.dispatchUntilIdle();Thread.onSpinWait();}
+  assertEquals(ProtosFutureValue.State.RESOLVED,f.state());
+  assertSame(ProtosBooleanValue.TRUE,f.resolvedValue().orElseThrow());
+  d.dispatchUntilIdle();
+  assertEquals(0,d.liveTaskCount());
+ }
 }

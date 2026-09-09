@@ -1,0 +1,38 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+address: IpAddress(6, 340282366920938463463374607431768211455)
+endpoint: IpEndpoint(address, 65535)
+
+((value) => { value }).parallel(endpoint).then((copy) => {
+    ok: true
+
+    IpEndpoint.recognizes(copy).ifFalse(() => { ok = false })
+    (copy.parent() === IpEndpoint).ifFalse(() => { ok = false })
+    (copy !== endpoint).ifFalse(() => { ok = false })
+    (copy.port == 65535).ifFalse(() => { ok = false })
+    (copy == endpoint).ifFalse(() => { ok = false })
+    (copy.hash() == endpoint.hash()).ifFalse(() => { ok = false })
+
+    IpAddress.recognizes(copy.address).ifFalse(() => { ok = false })
+    (copy.address.parent() === IpAddress).ifFalse(() => { ok = false })
+    (copy.address !== address).ifFalse(() => { ok = false })
+    (copy.address.version == 6).ifFalse(() => { ok = false })
+    (copy.address.bits == 340282366920938463463374607431768211455).ifFalse(() => { ok = false })
+    (copy.address == address).ifFalse(() => { ok = false })
+    (copy.address.hash() == address.hash()).ifFalse(() => { ok = false })
+
+    ok
+})
