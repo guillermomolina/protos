@@ -11,10 +11,7 @@
 
 environment: process.environment()
 
-environment.contains("A").and() {
-    (environment.get("A") == "first").and() {
-        (environment.contains("MISSING") == false).and() {
-            environment.get("MISSING") === null
-        }
-    }
-}
+environment.contains("A") &&
+    (environment.get("A") == "first") &&
+    (environment.contains("MISSING") == false) &&
+    (environment.get("MISSING") === null)

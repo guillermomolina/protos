@@ -17,12 +17,9 @@ path: Path.relative().child("target.bin")
 future: Files.writeAllText(filesystem, path, "Aé", Encoding.UTF16BE)
 result: future.value()
 bytes: Files.readAllBytes(filesystem, path).value()
-(result === filesystem).and() {
-    (bytes.size() == 4).and() {
-        (bytes.at(0) == 0).and() {
-            (bytes.at(1) == 65).and() {
-                (bytes.at(2) == 0).and() { bytes.at(3) == 233 }
-            }
-        }
-    }
-}
+(result === filesystem) &&
+    (bytes.size() == 4) &&
+    (bytes.at(0) == 0) &&
+    (bytes.at(1) == 65) &&
+    (bytes.at(2) == 0) &&
+    (bytes.at(3) == 233)
