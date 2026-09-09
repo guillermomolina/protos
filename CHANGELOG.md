@@ -1,5 +1,7 @@
 ## 0.2.293-SNAPSHOT
 
+- Allocate `D053 — PackageExecutionPlan ABI evolution and external-package representation` as `NEEDS_USER_DECISION` after the TOOL001-F2E3 audit exposed that F2D1 had frozen generation 1 as an exact workspace-only ABI. Publish the durable decision record and block F2E3 on D053 before any generation-1 reinterpretation, generation-2 selection, sidecar graph or host-handle design is accepted. Preserve the closed F2E2 same-capture verification/custody boundary and existing package identity constraints. No option is selected by this allocation; no specification, executable implementation, Maven implementation version, lock-format bytes or license terms change.
+
 - Close `AUD003-A2 — Standard Library indexing audit/migration` by classifying the current `protos/lib/**` explicit indexing sites and migrating the ordinary readability-only `at` / result-ignored `atPut` calls in `collections/Array`, `collections/Set`, `collections/IdentitySet`, `crypto/SHA256`, `io/Files`, and `json/JSON` to the already-specified bracket read/assignment syntax. Preserve dispatch, evaluation order, mutation/result semantics and all public APIs; no result-sensitive/direct-protocol/bootstrap exception is rewritten, no specification or license-term change is introduced, and the Standard Library scan is clean for this confirmed equivalence family. Implementation version becomes `0.2.293-SNAPSHOT`.
 
 ## 0.2.292-SNAPSHOT

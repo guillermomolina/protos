@@ -1,6 +1,6 @@
 # TOOL001-F2E — External Immutable-Package Execution
 
-Status: **IN_PROGRESS — F2E1/F2E2 CLOSED; F2E3 READY; F2E4/F2E5 dependency-gated**
+Status: **IN_PROGRESS — F2E1/F2E2 CLOSED; F2E3 BLOCKED_BY_DECISION (D053); F2E4/F2E5 dependency-gated**
 Nature: non-normative Package Tool / host-integration project record
 Allocated after: `TOOL001-F2D` workspace-only execution closure
 
@@ -102,7 +102,7 @@ F2E2  verified read-only package-store binding                     CLOSED
 F2E2A  captured-Filesystem ContentIdentity canonicalizer/verifier  CLOSED
 F2E2B  exact selected-root capture + verified-capture host custody CLOSED
 F2E2C same-capture integration + F2E2 closure                      CLOSED
-F2E3  external-node execution-plan construction                    READY
+F2E3  external-node execution-plan construction                    BLOCKED_BY_DECISION: D053
 F2E4  external canonical ModuleKey + source resolver               BLOCKED_BY_DEPENDENCIES
 F2E5  public run integration + F2 external-execution closure       BLOCKED_BY_DEPENDENCIES
 ```
@@ -129,6 +129,8 @@ traversal to store authority and verify exactly the locked ContentIdentity.
 No ambient scan by PackageId/name/version is allowed.
 
 ### F2E3 — external execution-plan construction
+
+D053 (`docs/project/D053_PACKAGE_EXECUTION_PLAN_ABI_EVOLUTION.md`) now owns the newly exposed PackageExecutionPlan ABI-evolution decision. F2E3 is **BLOCKED_BY_DECISION** until D053 is explicitly ratified. In particular, F2E3 must not reinterpret the already-published exact generation-1 workspace-only ABI, select a generation-2 shape, add a sidecar graph, or introduce host handles/capabilities as plan identity before that decision.
 
 Extend Protos-owned preflight only after E2 returns verified immutable material.
 
