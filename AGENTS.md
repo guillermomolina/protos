@@ -1691,13 +1691,15 @@ delta after synchronizing with the current `origin/main`:
   `src/main/**`, distributable Protos source under `protos/lib/**`, and build,
   generation, packaging, or runtime configuration whose change can alter the
   compiled or distributed program. Run the focused tests that exercise the
-  changed behavior when such tests exist, then run the complete Maven test suite
-  before publication.
+  changed behavior when such tests exist. Before publication, run the complete
+  Maven test suite unless the definitive delta qualifies for the explicitly
+  bounded impact-aware tool-local exception below.
 - **Test-impact changes** under `src/test/**`, `protos/tests/**`, or equivalent
-  executable test infrastructure require the affected/focused tests and, for a
-  publication change, the complete Maven test suite unless the changed test
-  surface is intentionally outside Maven and an equivalent complete project
-  validation is documented.
+  executable test infrastructure require the affected/focused tests. For a
+  publication change, run the complete Maven test suite unless the changed test
+  surface is intentionally outside Maven with an equivalent complete project
+  validation, or the definitive delta qualifies for the explicitly bounded
+  impact-aware tool-local exception below.
 - **Specification-only changes** under `spec/**` do not run Maven tests by
   default. Run the applicable specification governance, consistency, changelog,
   and static checks. If a specific executable guard consumes the modified
@@ -1709,6 +1711,67 @@ delta after synchronizing with the current `origin/main`:
   other static checks. If an executable guard specifically consumes a modified
   document or ledger, run that focused guard only unless the delta also has
   executable impact.
+
+<!-- PERF005-B2 IMPACT-AWARE-TOOL-VALIDATION -->
+### Impact-aware tool-local publication validation
+
+Impact-aware publication validation is a bounded exception for intermediate
+executable/test-impact slices whose definitive publication delta is
+**unequivocally local to one tool**. It reduces repeated validation of unrelated
+tool corpora without weakening validation of shared or ambiguous changes.
+
+The exception is governed by these rules:
+
+1. Derive impact from the complete definitive delta against the execution-time
+   `PUBLICATION_BASE` plus an explicit repository-maintained dependency map.
+   A work-item identifier such as `TOOL001` or `TOOL002` is only coordination
+   metadata and MUST NOT by itself select test scope.
+2. The reduced path MAY be used only through a deterministic repository selector
+   that recognizes every changed executable/test-impact path and classifies the
+   whole delta as one explicitly mapped tool-local surface. Until such a selector
+   is published, or whenever it does not recognize the complete delta, run the
+   complete Maven test suite.
+3. A recognized tool-local delta MUST run the selector's complete affected set
+   for that tool, including its owned corpus plus every shared smoke,
+   conformance, adapter, or integration test that the maintained dependency map
+   declares necessary. "Focused" never means one convenient test when the mapped
+   affected set is broader.
+4. Changes touching shared production surfaces such as `src/main/**`,
+   distributable shared library/Core surfaces under `protos/lib/**`, build or
+   generation configuration, shared runtime/compiler/parser/filesystem/module
+   machinery, or shared executable test infrastructure require the complete
+   Maven test suite under this conservative policy.
+5. Cross-tool deltas, unknown paths, newly introduced executable/test-impact
+   paths not yet classified by the map, and any dependency ambiguity fail closed
+   to the complete Maven test suite. Never guess that an unclassified path is
+   local.
+6. Impact-aware omission of unrelated suites applies only to intermediate
+   publications. Closing or reconciling an owning top-level executable work item
+   such as an `Ixxx`, `TOOLxxx`, `LIBxxx`, or comparable parent requires a
+   complete Maven test suite over the exact closure candidate, even if earlier
+   child slices used tool-local routing.
+7. The launcher/report MUST state the selected impact class, the affected test
+   set, why any broader suites were skipped, and whether top-level reconciliation
+   requires a complete suite. This evidence belongs in the owning Issue work log
+   after successful publication.
+8. This validation optimization is repository tooling policy only. It MUST NOT
+   resume, duplicate, or emulate a suspended Test Tool scheduler, alter Protos
+   execution semantics, or convert host-level validation routing into language
+   behavior.
+
+Representative reporting for an intermediate recognized tool-local publication:
+
+    VALIDATION_CLASS: EXECUTABLE_IMPACT
+    VALIDATION_IMPACT: TOOL_LOCAL:PACKAGE
+    AFFECTED_TEST_SET: <deterministic selector output>
+    FULL_TEST_SUITE: SKIPPED (impact-aware tool-local intermediate publication)
+    TOP_LEVEL_RECONCILIATION: NOT_REQUIRED_FOR_THIS_CHILD_SLICE
+
+For shared, ambiguous, unknown, cross-tool, or top-level closure candidates:
+
+    VALIDATION_CLASS: EXECUTABLE_IMPACT
+    VALIDATION_IMPACT: FULL
+    FULL_TEST_SUITE: PASS
 
 ### Prefer Protos-level tests for observable language behavior
 
