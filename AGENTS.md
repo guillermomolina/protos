@@ -440,6 +440,48 @@ In particular:
 More specific instructions may add or refine rules for their scope, but they do
 not silently discard repository-wide requirements.
 
+## Live GitHub assignee discipline
+<!-- LIVE-GITHUB-ASSIGNEE-DISCIPLINE -->
+
+GitHub `Assignees` represent **active responsibility**, not repository ownership.
+They are live coordination state and MUST NOT be mirrored into historical
+repository ledgers.
+
+When an agent starts or resumes work that is directly represented by a formal
+Protos GitHub Issue, the agent MUST reconcile assignee state together with the
+Issue/Project status:
+
+- an Issue that the agent is directly working on and keeps or moves to
+  `In progress` SHOULD have an active responsible assignee;
+- when the agent is acting on behalf of the repository owner and no different
+  human contributor is already responsible, assign `guillermomolina`;
+- when creating a new formal Issue and immediately starting it, set the assignee
+  in the same coordination workflow rather than leaving an `In progress` Issue
+  unassigned;
+- `Inbox` and unclaimed `Ready` work normally remain unassigned so availability
+  is visible to contributors;
+- do not replace, add yourself over, or otherwise disturb an existing human
+  assignee merely because an agent is assisting that person's work;
+- do not assign a parent/umbrella Issue solely because one of its children is
+  active; assignment belongs on the directly owned active work item unless the
+  parent itself is being actively driven as work;
+- `Blocked`, `Needs decision`, and `Review` may retain their existing assignee
+  when responsibility continues; do not manufacture an assignee merely from the
+  status name; and
+- closing/completing an Issue does not require clearing its assignee; historical
+  responsibility may remain visible.
+
+Agents MUST attempt this reconciliation when they have GitHub mutation capability.
+If the environment cannot update GitHub assignees, report that coordination
+limitation explicitly instead of claiming the Issue was assigned. Lack of
+assignee-mutation capability is not by itself an implementation blocker when the
+work is otherwise authorized and correctly coordinated.
+
+Project `Priority` is different: agents MAY recommend a priority, but MUST NOT
+invent or bulk-assign `P0`/`P1`/`P2`/`P3` merely because work is active. Priority
+reflects project-owner scheduling intent unless the user explicitly delegates
+that prioritization.
+
 ## Mandatory pre-implementation audit
 
 Before designing, modifying, or generating a patch for implementation work,
