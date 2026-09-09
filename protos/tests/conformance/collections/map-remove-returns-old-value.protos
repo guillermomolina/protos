@@ -16,8 +16,6 @@ m.atPut("b", 2)
 old: m.remove("a")
 m.atPut("a", 3)
 
-(old == 1).and() {
-    (m.size() == 2).and() {
-        m.at("a") == 3
-    }
-}
+(old == 1) &&
+    (m.size() == 2) &&
+    (m.at("a") == 3)
