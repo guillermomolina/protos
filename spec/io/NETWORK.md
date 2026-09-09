@@ -7,6 +7,8 @@ Last updated: 2026-09-09
 This document is the primary normative owner of portable network authority,
 numeric IP-address/endpoint semantics, and the initial TCP connection/listener
 capability model introduced by D047 / specification revision `0.1.388`.
+D052 / specification revision `0.1.393` fixes the ordinary-object/delegation topology of
+acquired live TCP resources without selecting host/backend machinery.
 General byte-I/O, Future commitment/cancellation, lifecycle, and half-close
 semantics remain owned by `IO_CORE.md` and `BYTE_IO.md`; Process bootstrap-local
 provisioning remains owned by `PROCESS_IO.md`; Actor and P transfer boundaries
@@ -269,6 +271,50 @@ The initial portable model defines no backlog option. Implementations may use
 bounded admission/queues/backpressure while preserving the observable Future,
 accept, close and resource-custody contracts.
 
+## 7.1 TCP live-resource object topology
+
+D052 / specification revision `0.1.393` fixes the Protos-visible topology shared by the live
+TCP resource families defined below.
+
+A successfully acquired `TcpConnection` or `TcpListener` is an ordinary identity-bearing Protos
+object whose structural state is `OPEN` at acquisition. Each family has one canonical standard
+frozen behavior prototype in the applicable Core standard-object domain. A concrete capability's
+immediate parent is exactly its family protocol prototype, and that protocol prototype's immediate
+parent is exactly `Object`.
+
+Core v0.1 requires no public Prelude binding, constructor, or global identifier named
+`TcpConnection` or `TcpListener`. The family protocol prototype is nevertheless ordinary observable
+Protos state when a program already possesses a live resource: ordinary `parent()` returns it and
+ordinary reflection observes its local standard selectors. The prototype itself carries no TCP
+resource authority.
+
+The TcpConnection protocol prototype owns the standard local behavior selectors `read`, `write`,
+`close`, `shutdownRead`, `shutdownWrite`, `localEndpoint`, and `remoteEndpoint`. The TcpListener
+protocol prototype owns `accept`, `localPort`, and `close`. A freshly acquired concrete resource has
+no mandatory local Protos slots merely to duplicate those selectors or encode backend state.
+Application code may create/shadow ordinary local slots while the resource object's structural state
+permits it.
+
+Delegating from a family protocol prototype or from a concrete live capability never manufactures
+TCP family membership or authority. Standard TCP behavior validates that the original receiver is an
+actual acquired member of the required live-resource family before exercising family-specific state;
+an ordinary descendant that only inherits lookup fails that receiver-domain check.
+
+The nearer family-prototype `close` selector is the standard `Closable` resource lifecycle operation,
+not the structural `Object.close()` transition. Successful or failed resource close does not by
+itself alter the receiver's ordinary OPEN/CLOSED/FROZEN structural state. Structural mutation/freeze
+and ordinary lookup/shadowing remain governed by the object model; resource lifecycle remains
+governed by Core I/O.
+
+The D047 Actor/P rule remains unchanged: concrete TCP live-resource capabilities and ordinary graphs
+that reach them are not transferable under the initial contract. The authority-free family protocol
+prototypes do not themselves grant network/resource authority.
+
+D052 does not define stronger endpoint object-identity observations. D047 continues to require the
+logical remote endpoint of an outgoing successful connection to equal the supplied endpoint under
+standard structural equality. This revision does not specify whether repeated endpoint accessors
+return one identity or fresh equal identities, nor whether `remoteEndpoint() === suppliedEndpoint`.
+
 ## 8. `TcpListener`
 
 A `TcpListener` is a live identity-bearing capability and satisfies `Closable`.
@@ -385,4 +431,6 @@ remain separate explicit future designs:
 - TLS, QUIC, HTTP and WebSocket;
 - Unix-domain/raw sockets;
 - service discovery;
-- generic socket options and socket-local deadlines/timeouts.
+- generic socket options and socket-local deadlines/timeouts; and
+- a stronger `===` identity relation among TcpConnection endpoint observations or the
+  original outgoing acquisition endpoint.

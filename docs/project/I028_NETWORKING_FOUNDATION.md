@@ -2,6 +2,8 @@
 
 Status: **IN_PROGRESS**
 Normative dependencies: D047 / specification revision `0.1.388` — RATIFIED; D048 / specification revision `0.1.391` — RATIFIED
+Additional C/D topology dependency: D052 / specification revision `0.1.393` — RATIFIED
+Platform architecture dependencies: PLAT002 — RATIFIED; PLAT003 — RATIFIED
 Consumer: `LIB005 — Networking`
 
 ## Purpose
@@ -21,6 +23,21 @@ No hidden semantic family/brand or textual/DNS coercion is introduced.
 `I028-A` is therefore READY. Later slices remain bounded by D047/D048 and by the
 normal implementation dependencies established as A-F progresses.
 
+## I028-C/D live-resource checkpoint — CLOSED by D052 + PLAT003
+
+D052 / specification revision `0.1.393` closes the previously unspecified observable object
+topology of acquired TcpConnection/TcpListener resources: ordinary OPEN identity-bearing objects,
+canonical frozen authority-free family protocol parents, no required public TCP family Prelude
+bindings, ordinary local-slot/shadowing behavior and receiver-domain enforcement that prevents
+delegation from manufacturing authority. Exact endpoint `===` identity remains intentionally
+unspecified.
+
+PLAT003 separately selects only durable JVM implementation architecture: ProtosObjectValue-derived
+resource wrappers with opaque host state, shared protocol installation, reuse of the existing
+I/O-operation acquisition/cancellation/late-custody machinery, and independent read/write progress
+lanes with one shared lifecycle. No production backend is selected by this checkpoint. I028-C remains
+READY to implement `connectTcp`; I028-D will consume the same topology for listener/accept work.
+
 ## Planned implementation decomposition after the checkpoint
 
 - **A — address/endpoint ordinary-object foundation — CLOSED:** A1/A2 publish the canonical ordinary data factories and A3 proves those same values traverse Actor/P through the pre-existing ordinary snapshot/rematerialization machinery with no networking-specific transfer path.
@@ -33,8 +50,8 @@ normal implementation dependencies established as A-F progresses.
   - **B3 — optional RootActor `network` bootstrap endowment — CLOSED (`0.2.284-SNAPSHOT` / `SAME_COMMIT`):** host-granted represented Network is an optional exact local `network` only on the initial RootActor module/standalone entry; absence is a missing slot, imports/new Actors receive no ambient grant, and Process exposes no Network accessor.
   - **B4 — ambient/import/Actor/P confinement conformance — CLOSED (`0.2.284-SNAPSHOT` / `SAME_COMMIT`; implementation version unchanged):** retained integrated evidence proves the authority-free Network prototype and Process protocol cannot recover a concrete grant, imports/non-root Actors cannot resolve RootActor `network` ambiently, and the exact B3 bootstrap capability is rejected by Actor/P transfer; no production or TCP/backend change.
   - **B5 — close B — CLOSED (`0.2.284-SNAPSHOT` / `SAME_COMMIT`; implementation version unchanged):** reconcile B1-B4 retained evidence, close the represented Network capability/bootstrap boundary, and release I028-C without selecting a TCP backend.
-- **C — TCP connection + `connectTcp` — READY:** async acquisition, cancellation/late
-  resource custody, Byte I/O/close/half-close composition, endpoint observation.
+- **C — TCP connection + `connectTcp` — READY under D052/PLAT003:** ordinary live-resource topology, host-neutral async acquisition, cancellation/late
+  resource custody, independent read/write progress with shared close/half-close lifecycle, and endpoint observation without strengthening endpoint `===` identity.
 - **D — TCP listener + `listenTcp`:** exact request snapshot/validation,
   `localPort`, concurrent pending accepts, lifecycle/admission behavior.
 - **E — production backend portability/scalability:** preserve D047 independently

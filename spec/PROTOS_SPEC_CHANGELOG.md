@@ -9,6 +9,35 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.393] - 2026-09-09
+
+### D052 — TCP live-resource object topology
+- Records explicit project-owner ratification after comparative review spanning Rust/Tokio, Go,
+  Java NIO, Node.js, Erlang/OTP, .NET, WASI, libuv/Asio and the existing Protos object/I/O model.
+- Acquired `TcpConnection` and `TcpListener` capabilities are ordinary identity-bearing Protos
+  objects, structurally OPEN at acquisition, delegating immediately to canonical frozen
+  authority-free family protocol prototypes whose immediate parent is `Object`.
+- The TCP family prototypes are observable through ordinary delegation/reflection from an acquired
+  resource but require no public Prelude binding or constructor. Standard selectors live on those
+  shared prototypes; ordinary delegation from a prototype/resource does not confer TCP family
+  membership or authority, and standard behaviors validate the actual receiver family.
+- Resource `close()` remains the existing `Closable` lifecycle operation and does not become the
+  structural `Object.close()` transition. Ordinary slots, shadowing, structural state and `super`
+  continue to follow the general object model.
+- D047 endpoint structural-equality requirements are preserved while stronger endpoint `===`
+  identity relations remain intentionally unspecified.
+
+### Architecture / implementation state
+- Separately ratifies PLAT003 as durable JVM/Truffle architecture: ordinary
+  `ProtosObjectValue`-derived TCP resource representations with opaque host state, one shared
+  protocol surface per family, host-neutral acquisition commitment/late-custody reuse and
+  independent read/write progress lanes with shared lifecycle.
+- PLAT003 selects no NIO/epoll/io_uring/IOCP/backend, thread/event-loop identity, public TCP family
+  binding, transferable resource proxy or generic HostResource hierarchy.
+- Normative document changed: `io/NETWORK.md`.
+- No production implementation, Maven implementation-version, native-boundary or license-term
+  change is included in this ratification checkpoint. I028-C remains the implementation consumer.
+
 ## [0.1.392] - 2026-09-09
 
 ### D051 — Conditional surface syntax boundary
