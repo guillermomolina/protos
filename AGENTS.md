@@ -841,13 +841,46 @@ scope, audit, validation, specification, versioning, license, or explicit user
 approval requirements, and it does not authorize a patch to incorporate or
 publish changes from the caller checkout.
 
+### Generated PR-head ownership and rerun state machine
+<!-- GITHUB002-D PR-HEAD-OWNERSHIP-STATE-MACHINE -->
+
+Every newly generated PR-first ZIP MUST have a stable artifact identity in
+addition to its Protos slice/work-item identity. It exists only to prove
+ownership of launcher-created GitHub state and to make reruns idempotent.
+
+The canonical mechanics are in
+`docs/project/GITHUB002_PR_FIRST_LAUNCHER.md`, with the stdlib-only reference
+helper in `tools/generated_patch_pr.py`.
+
+The remote head branch is deterministic:
+
+```text
+protos-patch/<lowercase-slice>/<artifact-id>
+```
+
+The candidate commit MUST carry `Protos-Patch-Artifact` and
+`Protos-Patch-Slice` trailers. The PR body MUST carry the matching
+`protos-generated-patch` marker. Remote branch/PR reuse is permitted only when
+this evidence proves ownership by the same artifact.
+
+Reruns MUST use the documented state machine; they MUST NOT force-push,
+silently rebase, silently merge, resurrect a closed-unmerged PR, or reuse
+ambiguous remote state.
+
+If PR creation fails after this invocation created a remote branch, cleanup may
+delete that branch only after rechecking that no owned PR exists and that its tip
+still equals the exact candidate SHA pushed by this invocation.
+
+Generated ZIPs SHOULD embed the acceptance-tested helper version instead of
+depending on a helper that may change later on `main`.
+
 ### Generated patch artifact acceptance gate
 
 A generated patch ZIP and its launcher are executable project work, not merely a
 transport wrapper around an intended diff. An agent MUST validate the artifact
 itself before presenting it to the user as ready to execute.
 
-Before delivering a generated publication ZIP, the authoring agent MUST, to the
+Before delivering a generated PR-first patch ZIP, the authoring agent MUST, to the
 extent the required repository content is available:
 
 1. establish and record the exact `AUTHORING_BASE` used for repository audit and
@@ -874,12 +907,14 @@ extent the required repository content is available:
    single package root, required files, executable permission bits where
    relevant, and successful archive integrity/CRC inspection;
 7. inspect the generated launcher as one whole workflow for its Git-state
-   preconditions, isolated-worktree lifecycle, execution-time
-   `PUBLICATION_BASE`, dynamic shared-file materialization, explicit staging
-   scope, adaptive-validation commands, publication-base stability check,
-   publication command, cleanup path, and final report;
+   preconditions, isolated-worktree lifecycle, execution-time `PR_BASE`, dynamic
+   shared-file materialization, explicit staging scope, adaptive-validation
+   commands, deterministic artifact/head identity, ownership trailers/marker,
+   non-force head-branch push, PR creation/recovery, failed-PR cleanup, local
+   cleanup path, and final PR/publication report;
 8. verify explicitly that the launcher does **not** require
-   `PUBLICATION_BASE == AUTHORING_BASE` and does not reject benign main movement
+   `PR_BASE == AUTHORING_BASE`, does not reject benign `main` movement after
+   candidate creation, and does not silently rebase/merge/force-push to catch up;
    merely because an old whole-file hash, line number, version, changelog header,
    or unrelated ledger text changed;
 9. when the authoring environment provides a disposable Git checkout or can
