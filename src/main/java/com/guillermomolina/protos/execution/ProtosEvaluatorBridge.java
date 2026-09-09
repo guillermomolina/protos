@@ -28,7 +28,9 @@ public final class ProtosEvaluatorBridge {
         }
 
         ProtosEvaluatorContinuation continuation = task.evaluatorContinuation();
-        ProtosEvaluatorContinuation.Entry entry = continuation.enter(node);
+        ProtosExpressionNode replaySiteIdentity =
+                ProtosExpressionNode.replaySiteIdentity(node);
+        ProtosEvaluatorContinuation.Entry entry = continuation.enter(replaySiteIdentity);
         if (entry.completed()) return entry.result();
         try {
             Object result = node.executeDirect(frame);

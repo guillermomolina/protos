@@ -205,6 +205,7 @@ public final class CanonicalToTruffleLowerer {
             ProtosExpressionNode[] expressions =
                     sequence.expressions().stream()
                             .map(this::lowerCallable)
+                            .map(ProtosExpressionNode::markStatementTagForLowering)
                             .toArray(ProtosExpressionNode[]::new);
             return new ProtosSequenceNode(sequence.span(), expressions);
         }
@@ -227,7 +228,9 @@ public final class CanonicalToTruffleLowerer {
             }
         }
         ProtosExpressionNode receiver = callableContext ? lowerCallable(call.receiver()) : lower(call.receiver());
-        return new ProtosCallNode(call.span(), receiver, new ProtosArgumentVectorNode(call.span(), items));
+        return new ProtosCallNode(
+                        call.span(), receiver, new ProtosArgumentVectorNode(call.span(), items))
+                .markCallTagForLowering();
     }
 
     private ProtosExpressionNode lowerSend(
@@ -258,10 +261,11 @@ public final class CanonicalToTruffleLowerer {
                         ? lowerCallable(send.receiver())
                         : lower(send.receiver());
         return new ProtosSendNode(
-                send.span(),
-                receiver,
-                send.message(),
-                new ProtosArgumentVectorNode(send.span(), items));
+                        send.span(),
+                        receiver,
+                        send.message(),
+                        new ProtosArgumentVectorNode(send.span(), items))
+                .markCallTagForLowering();
     }
 
     private ProtosExpressionNode lowerSuperSend(
@@ -288,9 +292,10 @@ public final class CanonicalToTruffleLowerer {
         }
 
         return new ProtosSuperSendNode(
-                send.span(),
-                send.message(),
-                new ProtosArgumentVectorNode(send.span(), items));
+                        send.span(),
+                        send.message(),
+                        new ProtosArgumentVectorNode(send.span(), items))
+                .markCallTagForLowering();
     }
 
     private ProtosExpressionNode lowerLiteral(CanonicalLiteral literal) {
@@ -308,7 +313,10 @@ public final class CanonicalToTruffleLowerer {
 
     private ProtosExpressionNode lowerSequence(CanonicalSequence sequence) {
         ProtosExpressionNode[] expressions =
-                sequence.expressions().stream().map(this::lower).toArray(ProtosExpressionNode[]::new);
+                sequence.expressions().stream()
+                        .map(this::lower)
+                        .map(ProtosExpressionNode::markStatementTagForLowering)
+                        .toArray(ProtosExpressionNode[]::new);
         return new ProtosSequenceNode(sequence.span(), expressions);
     }
 
@@ -326,6 +334,7 @@ public final class CanonicalToTruffleLowerer {
                             }
                             return lower(expression);
                         })
+                        .map(ProtosExpressionNode::markStatementTagForLowering)
                         .toArray(ProtosExpressionNode[]::new);
         return new ProtosSequenceNode(object.body().span(), expressions);
     }

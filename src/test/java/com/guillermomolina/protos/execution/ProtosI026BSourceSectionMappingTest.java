@@ -96,11 +96,19 @@ class ProtosI026BSourceSectionMappingTest {
     }
 
     @Test
-    void expressionBaseRetainsNoPerNodeSourceOrSourceSectionAuthority() {
-        Field[] fields = ProtosExpressionNode.class.getDeclaredFields();
+    void expressionBaseRetainsOnlySpanAndCompactInstrumentationTagState() {
+        Field[] instanceFields =
+                java.util.Arrays.stream(ProtosExpressionNode.class.getDeclaredFields())
+                        .filter(field -> !java.lang.reflect.Modifier.isStatic(field.getModifiers()))
+                        .toArray(Field[]::new);
 
-        assertEquals(1, fields.length);
-        assertSame(SourceSpan.class, fields[0].getType());
+        assertEquals(2, instanceFields.length);
+        assertTrue(java.util.Arrays.stream(instanceFields)
+                .anyMatch(field -> field.getName().equals("span") && field.getType() == SourceSpan.class));
+        assertTrue(java.util.Arrays.stream(instanceFields)
+                .anyMatch(field -> field.getName().equals("instrumentationTags") && field.getType() == byte.class));
+        assertTrue(java.util.Arrays.stream(instanceFields)
+                .noneMatch(field -> field.getType() == Source.class || field.getType() == SourceSection.class));
     }
 
     private static Source source(String characters) {

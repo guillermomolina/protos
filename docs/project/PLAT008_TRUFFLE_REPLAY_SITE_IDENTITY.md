@@ -129,3 +129,8 @@ PLAT008 does not select:
 ## Consumer release
 
 Publication of this ratified record releases `I026-C` from `BLOCKED_BY_PLAT008` to implementation work. I026-C must implement PLAT005 and PLAT008 together: semantic-minimum instrumentation plus wrapper-transparent logical replay identity, with focused evidence for attached/detached instrumentation, completed replay without duplicate events and unchanged ordinary execution semantics/cost boundaries. Any newly exposed durable platform choice must return through the PLAT decision gate.
+
+
+## I026-C executable consumption
+
+I026-C consumes this ratified architecture in `0.2.311-SNAPSHOT`. The implementation keeps the decision non-normative and semantically invisible: generated instrumentation wrappers are derived machinery, canonical-role tags remain the approved minimum surface, and continuation replay uses PLAT008 logical site identity rather than physical wrapper identity. Focused and full executable validation are publication gates for the consuming slice.

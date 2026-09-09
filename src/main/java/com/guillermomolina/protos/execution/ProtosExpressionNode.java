@@ -22,20 +22,108 @@ import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.source.SourceSpan;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.instrumentation.GenerateWrapper;
+import com.oracle.truffle.api.instrumentation.InstrumentableNode;
+import com.oracle.truffle.api.instrumentation.ProbeNode;
+import com.oracle.truffle.api.instrumentation.StandardTags;
+import com.oracle.truffle.api.instrumentation.Tag;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.source.SourceSection;
 import java.util.Objects;
 
-public abstract class ProtosExpressionNode extends Node {
+@GenerateWrapper
+public abstract class ProtosExpressionNode extends Node implements InstrumentableNode {
+    private static final byte TAG_STATEMENT = 1;
+    private static final byte TAG_CALL = 1 << 1;
+    private static final int MAX_WRAPPER_DEPTH = 64;
+
     private final SourceSpan span;
+    private byte instrumentationTags;
 
     protected ProtosExpressionNode(SourceSpan span) {
         this.span = Objects.requireNonNull(span, "span");
     }
 
+    protected ProtosExpressionNode(ProtosExpressionNode source) {
+        Objects.requireNonNull(source, "source");
+        this.span = source.span;
+        this.instrumentationTags = source.instrumentationTags;
+    }
+
     public final SourceSpan span() {
         return span;
+    }
+
+    final ProtosExpressionNode markStatementTagForLowering() {
+        requireUnadoptedTagMutation();
+        instrumentationTags |= TAG_STATEMENT;
+        return this;
+    }
+
+    final ProtosExpressionNode markCallTagForLowering() {
+        requireUnadoptedTagMutation();
+        instrumentationTags |= TAG_CALL;
+        return this;
+    }
+
+    private void requireUnadoptedTagMutation() {
+        if (getParent() != null) {
+            throw new IllegalStateException("instrumentation tags are fixed before AST adoption");
+        }
+    }
+
+    @Override
+    public final boolean isInstrumentable() {
+        return instrumentationTags != 0 && getSourceSection() != null;
+    }
+
+    @Override
+    public final boolean hasTag(Class<? extends Tag> tag) {
+        if (tag == StandardTags.StatementTag.class) {
+            return (instrumentationTags & TAG_STATEMENT) != 0;
+        }
+        if (tag == StandardTags.CallTag.class) {
+            return (instrumentationTags & TAG_CALL) != 0;
+        }
+        return false;
+    }
+
+    @Override
+    public final WrapperNode createWrapper(ProbeNode probe) {
+        return new ProtosExpressionNodeWrapper(this, this, probe);
+    }
+
+    @GenerateWrapper.OutgoingConverter
+    final Object convertOutgoingForInstrumentation(Object ignored) {
+        return null;
+    }
+
+    @GenerateWrapper.IncomingConverter
+    final Object rejectIncomingInstrumentationValue(Object ignored) {
+        throw new IllegalStateException(
+                "instrumentation value injection is unavailable before I026-D interop ownership");
+    }
+
+    static ProtosExpressionNode replaySiteIdentity(ProtosExpressionNode node) {
+        Objects.requireNonNull(node, "node");
+        Node current = node;
+        int depth = 0;
+        while (current instanceof WrapperNode wrapper) {
+            if (++depth > MAX_WRAPPER_DEPTH) {
+                throw new IllegalStateException("instrumentation wrapper chain exceeds safe depth");
+            }
+            Node delegate = wrapper.getDelegateNode();
+            if (delegate == current) {
+                throw new IllegalStateException("instrumentation wrapper delegates to itself");
+            }
+            if (!(delegate instanceof ProtosExpressionNode expression)) {
+                throw new IllegalStateException(
+                        "instrumentation wrapper does not delegate to a Protos execution node");
+            }
+            current = expression;
+        }
+        return (ProtosExpressionNode) current;
     }
 
     @Override

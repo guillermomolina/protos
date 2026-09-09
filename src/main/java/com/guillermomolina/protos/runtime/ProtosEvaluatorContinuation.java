@@ -17,11 +17,11 @@ public final class ProtosEvaluatorContinuation {
     public record Entry(int index, boolean completed, Object result) {}
 
     private static final class Event {
-        final ProtosExpressionNode node;
+        final ProtosExpressionNode replaySiteIdentity;
         boolean completed;
         Object result;
         int end;
-        Event(ProtosExpressionNode node) { this.node = node; }
+        Event(ProtosExpressionNode replaySiteIdentity) { this.replaySiteIdentity = replaySiteIdentity; }
     }
     private static final class Active {
         final int eventIndex;
@@ -56,13 +56,13 @@ public final class ProtosEvaluatorContinuation {
     public boolean controlUnwind() { return controlUnwind; }
     public void markControlUnwind() { controlUnwind = true; }
 
-    public Entry enter(ProtosExpressionNode node) {
-        Objects.requireNonNull(node, "node");
+    public Entry enter(ProtosExpressionNode replaySiteIdentity) {
+        Objects.requireNonNull(replaySiteIdentity, "replaySiteIdentity");
         if (!segmentActive) throw new IllegalStateException("no evaluator segment active");
         final int index;
         if (cursor < events.size()) {
             Event event = events.get(cursor);
-            if (event.node != node) {
+            if (event.replaySiteIdentity != replaySiteIdentity) {
                 throw new IllegalStateException("resumable evaluator replay diverged at event " + cursor);
             }
             index = cursor++;
@@ -72,7 +72,7 @@ public final class ProtosEvaluatorContinuation {
             }
         } else {
             index = events.size();
-            events.add(new Event(node));
+            events.add(new Event(replaySiteIdentity));
             cursor++;
         }
         active.push(new Active(index));
