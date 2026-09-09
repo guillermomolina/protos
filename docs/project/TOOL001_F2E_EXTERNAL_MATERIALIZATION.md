@@ -1,6 +1,6 @@
 # TOOL001-F2E — External Immutable-Package Execution
 
-Status: **IN_PROGRESS — F2E1/F2E2 CLOSED; F2E3 IN_PROGRESS (D053/D056 RATIFIED); F2E4/F2E5 dependency-gated**
+Status: **IN_PROGRESS — F2E1/F2E2 CLOSED; F2E3 IN_PROGRESS (D053/D056/D057 RATIFIED); F2E4/F2E5 dependency-gated**
 Nature: non-normative Package Tool / host-integration project record
 Allocated after: `TOOL001-F2D` workspace-only execution closure
 
@@ -102,7 +102,7 @@ F2E2  verified read-only package-store binding                     CLOSED
 F2E2A  captured-Filesystem ContentIdentity canonicalizer/verifier  CLOSED
 F2E2B  exact selected-root capture + verified-capture host custody CLOSED
 F2E2C same-capture integration + F2E2 closure                      CLOSED
-F2E3  external-node execution-plan construction                    IN_PROGRESS — D053/D056 RATIFIED
+F2E3  external-node execution-plan construction                    IN_PROGRESS — D053/D056/D057 RATIFIED
 F2E4  external canonical ModuleKey + source resolver               BLOCKED_BY_DEPENDENCIES
 F2E5  public run integration + F2 external-execution closure       BLOCKED_BY_DEPENDENCIES
 ```
@@ -711,3 +711,37 @@ multi-package immutable bundle identity or any PackageExecutionPlan path/host
 authority. Those remain future decisions if real use cases justify them.
 
 F2E3 remains **IN_PROGRESS** and is no longer decision-blocked.
+
+## D057 ratification — workspace is not active immutable-package semantics
+
+D057 is RATIFIED by explicit project-owner approval on 2026-09-09 after an
+expanded cross-ecosystem review of workspace, monorepo, package-publication and
+remote multi-package-source models.
+
+The selected A-strict/refined rule is:
+
+```text
+mutable resolution-root / development package
+    [workspace] -> permitted
+
+immutable registry/Git package
+    [workspace] -> fail closed
+```
+
+The presence of the table is rejected during immutable consumption even when
+`members = []`.
+
+The refinement deliberately preserves future monorepo/source-container support:
+a later acquisition design may select explicit canonical package roots/subroots
+inside one immutable source and produce ordinary exact PackageNodes. A later
+publication design may also project a development workspace into independently
+consumable package payloads. Neither future capability is inferred from current
+`workspace.members`.
+
+F2E3B / GitHub #236 is released to continue mechanically under D053, D056 and
+D057. It may read ManifestV1 through the same F2E2 verified capture, reject
+external workspace/path semantics, validate registry/Git manifest identity and
+transitive dependency declarations against the exact root-owned lock, and emit
+only inert generation-2 plan data.
+
+F2E3 remains **IN_PROGRESS**. F2E4/F2E5 remain dependency-gated.

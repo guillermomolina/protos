@@ -469,15 +469,33 @@ members = ["app", "parser", "fixture"]
 No element is implicitly expanded, globbed, environment-interpolated, or treated
 as a search path by schema v1.
 
-Workspace path interpretation and validation belong to the later workspace
-policy slice.
+Workspace path interpretation and validation for mutable resolution-root /
+development use belong to the existing workspace/package-resolution policy.
 
-Duplicates are structurally invalid because one workspace member relation should
-not be declared twice.
+D057 ratifies the immutable-consumption boundary: `[workspace]` is active only
+for mutable workspace/development use under the current package model. When a
+ManifestV1 is consumed directly as an immutable registry or exact-Git package
+instance, the presence of `[workspace]` is invalid and package preflight fails
+closed. This includes `members = []`; an empty declaration is not a special
+vacuous exception.
 
-An empty members array is valid but has no additional member packages.
+D057 does not prohibit a future immutable source/repository containing multiple
+packages. Such a feature must explicitly select canonical package roots/subroots
+and construct ordinary exact PackageNodes with defined PackageId,
+ContentIdentity, lock and custody rules rather than implicitly expanding current
+`workspace.members`.
 
-An empty `[workspace]` table is invalid.
+D057 also does not select a future publication projection that may remove or
+rewrite workspace-only metadata when producing independently consumable package
+payloads.
+
+Duplicates remain structurally invalid because one workspace member relation
+should not be declared twice.
+
+An empty members array remains structurally valid ManifestV1 data for mutable
+workspace/development use.
+
+An empty `[workspace]` table is structurally invalid.
 
 ### No virtual workspace root in schema v1
 

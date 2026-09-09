@@ -1,5 +1,7 @@
 ## 0.2.306-SNAPSHOT
 
+- Ratify `D057` / GitHub #237 after explicit project-owner approval and expanded cross-ecosystem review: under the current package model, `[workspace]` is mutable resolution-root/development semantics and its presence (including empty `members`) fails closed when ManifestV1 is consumed directly as an immutable registry or exact-Git package. Preserve future explicit immutable source-container + package-root/subroot selection and future per-package publication projection without introducing either implicitly through `workspace.members`. Update ManifestV1 package-model guidance and release `TOOL001-F2E3B` to continue mechanically under D053/D056/D057. Documentation/package-model decision only: no Core specification revision, executable source, implementation version, lock format, PackageExecutionPlan generation, public run behavior or host resolver change.
+
 - Close `I028-E2 — NIO endpoint bridge + non-blocking connectTcp acquisition`
   under D047/D052 and ratified PLAT003/PLAT006/PLAT007. Add the internal numeric
   endpoint-to-NIO bridge, Network-owned IPv6 scope hook, non-blocking
