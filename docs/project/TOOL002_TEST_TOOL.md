@@ -1088,3 +1088,7 @@ TOOL002 closes only after all slices required for the selected initial Test Tool
 outcome are implemented, validated, and published. Later optional hard-isolation
 work does not block closure unless it is explicitly promoted into the parent
 scope before closure.
+
+## I026-A4B3 hosting reconciliation
+
+I026-A4B3 changes only the Truffle hosting representation of TOOL002's already-closed exact/fresh/captured mechanics. The exact selected unit is now handed to the child as an inert Truffle `Source`, and parsing/executable-root creation occurs only after the fresh semantic Process is bound to its own `ProtosPolyglotProcessContext`. The Test Tool driver reuses one explicit RuntimeHost/Engine while each child remains a distinct semantic Process with a distinct Context. Private streams, fresh-Process isolation, detached observation, Package Prelude selection, and all TOOL002 expectation/test policy remain unchanged.

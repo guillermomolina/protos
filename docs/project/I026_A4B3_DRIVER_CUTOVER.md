@@ -53,17 +53,40 @@ Context language before any nested CallTarget executes. Closure execution still 
 plan per Closure syntax site rather than one plan per Closure instance; staged-direct behavior stays
 unchanged outside entered Contexts.
 
-Bundled tools remain explicitly staged direct in this phase. This is not a permanent compatibility
-path: Test Tool immediately invokes exact-source execution in fresh child Processes, and Truffle
-rejects executing a direct child AST while an unrelated outer Context is entered. The next mechanical
-phase therefore migrates the outer bundled-tool entry together with nested exact/fresh/captured/
-workspace execution as one sharing-layer-safe unit.
+The temporary bundled-tool staged-direct compatibility path ended in `0.2.291-SNAPSHOT`. Package Tool and Test Tool
+now enter through their semantic Process Contexts. Test Tool exact/inspection execution carries inert
+Truffle `Source` values into fresh child Processes and parses only after those child Processes are
+bound to distinct Contexts on the driver-owned RuntimeHost/Engine. Workspace preflight and application
+Processes use the same host-per-driver / Context-per-Process topology; application canonical-module
+preparation is deliberately only *entered* in its owning Context here and remains mechanically direct
+until the next initial-module cutover phase.
+
+## Published phase — bundled tool + exact/fresh/captured/workspace hosting
+
+Published in `0.2.291-SNAPSHOT`: the CLI no longer has `legacyToolSession` or a Session-owned direct
+`ProtosSourceCompiler`. Bundled tool entry Sources use the same Process-scoped public parse/root-task
+path as ordinary one-shot CLI execution. The Test Tool grants its exact-source facilities the outer
+driver's explicit `ProtosPolyglotRuntimeHost`; every exact/fresh/captured child remains a fresh semantic
+Process with a distinct Context, but child Contexts reuse the driver's Engine and close before control
+returns to the tool. The no-host helper overloads retain a self-owned temporary RuntimeHost for
+standalone Java consumers.
+
+`ProtosFreshProcessExecutor` and `ProtosCapturedProcessExecution` now accept exact inert `Source`
+objects rather than caller-compiled `CallTarget`s. Parsing, root execution, cooperative child-domain
+drain, live-result inspection and inspector-Closure invocation occur only inside the fresh Process
+Context. This removes the cross-layer AST handoff while preserving Process arguments/environment,
+private captured streams, detached result observation and fresh-Process semantics.
+
+`ProtosWorkspaceRunDriver` owns one explicit RuntimeHost for a run. Package preflight and application
+remain separate Processes and separate Contexts on that Engine. The application Process enters its
+Context before the existing `ProtosCanonicalInitialModuleExecution` runs, preventing direct roots from
+being born in a foreign sharing layer without pre-empting the next mechanical phase, which still owns
+ordinary module + RootActor initial-module public-parse cutover.
 
 ## Remaining mechanical phases inside I026-A4B3
 
-1. bundled-tool + exact/fresh/captured/workspace execution cutover;
-2. ordinary module + RootActor initial-module execution cutover;
-3. final direct-production-entry retirement, architecture guard, and A4B3/A4B/A4 closure.
+1. ordinary module + RootActor initial-module execution cutover;
+2. final direct-production-entry retirement, architecture guard, and A4B3/A4B/A4 closure.
 
 These remain inside Issue #89 as mechanical phases unless one later exposes an independently blockable/reviewable durable unit. Issue #42 remains the parent I026 outcome. `ContextPolicy.EXCLUSIVE` remains active; `REUSE` and `SHARED` remain deferred.
 

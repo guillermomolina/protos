@@ -23,6 +23,8 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
@@ -71,13 +73,33 @@ public final class ProtosWorkspacePackageApplicationExecution {
     }
 
     public static ProtosExecutionOutcome execute(Request request) throws IOException {
-        return execute(request, ignored -> {});
+        Objects.requireNonNull(request, "request");
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
+            return execute(request, ignored -> {}, runtimeHost);
+        }
+    }
+
+    static ProtosExecutionOutcome execute(
+            Request request, ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
+        return execute(request, ignored -> {}, runtimeHost);
     }
 
     static ProtosExecutionOutcome execute(
             Request request, Consumer<ProtosProcessRuntime> processObserver) throws IOException {
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(processObserver, "processObserver");
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
+            return execute(request, processObserver, runtimeHost);
+        }
+    }
+
+    static ProtosExecutionOutcome execute(
+            Request request,
+            Consumer<ProtosProcessRuntime> processObserver,
+            ProtosPolyglotRuntimeHost runtimeHost) throws IOException {
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(processObserver, "processObserver");
+        Objects.requireNonNull(runtimeHost, "runtimeHost");
 
         ProtosWorkspacePackageModuleResolver resolver =
                 new ProtosWorkspacePackageModuleResolver(
@@ -111,18 +133,48 @@ public final class ProtosWorkspacePackageApplicationExecution {
         ProtosProcessRuntime process = bootstrap.process();
 
         try {
+            ProtosPolyglotProcessContext processContext =
+                    runtimeHost.hostProcess(
+                            process,
+                            InputStream.nullInputStream(),
+                            OutputStream.nullOutputStream(),
+                            OutputStream.nullOutputStream());
             processObserver.accept(process);
-            return ProtosCanonicalInitialModuleExecution.execute(
-                    prelude,
-                    resolver,
-                    entryKey,
-                    bootstrap.activation());
+            try {
+                return processContext.callForRuntime(
+                        () -> {
+                            try {
+                                return ProtosCanonicalInitialModuleExecution.execute(
+                                        prelude,
+                                        resolver,
+                                        entryKey,
+                                        bootstrap.activation());
+                            } catch (IOException failure) {
+                                throw new CanonicalModuleIOException(failure);
+                            }
+                        });
+            } catch (CanonicalModuleIOException failure) {
+                throw failure.ioFailure();
+            }
         } catch (IOException failure) {
             throw failure;
         } catch (RuntimeException failure) {
             throw new IOException("workspace package application Process failed", failure);
         } finally {
             process.requestTerminationForRuntime();
+        }
+    }
+
+    private static final class CanonicalModuleIOException extends RuntimeException {
+        private final IOException ioFailure;
+
+        CanonicalModuleIOException(IOException ioFailure) {
+            super(null, null, false, false);
+            this.ioFailure = Objects.requireNonNull(ioFailure, "ioFailure");
+        }
+
+        IOException ioFailure() {
+            return ioFailure;
         }
     }
 

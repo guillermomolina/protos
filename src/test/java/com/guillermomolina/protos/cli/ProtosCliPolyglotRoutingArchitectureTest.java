@@ -25,7 +25,7 @@ import org.junit.jupiter.api.Test;
 
 final class ProtosCliPolyglotRoutingArchitectureTest {
     @Test
-    void ordinaryCliAndReplUseProcessScopedPolyglotEntryWhileBundledToolsRemainStaged()
+    void ordinaryCliReplAndBundledToolsUseProcessScopedPolyglotEntry()
             throws Exception {
         String source =
                 Files.readString(
@@ -43,8 +43,10 @@ final class ProtosCliPolyglotRoutingArchitectureTest {
         assertTrue(source.contains("runtimeHost.hostProcess("));
         assertTrue(source.contains("processContext.execute("));
         assertTrue(source.contains("processContext.evaluatePersistent("));
-        assertTrue(source.contains("legacyToolSession("));
-        assertTrue(source.contains("ProtosSourceCompiler"));
+        assertTrue(source.contains("executeStandaloneRootTask(session.execute(source.source()))"));
+        assertTrue(source.contains("session.activation, session.runtimeHost"));
+        assertFalse(source.contains("legacyToolSession("));
+        assertFalse(source.contains("ProtosSourceCompiler"));
         assertTrue(source.contains("implements AutoCloseable"));
         assertTrue(source.contains("try (Session session = session("));
         assertFalse(source.contains("s.compiler.compile(input).call"));

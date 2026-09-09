@@ -20,28 +20,33 @@ import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
-import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.source.Source;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.List;
 import java.util.Objects;
 
 /**
- * Local host mechanism for one exact entry in one fresh semantic Protos Process.
+ * Local host mechanism for one exact Source in one fresh semantic Protos Process.
  *
- * <p>The request is already past module/discovery policy: the caller supplies the exact compiled
- * entry and a Prelude whose import facility was created with the already-selected module resolver.
- * This mechanism creates no test identity, no scheduler, no worker identity, no retry policy and
- * no reporting institution.
+ * <p>The request is already past module/discovery policy: the caller supplies the exact Source
+ * and a Prelude whose import facility was created with the already-selected module resolver. The
+ * Source is parsed only after the fresh Process is bound to its own Polyglot Context, so executable
+ * AST ownership cannot leak from the caller's Context/sharing layer.
  *
- * <p>Every invocation creates and terminates a new {@code ProtosProcessRuntime}. The returned
- * outcome intentionally contains no Process/Actor/task handle.
+ * <p>Every invocation creates and terminates a new {@code ProtosProcessRuntime}. A caller may
+ * supply an explicit {@link ProtosPolyglotRuntimeHost} so many fresh Processes reuse one Engine
+ * while retaining one distinct Context per Process. The no-host overload owns one temporary host.
+ * The returned outcome intentionally contains no Process/Actor/task handle.
  */
 public final class ProtosFreshProcessExecutor {
     private ProtosFreshProcessExecutor() {}
 
     public record Request(
             ProtosPrelude prelude,
-            CallTarget entry,
+            Source entry,
             List<String> applicationArguments,
             ProtosEnvironmentValue.NativeNameDomain environmentNameDomain,
             List<ProtosEnvironmentValue.NativeEntry> environmentEntries,
@@ -66,6 +71,15 @@ public final class ProtosFreshProcessExecutor {
 
     public static ProtosExecutionOutcome execute(Request request) {
         Objects.requireNonNull(request, "request");
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
+            return execute(request, runtimeHost);
+        }
+    }
+
+    public static ProtosExecutionOutcome execute(
+            Request request, ProtosPolyglotRuntimeHost runtimeHost) {
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(runtimeHost, "runtimeHost");
 
         ProtosStandaloneProcessBootstrap.Result bootstrap =
                 ProtosStandaloneProcessBootstrap.create(
@@ -80,13 +94,18 @@ public final class ProtosFreshProcessExecutor {
                         request.stdoutEncoding(),
                         request.stderrEncoding(),
                         request.defaultFilesystem());
+        ProtosProcessRuntime process = bootstrap.process();
 
         try {
-            return ProtosRootTaskExecution.execute(
-                    request.entry(),
-                    bootstrap.activation());
+            ProtosPolyglotProcessContext processContext =
+                    runtimeHost.hostProcess(
+                            process,
+                            InputStream.nullInputStream(),
+                            OutputStream.nullOutputStream(),
+                            OutputStream.nullOutputStream());
+            return processContext.execute(request.entry(), bootstrap.activation());
         } finally {
-            bootstrap.process().requestTerminationForRuntime();
+            process.requestTerminationForRuntime();
         }
     }
 }

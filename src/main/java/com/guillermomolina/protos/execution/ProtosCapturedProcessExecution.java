@@ -23,20 +23,22 @@ import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamBinding;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.source.Source;
 import java.io.ByteArrayOutputStream;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
 
 /**
- * Executes one exact entry in a fresh semantic Process with private in-memory standard streams.
+ * Executes one exact Source in a fresh semantic Process with private in-memory standard streams.
  *
  * <p>This is a local host mechanism, not a test framework. It owns no manifest, expectation,
- * assertion, CaseId, retry, scheduling, reporting or worker policy. The caller has already
- * selected and compiled the exact entry and supplied the exact Process bootstrap data.
+ * assertion, CaseId, retry, scheduling, reporting or worker policy. The caller has already selected
+ * the exact Source and supplied the exact Process bootstrap data. Parsing occurs only inside the
+ * fresh Process Context.
  *
  * <p>The initial implementation captures stdout/stderr in memory because TOOL002-C is deliberately
  * sequential. Later large-scale scheduling may replace the capture storage behind a higher-level
@@ -47,7 +49,7 @@ public final class ProtosCapturedProcessExecution {
 
     public record Request(
             ProtosPrelude prelude,
-            CallTarget entry,
+            Source entry,
             List<String> applicationArguments,
             ProtosEnvironmentValue.NativeNameDomain environmentNameDomain,
             List<ProtosEnvironmentValue.NativeEntry> environmentEntries,
@@ -105,6 +107,15 @@ public final class ProtosCapturedProcessExecution {
 
     public static Result execute(Request request) {
         Objects.requireNonNull(request, "request");
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
+            return execute(request, runtimeHost);
+        }
+    }
+
+    public static Result execute(
+            Request request, ProtosPolyglotRuntimeHost runtimeHost) {
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(runtimeHost, "runtimeHost");
 
         PrivateReadableBackend stdin = new PrivateReadableBackend(request.stdin());
         PrivateWritableBackend stdout = new PrivateWritableBackend();
@@ -124,35 +135,33 @@ public final class ProtosCapturedProcessExecution {
                                 request.stdinEncoding(),
                                 request.stdoutEncoding(),
                                 request.stderrEncoding(),
-                                request.defaultFilesystem()));
+                                request.defaultFilesystem()),
+                        runtimeHost);
 
-        return new Result(
-                outcome,
-                stdout.snapshot(),
-                stderr.snapshot());
+        return new Result(outcome, stdout.snapshot(), stderr.snapshot());
     }
-
 
     /**
      * Executes one exact source directly in a fresh Process, drains its cooperative Actor-domain
      * work to idle, then invokes one exact inspector Closure with the still-live source result.
-     *
-     * <p>This is a tooling-neutral live-result inspection boundary. The source result never crosses
-     * the detached observation boundary. The source and inspector share the same Process, initial
-     * activation, Actor module state, execution domain and private streams. The inspector is invoked
-     * only after the source domain is idle and has no live tasks. Its own invocation must also leave
-     * no live tasks behind.
-     *
-     * <p>The inspector source must evaluate to a Closure accepting the live result as its single
-     * supplied argument. Only the inspector's terminal value/Error plus captured streams leave this
-     * method. This class owns no manifest, TestPlan, expectation, Future-state, assertion or
-     * reporting policy.
+     * Source parsing, cooperative child-domain drain, inspector parsing and inspector invocation
+     * all occur in that Process Context.
      */
-    public static Result executeThenInspect(
-            Request request,
-            CallTarget inspector) {
+    public static Result executeThenInspect(Request request, Source inspector) {
         Objects.requireNonNull(request, "request");
         Objects.requireNonNull(inspector, "inspector");
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
+            return executeThenInspect(request, inspector, runtimeHost);
+        }
+    }
+
+    public static Result executeThenInspect(
+            Request request,
+            Source inspector,
+            ProtosPolyglotRuntimeHost runtimeHost) {
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(inspector, "inspector");
+        Objects.requireNonNull(runtimeHost, "runtimeHost");
 
         PrivateReadableBackend stdin = new PrivateReadableBackend(request.stdin());
         PrivateWritableBackend stdout = new PrivateWritableBackend();
@@ -174,9 +183,15 @@ public final class ProtosCapturedProcessExecution {
 
         try {
             ProtosActivation activation = bootstrap.activation();
+            ProtosPolyglotProcessContext processContext =
+                    runtimeHost.hostProcess(
+                            bootstrap.process(),
+                            InputStream.nullInputStream(),
+                            OutputStream.nullOutputStream(),
+                            OutputStream.nullOutputStream());
             Object subject;
             try {
-                subject = request.entry().call(activation);
+                subject = processContext.evaluatePersistent(request.entry(), activation);
             } catch (ProtosSignalException signal) {
                 return new Result(
                         ProtosExecutionOutcome.failed(signal.error()),
@@ -184,7 +199,11 @@ public final class ProtosCapturedProcessExecution {
                         stderr.snapshot());
             }
 
-            activation.executionDomain().dispatchUntilIdle();
+            processContext.callForRuntime(
+                    () -> {
+                        activation.executionDomain().dispatchUntilIdle();
+                        return null;
+                    });
             if (activation.executionDomain().liveTaskCount() != 0) {
                 throw new IllegalStateException(
                         "direct inspection source reached cooperative idle with live tasks");
@@ -192,16 +211,18 @@ public final class ProtosCapturedProcessExecution {
 
             ProtosExecutionOutcome outcome;
             try {
-                Object inspectorValue = inspector.call(activation);
+                Object inspectorValue = processContext.evaluatePersistent(inspector, activation);
                 if (!(inspectorValue instanceof ProtosClosureValue inspectorClosure)) {
                     throw new IllegalStateException(
                             "direct inspection inspector source must evaluate to Closure");
                 }
                 Object inspected =
-                        ProtosClosureInvoker.invoke(
-                                inspectorClosure,
-                                List.of(subject),
-                                activation);
+                        processContext.callForRuntime(
+                                () ->
+                                        ProtosClosureInvoker.invoke(
+                                                inspectorClosure,
+                                                List.of(subject),
+                                                activation));
                 if (activation.executionDomain().liveTaskCount() != 0) {
                     throw new IllegalStateException(
                             "direct inspection inspector left live tasks");
@@ -211,10 +232,7 @@ public final class ProtosCapturedProcessExecution {
                 outcome = ProtosExecutionOutcome.failed(signal.error());
             }
 
-            return new Result(
-                    outcome,
-                    stdout.snapshot(),
-                    stderr.snapshot());
+            return new Result(outcome, stdout.snapshot(), stderr.snapshot());
         } finally {
             bootstrap.process().requestTerminationForRuntime();
         }

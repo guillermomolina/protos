@@ -951,7 +951,7 @@ TOOL002-B publishes the first local backend mechanism without introducing test
 policy:
 
 ```text
-already-selected Prelude/module resolver + exact compiled entry
+already-selected Prelude/module resolver + exact Protos Source
         |
         v
 ProtosFreshProcessExecutor
@@ -986,7 +986,7 @@ layers selected by the comparative and scale/distribution architecture.
 TOOL002-C closes the next mechanical layer without moving test policy into Java:
 
 ```text
-one exact already-compiled Protos entry
+one exact Protos Source
         |
         v
 ProtosCapturedProcessExecution

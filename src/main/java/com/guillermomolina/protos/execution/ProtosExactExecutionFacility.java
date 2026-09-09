@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.*;
+import com.oracle.truffle.api.source.Source;
 import java.math.BigInteger;
 import java.util.List;
 import java.util.Objects;
@@ -46,6 +47,12 @@ public final class ProtosExactExecutionFacility {
     private ProtosExactExecutionFacility() {}
 
     public static void install(ProtosActivation activation) {
+        install(activation, null);
+    }
+
+    public static void install(
+            ProtosActivation activation,
+            ProtosPolyglotRuntimeHost runtimeHost) {
         Objects.requireNonNull(activation, "activation");
         ProtosPrelude executionPrelude =
                 activation
@@ -54,7 +61,7 @@ public final class ProtosExactExecutionFacility {
                                 () ->
                                         new IllegalStateException(
                                                 "exact execution facility requires Core prelude"));
-        install(activation, BOOTSTRAP_SLOT, executionPrelude);
+        install(activation, BOOTSTRAP_SLOT, executionPrelude, runtimeHost);
     }
 
     /**
@@ -68,6 +75,14 @@ public final class ProtosExactExecutionFacility {
             ProtosActivation activation,
             String slotName,
             ProtosPrelude executionPrelude) {
+        install(activation, slotName, executionPrelude, null);
+    }
+
+    public static void install(
+            ProtosActivation activation,
+            String slotName,
+            ProtosPrelude executionPrelude,
+            ProtosPolyglotRuntimeHost runtimeHost) {
         Objects.requireNonNull(activation, "activation");
         Objects.requireNonNull(slotName, "slotName");
         Objects.requireNonNull(executionPrelude, "executionPrelude");
@@ -89,7 +104,8 @@ public final class ProtosExactExecutionFacility {
                                         execute(
                                                 callActivation,
                                                 arguments,
-                                                executionPrelude)));
+                                                executionPrelude,
+                                                runtimeHost)));
     }
 
 
@@ -98,6 +114,12 @@ public final class ProtosExactExecutionFacility {
      * {@link #INSPECTION_BOOTSTRAP_SLOT} using the caller's already-selected Prelude.
      */
     public static void installInspection(ProtosActivation activation) {
+        installInspection(activation, null);
+    }
+
+    public static void installInspection(
+            ProtosActivation activation,
+            ProtosPolyglotRuntimeHost runtimeHost) {
         Objects.requireNonNull(activation, "activation");
         ProtosPrelude executionPrelude =
                 activation
@@ -109,7 +131,8 @@ public final class ProtosExactExecutionFacility {
         installInspection(
                 activation,
                 INSPECTION_BOOTSTRAP_SLOT,
-                executionPrelude);
+                executionPrelude,
+                runtimeHost);
     }
 
     /**
@@ -126,6 +149,14 @@ public final class ProtosExactExecutionFacility {
             ProtosActivation activation,
             String slotName,
             ProtosPrelude executionPrelude) {
+        installInspection(activation, slotName, executionPrelude, null);
+    }
+
+    public static void installInspection(
+            ProtosActivation activation,
+            String slotName,
+            ProtosPrelude executionPrelude,
+            ProtosPolyglotRuntimeHost runtimeHost) {
         Objects.requireNonNull(activation, "activation");
         Objects.requireNonNull(slotName, "slotName");
         Objects.requireNonNull(executionPrelude, "executionPrelude");
@@ -147,13 +178,15 @@ public final class ProtosExactExecutionFacility {
                                         inspect(
                                                 callActivation,
                                                 arguments,
-                                                executionPrelude)));
+                                                executionPrelude,
+                                                runtimeHost)));
     }
 
     private static Object execute(
             ProtosActivation caller,
             List<?> arguments,
-            ProtosPrelude executionPrelude) {
+            ProtosPrelude executionPrelude,
+            ProtosPolyglotRuntimeHost runtimeHost) {
         if (arguments.size() != 1
                 || !(arguments.get(0) instanceof ProtosStringValue source)) {
             throw ordinaryError(caller);
@@ -167,33 +200,32 @@ public final class ProtosExactExecutionFacility {
                                         new IllegalStateException(
                                                 "exact execution observation requires caller Core prelude"));
         ProtosEncodingValue utf8 = utf8(executionPrelude);
-
+        ProtosCapturedProcessExecution.Request request =
+                new ProtosCapturedProcessExecution.Request(
+                        executionPrelude,
+                        exactSource(source.value(), "<exact-execution>"),
+                        List.of(),
+                        exactEnvironmentDomain(),
+                        List.of(),
+                        new byte[0],
+                        utf8,
+                        utf8,
+                        utf8,
+                        null);
         ProtosCapturedProcessExecution.Result result =
-                ProtosCapturedProcessExecution.execute(
-                        new ProtosCapturedProcessExecution.Request(
-                                executionPrelude,
-                                new ProtosSourceCompiler().compile(source.value()),
-                                List.of(),
-                                exactEnvironmentDomain(),
-                                List.of(),
-                                new byte[0],
-                                utf8,
-                                utf8,
-                                utf8,
-                                null));
+                runtimeHost == null
+                        ? ProtosCapturedProcessExecution.execute(request)
+                        : ProtosCapturedProcessExecution.execute(request, runtimeHost);
 
-        return observation(
-                result,
-                caller,
-                callerPrelude,
-                executionPrelude);
+        return observation(result, caller, callerPrelude, executionPrelude);
     }
 
 
     private static Object inspect(
             ProtosActivation caller,
             List<?> arguments,
-            ProtosPrelude executionPrelude) {
+            ProtosPrelude executionPrelude,
+            ProtosPolyglotRuntimeHost runtimeHost) {
         if (arguments.size() != 2
                 || !(arguments.get(0) instanceof ProtosStringValue source)
                 || !(arguments.get(1) instanceof ProtosStringValue inspector)) {
@@ -208,27 +240,34 @@ public final class ProtosExactExecutionFacility {
                                         new IllegalStateException(
                                                 "exact inspection observation requires caller Core prelude"));
         ProtosEncodingValue utf8 = utf8(executionPrelude);
-
+        ProtosCapturedProcessExecution.Request request =
+                new ProtosCapturedProcessExecution.Request(
+                        executionPrelude,
+                        exactSource(source.value(), "<exact-inspection-source>"),
+                        List.of(),
+                        exactEnvironmentDomain(),
+                        List.of(),
+                        new byte[0],
+                        utf8,
+                        utf8,
+                        utf8,
+                        null);
+        Source inspectorSource =
+                exactSource(inspector.value(), "<exact-inspector>");
         ProtosCapturedProcessExecution.Result result =
-                ProtosCapturedProcessExecution.executeThenInspect(
-                        new ProtosCapturedProcessExecution.Request(
-                                executionPrelude,
-                                new ProtosSourceCompiler().compile(source.value()),
-                                List.of(),
-                                exactEnvironmentDomain(),
-                                List.of(),
-                                new byte[0],
-                                utf8,
-                                utf8,
-                                utf8,
-                                null),
-                        new ProtosSourceCompiler().compile(inspector.value()));
+                runtimeHost == null
+                        ? ProtosCapturedProcessExecution.executeThenInspect(
+                                request, inspectorSource)
+                        : ProtosCapturedProcessExecution.executeThenInspect(
+                                request, inspectorSource, runtimeHost);
 
-        return observation(
-                result,
-                caller,
-                callerPrelude,
-                executionPrelude);
+        return observation(result, caller, callerPrelude, executionPrelude);
+    }
+
+    private static Source exactSource(String characters, String name) {
+        return Source.newBuilder(ProtosLanguage.ID, characters, name)
+                .mimeType(ProtosLanguage.MIME_TYPE)
+                .build();
     }
 
     private static ProtosObjectValue observation(

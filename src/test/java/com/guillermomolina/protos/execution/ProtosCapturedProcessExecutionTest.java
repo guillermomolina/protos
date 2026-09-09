@@ -22,6 +22,7 @@ import com.guillermomolina.protos.runtime.ProtosEncodingValue;
 import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.oracle.truffle.api.source.Source;
 import java.math.BigInteger;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -43,9 +44,8 @@ final class ProtosCapturedProcessExecutionTest {
                                 CORE,
                                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
         ProtosEncodingValue utf8 = encoding(prelude, "UTF8");
-        var entry =
-                new ProtosSourceCompiler()
-                        .compile(Files.readString(CASE, StandardCharsets.UTF_8));
+        Source entry =
+                source(Files.readString(CASE, StandardCharsets.UTF_8), "<captured-case>");
 
         ProtosCapturedProcessExecution.Result first =
                 ProtosCapturedProcessExecution.execute(
@@ -80,12 +80,12 @@ final class ProtosCapturedProcessExecutionTest {
                                 CORE,
                                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY));
         ProtosEncodingValue utf8 = encoding(prelude, "UTF8");
-        var entry =
-                new ProtosSourceCompiler()
-                        .compile(
-                                "writer: TextWriter(process.stdout(), process.stdoutEncoding())\n"
-                                        + "writer.writeLine(\"before-failure\").value()\n"
-                                        + "1.definitelyMissing()");
+        Source entry =
+                source(
+                        "writer: TextWriter(process.stdout(), process.stdoutEncoding())\n"
+                                + "writer.writeLine(\"before-failure\").value()\n"
+                                + "1.definitelyMissing()",
+                        "<captured-failure>");
 
         ProtosCapturedProcessExecution.Result result =
                 ProtosCapturedProcessExecution.execute(
@@ -112,7 +112,7 @@ final class ProtosCapturedProcessExecutionTest {
         ProtosCapturedProcessExecution.Request request =
                 new ProtosCapturedProcessExecution.Request(
                         prelude,
-                        new ProtosSourceCompiler().compile("7"),
+                        source("7", "<captured-detach>"),
                         List.of(),
                         exactEnvironmentDomain(),
                         List.of(),
@@ -136,7 +136,7 @@ final class ProtosCapturedProcessExecutionTest {
 
     private static ProtosCapturedProcessExecution.Request request(
             ProtosPrelude prelude,
-            com.oracle.truffle.api.CallTarget entry,
+            Source entry,
             ProtosEncodingValue utf8,
             String stdoutArgument,
             String stderrArgument) {
@@ -151,6 +151,12 @@ final class ProtosCapturedProcessExecutionTest {
                 utf8,
                 utf8,
                 null);
+    }
+
+    private static Source source(String characters, String name) {
+        return Source.newBuilder(ProtosLanguage.ID, characters, name)
+                .mimeType(ProtosLanguage.MIME_TYPE)
+                .build();
     }
 
     private static void assertCompletedInteger(

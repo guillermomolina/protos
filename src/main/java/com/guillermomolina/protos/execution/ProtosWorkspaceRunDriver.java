@@ -66,28 +66,32 @@ public final class ProtosWorkspaceRunDriver {
     public static ProtosExecutionOutcome execute(Request request) throws IOException {
         Objects.requireNonNull(request, "request");
 
-        ProtosPackageExecutionPlan plan =
-                ProtosWorkspacePackagePreflight.build(
-                        request.coreRoot(),
-                        request.packageToolRoot(),
-                        request.projectRoot(),
-                        request.standardLibraryResolver());
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
+            ProtosPackageExecutionPlan plan =
+                    ProtosWorkspacePackagePreflight.build(
+                            request.coreRoot(),
+                            request.packageToolRoot(),
+                            request.projectRoot(),
+                            request.standardLibraryResolver(),
+                            runtimeHost);
 
-        return ProtosWorkspacePackageApplicationExecution.execute(
-                new ProtosWorkspacePackageApplicationExecution.Request(
-                        request.coreRoot(),
-                        request.projectRoot(),
-                        plan,
-                        request.standardLibraryResolver(),
-                        request.entryLogicalModule(),
-                        request.applicationArguments(),
-                        request.environmentNameDomain(),
-                        request.environmentEntries(),
-                        request.stdinBackend(),
-                        request.stdoutBackend(),
-                        request.stderrBackend(),
-                        request.stdinEncodingBinding(),
-                        request.stdoutEncodingBinding(),
-                        request.stderrEncodingBinding()));
+            return ProtosWorkspacePackageApplicationExecution.execute(
+                    new ProtosWorkspacePackageApplicationExecution.Request(
+                            request.coreRoot(),
+                            request.projectRoot(),
+                            plan,
+                            request.standardLibraryResolver(),
+                            request.entryLogicalModule(),
+                            request.applicationArguments(),
+                            request.environmentNameDomain(),
+                            request.environmentEntries(),
+                            request.stdinBackend(),
+                            request.stdoutBackend(),
+                            request.stderrBackend(),
+                            request.stdinEncodingBinding(),
+                            request.stdoutEncodingBinding(),
+                            request.stderrEncodingBinding()),
+                    runtimeHost);
+        }
     }
 }

@@ -21,7 +21,10 @@ import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
+import com.oracle.truffle.api.source.Source;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Objects;
@@ -41,12 +44,15 @@ public final class ProtosWorkspacePackagePreflight {
             Path projectRoot,
             ProtosModuleResolver standardLibraryResolver)
             throws IOException {
-        return build(
-                coreRoot,
-                packageToolRoot,
-                projectRoot,
-                standardLibraryResolver,
-                ignored -> {});
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
+            return build(
+                    coreRoot,
+                    packageToolRoot,
+                    projectRoot,
+                    standardLibraryResolver,
+                    ignored -> {},
+                    runtimeHost);
+        }
     }
 
     static ProtosPackageExecutionPlan build(
@@ -56,11 +62,47 @@ public final class ProtosWorkspacePackagePreflight {
             ProtosModuleResolver standardLibraryResolver,
             Consumer<ProtosProcessRuntime> processObserver)
             throws IOException {
+        try (ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
+            return build(
+                    coreRoot,
+                    packageToolRoot,
+                    projectRoot,
+                    standardLibraryResolver,
+                    processObserver,
+                    runtimeHost);
+        }
+    }
+
+    static ProtosPackageExecutionPlan build(
+            Path coreRoot,
+            Path packageToolRoot,
+            Path projectRoot,
+            ProtosModuleResolver standardLibraryResolver,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
+        return build(
+                coreRoot,
+                packageToolRoot,
+                projectRoot,
+                standardLibraryResolver,
+                ignored -> {},
+                runtimeHost);
+    }
+
+    static ProtosPackageExecutionPlan build(
+            Path coreRoot,
+            Path packageToolRoot,
+            Path projectRoot,
+            ProtosModuleResolver standardLibraryResolver,
+            Consumer<ProtosProcessRuntime> processObserver,
+            ProtosPolyglotRuntimeHost runtimeHost)
+            throws IOException {
         Objects.requireNonNull(coreRoot, "coreRoot");
         Objects.requireNonNull(packageToolRoot, "packageToolRoot");
         Objects.requireNonNull(projectRoot, "projectRoot");
         Objects.requireNonNull(standardLibraryResolver, "standardLibraryResolver");
         Objects.requireNonNull(processObserver, "processObserver");
+        Objects.requireNonNull(runtimeHost, "runtimeHost");
 
         try (ProtosNioReadOnlyTreeFilesystemBackend backend =
                 new ProtosNioReadOnlyTreeFilesystemBackend(projectRoot)) {
@@ -90,6 +132,12 @@ public final class ProtosWorkspacePackagePreflight {
             ProtosProcessRuntime process = bootstrap.process();
 
             try {
+                ProtosPolyglotProcessContext processContext =
+                        runtimeHost.hostProcess(
+                                process,
+                                InputStream.nullInputStream(),
+                                OutputStream.nullOutputStream(),
+                                OutputStream.nullOutputStream());
                 processObserver.accept(process);
                 ProtosObjectValue rawFilesystem =
                         ProtosStandardFilesystemProtocol.createCapability(
@@ -107,10 +155,15 @@ public final class ProtosWorkspacePackagePreflight {
                 bootstrap.activation().context().createLocalSlot(
                         "projectTreeFilesystem", filesystem);
 
+                Source buildPlanSource =
+                        Source.newBuilder(
+                                        ProtosLanguage.ID,
+                                        BUILD_PLAN_SOURCE,
+                                        "<workspace-package-preflight>")
+                                .mimeType(ProtosLanguage.MIME_TYPE)
+                                .build();
                 ProtosExecutionOutcome outcome =
-                        ProtosRootTaskExecution.execute(
-                                new ProtosSourceCompiler().compile(BUILD_PLAN_SOURCE),
-                                bootstrap.activation());
+                        processContext.execute(buildPlanSource, bootstrap.activation());
                 if (outcome.state() != ProtosExecutionOutcome.State.COMPLETED) {
                     throw new IOException(
                             "workspace Package Tool preflight did not complete normally");

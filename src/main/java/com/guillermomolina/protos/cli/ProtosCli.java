@@ -19,7 +19,6 @@ package com.guillermomolina.protos.cli;
 import com.guillermomolina.protos.execution.*;
 import com.guillermomolina.protos.parser.ParseError;
 import com.guillermomolina.protos.runtime.*;
-import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.source.Source;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -199,12 +198,15 @@ public final class ProtosCli {
                     out,
                     err,
                     session -> {
-                        ProtosExactExecutionFacility.install(session.activation);
-                        ProtosExactExecutionFacility.installInspection(session.activation);
+                        ProtosExactExecutionFacility.install(
+                                session.activation, session.runtimeHost);
+                        ProtosExactExecutionFacility.installInspection(
+                                session.activation, session.runtimeHost);
                         ProtosExactExecutionFacility.install(
                                 session.activation,
                                 "packageExecution",
-                                packagePrelude);
+                                packagePrelude,
+                                session.runtimeHost);
                         installBundledToolFilesystem(
                                 session, "filesystem", filesystemBackend);
                         installBundledToolFilesystem(
@@ -295,7 +297,7 @@ public final class ProtosCli {
                         toolRoot,
                         new ProtosStandardLibraryModuleResolver(core.getParent()));
         Session session =
-                legacyToolSession(
+                session(
                         core,
                         resolver,
                         applicationArguments(args, 0),
@@ -306,7 +308,7 @@ public final class ProtosCli {
             provisioner.provision(session);
             ProtosModuleKey entryModule = resolver.entryModule(entryModuleName);
             ProtosModuleSource source = resolver.loadSource(entryModule).requireKey(entryModule);
-            executeStandaloneRootTask(session.compiler.compile(source), session.activation);
+            executeStandaloneRootTask(session.execute(source.source()));
             return 0;
         } catch (ParseError e) {
             err.println(diagnosticName + " tool syntax error: " + e.getMessage());
@@ -541,27 +543,10 @@ public final class ProtosCli {
                 applicationArguments,
                 in,
                 out,
-                err,
-                true);
+                err);
     }
 
-    private Session legacyToolSession(
-            Path core,
-            ProtosModuleResolver moduleResolver,
-            List<String> applicationArguments,
-            InputStream in,
-            PrintStream out,
-            PrintStream err)
-            throws IOException {
-        return createSession(
-                core,
-                moduleResolver,
-                applicationArguments,
-                in,
-                out,
-                err,
-                false);
-    }
+
 
     private Session createSession(
             Path core,
@@ -569,8 +554,7 @@ public final class ProtosCli {
             List<String> applicationArguments,
             InputStream in,
             PrintStream out,
-            PrintStream err,
-            boolean hosted)
+            PrintStream err)
             throws IOException {
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap().bootstrap(core, moduleResolver);
@@ -590,15 +574,6 @@ public final class ProtosCli {
                         utf8,
                         null);
 
-        if (!hosted) {
-            return new Session(
-                    new ProtosSourceCompiler(),
-                    bootstrap.activation(),
-                    bootstrap.process(),
-                    null,
-                    null);
-        }
-
         ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
         boolean bound = false;
         try {
@@ -606,7 +581,6 @@ public final class ProtosCli {
                     runtimeHost.hostProcess(bootstrap.process(), in, out, err);
             bound = true;
             return new Session(
-                    new ProtosSourceCompiler(),
                     bootstrap.activation(),
                     bootstrap.process(),
                     runtimeHost,
@@ -793,18 +767,7 @@ public final class ProtosCli {
      * standalone command behavior. The cooperative RootActor task execution itself is owned by
      * ProtosRootTaskExecution so test/tool consumers do not need a CLI-specific executor.
      */
-    private static Object executeStandaloneRootTask(
-            CallTarget target, ProtosActivation activation) {
-        ProtosExecutionOutcome outcome =
-                ProtosRootTaskExecution.execute(target, activation);
-        return switch (outcome.state()) {
-            case COMPLETED -> outcome.value();
-            case FAILED -> throw new ProtosSignalException(outcome.error());
-            case CANCELLED ->
-                    throw new IllegalStateException(
-                            "standalone root task was cancelled before entry completion");
-        };
-    }
+
 
     private static Object executeStandaloneRootTask(ProtosExecutionOutcome outcome) {
         return switch (outcome.state()) {
@@ -896,7 +859,6 @@ public final class ProtosCli {
     }
 
     private record Session(
-            ProtosSourceCompiler compiler,
             ProtosActivation activation,
             ProtosProcessRuntime process,
             ProtosPolyglotRuntimeHost runtimeHost,

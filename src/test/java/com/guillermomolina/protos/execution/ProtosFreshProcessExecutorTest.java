@@ -24,7 +24,7 @@ import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosProcessCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
-import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.source.Source;
 import java.math.BigInteger;
 import java.nio.file.Path;
 import java.util.List;
@@ -36,14 +36,12 @@ final class ProtosFreshProcessExecutorTest {
     @Test
     void eachExecutionCreatesASeparateSemanticProcess() throws Exception {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
-        ProtosSourceCompiler compiler = new ProtosSourceCompiler();
-
-        ProtosExecutionOutcome first =
+                ProtosExecutionOutcome first =
                 ProtosFreshProcessExecutor.execute(
-                        request(prelude, compiler.compile("process.args()")));
+                        request(prelude, source("process.args()")));
         ProtosExecutionOutcome second =
                 ProtosFreshProcessExecutor.execute(
-                        request(prelude, compiler.compile("process.args()")));
+                        request(prelude, source("process.args()")));
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, first.state());
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, second.state());
@@ -61,8 +59,7 @@ final class ProtosFreshProcessExecutorTest {
                 ProtosFreshProcessExecutor.execute(
                         request(
                                 prelude,
-                                new ProtosSourceCompiler()
-                                        .compile("(() => { 42 }).future().value()")));
+                                source("(() => { 42 }).future().value()")));
 
         assertEquals(ProtosExecutionOutcome.State.COMPLETED, outcome.state());
         ProtosIntegerValue value =
@@ -79,8 +76,7 @@ final class ProtosFreshProcessExecutorTest {
                 ProtosFreshProcessExecutor.execute(
                         request(
                                 prelude,
-                                new ProtosSourceCompiler()
-                                        .compile("1.definitelyMissing()")));
+                                source("1.definitelyMissing()")));
 
         assertEquals(ProtosExecutionOutcome.State.FAILED, outcome.state());
         assertNull(outcome.value());
@@ -92,7 +88,7 @@ final class ProtosFreshProcessExecutorTest {
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE);
         ProtosExecutionOutcome outcome =
                 ProtosFreshProcessExecutor.execute(
-                        request(prelude, new ProtosSourceCompiler().compile("process")));
+                        request(prelude, source("process")));
 
         ProtosProcessCapabilityValue capability =
                 assertInstanceOf(ProtosProcessCapabilityValue.class, outcome.value());
@@ -103,7 +99,7 @@ final class ProtosFreshProcessExecutorTest {
 
     private static ProtosFreshProcessExecutor.Request request(
             ProtosPrelude prelude,
-            CallTarget entry) {
+            Source entry) {
         return new ProtosFreshProcessExecutor.Request(
                 prelude,
                 entry,
@@ -119,6 +115,12 @@ final class ProtosFreshProcessExecutorTest {
                 null,
                 null,
                 null);
+    }
+
+    private static Source source(String characters) {
+        return Source.newBuilder(ProtosLanguage.ID, characters, "<fresh-process-test>")
+                .mimeType(ProtosLanguage.MIME_TYPE)
+                .build();
     }
 
     private static ProtosEnvironmentValue.NativeNameDomain exactEnvironmentDomain() {

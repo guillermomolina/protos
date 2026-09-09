@@ -401,3 +401,22 @@ PLAT001 changes no normative Protos specification. If implementation of this
 hosting topology exposes a missing language rule or would require changing
 observable Process/Actor/P behavior, dependent implementation must stop and use
 the normal `Dxxx`/specification approval process for that semantic question.
+
+<!-- I026-A4B3-BUNDLED-EXACT-WORKSPACE: v1 -->
+## A4B3 production-driver cutover evidence — bundled tools and child/workspace Processes
+
+In `0.2.291-SNAPSHOT`, the already-ratified explicit RuntimeHost/Engine topology is extended to the next
+production-driver phase without changing PLAT001 policy. A bundled-tool invocation owns one explicit
+RuntimeHost; its tool Process and any fresh exact/captured child Process each own a distinct Context on
+that Engine. Exact source is carried between host mechanisms only as inert Truffle `Source` data and is
+parsed after the destination Process Context is entered, so no executable AST/CallTarget crosses a
+sharing-layer boundary.
+
+Workspace execution follows the same composition: one driver-owned RuntimeHost, a distinct Package
+Tool preflight Process/Context, and a distinct application Process/Context. The application still uses
+the existing canonical initial-module mechanism *inside* its Context; the next A4B3 phase owns replacing
+that mechanically direct module/root entry with the ordinary public-parse RootActor route.
+
+No global Engine is introduced, no Process identity is collapsed into a Context, and no Context is
+reused as another semantic Process. `ContextPolicy.EXCLUSIVE` remains active; `REUSE` and `SHARED`
+remain deferred.
