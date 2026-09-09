@@ -56,13 +56,31 @@ READY to implement `connectTcp`; I028-D will consume the same topology for liste
   - **C3 — endpoint observations — CLOSED (`0.2.288-SNAPSHOT` / publication commit):** complete `localEndpoint` / `remoteEndpoint` as synchronous recognized `IpEndpoint` observations over runtime-held logical snapshots, with receiver-domain/arity validation and no network/backend work; no endpoint `===` identity relation is selected.
   - **C4 — host-neutral `connectTcp` acquisition — CLOSED (`0.2.289-SNAPSHOT` / publication commit):** install the single standard Network `connectTcp` selector, require an actual represented Network capability plus recognized endpoint before authority exercise, reuse ordinary I/O Future commitment/cancellation, materialize the fresh TcpConnection only at successful handoff, and explicitly release late/duplicate/unmaterializable backend resources; no concrete production backend or endpoint identity strengthening.
   - **C5 — integrated C conformance + closure — CLOSED (`0.2.289-SNAPSHOT` / publication commit; implementation version unchanged):** an acquired C4 connection is retained as the same ordinary C1-C3 resource family, preserves ordinary local-slot/shadowing behavior, rejects authority manufacture through descendants, remains non-transferable through Actor/P, and preserves pre-commit cancellation/late-resource custody; retained native-boundary evidence remains 131/34. I028-C is CLOSED.
-- **D — TCP listener + `listenTcp` — READY:** exact request snapshot/validation,
+- **D — TCP listener + `listenTcp` — IN_PROGRESS:** exact request snapshot/validation,
   `localPort`, concurrent pending accepts, lifecycle/admission behavior.
+  - **D1 — ordinary TcpListener resource/prototype + transfer foundation — CLOSED (`0.2.290-SNAPSHOT` / publication commit):** source-owned runtime-only frozen authority-free protocol parent, ordinary OPEN `ProtosTcpListenerValue` with opaque host state and ordinary application slots, exact canonical parent preservation, no public TcpListener Prelude binding, plus explicit Actor/P rejection of the live capability and authority-bearing descendants. No listener selector, acquisition or backend yet; native boundary remains 131/34.
+  - **D2 — `localPort` + `close` + shared listener lifecycle — READY:** install the bounded observation/lifecycle surface on the shared hidden listener protocol without selecting the production backend.
 - **E — production backend portability/scalability:** preserve D047 independently
   of NIO/epoll/kqueue/io_uring/IOCP/Network.framework implementation choices;
   subdivide mechanically if required.
 - **F — cross-slice conformance/native-boundary closure:** cancellation races,
   late custody, multiple-accept scale evidence and Actor/P non-transferability.
+
+## I028-D1 TcpListener ordinary-resource foundation
+
+Published at implementation version `0.2.290-SNAPSHOT`. D1 consumes the already-ratified D052/PLAT003 listener
+topology without selecting a backend or installing listener operations. Core now owns one runtime-only
+`_coreTcpListenerPrototype`: it delegates directly to Object, is removed before public Prelude
+publication, is frozen with the shared standard graph, and is retained only by `ProtosPrelude` for
+runtime resource construction/transfer identity. `ProtosTcpListenerValue` is an ordinary structurally
+OPEN `ProtosObjectValue` child of that exact prototype, stores opaque non-slot runtime resource state,
+and remains fully available for ordinary application local slots. Actor/P transfer rejects the
+concrete live resource explicitly and rejects an ordinary descendant by recursively reaching that
+parent authority, while an authority-free ordinary descendant of the hidden frozen protocol prototype
+remains transferable and keeps the canonical prototype parent. The public Prelude gains no
+`TcpListener` binding; `accept`, `localPort`, `close`, `listenTcp` and the production backend remain
+outside D1. No native Closure is introduced, so the retained Core native boundary remains 131 sites
+across 34 providers. D2 is READY.
 
 ## I028-C5 / I028-C closure
 

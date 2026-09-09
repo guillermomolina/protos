@@ -58,6 +58,7 @@ class ProtosCoreSourceNamingArchitectureTest {
                     "IpEndpoint.protos",
                     "Network.protos",
                     "TcpConnection.protos",
+                    "TcpListener.protos",
                     "Future.protos",
                     "Actor.protos",
                     "Process.protos",

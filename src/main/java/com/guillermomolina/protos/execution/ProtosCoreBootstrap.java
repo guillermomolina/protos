@@ -136,6 +136,9 @@ public final class ProtosCoreBootstrap {
                 .load(coreDirectory.resolve("TcpConnection.protos"))
                 .call(bootstrapActivation);
         sourceLoader
+                .load(coreDirectory.resolve("TcpListener.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
                 .load(coreDirectory.resolve("Future.protos"))
                 .call(bootstrapActivation);
         sourceLoader
@@ -296,6 +299,12 @@ public final class ProtosCoreBootstrap {
                         ProtosObjectValue.rootObject());
         ProtosStandardTcpConnectionProtocol.install(tcpConnectionPrototype);
         bootstrapContext.removeLocalSlot("_coreTcpConnectionPrototype");
+        ProtosObjectValue tcpListenerPrototype =
+                requirePrototype(
+                        bootstrapContext,
+                        "_coreTcpListenerPrototype",
+                        ProtosObjectValue.rootObject());
+        bootstrapContext.removeLocalSlot("_coreTcpListenerPrototype");
         ProtosObjectValue futurePrototype = requirePrototype(bootstrapContext, "Future", ProtosObjectValue.rootObject());
         ProtosStandardFutureProtocol.install(futurePrototype);
         ProtosObjectValue processObject =
@@ -394,7 +403,8 @@ public final class ProtosCoreBootstrap {
                 actorRefPrototype,
                 groupRefPrototype,
                 sendOperationPrototype,
-                tcpConnectionPrototype);
+                tcpConnectionPrototype,
+                tcpListenerPrototype);
         validateFrozenStandardGraph(
                 bootstrapContext,
                 preludeBindings,
@@ -402,14 +412,16 @@ public final class ProtosCoreBootstrap {
                 actorRefPrototype,
                 groupRefPrototype,
                 sendOperationPrototype,
-                tcpConnectionPrototype);
+                tcpConnectionPrototype,
+                tcpListenerPrototype);
 
         return new ProtosPrelude(
                 preludeBindings,
                 contextPrototype,
                 bufferedBytesPrototype,
                 actorRefPrototype,
-                tcpConnectionPrototype);
+                tcpConnectionPrototype,
+                tcpListenerPrototype);
     }
 
 

@@ -25,6 +25,7 @@ public final class ProtosPrelude {
     private final ProtosObjectValue runtimeBytesPrototype;
     private final ProtosObjectValue runtimeActorRefPrototype;
     private final ProtosObjectValue runtimeTcpConnectionPrototype;
+    private final ProtosObjectValue runtimeTcpListenerPrototype;
 
     public ProtosPrelude(
             ProtosObjectValue bindings,
@@ -51,12 +52,29 @@ public final class ProtosPrelude {
             ProtosObjectValue runtimeBytesPrototype,
             ProtosObjectValue runtimeActorRefPrototype,
             ProtosObjectValue runtimeTcpConnectionPrototype) {
+        this(
+                bindings,
+                contextPrototype,
+                runtimeBytesPrototype,
+                runtimeActorRefPrototype,
+                runtimeTcpConnectionPrototype,
+                null);
+    }
+
+    public ProtosPrelude(
+            ProtosObjectValue bindings,
+            ProtosObjectValue contextPrototype,
+            ProtosObjectValue runtimeBytesPrototype,
+            ProtosObjectValue runtimeActorRefPrototype,
+            ProtosObjectValue runtimeTcpConnectionPrototype,
+            ProtosObjectValue runtimeTcpListenerPrototype) {
         this.bindings = Objects.requireNonNull(bindings, "bindings");
         this.contextPrototype =
                 Objects.requireNonNull(contextPrototype, "contextPrototype");
         this.runtimeBytesPrototype = runtimeBytesPrototype;
         this.runtimeActorRefPrototype = runtimeActorRefPrototype;
         this.runtimeTcpConnectionPrototype = runtimeTcpConnectionPrototype;
+        this.runtimeTcpListenerPrototype = runtimeTcpListenerPrototype;
 
         if (runtimeTcpConnectionPrototype != null
                 && (!runtimeTcpConnectionPrototype.isFrozen()
@@ -64,6 +82,14 @@ public final class ProtosPrelude {
                                 != ProtosObjectValue.rootObject())) {
             throw new IllegalArgumentException(
                     "runtime TcpConnection prototype must be a frozen direct child of Object");
+        }
+
+        if (runtimeTcpListenerPrototype != null
+                && (!runtimeTcpListenerPrototype.isFrozen()
+                        || runtimeTcpListenerPrototype.parent().orElse(null)
+                                != ProtosObjectValue.rootObject())) {
+            throw new IllegalArgumentException(
+                    "runtime TcpListener prototype must be a frozen direct child of Object");
         }
 
         if (!bindings.isFrozen()) {
@@ -223,6 +249,20 @@ public final class ProtosPrelude {
     /** Nullable-safe identity test used only by isolation transfer machinery. */
     public boolean isTcpConnectionPrototypeForRuntime(Object candidate) {
         return runtimeTcpConnectionPrototype != null && candidate == runtimeTcpConnectionPrototype;
+    }
+
+    /** Runtime-only exact TcpListener protocol prototype omitted from public Prelude bindings. */
+    public ProtosObjectValue tcpListenerPrototypeForRuntime() {
+        if (runtimeTcpListenerPrototype == null) {
+            throw new IllegalStateException(
+                    "this prelude does not retain the standard runtime TcpListener prototype");
+        }
+        return runtimeTcpListenerPrototype;
+    }
+
+    /** Nullable-safe identity test used only by isolation transfer machinery. */
+    public boolean isTcpListenerPrototypeForRuntime(Object candidate) {
+        return runtimeTcpListenerPrototype != null && candidate == runtimeTcpListenerPrototype;
     }
 
     public ProtosObjectValue arrayPrototype() {

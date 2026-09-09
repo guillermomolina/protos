@@ -1,3 +1,7 @@
+## 0.2.290-SNAPSHOT
+
+- Close `I028-D1 — ordinary TcpListener resource/prototype + transfer foundation` under ratified D047/D052/PLAT003. Publish one source-owned runtime-only frozen authority-free TcpListener protocol prototype outside public Prelude bindings and one ordinary structurally OPEN `ProtosTcpListenerValue` child with opaque non-slot host state. Preserve ordinary local-slot mutation/shadowing capacity, canonical protocol-parent identity, explicit Actor/P rejection of the live listener and authority-bearing descendants, and transferability of authority-free descendants of the protocol prototype. Add no `accept`, `localPort`, `close`, `listenTcp`, production backend, endpoint-identity rule or native Closure; native boundary remains 131 construction sites / 34 providers. Release I028-D2. Specification and legacy live ledgers unchanged. Implementation version becomes `0.2.290-SNAPSHOT`.
+
 ## 0.2.289-SNAPSHOT
 
 - Close `I028-C5 — integrated TCP connection conformance + C closure` without changing the implementation version or production runtime. Retain one cross-slice harness from `Network.connectTcp` through the ordinary TcpConnection object/protocol, endpoint observation, ordinary local-slot/shadowing behavior, receiver-domain confinement, Actor/P rejection and pre-commit cancellation/late-resource custody. Reconcile the unchanged Core native boundary at 131 construction sites across 34 providers, close I028-C and release I028-D; no specification change, production backend or endpoint `===` strengthening is introduced.
