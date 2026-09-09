@@ -535,7 +535,7 @@ work may proceed without waiting for an earlier-numbered roadmap item.
 | LIB001 | Collections library | CLOSED | `SAME_COMMIT` | LIB001-A/B/C/D/E closed; initial Set/IdentitySet and eager sequential Array algorithm surfaces are fully published with no new runtime collection family, generic hierarchy, or production Java boundary. |
 | LIB002 | Text / encoding conveniences | CLOSED | `SAME_COMMIT` | LIB002-A published the four audited ordinary portable-Encoding convenience modules with real-`std:` Protos conformance; initial LIB002 scope is closed with no Core, native-boundary, registry/default, or distributed-runtime semantic change. |
 | LIB003 | JSON | CLOSED | `SAME_COMMIT` | LIB003-A/B/C/D/E closed; the bounded initial strict JSON tree, exact-decimal parser/encoder, JSON-specific event streaming, explicit TextReader/TextWriter composition, final stress/Actor-transfer evidence, and architecture audit are fully published without a generic serialization or object-persistence boundary. |
-| LIB004 | Filesystem / process conveniences | IN_PROGRESS | — | LIB004-0/A/B/C/D CLOSED; LIB004-E READY for final cross-slice closure. |
+| LIB004 | Filesystem / process conveniences | CLOSED | `SAME_COMMIT` | LIB004-0/A/B/C/D/E CLOSED; bounded initial `std:io/Files` and `std:io/ProcessStreams` convenience surface complete with final cross-slice conformance and architecture/native-boundary closure evidence. |
 | LIB005 | Networking | OPEN | — | Roadmap item only; `spec/io/IO_CORE.md` currently leaves network authority acquisition, socket APIs, DNS/name resolution, and transport configuration outside its standardized scope. Re-audit and establish prerequisites before implementation. |
 | LIB006 | Deterministic hashing | CLOSED | `SAME_COMMIT` | LIB006-A design + LIB006-B pure-Protos SHA-256 implementation complete the bounded initial one-shot hashing surface. |
 | LIB006-A | SHA-256 API/security/boundary design | CLOSED | `SAME_COMMIT` | Freeze one-shot Bytes->fresh 32-byte SHA-256, pure-Protos initial implementation, no entropy/keyed crypto/native bridge, and conformance boundary. |
@@ -707,11 +707,7 @@ Dependencies:
 - I012 Standard Bytes — CLOSED;
 - I015 Encoding / Text I/O — CLOSED;
 - LIB001 Collections — CLOSED and useful design precedent, but not a runtime
-  dependency of the JSON data model;
-- LIB002 convenience helpers are not required by LIB003-A/B/C core work.
-### LIB004 — Filesystem / process conveniences
-
-Status: IN_PROGRESS
+  dependency of the JStatus: CLOSED
 
 Description: Higher-level filesystem and Process conveniences layered over the
 standard capability-based File/Filesystem and Process I/O surfaces.
@@ -747,7 +743,13 @@ Planned slices:
 | LIB004-B | CLOSED | `0.2.268-SNAPSHOT` | `SAME_COMMIT` | Publish ordinary-Protos `std:io/Files.writeAllBytes`: synchronous private invocation-time Bytes snapshot before Filesystem effects, exact create+truncate positioned write open, sequential <=65536-byte writes with no failed-write retry, A-owned strong acquisition/ensure cleanup, exact Filesystem success result, and Protos-source snapshot/partial-failure/close/cancellation/pre-I/O conformance; no production Java/native-boundary or specification change. |
 | LIB004-C | CLOSED | `0.2.270-SNAPSHOT` | `SAME_COMMIT` | Publish explicit-Encoding ordinary-Protos `readAllText`/`writeAllText` as one-shot codec composition over the closed A/B byte helpers: read decode after owned cleanup, write encode before any Filesystem effect, no default Encoding, and Protos-source codec/error/cancellation/cleanup conformance; no production Java/native-boundary or specification change. |
 | LIB004-D | CLOSED | `0.2.272-SNAPSHOT` | `SAME_COMMIT` | Publish ordinary-Protos `std:io/ProcessStreams` with exact fresh borrowing `stdinReader`/`stdoutWriter`/`stderrWriter` composition over explicit Process byte streams and their Process-provided Encoding descriptors; Protos-source conformance proves fresh wrapper identity, distinct stdin/stdout/stderr codec use, borrowing close lifetime, and no hidden current Process. No production Java/native-boundary or specification change. |
-| LIB004-E | READY | — | — | LIB004-A/B/C/D CLOSED; run final cross-slice Protos conformance, architecture/native-boundary audit, project-state reconciliation and bounded parent closure. |
+| LIB004-E | CLOSED | — | `SAME_COMMIT` | Final closure reruns the published A/B/C/D Protos-source conformance together, the Core native-boundary architecture guard, and the complete Maven suite on the exact publication base; reconciles project state and closes bounded parent LIB004 without new API, source, test, specification, Java/native boundary, or implementation-version change. |
+
+Final closure evidence:
+- LIB004-E adds no new public operation and reuses the already-published Protos-source A/B/C/D conformance;
+- its publication launcher reruns the filesystem-library and Process-stream focal harnesses together, the Core native-boundary architecture guard, and the complete Maven suite before publication;
+- `std:io/Files` remains exactly the four approved whole-file helpers and `std:io/ProcessStreams` exactly the three approved borrowing adapters;
+- E changes no distributable source, Java source/test, Protos test source, specification, Maven version, license terms, or native standard Closure boundary.
 
 Implementation boundary:
 - every operation receives authority explicitly; no module may recover a
@@ -772,6 +774,9 @@ Dependencies:
 - I016 Filesystem / File — CLOSED;
 - I017 Process I/O / bootstrap — CLOSED;
 - I022 Dynamic Error handlers / unwind-safe cleanup — CLOSED;
+- no relevant entry in `docs/project/IMPLEMENTATION_BLOCKERS.md` may be
+  unresolved for this bounded LIB004 surface.
+ cleanup — CLOSED;
 - no relevant entry in `docs/project/IMPLEMENTATION_BLOCKERS.md` may be
   unresolved for this bounded LIB004 surface.
 

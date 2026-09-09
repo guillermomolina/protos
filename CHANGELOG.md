@@ -1,5 +1,7 @@
 ## 0.2.272-SNAPSHOT
 
+- Close `LIB004-E` and the bounded parent `LIB004` after final cross-slice closure validation. Rerun the existing Protos-source A/B/C/D conformance through the filesystem-library and Process integrated harnesses together, rerun the Core native-boundary architecture guard, and rerun the complete Maven suite on the exact publication base before publication. Reconcile the canonical project ledger and record the final architecture closure without adding another API, distributable/library source, Java source/test, Protos test, specification change, native standard operation, or implementation-version bump; the implementation version remains `0.2.272-SNAPSHOT`.
+
 - Close `LIB004-D — ProcessStreams`. Publish `std:io/ProcessStreams` in ordinary Protos with exactly `stdinReader(process)`, `stdoutWriter(process)` and `stderrWriter(process)`, each a direct fresh borrowing `TextReader`/`TextWriter` construction over the explicitly supplied Process standard byte stream and its Process-provided Encoding. No wrapper cache, ambient/current Process, default UTF-8, stream ownership transfer or Java/native operation is added. Four Protos-source conformance cases prove fresh wrappers, distinct Process-selected encodings, borrowing close behavior and explicit Process authority; the existing Process integrated Java harness only provisions byte backends and runs those cases. LIB004-D closes and LIB004-E becomes READY. No specification or production-Java/native-boundary change; implementation version becomes `0.2.272-SNAPSHOT`.
 
 ## 0.2.271-SNAPSHOT

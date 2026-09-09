@@ -1404,3 +1404,37 @@ authority.
 
 This later Core capability does not silently expand or reopen the bounded LIB004
 implementation program.
+
+<!-- LIB004-E-FINAL-CLOSURE -->
+## 2026-09-09 LIB004-E final implementation closure
+
+The bounded initial LIB004 implementation is CLOSED. This final slice adds no
+new library behavior; it closes only after the publication launcher validates the
+already-published A/B/C/D implementation together on the exact publication base.
+
+Closure publication base: `e89f66f4b0afd33f4cab5dccc1fd3c991b0bc4b7`
+Implementation version: `0.2.272-SNAPSHOT` (**unchanged by LIB004-E**)
+
+Final validation gates are deliberately broader than the documentation-only E
+delta:
+
+- the existing `ProtosFilesystemLibraryConformanceTest` and
+  `ProtosProcessIntegratedConformanceTest` are executed together, thereby
+  rerunning the Protos-source whole-file and ProcessStreams cases from A/B/C/D;
+- `ProtosCoreNativeBoundaryArchitectureTest` is rerun as the authoritative guard
+  for the then-current Core native standard-Closure boundary rather than copying
+  an absolute boundary count into LIB004;
+- the complete Maven test suite is rerun before the closure commit may publish.
+
+The final architecture remains the LIB004-0 design: explicit Filesystem/Path or
+Process authority, explicit Encoding for whole-file text, fresh borrowing
+Process text wrappers, ordinary-Protos implementation, and no ambient current
+Filesystem/Process/default Encoding. The public module surfaces remain exactly
+four selectors in `std:io/Files` and three selectors in
+`std:io/ProcessStreams`. No public `withOpen`, copy/publication policy, mode
+strings, directory convenience family, subprocess API, hidden Future detachment,
+or new cancellation semantics are introduced by closure.
+
+LIB004-E changes no `protos/lib/**`, `protos/tests/**`, `src/**`, `spec/**`, or
+`pom.xml` content. With LIB004-0/A/B/C/D/E published, the bounded parent LIB004
+work item is CLOSED.
