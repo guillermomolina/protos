@@ -144,12 +144,14 @@ public final class ProtosCapturedProcessExecution {
     }
 
     /**
-     * Executes one exact source directly in a fresh Process, drains its RootActor-local
-     * cooperative work to idle, then invokes one exact inspector Closure with the still-live
-     * source result as a real RootActor-local cooperative task. The inspector may therefore
-     * suspend through ordinary Future semantics while other Actors in the Process progress only
-     * through the production Actor scheduler. Source parsing, cooperative dispatch, inspector
-     * parsing and inspector execution all remain inside that Process Context.
+     * Executes one exact source directly in a fresh Process, drains currently runnable
+     * RootActor-local cooperative work to idle, then invokes one exact inspector Closure with the
+     * still-live source result as a real RootActor-local cooperative task. Source tasks that are
+     * suspended on the returned asynchronous result may remain live at that intermediate idle
+     * boundary; the inspector may therefore await that result through ordinary Future semantics
+     * while other Actors in the Process progress only through the production Actor scheduler.
+     * Source parsing, cooperative dispatch, inspector parsing and inspector execution all remain
+     * inside that Process Context.
      */
     public static Result executeThenInspect(Request request, Source inspector) {
         Objects.requireNonNull(request, "request");
@@ -208,11 +210,6 @@ public final class ProtosCapturedProcessExecution {
                         activation.executionDomain().dispatchUntilIdle();
                         return null;
                     });
-            if (activation.executionDomain().liveTaskCount() != 0) {
-                throw new IllegalStateException(
-                        "direct inspection source reached cooperative idle with live tasks");
-            }
-
             ProtosExecutionOutcome outcome;
             try {
                 Object inspectorValue = processContext.evaluatePersistent(inspector, activation);

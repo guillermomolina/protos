@@ -52,6 +52,7 @@ final class ProtosExactExecutionFacilityTest {
     private static final Path GROUP_ROOT =
             Path.of("protos", "tests", "conformance", "group");
     private static final Path ACTOR_REQUEST_CASE = ACTOR_ROOT.resolve("spawn-request-echo.protos");
+    private static final Path ACTOR_CHAIN_CASE = ACTOR_ROOT.resolve("ip-data-transfer.protos");
     private static final Path ACTOR_WORKERS = ACTOR_ROOT.resolve("modules").resolve("workers.protos");
     private static final Path GROUP_REQUEST_CASE =
             GROUP_ROOT.resolve("request-selects-one-eligible-member.protos");
@@ -165,6 +166,21 @@ final class ProtosExactExecutionFacilityTest {
                         ProtosIntegerValue.class,
                         observation.readLocalSlot("value").orElseThrow());
         assertEquals(BigInteger.valueOf(42), value.value());
+    }
+
+    @Test
+    void inspectionMayBeginWithReturnedActorFutureContinuationSuspended()
+            throws Exception {
+        ProtosObjectValue observation =
+                inspectionObservation(
+                        fixture(ACTOR_WORKERS),
+                        ACTOR_CHAIN_CASE,
+                        "(subject) => { subject.value() }");
+
+        assertCompletedObservation(observation);
+        assertSame(
+                ProtosBooleanValue.TRUE,
+                observation.readLocalSlot("value").orElseThrow());
     }
 
     @Test
