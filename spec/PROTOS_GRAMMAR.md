@@ -1808,6 +1808,7 @@ means:
 expressions `a` and `b`:
 
 ```text
+!a      ->  a.not()
 a && b  ->  a.and(() => b)
 a || b  ->  a.or(() => b)
 ```

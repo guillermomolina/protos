@@ -1,0 +1,8 @@
+count: 0
+value: true.ifTrueIfFalse(
+    () => { count = count + 1
+        count },
+    () => { count = 100
+        0 }
+)
+(value * 10) + count

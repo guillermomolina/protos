@@ -1,5 +1,16 @@
 # Core Native Boundary
 
+## I029 — D050 Boolean protocol completion
+
+I029 enlarges the existing standard Boolean selector surface without adding a
+native Closure construction site. The one audited
+`ProtosStandardBooleanProtocol` helper now installs `not`, `ifTrue`,
+`ifFalse`, `ifTrueIfFalse`, `and`, and `or`; canonical selection and
+selected-only callback validation remain host-irreducible control behavior.
+The audited Core total therefore remains **113 native Closure construction
+sites across 30 providers**. No `if`/`else` syntax or new runtime category is
+introduced.
+
 ## I024-D — final Filesystem tree-observation closure
 
 I024-D adds no production native Closure construction site. The standard
@@ -144,7 +155,7 @@ the standard native boundary.
 | Provider | Native Closure sites | Classification | Audited reason for remaining native |
 |---|---:|---|---|
 | `ProtosStandardObjectProtocol.java` | 7 | host-irreducible / representation bridge | Generic polymorphic `call` performs Closure invocation or ordinary instance construction; `identityHash` exposes semantic identity without dynamic-dispatch substitution; inherited `hasSlot` validates one semantic String and projects exact receiver-local slot presence; inherited `slotValue` validates one semantic String, reads only an ordinary receiver local binding and returns the exact stored value or signals Error when absent; `ensure` establishes the D043 Closure-only protected dynamic extent and executes unwind cleanup before normal/return/Error propagation; inherited `parent` projects the exact immutable semantic delegation parent across ordinary and opaque represented values and signals for the unique root because no structural parent exists; `while` establishes the D044 Closure-only iterative control boundary while reusing ordinary Closure invocation, replay, suspension, cancellation and task ownership machinery. |
-| `ProtosStandardBooleanProtocol.java` | 1 | host-irreducible | `ifTrue`/`ifFalse`/`and`/`or` are the primitive selective-control surface used to express branching itself, including path-sensitive callback validation. |
+| `ProtosStandardBooleanProtocol.java` | 1 | host-irreducible | `not`/`ifTrue`/`ifFalse`/`ifTrueIfFalse`/`and`/`or` are the primitive Boolean/control surface, including canonical negation and path-sensitive callback selection/validation. |
 | `ProtosStandardHashSupport.java` | 3 | representation bridge | Object identity hashing and Number/String hashing depend on semantic identity or exact represented values and must not be redefined through overrideable message sends. |
 | `ProtosStandardNumberEqualityProtocol.java` | 1 | representation bridge | Exact cross-family Number equality needs Integer/fixed/binary64 representation knowledge, including NaN and exact-integral Float handling. |
 | `ProtosStandardNumberOrderingProtocol.java` | 1 | representation bridge | Exact cross-family ordering and unordered NaN behavior require representation-aware comparison. |

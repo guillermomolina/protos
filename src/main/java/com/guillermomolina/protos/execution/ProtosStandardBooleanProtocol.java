@@ -31,35 +31,46 @@ public final class ProtosStandardBooleanProtocol {
     public static void install() {
         ProtosObjectValue object = ProtosObjectValue.rootObject();
 
-        install(object, "ifTrue", (receiver, callback, activation) -> {
+        install(object, "not", 0, (receiver, supplied, activation) ->
+                receiver == ProtosBooleanValue.TRUE
+                        ? ProtosBooleanValue.FALSE
+                        : ProtosBooleanValue.TRUE);
+
+        install(object, "ifTrue", 1, (receiver, supplied, activation) -> {
             if (receiver == ProtosBooleanValue.FALSE) {
                 return ProtosNullValue.INSTANCE;
             }
-            return ProtosInvocation.invoke(callback, List.of(), activation);
+            return ProtosInvocation.invoke(supplied.get(0), List.of(), activation);
         });
 
-        install(object, "ifFalse", (receiver, callback, activation) -> {
+        install(object, "ifFalse", 1, (receiver, supplied, activation) -> {
             if (receiver == ProtosBooleanValue.TRUE) {
                 return ProtosNullValue.INSTANCE;
             }
-            return ProtosInvocation.invoke(callback, List.of(), activation);
+            return ProtosInvocation.invoke(supplied.get(0), List.of(), activation);
         });
 
-        install(object, "and", (receiver, callback, activation) -> {
+        install(object, "ifTrueIfFalse", 2, (receiver, supplied, activation) -> {
+            Object selected =
+                    receiver == ProtosBooleanValue.TRUE ? supplied.get(0) : supplied.get(1);
+            return ProtosInvocation.invoke(selected, List.of(), activation);
+        });
+
+        install(object, "and", 1, (receiver, supplied, activation) -> {
             if (receiver == ProtosBooleanValue.FALSE) {
                 return ProtosBooleanValue.FALSE;
             }
             return requireBooleanResult(
-                    ProtosInvocation.invoke(callback, List.of(), activation),
+                    ProtosInvocation.invoke(supplied.get(0), List.of(), activation),
                     activation);
         });
 
-        install(object, "or", (receiver, callback, activation) -> {
+        install(object, "or", 1, (receiver, supplied, activation) -> {
             if (receiver == ProtosBooleanValue.TRUE) {
                 return ProtosBooleanValue.TRUE;
             }
             return requireBooleanResult(
-                    ProtosInvocation.invoke(callback, List.of(), activation),
+                    ProtosInvocation.invoke(supplied.get(0), List.of(), activation),
                     activation);
         });
     }
@@ -67,6 +78,7 @@ public final class ProtosStandardBooleanProtocol {
     private static void install(
             ProtosObjectValue object,
             String selector,
+            int arity,
             BooleanOperation operation) {
         if (object.hasLocalSlot(selector)) {
             return;
@@ -75,7 +87,7 @@ public final class ProtosStandardBooleanProtocol {
                 selector,
                 ProtosClosureValue.nativeClosure(
                         (activation, supplied) -> {
-                            if (supplied.size() != 1) {
+                            if (supplied.size() != arity) {
                                 throw new ProtosSignalException(
                                         ProtosCoreErrors.newError(activation));
                             }
@@ -85,7 +97,7 @@ public final class ProtosStandardBooleanProtocol {
                                 throw new ProtosSignalException(
                                         ProtosCoreErrors.newError(activation));
                             }
-                            return operation.apply(receiver, supplied.get(0), activation);
+                            return operation.apply(receiver, supplied, activation);
                         }));
     }
 
@@ -103,7 +115,7 @@ public final class ProtosStandardBooleanProtocol {
     private interface BooleanOperation {
         Object apply(
                 Object receiver,
-                Object callback,
+                List<?> supplied,
                 com.guillermomolina.protos.runtime.ProtosActivation activation);
     }
 }

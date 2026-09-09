@@ -33,14 +33,21 @@ Core v0.1 has exactly two semantic Boolean values: the canonical singleton
 objects `true` and `false`. No other object becomes a Boolean by delegation,
 copying, composition, freezing, or implementation representation.
 
-The standard Boolean protocol consists of the ordinary one-argument messages:
+The standard Boolean protocol consists of the ordinary messages:
 
 ```text
+not()
 ifTrue(block)
 ifFalse(block)
+ifTrueIfFalse(trueBlock, falseBlock)
 and(block)
 or(block)
 ```
+
+The standard arities are exact: `not` accepts zero arguments; `ifTrue`,
+`ifFalse`, `and`, and `or` accept exactly one argument; and
+`ifTrueIfFalse` accepts exactly two arguments. Any other supplied positional
+argument count signals an `Error` under the ordinary invocation boundary.
 
 These selectors use ordinary message lookup and dispatch. The standard behavior
 defined in this section is Boolean-family behavior: when ordinary lookup selects
@@ -70,29 +77,41 @@ A custom object may nevertheless define or override any of these selectors with
 its own ordinary behavior; doing so does not introduce truthiness and does not
 make that object a semantic Boolean.
 
-`block` denotes the already-evaluated argument object. Receiver and argument
-expressions are evaluated before the message invocation according to the
-ordinary left-to-right call rules in `CALLABLES.md`. In particular, evaluating
-a Closure literal creates the Closure object but does not execute its body.
-Standard Boolean behavior requires the selected callback to be invokable through
-the ordinary polymorphic invocation protocol; it need not be a Closure. The
-selected callback is invoked exactly once with zero positional arguments.
-Callability validation does not pre-validate callback arity: any arity or other
-invocation failure from that actual zero-argument call propagates normally.
+`block`, `trueBlock`, and `falseBlock` denote already-evaluated argument
+objects. Receiver and argument expressions are evaluated before the message
+invocation according to the ordinary left-to-right call rules in `CALLABLES.md`.
+For `ifTrueIfFalse`, both callback-producing argument expressions are therefore
+evaluated, in order, before Boolean behavior selects a callback. Evaluating a
+Closure literal creates the Closure object but does not execute its body.
 
-Callability is validated **only on a path that will invoke the callback**. A
-path that does not select the callback neither validates nor invokes it. This
-rule concerns the already-evaluated callback object; it does not suppress the
-ordinary evaluation of the argument expression that produced that object.
+Standard Boolean behavior requires only the callback selected by the receiver
+value to be invokable through the ordinary polymorphic invocation protocol; it
+need not be a Closure. The selected callback is invoked exactly once with zero
+positional arguments. Callability validation does not pre-validate callback
+declared arity: any arity or other invocation failure from that actual
+zero-argument call propagates normally.
+
+Callability is validated **only on a path that will invoke a callback**. An
+unselected callback is neither callability-validated nor invoked. This
+path-sensitivity concerns the already-evaluated callback object; it does not
+suppress ordinary evaluation of the argument expression that produced it.
 
 The exact standard results are:
 
 ```text
+true.not()           -> false
+false.not()          -> true
+
 true.ifTrue(block)   -> invoke block(); return its exact normal result
 false.ifTrue(block)  -> null
 
 true.ifFalse(block)  -> null
 false.ifFalse(block) -> invoke block(); return its exact normal result
+
+true.ifTrueIfFalse(trueBlock, falseBlock)
+                     -> invoke trueBlock(); return its exact normal result
+false.ifTrueIfFalse(trueBlock, falseBlock)
+                     -> invoke falseBlock(); return its exact normal result
 
 true.and(block)      -> invoke block(); require Boolean result; return it
 false.and(block)     -> false
@@ -102,10 +121,11 @@ false.or(block)      -> invoke block(); require Boolean result; return it
 ```
 
 The `null`, `true`, and `false` results above are the canonical language values.
-For `ifTrue` and `ifFalse`, a selected callback's normal result is returned
-unchanged. It may therefore be `null`, either Boolean, an arbitrary ordinary
-object, or a `Future`; the Boolean method performs no conversion, awaiting,
-Future adoption, or result validation on that value.
+`not` performs no callback invocation and returns the opposite canonical Boolean.
+For `ifTrue`, `ifFalse`, and `ifTrueIfFalse`, a selected callback's normal result
+is returned unchanged. It may therefore be `null`, either Boolean, an arbitrary
+ordinary object, or a `Future`; the Boolean method performs no conversion,
+awaiting, Future adoption, or result validation on that value.
 
 For standard `and` and `or`, the result of an invoked callback must be exactly
 canonical `true` or canonical `false`. Any other normal result, including
@@ -128,15 +148,15 @@ or scheduling boundary. A selected callback may of course reach an explicit
 suspension point according to its own ordinary semantics; an unselected callback
 cannot suspend because it is not invoked.
 
-The mandatory source lowering and precedence of `&&` and `||` are owned by
-`../PROTOS_GRAMMAR.md`. That lowering supplies a zero-argument Closure around
-the right operand and then performs ordinary `and` / `or` dispatch. Therefore
-standard canonical-Boolean receivers obtain the short-circuit behavior defined
-above, while a custom receiver may observe the generated Closure through its own
-ordinary `and` or `or` implementation. Implementations may specialize the
-canonical Boolean cases only when the observable receiver lookup, argument
-creation/evaluation, callback-selection, validation, result, Error/control
-transfer, and suspension behavior remains identical to the ordinary protocol.
+The mandatory source lowering and precedence of `!`, `&&`, and `||` are owned by
+`../PROTOS_GRAMMAR.md`. Unary `!value` lowers to the ordinary zero-argument
+message `value.not()`. The `&&` / `||` lowering supplies a zero-argument Closure
+around the right operand and then performs ordinary `and` / `or` dispatch.
+Therefore standard canonical-Boolean receivers obtain the strict negation and
+short-circuit behavior defined above, while a custom receiver may override
+`not`, `and`, or `or` through ordinary lookup and, for `and` / `or`, may observe
+the generated RHS Closure. Implementations may specialize the canonical Boolean
+cases only when observable behavior remains identical to the ordinary protocol.
 
 Possible future `if`/`else` syntax may be defined as sugar, but it does not
 create a second Boolean or truthiness semantics.

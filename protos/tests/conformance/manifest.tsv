@@ -104,6 +104,17 @@ boolean/and-invalid-result.protos	error	-
 boolean/or-invalid-result.protos	error	-
 boolean/iftrue-noninvokable.protos	error	-
 boolean/iffalse-noninvokable.protos	error	-
+boolean/not-message-true.protos	boolean	false
+boolean/not-message-false.protos	boolean	true
+boolean/not-operator-true.protos	boolean	false
+boolean/not-operator-false.protos	boolean	true
+boolean/not-nonboolean-receiver-error.protos	error	-
+boolean/iftrueiffalse-true-selected.protos	integer	42
+boolean/iftrueiffalse-false-selected.protos	integer	43
+boolean/iftrueiffalse-unselected-noninvokable.protos	integer	44
+boolean/iftrueiffalse-selected-noninvokable-error.protos	error	-
+boolean/iftrueiffalse-exactly-once.protos	integer	11
+boolean/iftrueiffalse-argument-expressions-eager.protos	integer	43
 numeric-equality/integer-float-equal.protos	boolean	true
 numeric-equality/fixed-integer-equal.protos	boolean	true
 numeric-equality/fixed-cross-family-equal.protos	boolean	true

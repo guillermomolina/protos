@@ -9,6 +9,42 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.390] - 2026-09-09
+
+### D050 — Standard Boolean protocol completion
+- Records explicit project-owner approval after comparison with Smalltalk/Self
+  Boolean selection and alternative selector spellings.
+- Adds exactly two ordinary standard Boolean messages: zero-argument `not()` and
+  `ifTrueIfFalse(trueBlock, falseBlock)`.
+- `true.not()` returns canonical `false`; `false.not()` returns canonical `true`.
+  Existing unary `!value` is confirmed as the mandatory lowering to
+  `value.not()`.
+- `ifTrueIfFalse` keeps ordinary receiver/argument evaluation. Both callback-
+  producing argument expressions are evaluated left-to-right before invocation;
+  canonical `true` selects only `trueBlock`, canonical `false` selects only
+  `falseBlock`; only the selected callback is callability-validated and it is
+  invoked exactly once with zero supplied positional arguments.
+- The exact normal result of the selected callback is returned unchanged.
+  Existing Error, non-local return, cancellation, suspension, Future and other
+  control/lifetime semantics compose through ordinary invocation.
+- Standard behavior remains restricted to canonical `true`/`false`; no
+  truthiness, coercion, Boolean prototype, ternary, `unless`, `xor`, inverse
+  two-branch selector, hidden task/scheduler boundary or new reserved word is
+  introduced.
+- Future `if`/`else` surface sugar remains a separate design decision.
+
+### Compatibility and implementation state
+- `I029 — Standard Boolean protocol completion` implements D050 atomically in
+  this publication at implementation version `0.2.275-SNAPSHOT`.
+- Protos-source conformance covers direct/operator negation, branch selection,
+  selected-only validation, exact-once invocation, ordinary eager argument-
+  expression effects and non-Boolean receiver rejection.
+- The existing single `ProtosStandardBooleanProtocol` native Closure construction
+  helper remains one site, so the audited Core total remains 113 sites across 30
+  providers.
+- Normative documents changed: `semantics/VALUES_AND_COLLECTIONS.md` and
+  `PROTOS_GRAMMAR.md`.
+
 ## [0.1.389] - 2026-09-09
 
 ### D049 — shared standard-object publication and root immutability

@@ -32,8 +32,10 @@ class ProtosStandardBooleanProtocolTest {
         ProtosPrelude prelude = corePrelude();
         ProtosObjectValue object = ProtosObjectValue.rootObject();
 
+        assertEquals(true, object.hasLocalSlot("not"));
         assertEquals(true, object.hasLocalSlot("ifTrue"));
         assertEquals(true, object.hasLocalSlot("ifFalse"));
+        assertEquals(true, object.hasLocalSlot("ifTrueIfFalse"));
         assertEquals(true, object.hasLocalSlot("and"));
         assertEquals(true, object.hasLocalSlot("or"));
         assertEquals(false, prelude.bindings().hasLocalSlot("Boolean"));
