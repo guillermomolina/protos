@@ -1,5 +1,7 @@
 ## 0.2.276-SNAPSHOT
 
+- Adopt repository-wide Protos source-style policy: ordinary hand-written Protos source, including Standard Library, tools, tutorials/examples and representative Protos tests, normally prefers stable specified idiomatic syntactic sugar over systematically exposing its canonical/desugared protocol form. Preserve explicit canonical spelling when implementing or testing the underlying mechanism, crossing a bootstrap/layering boundary, or when it is materially clearer; prohibit unrelated mechanical rewrites and make clear that this policy approves no new syntax or semantics. Add the human-facing style reference and contributor/agent routing. Documentation/governance only: no normative specification, production implementation, tests, Maven implementation-version or license-term change.
+
 - Ratify `D051 — Conditional surface syntax boundary` as specification revision
   `0.1.392`. Keep `if` and `else` ordinary identifiers, preserve
   `if(condition) { ... }` as an ordinary call with a trailing Closure, and

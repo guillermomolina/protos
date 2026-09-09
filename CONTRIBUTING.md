@@ -130,6 +130,20 @@ Do not change normative specification text merely to make an implementation
 convenient. If implementation and specification disagree, investigate the
 mismatch and change the correct owner.
 
+
+## Protos source style
+
+For hand-written Protos source, prefer stable, specified idiomatic syntax in
+ordinary programs and libraries rather than exposing the canonical/desugared
+protocol form everywhere. Use the explicit form when the protocol or lowering is
+itself under test or discussion, when bootstrap/layering requires it, or when it
+is materially clearer.
+
+This is a non-normative style preference; `spec/` remains authoritative for
+which forms exist and what they mean. See
+[`docs/guide/SOURCE_STYLE.md`](docs/guide/SOURCE_STYLE.md) for the complete rule,
+exceptions, and rationale.
+
 ## Validation
 
 Validation should match the impact of the change.

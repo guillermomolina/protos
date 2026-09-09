@@ -374,6 +374,27 @@ to coherence with the Protos universe.
 
 <!-- END PROTOS DESIGN PHILOSOPHY -->
 
+## Protos source style: idiomatic syntax and canonical forms
+
+For hand-written Protos source, agents MUST treat stable, specified idiomatic
+syntactic forms as the default spelling for ordinary code instead of
+systematically expanding them to their canonical protocol/desugared form merely
+because that form explains the semantics.
+
+This applies to Standard Library source, ordinary Protos tools/programs,
+tutorials, examples, documentation snippets, and Protos-source tests whose
+purpose is not the lowering itself. Use the explicit canonical/protocol form when
+implementing or testing that mechanism directly, when bootstrap/layering would
+otherwise become circular, when reflection/dispatch is the subject, or when the
+explicit form is materially clearer.
+
+This is a source-style rule, not language authority. It does not approve new
+syntax, change specified equivalence, or permit an agent to invent sugar for an
+unresolved design. Do not mechanically rewrite unrelated source only to satisfy
+this preference. See `docs/guide/SOURCE_STYLE.md` for the human-facing policy and
+examples.
+
+
 ## Public contribution and AI-assisted development policy
 
 `CONTRIBUTING.md` is the contributor-facing policy for this repository. Agents

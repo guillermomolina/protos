@@ -24,6 +24,16 @@ Three complementary resources are maintained:
 Where practical, guide chapters point to executable tutorial programs rather
 than duplicating large source examples that can drift independently.
 
+
+## Source style reference
+
+[`SOURCE_STYLE.md`](SOURCE_STYLE.md) records the non-normative project convention
+for choosing between idiomatic syntactic sugar and an equivalent canonical or
+expanded protocol form. Ordinary hand-written source normally uses the idiomatic
+surface; the explicit form remains appropriate when the underlying mechanism,
+bootstrap boundary, dispatch behavior, or semantic equivalence is the point of
+the code.
+
 ## Tracked documentation work
 
 The Programming Guide is part of
