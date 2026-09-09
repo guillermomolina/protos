@@ -19,12 +19,19 @@ Runner: import("self:Runner")
 plan: Manifest.load(filesystem)
 packageTomlPlan: Manifest.loadPackageToml(packageTomlFilesystem)
 actorPlan: Manifest.load(actorFilesystem)
+groupPlan: Manifest.load(groupFilesystem)
 run: Runner.runSimple(plan, filesystem, execution, executionInspect)
 actorRun: Runner.runSimple(
     actorPlan,
     actorFilesystem,
     actorExecution,
     actorExecutionInspect
+)
+groupRun: Runner.runSimple(
+    groupPlan,
+    groupFilesystem,
+    groupExecution,
+    groupExecutionInspect
 )
 packageTomlRun: Runner.runSimple(
     packageTomlPlan,

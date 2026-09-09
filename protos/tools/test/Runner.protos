@@ -97,6 +97,7 @@ isClosureErrorParentFreshExpectation: (spec) => {
 isFutureResolvedExpectation: (spec) => {
     kind: Manifest.caseExpectation(spec)
     supported: kind === "future-integer"
+    (kind === "future-integer-one-of").ifTrue(() => { supported = true })
     (kind === "future-null").ifTrue(() => { supported = true })
     (kind === "future-boolean").ifTrue(() => { supported = true })
     supported
@@ -645,13 +646,67 @@ standardErrorPrototype: (name) => {
     result
 }
 
+integerOneOfComparisonSource: (text) => {
+    source: Encoding.UTF8.encode(text)
+    (source.size() == 0).ifTrue(() => { policyError() })
+
+    token: Encoding.UTF8.encode("")
+    comparison: ""
+    count: 0
+
+    flush: () => {
+        (token.size() == 0).ifTrue(() => { policyError() })
+        element: Encoding.UTF8.decode(token)
+        parseExpectedInteger(element)
+
+        // parseExpectedInteger intentionally accepts the retained Java-owner +N spelling,
+        // while Protos has unary minus but no unary plus. Strip only that validated leading +
+        // when embedding the inert Integer literal into the inspector source.
+        literalBytes: Encoding.UTF8.encode("")
+        tokenIndex: 0
+        token.each((octet) => {
+            leadingPlus: (tokenIndex == 0) && (octet == 43)
+            leadingPlus.ifFalse(() => { literalBytes.add(octet) })
+            tokenIndex = tokenIndex + 1
+        })
+        literal: Encoding.UTF8.decode(literalBytes)
+
+        (count > 0).ifTrue(() => {
+            comparison = comparison + " || "
+        })
+        comparison = comparison + "(value === " + literal + ")"
+        count = count + 1
+        token = Encoding.UTF8.encode("")
+    }
+
+    source.each((octet) => {
+        (octet == 44).ifTrue(() => {
+            flush()
+        })
+        (octet == 44).ifFalse(() => {
+            token.add(octet)
+        })
+    })
+    flush()
+
+    (count == 0).ifTrue(() => { policyError() })
+    comparison
+}
+
 futureResolvedInspectorSource: (kind, expected) => {
     expectedExpression: ""
+    comparisonExpression: "value === expectedValue"
     known: false
 
     (kind === "future-integer").ifTrue(() => {
         parseExpectedInteger(expected)
         expectedExpression = expected
+        known = true
+    })
+
+    (kind === "future-integer-one-of").ifTrue(() => {
+        comparisonExpression = integerOneOfComparisonSource(expected)
+        expectedExpression = "null"
         known = true
     })
 
@@ -704,7 +759,7 @@ futureResolvedInspectorSource: (kind, expected) => {
     "        )\n" +
     "        passed = resolved\n" +
     "        passed.ifTrue(() => {\n" +
-    "            passed = value === expectedValue\n" +
+    "            passed = " + comparisonExpression + "\n" +
     "        })\n" +
     "    })\n" +
     "    passed\n" +
