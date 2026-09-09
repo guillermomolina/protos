@@ -9,5 +9,4 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-Number.numericEchoReceiver: () => this
-((2.5).numericEchoReceiver)() === 2.5
+((2.5).parent)() === Float

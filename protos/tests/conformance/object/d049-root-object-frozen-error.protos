@@ -13,32 +13,4 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-Manifest: import("self:Manifest")
-Runner: import("self:Runner")
-
-plan: Manifest.load(filesystem)
-run: Runner.runSimple(plan, filesystem, execution, executionInspect)
-cases: Manifest.planCases(plan)
-
-failures: ""
-Runner.runCaseResults(run).each((caseRun) => {
-    evaluation: Runner.caseRunEvaluation(caseRun)
-    Runner.resultPassed(evaluation).ifFalse(() => {
-        spec: Runner.caseRunSpec(caseRun)
-        failures = failures + Manifest.caseId(spec) + "\n"
-    })
-})
-
-countsMatch:
-    (Runner.runSelectedCount(run) == cases.size()) &&
-    (Runner.runPassedCount(run) == cases.size()) &&
-    (Runner.runSkippedCount(run) == 0) &&
-    (Runner.runCaseResults(run).size() == cases.size()) &&
-    Runner.runAllPassed(run)
-
-countsMatch.ifFalse(() => {
-    (failures.size() == 0).ifTrue(() => {
-        failures = "<aggregate-count-mismatch>\n"
-    })
-})
-failures
+Object._d049Probe: 1

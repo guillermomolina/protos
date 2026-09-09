@@ -9,5 +9,4 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-Integer.prototypeBridgeMarker: 41
-(42).prototypeBridgeMarker
+(42).negated()

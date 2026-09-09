@@ -9,5 +9,4 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-Number.numberBridgeMarker: 52
-(42).numberBridgeMarker
+(42) < 43

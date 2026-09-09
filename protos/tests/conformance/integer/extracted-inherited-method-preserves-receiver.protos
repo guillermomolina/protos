@@ -9,5 +9,4 @@
  * THE CONTENTS OF THIS FILE.
  */
 
-Integer.numericEchoReceiver: () => this
-((23).numericEchoReceiver)()
+((23).negated)()

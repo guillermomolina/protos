@@ -468,6 +468,9 @@ final class ProtosActorValueTransferTest {
         assertSame(
                 prelude.bindings(),
                 ProtosActorValueTransfer.snapshotValue(prelude.bindings(), source));
+        assertTrue(ProtosObjectValue.rootObject().isFrozen());
+        assertTrue(prelude.arrayPrototype().isFrozen());
+        assertTrue(prelude.bindings().isFrozen());
     }
 
     private static ProtosPrelude core() throws Exception {

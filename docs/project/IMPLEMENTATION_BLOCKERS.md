@@ -515,15 +515,17 @@ semantically immutable. No hidden overlay, per-Actor root identity or global
 mutable singleton is required.
 
 Current consequence:
-`I026-A4B2B3` is READY. It must implement the already-approved A+ executable
-layer together with safe one-time Core publication: shared semantic standard
-objects are frozen before publication, while sharing-layer-bound
-`ExecutionPlan` / `CallTarget` material belongs to the current
-`ProtosLanguageContext` under `ContextPolicy.EXCLUSIVE`. Concurrent multi-Process
-evidence must prove no cross-Context executable reuse and no global guest lock.
+`I026-A4B2B3` is IN_PROGRESS through mechanical A/B implementation slices.
+A is published: the standard root has one bounded atomic frozen publication
+cutover and each per-bootstrap shared standard graph, including semantic Closure
+captures, is sealed before Prelude exposure. B remains READY for the already
+approved A+ `ProtosLanguageContext`-local executable projection and final
+concurrent multi-Process evidence.
 
-B010 remains READY until that implementation and its validation are published;
-only then may B010 close together with I026-A4B2B3's implementation obligation.
+B010 deliberately remains READY until B publishes the no-cross-Context
+`ExecutionPlan` / `CallTarget` evidence required by this blocker's original exit
+condition. Only B may close B010 together with I026-A4B2B3/A4B2B/A4B2 and release
+I026-A4B3.
 
 History:
 B010 was introduced when A4B2B3 exposed that a bootstrap lock could remove a

@@ -28,9 +28,17 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import org.junit.jupiter.api.Test;
 
 class ProtosCoreBootstrapTest {
@@ -216,6 +224,106 @@ class ProtosCoreBootstrapTest {
                         prelude.newModuleActivation()));
     }
 
+
+    @Test
+    void publishesTheCompleteSharedStandardGraphFrozen() throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
+
+        assertFrozenStandardGraph(prelude);
+        assertSame(
+                ProtosObjectValue.MutationState.FROZEN,
+                ProtosObjectValue.rootObject().mutationState());
+    }
+
+    @Test
+    void guestCannotCreateAStandardRootSlotAfterPublication() throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap().bootstrap(Path.of("protos", "lib", "core"));
+
+        ProtosSignalException failure =
+                org.junit.jupiter.api.Assertions.assertThrows(
+                        ProtosSignalException.class,
+                        () ->
+                                new ProtosSourceFileLoader()
+                                        .load(
+                                                Path.of(
+                                                        "protos",
+                                                        "tests",
+                                                        "conformance",
+                                                        "object",
+                                                        "d049-root-object-frozen-error.protos"))
+                                        .call(prelude.newModuleActivation()));
+
+        assertSame(prelude.errorPrototype(), failure.error().parent().orElseThrow());
+        assertFalse(ProtosObjectValue.rootObject().hasLocalSlot("_d049Probe"));
+    }
+
+    @Test
+    void concurrentCoreBootstrapsObserveOneCompleteFrozenRoot() throws Exception {
+        int workers = 4;
+        ExecutorService executor = Executors.newFixedThreadPool(workers);
+        CountDownLatch ready = new CountDownLatch(workers);
+        CountDownLatch start = new CountDownLatch(1);
+        java.util.ArrayList<java.util.concurrent.Future<ProtosPrelude>> futures =
+                new java.util.ArrayList<>();
+        try {
+            for (int index = 0; index < workers; index++) {
+                futures.add(
+                        executor.submit(
+                                () -> {
+                                    ready.countDown();
+                                    start.await();
+                                    return new ProtosCoreBootstrap()
+                                            .bootstrap(Path.of("protos", "lib", "core"));
+                                }));
+            }
+            assertTrue(ready.await(10, java.util.concurrent.TimeUnit.SECONDS));
+            start.countDown();
+            for (java.util.concurrent.Future<ProtosPrelude> future : futures) {
+                ProtosPrelude prelude = future.get();
+                assertSame(
+                        ProtosObjectValue.rootObject(),
+                        prelude.bindings().readLocalSlot("Object").orElseThrow());
+                assertFrozenStandardGraph(prelude);
+            }
+        } finally {
+            start.countDown();
+            executor.shutdownNow();
+        }
+    }
+
+    private static void assertFrozenStandardGraph(ProtosPrelude prelude) {
+        Set<ProtosObjectValue> visited =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+        ArrayDeque<ProtosObjectValue> pending = new ArrayDeque<>();
+        pending.add(ProtosObjectValue.rootObject());
+        pending.add(prelude.bindings());
+        pending.add(prelude.bytesPrototypeForRuntime());
+        pending.add(prelude.actorRefPrototypeForRuntime());
+        while (!pending.isEmpty()) {
+            ProtosObjectValue object = pending.removeFirst();
+            if (!visited.add(object)) {
+                continue;
+            }
+            assertTrue(object.isFrozen(), () -> "shared standard object remained mutable: " + object);
+            for (Object value : object.localSlotsSnapshot().values()) {
+                if (value instanceof ProtosObjectValue child) {
+                    pending.addLast(child);
+                }
+            }
+            if (object instanceof ProtosClosureValue closure) {
+                for (ProtosObjectValue context : closure.capturedLexicalContexts()) {
+                    pending.addLast(context);
+                }
+                if (closure.capturedReceiver() instanceof ProtosObjectValue receiver) {
+                    pending.addLast(receiver);
+                }
+                closure.methodHome().ifPresent(pending::addLast);
+            }
+        }
+    }
+
     private static ProtosClosureValue assertSourceBackedObjectClosure(
             ProtosObjectValue object, String selector) {
         ProtosClosureValue closure =
@@ -225,6 +333,7 @@ class ProtosCoreBootstrapTest {
         assertNotNull(closure.definition());
         assertTrue(closure.executionPlan().isPresent());
         assertTrue(closure.nativeBody().isEmpty());
+        assertTrue(closure.isFrozen());
         return closure;
     }
 

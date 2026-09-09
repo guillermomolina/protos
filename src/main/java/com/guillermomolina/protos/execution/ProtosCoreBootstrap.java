@@ -23,8 +23,12 @@ import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.IOException;
 import java.nio.file.Path;
+import java.util.ArrayDeque;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 
 public final class ProtosCoreBootstrap {
     private final ProtosSourceFileLoader sourceLoader;
@@ -46,8 +50,7 @@ public final class ProtosCoreBootstrap {
         Objects.requireNonNull(coreDirectory, "coreDirectory");
         Objects.requireNonNull(moduleResolver, "moduleResolver");
 
-        ProtosStandardObjectProtocol.install();
-        installSourceBackedObjectBehavior(coreDirectory);
+        publishStandardRoot(coreDirectory);
 
         ProtosObjectValue bootstrapContext =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
@@ -190,7 +193,6 @@ public final class ProtosCoreBootstrap {
                 requirePrototype(bootstrapContext, "Int64", integerPrototype);
         ProtosStandardNumberEqualityProtocol.install(numberPrototype);
         ProtosStandardNumberOrderingProtocol.install(numberPrototype);
-        ProtosStandardHashSupport.installObjectHash();
         ProtosStandardHashSupport.installNumberHash(numberPrototype);
         ProtosStandardIntegerProtocol.install(integerPrototype);
         ProtosStandardFloatProtocol.install(floatPrototype);
@@ -305,7 +307,6 @@ public final class ProtosCoreBootstrap {
         ProtosObjectValue importFacility =
                 requirePrototype(
                         bootstrapContext, "import", ProtosObjectValue.rootObject());
-        ProtosParallelRuntime.installObjectParallel();
         ProtosModuleRuntime moduleRuntime = new ProtosModuleRuntime(moduleResolver);
         ProtosStandardActorProtocol actorProtocol =
                 new ProtosStandardActorProtocol(
@@ -354,13 +355,158 @@ public final class ProtosCoreBootstrap {
                 requirePrototype(
                         bootstrapContext, "_corePreludeBindings", contextPrototype);
         bootstrapContext.removeLocalSlot("_corePreludeBindings");
-        preludeBindings.freeze();
+
+        freezeSharedStandardGraph(
+                bootstrapContext,
+                preludeBindings,
+                bufferedBytesPrototype,
+                actorRefPrototype,
+                groupRefPrototype,
+                sendOperationPrototype);
+        validateFrozenStandardGraph(
+                bootstrapContext,
+                preludeBindings,
+                bufferedBytesPrototype,
+                actorRefPrototype,
+                groupRefPrototype,
+                sendOperationPrototype);
 
         return new ProtosPrelude(
                 preludeBindings,
                 contextPrototype,
                 bufferedBytesPrototype,
                 actorRefPrototype);
+    }
+
+
+    private void publishStandardRoot(Path coreDirectory) throws IOException {
+        ProtosObjectValue object = ProtosObjectValue.rootObject();
+        synchronized (object) {
+            if (object.isFrozen()) {
+                validatePublishedRoot(object);
+                return;
+            }
+            if (!object.isOpen()) {
+                throw new IllegalStateException(
+                        "standard Object root must be open during unpublished bootstrap construction");
+            }
+
+            ProtosStandardObjectProtocol.install();
+            installSourceBackedObjectBehavior(coreDirectory);
+            ProtosStandardHashSupport.installObjectHash();
+            ProtosStandardFutureProtocol.installObjectFuture();
+            ProtosParallelRuntime.installObjectParallel();
+
+            validateRootSurface(object);
+            freezeSharedStandardGraph(object);
+            validatePublishedRoot(object);
+        }
+    }
+
+    private static void validateRootSurface(ProtosObjectValue object) {
+        Set<String> expected =
+                Set.of(
+                        "call",
+                        "identityHash",
+                        "hasSlot",
+                        "slotValue",
+                        "ifTrue",
+                        "ifFalse",
+                        "and",
+                        "or",
+                        "hash",
+                        "future",
+                        "parallel",
+                        "parent",
+                        "ensure",
+                        "while",
+                        "init",
+                        "==",
+                        "!=");
+        if (!object.localSlotsSnapshot().keySet().containsAll(expected)) {
+            throw new IllegalStateException(
+                    "standard Object root publication surface is incomplete");
+        }
+        validateExistingSourceBackedClosure(object, "init");
+        validateExistingSourceBackedClosure(object, "==");
+        validateExistingSourceBackedClosure(object, "!=");
+    }
+
+    private static void validatePublishedRoot(ProtosObjectValue object) {
+        validateRootSurface(object);
+        if (!object.isFrozen()) {
+            throw new IllegalStateException("standard Object root was not published frozen");
+        }
+        for (Object value : object.localSlotsSnapshot().values()) {
+            if (!(value instanceof ProtosClosureValue closure) || !closure.isFrozen()) {
+                throw new IllegalStateException(
+                        "published standard Object behavior must be a frozen Closure");
+            }
+        }
+    }
+
+    /**
+     * Seals only the implementation-owned standard graph being published by Core bootstrap.
+     *
+     * <p>This is not the Protos {@code freeze()} operation made recursive. It is a bootstrap
+     * publication walk over standard objects that are about to be physically shared. Closure
+     * semantic captures are included because a frozen Closure must not retain mutable shared
+     * Protos state behind its structural shell.
+     */
+    private static void freezeSharedStandardGraph(Object... roots) {
+        Set<ProtosObjectValue> visited =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+        ArrayDeque<ProtosObjectValue> pending = new ArrayDeque<>();
+        enqueueStandardObjects(pending, roots);
+        while (!pending.isEmpty()) {
+            ProtosObjectValue object = pending.removeFirst();
+            if (!visited.add(object)) {
+                continue;
+            }
+            enqueueStandardObjects(
+                    pending, object.localSlotsSnapshot().values().toArray());
+            if (object instanceof ProtosClosureValue closure) {
+                enqueueStandardObjects(
+                        pending, closure.capturedLexicalContexts().toArray());
+                enqueueStandardObjects(pending, closure.capturedReceiver());
+                closure.methodHome().ifPresent(pending::addLast);
+            }
+            object.freeze();
+        }
+    }
+
+    private static void validateFrozenStandardGraph(Object... roots) {
+        Set<ProtosObjectValue> visited =
+                Collections.newSetFromMap(new IdentityHashMap<>());
+        ArrayDeque<ProtosObjectValue> pending = new ArrayDeque<>();
+        enqueueStandardObjects(pending, roots);
+        while (!pending.isEmpty()) {
+            ProtosObjectValue object = pending.removeFirst();
+            if (!visited.add(object)) {
+                continue;
+            }
+            if (!object.isFrozen()) {
+                throw new IllegalStateException(
+                        "Core published mutable standard object: " + object.getClass().getName());
+            }
+            enqueueStandardObjects(
+                    pending, object.localSlotsSnapshot().values().toArray());
+            if (object instanceof ProtosClosureValue closure) {
+                enqueueStandardObjects(
+                        pending, closure.capturedLexicalContexts().toArray());
+                enqueueStandardObjects(pending, closure.capturedReceiver());
+                closure.methodHome().ifPresent(pending::addLast);
+            }
+        }
+    }
+
+    private static void enqueueStandardObjects(
+            ArrayDeque<ProtosObjectValue> pending, Object... values) {
+        for (Object value : values) {
+            if (value instanceof ProtosObjectValue object) {
+                pending.addLast(object);
+            }
+        }
     }
 
 

@@ -51,44 +51,40 @@ class ProtosRepresentedValueLookupTest {
     void numericRepresentationsUseTheirNormativePrototypeParents()
             throws IOException {
         ProtosPrelude prelude = corePrelude();
-        Object integerMarker =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
-        Object floatMarker =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
-        Object fixedMarker =
-                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        Object integerCall = prelude.integerPrototype().readLocalSlot("call").orElseThrow();
+        Object floatCall = prelude.floatPrototype().readLocalSlot("call").orElseThrow();
+        ProtosObjectValue fixedPrototype =
+                prelude.fixedIntegerPrototype(ProtosFixedIntegerValue.Family.UINT8);
+        Object fixedCall = fixedPrototype.readLocalSlot("call").orElseThrow();
 
-        prelude.integerPrototype().createLocalSlot("integerMarker", integerMarker);
-        prelude.floatPrototype().createLocalSlot("floatMarker", floatMarker);
-        prelude.fixedIntegerPrototype(ProtosFixedIntegerValue.Family.UINT8)
-                .createLocalSlot("fixedMarker", fixedMarker);
-
-        assertSame(
-                integerMarker,
+        ProtosSlotLookupResult integerSelected =
                 ProtosValueLookup.lookup(
                                 new ProtosIntegerValue(BigInteger.valueOf(42)),
-                                "integerMarker",
+                                "call",
                                 prelude)
-                        .orElseThrow()
-                        .value());
-        assertSame(
-                floatMarker,
+                        .orElseThrow();
+        assertSame(integerCall, integerSelected.value());
+        assertSame(prelude.integerPrototype(), integerSelected.home());
+
+        ProtosSlotLookupResult floatSelected =
                 ProtosValueLookup.lookup(
                                 new ProtosFloatValue(2.5d),
-                                "floatMarker",
+                                "call",
                                 prelude)
-                        .orElseThrow()
-                        .value());
-        assertSame(
-                fixedMarker,
+                        .orElseThrow();
+        assertSame(floatCall, floatSelected.value());
+        assertSame(prelude.floatPrototype(), floatSelected.home());
+
+        ProtosSlotLookupResult fixedSelected =
                 ProtosValueLookup.lookup(
                                 new ProtosFixedIntegerValue(
                                         ProtosFixedIntegerValue.Family.UINT8,
                                         BigInteger.valueOf(7)),
-                                "fixedMarker",
+                                "call",
                                 prelude)
-                        .orElseThrow()
-                        .value());
+                        .orElseThrow();
+        assertSame(fixedCall, fixedSelected.value());
+        assertSame(fixedPrototype, fixedSelected.home());
     }
 
     // Deliberately Java-side: this fixes exact root lookup-home identity and the

@@ -196,8 +196,9 @@ retain their existing direct path.
 
 Focused integration evidence runs two Actors of one hosted Process concurrently on two distinct
 carrier threads and proves both observe one exact `ProtosLanguageContext`. No global execution
-lock, semantic ThreadLocal or carrier affinity is introduced. A4B2B2 subsequently closes the P carrier placement requirement; A4B2B3 is now READY for the
-remaining concurrent Core-root bootstrap publication and A4B2 closure.
+lock, semantic ThreadLocal or carrier affinity is introduced. A4B2B2 subsequently closes the P carrier placement requirement; A4B2B3 is now IN_PROGRESS
+through mechanical A/B implementation slices, with A frozen publication CLOSED and B A+ executable
+projection/final concurrency closure READY.
 
 `ContextPolicy.SHARED` remains deferred; explicit Engine sharing here does not change the default
 EXCLUSIVE language-context policy.
@@ -220,8 +221,10 @@ while inheriting that same hosting placement. Queueing, snapshotting and determi
 bookkeeping remain outside Context entry when they do not execute guest code. Standalone/unbound
 migration paths remain direct.
 
-A4B2B3 is READY and remains the sole owner of concurrent Core-root bootstrap publication. Only its
-closure may close A4B2B/A4B2 and release A4B3. `ContextPolicy.SHARED` remains deferred.
+A4B2B3 is IN_PROGRESS through mechanical A/B implementation slices. A is CLOSED with atomic
+frozen Core publication; B is READY for the already-approved A+ context-local executable projection
+and final multi-Process evidence. Only B may close A4B2B/A4B2 and release A4B3.
+`ContextPolicy.SHARED` remains deferred.
 
 
 <!-- I026-A4B2B3-A-PLUS: v1 -->
@@ -294,7 +297,8 @@ question was recorded as B010 and is now normatively resolved by **D049** /
 specification revision `0.1.389`: a standard object physically shared through the
 prelude and exposing ordinary structural state is published frozen before guest
 observation, and the unique root `Object` is explicitly covered. B010 therefore
-moves to READY and A4B2B3 may implement that semantic boundary.
+remains READY while A4B2B3 implements that semantic boundary. B2B3A has now published the
+frozen Core-publication half; B2B3B remains READY for A+ executable projection and final closure.
 
 D049 remains normative language authority, not a PLAT001 decision. PLAT001 still
 owns only the Truffle execution-layer consequence: shared semantic behavior may

@@ -18,11 +18,11 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.guillermomolina.protos.runtime.ProtosBooleanValue;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -92,7 +92,11 @@ final class ProtosTestToolD4CorpusOwnershipTest {
                     outcome.state(),
                     () -> "D4 corpus ownership fixture failed: "
                             + outcome.error());
-            assertSame(ProtosBooleanValue.TRUE, outcome.value());
+            ProtosStringValue failures =
+                    assertInstanceOf(ProtosStringValue.class, outcome.value());
+            assertTrue(
+                    failures.value().isEmpty(),
+                    () -> "D4 corpus failures:\n" + failures.value());
         }
     }
 }
