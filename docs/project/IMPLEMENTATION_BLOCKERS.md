@@ -485,71 +485,54 @@ scoped; F2E3/F2E4/F2E5 remain gated behind F2E2.
 
 ## B010 — Shared root `Object` structural mutability under Process hosting
 
-Status: BLOCKED
+Status: READY
 
 Implementation area:
 `I026-A4B2B3` concurrent Core-root publication and the closure gate for
 `I026-A4B2B` / `I026-A4B2` before `I026-A4B3` may become READY.
 
 Normative dependency:
-The current normative object model makes `Object` the unique standard delegation
-root and subjects ordinary objects to observable open/closed/frozen structural
-state. The current implementation realizes that standard root as one JVM-wide
-`ProtosObjectValue.ROOT` whose local-slot table remains mutable after Core
-bootstrap.
-
-The normative module/isolation model independently permits physical sharing of
-standard-prelude objects only while those objects are semantically immutable for
-the duration of the sharing. Mutable standard state must be Actor-local, and
-Actors must not gain shared mutable Protos memory merely through the standard
-prelude.
-
-Those rules do not currently say which structural-state rule closes the gap for
-the standard root itself. `I026-A4B2B3` must therefore not guess whether the
-portable answer is to make the standard root immutable after bootstrap, give
-mutable root state an isolation-domain-local representation, or use another
-semantically equivalent model. That choice is observable through ordinary slot
-creation, assignment, removal, `close()`, `freeze()`, reflection, lookup and
-identity behavior and is therefore not a Truffle-only implementation detail.
+Satisfied by D049 / specification revision `0.1.389`. The standard shared-object
+publication rule now requires every physically shared standard object whose
+ordinary structural state is observable to be published `FROZEN` before guest
+observation and to remain frozen for the sharing interval. The unique standard
+root `Object` is explicitly covered; shared standard Closures independently obey
+the same semantic-immutability boundary.
 
 Specification authority:
-- `spec/semantics/OBJECT_MODEL.md` for `Object`, ordinary slot mutation and
-  open/closed/frozen state;
-- `spec/semantics/MODULES.md` for shared-prelude immutability and Actor-local
-  ownership of mutable standard state;
-- `spec/concurrency/ACTORS.md` for Actor isolation where the module owner relies
-  on that isolation boundary.
+- `spec/semantics/OBJECT_MODEL.md` for the standard root publication state and
+  ordinary frozen-object mutation behavior;
+- `spec/semantics/MODULES.md` for the general shared-prelude immutability rule and
+  object-by-object shallow publication boundary;
+- `spec/concurrency/ACTORS.md` for Actor isolation.
 
 Unblock condition:
-The current normative specification must explicitly and uniquely determine the
-structural-state / isolation ownership of the standard root `Object` when it is
-reachable from independent Actors and hosted Processes. Two independent
-implementations must be able to determine whether a shared root is semantically
-immutable for the sharing interval or how any mutable root state is isolated,
-without inventing a cross-Actor mutable singleton, a hidden write overlay, or a
-new identity rule.
+Satisfied. Two independent implementations can determine that the shared root
+`Object` is `FROZEN` from first guest-observable access, that no guest-visible
+root mutation may cross Actor boundaries, that freezing remains shallow, and
+that every other physically shared standard object must independently be
+semantically immutable. No hidden overlay, per-Actor root identity or global
+mutable singleton is required.
 
 Current consequence:
-The project-owner-approved A+ Truffle direction remains valid for executable
-ownership: `ContextPolicy.EXCLUSIVE` is retained, source-backed root behavior is
-semantic state, and sharing-layer-bound `ExecutionPlan` / `CallTarget` material
-must be projected into and owned by the current `ProtosLanguageContext`. That
-platform decision does not resolve this separate observable root-state question.
+`I026-A4B2B3` is READY. It must implement the already-approved A+ executable
+layer together with safe one-time Core publication: shared semantic standard
+objects are frozen before publication, while sharing-layer-bound
+`ExecutionPlan` / `CallTarget` material belongs to the current
+`ProtosLanguageContext` under `ContextPolicy.EXCLUSIVE`. Concurrent multi-Process
+evidence must prove no cross-Context executable reuse and no global guest lock.
 
-`I026-A4B2B3` is therefore BLOCKED. It must not close `I026-A4B2B`, close
-`I026-A4B2`, or release `I026-A4B3` until this blocker is normatively resolved
-and the resulting implementation has its required concurrent multi-Process
-evidence.
+B010 remains READY until that implementation and its validation are published;
+only then may B010 close together with I026-A4B2B3's implementation obligation.
 
-Implementation-only shortcuts that are insufficient:
-- serializing Core bootstrap while leaving guest-visible root mutation shared;
-- synchronizing guest writes to a JVM-global root (race freedom is not Actor
-  isolation);
-- enabling `ContextPolicy.REUSE` or `ContextPolicy.SHARED` (Truffle code sharing
-  does not define Protos object-state ownership).
+History:
+B010 was introduced when A4B2B3 exposed that a bootstrap lock could remove a
+publication race without resolving guest-visible mutable root sharing. D049
+selects the shared-frozen-standard-object model after explicit project-owner
+approval and moves the blocker from `BLOCKED` to `READY`.
 
 Independent work:
 Published A4B2A/A4B2B1/A4B2B2 hosting and carrier-routing evidence remains
 valid. `I026-D` and unrelated implementation work may continue independently.
 `ContextPolicy.REUSE` and `ContextPolicy.SHARED` remain deferred platform
-optimizations and need not be reopened to resolve this blocker.
+optimizations and are not required by D049.

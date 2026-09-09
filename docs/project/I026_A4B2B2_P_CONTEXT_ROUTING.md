@@ -75,7 +75,7 @@ bounded carrier count, caller-domain Future ownership and deterministic failure 
 
 ## Remaining A4B2B work
 
-**I026-A4B2B3 — concurrent Core bootstrap closure** has its A+ executable-layer direction approved under PLAT001, but is now **BLOCKED by B010**. The remaining normative question is the structural-state/isolation ownership of the standard root `Object`; a bootstrap-only lock is not sufficient while guest-visible mutable root state would remain physically shared. Only after that dependency is closed and concurrent multi-Process publication evidence passes may A4B2B3 close A4B2B/A4B2 and release A4B3.
+**I026-A4B2B3 — concurrent Core bootstrap closure** is now **READY** after D049 resolves B010. Shared standard `Object`/behavior must be published frozen, while the already-approved A+ executable layer keeps sharing-layer-bound plans/CallTargets owned by the current `ProtosLanguageContext`. B2B3 still requires concurrent multi-Process publication evidence before it may close A4B2B/A4B2 and release A4B3.
 
 `ContextPolicy.SHARED` remains deferred.
 

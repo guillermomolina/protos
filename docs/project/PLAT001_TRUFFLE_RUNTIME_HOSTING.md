@@ -287,16 +287,19 @@ The A+ boundary is deliberately compatible with that progression: future
 changing Protos callable semantics if and only if the stronger Truffle contracts
 are proven.
 
-### Separate root-state semantic gate
+### Resolved root-state semantic gate
 
-This amendment does **not** ratify a new observable mutation rule for the
-standard `Object`, does not make JVM object identity a language promise, and does
-not approve freezing, per-Actor root copies, copy-on-write overlays or another
-structural-state model by implication. The A4B2B3 audit found that the current
-open JVM-global root is reachable through the shared standard prelude while the
-normative module/isolation model forbids physically shared mutable Protos state.
-That independent observable question is recorded as **B010** and must be
-resolved normatively before A4B2B3 can close.
+The A+ amendment itself did not choose observable root mutability. That separate
+question was recorded as B010 and is now normatively resolved by **D049** /
+specification revision `0.1.389`: a standard object physically shared through the
+prelude and exposing ordinary structural state is published frozen before guest
+observation, and the unique root `Object` is explicitly covered. B010 therefore
+moves to READY and A4B2B3 may implement that semantic boundary.
+
+D049 remains normative language authority, not a PLAT001 decision. PLAT001 still
+owns only the Truffle execution-layer consequence: shared semantic behavior may
+exist while sharing-layer-bound executable material remains context-local under
+`ContextPolicy.EXCLUSIVE`.
 
 ## Explicitly deferred choices
 

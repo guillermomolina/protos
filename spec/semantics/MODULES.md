@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-04
+Last updated: 2026-09-09
 
 This document is the primary normative owner of module contexts, module identity, loading, caching, initialization, cycles, and module lifetime.
 
@@ -52,7 +52,9 @@ Freezing is shallow, so freezing the prelude is not by itself sufficient to make
 
 > Any Protos object physically shared between Actors through the standard prelude must be semantically immutable for the duration of that sharing. Mutable Protos state reachable through standard facilities must be Actor-local.
 
-The implementation may physically share immutable implementation artifacts — parsed syntax, bytecode, machine code, immutable metadata, and immutable constant data — where the sharing is semantically unobservable. Mutable standard-library or runtime state belongs to the Actor that uses it. This rule does not change the existing shallow-freeze semantics, does not introduce deep freeze, does not weaken Actor isolation, and does not require implementations to duplicate immutable data unnecessarily.
+For a physically shared standard object whose ordinary structural state is observable through the open/closed/frozen object model, semantic immutability requires that **the shared object itself be `FROZEN` before guest observation and remain frozen for the sharing interval**. Freezing the prelude is shallow and therefore does not recursively make its slot values safe to share: each physically shared referenced standard object must independently satisfy this rule. In particular, a standard Closure physically shared as prelude/Core behavior has frozen Protos-visible structural state even though invoking or extracting it continues to follow ordinary Closure semantics.
+
+The implementation may physically share immutable implementation artifacts — parsed syntax, bytecode, machine code, immutable metadata, and immutable constant data — where the sharing is semantically unobservable. It may also maintain hidden implementation-only caches or executable metadata when those structures do not constitute Protos-visible mutable state, do not carry Actor-local semantic state across isolation boundaries, and preserve the applicable implementation concurrency contract. Mutable standard-library or runtime **semantic** state belongs to the Actor that uses it. This rule does not change the existing shallow-freeze semantics, does not introduce deep freeze, does not weaken Actor isolation, and does not require implementations to duplicate immutable data unnecessarily.
 
 This preserves module isolation: modules may share immutable standard facilities, but they do not acquire shared mutable global state through the prelude.
 

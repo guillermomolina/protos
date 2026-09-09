@@ -9,6 +9,19 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.389] - 2026-09-09
+
+### D049 — shared standard-object publication and root immutability
+- Records explicit project-owner approval of D049 after the B010 cross-language, Actor-isolation, adversarial and future-scalability review. Standard Protos objects physically shared through the standard prelude must be semantically immutable; when their ordinary structural state is observable, the shared object itself is published `FROZEN` before any guest observation and remains frozen for the sharing interval.
+- The unique standard root `Object` is therefore completely constructed before publication and is `FROZEN` from first guest-observable access. Guest attempts to create, assign, compose into, or remove root local slots use the existing frozen-object failure rules; ordinary `close()` / `freeze()` idempotence is unchanged.
+- The rule is object-by-object and shallow, not a new deep-freeze operation. Standard Closures or other standard objects that are themselves physically shared must independently satisfy the same semantic-immutability boundary. Hidden implementation caches/executable artifacts may remain implementation state only when they are semantically unobservable and do not carry Actor-local mutable state across isolation boundaries.
+- Rejects a Process-local mutable root (which would still share mutation between Actors), an Actor-local replicated Core/root graph, hidden copy-on-write/overlay mutation, and a JVM-global mutable root protected only by locks. Those designs add state/identity/coordination cost or fail the existing Actor isolation invariant.
+
+### Compatibility and implementation state
+- D049 resolves B010's normative dependency and makes `I026-A4B2B3` READY; it does not itself implement concurrent Core publication, A+ context-local Truffle executable projection, or close B010/A4B2B3.
+- Existing source that relied on mutating the standard root `Object` after bootstrap becomes invalid under the ordinary frozen-object rules. Programs remain free to create child prototypes, compose objects, shadow prelude names locally, and mutate their own Actor-local objects.
+- This is a specification/governance publication only. It changes no production source, persisted tests, Maven implementation version, native-Closure boundary, license terms, `ContextPolicy`, Truffle Engine/Context topology, or I028 networking work.
+
 ## [0.1.388] - 2026-09-09
 
 ### D047 — explicit capability-oriented TCP networking foundation

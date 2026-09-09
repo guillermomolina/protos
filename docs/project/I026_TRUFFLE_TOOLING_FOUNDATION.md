@@ -66,7 +66,7 @@ see `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md`.
 | I026-A4B2B | IN_PROGRESS | — | I026-A4B2A | Implement Actor/P/bootstrap integration through ordered A4B2B1-A4B2B3; B2B closes only after Actor routing, P routing and concurrent Core bootstrap are all published. |
 | I026-A4B2B1 | CLOSED | `0.2.271-SNAPSHOT` | I026-A4B2A | Route every scheduled Actor control/Task/mailbox segment through its owning Process execution host; prove two distinct Actor carriers enter one exact Process `ProtosLanguageContext` with no Context-per-Actor mapping or carrier affinity. |
 | I026-A4B2B2 | CLOSED | `0.2.273-SNAPSHOT` | I026-A4B2B1 | Propagate Process host placement through isolated P domains, enter the owning Process Context around guest execution, preserve sibling physical parallelism, and prove nested P inherits the same Context without exposing Process authority. |
-| I026-A4B2B3 | BLOCKED | — | I026-A4B2B2 | A+ executable-layer ownership is approved under PLAT001, but concurrent Core-root publication is blocked by B010 until the standard root `Object` structural-state/isolation semantics are normatively closed. Only then may B2B3 close A4B2B/A4B2 and release A4B3. |
+| I026-A4B2B3 | READY | — | I026-A4B2B2 + D049/B010 | D049 resolves the root-state/isolation dependency: shared standard `Object`/behavior is published frozen, while approved A+ keeps sharing-layer-bound executable material context-local under `EXCLUSIVE`. Implement safe concurrent Core publication/evidence before closing B2B3/A4B2. |
 | I026-A4B3 | BLOCKED_BY_DEPENDENCIES | — | I026-A4B2 | Cut CLI, REPL, bundled-tool, workspace and remaining production drivers onto the PLAT001 substrate and retire direct compiler/call entry as a separate primary production architecture. |
 | I026-B | BLOCKED_BY_DEPENDENCIES | — | I026-A4 | Map the existing exact `SourceSpan` ranges to valid Truffle `SourceSection` values on roots/execution nodes, with focused Java-side integration evidence. |
 | I026-C | BLOCKED_BY_DEPENDENCIES | — | I026-B | Make the relevant AST nodes instrumentable and expose the minimal faithful `StandardTags` needed for source execution/stepping; do not tag nodes merely to satisfy a debugger UI. |
@@ -97,7 +97,7 @@ Processes. A4B2B is now IN_PROGRESS through A4B2B1-A4B2B3. A4B2B1 routes every A
 scheduler segment through the owning Process execution host and is CLOSED. A4B2B2 is also CLOSED:
 isolated P domains now retain implementation-only Process host placement, sibling P carriers enter the
 same Process Context concurrently, and nested P inherits that placement without gaining Process
-authority. A4B2B3 has an approved A+ executable-layer direction but is BLOCKED by B010 on the independent standard-root structural-state/isolation question. It cannot close A4B2B/A4B2 or release A4B3 until that normative dependency is closed and concurrent publication evidence passes. I026-D remains independently READY.
+authority. D049 now resolves B010's independent standard-root structural-state/isolation question, so A4B2B3 is READY. It must publish the frozen shared-standard-object boundary together with A+ context-local executable projection and concurrent multi-Process evidence before it may close A4B2B/A4B2 or release A4B3. I026-D remains independently READY.
 
 ## Deferred ownership
 

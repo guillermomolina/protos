@@ -2,7 +2,7 @@
 
 Language version: 0.1
 Status: Draft
-Last updated: 2026-09-04
+Last updated: 2026-09-09
 
 This document is the primary normative owner of object identity as objects, delegation, slots, composition, and object open/closed/frozen state.
 
@@ -530,7 +530,17 @@ Each operation either signals before producing a normal result or returns the co
 Their results are ordinary objects; `...` has no knowledge that `without` or `alias` was used. These operations therefore remain ordinary utilities built on the local-slot structure already exposed by Core reflection rather than a separate trait, method-cloning, or composition mechanism.
 ## 22. Open Objects
 
-Objects are initially open and mutable.
+Objects created through ordinary program execution are initially open and mutable. A standard object may instead have a normative publication contract that makes its bootstrap-construction phase unobservable and fixes a later guest-observable structural state.
+
+### Standard shared-object publication
+
+A standard Protos object that is physically shared between independent Actors through the standard prelude and whose structural state is observable through the ordinary open/closed/frozen object model must be **frozen before any guest code can observe that shared object** and must remain frozen for the complete guest-observable sharing interval. Physical sharing never authorizes shared guest mutation.
+
+The unique standard root `Object` is such an object. Its standard slots and behavior are completely established before publication, and from the first guest-observable access `Object` is already `FROZEN`. The implementation may use an unobservable construction phase to assemble the standard root, but no Protos execution may observe a partially constructed, open, or merely closed shared standard root.
+
+Consequently ordinary attempts to create, assign, compose into, or remove a local slot on the standard `Object` after publication fail through the existing frozen-object rules. No D049-specific mutation operation or Error family is introduced. Calling the ordinary structural `Object.freeze()` or `Object.close()` behavior on an already-frozen standard root retains the existing idempotent state/result contract.
+
+This publication rule is **shallow**, exactly like ordinary `freeze()`. It does not recursively freeze every value reachable from a standard object's slots and does not introduce deep freeze. A referenced value that is itself physically shared across Actor isolation boundaries must independently satisfy the applicable sharing rule for that value.
 
 An open object permits local slot creation, modification, and removal subject to the normal rules. Slot removal never delegates.
 
