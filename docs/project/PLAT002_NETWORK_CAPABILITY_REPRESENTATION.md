@@ -87,8 +87,8 @@ review, not a language-specification revision merely because backend machinery c
 | I028-B1 | CLOSED | Publish the canonical frozen source-backed `Network` prototype, register PLAT002, and close Core/Prelude/source inventories without creating authority or selecting a TCP backend. |
 | I028-B2 | CLOSED | Implemented represented Network wrapper with canonical parent/opaque host target plus explicit Actor/P rejection for the capability and authority-bearing descendants; no bootstrap/TCP. |
 | I028-B3 | CLOSED | Optional exact RootActor initial-module `network` endowment from an already-provisioned represented capability; absent grant means absent slot, imports/new Actors receive no ambient grant, and Process has no Network accessor. |
-| I028-B4 | READY | Retained Protos/JVM conformance for prototype-vs-capability distinction and bootstrap/import/Actor/P authority confinement. |
-| I028-B5 | BLOCKED_BY_DEPENDENCIES | Reconcile B evidence and close the Network capability/bootstrap slice before TCP implementation proceeds. |
+| I028-B4 | CLOSED | Retained integrated authority-confinement evidence now proves no ambient recovery through Prelude/Process/import/new-Actor plus Actor/P rejection of the exact RootActor bootstrap grant; no production/TCP change. |
+| I028-B5 | READY | Reconcile B1-B4 evidence and close the represented Network capability/bootstrap boundary before TCP implementation proceeds. |
 
 ## B2 implementation evidence
 
@@ -112,6 +112,16 @@ continue through paths that never receive root bootstrap locals. The host-neutra
 assembler retains its existing API and adds an overload accepting the exact represented Network
 capability. Process protocol selectors, Actor/P transfer rules, Network representation, native
 Closure inventory and backend identity remain unchanged.
+
+## B4 retained confinement evidence
+
+I028-B4 closes at `0.2.284-SNAPSHOT` with the implementation version unchanged. The retained integration
+harness composes the already-selected represented Network architecture with the actual B3 RootActor
+grant: capital-`Network` remains authority-free Prelude state; `Process` exposes no Network accessor;
+imports and hosted non-root Actors cannot resolve the RootActor-local lower-case `network`; and the
+exact provisioned represented capability fails the existing Actor `NonTransferableValue` and P
+`NonParallel` boundaries. This evidence adds no backend, resource proxy or authority derivation rule.
+B5 is READY for reconciliation only; PLAT002 itself is unchanged.
 
 ## Deliberately deferred
 

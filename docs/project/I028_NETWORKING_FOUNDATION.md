@@ -31,8 +31,8 @@ normal implementation dependencies established as A-F progresses.
   - **B1 — canonical Network prototype — CLOSED (`0.2.282-SNAPSHOT` / `SAME_COMMIT`):** publish frozen source-backed standard `Network` in Prelude, register ratified PLAT002, update exact Core inventories and retain zero authority/backend/native-Closure construction.
   - **B2 — represented Network capability + transfer confinement — CLOSED (`0.2.283-SNAPSHOT` / `SAME_COMMIT`):** implement the PLAT002 represented wrapper with canonical Network parent, opaque host target and explicit Actor/P fail-closed transfer, including authority-bearing descendants; no RootActor endowment or TCP operations.
   - **B3 — optional RootActor `network` bootstrap endowment — CLOSED (`0.2.284-SNAPSHOT` / `SAME_COMMIT`):** host-granted represented Network is an optional exact local `network` only on the initial RootActor module/standalone entry; absence is a missing slot, imports/new Actors receive no ambient grant, and Process exposes no Network accessor.
-  - **B4 — ambient/import/Actor/P confinement conformance — READY:** retain broader authority-confinement evidence over prototype-vs-capability distinction, import/new-Actor/P boundaries and non-recovery paths.
-  - **B5 — close B — BLOCKED_BY_DEPENDENCIES:** reconcile retained evidence and close Network capability/bootstrap provisioning before TCP acquisition implementation proceeds.
+  - **B4 — ambient/import/Actor/P confinement conformance — CLOSED (`0.2.284-SNAPSHOT` / `SAME_COMMIT`; implementation version unchanged):** retained integrated evidence proves the authority-free Network prototype and Process protocol cannot recover a concrete grant, imports/non-root Actors cannot resolve RootActor `network` ambiently, and the exact B3 bootstrap capability is rejected by Actor/P transfer; no production or TCP/backend change.
+  - **B5 — close B — READY:** reconcile B1-B4 retained evidence and close Network capability/bootstrap provisioning before TCP acquisition implementation proceeds.
 - **C — TCP connection + `connectTcp`:** async acquisition, cancellation/late
   resource custody, Byte I/O/close/half-close composition, endpoint observation.
 - **D — TCP listener + `listenTcp`:** exact request snapshot/validation,
@@ -42,6 +42,20 @@ normal implementation dependencies established as A-F progresses.
   subdivide mechanically if required.
 - **F — cross-slice conformance/native-boundary closure:** cancellation races,
   late custody, multiple-accept scale evidence and Actor/P non-transferability.
+
+## I028-B4 closure
+
+Closed at implementation version `0.2.284-SNAPSHOT` without an implementation-version or production-runtime
+change. B4 retains one integrated JVM/Protos-source harness over the complete B boundary established by
+B1-B3: the frozen `Network` prototype remains an authority-free Prelude value; the standard `Process`
+prototype retains exactly its existing eight Process-I/O selectors and no Network recovery selector;
+an imported module that actually tries to resolve lower-case `network` fails despite the importing
+RootActor owning a grant; a hosted non-root Actor attempting the same lookup also fails; and the exact
+`ProtosNetworkCapabilityValue` installed by B3 is rejected at both Actor and isolated-P transfer
+boundaries. The previously retained B2/B3 tests remain focal evidence for prototype-vs-capability shape,
+ordinary prototype-descendant transferability, optional-grant absence, exact RootActor timing and
+standalone provisioning. No specification, production source, native Closure, connect/listen/TCP or
+backend identity changes. B5 is READY for B-level reconciliation/closure.
 
 ## I028-B3 closure
 
