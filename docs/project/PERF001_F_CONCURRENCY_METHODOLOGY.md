@@ -1,6 +1,6 @@
 # PERF001-F — Future/P/Actor concurrency benchmark methodology
 
-Status: methodology/workload audit **APPROVED**; canonical workload implementation and retained measurement evidence pending
+Status: methodology/workload audit **APPROVED**; canonical workload implementation **PUBLISHED**; companion harness and retained measurement evidence pending
 
 Live coordination: GitHub Issue #105, parent PERF001 Issue #51
 Nature: non-normative performance-engineering methodology and benchmark-contract record
@@ -54,6 +54,13 @@ PERF001-F reserves exactly six canonical workload identifiers under
 `protos/benchmarks/concurrency/`. The first corpus implementation slice must use
 these identifiers and must satisfy these contracts without adding hidden runtime
 privileges or scheduler assumptions.
+
+The canonical source corpus is now published under
+`protos/benchmarks/concurrency/`. Each source defines an ordinary top-level `run`
+Closure and ends with `run()` for direct correctness execution. Actor sources
+perform spawn/readiness setup before `run`; the companion harness may therefore
+retain the same production-hosted Process and time later ordinary `run`
+invocations without folding Actor bootstrap into steady request cost.
 
 ### 2.1 `concurrency/future-roundtrip`
 
@@ -221,6 +228,10 @@ The approved methodology is decomposed into these safe publication boundaries:
 
 These phases are implementation slices inside existing PERF001-F, not new formal
 PERF work items by default.
+
+Steps 1 and 2 are now published. Step 3, the companion production-hosted harness,
+is the next implementation slice; the I026 gate still applies only to step 4's
+retained reference timing.
 
 ## 9. Explicit exclusions
 

@@ -7,15 +7,20 @@ Workloads belong here only when they can be expressed without adding assumptions
 methodology is documented in
 `docs/project/PERF001_F_CONCURRENCY_METHODOLOGY.md`.
 
-The implementation slice must materialize exactly these canonical workload
-identifiers here:
+The six canonical workload identifiers are materialized by these sources:
 
-- `concurrency/future-roundtrip`
-- `concurrency/future-fanout-all`
-- `concurrency/parallel-roundtrip`
-- `concurrency/parallel-array-map`
-- `concurrency/actor-request-roundtrip`
-- `concurrency/actor-fanout-requests`
+- `concurrency/future-roundtrip` -> `future-roundtrip.protos`
+- `concurrency/future-fanout-all` -> `future-fanout-all.protos`
+- `concurrency/parallel-roundtrip` -> `parallel-roundtrip.protos`
+- `concurrency/parallel-array-map` -> `parallel-array-map.protos`
+- `concurrency/actor-request-roundtrip` -> `actor-request-roundtrip.protos`
+- `concurrency/actor-fanout-requests` -> `actor-fanout-requests.protos`
+
+Each source defines one ordinary top-level `run` Closure and ends by invoking
+`run()` so the corpus remains directly executable for correctness checks. Actor
+sources perform spawn/readiness setup before `run`; a steady-state harness may
+retain that production-hosted Process and time later ordinary `run` invocations
+without including Actor bootstrap in the per-request timing window.
 
 These are Protos-native workload contracts, not cross-language concurrency
 analogues. They must remain expressible entirely through the corresponding

@@ -1,5 +1,7 @@
 ## 0.2.299-SNAPSHOT
 
+- Materialize the approved `PERF001-F` canonical concurrency corpus as six ordinary Protos sources covering Future round-trip/fan-out, isolated-P round-trip/Array strong scaling, and Actor request/fan-out. Each source exposes an ordinary `run` Closure and remains directly executable; Actor setup/readiness stays outside the reusable `run` body so the forthcoming production-hosted harness can exclude bootstrap from steady request timing. Preserve fixed logical work, deterministic results, public Future/P/Actor protocols and the existing I026 final-reference gate. Benchmark-corpus only: no Protos semantics, production runtime/library implementation, Maven implementation version, test suite, native boundary or license-term change.
+
 - Repair `TOOL002-G1` exact live-result inspection after the retained Actor corpus exposed a legitimate suspended RootActor continuation at the intermediate cooperative-idle boundary. Keep draining currently runnable RootActor work before inspection, but no longer require intermediate idle to imply zero live tasks; the cooperative inspector may await the returned Future while production Actors progress, and the existing post-inspector zero-live-task invariant remains enforced. Add the retained `actor/ip-data-transfer.protos` chained-Future regression. No test-only scheduler, public API, Protos semantics, normative specification or native-boundary change. Implementation version becomes `0.2.299-SNAPSHOT`.
 
 ## 0.2.298-SNAPSHOT
