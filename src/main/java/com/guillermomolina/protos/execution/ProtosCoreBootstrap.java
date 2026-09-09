@@ -124,6 +124,9 @@ public final class ProtosCoreBootstrap {
                 .load(coreDirectory.resolve("Path.protos"))
                 .call(bootstrapActivation);
         sourceLoader
+                .load(coreDirectory.resolve("IpAddress.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
                 .load(coreDirectory.resolve("Future.protos"))
                 .call(bootstrapActivation);
         sourceLoader
@@ -265,6 +268,10 @@ public final class ProtosCoreBootstrap {
         ProtosStandardIdentityMapProtocol.install(identityMapPrototype);
         ProtosObjectValue pathPrototype = requirePrototype(bootstrapContext, "Path", ProtosObjectValue.rootObject());
         ProtosStandardPathProtocol.install(pathPrototype);
+        ProtosObjectValue ipAddressPrototype =
+                requirePrototype(
+                        bootstrapContext, "IpAddress", ProtosObjectValue.rootObject());
+        ProtosStandardIpAddressProtocol.install(ipAddressPrototype);
         ProtosObjectValue futurePrototype = requirePrototype(bootstrapContext, "Future", ProtosObjectValue.rootObject());
         ProtosStandardFutureProtocol.install(futurePrototype);
         ProtosObjectValue processObject =

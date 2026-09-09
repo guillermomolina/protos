@@ -150,6 +150,7 @@ class ProtosCoreBootstrapTest {
                         "Map",
                         "IdentityMap",
                         "Path",
+                        "IpAddress",
                         "Future",
                         "Actor",
                         "Process",

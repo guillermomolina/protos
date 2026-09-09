@@ -678,3 +678,7 @@ maturity/object-model/closure-identity-registry-lifecycle.protos	integer	1000300
 maturity/object-model/custom-equality-dual-map-live-state.protos	integer	66077066015042028028020311
 control/if-spelling-remains-ordinary-call.protos	integer	42
 control/else-spelling-remains-ordinary-name.protos	integer	43
+network/ip-address-construction.protos	boolean	true
+network/ip-address-validation.protos	boolean	true
+network/ip-address-recognition.protos	boolean	true
+network/ip-address-equality-hash.protos	boolean	true

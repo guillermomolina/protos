@@ -1,6 +1,6 @@
 # I028 — Core Networking Foundation
 
-Status: **READY**
+Status: **IN_PROGRESS**
 Normative dependencies: D047 / specification revision `0.1.388` — RATIFIED; D048 / specification revision `0.1.391` — RATIFIED
 Consumer: `LIB005 — Networking`
 
@@ -23,7 +23,10 @@ normal implementation dependencies established as A-F progresses.
 
 ## Planned implementation decomposition after the checkpoint
 
-- **A — address/endpoint ordinary-object foundation — READY:** implement the D048 construction/recognition protocol, validation, freezing, structural equality and hashing, IPv4/IPv6 exact-bit invariants and transfer conformance.
+- **A — address/endpoint ordinary-object foundation — IN_PROGRESS:** mechanically subdivided into independently publishable A1/A2/A3 slices without changing D047/D048.
+  - **A1 — IpAddress local foundation — CLOSED (`0.2.278-SNAPSHOT` / `SAME_COMMIT`):** source-backed canonical ordinary prototype, `IpAddress(version, bits)` through ordinary invocation, exact unbounded-Integer IPv4/IPv6 validation, transparent `recognizes`, structural `==`/`hash`, frozen successful values and frozen Prelude prototype, plus ordinary-Protos conformance. No `IpEndpoint` or Actor/P transfer.
+  - **A2 — IpEndpoint local foundation — READY:** factory, address/port validation, transparent recognition, structural equality/hash, freeze and Prelude publication only.
+  - **A3 — Actor/P transfer + close A — BLOCKED_BY_DEPENDENCIES:** after A2, prove ordinary snapshot/rematerialization across Actor/P preserves canonical parent, exact slots, frozen state and equality/hash, then close A.
 - **B — Network capability + bootstrap provisioning:** host-neutral live
   capability shape and optional initial-module `network` endowment; no ambient
   recovery.
@@ -36,6 +39,18 @@ normal implementation dependencies established as A-F progresses.
   subdivide mechanically if required.
 - **F — cross-slice conformance/native-boundary closure:** cancellation races,
   late custody, multiple-accept scale evidence and Actor/P non-transferability.
+
+## I028-A1 closure
+
+Published at implementation version `0.2.278-SNAPSHOT`. The slice is intentionally local:
+`IpAddress` is a canonical frozen ordinary Prelude factory/prototype, successful construction
+returns a fresh frozen ordinary child with exactly `version` and `bits`, and the bounded
+representation bridge enforces exact unbounded-Integer IPv4/IPv6 ranges, transparent
+recognition and structural equality/hash without candidate callbacks. Ordinary-Protos
+conformance covers construction/freshness/freeze, boundary and fixed-width rejection,
+recognition receiver/arity/shape behavior, equality/hash and Map-key coherence. The native
+boundary is explicitly re-audited at 119 sites / 31 providers. `IpEndpoint`, Actor/P transfer
+and every Network/TCP/backend concern remain untouched.
 
 ## Exclusions
 

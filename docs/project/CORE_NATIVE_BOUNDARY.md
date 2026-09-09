@@ -1,3 +1,18 @@
+## I028-A1 — standard `IpAddress` ordinary-object bridge
+
+I028-A1 publishes the already-ratified D048 `IpAddress(version, bits)` factory/prototype
+without introducing a Java runtime value family. `IpAddress.protos` owns the canonical ordinary
+prototype identity; the bounded Java provider installs four representation-bridge Closures for
+construction-time exact Integer/range validation plus freeze, transparent `recognizes(value)`,
+and callback-free structural `==` / `hash`. Successful values remain fresh frozen ordinary
+objects with exactly `version` and `bits` local slots and the canonical `IpAddress` as immediate
+parent.
+
+The direct bridge is required because recognition must inspect frozen state, exact immediate
+parent and the exact receiver-local slot set without invoking candidate behavior. The audited
+Core boundary therefore becomes **119 native Closure construction sites across 31 providers**.
+No `IpEndpoint`, Actor/P transfer, Network/TCP authority, DNS, UDP or TLS behavior is included.
+
 ## I030 — standard `Object.without` / `Object.alias` structural views
 
 LM007-D exposed that the already-normative structural-view helpers existed in
@@ -191,6 +206,7 @@ the standard native boundary.
 | `ProtosStandardIdentityMapProtocol.java` | 7 | representation bridge | IdentityMap storage and lookup require primitive semantic identity/identityHash plus keyed representation state and iteration snapshots. |
 | `ProtosStandardBytesProtocol.java` | 7 | representation bridge | Bytes owns octet-indexed mutable state, reservation state, exact octet validation, snapshot iteration, and P-region interaction. Its standard prototype identity is already source-backed and construction-only. |
 | `ProtosStandardPathProtocol.java` | 6 | representation bridge | Path construction, components, structural equality, and structural hash operate on the immutable Path representation. |
+| `ProtosStandardIpAddressProtocol.java` | 4 | representation bridge | D048 construction and recognition require exact unbounded-Integer/range validation, fresh ordinary-object state publication plus freeze, and direct inspection of frozen state, immediate canonical parent and exact local-slot shape without invoking candidate behavior; structural equality/hash read only the same canonical `version`/`bits` state. |
 | `ProtosStandardErrorProtocol.java` | 2 | host-irreducible | `Error.signal` performs the language Error control transfer with exact signaled-object preservation; `Error.handle` installs and consumes the dynamic handler frame whose selection precedes unwind cleanup. |
 | `ProtosStandardFutureProtocol.java` | 2 | concurrency/runtime bridge | `future`, `value`, `cancel`, `detach`, `then`, and `all` depend on Task ownership, suspension, observation, terminal states, cancellation, and Actor-local execution domains. |
 | `ProtosParallelRuntime.java` | 2 | concurrency/runtime bridge | `parallel`, Array parallel operations, Bytes/ByteRegion `parallelRange`, snapshot transfer, reservations, commitment, and bounded host carriers form the P execution substrate. |

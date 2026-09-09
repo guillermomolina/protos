@@ -56,6 +56,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardFileProtocol.java", 10),
                     Map.entry("execution/ProtosStandardFilesystemProtocol.java", 1),
                     Map.entry("execution/ProtosStandardPathProtocol.java", 6),
+                    Map.entry("execution/ProtosStandardIpAddressProtocol.java", 4),
                     Map.entry("execution/ProtosStandardArrayProtocol.java", 5),
                     Map.entry("execution/ProtosStandardProcessArgumentsProtocol.java", 3),
                     Map.entry("execution/ProtosStandardEnvironmentProtocol.java", 3),
@@ -114,8 +115,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         }
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
-        assertEquals(30, actualCore.size());
-        assertEquals(115, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(31, actualCore.size());
+        assertEquals(119, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
         String inventory =
@@ -226,6 +227,15 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                 "Path",
                 prelude.pathPrototype(),
                 Set.of("relative", "rooted", "child", "parentComponent", "==", "hash"));
+        ProtosObjectValue ipAddressPrototype = ordinaryBinding(prelude, "IpAddress");
+        assertTrue(ipAddressPrototype.isFrozen(), "standard IpAddress prototype must be frozen");
+        assertTrue(
+                ipAddressPrototype.parent().orElse(null) == ProtosObjectValue.rootObject(),
+                "standard IpAddress prototype must delegate directly to Object");
+        assertNativeSelectors(
+                "IpAddress",
+                ipAddressPrototype,
+                Set.of("init", "recognizes", "==", "hash"));
         assertNativeSelectors(
                 "Future",
                 prelude.futurePrototype(),

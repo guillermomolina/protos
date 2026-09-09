@@ -1,0 +1,41 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+
+ipv4: IpAddress(4, 4294967295)
+ipv6: IpAddress(6, 340282366920938463463374607431768211455)
+fresh: IpAddress(4, 4294967295)
+ok: true
+
+(ipv4.parent() === IpAddress).ifFalse(() => { ok = false })
+(ipv6.parent() === IpAddress).ifFalse(() => { ok = false })
+(ipv4.version == 4).ifFalse(() => { ok = false })
+(ipv4.bits == 4294967295).ifFalse(() => { ok = false })
+(ipv6.version == 6).ifFalse(() => { ok = false })
+(ipv6.bits == 340282366920938463463374607431768211455).ifFalse(() => { ok = false })
+(ipv4 === fresh).ifTrue(() => { ok = false })
+IpAddress.recognizes(ipv4).ifFalse(() => { ok = false })
+IpAddress.recognizes(ipv6).ifFalse(() => { ok = false })
+
+mutationRejected: Error.handle(
+    () => {
+        ipv4.bits = 0
+        false
+    },
+    (error) => { true }
+)
+mutationRejected.ifFalse(() => { ok = false })
+
+ok
