@@ -549,12 +549,15 @@ mechanism before behavior that depends on it, and behavior before final
 cross-slice closure/conformance. Do not create a dependency merely to force a
 preferred order when two slices can progress independently.
 
-Do not invent a new formal project work item merely because an informal task was
-decomposed. When the parent is already a formally tracked item and the canonical
-ledger/design record uses slice suffixes, use the existing family convention
-(for example `Ixxx-A` or `LIBxxx-B`) and persist newly formalized slice state in
-the owning project record when appropriate. Otherwise, descriptive local slice
-names are sufficient.
+Do not create a new formal project work item or GitHub sub-issue merely because
+an informal task was decomposed. A sub-item deserves independent GitHub tracking
+when it has durable project identity: for example, it can be blocked, assigned,
+reviewed, validated, or completed independently. Cost-driven micro-decomposition,
+diagnostic attempts, launcher revisions, and other execution-only splits remain
+inside the parent Issue/checklist, local plan, or publication report. When an
+already-formal family uses slice suffixes (for example `Ixxx-A` or `LIBxxx-B`),
+preserve that identifier in the owning durable record and GitHub tracking only
+when the slice meets this independent-identity criterion.
 
 Before starting each subsequent slice, re-fetch and inspect the current
 `origin/main` and re-check the assumptions that slice depends on. A previously
@@ -1028,80 +1031,126 @@ Do not bypass this process merely because the original request was phrased as
 "implement X".
 
 
-### Implementation status
+### GitHub-native project coordination
 
-`docs/project/IMPLEMENTATION_STATUS.md` is the canonical repository-level record
-of implementation progress. It records implementation state only; it is not
-part of the Protos language specification.
+GitHub is the live coordination layer for actionable Protos project work. This
+coordination role is deliberately separate from language/design authority and
+from durable repository evidence.
 
-Before starting implementation work, agents MUST inspect that file and verify
-its claims against the current `origin/main`. Historical chat context, prompts,
-previous agent reports, and remembered SHAs are context only and MUST NOT
-override the current repository state.
+The authority split is:
 
-When an implementation item is successfully validated and published, agents
-MUST update its status, implementation version when applicable, closure
-evidence, and dependency transitions in the same change whenever practical.
-Do not mark an item `CLOSED` merely because a patch was generated or statically
-validated.
+- normative Protos semantics remain owned by the applicable files under `spec/`;
+- ratified `Dxxx` and `PLATxxx` decisions remain durable repository records and
+  are not redefined by an Issue, Discussion, reaction, vote, or Project field;
+- `docs/project/IMPLEMENTATION_BLOCKERS.md` remains the durable repository ledger
+  for `Bxxx` normative unblock conditions;
+- GitHub Discussions is the preferred public surface for questions, ideas,
+  investigation, and pre-decision design discussion;
+- GitHub Issues is the canonical live coordination surface for actionable
+  project work such as `Ixxx`, `CLIxxx`, `TOOLxxx`, `PERFxxx`, `DISTxxx`,
+  `DOCxxx`, `LIBxxx`, `AUDxxx`, `LMxxx`, and comparable work families;
+- the `Protos Development` GitHub Project is the canonical live scheduling and
+  prioritization view once an Issue is present there. Until that Project is
+  configured/populated during `GITHUB001`, the Issue itself owns live operational
+  state; and
+- merged/published repository state, owning project records, tests, changelog
+  entries, and Git history retain durable implementation/closure evidence.
 
-When the implementation commit itself also updates the status ledger, use the
-literal closure-evidence marker `SAME_COMMIT`; a commit cannot contain its own
-Git SHA without creating a circular hash dependency. A later maintenance change
-may backfill the concrete SHA.
+No GitHub surface has design-approval authority. A Discussion reaching consensus,
+an Issue being closed, a Project item moving to `Done`, a reaction count, or a PR
+being merged does not satisfy the explicit project-owner approval gate for a
+substantive design decision. Apply the design-authority rules above exactly as
+before.
 
-`IN_PROGRESS` is advisory coordination state, not a repository lock. Agents
-must still inspect current `origin/main` and concurrent changes before modifying
-shared files.
+`docs/project/IMPLEMENTATION_STATUS.md` and `docs/project/OPEN_TASKS.md` are legacy
+migration inputs during `GITHUB001`. They remain useful historical/reconciliation
+evidence until their dedicated migration cleanup is published, but agents MUST
+NOT treat either file as the canonical source of live scheduling/status after
+this cutover and MUST NOT add new actionable work there merely to mirror GitHub.
+Do not delete or bulk-rewrite their historical content opportunistically; their
+retirement/reduction is owned by the bounded `GITHUB001` reconciliation work.
+
+Before starting actionable implementation/project work, agents MUST:
+
+1. inspect the current GitHub Issue for the work item when one exists;
+2. inspect current `origin/main`, the owning durable project/design records, and
+   every applicable blocker/specification source;
+3. reconcile stale Issue claims against repository fact before relying on them;
+   and
+4. preserve the authority split above when updating either side.
+
+GitHub live state is coordination data, not proof that code exists. If an Issue
+or Project field conflicts with current published repository state, use the
+repository/specification to establish what actually exists and then reconcile
+GitHub; do not rewrite durable semantics or implementation evidence merely to
+match stale coordination metadata.
+
+When a bounded implementation slice is successfully published, the publication
+commit MUST still record every durable artifact required by its owning work item
+(for example implementation version/changelog, owning project record, tests,
+blocker transition, or normative decision evidence where applicable). The patch
+launcher itself MUST NOT require GitHub API credentials and MUST NOT create,
+close, relabel, assign, or move Issues/Project items. Only after publication is
+confirmed as successful may the coordinating agent update the corresponding
+GitHub live state. If the agent cannot perform that GitHub write, it must report
+the exact coordination update still required rather than pretending it happened.
+
+The standard isolated direct-to-`main` publication workflow remains valid. Moving
+project coordination to GitHub does not by itself require every agent-generated
+change to use a pull request. Use a PR when the contribution workflow, review
+policy, or explicit user request requires one; otherwise follow the publication
+rules in this file.
+
+Live coordination state such as assignee, `In progress`, `Blocked`, or a Project
+column is advisory coordination, not a repository lock. Multiple agents must
+still re-fetch `origin/main`, inspect overlapping work, and avoid assuming that a
+GitHub assignment grants exclusive ownership of mutable files or semantics.
+
+#### Discussions and actionable work
+
+Use a Discussion while the primary activity is exploration: understanding a
+problem, collecting use cases, comparing alternatives/prior art, or preparing a
+decision packet. Once there is bounded actionable project work with sufficiently
+settled semantics/architecture, track that work in an Issue. A Discussion may
+remain as historical reasoning and link to the resulting Issue/decision record;
+it does not become normative authority.
+
+When an unresolved substantive design choice appears during an Issue, do not
+silently settle it in the Issue. Route the choice through the existing design
+process and explicit approval gate; link the resulting `Dxxx`/`PLATxxx`/other
+repository authority back from the Issue as useful coordination metadata.
 
 #### Tracked work-item families
 
-The canonical project-status ledger MUST cover every formally tracked project
-work-item family present in the repository when that family has project
-lifecycle significance. Family syntax is generic: a formal identifier is an
-uppercase family name followed by three digits (for example `D037`, `B003`,
-`I011`, `CLI003`, `LM001`), optionally followed by a slice suffix such as
-`I011-3`.
+Formal project identifiers retain their existing family meanings. Identifier
+syntax alone does not establish authority: discover existing identifiers and
+family semantics from current repository records and migrated GitHub history,
+not from chat memory or a token that merely looks like `I123`.
 
-Identifier syntax alone does NOT make an occurrence a project work item.
-Discovery must also respect source authority. Canonical project ledgers,
-published specification changelog entries, and formal project/change records may
-own tracked identifiers; incidental examples, benchmarks, test method names,
-design brainstorming, prose mentions, or similarly-shaped identifiers do not.
+New actionable formal work SHOULD have a GitHub Issue when it is allocated. An
+operational identifier MUST NOT exist only in a prompt/chat. When the work also
+has an owning durable repository record, persist the identifier there no later
+than the first repository publication that materially establishes the work.
+Before allocating the next identifier in a family, check both current repository
+records and GitHub Issues so migration/backfill cannot create a collision.
 
-Do not invent identifiers, meanings, lifecycle states, or family semantics from
-chat history. Discover them from the current repository and point to the owning
-source. If an owning source records an item but does not explicitly declare a
-lifecycle state, preserve that uncertainty rather than guessing `OPEN` or
-`CLOSED`.
+Standard Library work uses `LIBxxx`; documentation initiatives use `DOCxxx`;
+official bundled tools use `TOOLxxx`; performance work uses `PERFxxx`; Language
+Maturity uses `LMxxx`; and the other existing families retain their documented
+boundaries. Moving lifecycle coordination to GitHub does not change those family
+semantics and MUST NOT be used to smuggle language-design authority into an
+implementation/project family.
 
-The curated implementation tables and per-item slice ledgers in
-`docs/project/IMPLEMENTATION_STATUS.md` remain the primary status record for
-implementation families already represented there. The auto-discovered registry
-must not create a competing interpretation of those rows.
+Parent Issues remain open until the repository-defined parent outcome is
+actually complete. Use a sub-issue only for a durable independently meaningful
+unit. Temporary patch versions, diagnostics, launcher attempts, and cost-driven
+micro-slices are not separate project work items merely because they were useful
+to an agent while executing the work.
 
-When a new formally tracked family or item is introduced, allocate and persist
-its identifier in a canonical repository source in the same change whenever
-practical. Operational identifiers MUST NOT exist only in prompts or chat
-history. In particular, new Language Maturity work uses the next unused `LMxxx`
-identifier and records it in `docs/project/IMPLEMENTATION_STATUS.md` when
-published.
-
-Standard Library work uses the `LIBxxx` family. It tracks distributable library
-functionality implemented primarily as ordinary Protos modules outside
-`protos/lib/core/`. `LIBxxx` items build on existing language/Core semantics and
-MUST NOT be used to introduce or redefine normative language behavior. If a
-library item exposes a missing Core/runtime semantic prerequisite, resolve and
-track that prerequisite through the applicable specification/design and
-implementation work before the library relies on it.
-
-New Standard Library work uses the next unused `LIBxxx` identifier and records
-it in `docs/project/IMPLEMENTATION_STATUS.md` when the work is formally
-introduced. Core bootstrap/source-placement work under `protos/lib/core/`
-remains tracked by the applicable Core implementation item rather than becoming
-`LIBxxx` work merely because the implementation is written in Protos.
-
-
+Retrospective GitHub backfill MUST identify itself as retrospective. GitHub
+creation/closure timestamps are not historical project dates. Preserve original
+closure commits, versions, durable records, and Git history where available; do
+not fabricate unavailable evidence merely to make an old Issue look complete.
 
 ### Documentation work
 
@@ -1132,9 +1181,10 @@ normative blocker and mark only the affected `DOCxxx` slice blocked. Do not bloc
 independent documentation work that can proceed from already-defined semantics.
 
 New independently tracked documentation work uses the next unused `DOCxxx`
-identifier and records it in `docs/project/IMPLEMENTATION_STATUS.md` plus an
-owning project record when formally introduced. Operational `DOCxxx` identifiers
-MUST NOT exist only in prompts or chat history.
+identifier, creates/uses its GitHub Issue for live coordination, and records it
+in an owning durable project record when the first repository publication
+materially establishes the work. Operational `DOCxxx` identifiers MUST NOT exist
+only in prompts or chat history.
 
 The first tracked documentation initiative is `DOC001 — Protos Programming
 Documentation`, owned by
@@ -1178,9 +1228,10 @@ Filesystem Slice 2B / B006, and manifest Slice 3 sub-slices remain valid
 historical names. The TOOL001 project record maps them into the canonical current
 lifecycle without rewriting commits, changelog entries, or prior evidence.
 
-When promoting a new bundled tool, record the `TOOLxxx` parent and any formalized
-slices in `docs/project/IMPLEMENTATION_STATUS.md` and an owning project record.
-Exploratory tool architecture alone does not reserve an identifier.
+When promoting a new bundled tool, create/use the `TOOLxxx` GitHub Issue for
+live coordination and record the parent plus any durable formalized slices in an
+owning repository project record. Exploratory tool architecture alone does not
+reserve an identifier.
 
 ### Performance work
 
@@ -1196,11 +1247,12 @@ performance improvement requires an observable semantic change, route that
 change through the applicable specification/design process and implementation
 family before treating the resulting implementation as performance work.
 
-New Performance work uses the next unused `PERFxxx` identifier and records it
-in `docs/project/IMPLEMENTATION_STATUS.md` when formally introduced. Benchmark
+New Performance work uses the next unused `PERFxxx` identifier and creates/uses
+its GitHub Issue for live coordination when formally introduced. Benchmark
 workloads, result files, test names, commit messages, or incidental prose do not
 become tracked work items merely because they contain a PERF-shaped token; the
-canonical project ledger owns lifecycle state.
+Issue/Project coordination layer owns live lifecycle state while durable
+repository records retain evidence.
 
 Performance changes that modify executable implementation source under `src/`
 or distributable Protos library source under `protos/lib/` remain subject to the
