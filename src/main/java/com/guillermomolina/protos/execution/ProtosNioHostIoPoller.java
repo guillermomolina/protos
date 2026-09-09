@@ -86,7 +86,7 @@ final class ProtosNioHostIoPoller implements AutoCloseable {
     }
 
     /** Registers one channel with this poller. Must run inside a submitted poller action. */
-    void register(SelectableChannel channel, int interestOps, SelectionHandler handler)
+    SelectionKey register(SelectableChannel channel, int interestOps, SelectionHandler handler)
             throws IOException {
         requirePollerThread();
         Objects.requireNonNull(channel, "channel");
@@ -95,7 +95,7 @@ final class ProtosNioHostIoPoller implements AutoCloseable {
             throw new IllegalArgumentException("invalid channel interest operations");
         }
         channel.configureBlocking(false);
-        channel.register(selector, interestOps, handler);
+        return channel.register(selector, interestOps, handler);
     }
 
     /** Changes one registered channel's readiness interest from its owning poller thread. */

@@ -1,3 +1,16 @@
+## 0.2.306-SNAPSHOT
+
+- Close `I028-E2 — NIO endpoint bridge + non-blocking connectTcp acquisition`
+  under D047/D052 and ratified PLAT003/PLAT006/PLAT007. Add the internal numeric
+  endpoint-to-NIO bridge, Network-owned IPv6 scope hook, non-blocking
+  `SocketChannel` immediate/`OP_CONNECT` acquisition, recognized logical local
+  endpoint materialization and C4 commit/cancel/late-custody handoff. Keep zero
+  post-connect readiness interest for E3 and physical close/custody only; defer
+  byte duplex/half-close, listener/PLAT007, production Network wiring,
+  poller-count/sharding/affinity and native backend work. Specification, public
+  Protos API, native boundary and license terms are unchanged. Implementation
+  version becomes `0.2.306-SNAPSHOT`.
+
 ## 0.2.305-SNAPSHOT
 
 - Ratify `PLAT008 — Truffle replay-site identity across wrappers, rewrites and continuations` after explicit project-owner approval and focused cross-runtime review covering Truffle wrapper semantics, Apple Pkl, TruffleRuby, GraalJS generators, FastR, Sulong, Espresso continuations/JDWP, and GraalPy/Bytecode DSL. Select logical replay-site identity with a zero-allocation delegate-backed representation for the current AST and a representation-independent backend contract: wrappers/probes are transparent to replay identity, completed replay does not re-execute instrumentation, SourceSpan/SourceSection are not identity, no per-node token/registry is added now, live replacements must preserve/remap the logical site, and a future Bytecode DSL may use BytecodeLocation or equivalent. Release `I026-C` from its PLAT008 blocker without changing Protos semantics, executable implementation, Maven implementation version, ContextPolicy or license terms. Documentation/governance only.
