@@ -858,7 +858,7 @@ the already-published implementation commit.
 | LM005 | Concurrent Language Maturity | CLOSED | `SAME_COMMIT` | LM005-A Future, LM005-B Actor, and LM005-C Group/GroupRef conformance/examples/tutorials complete; no runtime or normative feature added. |
 | LM006 | System & Resource Language Maturity | CLOSED | `SAME_COMMIT` | LM006-A/B/C/D/E/F system/resource maturity complete; executable learning material and final cross-slice reconciliation are published; no runtime or normative feature was added by LM006. |
 | LM007 | Object Model Maturity | CLOSED | `SAME_COMMIT` | LM007-A/B/C/D/E are CLOSED after final cross-slice execution of all 16 retained object-model maturity programs, the complete Test Tool corpus and the repository full suite. Findings I027 and I030 are CLOSED under their implementation owners; LM007 owns no runtime or normative feature. |
-| LM008 | Core Language Surface Completeness | IN_PROGRESS | — | LM008-A inventory/methodology is published; LM008-B is IN_PROGRESS with its B1 lexical/literal/separator checkpoint complete, LM008-C/D/E remain READY, and LM008-F is dependency-gated. Audits normative Core -> guest-visible path -> Protos conformance without inventing semantics. |
+| LM008 | Core Language Surface Completeness | IN_PROGRESS | — | LM008-A inventory/methodology and LM008-B grammar/evaluation/binding/callable audit are published; LM008-B is CLOSED with B1-B4 complete and no design/production finding. LM008-C/D/E remain READY and LM008-F is dependency-gated. Audits normative Core -> guest-visible path -> Protos conformance without inventing semantics. |
 
 ### LM005 — Concurrent Language Maturity
 

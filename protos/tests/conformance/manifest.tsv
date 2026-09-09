@@ -584,6 +584,7 @@ core-surface/direct-call-argument-vector-order.protos	integer	123234
 core-surface/default-rest-binding.protos	integer	40204101
 core-surface/trailing-closure-newline-separation.protos	integer	11
 core-surface/spread-non-array-stops-later-argument.protos	boolean	true
+core-surface/super-missing-home-after-argument-vector.protos	integer	12
 control/ensure-body-nonlocal-return-runs-cleanup.protos	integer	112
 control/ensure-cleanup-error-supersedes-normal.protos	boolean	true
 control/ensure-cleanup-invokable-not-closure.protos	error	-

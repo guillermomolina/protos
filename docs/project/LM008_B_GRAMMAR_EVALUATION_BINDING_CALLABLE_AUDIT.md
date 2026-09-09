@@ -1,6 +1,6 @@
 # LM008-B — Grammar, evaluation, binding and callable surface audit
 
-Status: IN_PROGRESS
+Status: CLOSED
 
 Parent: `LM008 — Core Language Surface Completeness`
 
@@ -187,3 +187,75 @@ conformance.
 
 `LM008-B` remains `IN_PROGRESS`. `B4` is next: receiver binding/extraction,
 `super`, non-local return and final B reconciliation.
+
+## B4 checkpoint
+
+Checkpoint state: COMPLETE
+
+Validation class: `TEST_IMPACT`
+
+Normative authorities:
+
+- `spec/semantics/CALLABLES.md` for method-role receiver binding, receiver-bound
+  Closure extraction, captured `methodHome`, return homes and `InvalidReturn`;
+- `spec/semantics/EXECUTION_AND_CONTROL.md` for `super` dispatch, missing-home
+  validation and the distinction between `InvalidSuper` and ordinary lookup
+  failure;
+- `spec/PROTOS_GRAMMAR.md` for the intentionally non-first-class `super` syntax.
+
+B4 deliberately reuses LM007 object-model maturity evidence where that retained
+ordinary-Protos corpus already stresses the same receiver/extraction/`super`
+contracts more deeply than a new LM008 microtest would.
+
+### Evidence matrix
+
+| Surface row | Normative requirement | Retained language-level evidence | Supplementary mechanism evidence | Classification |
+|---|---|---|---|---|
+| Dynamic method receiver | Reaching a Closure-valued slot through a message send invokes it in method role with `this` bound to the original receiver, including inherited lookup | `regression/delegated-method-uses-dynamic-receiver.protos`; LM007-A/B receiver workflows | ordinary send/invocation execution tests | `COVERED` |
+| Nested Closure receiver capture | A Closure created during method execution captures that method receiver lexically and continues to observe the same receiver's live state | `regression/nested-closure-retains-method-receiver-state.protos`; `maturity/object-model/post-capture-deep-shadowing.protos` | Closure activation/capture tests | `COVERED` |
+| Receiver-bound extraction freshness | Reading a selected Closure-valued member as a value creates a fresh Closure identity per successful lookup while preserving the selected Closure state and original receiver | `call/extracted-method-freshness-and-state.protos`; `maturity/object-model/closure-identity-registry-lifecycle.protos` | receiver-bound Closure runtime tests | `COVERED` |
+| Inherited extraction receiver / lookup origin | Extraction through inherited lookup preserves the original receiver and the selected slot owner as `methodHome` | `regression/extracted-inherited-method-keeps-receiver.protos`; `maturity/object-model/deep-extracted-super-chain-mutation.protos` | member-read / bound-Closure tests | `COVERED` |
+| Alias, storage and later re-extraction | Aliasing an extracted Closure preserves that exact object; storing it preserves the stored value, while a later ordinary member read is a new fresh extraction for the new receiver/slot owner | LM007-B `sibling-extractions-repeated-rounds.protos` and LM007-D `closure-identity-registry-lifecycle.protos` | identity/member-read tests | `COVERED` |
+| `super` dynamic receiver and continuation origin | `super.message(...)` keeps the current dynamic receiver while lookup resumes strictly after the current `methodHome` | `regression/super-send-preserves-dynamic-receiver.protos`; `maturity/object-model/deep-extracted-super-chain-mutation.protos` | I020-A execution evidence | `COVERED` |
+| Nested Closure retains `methodHome` for `super` | A Closure created inside a method retains the receiver plus method lookup origin needed by later `super` sends | `regression/nested-closure-super-retains-method-home.protos`; LM007-B deep extracted/nested-super evidence | I020 receiver/methodHome tests | `COVERED` |
+| Missing `methodHome` timing and category | A syntactically valid super send first forms the complete supplied argument vector; only then does missing `methodHome` signal one fresh `InvalidSuper` without lookup/fallback | new `core-surface/super-missing-home-after-argument-vector.protos` proves ordinary+spread argument effects complete first; existing `regression/super-without-method-home-signals-invalid-super.protos` and `regression/super-without-method-home-fresh-invalid-super.protos` prove category/freshness | closed I020-D evidence | `COVERED` |
+| Valid-home exhausted lookup | A present valid method home with no remaining matching slot is ordinary `SlotNotFound`, not `InvalidSuper` | retained I020-A/D language conformance and the ordinary super-send corpus | I020 execution tests | `COVERED` |
+| `super` is not first class | Bare `super` and `super.member` extraction are invalid; only the structural `super.member(arguments...)` send form exists | `lm008-b4-bare-super-rejected.protos` and `lm008-b4-super-extraction-rejected.protos` through the B4 parser-source harness | `ProtosParserSuperSendTest` | `INTENTIONAL_ABSENCE_COVERED` |
+| Non-local return home | `^value` from a nested lexical Closure targets the enclosing active function/method return home rather than the nested Closure call | `call/non-local-return-crosses-nested-call.protos`; `regression/non-local-return-from-default.protos`; retained ensure/while non-local-return propagation cases | return-home execution tests | `COVERED` |
+| Escaped Closure invalid return | If the captured return home has completed, later `^value` signals fresh `InvalidReturn` rather than becoming a local return from the later invocation | `regression/escaped-closure-fresh-invalid-return.protos` with `closure-error-parent-fresh InvalidReturn` expectation | `ProtosReturnNode` / return-home tests | `COVERED` |
+
+The two invalid `super` fixtures remain outside the runtime manifest because the
+required observable behavior is parser rejection before semantic execution.
+
+### B4 audit result
+
+No B4 row requires a new semantic or architectural decision.
+
+No already-normative B4 promise was found missing from the current guest-visible
+implementation. Receiver/extraction/`super` lifetime behavior is already covered
+especially strongly by the closed LM007-B maturity corpus; B4 does not clone that
+evidence merely to put an LM008 prefix on it.
+
+## LM008-B final reconciliation
+
+B1 through B4 are complete.
+
+Across grammar, evaluation, binding, lowering, object/composition syntax,
+Closures, invocation, receiver binding/extraction, `super`, argument/default/rest/
+spread behavior and non-local return:
+
+- no row remains `RUNNABLE_UNCOVERED`, `SPECIFIED_NOT_GUEST_VISIBLE`, or
+  `NEEDS_DESIGN_DECISION` inside LM008-B;
+- no new Dxxx/PLATxxx decision was required;
+- no production implementation defect was found by this B audit;
+- every positive B row classified `COVERED` points to retained ordinary-Protos
+  executable evidence;
+- syntax that Core intentionally withholds is retained as invalid Protos source
+  with the smallest frontend observation harness where runtime execution is not
+  a meaningful observation boundary; and
+- I025, I020 and LM007 evidence is reused rather than duplicated.
+
+`LM008-B` is therefore `CLOSED`. Parent `LM008` remains `IN_PROGRESS`: independent
+fronts `LM008-C`, `LM008-D` and `LM008-E` remain ready, while final `LM008-F`
+continues to depend on their reconciliation and on any implementation owners they
+may expose.
