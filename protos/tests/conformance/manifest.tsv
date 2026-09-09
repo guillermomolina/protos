@@ -574,6 +574,11 @@ core-surface/grammar-integer-literals.protos	integer	1052194
 core-surface/grammar-decimal-float-literal.protos	float-bits	4062c00000000000
 core-surface/grammar-string-literals.protos	boolean	true
 core-surface/grammar-separators-comments-continuation.protos	integer	21
+core-surface/binding-slot-write-exact-rhs.protos	boolean	true
+core-surface/member-assignment-target-before-rhs.protos	integer	12707
+core-surface/indexed-assignment-evaluation-order.protos	integer	12347
+core-surface/binary-operator-evaluation-order.protos	integer	1242
+core-surface/object-parent-composition-evaluation-order.protos	integer	12394
 control/ensure-body-nonlocal-return-runs-cleanup.protos	integer	112
 control/ensure-cleanup-error-supersedes-normal.protos	boolean	true
 control/ensure-cleanup-invokable-not-closure.protos	error	-
