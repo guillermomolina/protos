@@ -152,7 +152,8 @@ public final class ProtosActorValueTransfer {
                     || value instanceof ProtosByteRegionValue
                     || value instanceof ProtosActivation
                     || value instanceof ProtosFileValue
-                    || value instanceof ProtosFilesystemValue) {
+                    || value instanceof ProtosFilesystemValue
+                    || value instanceof ProtosNetworkCapabilityValue) {
                 throw nonTransferable();
             }
 

@@ -163,6 +163,8 @@ public final class ProtosPrelude {
 
     public ProtosObjectValue processPrototype() { return requiredOrdinaryBinding("Process"); }
 
+    public ProtosObjectValue networkPrototype() { return requiredOrdinaryBinding("Network"); }
+
     public ProtosObjectValue textWriterPrototype() {
         return requiredOrdinaryBinding("TextWriter");
     }

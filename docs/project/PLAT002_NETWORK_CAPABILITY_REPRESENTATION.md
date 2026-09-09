@@ -85,10 +85,21 @@ review, not a language-specification revision merely because backend machinery c
 | Slice | Initial status after B1 | Scope / exit condition |
 |---|---|---|
 | I028-B1 | CLOSED | Publish the canonical frozen source-backed `Network` prototype, register PLAT002, and close Core/Prelude/source inventories without creating authority or selecting a TCP backend. |
-| I028-B2 | READY | Implement `ProtosNetworkCapabilityValue` as the selected represented wrapper and make Actor/P non-transferability explicit with focused tests; no bootstrap endowment or TCP operations. |
-| I028-B3 | BLOCKED_BY_DEPENDENCIES | Add optional RootActor initial-module local `network` provisioning with absence/import/new-Actor confinement; no ambient recovery. |
+| I028-B2 | CLOSED | Implemented represented Network wrapper with canonical parent/opaque host target plus explicit Actor/P rejection for the capability and authority-bearing descendants; no bootstrap/TCP. |
+| I028-B3 | READY | Add optional RootActor initial-module local `network` provisioning with absence/import/new-Actor confinement; no ambient recovery. |
 | I028-B4 | BLOCKED_BY_DEPENDENCIES | Retained Protos/JVM conformance for prototype-vs-capability distinction and bootstrap/import/Actor/P authority confinement. |
 | I028-B5 | BLOCKED_BY_DEPENDENCIES | Reconcile B evidence and close the Network capability/bootstrap slice before TCP implementation proceeds. |
+
+## B2 implementation evidence
+
+I028-B2 closes in `0.2.283-SNAPSHOT`. `ProtosNetworkCapabilityValue` implements the existing
+`ProtosRepresentedValue` bridge, stores the exact standard Network prototype selected from the
+provisioning Prelude and retains one opaque non-null host authority target outside the ordinary object graph.
+Actor transfer names the wrapper in its explicit non-transferable resource set; P names it in the explicit
+NonParallel set. Because both copiers traverse delegation parents before copying ordinary descendants, an
+authority-bearing ordinary child is rejected as well. An ordinary child of the authority-free Network prototype
+remains copyable, preserving the PLAT002 prototype/capability distinction. No generic HostCapability base,
+backend interface, RootActor endowment or TCP mechanism is introduced.
 
 ## Deliberately deferred
 

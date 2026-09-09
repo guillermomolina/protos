@@ -29,8 +29,8 @@ normal implementation dependencies established as A-F progresses.
   - **A3 — Actor/P transfer + close A — CLOSED (`0.2.280-SNAPSHOT` / `SAME_COMMIT`; implementation version unchanged):** retained Protos-source conformance proves Actor and P rematerialization preserve canonical IpAddress/IpEndpoint parents, exact recognized frozen state, nested address data, structural equality/hash and fresh destination identities; Actor uses its deterministic harness and P uses existing P runtime-test orchestration because Test Tool direct inspection intentionally requires cooperative idle before Future inspection; no production transfer special case is added.
 - **B — Network capability + bootstrap provisioning — IN_PROGRESS:** PLAT002 selects a represented live Network authority below a canonical source-backed prototype; B1 publishes only that prototype/architecture record and B2-B5 implement the capability, bootstrap confinement and closure without selecting the TCP backend.
   - **B1 — canonical Network prototype — CLOSED (`0.2.282-SNAPSHOT` / `SAME_COMMIT`):** publish frozen source-backed standard `Network` in Prelude, register ratified PLAT002, update exact Core inventories and retain zero authority/backend/native-Closure construction.
-  - **B2 — represented Network capability + transfer confinement — READY:** implement the PLAT002 `ProtosNetworkCapabilityValue` wrapper and explicit Actor/P non-transferability; no RootActor endowment or TCP operations.
-  - **B3 — optional RootActor `network` bootstrap endowment — BLOCKED_BY_DEPENDENCIES:** consume B2 and provision host-granted Network only in the initial RootActor module context, absent when not granted and never imported/ambient.
+  - **B2 — represented Network capability + transfer confinement — CLOSED (`0.2.283-SNAPSHOT` / `SAME_COMMIT`):** implement the PLAT002 represented wrapper with canonical Network parent, opaque host target and explicit Actor/P fail-closed transfer, including authority-bearing descendants; no RootActor endowment or TCP operations.
+  - **B3 — optional RootActor `network` bootstrap endowment — READY:** consume B2 and provision host-granted Network only in the initial RootActor module context, absent when not granted and never imported/ambient.
   - **B4 — ambient/import/Actor/P confinement conformance — BLOCKED_BY_DEPENDENCIES:** prove prototype possession/ordinary derivation cannot manufacture authority and no implicit import/new-Actor/P recovery path exists.
   - **B5 — close B — BLOCKED_BY_DEPENDENCIES:** reconcile retained evidence and close Network capability/bootstrap provisioning before TCP acquisition implementation proceeds.
 - **C — TCP connection + `connectTcp`:** async acquisition, cancellation/late
@@ -42,6 +42,18 @@ normal implementation dependencies established as A-F progresses.
   subdivide mechanically if required.
 - **F — cross-slice conformance/native-boundary closure:** cancellation races,
   late custody, multiple-accept scale evidence and Actor/P non-transferability.
+
+## I028-B2 closure
+
+Published at implementation version `0.2.283-SNAPSHOT`. The PLAT002 represented capability now exists as
+`ProtosNetworkCapabilityValue`: it retains the exact canonical source-backed `Network` prototype and
+one opaque non-null host authority target outside ordinary Protos slots. `ProtosPrelude.networkPrototype()`
+provides the exact standard parent to host/runtime code. Actor and isolated-P copy paths now reject the
+represented capability explicitly, and ordinary descendants whose delegation parent reaches that capability
+fail at the same boundary rather than smuggling authority through graph copy. Conversely, an ordinary object
+whose parent is merely the authority-free `Network` prototype remains ordinary transferable data, proving
+that prototype possession/derivation does not manufacture authority. B2 adds no RootActor `network` slot,
+Network operation, TCP resource/backend, native Closure site or normative specification change. B3 is READY.
 
 ## I028-B1 / PLAT002 publication
 
