@@ -12,30 +12,17 @@
 le: Encoding.UTF16LE.encode("A\u{1f600}")
 be: Encoding.UTF16BE.encode("A\u{1f600}")
 
-(le.size() == 6).and() {
-    (be.size() == 6).and() {
-        (le.at(0) == 65).and() {
-            (le.at(1) == 0).and() {
-                (le.at(2) == 61).and() {
-                    (le.at(3) == 216).and() {
-                        (le.at(4) == 0).and() {
-                            (le.at(5) == 222).and() {
-                                (be.at(0) == 0).and() {
-                                    (be.at(1) == 65).and() {
-                                        (be.at(2) == 216).and() {
-                                            (be.at(3) == 61).and() {
-                                                (be.at(4) == 222).and() {
-                                                    be.at(5) == 0
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+(le.size() == 6) &&
+    (be.size() == 6) &&
+    (le.at(0) == 65) &&
+    (le.at(1) == 0) &&
+    (le.at(2) == 61) &&
+    (le.at(3) == 216) &&
+    (le.at(4) == 0) &&
+    (le.at(5) == 222) &&
+    (be.at(0) == 0) &&
+    (be.at(1) == 65) &&
+    (be.at(2) == 216) &&
+    (be.at(3) == 61) &&
+    (be.at(4) == 222) &&
+    (be.at(5) == 0)

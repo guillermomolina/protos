@@ -26,14 +26,9 @@ b.add(0)
 b.add(127)
 b.add(255)
 
-(a == a).and() {
-    (a != b).and() {
-        (a === a).and() {
-            (a !== b).and() {
-                (a.identityHash() == a.identityHash()).and() {
-                    a.hash() == a.hash()
-                }
-            }
-        }
-    }
-}
+(a == a) &&
+    (a != b) &&
+    (a === a) &&
+    (a !== b) &&
+    (a.identityHash() == a.identityHash()) &&
+    (a.hash() == a.hash())

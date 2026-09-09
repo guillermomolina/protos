@@ -23,10 +23,7 @@ callback: {
 
 result: environment.each(callback)
 
-(result === environment).and() {
-    (seen.at(0) == "A").and() {
-        (seen.at(1) == "\u{e000}").and() {
-            seen.at(2) == "\u{10000}"
-        }
-    }
-}
+(result === environment) &&
+    (seen.at(0) == "A") &&
+    (seen.at(1) == "\u{e000}") &&
+    (seen.at(2) == "\u{10000}")

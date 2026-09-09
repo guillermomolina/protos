@@ -60,6 +60,6 @@ fixture: makeSource(Array(makeBytes(254, 255, 0, 65), null))
 reader: TextReader(fixture.source, Encoding.UTF16BE)
 reader.readText().then((first) => {
     reader.readText().then((second) => {
-        (first == "A").and() { second === null }
+        (first == "A") && (second === null)
     })
 })

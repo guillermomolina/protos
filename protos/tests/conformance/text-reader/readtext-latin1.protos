@@ -60,6 +60,6 @@ fixture: makeSource(Array(makeBytes(0, 128, 255), null))
 reader: TextReader(fixture.source, Encoding.Latin1)
 reader.readText().then((first) => {
     reader.readText().then((second) => {
-        (first == "\u{0}\u{80}\u{ff}").and() { second === null }
+        (first == "\u{0}\u{80}\u{ff}") && (second === null)
     })
 })
