@@ -58,7 +58,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardPathProtocol.java", 6),
                     Map.entry("execution/ProtosStandardIpAddressProtocol.java", 4),
                     Map.entry("execution/ProtosStandardIpEndpointProtocol.java", 4),
-                    Map.entry("execution/ProtosStandardNetworkProtocol.java", 1),
+                    Map.entry("execution/ProtosStandardNetworkProtocol.java", 2),
                     Map.entry("execution/ProtosStandardTcpConnectionProtocol.java", 7),
                     Map.entry("execution/ProtosStandardTcpListenerProtocol.java", 3),
                     Map.entry("execution/ProtosStandardArrayProtocol.java", 5),
@@ -120,7 +120,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
         assertEquals(35, actualCore.size());
-        assertEquals(134, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(135, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
         String inventory =
@@ -252,7 +252,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertNativeSelectors(
                 "Network",
                 prelude.networkPrototype(),
-                Set.of("connectTcp"));
+                Set.of("connectTcp", "listenTcp"));
         assertNativeSelectors(
                 "TcpListener",
                 prelude.tcpListenerPrototypeForRuntime(),

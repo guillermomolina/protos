@@ -27,9 +27,9 @@ import java.util.Objects;
  * provisioning prelude. Actor and P transfer deliberately reject this wrapper and any ordinary
  * graph whose delegation chain reaches it under the initial D047 contract.
  *
- * <p>The authority target has no Protos-visible representation or identity. I028-C4 may interpret
- * that opaque target through its host-neutral connect acquisition contract; the concrete production
- * backend remains outside this value and outside Protos semantics.
+ * <p>The authority target has no Protos-visible representation or identity. the standard Network protocol may interpret
+ * that opaque target through its host-neutral connect/listen acquisition contracts; the concrete
+ * production backend remains outside this value and outside Protos semantics.
  */
 public final class ProtosNetworkCapabilityValue implements ProtosRepresentedValue {
     private final ProtosObjectValue prototype;
