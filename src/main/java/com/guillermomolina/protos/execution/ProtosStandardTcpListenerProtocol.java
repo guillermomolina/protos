@@ -20,18 +20,50 @@ import com.guillermomolina.protos.runtime.*;
 import java.util.List;
 import java.util.Objects;
 
-/** D052 shared protocol bridge for TcpListener observation and Closable lifecycle. */
+/** D052 shared protocol bridge for TcpListener accept, observation and Closable lifecycle. */
 public final class ProtosStandardTcpListenerProtocol {
     private ProtosStandardTcpListenerProtocol() {}
     public static void install(ProtosObjectValue prototype) {
         Objects.requireNonNull(prototype,"prototype");
         if(prototype.parent().orElse(null)!=ProtosObjectValue.rootObject()) throw new IllegalArgumentException("standard TcpListener protocol prototype must delegate directly to Object");
         if(!prototype.isOpen()||!prototype.localSlotsSnapshot().isEmpty()) throw new IllegalStateException("standard TcpListener protocol prototype must be fresh and open");
+        prototype.createLocalSlot("accept",ProtosClosureValue.nativeClosure((activation,supplied)->requireAcceptingListener(activation,supplied,prototype).acceptForRuntime(activation)));
         prototype.createLocalSlot("localPort",ProtosClosureValue.nativeClosure((activation,supplied)->{
             ProtosTcpListenerValue listener=requireListener(activation,supplied,prototype);
             return new ProtosIntegerValue(listener.localPortForRuntime());
         }));
         prototype.createLocalSlot("close",ProtosClosureValue.nativeClosure((activation,supplied)->requireListener(activation,supplied,prototype).closeForRuntime(activation)));
+    }
+
+    public static ProtosTcpConnectionValue materializeAcceptedConnection(
+            ProtosActivation activation,
+            Object resourceState,
+            ProtosObjectValue localEndpoint,
+            ProtosObjectValue remoteEndpoint,
+            ProtosTcpConnectionFlow.Backend connectionBackend) {
+        Objects.requireNonNull(activation,"activation");
+        ProtosPrelude prelude=activation.prelude().orElseThrow();
+        Object endpointBinding=prelude.bindings().readLocalSlot("IpEndpoint").orElse(null);
+        Object addressBinding=prelude.bindings().readLocalSlot("IpAddress").orElse(null);
+        if(!(endpointBinding instanceof ProtosObjectValue endpointPrototype)
+                || !(addressBinding instanceof ProtosObjectValue addressPrototype)
+                || !ProtosStandardIpEndpointProtocol.recognizesValue(localEndpoint,endpointPrototype,addressPrototype)
+                || !ProtosStandardIpEndpointProtocol.recognizesValue(remoteEndpoint,endpointPrototype,addressPrototype)) {
+            throw new IllegalArgumentException("accepted TCP endpoint descriptor is not a recognized IpEndpoint");
+        }
+        return new ProtosTcpConnectionValue(
+                prelude,
+                Objects.requireNonNull(resourceState,"resourceState"),
+                activation,
+                Objects.requireNonNull(connectionBackend,"connectionBackend"),
+                localEndpoint,
+                remoteEndpoint);
+    }
+
+    private static ProtosTcpListenerValue requireAcceptingListener(ProtosActivation activation,List<?> supplied,ProtosObjectValue prototype) {
+        ProtosTcpListenerValue listener=requireListener(activation,supplied,prototype);
+        if(!listener.hasAcceptForRuntime()) throw invalid(activation);
+        return listener;
     }
     private static ProtosTcpListenerValue requireListener(ProtosActivation activation,List<?> supplied,ProtosObjectValue prototype) {
         if(!supplied.isEmpty() || !(activation.receiver() instanceof ProtosTcpListenerValue listener) || listener.parent().orElse(null)!=prototype || !listener.hasProtocolFlowForRuntime()) throw invalid(activation);

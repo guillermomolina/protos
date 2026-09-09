@@ -43,7 +43,7 @@ final class ProtosTcpListenerFoundationTest {
 
         assertSame(ProtosObjectValue.rootObject(), prototype.parent().orElseThrow());
         assertTrue(prototype.isFrozen());
-        assertEquals(java.util.Set.of("localPort", "close"), prototype.localSlotsSnapshot().keySet());
+        assertEquals(java.util.Set.of("accept", "localPort", "close"), prototype.localSlotsSnapshot().keySet());
         assertTrue(prelude.bindings().readLocalSlot("TcpListener").isEmpty());
         assertTrue(prelude.bindings().readLocalSlot("_coreTcpListenerPrototype").isEmpty());
     }

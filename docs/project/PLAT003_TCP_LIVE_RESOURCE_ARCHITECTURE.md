@@ -118,6 +118,10 @@ less-ordinary Protos representation merely as a memory optimization.
 - Backend-specific socket/channel objects in Protos semantics: violates D047 portability and D052
   ordinary-object topology.
 
+## I028-D3 implementation evidence
+
+D3 consumes the ratified listener accept contract at implementation version `0.2.294-SNAPSHOT` without changing PLAT003 or selecting a production backend. `ProtosTcpListenerFlow` admits every `accept()` as a separate `ProtosIoOperation` on the D2 shared lifecycle rather than imposing one pending slot or an implementation-visible accept queue. The backend completion descriptor carries explicit untransferred-resource release custody plus logical local/remote endpoint snapshots and a host-neutral TcpConnection backend; the standard execution bridge validates those endpoints through the existing D048 recognizer before materializing the C-family TcpConnection. Cancellation-handle registration races, Actor termination, listener close cutover, late/duplicate success and backend failure reuse the established Future/I/O machinery. The shared listener protocol grows by one native Closure to three sites; total native boundary becomes 134/35. `listenTcp` and backend selection remain D4/E work.
+
 ## I028-D2 implementation evidence
 
 D2 consumes the ratified listener topology at implementation version `0.2.292-SNAPSHOT` without changing PLAT003 or choosing a network backend. `ProtosStandardTcpListenerProtocol` installs only `localPort` and `close` on the shared hidden family prototype. Operational listeners retain the acquired port and one `ProtosTcpListenerFlow` as opaque runtime state; that flow reuses `ProtosIoLifecycle` for the whole-resource close cutover and is intentionally ready for D3 to admit multiple independent accept operations on the same lifecycle. Observation has no backend effect, resource close remains orthogonal to structural Object close, and no per-listener Closure, event-loop/thread/selector/channel identity, `accept`, or `listenTcp` is introduced. The native boundary becomes 133 sites across 35 providers.

@@ -53,16 +53,41 @@ public final class ProtosTcpListenerValue extends ProtosObjectValue {
         this.flow = new ProtosTcpListenerFlow(this, Objects.requireNonNull(activation, "activation"), Objects.requireNonNull(backend, "backend"));
     }
 
+    /** Runtime construction path for an acquired listener with standardized accept capability. */
+    public ProtosTcpListenerValue(
+            ProtosPrelude prelude,
+            Object resourceState,
+            ProtosActivation activation,
+            ProtosTcpListenerFlow.Backend backend,
+            BigInteger localPort,
+            ProtosTcpListenerFlow.ResultMaterializer resultMaterializer) {
+        super(requirePrototype(prelude));
+        this.resourceState = Objects.requireNonNull(resourceState, "resourceState");
+        this.localPort = requireLocalPort(localPort);
+        this.flow = new ProtosTcpListenerFlow(
+                this,
+                Objects.requireNonNull(activation, "activation"),
+                Objects.requireNonNull(backend, "backend"),
+                Objects.requireNonNull(resultMaterializer, "resultMaterializer"));
+    }
+
+
     /** Opaque host/runtime state. This value is never an ordinary Protos slot. */
     public Object resourceStateForRuntime() {
         return resourceState;
     }
 
     public boolean hasProtocolFlowForRuntime() { return flow != null; }
+    public boolean hasAcceptForRuntime() { return flow != null && flow.acceptsForRuntime(); }
 
     public BigInteger localPortForRuntime() {
         if (localPort == null) throw new IllegalStateException("TcpListener has no acquired local port");
         return localPort;
+    }
+
+    public ProtosFutureValue acceptForRuntime(ProtosActivation activation) {
+        if (!hasAcceptForRuntime()) throw new IllegalStateException("TcpListener has no accept capability");
+        return flow.accept(activation);
     }
 
     public ProtosFutureValue closeForRuntime(ProtosActivation activation) {

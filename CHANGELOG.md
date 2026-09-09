@@ -1,3 +1,7 @@
+## 0.2.294-SNAPSHOT
+
+- Close `I028-D3 — TcpListener concurrent accept + custody` under ratified D047/D052/PLAT003. Add one shared `accept` selector and one independent I/O operation per pending accept on the D2 listener lifecycle, preserving multiple-pending progress without a semantic FIFO or owner-thread affinity. Reuse ordinary Future/Actor cancellation, listener-close cutover and explicit late/duplicate/unmaterializable resource release; validate accepted logical endpoint descriptors through the existing D048 representation bridge before materializing the existing TcpConnection family. Add no `listenTcp`, production backend, endpoint-identity rule or host socket/channel/reactor identity. Native boundary becomes 134 construction sites / 35 providers; release I028-D4. Specification and legacy live ledgers unchanged. Implementation version becomes `0.2.294-SNAPSHOT`.
+
 ## 0.2.293-SNAPSHOT
 
 - Allocate `D053 — PackageExecutionPlan ABI evolution and external-package representation` as `NEEDS_USER_DECISION` after the TOOL001-F2E3 audit exposed that F2D1 had frozen generation 1 as an exact workspace-only ABI. Publish the durable decision record and block F2E3 on D053 before any generation-1 reinterpretation, generation-2 selection, sidecar graph or host-handle design is accepted. Preserve the closed F2E2 same-capture verification/custody boundary and existing package identity constraints. No option is selected by this allocation; no specification, executable implementation, Maven implementation version, lock-format bytes or license terms change.

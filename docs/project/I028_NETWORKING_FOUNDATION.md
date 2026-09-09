@@ -60,12 +60,17 @@ READY to implement `connectTcp`; I028-D will consume the same topology for liste
   `localPort`, concurrent pending accepts, lifecycle/admission behavior.
   - **D1 — ordinary TcpListener resource/prototype + transfer foundation — CLOSED (`0.2.290-SNAPSHOT` / publication commit):** source-owned runtime-only frozen authority-free protocol parent, ordinary OPEN `ProtosTcpListenerValue` with opaque host state and ordinary application slots, exact canonical parent preservation, no public TcpListener Prelude binding, plus explicit Actor/P rejection of the live capability and authority-bearing descendants. No listener selector, acquisition or backend yet; native boundary remains 131/34.
   - **D2 — `localPort` + `close` + shared listener lifecycle — CLOSED (`0.2.292-SNAPSHOT` / publication commit):** install `localPort` and resource `close` exactly once on the shared hidden listener protocol; retain acquired-port observation as synchronous/no-backend work and reuse the standard I/O lifecycle for one close cutover without changing ordinary structural OPEN/CLOSED/FROZEN state. No `accept`, `listenTcp` or production backend yet; native boundary becomes 133/35.
-  - **D3 — `accept()` + concurrent pending accepts + cancellation/late custody — READY:** add independently pending accept operations over the D2 shared lifecycle and materialize accepted TcpConnection custody without selecting a production backend.
+  - **D3 — `accept()` + concurrent pending accepts + cancellation/late custody — CLOSED (`0.2.294-SNAPSHOT` / publication commit):** install one shared `accept` selector; admit each call as an independent operation on the D2 lifecycle, support multiple pending Futures without a semantic FIFO/owner-thread rule, reuse pre-commit/Actor cancellation and close cutover, materialize fresh accepted TcpConnections only from recognized logical endpoint snapshots, and explicitly release late/duplicate/unmaterializable resources. No `listenTcp` or production backend yet; native boundary becomes 134/35.
+  - **D4 — `Network.listenTcp(localRequest)` + exact request validation/capture + listener acquisition — READY:** add the already-specified exact three-slot request preflight and host-neutral listener acquisition without selecting the production backend.
 - **E — production backend portability/scalability:** preserve D047 independently
   of NIO/epoll/kqueue/io_uring/IOCP/Network.framework implementation choices;
   subdivide mechanically if required.
 - **F — cross-slice conformance/native-boundary closure:** cancellation races,
   late custody, multiple-accept scale evidence and Actor/P non-transferability.
+
+## I028-D3 TcpListener concurrent accept/custody
+
+Published at implementation version `0.2.294-SNAPSHOT`. D3 completes the listener's three-selector D052 protocol by adding one shared `accept` bridge. Every invocation admits one independent `ProtosIoOperation` on the same D2 `ProtosIoLifecycle`; there is no runtime-global or listener-head FIFO that serializes otherwise-independent pending accepts, and completion order is whatever the logical listener/backend establishes. Pre-commit Future cancellation, Actor termination and listener-close cutover reuse the existing cancellation/commitment machinery. A successful backend descriptor commits once, reuses the existing D048 endpoint recognizer before constructing the already-standardized TcpConnection family, and explicitly releases every late, duplicate, cancelled or malformed untransferred connection. D3 adds no `listenTcp`, socket/channel/reactor identity, production backend or endpoint `===` strengthening. The audited native boundary becomes 134 sites across 35 providers. D4 is READY.
 
 ## I028-D2 TcpListener localPort/close lifecycle
 
