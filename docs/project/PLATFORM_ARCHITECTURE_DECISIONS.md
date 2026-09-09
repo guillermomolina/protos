@@ -41,6 +41,8 @@ process remains authoritative first.
 | PLAT007 | JVM NIO IPv6-only TCP listener enforcement | RATIFIED | Explicit project-owner approval, 2026-09-09 after mainstream-runtime, Truffle/GraalVM, Apple Pkl, future-backend and scalability review | I028-E/F |
 | PLAT008 | Truffle replay-site identity across wrappers, rewrites and continuations | RATIFIED | Explicit project-owner approval, 2026-09-09 after Truffle + Apple Pkl/TruffleRuby/GraalJS/FastR/Sulong/Espresso/GraalPy Bytecode DSL replay/wrapper/future-scalability review | I026-C/F and future replay backend work |
 | PLAT009 | Host-neutral first-effect attempt gate for asynchronous ByteWritable output | RATIFIED | Explicit project-owner approval, 2026-09-09 after ByteWritable/NIO race analysis plus cross-runtime, Truffle/GraalVM, Apple Pkl and future-scalability review | I028-E3 and future async output backends |
+| PLAT010 | Bounded reusable platform carriers for normal Actor guest execution | RATIFIED | Explicit project-owner approval, 2026-09-09 after exhaustive BEAM/Go/Tokio/Akka/Orleans/Swift/Pony/Kotlin/GHC/OCaml/Loom and Truffle scalability review triggered by PERF001-F #239 | Actor runtime scheduler, #239, PERF001-F |
+| PLAT011 | RuntimeHost-owned shared Actor carrier substrate across local Processes | RATIFIED | Explicit project-owner approval, 2026-09-09 after cross-runtime many-Process, 64/128+ core, NUMA/affinity, blocking-lane and distributed-evolution review | Actor runtime hosting, #239, PERF001-F and future host capacity governance |
 
 See `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md` for the selected topology,
 its non-semantic boundary, alternatives, scaling rationale, invariants, and
@@ -65,3 +67,7 @@ See `docs/project/PLAT007_IPV6_ONLY_TCP_LISTENER_ENFORCEMENT.md` for the public-
 See `docs/project/PLAT008_TRUFFLE_REPLAY_SITE_IDENTITY.md` for the selected logical replay-site identity contract, zero-allocation delegate-backed AST representation, wrapper transparency, live-replacement preservation rule and Bytecode-DSL-compatible future representation boundary.
 
 See `docs/project/PLAT009_BYTEWRITABLE_FIRST_EFFECT_GATE.md` for the host-neutral transient first-effect-attempt gate preserving existing ByteWritable cancellation/commitment semantics across readiness and future completion/native/WASI/brokered backends.
+
+See `docs/project/PLAT010_ACTOR_PLATFORM_CARRIERS.md` for the selected bounded reusable platform-carrier primitive for normal Actor guest execution, the rejection of virtual-thread carriers as the default CPU/guest substrate, and the required repeated 1/2/4/8 production-path evidence before PERF001-F #239 may close.
+
+See `docs/project/PLAT011_RUNTIMEHOST_CARRIER_SUBSTRATE.md` for the selected RuntimeHost-owned bounded carrier-capacity topology across multiple local Processes, its O(runtime CPU capacity) physical-thread scaling target, separate blocking/offload lane boundary, and preserved future work-stealing/NUMA/resource-governance evolution path.
