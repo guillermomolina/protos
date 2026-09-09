@@ -22,6 +22,14 @@ public final class ProtosByteIoFlow {
         /** Number of captured bytes already irreversibly contributed before failure. */
         void failed(int contributedPrefix);
     }
+    /**
+     * Optional PLAT009 bridge for a backend whose first host output attempt may
+     * complete with either zero or positive irreversible contribution.
+     */
+    public interface FirstEffectWriteCompletion extends WriteCompletion {
+        boolean beginFirstEffectAttempt();
+        boolean finishFirstEffectAttempt(boolean contributed);
+    }
     public interface ReceiverCompletion {
         void succeeded();
         void failed();
@@ -354,11 +362,28 @@ public final class ProtosByteIoFlow {
     private void startWrite(Request r){
         if(r.bytes.length==0){if(r.op.commit())r.op.resolve(receiver);finish(r);return;}
         try{
-            setCancellation(r,backend.write(r.bytes.clone(),new WriteCompletion(){
-                public void succeeded(){if(r.op.commit())r.op.resolve(receiver);finish(r);}
+            setCancellation(r,backend.write(r.bytes.clone(),new FirstEffectWriteCompletion(){
+                public boolean beginFirstEffectAttempt(){
+                    boolean begun=r.op.beginFirstEffectAttempt();
+                    if(!begun&&r.op.terminal())finish(r);
+                    return begun;
+                }
+                public boolean finishFirstEffectAttempt(boolean contributed){
+                    boolean proceed=r.op.finishFirstEffectAttempt(contributed);
+                    if(!proceed&&r.op.terminal())finish(r);
+                    return proceed;
+                }
+                public void succeeded(){
+                    if(r.op.firstEffectAttemptInFlight()
+                            && !r.op.finishFirstEffectAttempt(true)){finish(r);return;}
+                    if(!r.op.committed()&&!r.op.commit()){finish(r);return;}
+                    r.op.resolve(receiver);finish(r);
+                }
                 public void failed(int k){
                     if(k<0||k>r.bytes.length)throw new IllegalArgumentException("invalid contributed prefix");
-                    if(k>0)r.op.commit();
+                    if(r.op.firstEffectAttemptInFlight()
+                            && !r.op.finishFirstEffectAttempt(k>0)){finish(r);return;}
+                    if(k>0&&!r.op.committed())r.op.commit();
                     synchronized(ProtosByteIoFlow.this){precedingWriteFailed=true;}
                     failIo(r);finish(r);
                 }

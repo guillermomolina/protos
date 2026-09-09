@@ -62,10 +62,14 @@ READY to implement `connectTcp`; I028-D will consume the same topology for liste
   - **D3 — `accept()` + concurrent pending accepts + cancellation/late custody — CLOSED (`0.2.294-SNAPSHOT` / publication commit):** install one shared `accept` selector; admit each call as an independent operation on the D2 lifecycle, support multiple pending Futures without a semantic FIFO/owner-thread rule, reuse pre-commit/Actor cancellation and close cutover, materialize fresh accepted TcpConnections only from recognized logical endpoint snapshots, and explicitly release late/duplicate/unmaterializable resources. No `listenTcp` or production backend yet; native boundary becomes 134/35.
   - **D4 — `Network.listenTcp(localRequest)` + exact request validation/capture + listener acquisition — CLOSED (`0.2.298-SNAPSHOT` / publication commit):** install the second shared Network acquisition selector; validate/capture exactly local `ipVersion`/`address`/`port` before backend effect, preserve canonical-null address/port request semantics, reuse ordinary Future cancellation/commitment and late-resource custody, and materialize one fresh accept-enabled D1-D3 TcpListener with its acquired non-zero port. No production backend or host wildcard/ephemeral convention is selected; native boundary becomes 135/35.
   - **D5 — integrated D conformance + closure — CLOSED (`0.2.300-SNAPSHOT` / publication commit; implementation version unchanged):** an actual D4-acquired listener retains the ordinary D1 family, D2 observation/close lifecycle, D3 concurrent accept/custody and Actor/P confinement; accepted resources remain the existing C-family TcpConnections. Native-boundary evidence remains 135/35. I028-D is CLOSED.
-- **E — production backend portability/scalability — IN_PROGRESS:** PLAT006/PLAT007/PLAT009 are RATIFIED. E1/E2 are CLOSED; E3 is READY under the host-neutral first-effect-attempt gate. E4/E5 remain dependency-gated.
+- **E — production backend portability/scalability — IN_PROGRESS:** PLAT006/PLAT007/PLAT009 are RATIFIED. E1/E2/E3A are CLOSED; E3B is READY. E4/E5 remain dependency-gated.
   - **E1 — bounded JDK-NIO poller primitive — CLOSED (`0.2.305-SNAPSHOT` / `SAME_COMMIT`):** internal Selector-owning daemon platform thread, concurrent control queue + wakeup, readiness dispatch, poller-thread-only registration/interest mutation, isolated callback failure and idempotent registered-channel release. No TCP operation, Network provisioning, poller-count/sharding policy or native transport.
   - **E2 — NIO endpoint bridge + `connectTcp` acquisition — CLOSED (`0.2.306-SNAPSHOT` / `SAME_COMMIT`):** decode recognized numeric endpoints without DNS, preserve exact IPv4/IPv6 family and Network-owned IPv6 scope, perform non-blocking `SocketChannel` immediate/`OP_CONNECT` acquisition, materialize the actual recognized local endpoint, and hand opaque channel custody through the existing C4 commit/cancel/late-release contract. No duplex byte I/O or production Network wiring yet.
-  - **E3 — production TcpConnection duplex backend — READY under PLAT009:** implement independent non-blocking read/write lanes plus directional shutdown/close over the E2 channel; use PLAT009 transient first-effect arbitration so zero-effect cancellation remains possible while the first positive output contribution commits before any competing zero-effect cutover can publish. No readiness/backend identity becomes observable.
+  - **E3 — production TcpConnection duplex backend — IN_PROGRESS under PLAT009:** E3A closes the generic first-effect gate; E3B is READY for the NIO read lane, E3C remains gated on E3B for non-blocking partial writes, and E3D retains directional shutdown/close plus integrated E3 closure.
+    - **E3A — host-neutral first-effect attempt gate — CLOSED (`0.2.309-SNAPSHOT` / `SAME_COMMIT`):** add transient `ATTEMPTING_FIRST_EFFECT` arbitration to `ProtosIoOperation`, preserve first-arrival cancellation-vs-close cutover ordering, and expose it to asynchronous ByteWritable backends through a richer `WriteCompletion` subtype without migrating existing backends. No socket readiness or TCP byte transfer is implemented by this slice.
+    - **E3B — NIO read lane + independent readiness — READY:** implement non-blocking `SocketChannel` read readiness, EOF/failure handling and bounded rebuffer-compatible cancellation while leaving write readiness untouched.
+    - **E3C — NIO write lane + PLAT009 partial-write arbitration — BLOCKED_BY_E3B:** implement ordered partial `SocketChannel.write` progress with `OP_WRITE` and the E3A first-effect gate.
+    - **E3D — directional shutdown/close + integrated E3 closure — BLOCKED_BY_E3B_E3C:** implement physical half-close coordination, retain shared connection close custody and close E3 with integrated duplex evidence.
   - **E4 — production TcpListener/accept + PLAT007 composite IPv6-only backend — BLOCKED_BY_E3:** implement listener acquisition, concurrent accepts and the ratified all-or-nothing concrete-IPv6 composite listener baseline.
   - **E5 — production Network provisioning/wiring + integrated E closure — BLOCKED_BY_E2_E3_E4:** provision the production authority target through applicable host entry points, retain backend lifecycle/custody evidence and close E before final I028-F conformance.
 - **F — cross-slice conformance/native-boundary closure:** cancellation races,
@@ -127,6 +131,39 @@ enumeration caching, candidate-port retry policy, poller sharding/affinity,
 dynamic rebinding and native-backend mechanism remain deliberately deferred. If
 implementation exposes a new substantive durable choice, stop that slice and
 cross the explicit approval gate before proceeding.
+
+## I028-E3A host-neutral first-effect attempt gate implementation
+
+Closed at implementation version `0.2.309-SNAPSHOT` as the first mechanical consumer of
+ratified PLAT009.
+
+`ProtosIoOperation` now has a transient `ATTEMPTING_FIRST_EFFECT` phase that is
+neither uncommitted terminal eligibility nor irreversible commitment. A
+cancellation or whole-resource close arriving during that phase records the same
+first-arrival cutover precedence that an ordinary uncommitted operation already
+had, but leaves the Future pending until the backend classifies the physical
+attempt. Zero effect applies that pending pre-commit cutover; positive first
+effect commits before the pending zero-effect cutover can rewrite the result.
+
+The operation/lifecycle monitor protects only these bounded transitions. E3A
+performs no host I/O under that monitor and adds no global coordinator, thread,
+poller or backend identity.
+
+`ProtosByteIoFlow` continues to expose the existing `WriteCompletion` contract
+to ordinary backends and additionally supplies a `FirstEffectWriteCompletion`
+subtype for async backends that need PLAT009 arbitration. Existing File, process
+stream and test backends therefore require no migration. Terminal success/failure
+also defensively settles a still-open first-effect attempt from its known
+non-empty-write aftermath.
+
+Focused evidence covers cancellation and close during the uncertainty window,
+positive-effect commitment, zero-effect failure, preservation of
+cancellation-vs-close first-arrival ordering, and continued ordered-flow
+usability after zero-effect cancellation.
+
+E3A adds no NIO read/write readiness, no socket half-close behavior, no
+production Network provisioning, no poller count/sharding/affinity choice and no
+native-boundary change. E3B is READY.
 
 ## I028-E3 first-effect arbitration checkpoint — RELEASED by PLAT009
 

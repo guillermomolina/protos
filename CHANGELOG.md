@@ -1,3 +1,20 @@
+## 0.2.309-SNAPSHOT
+
+- Close `I028-E3A — host-neutral first-effect attempt gate` as the first
+  executable consumer of ratified PLAT009. Add transient
+  `ATTEMPTING_FIRST_EFFECT` arbitration to `ProtosIoOperation`, preserve the
+  existing first-arrival cancellation-versus-close cutover ordering while
+  first-effect aftermath is unknown, commit positive first effect before a
+  competing zero-effect cutover can publish, and keep host I/O outside lifecycle
+  synchronization. Extend the internal ByteWritable backend bridge with an
+  optional `FirstEffectWriteCompletion` subtype while leaving existing backends
+  source-compatible. Add focused lifecycle and ByteWritable bridge evidence.
+  Decompose the remaining E3 work into NIO read, NIO partial-write and integrated
+  directional-shutdown/close slices; no TCP byte readiness, production Network
+  wiring, poller-count/sharding/affinity or native backend is selected here.
+  Specification, public Protos API, native boundary and license terms are
+  unchanged. Implementation version becomes `0.2.309-SNAPSHOT`.
+
 ## 0.2.308-SNAPSHOT
 
 - Close `TOOL001-F2E3B` / GitHub #236 under ratified D053/D056/D057. Add a bundled-Protos generation-2 constructor that consumes each same-capture F2E2-verified external Filesystem only during preflight, loads exact ManifestV1 from that capture, validates PackageId, ReleaseVersion and active LanguageCompatibilityId, rejects external `path` and `[workspace]`, reconciles registry authority/locator/constraint and Git fetch/revision against the canonical root-owned lock, and emits uniform external dependency edges while keeping Filesystem/custody/path/provenance/host authority out of PackageExecutionPlan. Add mixed workspace->registry->{registry,Git} conformance plus fail-closed identity/version/compatibility, D056/D057, provenance, edge-accounting, descriptor, duplicate-edge and dangling-target evidence. Parent F2E3 remains IN_PROGRESS for final verified-custody composition; F2E4 remains dependency-gated. Implementation version becomes `0.2.308-SNAPSHOT`; Core specification, lock format, public run, host V2 adapter/resolver and license terms are unchanged.

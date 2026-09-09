@@ -53,6 +53,112 @@ class ProtosIoLifecycleTest {
     }
 
     @Test
+    void cancellationDuringFirstEffectAttemptWaitsForZeroEffectClassification() throws Exception {
+        var x=fixture();
+        var operation=x.lifecycle.beginOperation(x.activation);
+        var cancellations=new AtomicInteger();
+        operation.onCancellation(cancellations::incrementAndGet);
+
+        assertTrue(operation.beginFirstEffectAttempt());
+        assertTrue(operation.future().cancelRequest());
+        assertEquals(ProtosFutureValue.State.PENDING,operation.future().state());
+        assertEquals(1,cancellations.get());
+
+        assertFalse(operation.finishFirstEffectAttempt(false));
+        assertEquals(ProtosFutureValue.State.CANCELLED,operation.future().state());
+        assertFalse(operation.committed());
+        assertTrue(operation.terminal());
+    }
+
+    @Test
+    void positiveFirstEffectCommitsDespiteCancellationRequestedDuringAttempt() throws Exception {
+        var x=fixture();
+        var operation=x.lifecycle.beginOperation(x.activation);
+        var cancellations=new AtomicInteger();
+        operation.onCancellation(cancellations::incrementAndGet);
+
+        assertTrue(operation.beginFirstEffectAttempt());
+        assertTrue(operation.future().cancelRequest());
+        assertEquals(ProtosFutureValue.State.PENDING,operation.future().state());
+
+        assertTrue(operation.finishFirstEffectAttempt(true));
+        assertTrue(operation.committed());
+        assertEquals(ProtosFutureValue.State.PENDING,operation.future().state());
+        assertEquals(1,cancellations.get());
+        assertTrue(operation.resolve(ProtosNullValue.INSTANCE));
+        assertEquals(ProtosFutureValue.State.RESOLVED,operation.future().state());
+    }
+
+    @Test
+    void closeDuringFirstEffectAttemptWaitsForZeroEffectThenUsesExistingLifecycleError() throws Exception {
+        var x=fixture();
+        var operation=x.lifecycle.beginOperation(x.activation);
+        assertTrue(operation.beginFirstEffectAttempt());
+
+        var close=x.lifecycle.close(x.activation);
+        assertEquals(ProtosFutureValue.State.PENDING,operation.future().state());
+        assertEquals(ProtosFutureValue.State.PENDING,close.state());
+        assertEquals(0,x.releaseStarts.get());
+
+        assertFalse(operation.finishFirstEffectAttempt(false));
+        assertEquals(ProtosFutureValue.State.FAILED,operation.future().state());
+        assertSame(
+                x.prelude.standardErrorPrototype("IOLifecycleError"),
+                operation.future().failedError().orElseThrow().parent().orElseThrow());
+        assertEquals(1,x.releaseStarts.get());
+
+        x.completion.get().succeeded();
+        assertEquals(ProtosFutureValue.State.RESOLVED,close.state());
+    }
+
+    @Test
+    void positiveFirstEffectAfterCloseCommitsAndCloseWaitsForTerminalOperation() throws Exception {
+        var x=fixture();
+        var operation=x.lifecycle.beginOperation(x.activation);
+        assertTrue(operation.beginFirstEffectAttempt());
+
+        var close=x.lifecycle.close(x.activation);
+        assertEquals(0,x.releaseStarts.get());
+
+        assertTrue(operation.finishFirstEffectAttempt(true));
+        assertTrue(operation.committed());
+        assertEquals(ProtosFutureValue.State.PENDING,close.state());
+        assertEquals(0,x.releaseStarts.get());
+
+        assertTrue(operation.resolve(ProtosNullValue.INSTANCE));
+        assertEquals(1,x.releaseStarts.get());
+        x.completion.get().succeeded();
+        assertEquals(ProtosFutureValue.State.RESOLVED,close.state());
+    }
+
+    @Test
+    void firstCutoverArrivalDuringAttemptPreservesCancellationVersusClosePrecedence() throws Exception {
+        var cancellationFirst=fixture();
+        var cancelled=cancellationFirst.lifecycle.beginOperation(cancellationFirst.activation);
+        assertTrue(cancelled.beginFirstEffectAttempt());
+        assertTrue(cancelled.future().cancelRequest());
+        var closeAfterCancellation=cancellationFirst.lifecycle.close(cancellationFirst.activation);
+        assertFalse(cancelled.finishFirstEffectAttempt(false));
+        assertEquals(ProtosFutureValue.State.CANCELLED,cancelled.future().state());
+        cancellationFirst.completion.get().succeeded();
+        assertEquals(ProtosFutureValue.State.RESOLVED,closeAfterCancellation.state());
+
+        var closeFirst=fixture();
+        var failed=closeFirst.lifecycle.beginOperation(closeFirst.activation);
+        assertTrue(failed.beginFirstEffectAttempt());
+        var closeBeforeCancellation=closeFirst.lifecycle.close(closeFirst.activation);
+        assertTrue(failed.future().cancelRequest());
+        assertEquals(ProtosFutureValue.State.PENDING,failed.future().state());
+        assertFalse(failed.finishFirstEffectAttempt(false));
+        assertEquals(ProtosFutureValue.State.FAILED,failed.future().state());
+        assertSame(
+                closeFirst.prelude.standardErrorPrototype("IOLifecycleError"),
+                failed.future().failedError().orElseThrow().parent().orElseThrow());
+        closeFirst.completion.get().succeeded();
+        assertEquals(ProtosFutureValue.State.RESOLVED,closeBeforeCancellation.state());
+    }
+
+    @Test
     void closeCutoverInvokesUncommittedCancellationHookBeforeRelease() throws Exception {
         var p=core();
         var d=new ProtosActorExecutionDomain();
