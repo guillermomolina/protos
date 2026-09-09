@@ -827,7 +827,7 @@ the already-published implementation commit.
 | LM003 | Language interaction conformance | CLOSED | `dbc086ed294ead0b4219952c02b00ec28a492472` | Retrospective canonical ID; delegation, dynamic receiver, captured-state and inherited-call interaction coverage. |
 | LM004 | Extended language interaction conformance | CLOSED | `d390c0c642c5d2d907fcf9e384d1cbc080dd4783` | Retrospective canonical ID; deeper delegation/call-argument interactions plus Map/IdentityMap Path-key behavior. |
 | LM005 | Concurrent Language Maturity | CLOSED | `SAME_COMMIT` | LM005-A Future, LM005-B Actor, and LM005-C Group/GroupRef conformance/examples/tutorials complete; no runtime or normative feature added. |
-| LM006 | System & Resource Language Maturity | IN_PROGRESS | — | closed slices: A/B/C/D/E; READY: F; No runtime or normative feature is owned by LM006. |
+| LM006 | System & Resource Language Maturity | CLOSED | `SAME_COMMIT` | LM006-A/B/C/D/E/F system/resource maturity complete; executable learning material and final cross-slice reconciliation are published; no runtime or normative feature was added by LM006. |
 | LM007 | Object Model Maturity | IN_PROGRESS | — | LM007-A/B/C object-model maturity slices are CLOSED; LM007-D/E remain READY. No runtime or normative feature is owned by LM007. |
 
 ### LM005 — Concurrent Language Maturity
@@ -855,7 +855,7 @@ Closure reconciliation:
 
 ### LM006 — System & Resource Language Maturity
 
-Status: IN_PROGRESS
+Status: CLOSED
 
 Scope: dogfood already-implemented system/resource semantics through portable
 Protos conformance programs, executable examples, tutorials and interaction
@@ -872,7 +872,7 @@ before dependent maturity work proceeds.
 | LM006-C | CLOSED | `SAME_COMMIT` | Process/standard-stream interaction maturity: five Protos programs over the existing host-neutral Process harness prove shared stdin consumption across root/delegated Process capability proxies, root/delegated `ProcessStreams` stdout composition, raw-byte plus text output on one Process binding, independent stream availability, and args/environment-to-text-output composition through the Process-selected Encoding. No ambient Process/default Encoding, runtime/specification/API or implementation-version change. |
 | LM006-D | CLOSED | `SAME_COMMIT` | Resource-lifetime/Error/ensure maturity: five Protos programs over one host-only deterministic File backend cover exact normal-result preservation through owned cleanup, exact body-Error preservation through successful close, later close-IOError precedence over an already-selected body Error, borrowing TextReader failure with outer File ownership, and Future recording/re-signaling of the later cleanup Error. Existing I022/LIB004 cancellation-race coverage is reused rather than duplicated; no runtime/specification/API or implementation-version change. |
 | LM006-E | CLOSED | `SAME_COMMIT` | End-to-end system/resource interaction maturity: six ordinary Protos programs compose explicit Process and Filesystem authority with Path/File, whole-file byte/text I/O, ProcessStreams, Array algorithms, Futures, Errors, mutable Bytes/Encoding and ensure-owned direct File lifetime. One host-only deterministic integration harness provisions resources; no runtime/specification/API or implementation-version change. |
-| LM006-F | READY | — | Executable examples/tutorial progression plus final cross-slice reconciliation and LM006 closure; B-E are CLOSED. |
+| LM006-F | CLOSED | `SAME_COMMIT` | Executable learning material plus final cross-slice reconciliation: standalone Bytes/Encoding and Process examples, an explicitly provisioned Filesystem tutorial, and final A-E regression gates. No runtime/specification/API or implementation-version change. |
 
 LM006-B closure evidence:
 - five Protos sources own the observable expectations; the Java test harness only provisions one deterministic in-memory Filesystem backend and shared selected-resource storage;
@@ -902,6 +902,22 @@ LM006-E closure evidence:
   remains independent of unfinished I026 machinery; no production Java/runtime,
   normative specification, public API, native boundary or implementation version
   is changed.
+
+
+LM006 closure reconciliation:
+- LM006-A/B/C/D/E/F are all CLOSED in repository state after this publication.
+- The bundled Test Tool still owns the complete main conformance manifest, so
+  LM006-A remains covered through whole-corpus selection with no skipped cases;
+  the dedicated Filesystem, Process, resource-lifetime and end-to-end harnesses
+  retain LM006-B/C/D/E coverage.
+- Shipped learning material now demonstrates mutable Bytes/Encoding and Process
+  output through the ordinary standalone CLI, while Filesystem learning material
+  is executed only under a host that explicitly provisions `filesystem`.
+- The ordinary application CLI remains without default Filesystem authority;
+  Process possession does not recover Filesystem authority, and LM006 adds no
+  ambient authority, pairwise interaction rule or dependency on I026.
+- LM006 closes without production Java/runtime, normative specification, public
+  API, native-boundary, license-term or implementation-version change.
 
 Coordination:
 - LM006-B, LM006-C, LM006-D and LM006-E are intentionally independent work

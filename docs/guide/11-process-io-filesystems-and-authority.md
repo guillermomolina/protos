@@ -1501,3 +1501,23 @@ Those normative documents define Protos. This chapter supplies the
 programmer-facing model for keeping Process authority, filesystem authority,
 resource lifetime, data conversion, and asynchronous effects explicit rather
 than smuggling host globals into ordinary code.
+
+## Runnable system/resource learning material
+
+The shipped learning material keeps the authority boundary visible rather than
+making examples work by granting hidden ambient access.
+
+- [`../../protos/examples/io/encoding-and-bytes.protos`](../../protos/examples/io/encoding-and-bytes.protos)
+  is a standalone-CLI cookbook example for the authority-free
+  `Encoding`/mutable-`Bytes` boundary.
+- [`../../protos/tutorials/12-system-resources/01-process-stream-output.protos`](../../protos/tutorials/12-system-resources/01-process-stream-output.protos)
+  runs through the ordinary standalone CLI. It obtains text output only from the
+  bootstrap-local `process` capability and its Process-selected Encoding.
+- [`../../protos/tutorials/12-system-resources/02-filesystem-text-roundtrip.protos`](../../protos/tutorials/12-system-resources/02-filesystem-text-roundtrip.protos)
+  requires a host that explicitly provisions bootstrap-local `filesystem`
+  authority. The LM006 system/resource integration harness executes that source
+  with deterministic confined test storage.
+
+The ordinary standalone application CLI therefore does **not** run the Filesystem
+lesson merely because it can read the lesson's source file. Source discovery and
+filesystem authority remain separate concerns.

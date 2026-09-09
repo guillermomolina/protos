@@ -32,3 +32,4 @@ Print-dependent cookbook programs are maintained as executable standalone-CLI so
 | Spawn an Actor and request a reply | `concurrency/actor-request-reply.protos` |
 | Observe same-sender FIFO with send then request | `concurrency/actor-send-fifo.protos` |
 | Route a request through an ActorGroup | `concurrency/actor-group-request.protos` |
+| Encode, mutate, and decode bytes | `io/encoding-and-bytes.protos` |

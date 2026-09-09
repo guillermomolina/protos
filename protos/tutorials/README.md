@@ -21,3 +21,11 @@ Current progression:
 9. `09-futures/`
 10. `10-actors/`
 11. `11-actor-groups/`
+12. `12-system-resources/`
+
+The system/resource progression deliberately uses two execution hosts:
+`01-process-stream-output.protos` is a normal standalone-CLI lesson, while
+`02-filesystem-text-roundtrip.protos` requires an explicitly provisioned
+bootstrap-local `filesystem` capability and is executed by the LM006 system/resource
+integration harness. The latter is intentionally not made ambient merely for
+tutorial convenience.

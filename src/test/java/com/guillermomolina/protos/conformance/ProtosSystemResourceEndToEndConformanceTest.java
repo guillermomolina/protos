@@ -63,6 +63,8 @@ final class ProtosSystemResourceEndToEndConformanceTest {
     private static final Path STANDARD_LIBRARY = Path.of("protos", "lib");
     private static final Path CASE_ROOT =
             Path.of("protos", "tests", "conformance", "maturity", "system");
+    private static final Path TUTORIAL_ROOT =
+            Path.of("protos", "tutorials", "12-system-resources");
 
     @Test
     void bootstrapDataCollectionsFilesystemAndProcessOutputCompose() throws Exception {
@@ -114,7 +116,30 @@ final class ProtosSystemResourceEndToEndConformanceTest {
                 new byte[0]);
     }
 
+    @Test
+    void explicitFilesystemLearningMaterialRunsWithProvisionedAuthority() throws Exception {
+        runTutorialCase(
+                "02-filesystem-text-roundtrip.protos",
+                Map.of(),
+                new byte[0]);
+    }
+
     private static void runCase(String sourceFile, Map<String, byte[]> initialFiles, byte[] stdin)
+            throws Exception {
+        runSource(CASE_ROOT.resolve(sourceFile), sourceFile, initialFiles, stdin);
+    }
+
+    private static void runTutorialCase(
+            String sourceFile, Map<String, byte[]> initialFiles, byte[] stdin)
+            throws Exception {
+        runSource(TUTORIAL_ROOT.resolve(sourceFile), sourceFile, initialFiles, stdin);
+    }
+
+    private static void runSource(
+            Path sourcePath,
+            String sourceFile,
+            Map<String, byte[]> initialFiles,
+            byte[] stdin)
             throws Exception {
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap()
@@ -180,7 +205,7 @@ final class ProtosSystemResourceEndToEndConformanceTest {
         activation.context().createLocalSlot("stderrCapture", stderrCapture);
 
         String source =
-                Files.readString(CASE_ROOT.resolve(sourceFile), StandardCharsets.UTF_8);
+                Files.readString(sourcePath, StandardCharsets.UTF_8);
         ProtosExecutionOutcome outcome =
                 ProtosRootTaskExecution.execute(
                         new ProtosSourceCompiler().compile(source), activation);
