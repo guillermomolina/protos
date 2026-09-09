@@ -370,7 +370,7 @@ public final class ProtosParallelRuntime {
                 if(memo.containsKey(v))return memo.get(v);
                 ProtosEnvironmentValue y=x.rematerializeForParallelTransfer();memo.put(v,y);return y;
             }
-            if(v instanceof ProtosFutureValue||v instanceof ProtosByteRegionValue||v instanceof ProtosTask||v instanceof ProtosFileValue||v instanceof ProtosFilesystemValue||v instanceof ProtosNetworkCapabilityValue||v instanceof ProtosProcessStandardStreamValue||v instanceof ProtosSendOperationControl||v==null)throw new NonParallel();
+            if(v instanceof ProtosFutureValue||v instanceof ProtosByteRegionValue||v instanceof ProtosTask||v instanceof ProtosFileValue||v instanceof ProtosFilesystemValue||v instanceof ProtosNetworkCapabilityValue||v instanceof ProtosTcpConnectionValue||v instanceof ProtosProcessStandardStreamValue||v instanceof ProtosSendOperationControl||v==null)throw new NonParallel();
             if(memo.containsKey(v))return memo.get(v);
             ProtosPrelude p=a.prelude().orElseThrow();
             if(v==ProtosObjectValue.rootObject()||prelude(v,p))return v;
@@ -417,6 +417,7 @@ public final class ProtosParallelRuntime {
         }
         static boolean prelude(Object v,ProtosPrelude p){
             if(!(v instanceof ProtosObjectValue o)||!o.isFrozen())return false;
+            if(p.isTcpConnectionPrototypeForRuntime(v))return true;
             for(Object x:p.bindings().localSlotsSnapshot().values())if(x==v)return true;return false;
         }
         static void slots(ProtosObjectValue x,ProtosObjectValue y,ProtosActivation a,IdentityHashMap<Object,Object> memo){

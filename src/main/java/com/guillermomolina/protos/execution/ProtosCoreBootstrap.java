@@ -133,6 +133,9 @@ public final class ProtosCoreBootstrap {
                 .load(coreDirectory.resolve("Network.protos"))
                 .call(bootstrapActivation);
         sourceLoader
+                .load(coreDirectory.resolve("TcpConnection.protos"))
+                .call(bootstrapActivation);
+        sourceLoader
                 .load(coreDirectory.resolve("Future.protos"))
                 .call(bootstrapActivation);
         sourceLoader
@@ -284,6 +287,12 @@ public final class ProtosCoreBootstrap {
         ProtosStandardIpEndpointProtocol.install(ipEndpointPrototype, ipAddressPrototype);
         requirePrototype(
                 bootstrapContext, "Network", ProtosObjectValue.rootObject());
+        ProtosObjectValue tcpConnectionPrototype =
+                requirePrototype(
+                        bootstrapContext,
+                        "_coreTcpConnectionPrototype",
+                        ProtosObjectValue.rootObject());
+        bootstrapContext.removeLocalSlot("_coreTcpConnectionPrototype");
         ProtosObjectValue futurePrototype = requirePrototype(bootstrapContext, "Future", ProtosObjectValue.rootObject());
         ProtosStandardFutureProtocol.install(futurePrototype);
         ProtosObjectValue processObject =
@@ -381,20 +390,23 @@ public final class ProtosCoreBootstrap {
                 bufferedBytesPrototype,
                 actorRefPrototype,
                 groupRefPrototype,
-                sendOperationPrototype);
+                sendOperationPrototype,
+                tcpConnectionPrototype);
         validateFrozenStandardGraph(
                 bootstrapContext,
                 preludeBindings,
                 bufferedBytesPrototype,
                 actorRefPrototype,
                 groupRefPrototype,
-                sendOperationPrototype);
+                sendOperationPrototype,
+                tcpConnectionPrototype);
 
         return new ProtosPrelude(
                 preludeBindings,
                 contextPrototype,
                 bufferedBytesPrototype,
-                actorRefPrototype);
+                actorRefPrototype,
+                tcpConnectionPrototype);
     }
 
 

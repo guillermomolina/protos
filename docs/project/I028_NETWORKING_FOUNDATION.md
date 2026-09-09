@@ -50,8 +50,12 @@ READY to implement `connectTcp`; I028-D will consume the same topology for liste
   - **B3 — optional RootActor `network` bootstrap endowment — CLOSED (`0.2.284-SNAPSHOT` / `SAME_COMMIT`):** host-granted represented Network is an optional exact local `network` only on the initial RootActor module/standalone entry; absence is a missing slot, imports/new Actors receive no ambient grant, and Process exposes no Network accessor.
   - **B4 — ambient/import/Actor/P confinement conformance — CLOSED (`0.2.284-SNAPSHOT` / `SAME_COMMIT`; implementation version unchanged):** retained integrated evidence proves the authority-free Network prototype and Process protocol cannot recover a concrete grant, imports/non-root Actors cannot resolve RootActor `network` ambiently, and the exact B3 bootstrap capability is rejected by Actor/P transfer; no production or TCP/backend change.
   - **B5 — close B — CLOSED (`0.2.284-SNAPSHOT` / `SAME_COMMIT`; implementation version unchanged):** reconcile B1-B4 retained evidence, close the represented Network capability/bootstrap boundary, and release I028-C without selecting a TCP backend.
-- **C — TCP connection + `connectTcp` — READY under D052/PLAT003:** ordinary live-resource topology, host-neutral async acquisition, cancellation/late
-  resource custody, independent read/write progress with shared close/half-close lifecycle, and endpoint observation without strengthening endpoint `===` identity.
+- **C — TCP connection + `connectTcp` — IN_PROGRESS under D052/PLAT003:** ordinary live-resource topology, host-neutral async acquisition, cancellation/late resource custody, independent read/write progress with shared close/half-close lifecycle, and endpoint observation without strengthening endpoint `===` identity.
+  - **C1 — ordinary TcpConnection resource/prototype + transfer foundation — CLOSED (`0.2.285-SNAPSHOT` / publication commit):** source-owned runtime-only frozen authority-free protocol parent, ordinary OPEN `ProtosTcpConnectionValue` with opaque host state and ordinary application slots, exact canonical parent preservation, no public TcpConnection Prelude binding, plus explicit Actor/P rejection of the live capability and authority-bearing descendants. No TCP selector, acquisition or backend yet; native boundary remains 123/32.
+  - **C2 — TcpConnection protocol + duplex lifecycle foundation — READY:** install the D052 selector surface once on the shared protocol parent and realize PLAT003 independent read/write lanes with shared close/half-close lifecycle, still host-neutral.
+  - **C3 — endpoint observations — dependency-gated on C2:** `localEndpoint` / `remoteEndpoint` snapshots without strengthening endpoint `===` identity.
+  - **C4 — host-neutral `connectTcp` acquisition — dependency-gated on C2/C3:** validation/capture, Future commitment/cancellation and explicit late-resource custody; no concrete production backend.
+  - **C5 — integrated C conformance + closure — dependency-gated on C1-C4:** receiver-domain, ordinary-object/shadowing, Actor/P, acquisition races and C-level native-boundary reconciliation.
 - **D — TCP listener + `listenTcp`:** exact request snapshot/validation,
   `localPort`, concurrent pending accepts, lifecycle/admission behavior.
 - **E — production backend portability/scalability:** preserve D047 independently
@@ -59,6 +63,21 @@ READY to implement `connectTcp`; I028-D will consume the same topology for liste
   subdivide mechanically if required.
 - **F — cross-slice conformance/native-boundary closure:** cancellation races,
   late custody, multiple-accept scale evidence and Actor/P non-transferability.
+
+## I028-C1 TcpConnection ordinary-resource foundation
+
+Published at implementation version `0.2.285-SNAPSHOT`. C1 consumes D052/PLAT003 without selecting a backend or
+installing TCP operations. Core now owns one runtime-only `_coreTcpConnectionPrototype`: it delegates
+directly to Object, is removed before public Prelude publication, is frozen with the shared standard
+graph, and is retained only by `ProtosPrelude` for runtime resource construction/transfer identity.
+`ProtosTcpConnectionValue` is an ordinary structurally OPEN `ProtosObjectValue` child of that exact
+prototype, stores opaque non-slot runtime resource state, and remains fully available for ordinary
+application local slots. Actor/P transfer rejects the concrete live resource explicitly and rejects an
+ordinary descendant by recursively reaching that parent authority, while an authority-free ordinary
+descendant of the hidden frozen protocol prototype remains transferable and keeps the canonical
+prototype parent. The public Prelude gains no `TcpConnection` binding, no TCP selector or `connectTcp`
+exists yet, and no socket/channel/event-loop/backend is selected. Native Closure inventory remains
+123 sites across 32 providers. C2 is READY.
 
 ## I028-B5 / I028-B closure
 

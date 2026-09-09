@@ -118,6 +118,17 @@ less-ordinary Protos representation merely as a memory optimization.
 - Backend-specific socket/channel objects in Protos semantics: violates D047 portability and D052
   ordinary-object topology.
 
+## I028-C1 implementation evidence
+
+C1 publishes the first concrete consumer of this architecture at implementation version `0.2.285-SNAPSHOT`. The
+JVM wrapper is `ProtosTcpConnectionValue extends ProtosObjectValue`; its immediate parent is one
+source-owned runtime-only standard protocol prototype retained outside public Prelude bindings, and
+its opaque resource-state field is not a Protos slot. The protocol prototype is frozen and shared
+canonically across Actor/P snapshot boundaries, while the concrete wrapper and ordinary graphs whose
+parent chain reaches it are rejected explicitly. No selector is installed yet, so C1 does not create
+per-resource protocol closures or prematurely choose the duplex scheduler/backend. C2 is the bounded
+consumer that will attach the ratified protocol/lifecycle surface.
+
 ## Deliberately deferred
 
 PLAT003 selects no concrete production network backend, reactor count, polling/completion API, thread

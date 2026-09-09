@@ -24,6 +24,7 @@ public final class ProtosPrelude {
     private final ProtosObjectValue contextPrototype;
     private final ProtosObjectValue runtimeBytesPrototype;
     private final ProtosObjectValue runtimeActorRefPrototype;
+    private final ProtosObjectValue runtimeTcpConnectionPrototype;
 
     public ProtosPrelude(
             ProtosObjectValue bindings,
@@ -36,11 +37,34 @@ public final class ProtosPrelude {
             ProtosObjectValue contextPrototype,
             ProtosObjectValue runtimeBytesPrototype,
             ProtosObjectValue runtimeActorRefPrototype) {
+        this(
+                bindings,
+                contextPrototype,
+                runtimeBytesPrototype,
+                runtimeActorRefPrototype,
+                null);
+    }
+
+    public ProtosPrelude(
+            ProtosObjectValue bindings,
+            ProtosObjectValue contextPrototype,
+            ProtosObjectValue runtimeBytesPrototype,
+            ProtosObjectValue runtimeActorRefPrototype,
+            ProtosObjectValue runtimeTcpConnectionPrototype) {
         this.bindings = Objects.requireNonNull(bindings, "bindings");
         this.contextPrototype =
                 Objects.requireNonNull(contextPrototype, "contextPrototype");
         this.runtimeBytesPrototype = runtimeBytesPrototype;
         this.runtimeActorRefPrototype = runtimeActorRefPrototype;
+        this.runtimeTcpConnectionPrototype = runtimeTcpConnectionPrototype;
+
+        if (runtimeTcpConnectionPrototype != null
+                && (!runtimeTcpConnectionPrototype.isFrozen()
+                        || runtimeTcpConnectionPrototype.parent().orElse(null)
+                                != ProtosObjectValue.rootObject())) {
+            throw new IllegalArgumentException(
+                    "runtime TcpConnection prototype must be a frozen direct child of Object");
+        }
 
         if (!bindings.isFrozen()) {
             throw new IllegalArgumentException("prelude bindings must be frozen");
@@ -185,6 +209,20 @@ public final class ProtosPrelude {
                     "this prelude does not retain the standard runtime ActorRef prototype");
         }
         return runtimeActorRefPrototype;
+    }
+
+    /** Runtime-only exact TcpConnection protocol prototype omitted from public Prelude bindings. */
+    public ProtosObjectValue tcpConnectionPrototypeForRuntime() {
+        if (runtimeTcpConnectionPrototype == null) {
+            throw new IllegalStateException(
+                    "this prelude does not retain the standard runtime TcpConnection prototype");
+        }
+        return runtimeTcpConnectionPrototype;
+    }
+
+    /** Nullable-safe identity test used only by isolation transfer machinery. */
+    public boolean isTcpConnectionPrototypeForRuntime(Object candidate) {
+        return runtimeTcpConnectionPrototype != null && candidate == runtimeTcpConnectionPrototype;
     }
 
     public ProtosObjectValue arrayPrototype() {

@@ -153,7 +153,8 @@ public final class ProtosActorValueTransfer {
                     || value instanceof ProtosActivation
                     || value instanceof ProtosFileValue
                     || value instanceof ProtosFilesystemValue
-                    || value instanceof ProtosNetworkCapabilityValue) {
+                    || value instanceof ProtosNetworkCapabilityValue
+                    || value instanceof ProtosTcpConnectionValue) {
                 throw nonTransferable();
             }
 
@@ -306,7 +307,9 @@ public final class ProtosActorValueTransfer {
         }
 
         private boolean isSharedStandardObject(ProtosObjectValue object) {
-            if (object == ProtosObjectValue.rootObject() || object == prelude.bindings()) {
+            if (object == ProtosObjectValue.rootObject()
+                    || object == prelude.bindings()
+                    || prelude.isTcpConnectionPrototypeForRuntime(object)) {
                 return true;
             }
             for (Object binding : prelude.bindings().localSlotsSnapshot().values()) {
