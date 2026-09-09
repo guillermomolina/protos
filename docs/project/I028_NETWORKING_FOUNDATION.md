@@ -3,7 +3,7 @@
 Status: **IN_PROGRESS**
 Normative dependencies: D047 / specification revision `0.1.388` — RATIFIED; D048 / specification revision `0.1.391` — RATIFIED
 Additional C/D topology dependency: D052 / specification revision `0.1.393` — RATIFIED
-Platform architecture dependencies: PLAT002 — RATIFIED; PLAT003 — RATIFIED; PLAT006 — RATIFIED; PLAT007 — RATIFIED
+Platform architecture dependencies: PLAT002 — RATIFIED; PLAT003 — RATIFIED; PLAT006 — RATIFIED; PLAT007 — RATIFIED; PLAT009 — RATIFIED
 Consumer: `LIB005 — Networking`
 
 ## Purpose
@@ -62,10 +62,10 @@ READY to implement `connectTcp`; I028-D will consume the same topology for liste
   - **D3 — `accept()` + concurrent pending accepts + cancellation/late custody — CLOSED (`0.2.294-SNAPSHOT` / publication commit):** install one shared `accept` selector; admit each call as an independent operation on the D2 lifecycle, support multiple pending Futures without a semantic FIFO/owner-thread rule, reuse pre-commit/Actor cancellation and close cutover, materialize fresh accepted TcpConnections only from recognized logical endpoint snapshots, and explicitly release late/duplicate/unmaterializable resources. No `listenTcp` or production backend yet; native boundary becomes 134/35.
   - **D4 — `Network.listenTcp(localRequest)` + exact request validation/capture + listener acquisition — CLOSED (`0.2.298-SNAPSHOT` / publication commit):** install the second shared Network acquisition selector; validate/capture exactly local `ipVersion`/`address`/`port` before backend effect, preserve canonical-null address/port request semantics, reuse ordinary Future cancellation/commitment and late-resource custody, and materialize one fresh accept-enabled D1-D3 TcpListener with its acquired non-zero port. No production backend or host wildcard/ephemeral convention is selected; native boundary becomes 135/35.
   - **D5 — integrated D conformance + closure — CLOSED (`0.2.300-SNAPSHOT` / publication commit; implementation version unchanged):** an actual D4-acquired listener retains the ordinary D1 family, D2 observation/close lifecycle, D3 concurrent accept/custody and Actor/P confinement; accepted resources remain the existing C-family TcpConnections. Native-boundary evidence remains 135/35. I028-D is CLOSED.
-- **E — production backend portability/scalability — IN_PROGRESS:** PLAT006/PLAT007 are RATIFIED. E1/E2 are CLOSED; E3 is READY for the connected TcpConnection duplex backend. E4/E5 remain dependency-gated.
+- **E — production backend portability/scalability — IN_PROGRESS:** PLAT006/PLAT007/PLAT009 are RATIFIED. E1/E2 are CLOSED; E3 is READY under the host-neutral first-effect-attempt gate. E4/E5 remain dependency-gated.
   - **E1 — bounded JDK-NIO poller primitive — CLOSED (`0.2.305-SNAPSHOT` / `SAME_COMMIT`):** internal Selector-owning daemon platform thread, concurrent control queue + wakeup, readiness dispatch, poller-thread-only registration/interest mutation, isolated callback failure and idempotent registered-channel release. No TCP operation, Network provisioning, poller-count/sharding policy or native transport.
   - **E2 — NIO endpoint bridge + `connectTcp` acquisition — CLOSED (`0.2.306-SNAPSHOT` / `SAME_COMMIT`):** decode recognized numeric endpoints without DNS, preserve exact IPv4/IPv6 family and Network-owned IPv6 scope, perform non-blocking `SocketChannel` immediate/`OP_CONNECT` acquisition, materialize the actual recognized local endpoint, and hand opaque channel custody through the existing C4 commit/cancel/late-release contract. No duplex byte I/O or production Network wiring yet.
-  - **E3 — production TcpConnection duplex backend — READY:** implement independent non-blocking read/write lanes plus directional shutdown/close over the E2 channel without exposing readiness identity.
+  - **E3 — production TcpConnection duplex backend — READY under PLAT009:** implement independent non-blocking read/write lanes plus directional shutdown/close over the E2 channel; use PLAT009 transient first-effect arbitration so zero-effect cancellation remains possible while the first positive output contribution commits before any competing zero-effect cutover can publish. No readiness/backend identity becomes observable.
   - **E4 — production TcpListener/accept + PLAT007 composite IPv6-only backend — BLOCKED_BY_E3:** implement listener acquisition, concurrent accepts and the ratified all-or-nothing concrete-IPv6 composite listener baseline.
   - **E5 — production Network provisioning/wiring + integrated E closure — BLOCKED_BY_E2_E3_E4:** provision the production authority target through applicable host entry points, retain backend lifecycle/custody evidence and close E before final I028-F conformance.
 - **F — cross-slice conformance/native-boundary closure:** cancellation races,
@@ -127,6 +127,41 @@ enumeration caching, candidate-port retry policy, poller sharding/affinity,
 dynamic rebinding and native-backend mechanism remain deliberately deferred. If
 implementation exposes a new substantive durable choice, stop that slice and
 cross the explicit approval gate before proceeding.
+
+## I028-E3 first-effect arbitration checkpoint — RELEASED by PLAT009
+
+PLAT009 is RATIFIED after explicit project-owner approval following the concrete
+E3 partial-NIO-write race analysis and expanded review across mainstream async
+runtimes plus the Truffle/GraalVM ecosystem, including Apple Pkl.
+
+The normative ByteWritable contract is unchanged. The runtime may transiently
+mark an operation as attempting its first irreversible effect without committing
+it. During that uncertainty window, cancellation/Actor termination/lifecycle
+cutover may be recorded and may request best-effort backend cancellation, but a
+zero-effect terminal outcome cannot be published until the host aftermath is
+known sufficiently to preserve the existing contract.
+
+An attempt proven to have zero irreversible effect returns to pre-commit
+arbitration, where existing cancellation/lifecycle rules decide any pending
+cutover. An attempt proven to have made the first positive irreversible
+contribution commits before any competing zero-effect cutover can rewrite its
+outcome. Terminal success/failure remains separate and later partial output may
+continue under the existing hidden contiguous-prefix rules.
+
+Host I/O is never performed while holding lifecycle synchronization merely to
+preserve this gate. State is local to the already-admitted operation/resource
+lifecycle, adds no global coordinator/thread, and exposes no selector/thread/fd/
+native-request/backend identity. The same boundary remains usable by readiness,
+completion, native, FFM, WASI and brokered backends.
+
+PLAT009 defines no new observable precedence among cancellation, lifecycle
+close, Actor termination and failure. Exact Java representation, batching,
+buffer policy, poller/sharding/affinity and native-backend choice remain
+deliberately deferred.
+
+I028-E3 is released to bounded implementation. If implementation exposes another
+substantive semantic or durable architecture choice, stop that slice and cross
+the explicit approval gate before proceeding.
 
 ## I028-E2 NIO endpoint bridge + non-blocking connect acquisition
 
