@@ -184,6 +184,11 @@ public final class ProtosActorExecutionDomain {
         actorTerminationBegun();
     }
 
+    /** Runtime/bootstrap hook for registering an ordinary pending non-task Future. */
+    public void registerActorNonTaskFutureForRuntime(ProtosFutureValue future) {
+        registerActorNonTaskFuture(future);
+    }
+
     void registerActorNonTaskFuture(ProtosFutureValue future) {
         Objects.requireNonNull(future, "future");
         boolean cancelNow;

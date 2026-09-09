@@ -99,13 +99,26 @@ public final class ProtosExactExecutionFacility {
                 .context()
                 .createLocalSlot(
                         slotName,
-                        ProtosClosureValue.nativeClosure(
+                        exactExecutionBootstrapClosure(
                                 (callActivation, arguments) ->
                                         execute(
                                                 callActivation,
                                                 arguments,
                                                 executionPrelude,
                                                 runtimeHost)));
+    }
+
+
+    /**
+     * Shared native-closure construction site for the exact-execution bootstrap family.
+     *
+     * <p>This remains inside the already-audited non-Core exact-execution boundary. Callers in
+     * this package may supply behavior, but they do not create an additional native provider.
+     */
+    static ProtosClosureValue exactExecutionBootstrapClosure(
+            ProtosNativeClosureBody body) {
+        return ProtosClosureValue.nativeClosure(
+                Objects.requireNonNull(body, "body"));
     }
 
 
@@ -199,19 +212,8 @@ public final class ProtosExactExecutionFacility {
                                 () ->
                                         new IllegalStateException(
                                                 "exact execution observation requires caller Core prelude"));
-        ProtosEncodingValue utf8 = utf8(executionPrelude);
         ProtosCapturedProcessExecution.Request request =
-                new ProtosCapturedProcessExecution.Request(
-                        executionPrelude,
-                        exactSource(source.value(), "<exact-execution>"),
-                        List.of(),
-                        exactEnvironmentDomain(),
-                        List.of(),
-                        new byte[0],
-                        utf8,
-                        utf8,
-                        utf8,
-                        null);
+                executionRequest(source, executionPrelude);
         ProtosCapturedProcessExecution.Result result =
                 runtimeHost == null
                         ? ProtosCapturedProcessExecution.execute(request)
@@ -264,13 +266,32 @@ public final class ProtosExactExecutionFacility {
         return observation(result, caller, callerPrelude, executionPrelude);
     }
 
+    static ProtosCapturedProcessExecution.Request executionRequest(
+            ProtosStringValue source,
+            ProtosPrelude executionPrelude) {
+        Objects.requireNonNull(source, "source");
+        Objects.requireNonNull(executionPrelude, "executionPrelude");
+        ProtosEncodingValue utf8 = utf8(executionPrelude);
+        return new ProtosCapturedProcessExecution.Request(
+                executionPrelude,
+                exactSource(source.value(), "<exact-execution>"),
+                List.of(),
+                exactEnvironmentDomain(),
+                List.of(),
+                new byte[0],
+                utf8,
+                utf8,
+                utf8,
+                null);
+    }
+
     private static Source exactSource(String characters, String name) {
         return Source.newBuilder(ProtosLanguage.ID, characters, name)
                 .mimeType(ProtosLanguage.MIME_TYPE)
                 .build();
     }
 
-    private static ProtosObjectValue observation(
+    static ProtosObjectValue observation(
             ProtosCapturedProcessExecution.Result result,
             ProtosActivation caller,
             ProtosPrelude prelude,
@@ -378,7 +399,7 @@ public final class ProtosExactExecutionFacility {
         };
     }
 
-    private static ProtosSignalException ordinaryError(
+    static ProtosSignalException ordinaryError(
             ProtosActivation activation) {
         return new ProtosSignalException(
                 ProtosCoreErrors.newError(activation));
