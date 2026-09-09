@@ -55,7 +55,7 @@ gate before dependent maturity work continues.
 | `LM007-A` | CLOSED | Integrated object workflows combining delegation, local slot mutation, nested/extracted receiver-preserving Closures, Error handling and Array/Map/IdentityMap transport. |
 | `LM007-B` | CLOSED | Deep prototype chains, method extraction and mutation after capture/extraction, including repeated invocation, retained `super` lookup origin, post-capture local shadowing, ancestor mutation, and method-slot replacement. |
 | `LM007-C` | CLOSED | Error boundaries across delegated methods and collection callbacks, including whole-operation unwind, repeated per-callback recovery, selected-handler deactivation/re-signal, exact Error identity and nested delegation-category matching. |
-| `LM007-D` | READY | Long-form registries/pipelines with repeated state transitions and equality/identity-sensitive collection lookup. |
+| `LM007-D` | CLOSED | Long-form registries/pipelines keep equality-keyed and identity-keyed state coherent across repeated insert/replace/remove/reinsert transitions, numeric family distinctions, exact Closure identities and stable custom equality/hash keys over mutable receivers. |
 | `LM007-E` | READY | Reconcile findings, reduce failures to minimal regressions, document gaps and close LM007 only after the integrated invariants remain stable. |
 
 ## LM007-A coverage
@@ -93,6 +93,19 @@ Deterministic integer expectations are `2613462350255427`, `66155101`,
 
 Deterministic integer expectations are `77321110`, `109422222`, `662111110`,
 and `696532211` respectively.
+
+## LM007-D coverage
+
+| Program | Registry / transition pressure | Equality / identity / receiver pressure |
+|---|---|---|
+| `dual-index-entity-registry-transitions.protos` | One logical `Map` and one exact `IdentityMap` track three mutable delegated entities across replacement, remove/reinsert and five collection-driven transitions | Equal String logical keys intentionally replace routing while all three exact object identities remain independently addressable; stored receiver-bound readers observe later local mutation |
+| `numeric-equality-identity-registry-transitions.protos` | Five staged actions repeatedly insert, replace, remove and reinsert ordinary Integer `1` and Float `1.0` | Normal `Map` follows numeric cross-family `==`/hash coherence and therefore holds one logical key; `IdentityMap` follows `===` and therefore retains the two numeric-family identities separately |
+| `closure-identity-registry-lifecycle.protos` | A normal `Map` routes logical names to extracted callables while an `IdentityMap` separately records exact extracted Closure identities across alias replacement, fresh extraction and removal | Aliasing one extracted Closure preserves exact identity; independent extraction is fresh; all retained callables remain bound to the original receiver and observe later receiver mutation when invoked through the logical registry |
+| `custom-equality-dual-map-live-state.protos` | Equal-but-distinct mutable entities move through logical replacement/removal/reinsertion while exact entries remain stable | `id` is the stable complete equality/hash key; `==` is introduced from the ordinary `equals` Closure through `alias("equals", "==")` while unrelated `state` mutates; `Map` collapses equal ids, `IdentityMap` preserves individual entities, and stored receiver-bound readers expose the current live state |
+
+Deterministic integer expectations are `117079030032006238`,
+`15040040300250010217`, `100030030006020111`, and
+`66077066015042028028020311` respectively.
 
 ## Closure criteria
 

@@ -670,3 +670,7 @@ object-structural/alias-publishes-symbolic-selector.protos	integer	7
 object-structural/alias-rejects-local-conflicts.protos	integer	111
 object-structural/without-local-view-is-fresh.protos	integer	6
 object-structural/without-does-not-delegate.protos	integer	1
+maturity/object-model/dual-index-entity-registry-transitions.protos	integer	117079030032006238
+maturity/object-model/numeric-equality-identity-registry-transitions.protos	integer	15040040300250010217
+maturity/object-model/closure-identity-registry-lifecycle.protos	integer	100030030006020111
+maturity/object-model/custom-equality-dual-map-live-state.protos	integer	66077066015042028028020311
