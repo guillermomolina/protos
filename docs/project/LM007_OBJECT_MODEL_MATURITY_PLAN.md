@@ -1,6 +1,6 @@
 # LM007 — Object Model Maturity
 
-Status: IN_PROGRESS
+Status: CLOSED
 
 ## Objective
 
@@ -56,7 +56,7 @@ gate before dependent maturity work continues.
 | `LM007-B` | CLOSED | Deep prototype chains, method extraction and mutation after capture/extraction, including repeated invocation, retained `super` lookup origin, post-capture local shadowing, ancestor mutation, and method-slot replacement. |
 | `LM007-C` | CLOSED | Error boundaries across delegated methods and collection callbacks, including whole-operation unwind, repeated per-callback recovery, selected-handler deactivation/re-signal, exact Error identity and nested delegation-category matching. |
 | `LM007-D` | CLOSED | Long-form registries/pipelines keep equality-keyed and identity-keyed state coherent across repeated insert/replace/remove/reinsert transitions, numeric family distinctions, exact Closure identities and stable custom equality/hash keys over mutable receivers. |
-| `LM007-E` | READY | Reconcile findings, reduce failures to minimal regressions, document gaps and close LM007 only after the integrated invariants remain stable. |
+| `LM007-E` | CLOSED | Final cross-slice reconciliation re-executes all 16 retained A-D programs plus the complete Test Tool corpus and full repository suite; records I027/I030 as closed implementation findings, retains their focused regressions, accounts for rejected test-author assumptions and closes LM007 with no unresolved semantic gap or new surface. |
 
 ## LM007-A coverage
 
@@ -106,6 +106,31 @@ and `696532211` respectively.
 Deterministic integer expectations are `117079030032006238`,
 `15040040300250010217`, `100030030006020111`, and
 `66077066015042028028020311` respectively.
+
+## LM007-E reconciliation
+
+LM007 closes by reconciliation rather than by adding a seventeenth case. The A-D
+corpus already spans the intended interaction matrix; E validates that matrix as
+one retained body of evidence and accounts for every failure encountered while
+building it.
+
+| Finding | Classification | Resolution / retained evidence |
+|---|---|---|
+| LM007-A nested bare call lost the original dynamic receiver after lexical lookup exhaustion | Implementation defect against closed receiver/member-read semantics | `I027` CLOSED; its minimal ordinary-Protos receiver-fallback regression remains outside LM007 while A's integrated workflow remains retained |
+| LM007-D first draft assigned `transitions` where the receiver had no local slot | Invalid maturity-test assumption | Test corrected to give each entity receiver-local transition state; no language/runtime/specification change and the intended expectation remained unchanged |
+| LM007-D first custom-equality draft attempted `==:` slot creation | Invalid maturity-test syntax assumption | Test uses already-defined structural `alias("equals", "==")`; no grammar/specification change and the intended expectation remained unchanged |
+| LM007-D then exposed that standard `Object.alias/without` were specified but not published | Implementation defect against closed structural-view semantics | `I030` CLOSED with focused ordinary-Protos `alias`/`without` regressions and native-boundary guards; the published D workflow consumes that repaired surface |
+| LM007-B / LM007-C | No implementation or semantic gap | Published integrated programs passed under existing receiver/`super`/Error/handler contracts |
+
+Final retained maturity inventory: **16 ordinary-Protos programs**, four in each
+of A, B, C and D. E adds no new source, expectation or host harness. All retained
+expectations remain owned by already-closed semantics; there is no unresolved
+Dxxx decision or LM007-owned runtime follow-up.
+
+The E publication gate executes every one of those 16 programs directly, then
+runs central Test Tool corpus ownership/bootstrap and the complete Maven suite on
+the same publication candidate. Only that validated candidate may record LM007
+as CLOSED.
 
 ## Closure criteria
 

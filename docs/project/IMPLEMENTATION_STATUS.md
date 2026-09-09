@@ -831,7 +831,7 @@ the already-published implementation commit.
 | LM004 | Extended language interaction conformance | CLOSED | `d390c0c642c5d2d907fcf9e384d1cbc080dd4783` | Retrospective canonical ID; deeper delegation/call-argument interactions plus Map/IdentityMap Path-key behavior. |
 | LM005 | Concurrent Language Maturity | CLOSED | `SAME_COMMIT` | LM005-A Future, LM005-B Actor, and LM005-C Group/GroupRef conformance/examples/tutorials complete; no runtime or normative feature added. |
 | LM006 | System & Resource Language Maturity | CLOSED | `SAME_COMMIT` | LM006-A/B/C/D/E/F system/resource maturity complete; executable learning material and final cross-slice reconciliation are published; no runtime or normative feature was added by LM006. |
-| LM007 | Object Model Maturity | IN_PROGRESS | — | LM007-A/B/C/D object-model maturity slices are CLOSED; LM007-E remains READY. No runtime or normative feature is owned by LM007. |
+| LM007 | Object Model Maturity | CLOSED | `SAME_COMMIT` | LM007-A/B/C/D/E are CLOSED after final cross-slice execution of all 16 retained object-model maturity programs, the complete Test Tool corpus and the repository full suite. Findings I027 and I030 are CLOSED under their implementation owners; LM007 owns no runtime or normative feature. |
 
 ### LM005 — Concurrent Language Maturity
 
@@ -934,7 +934,7 @@ Coordination:
 
 ### LM007 — Object Model Maturity
 
-Status: IN_PROGRESS
+Status: CLOSED
 
 Scope: dogfood already-defined object-model semantics through integrated ordinary
 Protos programs that combine delegation/prototype chains, local and inherited
@@ -950,7 +950,7 @@ the ordinary Dxxx approval gate before dependent maturity work proceeds.
 | LM007-B | CLOSED | `SAME_COMMIT` | Deep prototype-chain lookup with preserved receiver/methodHome through extracted and nested-super Closures, repeated sibling invocation under later receiver/ancestor mutation, post-capture creation of local shadows over inherited state, and old-versus-fresh extraction across method-slot replacement. Ordinary Protos central-manifest coverage only; no Java harness, runtime, specification, API or implementation-version change. |
 | LM007-C | CLOSED | `SAME_COMMIT` | Dynamic Error boundaries across delegated receiver methods and Array callbacks: whole-collection unwinding preserves pre-signal receiver effects, per-element handlers share captured lexical state, a selected inner handler cannot catch its own replacement signal, and nested delegation-based Error categories select the dynamically innermost matching handler. Ordinary Protos central-manifest coverage only; no Java harness, runtime, specification, API or implementation-version change. |
 | LM007-D | CLOSED | `SAME_COMMIT` | Long-form registry/pipeline maturity: logical Map keys and exact IdentityMap keys remain distinct across repeated entity mutation/re-registration; numeric cross-family equality and identity diverge correctly; extracted Closure identities survive registry lifecycle; and stable custom equality/hash keys compose with live receiver state. Ordinary Protos central-manifest coverage only; no Java harness, runtime, specification, API or implementation-version change. |
-| LM007-E | READY | — | Cross-slice reconciliation, minimal retained regressions, semantic-gap accounting and final LM007 closure. |
+| LM007-E | CLOSED | `SAME_COMMIT` | Final cross-slice reconciliation reruns all 16 A-D ordinary-Protos programs together with the complete Test Tool manifest and full repository suite; records I027 and I030 as the two closed implementation findings, classifies the two pre-publication D authoring corrections as invalid test assumptions, and closes with no unresolved semantic gap, new maturity case, runtime/specification/API or implementation-version change. |
 
 LM007-B closure evidence:
 - four ordinary Protos cases extend LM007-A from broad interaction coverage into deep receiver/lookup lifetime pressure: extracted `super` and nested-super callables preserve one original receiver plus exact lookup origin across four prototype levels and later ancestor/local mutation;
@@ -969,6 +969,14 @@ LM007-D closure evidence:
 - one dual-index entity workflow keeps equality-keyed logical names separate from exact mutable entity identities while stored receiver-bound readers observe later mutation; one numeric workflow proves `1 == 1.0` collapses the normal Map key while `1 !== 1.0` keeps two IdentityMap keys throughout remove/reinsert/replace transitions;
 - extracted Closure identities are tracked as exact IdentityMap keys while a normal Map independently routes logical names to those callables, proving alias identity, fresh extraction identity, removal and later receiver-state observation compose without rebinding indexed values;
 - custom mutable entity keys expose stable `id`-only equality through ordinary `alias("equals", "==")` plus `hash`, while unrelated live `state` mutates; normal Map collapses equal-but-distinct entities and IdentityMap keeps them separate across replacement/removal/reinsertion. No Java harness, production runtime, normative specification, public API, native boundary or implementation version is changed.
+
+LM007 closure reconciliation:
+- LM007-A/B/C/D/E are all CLOSED after this publication. E adds no new maturity program: its purpose is to re-execute the retained interaction corpus together, not manufacture another feature-shaped test merely to close the ledger.
+- The retained LM007 corpus contains 16 ordinary-Protos central-manifest programs: four integrated receiver/collection workflows (A), four deep extraction/lookup lifetime workflows (B), four Error/handler boundary workflows (C), and four equality/identity registry lifecycle workflows (D). Their published expectations remain unchanged by E.
+- LM007 exposed two implementation defects against already-closed semantics. A exposed the receiver-fallback Closure-binding mismatch closed by I027; its minimal ordinary-Protos regression remains independently retained. D exposed the missing standard Object structural-view publication closed by I030; I030 retains focused `without`/`alias` regressions and LM007-D consumes the now-published ordinary `alias("equals", "==")` surface.
+- Two failed D authoring attempts were not language defects: assignment to an inherited-only slot violated the already-defined receiver-local assignment destination rule, and `==:` was not valid slot-creation grammar. Both test assumptions were corrected before D publication without changing normative semantics or the intended deterministic expectations.
+- B and C required no runtime repair, and LM007 uncovered no unresolved Dxxx choice. No maturity expectation was weakened to match implementation behavior; no LM006 surface or unfinished I026 machinery is consumed.
+- Final closure requires the same publication candidate to pass all 16 focused LM007 programs, central Test Tool corpus ownership/bootstrap, and the complete Maven suite. No production runtime, normative specification, public API, native selector inventory or implementation version is changed by LM007-E.
 
 Coordination:
 - LM007 is intentionally independent of LM006 system/resource maturity and does
