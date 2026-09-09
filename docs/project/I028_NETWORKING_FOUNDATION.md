@@ -3,7 +3,7 @@
 Status: **IN_PROGRESS**
 Normative dependencies: D047 / specification revision `0.1.388` — RATIFIED; D048 / specification revision `0.1.391` — RATIFIED
 Additional C/D topology dependency: D052 / specification revision `0.1.393` — RATIFIED
-Platform architecture dependencies: PLAT002 — RATIFIED; PLAT003 — RATIFIED; PLAT006 — RATIFIED
+Platform architecture dependencies: PLAT002 — RATIFIED; PLAT003 — RATIFIED; PLAT006 — RATIFIED; PLAT007 — RATIFIED
 Consumer: `LIB005 — Networking`
 
 ## Purpose
@@ -62,7 +62,7 @@ READY to implement `connectTcp`; I028-D will consume the same topology for liste
   - **D3 — `accept()` + concurrent pending accepts + cancellation/late custody — CLOSED (`0.2.294-SNAPSHOT` / publication commit):** install one shared `accept` selector; admit each call as an independent operation on the D2 lifecycle, support multiple pending Futures without a semantic FIFO/owner-thread rule, reuse pre-commit/Actor cancellation and close cutover, materialize fresh accepted TcpConnections only from recognized logical endpoint snapshots, and explicitly release late/duplicate/unmaterializable resources. No `listenTcp` or production backend yet; native boundary becomes 134/35.
   - **D4 — `Network.listenTcp(localRequest)` + exact request validation/capture + listener acquisition — CLOSED (`0.2.298-SNAPSHOT` / publication commit):** install the second shared Network acquisition selector; validate/capture exactly local `ipVersion`/`address`/`port` before backend effect, preserve canonical-null address/port request semantics, reuse ordinary Future cancellation/commitment and late-resource custody, and materialize one fresh accept-enabled D1-D3 TcpListener with its acquired non-zero port. No production backend or host wildcard/ephemeral convention is selected; native boundary becomes 135/35.
   - **D5 — integrated D conformance + closure — CLOSED (`0.2.300-SNAPSHOT` / publication commit; implementation version unchanged):** an actual D4-acquired listener retains the ordinary D1 family, D2 observation/close lifecycle, D3 concurrent accept/custody and Actor/P confinement; accepted resources remain the existing C-family TcpConnections. Native-boundary evidence remains 135/35. I028-D is CLOSED.
-- **E — production backend portability/scalability — READY:** PLAT006 ratifies a host-neutral I/O operation engine independent of readiness-vs-completion machinery and selects bounded non-blocking JDK NIO (`SocketChannel` / `ServerSocketChannel` + `Selector`) as the initial JVM production backend. Implement without exposing thread/selector/event-loop/channel identity; exact poller count, sharding, affinity and future native backend selection remain deliberately deferred.
+- **E — production backend portability/scalability — READY:** PLAT006 ratifies the host-neutral operation engine plus bounded JDK NIO backend; PLAT007 ratifies the IPv6-only listener enforcement required by D047. Implement IPv6 `address: null` as one logical all-or-nothing listener over concrete authorized IPv6 `ServerSocketChannel` bindings, never a dual-stack wildcard shortcut. Exact poller count/sharding, candidate-port retry policy and future native O(1)-socket backend remain deliberately deferred.
 - **F — cross-slice conformance/native-boundary closure:** cancellation races,
   late custody, multiple-accept scale evidence and Actor/P non-transferability.
 
@@ -90,6 +90,38 @@ pass equivalent cancellation/lifetime/late-completion/custody conformance.
 I028-E is released to bounded implementation decomposition. If implementation
 exposes another substantive durable architecture decision, the affected slice
 must stop and cross the normal explicit approval gate before proceeding.
+
+## I028-E IPv6-only listener checkpoint — RELEASED by PLAT007
+
+PLAT007 is RATIFIED after explicit project-owner approval following mainstream
+runtime plus Truffle/GraalVM review including Apple Pkl and future-backend
+scalability analysis.
+
+The initial public-JDK NIO backend must not use a potentially dual-stack IPv6
+wildcard socket to implement D047's IPv6-only listener. For an IPv6
+`address: null` request it captures the concrete IPv6 addresses authorized by
+the supplied Network at acquisition time and builds one logical TcpListener from
+individually bound IPv6 `ServerSocketChannel` components multiplexed by the
+PLAT006 engine.
+
+All components must share one acquired non-zero local port and construction is
+all-or-nothing: failure releases every partial component before the acquisition
+fails. Scope remains Network-authority state; explicit `IpAddress` values,
+including `::`, are never reinterpreted as canonical-null wildcard requests.
+Filtering IPv4 only after `accept`, relying on unsupported JDK internals, and
+requiring JNI as the portable baseline are rejected.
+
+The composite mechanism is the portable conformance baseline, not a permanent
+high-address-cardinality optimum. A future native/FFM/framework/WASI/brokered
+backend may replace it — including an O(1)-socket `IPV6_V6ONLY` implementation —
+behind the unchanged PLAT006 operation boundary if it preserves all portable
+semantics and conformance.
+
+I028-E is released again to bounded implementation decomposition. Exact address
+enumeration caching, candidate-port retry policy, poller sharding/affinity,
+dynamic rebinding and native-backend mechanism remain deliberately deferred. If
+implementation exposes a new substantive durable choice, stop that slice and
+cross the explicit approval gate before proceeding.
 
 ## I028-D5 / I028-D closure
 
