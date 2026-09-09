@@ -19,6 +19,5 @@ bodyCalls: 0
 result: (() => false).while((required) => {
     bodyCalls = bodyCalls + 1
 })
-(result === null).and() {
-    bodyCalls == 0
-}
+(result === null) &&
+    (bodyCalls == 0)

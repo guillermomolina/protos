@@ -29,6 +29,5 @@ Error.handle(
         null
     }
 )
-handled.and() {
-    bodyCalls == 0
-}
+handled &&
+    (bodyCalls == 0)
