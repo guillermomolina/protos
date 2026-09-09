@@ -826,6 +826,7 @@ the already-published implementation commit.
 | LM004 | Extended language interaction conformance | CLOSED | `d390c0c642c5d2d907fcf9e384d1cbc080dd4783` | Retrospective canonical ID; deeper delegation/call-argument interactions plus Map/IdentityMap Path-key behavior. |
 | LM005 | Concurrent Language Maturity | CLOSED | `SAME_COMMIT` | LM005-A Future, LM005-B Actor, and LM005-C Group/GroupRef conformance/examples/tutorials complete; no runtime or normative feature added. |
 | LM006 | System & Resource Language Maturity | IN_PROGRESS | — | closed slices: A/B/C/D; READY: E; dependency-gated: F; No runtime or normative feature is owned by LM006. |
+| LM007 | Object Model Maturity | IN_PROGRESS | — | LM007-A integrated object workflows close in this publication; LM007-B/C/D/E remain READY. No runtime or normative feature is owned by LM007. |
 
 ### LM005 — Concurrent Language Maturity
 
@@ -895,6 +896,34 @@ Coordination:
 - Production Java/runtime changes are outside normal LM006 scope. A discovered
   implementation defect is fixed under its proper implementation owner and then
   consumed by LM006 conformance.
+
+### LM007 — Object Model Maturity
+
+Status: IN_PROGRESS
+
+Scope: dogfood already-defined object-model semantics through integrated ordinary
+Protos programs that combine delegation/prototype chains, local and inherited
+slots, lexical Closures, method receivers, Error boundaries and collections.
+LM007 is independent of LM006 and MUST NOT define new normative language/runtime
+behavior. A reproducible mismatch against already-closed semantics is a defect or
+separately tracked implementation finding; an uncovered semantic choice must pass
+the ordinary Dxxx approval gate before dependent maturity work proceeds.
+
+| Slice | Status | Closure evidence | Surface |
+|---|---|---|---|
+| LM007-A | CLOSED | `SAME_COMMIT` | Integrated object workflows: post-capture receiver-local mutation, inherited/extracted receiver-preserving methods and nested Closures, Error-handled delegated pipelines, and Array/Map/IdentityMap transport. Ordinary Protos central-manifest coverage only; no Java harness, runtime, specification, API or implementation-version change. |
+| LM007-B | READY | — | Deep prototype-chain lookup, method extraction, repeated invocation and mutation after capture/extraction across inherited and local state. |
+| LM007-C | READY | — | Error boundaries across delegated methods, lexical handler state, receiver state and collection callbacks. |
+| LM007-D | READY | — | Long-form object/collection workflows with registries, repeated state transitions and equality/identity-sensitive lookup. |
+| LM007-E | READY | — | Cross-slice reconciliation, minimal retained regressions, semantic-gap accounting and final LM007 closure. |
+
+Coordination:
+- LM007 is intentionally independent of LM006 system/resource maturity and does
+  not consume unfinished LM006 surfaces.
+- Production runtime/specification changes are outside normal LM007 scope. A
+  discovered implementation defect is fixed under its proper owner and then
+  consumed by LM007 conformance.
+- Plan: `docs/project/LM007_OBJECT_MODEL_MATURITY_PLAN.md`.
 
 New Language Maturity work MUST allocate and persist its `LMxxx` identifier in
 the repository at publication time rather than relying on chat/prompt history.

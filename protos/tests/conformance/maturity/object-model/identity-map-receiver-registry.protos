@@ -1,0 +1,36 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE.
+ */
+
+Arrays: import("std:collections/Array")
+
+sensor: {
+    value: 0
+    makeReader: () => { () => { value } }
+}
+
+a: sensor { value: 1 }
+b: sensor { value: 2 }
+c: sensor { value: 3 }
+
+registry: IdentityMap()
+registry.atPut(a, a.makeReader())
+registry.atPut(b, b.makeReader())
+registry.atPut(c, c.makeReader())
+
+a.value = 7
+b.value = 8
+c.value = 10
+
+readers: Array(registry.at(a), registry.at(b), registry.at(c))
+values: Arrays.map(readers, (reader) => { reader() })
+sum: Arrays.reduce(values, (total, value) => { total + value }, 0)
+
+(registry.size() * 100) + sum

@@ -1,0 +1,59 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE.
+ */
+
+Arrays: import("std:collections/Array")
+
+worker: {
+    factor: 1
+    bias: 0
+
+    evaluate: (input) => {
+        (input * factor) + bias
+    }
+
+    makeJob: (input) => {
+        () => { evaluate(input) }
+    }
+}
+
+double: worker {
+    factor: 2
+    bias: 1
+}
+triple: worker {
+    factor: 3
+    bias: 2
+}
+quad: worker {
+    factor: 4
+    bias: 3
+}
+
+jobs: Array(
+    double.makeJob(10),
+    triple.makeJob(10),
+    quad.makeJob(10)
+)
+
+// The closure must keep the original receiver but observe its later local state.
+triple.factor = 5
+
+outputs: Arrays.map(jobs, (job) => { job() })
+byName: Map()
+byName.atPut("double", outputs.at(0))
+byName.atPut("triple", outputs.at(1))
+byName.atPut("quad", outputs.at(2))
+
+total: Arrays.reduce(outputs, (sum, value) => { sum + value }, 0)
+(total * 1000) +
+    (byName.at("double") * 100) +
+    (byName.at("triple") * 10) +
+    byName.at("quad")
