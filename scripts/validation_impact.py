@@ -29,6 +29,7 @@ PACKAGE_TEST_SET = (
     "ProtosPackage*Test,"
     "ProtosExternalPackage*Test,"
     "ProtosWorkspace*Test,"
+    "ProtosTestToolPackage*Test,"
     "ProtosCliTest"
 )
 

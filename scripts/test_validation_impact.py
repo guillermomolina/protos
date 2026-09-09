@@ -66,6 +66,19 @@ class ValidationImpactTest(unittest.TestCase):
             "CHANGELOG.md",
         ])
 
+    def test_package_affected_set_includes_test_tool_package_consumers(self):
+        result = IMPACT.classify_paths([
+            "protos/tools/package/ExecutionPlan.protos"
+        ])
+        self.assertEqual("TOOL_LOCAL:PACKAGE", result.impact)
+        self.assertIn("ProtosTestToolPackage*Test", result.test_set)
+
+    def test_test_tool_package_test_remains_test_tool_local_when_it_is_the_delta(self):
+        self.assert_test_tool([
+            "src/test/java/com/guillermomolina/protos/execution/"
+            "ProtosTestToolPackageExecutionEnvironmentTest.java"
+        ])
+
     def test_test_tool_source_is_local(self):
         self.assert_test_tool(["protos/tools/test/Runner.protos"])
 
