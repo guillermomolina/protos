@@ -1,6 +1,6 @@
 # TOOL001-F2E — External Immutable-Package Execution
 
-Status: **IN_PROGRESS — F2E1/F2E2 CLOSED; F2E3 IN_PROGRESS (D053/D056/D057 RATIFIED); F2E4/F2E5 dependency-gated**
+Status: **IN_PROGRESS — F2E1/F2E2/F2E3 CLOSED; F2E4 READY; F2E5 dependency-gated**
 Nature: non-normative Package Tool / host-integration project record
 Allocated after: `TOOL001-F2D` workspace-only execution closure
 
@@ -102,8 +102,8 @@ F2E2  verified read-only package-store binding                     CLOSED
 F2E2A  captured-Filesystem ContentIdentity canonicalizer/verifier  CLOSED
 F2E2B  exact selected-root capture + verified-capture host custody CLOSED
 F2E2C same-capture integration + F2E2 closure                      CLOSED
-F2E3  external-node execution-plan construction                    IN_PROGRESS — D053/D056/D057 RATIFIED
-F2E4  external canonical ModuleKey + source resolver               BLOCKED_BY_DEPENDENCIES
+F2E3  external-node execution-plan construction                    CLOSED — F2E3A/B/C; D053/D056/D057 RATIFIED
+F2E4  external canonical ModuleKey + source resolver               READY
 F2E5  public run integration + F2 external-execution closure       BLOCKED_BY_DEPENDENCIES
 ```
 
@@ -779,3 +779,51 @@ F2E3 remains **IN_PROGRESS**. The remaining parent work is the final
 verified-custody/composition boundary that will connect F2E2 host custody to
 this Protos-owned V2 construction before F2E4 host detach/resolver work can
 begin.
+
+## F2E3C closure — borrowed verified-custody composition + F2E3 closure
+
+F2E3C is CLOSED by this executable host-composition slice, closing parent F2E3.
+
+`ProtosExternalPackagePlanningPreflight` now composes the already-published
+boundaries without adding a new semantic layer:
+
+```text
+root-owned exact lock + workspace Filesystem
+        |
+borrowed F2E2 verified external custodies
+        |
+        | materialize each exact custody into one fresh Package Tool activation
+        | no source/store reopen, no second capture
+        v
+temporary ordinary verifiedExternalInputs
+        |
+        v
+ExecutionPlan.buildV2FromVerifiedCaptures(...)
+        |
+        v
+raw inert PackageExecutionPlanV2
+```
+
+Incoming `ProtosCapturedFilesystemCustody` values are borrowed run-owned
+authority. F2E3C neither consumes nor closes them on success or failure.
+F2E4 remains the owner of the future concrete exact-package-identity ->
+verified-custody resolver/lifetime mapping.
+
+The composition Process owns only its confined workspace Filesystem view,
+temporary domain-bound external Filesystem views and Package Tool Process
+lifetime. It terminates before the raw inert V2 value is returned. No
+Filesystem/custody/path/store/locator/fetch/authority/host handle is retained in
+the plan.
+
+Integration evidence verifies that three independently captured and
+ContentIdentity-verified external packages (registry A, registry B, exact-Git C)
+still produce the mixed V2 graph after all three original selected source
+directories are deleted. This proves planning consumes the exact same immutable
+captured backing verified by F2E2 rather than reopening mutable store paths.
+Both successful and failed planning leave all borrowed custodies open for later
+F2E4/F2E5 use, while the Package Tool Process terminates in both cases.
+
+F2E3 is therefore CLOSED. F2E4 is READY to implement the already-deferred
+generation-2 defensive detach plus canonical external ModuleKey/source resolver
+and its concrete run-local custody mapping. F2E5 remains dependency-gated on
+F2E4.

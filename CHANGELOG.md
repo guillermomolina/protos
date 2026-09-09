@@ -1,3 +1,7 @@
+## 0.2.310-SNAPSHOT
+
+- Close `TOOL001-F2E3C` / GitHub #243 and parent `TOOL001-F2E3` / #91. Add the host-mechanical `ProtosExternalPackagePlanningPreflight` boundary: one Package Tool Process receives the confined workspace Filesystem plus temporary views materialized from borrowed F2E2-verified registry/Git custodies, invokes the already-published Protos-owned `ExecutionPlan.buildV2FromVerifiedCaptures`, terminates, and returns only the raw inert generation-2 plan. Incoming custodies remain open on both success and failure for F2E4; no original selected source/store path is reopened or retained and no V2 detach/resolver is introduced. Integration tests delete the original external roots after verification, prove mixed registry/Git planning still succeeds from the same captures, prove failed planning also preserves borrowed custody, and prove no Filesystem reaches the plan. `TOOL001-F2E4` becomes READY. Implementation version becomes `0.2.310-SNAPSHOT`; Core specification, lock format, PackageExecutionPlanV1, public run and license terms are unchanged.
+
 ## 0.2.309-SNAPSHOT
 
 - Close `I028-E3A — host-neutral first-effect attempt gate` as the first
