@@ -637,3 +637,8 @@ reflection/slot-value-invalid-name.protos	error	-
 reflection/slot-value-represented-absent.protos	error	-
 control/bare-assignment-target-fixed-before-rhs.protos	integer	95
 control/bare-assignment-missing-target-before-rhs.protos	boolean	false
+maturity/bytes-encoding/build-utf8-bytes-by-add.protos	boolean	true
+maturity/bytes-encoding/mutate-utf8-before-decode.protos	boolean	true
+maturity/bytes-encoding/encoded-results-independent-under-mutation.protos	boolean	true
+maturity/bytes-encoding/build-utf16be-bytes-by-add.protos	boolean	true
+maturity/bytes-encoding/malformed-after-bytes-mutation.protos	error	-

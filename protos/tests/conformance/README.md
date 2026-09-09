@@ -72,6 +72,11 @@ ordinary `.protos` bootstrap modules. Their local `future-integer-one-of`
 expectation asserts that a reply came from one of the explicitly permitted
 eligible members without turning scheduler/member selection into a test assumption.
 
+LM006 system/resource maturity cases that need no host-side orchestration live
+under `maturity/` and remain in the main manifest. LM006-A deliberately
+composes already-closed Bytes and Encoding semantics entirely in ordinary
+Protos, so it adds no Java harness or test-only language surface.
+
 The harness deliberately keeps assertions outside the Protos language. Adding
 test-only assertion syntax or a privileged testing object would be a language or
 library design decision and is not required for conformance testing.

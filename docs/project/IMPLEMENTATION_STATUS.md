@@ -824,6 +824,7 @@ the already-published implementation commit.
 | LM003 | Language interaction conformance | CLOSED | `dbc086ed294ead0b4219952c02b00ec28a492472` | Retrospective canonical ID; delegation, dynamic receiver, captured-state and inherited-call interaction coverage. |
 | LM004 | Extended language interaction conformance | CLOSED | `d390c0c642c5d2d907fcf9e384d1cbc080dd4783` | Retrospective canonical ID; deeper delegation/call-argument interactions plus Map/IdentityMap Path-key behavior. |
 | LM005 | Concurrent Language Maturity | CLOSED | `SAME_COMMIT` | LM005-A Future, LM005-B Actor, and LM005-C Group/GroupRef conformance/examples/tutorials complete; no runtime or normative feature added. |
+| LM006 | System & Resource Language Maturity | IN_PROGRESS | — | LM006-A Bytes/Encoding composition maturity closes in this publication; LM006-B/C/D/E remain independently READY and LM006-F is dependency-gated. No runtime or normative feature is owned by LM006. |
 
 ### LM005 — Concurrent Language Maturity
 
@@ -846,6 +847,38 @@ Closure reconciliation:
 - LM005-A, LM005-B and LM005-C are all published and closed.
 - The corpus dogfoods Future, Actor/ActorRef and Group/GroupRef semantics already owned by closed Core implementation items; LM005 added no production runtime or normative behavior.
 - Group routing conformance asserts only outcomes permitted by eligible-member selection and deliberately does not pin a scheduler-selected member.
+
+
+### LM006 — System & Resource Language Maturity
+
+Status: IN_PROGRESS
+
+Scope: dogfood already-implemented system/resource semantics through portable
+Protos conformance programs, executable examples, tutorials and interaction
+coverage. LM006 MUST NOT define new normative language/runtime behavior. A
+reproducible mismatch against already-closed semantics is a bug or separately
+tracked implementation defect rather than a license to add a feature; an
+uncovered substantive semantic choice must pass the ordinary Dxxx approval gate
+before dependent maturity work proceeds.
+
+| Slice | Status | Closure evidence | Surface |
+|---|---|---|---|
+| LM006-A | CLOSED | `SAME_COMMIT` | Bytes/Encoding composition maturity: manually built mutable byte sequences decoded through mandatory portable encodings, decode-after-mutation, fresh encode-result independence under mutation, UTF-16BE byte construction, and malformed-after-mutation failure. Ordinary Protos central-manifest coverage only; no Java harness, runtime, specification, API or implementation-version change. |
+| LM006-B | READY | — | File/Filesystem/Path maturity over already-closed open/read/write/position/namespace/directory/captured-tree semantics; prefer ordinary Protos cases and add host orchestration only where a real capability/backend boundary requires it. |
+| LM006-C | READY | — | Process and standard-stream maturity over closed Process bootstrap/I/O plus `std:io/ProcessStreams`, including explicit authority/Encoding and borrowing-lifetime composition; no ambient Process or default Encoding may be invented. |
+| LM006-D | READY | — | Resource lifetime, Error and `ensure` maturity across already-closed File/text/Future cleanup and failure-precedence semantics. |
+| LM006-E | READY | — | End-to-end system/resource programs composing already-closed Path, Filesystem/File, byte/text I/O, Process, collections, Errors and Futures without introducing pairwise special semantics. |
+| LM006-F | BLOCKED_BY_DEPENDENCIES | — | Executable examples/tutorial progression plus final cross-slice reconciliation and LM006 closure after B-E are closed. |
+
+Coordination:
+- LM006-B, LM006-C, LM006-D and LM006-E are intentionally independent work
+  fronts; none is serialized merely for tracking convenience.
+- LM006 must not depend on unfinished I026 machinery. A candidate case that
+  genuinely requires I026 remains outside the ready LM006 slice until that
+  prerequisite is published.
+- Production Java/runtime changes are outside normal LM006 scope. A discovered
+  implementation defect is fixed under its proper implementation owner and then
+  consumed by LM006 conformance.
 
 New Language Maturity work MUST allocate and persist its `LMxxx` identifier in
 the repository at publication time rather than relying on chat/prompt history.
