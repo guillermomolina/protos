@@ -62,9 +62,9 @@ reader: TextReader(fixture.source, Encoding.UTF16LE)
 reader.readText().then((first) => {
     reader.readText().then((second) => {
         reader.readText().then((third) => {
-            (first == "A").and() {
-                (second == "\u{1f600}").and() { third === null }
-            }
+            (first == "A") &&
+                (second == "\u{1f600}") &&
+                (third === null)
         })
     })
 })

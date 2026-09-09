@@ -58,13 +58,11 @@ reader.readLine().then((first) => {
         reader.readLine().then((third) => {
             reader.readLine().then((fourth) => {
                 reader.readLine().then((eof) => {
-                    (first == "a").and() {
-                        (second == "b").and() {
-                            (third == "c").and() {
-                                (fourth == "d").and() { eof === null }
-                            }
-                        }
-                    }
+                    (first == "a") &&
+                        (second == "b") &&
+                        (third == "c") &&
+                        (fourth == "d") &&
+                        (eof === null)
                 })
             })
         })

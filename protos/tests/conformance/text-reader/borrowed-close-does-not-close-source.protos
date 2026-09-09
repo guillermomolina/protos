@@ -59,5 +59,6 @@ makeSource: (steps) => {
 fixture: makeSource(Array())
 reader: TextReader(fixture.source, Encoding.UTF8)
 reader.close().then((closed) => {
-    (closed === reader).and() { fixture.state.closes == 0 }
+    (closed === reader) &&
+        (fixture.state.closes == 0)
 })

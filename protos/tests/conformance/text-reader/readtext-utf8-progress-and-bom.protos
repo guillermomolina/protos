@@ -60,15 +60,14 @@ fixture: makeSource(Array(makeBytes(239, 187), makeBytes(191, 65, 240, 159), mak
 reader: TextReader(fixture.source, Encoding.UTF8)
 
 reader.readText().then((first) => {
-    firstOk: (first == "A").and() { fixture.state.reads == 2 }
+    firstOk: (first == "A") && (fixture.state.reads == 2)
     reader.readText().then((second) => {
-        secondOk: (second == "\u{1f600}").and() { fixture.state.reads == 3 }
+        secondOk: (second == "\u{1f600}") && (fixture.state.reads == 3)
         reader.readText().then((third) => {
-            firstOk.and() {
-                secondOk.and() {
-                    (third === null).and() { fixture.state.reads == 4 }
-                }
-            }
+            firstOk &&
+                secondOk &&
+                (third === null) &&
+                (fixture.state.reads == 4)
         })
     })
 })

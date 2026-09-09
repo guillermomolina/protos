@@ -58,8 +58,8 @@ textFuture: reader.readText()
 
 lineFuture.then((line) => {
     textFuture.then((text) => {
-        (line == "A").and() {
-            (text == "B").and() { fixture.state.reads == 1 }
-        }
+        (line == "A") &&
+            (text == "B") &&
+            (fixture.state.reads == 1)
     })
 })
