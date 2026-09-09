@@ -1715,6 +1715,48 @@ delta after synchronizing with the current `origin/main`:
 <!-- PERF005-B2 IMPACT-AWARE-TOOL-VALIDATION -->
 ### Impact-aware tool-local publication validation
 
+#### Required publication-launcher integration
+
+For an intermediate **executable-impact** or **test-impact** publication, use the
+repository-maintained validation runner rather than reproducing impact parsing in
+the generated launcher.
+
+The launcher MUST first materialize the complete intended delta in its isolated
+publication worktree, stage only the bounded slice, and create one local
+candidate commit. That immutable commit is `CANDIDATE_SHA`; the caller worktree
+remains untouched. Then run:
+
+    python3 scripts/publication_validation.py \
+      --repo . \
+      --base "$PUBLICATION_BASE" \
+      --head "$CANDIDATE_SHA"
+
+If this publication closes or reconciles an owning top-level executable work
+item, append `--top-level-closure`. That flag is closure metadata only; it does
+not make a formal Issue identifier authoritative for ordinary impact routing.
+
+The validation runner MUST inspect exactly
+`PUBLICATION_BASE..CANDIDATE_SHA`. It verifies that the isolated worktree `HEAD`
+is that candidate and has no later tracked changes, invokes
+`scripts/validation_impact.py`, and executes either the selector's complete
+tool-local Maven test set or the complete Maven suite. Missing/malformed selector
+state, unsupported output, candidate mismatch, dirty tracked state, or failed
+selected tests is a fail-closed publication error.
+
+After validation, the launcher MUST verify that no tracked file changed during
+tests. It MUST NOT amend, repair, or otherwise mutate `CANDIDATE_SHA`. If any
+material change is required, abort that invocation and create a fresh candidate
+under the normal execution-time publication-base rules. Before push, fetch
+`origin/main` again and abort without push if it no longer equals
+`PUBLICATION_BASE`.
+
+The launcher report MUST preserve the runner's `VALIDATION_IMPACT`,
+`AFFECTED_TEST_SET`, `VALIDATION_REASON`, `FULL_TEST_SUITE`, and
+`TOP_LEVEL_RECONCILIATION` evidence. Documentation/governance-only publications
+continue to use the existing adaptive validation rules and do not invoke this
+runner merely to obtain a no-test classification.
+
+
 Impact-aware publication validation is a bounded exception for intermediate
 executable/test-impact slices whose definitive publication delta is
 **unequivocally local to one tool**. It reduces repeated validation of unrelated
