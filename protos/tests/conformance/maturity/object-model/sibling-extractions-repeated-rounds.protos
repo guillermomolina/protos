@@ -1,0 +1,56 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE.
+ */
+
+Arrays: import("std:collections/Array")
+
+prototype: {
+    offset: 1
+    read: () => { value + offset }
+    makeReader: () => { () => { read() } }
+}
+branch: prototype {
+    offset: 10
+}
+left: branch {
+    value: 2
+}
+right: branch {
+    value: 5
+}
+
+leftA: left.read
+leftB: left.read
+rightA: right.read
+leftNested: left.makeReader()
+rightNested: right.makeReader()
+
+round1Callables: Array(leftA, leftB, rightA, leftNested, rightNested)
+round1Values: Arrays.map(round1Callables, (callable) => { callable() })
+round1: Arrays.reduce(round1Values, (sum, value) => { sum + value }, 0)
+
+left.value = 20
+right.value = 30
+branch.offset = 7
+
+round2Values: Arrays.map(round1Callables, (callable) => { callable() })
+round2: Arrays.reduce(round2Values, (sum, value) => { sum + value }, 0)
+
+// Re-reading a Closure-valued member is a new extraction. It therefore binds
+// the stored Closure to holder, while leftA and leftNested remain bound to left.
+holder: left {
+    saved: leftA
+}
+again: holder.saved
+holder.value: 40
+round3: again() + leftA() + leftNested()
+
+result: (round1 * 1000000) + (round2 * 1000) + round3
+result

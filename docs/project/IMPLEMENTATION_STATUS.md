@@ -826,7 +826,7 @@ the already-published implementation commit.
 | LM004 | Extended language interaction conformance | CLOSED | `d390c0c642c5d2d907fcf9e384d1cbc080dd4783` | Retrospective canonical ID; deeper delegation/call-argument interactions plus Map/IdentityMap Path-key behavior. |
 | LM005 | Concurrent Language Maturity | CLOSED | `SAME_COMMIT` | LM005-A Future, LM005-B Actor, and LM005-C Group/GroupRef conformance/examples/tutorials complete; no runtime or normative feature added. |
 | LM006 | System & Resource Language Maturity | IN_PROGRESS | — | closed slices: A/B/C/D; READY: E; dependency-gated: F; No runtime or normative feature is owned by LM006. |
-| LM007 | Object Model Maturity | IN_PROGRESS | — | LM007-A integrated object workflows close in this publication; LM007-B/C/D/E remain READY. No runtime or normative feature is owned by LM007. |
+| LM007 | Object Model Maturity | IN_PROGRESS | — | LM007-A/B object-model maturity slices are CLOSED; LM007-C/D/E remain READY. No runtime or normative feature is owned by LM007. |
 
 ### LM005 — Concurrent Language Maturity
 
@@ -912,10 +912,16 @@ the ordinary Dxxx approval gate before dependent maturity work proceeds.
 | Slice | Status | Closure evidence | Surface |
 |---|---|---|---|
 | LM007-A | CLOSED | `SAME_COMMIT` | Integrated object workflows: post-capture receiver-local mutation, inherited/extracted receiver-preserving methods and nested Closures, Error-handled delegated pipelines, and Array/Map/IdentityMap transport. Ordinary Protos central-manifest coverage only; no Java harness, runtime, specification, API or implementation-version change. |
-| LM007-B | READY | — | Deep prototype-chain lookup, method extraction, repeated invocation and mutation after capture/extraction across inherited and local state. |
+| LM007-B | CLOSED | `SAME_COMMIT` | Deep prototype-chain lookup with preserved receiver/methodHome through extracted and nested-super Closures, repeated sibling invocation under later receiver/ancestor mutation, post-capture creation of local shadows over inherited state, and old-versus-fresh extraction across method-slot replacement. Ordinary Protos central-manifest coverage only; no Java harness, runtime, specification, API or implementation-version change. |
 | LM007-C | READY | — | Error boundaries across delegated methods, lexical handler state, receiver state and collection callbacks. |
 | LM007-D | READY | — | Long-form object/collection workflows with registries, repeated state transitions and equality/identity-sensitive lookup. |
 | LM007-E | READY | — | Cross-slice reconciliation, minimal retained regressions, semantic-gap accounting and final LM007 closure. |
+
+LM007-B closure evidence:
+- four ordinary Protos cases extend LM007-A from broad interaction coverage into deep receiver/lookup lifetime pressure: extracted `super` and nested-super callables preserve one original receiver plus exact lookup origin across four prototype levels and later ancestor/local mutation;
+- sibling extractions and returned nested Closures remain independently receiver-bound across repeated collection-driven invocation, while a later member read of a stored Closure performs the already-defined fresh extraction for its new receiver;
+- post-capture local slot creation shadows inherited state immediately for the retained receiver, while later mutations of now-shadowed ancestors no longer affect lookup; replacing a prototype method slot changes future extraction but not an already-extracted Closure;
+- no Java harness, production runtime, normative specification, public API, native boundary or implementation version is changed.
 
 Coordination:
 - LM007 is intentionally independent of LM006 system/resource maturity and does

@@ -53,7 +53,7 @@ gate before dependent maturity work continues.
 | Slice | State | Purpose |
 |---|---|---|
 | `LM007-A` | CLOSED | Integrated object workflows combining delegation, local slot mutation, nested/extracted receiver-preserving Closures, Error handling and Array/Map/IdentityMap transport. |
-| `LM007-B` | READY | Deep prototype chains, method extraction and mutation after capture/extraction, including repeated invocation and mixed inherited/local state. |
+| `LM007-B` | CLOSED | Deep prototype chains, method extraction and mutation after capture/extraction, including repeated invocation, retained `super` lookup origin, post-capture local shadowing, ancestor mutation, and method-slot replacement. |
 | `LM007-C` | READY | Error boundaries across delegated methods, lexical handler state, receiver state and collection callbacks. |
 | `LM007-D` | READY | Long-form registries/pipelines with repeated state transitions and equality/identity-sensitive collection lookup. |
 | `LM007-E` | READY | Reconcile findings, reduce failures to minimal regressions, document gaps and close LM007 only after the integrated invariants remain stable. |
@@ -69,6 +69,18 @@ gate before dependent maturity work continues.
 
 The four deterministic integer expectations are `118663`, `3171`, `72` and
 `325` respectively.
+
+## LM007-B coverage
+
+| Program | Deep lookup / mutation pressure | Extraction / receiver pressure |
+|---|---|---|
+| `deep-extracted-super-chain-mutation.protos` | Four delegation edges plus receiver-local and two ancestor-local mutations after extraction | Extracted overriding method and returned nested Closure retain the leaf receiver and the level-2 `methodHome`; both repeatedly execute `super` after the creator invocation has returned |
+| `sibling-extractions-repeated-rounds.protos` | Two sibling receivers share inherited behavior and ancestor offset, then diverge under receiver-local mutation; a later local slot is created on a descendant holder | Multiple extractions plus returned nested readers survive repeated Array transport/invocation; re-reading a stored Closure-valued member performs a fresh extraction for the holder receiver |
+| `post-capture-deep-shadowing.protos` | A retained receiver observes inherited rate/bias, later local shadow creation, ancestor mutation, second local shadow creation and a mutation hidden by the new shadow | Nested Closure created by an inherited method remains receiver-bound throughout all post-capture lookup-topology changes |
+| `method-slot-replacement-after-extraction.protos` | A three-level descendant observes later receiver-local value mutation after the prototype's method slot is replaced | The old extracted Closure keeps the originally selected implementation; fresh extractions see the replacement while all extracted values continue to use the descendant receiver |
+
+Deterministic integer expectations are `2613462350255427`, `66155101`,
+`245458606363`, and `6105011110231` respectively.
 
 ## Closure criteria
 

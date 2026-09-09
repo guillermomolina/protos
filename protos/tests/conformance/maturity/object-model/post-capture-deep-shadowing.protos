@@ -1,0 +1,54 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE.
+ */
+
+prototype: {
+    rate: 2
+    makeReader: () => {
+        () => { (rate * 10) + bias + value }
+    }
+}
+branch: prototype {
+    bias: 3
+}
+mid: branch {}
+leaf: mid {
+    value: 1
+}
+
+reader: leaf.makeReader()
+before: reader()
+
+// Local creation after capture shadows inherited state without changing the
+// receiver retained by the nested Closure.
+leaf.rate: 5
+afterRateShadow: reader()
+
+branch.bias = 7
+afterAncestorMutation: reader()
+
+leaf.bias: 9
+afterBiasShadow: reader()
+
+leaf.value = 4
+afterLocalMutation: reader()
+
+// The leaf-local rate now shields this later ancestor mutation.
+prototype.rate = 8
+afterShadowedAncestorMutation: reader()
+
+result:
+    (before * 10000000000) +
+    (afterRateShadow * 100000000) +
+    (afterAncestorMutation * 1000000) +
+    (afterBiasShadow * 10000) +
+    (afterLocalMutation * 100) +
+    afterShadowedAncestorMutation
+result

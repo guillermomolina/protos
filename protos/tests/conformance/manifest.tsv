@@ -647,3 +647,7 @@ maturity/object-model/delegated-closure-collection-workflow.protos	integer	11866
 maturity/object-model/error-handled-delegated-pipeline.protos	integer	3171
 maturity/object-model/extracted-methods-through-collection.protos	integer	72
 maturity/object-model/identity-map-receiver-registry.protos	integer	325
+maturity/object-model/deep-extracted-super-chain-mutation.protos	integer	2613462350255427
+maturity/object-model/sibling-extractions-repeated-rounds.protos	integer	66155101
+maturity/object-model/post-capture-deep-shadowing.protos	integer	245458606363
+maturity/object-model/method-slot-replacement-after-extraction.protos	integer	6105011110231
