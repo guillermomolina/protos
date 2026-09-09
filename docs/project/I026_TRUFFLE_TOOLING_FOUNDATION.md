@@ -71,8 +71,8 @@ see `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md`.
 | I026-A4B2B3A | CLOSED | `0.2.277-SNAPSHOT` | I026-A4B2B2 + D049 | Publish one atomic frozen standard-root cutover plus frozen shared standard graph/captures; concurrent bootstraps reuse and validate the completed required root surface without a guest execution lock. |
 | I026-A4B2B3B | CLOSED | `0.2.280-SNAPSHOT` | I026-A4B2B3A + PLAT001 A+ | Globally shared source-backed root Closure plans project through a bounded cache owned by the entered `ProtosLanguageContext`; two Process Contexts on one Engine overlap while using distinct plans and parameter/body CallTargets; EXCLUSIVE retained. |
 | I026-A4B3 | CLOSED | `0.2.301-SNAPSHOT` | I026-A4B2 | CLI/REPL, bundled tools, exact/fresh/captured/workspace, ordinary modules, RootActor initial modules and the remaining production Process creator all use Process-scoped public-parse hosting; the final architecture guard prevents direct compiler entry from returning in Process creators. EXCLUSIVE retained; REUSE/SHARED deferred. |
-| I026-B | READY | — | I026-A4 + PLAT004 | Map the existing exact `SourceSpan` ranges to valid Truffle `SourceSection` values on roots/execution nodes under ratified PLAT004 root-owned Source / node-local range / on-demand projection, with focused Java-side integration evidence. |
-| I026-C | BLOCKED_BY_DEPENDENCIES | — | I026-B | Make the relevant AST nodes instrumentable and expose the minimal faithful `StandardTags` needed for source execution/stepping; do not tag nodes merely to satisfy a debugger UI. |
+| I026-B | CLOSED | `0.2.303-SNAPSHOT` | I026-A4 + PLAT004 | Map the existing exact `SourceSpan` ranges to valid Truffle `SourceSection` values on roots/execution nodes under ratified PLAT004 root-owned Source / node-local range / on-demand projection, with focused Java-side integration evidence. |
+| I026-C | READY | — | I026-B | Make the relevant AST nodes instrumentable and expose the minimal faithful `StandardTags` needed for source execution/stepping; do not tag nodes merely to satisfy a debugger UI. |
 | I026-D | READY | — | I026-A1 | Expose semantically faithful Truffle interop/debug views for Protos runtime values needed by tooling, without changing Protos identity or access semantics. This may proceed independently from A2-A4. |
 | I026-E | BLOCKED_BY_DEPENDENCIES | — | I026-C + I026-D | Bridge top/local debugger scopes from the existing Protos activation/context model and prove visible names/values match Protos lookup boundaries. |
 | I026-F | BLOCKED_BY_DEPENDENCIES | — | I026-C + I026-E | Run a real GraalVM DAP smoke gate over Protos source: source breakpoint, stepping, stack frames, scopes and representative values. Only successful evidence permits a Protos DAP-support claim. |
@@ -145,3 +145,15 @@ A4B3 and A4B therefore close with A4. `ContextPolicy.EXCLUSIVE` remains active a
 `REUSE`/`SHARED` remain deferred. I026-B is released to READY; I026-D remains independently READY.
 
 PLAT004 is RATIFIED and is the durable platform owner for I026-B source-section placement. I026-B remains READY after publication of that decision; I026-C continues to own instrumentability and tag selection.
+
+## I026-B SourceSection mapping closure
+
+I026-B closes in `0.2.303-SNAPSHOT` as the first executable consumer of ratified PLAT004. `ProtosRootNode`
+remains the sole structural owner of the exact Truffle `Source` for each executable tree and
+reports its own section from the retained body span. Adopted `ProtosExpressionNode` instances
+retain only their existing half-open `SourceSpan` and derive `SourceSection` values on demand
+through the owning root. Unadopted nodes and source-less roots return no fabricated location;
+a retained span that exceeds the owning Source fails explicitly rather than being clipped or
+remapped. Focused evidence also guards the expression base against per-node `Source` or
+`SourceSection` authority. No instrumentation tags, debugger scopes, Protos semantics or
+ContextPolicy changes are introduced. I026-C is released to READY.

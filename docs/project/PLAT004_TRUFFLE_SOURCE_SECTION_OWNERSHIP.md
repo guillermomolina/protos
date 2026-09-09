@@ -78,6 +78,16 @@ Rejected because it duplicates source identity throughout the tree, increases cl
 
 Rejected as the baseline because it buys cache/clone/replace complexity before measurements show that repeated `SourceSection` construction is a bottleneck. A non-authoritative cache remains available later under invariant 10.
 
+## I026-B implementation evidence
+
+I026-B consumes this decision in `0.2.303-SNAPSHOT`. `ProtosRootNode` keeps the exact Truffle `Source` as the
+single structural source owner and projects its body `SourceSpan` to the root section. Adopted
+`ProtosExpressionNode` instances ask that root to project their own retained half-open spans on
+demand; the expression base gains no `Source` or `SourceSection` field. Missing root/source
+ownership returns no location, while a retained range outside the exact source fails closed rather
+than being clipped. This closes the mapping layer only; `InstrumentableNode` coverage and
+`StandardTags` remain I026-C work.
+
 ## Deliberately deferred
 
 PLAT004 does not select:

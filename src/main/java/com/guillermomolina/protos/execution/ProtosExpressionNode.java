@@ -23,6 +23,8 @@ import com.guillermomolina.protos.source.SourceSpan;
 import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.Node;
+import com.oracle.truffle.api.nodes.RootNode;
+import com.oracle.truffle.api.source.SourceSection;
 import java.util.Objects;
 
 public abstract class ProtosExpressionNode extends Node {
@@ -34,6 +36,16 @@ public abstract class ProtosExpressionNode extends Node {
 
     public final SourceSpan span() {
         return span;
+    }
+
+    @Override
+    @CompilerDirectives.TruffleBoundary
+    public final SourceSection getSourceSection() {
+        RootNode rootNode = getRootNode();
+        if (!(rootNode instanceof ProtosRootNode protosRootNode)) {
+            return null;
+        }
+        return protosRootNode.sourceSectionFor(span);
     }
 
     public final Object execute(VirtualFrame frame) {

@@ -1,3 +1,7 @@
+## 0.2.303-SNAPSHOT
+
+- Close `I026-B — SourceSpan to Truffle SourceSection mapping` as the executable consumer of ratified PLAT004. Keep exact Truffle `Source` identity owned only by each `ProtosRootNode`; derive root and adopted execution-node `SourceSection` values on demand from the existing half-open `SourceSpan`; return no fabricated location for unadopted/source-less nodes; and fail closed when a retained span exceeds the owning Source instead of clipping or remapping it. Add focused identity/range/adoption/failure/footprint evidence and release I026-C to READY. No Protos specification, instrumentation-tag policy, ContextPolicy or license-term change. Implementation version becomes `0.2.303-SNAPSHOT`.
+
 ## 0.2.302-SNAPSHOT
 
 - Advance `AUD003-B1` with mechanical tranche `B1b1`: migrate six reviewed ordinary conformance files whose trailing `.and() { ... }` Closures form pure single-expression chains to idiomatic `&&`. Each rewrite preserves left-to-right evaluation, short-circuit laziness, expression result and test purpose, and does not touch Boolean protocol/lowering tests or multi-expression Closure bodies. B1 remains in progress for additional trailing-Closure tranches. Test/source-style only: no implementation-version, specification, public-API, native-boundary or license-term change.

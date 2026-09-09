@@ -17,9 +17,12 @@
 
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.source.SourceSpan;
+import com.oracle.truffle.api.CompilerDirectives;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.source.Source;
+import com.oracle.truffle.api.source.SourceSection;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -43,6 +46,30 @@ public final class ProtosRootNode extends RootNode {
 
     Optional<Source> source() {
         return Optional.ofNullable(source);
+    }
+
+    @Override
+    @CompilerDirectives.TruffleBoundary
+    public SourceSection getSourceSection() {
+        return sourceSectionFor(body.span());
+    }
+
+    @CompilerDirectives.TruffleBoundary
+    SourceSection sourceSectionFor(SourceSpan span) {
+        Objects.requireNonNull(span, "span");
+        if (source == null) {
+            return null;
+        }
+        if (span.endOffset() > source.getLength()) {
+            throw new IllegalStateException(
+                    "source span "
+                            + span
+                            + " exceeds owning Truffle Source length "
+                            + source.getLength()
+                            + " for "
+                            + source.getName());
+        }
+        return source.createSection(span.startOffset(), span.length());
     }
 
     @Override
