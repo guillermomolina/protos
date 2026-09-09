@@ -642,3 +642,4 @@ maturity/bytes-encoding/mutate-utf8-before-decode.protos	boolean	true
 maturity/bytes-encoding/encoded-results-independent-under-mutation.protos	boolean	true
 maturity/bytes-encoding/build-utf16be-bytes-by-add.protos	boolean	true
 maturity/bytes-encoding/malformed-after-bytes-mutation.protos	error	-
+regression/unqualified-receiver-fallback-method-keeps-receiver.protos	integer	9

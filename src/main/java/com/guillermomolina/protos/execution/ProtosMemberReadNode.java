@@ -17,11 +17,8 @@
 
 package com.guillermomolina.protos.execution;
 
-import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
-import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
-import com.guillermomolina.protos.runtime.ProtosSlotLookupResult;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.source.SourceSpan;
 import com.oracle.truffle.api.frame.VirtualFrame;
@@ -50,28 +47,13 @@ public final class ProtosMemberReadNode extends ProtosExpressionNode {
         com.guillermomolina.protos.runtime.ProtosPrelude prelude =
                 activation.prelude().orElse(null);
 
-        ProtosSlotLookupResult result;
         try {
-            result =
-                    ProtosValueLookup.lookup(receiverValue, name, prelude)
-                            .orElseThrow(
-                                    () -> new ProtosSignalException(
-                                            ProtosCoreErrors.newSlotNotFound(activation)));
+            return ProtosValueLookup.readMember(receiverValue, name, prelude)
+                    .orElseThrow(
+                            () -> new ProtosSignalException(
+                                    ProtosCoreErrors.newSlotNotFound(activation)));
         } catch (UnsupportedOperationException unsupportedRepresentation) {
             throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
         }
-
-        if (result.value() instanceof ProtosClosureValue closure) {
-            return bindExtractedMethod(closure, receiverValue, result.home());
-        }
-        return result.value();
-    }
-
-    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
-    private static ProtosClosureValue bindExtractedMethod(
-            ProtosClosureValue closure,
-            Object receiver,
-            ProtosObjectValue methodHome) {
-        return closure.bindMethod(receiver, methodHome);
     }
 }

@@ -76,4 +76,27 @@ public final class ProtosValueLookup {
                 "Standard delegation parent is not implemented for runtime value representation "
                         + receiver.getClass().getName());
     }
+
+    /**
+     * Performs one ordinary member read after lookup, including method-Closure
+     * binding to the original receiver and the selected slot home.
+     */
+    public static Optional<Object> readMember(
+            Object receiver,
+            String name,
+            ProtosPrelude prelude) {
+        return lookup(receiver, name, prelude)
+                .map(result -> materializeMemberRead(receiver, result));
+    }
+
+    @com.oracle.truffle.api.CompilerDirectives.TruffleBoundary
+    private static Object materializeMemberRead(
+            Object receiver,
+            ProtosSlotLookupResult result) {
+        Object value = result.value();
+        if (value instanceof ProtosClosureValue closure) {
+            return closure.bindMethod(receiver, result.home());
+        }
+        return value;
+    }
 }

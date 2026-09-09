@@ -91,6 +91,7 @@ when a later approved platform decision replaces it.
 | I026-A4B2B2 | P carrier Process-Context routing | CLOSED | `SAME_COMMIT` | `0.2.273-SNAPSHOT`; P-domain placement metadata routes sibling and nested guest execution through the originating Process Context without transferring Process authority or adding carrier affinity. |
 | I026-A4B2B3 | Concurrent Core bootstrap closure | READY | — | Depends on closed A4B2B2; resolve/prove safe Core-root publication across concurrent Processes, close A4B2B/A4B2 and release A4B3. |
 | I026-A4B3 | Production driver cutover + legacy-entry retirement | BLOCKED_BY_DEPENDENCIES | — | I026-A4B2; migrate CLI/REPL/bundled-tool/workspace/remaining drivers and retire direct compiler/call entry as a separate primary architecture. |
+| I027 | Unqualified receiver-fallback Closure binding alignment | CLOSED | `SAME_COMMIT` | Align the already-normative `EXECUTION_AND_CONTROL` §6 receiver phase with ordinary member-read Closure binding from `CALLABLES`: after lexical exhaustion, inherited/local receiver Closure reads preserve the original dynamic receiver and exact lookup home; lexical Closure bindings remain exact. Ordinary-Protos regression plus focused runtime mechanism coverage; no specification/public API/native-boundary change. |
 
 ### I024 — Filesystem directory observation + captured-tree capability
 

@@ -389,8 +389,7 @@ public final class ProtosActivation {
             }
         }
 
-        return ProtosValueLookup.lookup(receiver, name, prelude)
-                .map(ProtosSlotLookupResult::value);
+        return ProtosValueLookup.readMember(receiver, name, prelude);
     }
 
     public Optional<ProtosObjectValue> writableLexicalContext(String name) {

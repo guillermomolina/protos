@@ -17,6 +17,8 @@
 
 package com.guillermomolina.protos.runtime;
 
+import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -88,6 +90,32 @@ class ProtosActivationTest {
                 new ProtosActivation(current, List.of(), receiver);
 
         assertSame(inherited, activation.lookup("name").orElseThrow());
+    }
+
+    @Test
+    void receiverFallbackClosureReadBindsOriginalReceiverAndLookupHomeOnlyAfterLexicalExhaustion() {
+        ProtosObjectValue root = ProtosObjectValue.rootObject();
+        ProtosObjectValue prototype = new ProtosObjectValue(root);
+        ProtosObjectValue receiver = new ProtosObjectValue(prototype);
+        ProtosObjectValue current = new ProtosObjectValue(root);
+        ProtosClosureValue method =
+                ProtosClosureValue.nativeClosure(
+                        (ignoredActivation, ignoredSupplied) -> ProtosNullValue.INSTANCE);
+        prototype.createLocalSlot("method", method);
+
+        ProtosActivation activation =
+                new ProtosActivation(current, List.of(), receiver);
+
+        ProtosClosureValue bound =
+                assertInstanceOf(
+                        ProtosClosureValue.class,
+                        activation.lookup("method").orElseThrow());
+        assertNotSame(method, bound);
+        assertSame(receiver, bound.capturedReceiver());
+        assertSame(prototype, bound.methodHome().orElseThrow());
+
+        current.createLocalSlot("method", method);
+        assertSame(method, activation.lookup("method").orElseThrow());
     }
 
     @Test
