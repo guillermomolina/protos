@@ -39,7 +39,7 @@ bytesLess: (left, right) => {
     left.each((leftOctet) => {
         decided.ifFalse(() => {
             (index < rightSize).ifTrue(() => {
-                rightOctet: right.at(index)
+                rightOctet: right[index]
 
                 (leftOctet < rightOctet).ifTrue(() => {
                     result = true
@@ -268,7 +268,7 @@ renderDependency: (
             memberPackageIds.containsKey(targetLocation).ifFalse(() => {
                 fail()
             })
-            (memberPackageIds.at(targetLocation) == targetPackageId).ifFalse(() => {
+            (memberPackageIds[targetLocation] == targetPackageId).ifFalse(() => {
                 fail()
             })
 
@@ -303,7 +303,7 @@ renderDependencies: (
         seenAliases.containsKey(alias).ifTrue(() => {
             fail()
         })
-        seenAliases.atPut(alias, true)
+        seenAliases[alias] = true
     })
 
     ordered: Arrays.sort(dependencies, dependencyLess)
@@ -358,7 +358,7 @@ text: (resolutionRoot) => {
     members: resolutionRoot.members
     seenLocations: Map()
     seenPackageIds: Map()
-    seenPackageIds.atPut(rootPackageId, true)
+    seenPackageIds[rootPackageId] = true
     memberPackageIds: Map()
 
     members.each((member) => {
@@ -372,14 +372,14 @@ text: (resolutionRoot) => {
         seenLocations.containsKey(location).ifTrue(() => {
             fail()
         })
-        seenLocations.atPut(location, true)
+        seenLocations[location] = true
 
         seenPackageIds.containsKey(packageId).ifTrue(() => {
             fail()
         })
-        seenPackageIds.atPut(packageId, true)
+        seenPackageIds[packageId] = true
 
-        memberPackageIds.atPut(location, packageId)
+        memberPackageIds[location] = packageId
     })
 
     orderedMembers: Arrays.sort(members, memberLess)
@@ -440,8 +440,8 @@ lowerHex: (digestBytes) => {
     digestBytes.each((octet) => {
         result =
             result +
-            digits.at(octet.div(16)) +
-            digits.at(octet.mod(16))
+            digits[octet.div(16)] +
+            digits[octet.mod(16)]
     })
 
     result

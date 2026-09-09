@@ -107,10 +107,10 @@ pathValue: (text) => {
 
 // Private CaseSpec tuple layout. Consumers use the named accessors below.
 caseSpec: (fields) => {
-    path: fields.at(0)
+    path: fields[0]
     ignoredCanonicalValidation: pathValue(path)
-    expectation: fields.at(1)
-    expected: fields.at(2)
+    expectation: fields[1]
+    expected: fields[2]
 
     (expectation.size() == 0).ifTrue(() => {
         fail()
@@ -120,9 +120,9 @@ caseSpec: (fields) => {
 }
 
 packageTomlCaseSpec: (fields) => {
-    path: fields.at(0)
+    path: fields[0]
     ignoredCanonicalValidation: pathValue(path)
-    retainedExpectation: fields.at(1)
+    retainedExpectation: fields[1]
 
     expectation: ""
     expected: ""
@@ -147,26 +147,26 @@ packageTomlCaseSpec: (fields) => {
 }
 
 caseId: (spec) => {
-    spec.at(0)
+    spec[0]
 }
 
 casePath: (spec) => {
-    spec.at(1)
+    spec[1]
 }
 
 caseExpectation: (spec) => {
-    spec.at(2)
+    spec[2]
 }
 
 caseExpected: (spec) => {
-    spec.at(3)
+    spec[3]
 }
 
 parseLine: (line) => {
     bytes: Encoding.UTF8.encode(line)
     ignore: bytes.size() == 0
     ignore.ifFalse(() => {
-        (bytes.at(0) == 35).ifTrue(() => {
+        (bytes[0] == 35).ifTrue(() => {
             ignore = true
         })
     })
@@ -182,7 +182,7 @@ parsePackageTomlLine: (line) => {
     bytes: Encoding.UTF8.encode(line)
     ignore: bytes.size() == 0
     ignore.ifFalse(() => {
-        (bytes.at(0) == 35).ifTrue(() => {
+        (bytes[0] == 35).ifTrue(() => {
             ignore = true
         })
     })
@@ -195,7 +195,7 @@ parsePackageTomlLine: (line) => {
 }
 
 planCases: (plan) => {
-    plan.at(0)
+    plan[0]
 }
 
 loadWithParser: (filesystem, parser) => {
@@ -209,12 +209,12 @@ loadWithParser: (filesystem, parser) => {
     carryChunk = (chunk, level) => {
         present: chunks.containsKey(level)
         present.ifTrue(() => {
-            left: chunks.at(level)
+            left: chunks[level]
             chunks.remove(level)
             carryChunk(Array(...left, ...chunk), level + 1)
         })
         present.ifFalse(() => {
-            chunks.atPut(level, chunk)
+            chunks[level] = chunk
             (level > maxChunkLevel).ifTrue(() => {
                 maxChunkLevel = level
             })
@@ -227,7 +227,7 @@ loadWithParser: (filesystem, parser) => {
         (level >= 0).ifTrue(() => {
             nextResult: result
             chunks.containsKey(level).ifTrue(() => {
-                nextResult = Array(...result, ...chunks.at(level))
+                nextResult = Array(...result, ...chunks[level])
             })
             finalResult = collectChunks(level - 1, nextResult)
         })
@@ -256,7 +256,7 @@ loadWithParser: (filesystem, parser) => {
         pending: Array(...batchTemplate)
         issueIndex: 0
         batchTemplate.each((ignored) => {
-            pending.atPut(issueIndex, reader.readLine(65536))
+            pending[issueIndex] = reader.readLine(65536)
             issueIndex = issueIndex + 1
         })
 

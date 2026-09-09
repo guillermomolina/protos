@@ -34,7 +34,7 @@ keyPath: (text) => {
     peek: () => {
         result: -1
         (index < length).ifTrue(() => {
-            result = source.at(index)
+            result = source[index]
         })
         result
     }
@@ -43,7 +43,7 @@ keyPath: (text) => {
         (index >= length).ifTrue(() => {
             fail()
         })
-        result: source.at(index)
+        result: source[index]
         index = index + 1
         result
     }
@@ -51,7 +51,7 @@ keyPath: (text) => {
     skipSpaces: null
     skipSpaces = () => {
         (index < length).ifTrue(() => {
-            octet: source.at(index)
+            octet: source[index]
             whitespace: octet == 32
             (octet == 9).ifTrue(() => {
                 whitespace = true
@@ -289,7 +289,7 @@ keyPath: (text) => {
         scan: null
         scan = () => {
             (index < length).ifTrue(() => {
-                octet: source.at(index)
+                octet: source[index]
                 isBareKeyOctet(octet).ifTrue(() => {
                     buffer.add(octet)
                     index = index + 1
@@ -333,7 +333,7 @@ keyPath: (text) => {
         more.ifTrue(() => {
             skipSpaces()
             (index < length).ifTrue(() => {
-                (source.at(index) == 46).ifFalse(() => {
+                (source[index] == 46).ifFalse(() => {
                     fail()
                 })
                 index = index + 1
@@ -367,7 +367,7 @@ value: (text) => {
     peek: () => {
         result: -1
         (index < length).ifTrue(() => {
-            result = source.at(index)
+            result = source[index]
         })
         result
     }
@@ -376,7 +376,7 @@ value: (text) => {
         (index >= length).ifTrue(() => {
             fail()
         })
-        result: source.at(index)
+        result: source[index]
         index = index + 1
         result
     }
@@ -415,7 +415,7 @@ value: (text) => {
     skipSpaces: null
     skipSpaces = () => {
         (index < length).ifTrue(() => {
-            isSpace(source.at(index)).ifTrue(() => {
+            isSpace(source[index]).ifTrue(() => {
                 index = index + 1
                 skipSpaces()
             })
@@ -425,7 +425,7 @@ value: (text) => {
     skipComment: null
     skipComment = () => {
         (index < length).ifTrue(() => {
-            octet: source.at(index)
+            octet: source[index]
             isNewlineStart(octet).ifFalse(() => {
                 invalidControl: octet < 32
                 (octet == 127).ifTrue(() => {
@@ -447,7 +447,7 @@ value: (text) => {
     skipArrayTrivia = () => {
         progressed: false
         (index < length).ifTrue(() => {
-            octet: source.at(index)
+            octet: source[index]
             isSpace(octet).ifTrue(() => {
                 index = index + 1
                 progressed = true
@@ -586,7 +586,7 @@ value: (text) => {
         skipContinuationWhitespace: null
         skipContinuationWhitespace = () => {
             (index < length).ifTrue(() => {
-                octet: source.at(index)
+                octet: source[index]
                 whitespace: isSpace(octet)
                 isNewlineStart(octet).ifTrue(() => {
                     whitespace = true
@@ -658,7 +658,7 @@ value: (text) => {
                                 inspect = () => {
                                     seeking.ifTrue(() => {
                                         (look < length).ifTrue(() => {
-                                            candidate: source.at(look)
+                                            candidate: source[look]
 
                                             isSpace(candidate).ifTrue(() => {
                                                 look = look + 1
@@ -931,7 +931,7 @@ value: (text) => {
                 gather: null
                 gather = () => {
                     (index < length).ifTrue(() => {
-                        octet: source.at(index)
+                        octet: source[index]
                         isBareKeyOctet(octet).ifTrue(() => {
                             buffer.add(octet)
                             index = index + 1
@@ -976,27 +976,27 @@ value: (text) => {
 
     putPath: null
     putPath = (map, parts, position, valueNode) => {
-        name: parts.at(position)
+        name: parts[position]
         last: position == parts.size() - 1
 
         last.ifTrue(() => {
             map.containsKey(name).ifTrue(() => {
                 fail()
             })
-            map.atPut(name, valueNode)
+            map[name] = valueNode
         })
 
         last.ifFalse(() => {
             child: null
             map.containsKey(name).ifTrue(() => {
-                child = map.at(name)
+                child = map[name]
                 (child.kind == "table").ifFalse(() => {
                     fail()
                 })
             })
             map.containsKey(name).ifFalse(() => {
                 child = node("table", Map())
-                map.atPut(name, child)
+                map[name] = child
             })
             putPath(child.value, parts, position + 1, valueNode)
         })
@@ -1009,13 +1009,13 @@ value: (text) => {
         present: chunks.containsKey(level)
 
         present.ifTrue(() => {
-            left: chunks.at(level)
+            left: chunks[level]
             chunks.remove(level)
             carryChunk(chunks, Array(...left, ...chunk), level + 1)
         })
 
         present.ifFalse(() => {
-            chunks.atPut(level, chunk)
+            chunks[level] = chunk
             (level > maxChunkLevel).ifTrue(() => {
                 maxChunkLevel = level
             })
@@ -1028,7 +1028,7 @@ value: (text) => {
         (level >= 0).ifTrue(() => {
             nextResult: result
             chunks.containsKey(level).ifTrue(() => {
-                nextResult = Array(...result, ...chunks.at(level))
+                nextResult = Array(...result, ...chunks[level])
             })
             finalResult = collectChunks(chunks, level - 1, nextResult)
         })
@@ -1077,7 +1077,7 @@ value: (text) => {
         base: 10
 
         (position < tokenLength).ifTrue(() => {
-            first: token.at(position)
+            first: token[position]
             (first == 43).ifTrue(() => {
                 signed = true
                 position = position + 1
@@ -1095,8 +1095,8 @@ value: (text) => {
 
         valid.ifTrue(() => {
             (position + 1 < tokenLength).ifTrue(() => {
-                (token.at(position) == 48).ifTrue(() => {
-                    prefix: token.at(position + 1)
+                (token[position] == 48).ifTrue(() => {
+                    prefix: token[position + 1]
                     (prefix == 120).ifTrue(() => {
                         base = 16
                         position = position + 2
@@ -1131,7 +1131,7 @@ value: (text) => {
         scan: null
         scan = () => {
             (position < tokenLength).ifTrue(() => {
-                octet: token.at(position)
+                octet: token[position]
 
                 (octet == 95).ifTrue(() => {
                     invalidUnderscore: digits == 0
@@ -1394,8 +1394,8 @@ value: (text) => {
         (first == 34).ifTrue(() => {
             multiline: false
             (index + 2 < length).ifTrue(() => {
-                (source.at(index + 1) == 34).ifTrue(() => {
-                    (source.at(index + 2) == 34).ifTrue(() => {
+                (source[index + 1] == 34).ifTrue(() => {
+                    (source[index + 2] == 34).ifTrue(() => {
                         multiline = true
                     })
                 })
@@ -1406,8 +1406,8 @@ value: (text) => {
         (first == 39).ifTrue(() => {
             multiline: false
             (index + 2 < length).ifTrue(() => {
-                (source.at(index + 1) == 39).ifTrue(() => {
-                    (source.at(index + 2) == 39).ifTrue(() => {
+                (source[index + 1] == 39).ifTrue(() => {
+                    (source[index + 2] == 39).ifTrue(() => {
                         multiline = true
                     })
                 })

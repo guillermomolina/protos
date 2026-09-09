@@ -65,7 +65,7 @@ equalsAsciiIgnoreCase: (left, right) => {
 
     leftBytes.each((octet) => {
         equal.ifTrue(() => {
-            (asciiLower(octet) == asciiLower(rightBytes.at(index))).ifFalse(() => {
+            (asciiLower(octet) == asciiLower(rightBytes[index])).ifFalse(() => {
                 equal = false
             })
         })

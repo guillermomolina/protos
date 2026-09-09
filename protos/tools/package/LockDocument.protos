@@ -30,7 +30,7 @@ expectBare: (tokens, index, expected) => {
         fail()
     })
 
-    token: tokens.at(index)
+    token: tokens[index]
     token.quoted.ifTrue(() => {
         fail()
     })
@@ -46,7 +46,7 @@ expectQuoted: (tokens, index) => {
         fail()
     })
 
-    token: tokens.at(index)
+    token: tokens[index]
     token.quoted.ifFalse(() => {
         fail()
     })
@@ -59,8 +59,8 @@ parseContentAt: (tokens, start) => {
         fail()
     })
 
-    method: Syntax.parseMethodToken(tokens.at(start))
-    digest: Syntax.parseDigestToken(tokens.at(start + 1))
+    method: Syntax.parseMethodToken(tokens[start])
+    digest: Syntax.parseDigestToken(tokens[start + 1])
 
     {
         value: {
@@ -202,7 +202,7 @@ parseRecord: (line) => {
         fail()
     })
 
-    keyword: tokens.at(0)
+    keyword: tokens[0]
     keyword.quoted.ifTrue(() => {
         fail()
     })
@@ -328,14 +328,14 @@ parseStructural: (text) => {
     (lines.size() < 5).ifTrue(() => {
         fail()
     })
-    (lines.at(3) == "").ifFalse(() => {
+    (lines[3] == "").ifFalse(() => {
         fail()
     })
 
     headerText:
-        lines.at(0) + "\n" +
-        lines.at(1) + "\n" +
-        lines.at(2) + "\n\n"
+        lines[0] + "\n" +
+        lines[1] + "\n" +
+        lines[2] + "\n\n"
     header: Syntax.parseHeader(headerText)
 
     roots: Array()
@@ -406,7 +406,7 @@ parseStructural: (text) => {
     (roots.size() == 1).ifFalse(() => {
         fail()
     })
-    root: roots.at(0).ref
+    root: roots[0].ref
 
     workspaceMembers.each((member) => {
         refEquals(member.ref, root).ifTrue(() => {
@@ -455,7 +455,7 @@ bytesLess: (left, right) => {
     left.each((leftOctet) => {
         decided.ifFalse(() => {
             (index < rightSize).ifTrue(() => {
-                rightOctet: right.at(index)
+                rightOctet: right[index]
 
                 (leftOctet < rightOctet).ifTrue(() => {
                     result = true

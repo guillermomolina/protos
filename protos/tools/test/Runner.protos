@@ -34,7 +34,7 @@ readSource: (spec, filesystem) => {
         pending: Array(...batchTemplate)
         issueIndex: 0
         batchTemplate.each((ignored) => {
-            pending.atPut(issueIndex, file.read(65536))
+            pending[issueIndex] = file.read(65536)
             issueIndex = issueIndex + 1
         })
 
@@ -70,11 +70,11 @@ resultTuple: (...items) => {
 }
 
 resultPassed: (result) => {
-    result.at(0)
+    result[0]
 }
 
 resultObservation: (result) => {
-    result.at(1)
+    result[1]
 }
 
 isSimpleExpectation: (spec) => {
@@ -116,15 +116,15 @@ isFutureStoredObservationExpectation: (spec) => {
 }
 
 futureObservationPolicyMode: (policy) => {
-    policy.at(0)
+    policy[0]
 }
 
 futureObservationPolicyParent: (policy) => {
-    policy.at(1)
+    policy[1]
 }
 
 futureObservationPolicyParentName: (policy) => {
-    policy.at(2)
+    policy[2]
 }
 
 parseFutureObservationPolicy: (text) => {
@@ -1082,11 +1082,11 @@ caseRunTuple: (...items) => {
 }
 
 caseRunSpec: (caseRun) => {
-    caseRun.at(0)
+    caseRun[0]
 }
 
 caseRunEvaluation: (caseRun) => {
-    caseRun.at(1)
+    caseRun[1]
 }
 
 runTuple: (...items) => {
@@ -1094,19 +1094,19 @@ runTuple: (...items) => {
 }
 
 runCaseResults: (run) => {
-    run.at(0)
+    run[0]
 }
 
 runSelectedCount: (run) => {
-    run.at(1)
+    run[1]
 }
 
 runPassedCount: (run) => {
-    run.at(2)
+    run[2]
 }
 
 runSkippedCount: (run) => {
-    run.at(3)
+    run[3]
 }
 
 runAllPassed: (run) => {
@@ -1123,12 +1123,12 @@ runSimpleWithLoader: (plan, sourceLoader, executor, inspectorExecutor = null) =>
     carryChunk = (chunk, level) => {
         present: resultChunks.containsKey(level)
         present.ifTrue(() => {
-            left: resultChunks.at(level)
+            left: resultChunks[level]
             resultChunks.remove(level)
             carryChunk(Array(...left, ...chunk), level + 1)
         })
         present.ifFalse(() => {
-            resultChunks.atPut(level, chunk)
+            resultChunks[level] = chunk
             (level > maxChunkLevel).ifTrue(() => {
                 maxChunkLevel = level
             })
@@ -1141,7 +1141,7 @@ runSimpleWithLoader: (plan, sourceLoader, executor, inspectorExecutor = null) =>
         (level >= 0).ifTrue(() => {
             nextResult: result
             resultChunks.containsKey(level).ifTrue(() => {
-                nextResult = Array(...result, ...resultChunks.at(level))
+                nextResult = Array(...result, ...resultChunks[level])
             })
             finalResult = collectChunks(level - 1, nextResult)
         })

@@ -246,7 +246,7 @@ parseQstring: (text) => {
         fail()
     })
 
-    token: tokens.at(0)
+    token: tokens[0]
     token.quoted.ifFalse(() => {
         fail()
     })
@@ -308,7 +308,7 @@ parseDecimalToken: (token) => {
     })
 
     (source.size() > 1).ifTrue(() => {
-        (source.at(0) == 48).ifTrue(() => {
+        (source[0] == 48).ifTrue(() => {
             fail()
         })
     })
@@ -454,7 +454,7 @@ headerLines: (text) => {
         fail()
     })
 
-    (lines.at(3) == "").ifFalse(() => {
+    (lines[3] == "").ifFalse(() => {
         fail()
     })
 
@@ -468,7 +468,7 @@ parseLockFormatLine: (text) => {
         fail()
     })
 
-    keyword: tokens.at(0)
+    keyword: tokens[0]
     keyword.quoted.ifTrue(() => {
         fail()
     })
@@ -476,7 +476,7 @@ parseLockFormatLine: (text) => {
         fail()
     })
 
-    parsed: parseDecimalToken(tokens.at(1))
+    parsed: parseDecimalToken(tokens[1])
     (parsed.value == 1).ifFalse(() => {
         fail()
     })
@@ -491,7 +491,7 @@ parseResolverVersionLine: (text) => {
         fail()
     })
 
-    keyword: tokens.at(0)
+    keyword: tokens[0]
     keyword.quoted.ifTrue(() => {
         fail()
     })
@@ -499,7 +499,7 @@ parseResolverVersionLine: (text) => {
         fail()
     })
 
-    parseDecimalToken(tokens.at(1))
+    parseDecimalToken(tokens[1])
 }
 
 parseResolutionInputLine: (text) => {
@@ -509,7 +509,7 @@ parseResolutionInputLine: (text) => {
         fail()
     })
 
-    keyword: tokens.at(0)
+    keyword: tokens[0]
     keyword.quoted.ifTrue(() => {
         fail()
     })
@@ -517,8 +517,8 @@ parseResolutionInputLine: (text) => {
         fail()
     })
 
-    parsedMethod: parseMethodToken(tokens.at(1))
-    parsedDigest: parseDigestToken(tokens.at(2))
+    parsedMethod: parseMethodToken(tokens[1])
+    parsedDigest: parseDigestToken(tokens[2])
 
     {
         method: parsedMethod
@@ -530,9 +530,9 @@ parseResolutionInputLine: (text) => {
 parseHeader: (text) => {
     lines: headerLines(text)
 
-    lockFormatRecord: parseLockFormatLine(lines.at(0))
-    resolverVersionRecord: parseResolverVersionLine(lines.at(1))
-    resolutionInputRecord: parseResolutionInputLine(lines.at(2))
+    lockFormatRecord: parseLockFormatLine(lines[0])
+    resolverVersionRecord: parseResolverVersionLine(lines[1])
+    resolutionInputRecord: parseResolutionInputLine(lines[2])
 
     lockFormatValue: lockFormatRecord.value
     lockFormatTextValue: lockFormatRecord.text
@@ -565,7 +565,7 @@ nodeRefAt: (tokens, start) => {
         fail()
     })
 
-    kindToken: tokens.at(start)
+    kindToken: tokens[start]
     kindToken.quoted.ifTrue(() => {
         fail()
     })
@@ -577,7 +577,7 @@ nodeRefAt: (tokens, start) => {
             fail()
         })
 
-        packageToken: tokens.at(start + 1)
+        packageToken: tokens[start + 1]
         packageToken.quoted.ifFalse(() => {
             fail()
         })
@@ -596,8 +596,8 @@ nodeRefAt: (tokens, start) => {
             fail()
         })
 
-        packageToken: tokens.at(start + 1)
-        versionToken: tokens.at(start + 2)
+        packageToken: tokens[start + 1]
+        versionToken: tokens[start + 2]
 
         packageToken.quoted.ifFalse(() => {
             fail()
@@ -623,8 +623,8 @@ nodeRefAt: (tokens, start) => {
             fail()
         })
 
-        packageToken: tokens.at(start + 1)
-        revisionToken: tokens.at(start + 2)
+        packageToken: tokens[start + 1]
+        revisionToken: tokens[start + 2]
 
         packageToken.quoted.ifFalse(() => {
             fail()

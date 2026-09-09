@@ -27,6 +27,6 @@ packageTomlRun: Runner.runSimple(
 
 writer: TextWriter(process.stdout(), process.stdoutEncoding())
 writer.writeLine("Protos test tool bootstrap")
-writer.writeLine(process.args().at(0))
+writer.writeLine(process.args()[0])
 
 run

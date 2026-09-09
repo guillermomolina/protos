@@ -182,7 +182,7 @@ resolvePathDependency: (
         memberPackageIds.containsKey(targetLocation).ifFalse(() => {
             fail()
         })
-        targetPackageId = memberPackageIds.at(targetLocation)
+        targetPackageId = memberPackageIds[targetLocation]
     })
 
     {
@@ -324,7 +324,7 @@ assembleState: (projectTreeFilesystem) => {
     seenLocations: Map()
     seenPackageIds: Map()
     memberPackageIds: Map()
-    seenPackageIds.atPut(rootPackageId, true)
+    seenPackageIds[rootPackageId] = true
 
     (rootManifest.workspace === null).ifFalse(() => {
         rootManifest.workspace.members.each((declaration) => {
@@ -339,7 +339,7 @@ assembleState: (projectTreeFilesystem) => {
             seenLocations.containsKey(location).ifTrue(() => {
                 fail()
             })
-            seenLocations.atPut(location, true)
+            seenLocations[location] = true
 
             memberManifest:
                 Schema.parse(
@@ -353,8 +353,8 @@ assembleState: (projectTreeFilesystem) => {
             seenPackageIds.containsKey(packageId).ifTrue(() => {
                 fail()
             })
-            seenPackageIds.atPut(packageId, true)
-            memberPackageIds.atPut(location, packageId)
+            seenPackageIds[packageId] = true
+            memberPackageIds[location] = packageId
 
             rawMembers =
                 Array(

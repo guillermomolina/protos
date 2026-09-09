@@ -35,7 +35,7 @@ statements: (text) => {
     peek: () => {
         value: -1
         (index < length).ifTrue(() => {
-            value = source.at(index)
+            value = source[index]
         })
         value
     }
@@ -44,7 +44,7 @@ statements: (text) => {
         (index >= length).ifTrue(() => {
             fail()
         })
-        value: source.at(index)
+        value: source[index]
         index = index + 1
         value
     }
@@ -73,7 +73,7 @@ statements: (text) => {
         scan: null
         scan = () => {
             (look < length).ifTrue(() => {
-                (source.at(look) == quote).ifTrue(() => {
+                (source[look] == quote).ifTrue(() => {
                     count = count + 1
                     look = look + 1
                     scan()
@@ -338,7 +338,7 @@ table: (text) => {
 
     root: node("table", Map())
     states: IdentityMap()
-    states.atPut(root, "root")
+    states[root] = "root"
     current: root
 
     isSpace: (octet) => {
@@ -356,7 +356,7 @@ table: (text) => {
         copy: null
         copy = () => {
             (position < end).ifTrue(() => {
-                buffer.add(source.at(position))
+                buffer.add(source[position])
                 position = position + 1
                 copy()
             })
@@ -373,7 +373,7 @@ table: (text) => {
         trimLeft: null
         trimLeft = () => {
             (left < right).ifTrue(() => {
-                isSpace(source.at(left)).ifTrue(() => {
+                isSpace(source[left]).ifTrue(() => {
                     left = left + 1
                     trimLeft()
                 })
@@ -383,7 +383,7 @@ table: (text) => {
         trimRight: null
         trimRight = () => {
             (right > left).ifTrue(() => {
-                isSpace(source.at(right - 1)).ifTrue(() => {
+                isSpace(source[right - 1]).ifTrue(() => {
                     right = right - 1
                     trimRight()
                 })
@@ -400,13 +400,13 @@ table: (text) => {
 
     markInlineTable: (valueNode) => {
         (valueNode.kind == "table").ifTrue(() => {
-            states.atPut(valueNode, "inline")
+            states[valueNode] = "inline"
         })
     }
 
     putDotted: null
     putDotted = (tableNode, parts, position, valueNode) => {
-        name: parts.at(position)
+        name: parts[position]
         last: position == parts.size() - 1
         entries: tableNode.value
 
@@ -414,21 +414,21 @@ table: (text) => {
             entries.containsKey(name).ifTrue(() => {
                 fail()
             })
-            entries.atPut(name, valueNode)
+            entries[name] = valueNode
             markInlineTable(valueNode)
         })
 
         last.ifFalse(() => {
             child: null
             entries.containsKey(name).ifTrue(() => {
-                child = entries.at(name)
+                child = entries[name]
                 (child.kind == "table").ifFalse(() => {
                     fail()
                 })
                 states.containsKey(child).ifFalse(() => {
                     fail()
                 })
-                state: states.at(child)
+                state: states[child]
                 (state == "header").ifTrue(() => {
                     fail()
                 })
@@ -436,14 +436,14 @@ table: (text) => {
                     fail()
                 })
                 (state == "implicit").ifTrue(() => {
-                    states.atPut(child, "dotted")
+                    states[child] = "dotted"
                 })
             })
 
             entries.containsKey(name).ifFalse(() => {
                 child = node("table", Map())
-                entries.atPut(name, child)
-                states.atPut(child, "dotted")
+                entries[name] = child
+                states[child] = "dotted"
             })
 
             putDotted(child, parts, position + 1, valueNode)
@@ -457,14 +457,14 @@ table: (text) => {
         states.containsKey(arrayNode).ifFalse(() => {
             fail()
         })
-        (states.at(arrayNode) == "array-table").ifFalse(() => {
+        (states[arrayNode] == "array-table").ifFalse(() => {
             fail()
         })
         elements: arrayNode.value
         (elements.size() == 0).ifTrue(() => {
             fail()
         })
-        selected: elements.at(elements.size() - 1)
+        selected: elements[elements.size() - 1]
         (selected.kind == "table").ifFalse(() => {
             fail()
         })
@@ -478,7 +478,7 @@ table: (text) => {
             states.containsKey(child).ifFalse(() => {
                 fail()
             })
-            (states.at(child) == "inline").ifTrue(() => {
+            (states[child] == "inline").ifTrue(() => {
                 fail()
             })
             selected = child
@@ -500,13 +500,13 @@ table: (text) => {
 
         walk: null
         walk = () => {
-            name: parts.at(position)
+            name: parts[position]
             last: position == parts.size() - 1
             entries: selected.value
             child: null
 
             entries.containsKey(name).ifTrue(() => {
-                child = entries.at(name)
+                child = entries[name]
 
                 last.ifTrue(() => {
                     (child.kind == "table").ifFalse(() => {
@@ -515,9 +515,9 @@ table: (text) => {
                     states.containsKey(child).ifFalse(() => {
                         fail()
                     })
-                    state: states.at(child)
+                    state: states[child]
                     (state == "implicit").ifTrue(() => {
-                        states.atPut(child, "header")
+                        states[child] = "header"
                     })
                     (state == "implicit").ifFalse(() => {
                         fail()
@@ -532,12 +532,12 @@ table: (text) => {
 
             entries.containsKey(name).ifFalse(() => {
                 child = node("table", Map())
-                entries.atPut(name, child)
+                entries[name] = child
                 last.ifTrue(() => {
-                    states.atPut(child, "header")
+                    states[child] = "header"
                 })
                 last.ifFalse(() => {
-                    states.atPut(child, "implicit")
+                    states[child] = "implicit"
                 })
                 selected = child
             })
@@ -559,24 +559,24 @@ table: (text) => {
 
         walk: null
         walk = () => {
-            name: parts.at(position)
+            name: parts[position]
             last: position == parts.size() - 1
             entries: selected.value
             child: null
 
             last.ifTrue(() => {
                 element: node("table", Map())
-                states.atPut(element, "array-element")
+                states[element] = "array-element"
 
                 entries.containsKey(name).ifTrue(() => {
-                    child = entries.at(name)
+                    child = entries[name]
                     (child.kind == "array").ifFalse(() => {
                         fail()
                     })
                     states.containsKey(child).ifFalse(() => {
                         fail()
                     })
-                    (states.at(child) == "array-table").ifFalse(() => {
+                    (states[child] == "array-table").ifFalse(() => {
                         fail()
                     })
                     child.value = Array(...child.value, element)
@@ -584,8 +584,8 @@ table: (text) => {
 
                 entries.containsKey(name).ifFalse(() => {
                     child = node("array", Array(element))
-                    entries.atPut(name, child)
-                    states.atPut(child, "array-table")
+                    entries[name] = child
+                    states[child] = "array-table"
                 })
 
                 created = element
@@ -593,14 +593,14 @@ table: (text) => {
 
             last.ifFalse(() => {
                 entries.containsKey(name).ifTrue(() => {
-                    child = entries.at(name)
+                    child = entries[name]
                     selected = existingParent(child)
                 })
 
                 entries.containsKey(name).ifFalse(() => {
                     child = node("table", Map())
-                    entries.atPut(name, child)
-                    states.atPut(child, "implicit")
+                    entries[name] = child
+                    states[child] = "implicit"
                     selected = child
                 })
 
@@ -619,10 +619,10 @@ table: (text) => {
         (bounds.left >= bounds.right).ifTrue(() => {
             fail()
         })
-        (source.at(bounds.left) == 91).ifFalse(() => {
+        (source[bounds.left] == 91).ifFalse(() => {
             fail()
         })
-        (source.at(bounds.right - 1) == 93).ifFalse(() => {
+        (source[bounds.right - 1] == 93).ifFalse(() => {
             fail()
         })
 
@@ -631,12 +631,12 @@ table: (text) => {
         keyEnd: bounds.right - 1
 
         (keyStart < keyEnd).ifTrue(() => {
-            (source.at(keyStart) == 91).ifTrue(() => {
+            (source[keyStart] == 91).ifTrue(() => {
                 arrayHeader = true
                 (keyStart + 1 >= keyEnd).ifTrue(() => {
                     fail()
                 })
-                (source.at(keyEnd - 1) == 93).ifFalse(() => {
+                (source[keyEnd - 1] == 93).ifFalse(() => {
                     fail()
                 })
                 keyStart = keyStart + 1
@@ -662,7 +662,7 @@ table: (text) => {
         scan = () => {
             (position < length).ifTrue(() => {
                 (separator < 0).ifTrue(() => {
-                    octet: source.at(position)
+                    octet: source[position]
                     inQuote: quote >= 0
 
                     inQuote.ifTrue(() => {
@@ -742,7 +742,7 @@ table: (text) => {
             fail()
         })
 
-        header: source.at(bounds.left) == 91
+        header: source[bounds.left] == 91
         header.ifTrue(() => {
             parsedHeader: parseHeader(statement)
             parsedHeader.array.ifTrue(() => {

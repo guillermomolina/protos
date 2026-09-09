@@ -66,7 +66,7 @@ bytesLess: (left, right) => {
     left.each((leftOctet) => {
         decided.ifFalse(() => {
             (index < rightSize).ifTrue(() => {
-                rightOctet: right.at(index)
+                rightOctet: right[index]
 
                 (leftOctet < rightOctet).ifTrue(() => {
                     result = true
@@ -104,8 +104,8 @@ lowerHex: (digestBytes) => {
     digestBytes.each((octet) => {
         result =
             result +
-            digits.at(octet.div(16)) +
-            digits.at(octet.mod(16))
+            digits[octet.div(16)] +
+            digits[octet.mod(16)]
     })
     result
 }
@@ -184,7 +184,7 @@ foldAndValidateSegment: (name) => {
         })
     })
 
-    (source.at(source.size() - 1) == 46).ifTrue(() => {
+    (source[source.size() - 1] == 46).ifTrue(() => {
         fail()
     })
 
@@ -205,7 +205,7 @@ recordArray: (records, count) => {
         })
 
         (length == 1).ifTrue(() => {
-            result = Array(records.at(start))
+            result = Array(records[start])
         })
 
         (length > 1).ifTrue(() => {
@@ -223,13 +223,10 @@ recordArray: (records, count) => {
 
 collectRecords: (capturedFilesystem) => {
     pending: Map()
-    pending.atPut(
-        0,
-        {
+    pending[0] = {
             path: Path.relative()
             prefix: ""
         }
-    )
     pendingCount: 1
     cursor: 0
 
@@ -238,7 +235,7 @@ collectRecords: (capturedFilesystem) => {
     rootManifest: false
 
     (() => cursor < pendingCount).while() {
-        frame: pending.at(cursor)
+        frame: pending[cursor]
         cursor = cursor + 1
 
         entries: capturedFilesystem.entries(frame.path).value()
@@ -252,7 +249,7 @@ collectRecords: (capturedFilesystem) => {
             siblingFoldedNames.containsKey(foldedName).ifTrue(() => {
                 fail()
             })
-            siblingFoldedNames.atPut(foldedName, true)
+            siblingFoldedNames[foldedName] = true
 
             childPath: frame.path.child(name)
             pathText: name
@@ -287,25 +284,19 @@ collectRecords: (capturedFilesystem) => {
                     childPath
                 ).value()
 
-                records.atPut(
-                    recordCount,
-                    {
+                records[recordCount] = {
                         pathBytes: recordPathBytes
                         content: recordContent
                     }
-                )
                 recordCount = recordCount + 1
             })
 
             (kind == "directory").ifTrue(() => {
                 recognized = true
-                pending.atPut(
-                    pendingCount,
-                    {
+                pending[pendingCount] = {
                         path: childPath
                         prefix: pathText
                     }
-                )
                 pendingCount = pendingCount + 1
             })
 

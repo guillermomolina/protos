@@ -131,7 +131,7 @@ listed in one table.
 |---|---|---|
 | AUD003-A1 | CLOSED | User-facing indexing cleanup in examples/tutorials, published historically as `SOURCE-STYLE-INDEXING-A1` at `a848371a6428cb1d80b688a9a27e6b74ec61f28a`. |
 | AUD003-A2 | CLOSED | Standard Library indexing audit/migration: ordinary indexing debt migrated across six reviewed modules; no current stdlib result-sensitive/direct-protocol/bootstrap exception remained; validated under `0.2.293-SNAPSHOT`. |
-| AUD003-A3 | OPEN | Bundled-tool indexing audit/migration under `protos/tools/**`. |
+| AUD003-A3 | CLOSED | Bundled-tool indexing audit/migration: ordinary indexing debt migrated across 16 execution-time Package/Test Tool modules; no result-sensitive/protocol/bootstrap exception was rewritten; validated under `0.2.295-SNAPSHOT`. |
 | AUD003-A4 | OPEN | Benchmarks and remaining ordinary-program indexing audit/migration. |
 | AUD003-B1 | OPEN | Ordinary lazy Boolean spelling audit for explicit `and`/`or`, including representative conformance tests whose subject is not the Boolean protocol itself. |
 | AUD003-B2 | OPEN | Ordinary unary spelling audit for explicit `not`/`negated`, retaining protocol/lowering tests. |
@@ -185,6 +185,46 @@ Standard Library after materialization.
 Executable validation covers collections, SHA-256, JSON and Files focal
 conformance plus the complete Maven test suite. No specification or public API
 changes. Implementation version: `0.2.293-SNAPSHOT`.
+
+### AUD003-A3 retained evidence
+
+GitHub coordination: Issue `#112` (`AUD003-A3`).
+
+The execution-time bundled-tool inventory classified explicit `.at(...)` /
+`.atPut(...)` occurrences under `protos/tools/**` before migration. The
+migrated modules were:
+
+- `protos/tools/package/ContentIdentity.protos`
+- `protos/tools/package/DependencyConstraint.protos`
+- `protos/tools/package/ExecutionPlan.protos`
+- `protos/tools/package/LockDocument.protos`
+- `protos/tools/package/LockSyntax.protos`
+- `protos/tools/package/Main.protos`
+- `protos/tools/package/ManifestSchemaV1.protos`
+- `protos/tools/package/ReleaseVersion.protos`
+- `protos/tools/package/ResolutionInput.protos`
+- `protos/tools/package/ResolutionRoot.protos`
+- `protos/tools/package/RuntimeNames.protos`
+- `protos/tools/package/TomlDocument.protos`
+- `protos/tools/package/TomlSyntax.protos`
+- `protos/tools/test/Main.protos`
+- `protos/tools/test/Manifest.protos`
+- `protos/tools/test/Runner.protos`
+
+All migrated reads are ordinary indexing. Every migrated `atPut` is a complete
+standalone statement whose own return value is ignored; the materializer rejects
+embedded/result-sensitive writes, unexpected arity, or a new indexing-bearing
+tool file outside the reviewed A3 inventory. No direct indexing-protocol,
+reflection/dispatch, bootstrap/layering, or result-contract exception was
+rewritten.
+
+The post-materialization scan covers the complete current `protos/tools/**`
+domain and requires zero remaining explicit indexing calls in this confirmed
+equivalence family.
+
+Executable validation covers the Package Tool Protos corpus and Test Tool
+implementation tests, followed by the complete Maven test suite. No
+specification or public API change. Implementation version: `0.2.295-SNAPSHOT`.
 
 ## Migration discipline
 

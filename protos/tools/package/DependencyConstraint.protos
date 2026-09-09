@@ -110,7 +110,7 @@ parseComparison: (token) => {
         fail()
     })
 
-    first: token.at(0)
+    first: token[0]
     lower: first == 62
     upper: first == 60
 
@@ -126,7 +126,7 @@ parseComparison: (token) => {
     versionStart: 1
 
     (token.size() > 1).ifTrue(() => {
-        (token.at(1) == 61).ifTrue(() => {
+        (token[1] == 61).ifTrue(() => {
             inclusive = true
             versionStart = 2
         })
@@ -224,13 +224,13 @@ parse: (text) => {
     interval: false
 
     (source.size() > 0).ifTrue(() => {
-        (source.at(0) == 94).ifTrue(() => {
+        (source[0] == 94).ifTrue(() => {
             caret = true
         })
-        (source.at(0) == 62).ifTrue(() => {
+        (source[0] == 62).ifTrue(() => {
             interval = true
         })
-        (source.at(0) == 60).ifTrue(() => {
+        (source[0] == 60).ifTrue(() => {
             interval = true
         })
     })

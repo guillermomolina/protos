@@ -59,7 +59,7 @@ copyExports: (manifest) => {
     manifest.exports.each((publicName, internalName) => {
         Names.requireLogicalName(publicName)
         Names.requireLogicalName(internalName)
-        result.atPut(publicName, internalName)
+        result[publicName] = internalName
     })
 
     result

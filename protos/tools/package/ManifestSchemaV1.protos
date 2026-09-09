@@ -29,7 +29,7 @@ baseFromTable: (root) => {
         entries.containsKey(name).ifFalse(() => {
             fail()
         })
-        entries.at(name)
+        entries[name]
     }
 
     nonEmptyString: (node) => {
@@ -52,12 +52,12 @@ baseFromTable: (root) => {
     }
 
     rootAllowed: Map()
-    rootAllowed.atPut("manifest-version", true)
-    rootAllowed.atPut("package", true)
-    rootAllowed.atPut("compatibility", true)
-    rootAllowed.atPut("exports", true)
-    rootAllowed.atPut("dependencies", true)
-    rootAllowed.atPut("workspace", true)
+    rootAllowed["manifest-version"] = true
+    rootAllowed["package"] = true
+    rootAllowed["compatibility"] = true
+    rootAllowed["exports"] = true
+    rootAllowed["dependencies"] = true
+    rootAllowed["workspace"] = true
 
     rootEntries: tableEntries(root)
     checkAllowed(rootEntries, rootAllowed)
@@ -73,16 +73,16 @@ baseFromTable: (root) => {
     packageNode: requiredNode(rootEntries, "package")
     packageEntries: tableEntries(packageNode)
     packageAllowed: Map()
-    packageAllowed.atPut("id", true)
-    packageAllowed.atPut("version", true)
-    packageAllowed.atPut("locator", true)
+    packageAllowed["id"] = true
+    packageAllowed["version"] = true
+    packageAllowed["locator"] = true
     checkAllowed(packageEntries, packageAllowed)
 
     packageId: nonEmptyString(requiredNode(packageEntries, "id"))
     packageVersion: nonEmptyString(requiredNode(packageEntries, "version"))
     packageLocator: null
     packageEntries.containsKey("locator").ifTrue(() => {
-        packageLocator = nonEmptyString(packageEntries.at("locator"))
+        packageLocator = nonEmptyString(packageEntries["locator"])
     })
 
     {
@@ -115,7 +115,7 @@ sectionsFromTable: (root) => {
         entries.containsKey(name).ifFalse(() => {
             fail()
         })
-        entries.at(name)
+        entries[name]
     }
 
     nonEmptyString: (node) => {
@@ -142,9 +142,9 @@ sectionsFromTable: (root) => {
 
     compatibility: null
     rootEntries.containsKey("compatibility").ifTrue(() => {
-        compatibilityEntries: tableEntries(rootEntries.at("compatibility"))
+        compatibilityEntries: tableEntries(rootEntries["compatibility"])
         compatibilityAllowed: Map()
-        compatibilityAllowed.atPut("language", true)
+        compatibilityAllowed["language"] = true
         checkAllowed(compatibilityEntries, compatibilityAllowed)
         language: nonEmptyString(requiredNode(compatibilityEntries, "language"))
         compatibility = {
@@ -154,17 +154,17 @@ sectionsFromTable: (root) => {
 
     exports: Map()
     rootEntries.containsKey("exports").ifTrue(() => {
-        exportEntries: tableEntries(rootEntries.at("exports"))
+        exportEntries: tableEntries(rootEntries["exports"])
         exportEntries.each((name, valueNode) => {
-            exports.atPut(name, nonEmptyString(valueNode))
+            exports[name] = nonEmptyString(valueNode)
         })
     })
 
     workspace: null
     rootEntries.containsKey("workspace").ifTrue(() => {
-        workspaceEntries: tableEntries(rootEntries.at("workspace"))
+        workspaceEntries: tableEntries(rootEntries["workspace"])
         workspaceAllowed: Map()
-        workspaceAllowed.atPut("members", true)
+        workspaceAllowed["members"] = true
         checkAllowed(workspaceEntries, workspaceAllowed)
 
         membersNode: requiredNode(workspaceEntries, "members")
@@ -179,7 +179,7 @@ sectionsFromTable: (root) => {
             seenMembers.containsKey(member).ifTrue(() => {
                 fail()
             })
-            seenMembers.atPut(member, true)
+            seenMembers[member] = true
             members = Array(...members, member)
         })
 
@@ -237,17 +237,17 @@ fromTable: (root) => {
     dependencies: Map()
 
     rootEntries.containsKey("dependencies").ifTrue(() => {
-        dependencyEntries: tableEntries(rootEntries.at("dependencies"))
+        dependencyEntries: tableEntries(rootEntries["dependencies"])
 
         dependencyEntries.each((alias, declarationNode) => {
             declarationEntries: tableEntries(declarationNode)
             declarationAllowed: Map()
-            declarationAllowed.atPut("authority", true)
-            declarationAllowed.atPut("package", true)
-            declarationAllowed.atPut("version", true)
-            declarationAllowed.atPut("git", true)
-            declarationAllowed.atPut("rev", true)
-            declarationAllowed.atPut("path", true)
+            declarationAllowed["authority"] = true
+            declarationAllowed["package"] = true
+            declarationAllowed["version"] = true
+            declarationAllowed["git"] = true
+            declarationAllowed["rev"] = true
+            declarationAllowed["path"] = true
             checkAllowed(declarationEntries, declarationAllowed)
 
             hasAuthority: declarationEntries.containsKey("authority")
@@ -288,24 +288,24 @@ fromTable: (root) => {
 
             registryValid.ifTrue(() => {
                 dependency = {
-                    authority: nonEmptyString(declarationEntries.at("authority"))
-                    package: nonEmptyString(declarationEntries.at("package"))
-                    version: nonEmptyString(declarationEntries.at("version"))
+                    authority: nonEmptyString(declarationEntries["authority"])
+                    package: nonEmptyString(declarationEntries["package"])
+                    version: nonEmptyString(declarationEntries["version"])
                 }
                 valid = true
             })
 
             gitValid.ifTrue(() => {
                 dependency = {
-                    git: nonEmptyString(declarationEntries.at("git"))
-                    rev: nonEmptyString(declarationEntries.at("rev"))
+                    git: nonEmptyString(declarationEntries["git"])
+                    rev: nonEmptyString(declarationEntries["rev"])
                 }
                 valid = true
             })
 
             pathValid.ifTrue(() => {
                 dependency = {
-                    path: nonEmptyString(declarationEntries.at("path"))
+                    path: nonEmptyString(declarationEntries["path"])
                 }
                 valid = true
             })
@@ -314,7 +314,7 @@ fromTable: (root) => {
                 fail()
             })
 
-            dependencies.atPut(alias, dependency)
+            dependencies[alias] = dependency
         })
     })
 

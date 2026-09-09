@@ -62,7 +62,7 @@ parseDecimal: (bytes) => {
     })
 
     (bytes.size() > 1).ifTrue(() => {
-        (bytes.at(0) == 48).ifTrue(() => {
+        (bytes[0] == 48).ifTrue(() => {
             fail()
         })
     })
@@ -97,7 +97,7 @@ parsePrereleaseIdentifier: (bytes) => {
 
     numeric.ifTrue(() => {
         (bytes.size() > 1).ifTrue(() => {
-            (bytes.at(0) == 48).ifTrue(() => {
+            (bytes[0] == 48).ifTrue(() => {
                 fail()
             })
         })
@@ -233,7 +233,7 @@ compareAsciiText: (leftText, rightText) => {
     left.each((octet) => {
         (index < limit).ifTrue(() => {
             (result == 0).ifTrue(() => {
-                other: right.at(index)
+                other: right[index]
                 (octet < other).ifTrue(() => {
                     result = -1
                 })
@@ -341,7 +341,7 @@ compare: (left, right) => {
                         (result == 0).ifTrue(() => {
                             result = compareIdentifier(
                                 identifier,
-                                right.prerelease.at(index)
+                                right.prerelease[index]
                             )
                         })
                     })
