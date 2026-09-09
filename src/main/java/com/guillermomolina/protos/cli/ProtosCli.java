@@ -176,7 +176,11 @@ public final class ProtosCli {
         Path conformanceRoot = testsRoot.resolve("conformance");
         Path packageTomlRoot =
                 testsRoot.resolve("package-tool").resolve("toml-syntax");
+        Path actorRoot = conformanceRoot.resolve("actor");
+        Path actorModulesRoot = actorRoot.resolve("modules");
         Path packageToolRoot = distributionRoot.resolve("tools").resolve("package");
+        ProtosModuleResolver standardLibraryResolver =
+                new ProtosStandardLibraryModuleResolver(core.getParent());
         ProtosPrelude packagePrelude =
                 new ProtosCoreBootstrap()
                         .bootstrap(
@@ -184,12 +188,24 @@ public final class ProtosCli {
                                 new ProtosBundledToolModuleResolver(
                                         "package",
                                         packageToolRoot,
-                                        new ProtosStandardLibraryModuleResolver(
-                                                core.getParent())));
+                                        standardLibraryResolver));
+        ProtosPrelude actorPrelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(
+                                core,
+                                new ProtosExactModuleOverlayResolver(
+                                        Map.of(
+                                                "workers",
+                                                new ProtosExactModuleOverlayResolver.ExactModule(
+                                                        new ProtosModuleKey("tool002-actor:workers"),
+                                                        actorModulesRoot.resolve("workers.protos"))),
+                                        standardLibraryResolver));
         try (ProtosNioReadOnlyTreeFilesystemBackend filesystemBackend =
                         new ProtosNioReadOnlyTreeFilesystemBackend(conformanceRoot);
                 ProtosNioReadOnlyTreeFilesystemBackend packageTomlFilesystemBackend =
-                        new ProtosNioReadOnlyTreeFilesystemBackend(packageTomlRoot)) {
+                        new ProtosNioReadOnlyTreeFilesystemBackend(packageTomlRoot);
+                ProtosNioReadOnlyTreeFilesystemBackend actorFilesystemBackend =
+                        new ProtosNioReadOnlyTreeFilesystemBackend(actorRoot)) {
             return runBundledTool(
                     "test",
                     "Test",
@@ -204,11 +220,23 @@ public final class ProtosCli {
                                 session.activation, session.runtimeHost);
                         ProtosExactExecutionFacility.install(
                                 session.activation,
+                                "actorExecution",
+                                actorPrelude,
+                                session.runtimeHost);
+                        ProtosExactExecutionFacility.installInspection(
+                                session.activation,
+                                "actorExecutionInspect",
+                                actorPrelude,
+                                session.runtimeHost);
+                        ProtosExactExecutionFacility.install(
+                                session.activation,
                                 "packageExecution",
                                 packagePrelude,
                                 session.runtimeHost);
                         installBundledToolFilesystem(
                                 session, "filesystem", filesystemBackend);
+                        installBundledToolFilesystem(
+                                session, "actorFilesystem", actorFilesystemBackend);
                         installBundledToolFilesystem(
                                 session,
                                 "packageTomlFilesystem",

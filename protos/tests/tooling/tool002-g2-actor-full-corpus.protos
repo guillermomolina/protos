@@ -1,0 +1,49 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. See LICENSE.TXT.
+
+Manifest: import("self:Manifest")
+Runner: import("self:Runner")
+
+plan: Manifest.load(actorFilesystem)
+run: Runner.runSimple(
+    plan,
+    actorFilesystem,
+    actorExecution,
+    actorExecutionInspect
+)
+cases: Manifest.planCases(plan)
+firstFailure: null
+
+Runner.runCaseResults(run).each((caseRun) => {
+    Runner.resultPassed(Runner.caseRunEvaluation(caseRun)).ifFalse(() => {
+        (firstFailure === null).ifTrue(() => {
+            firstFailure = Manifest.caseId(Runner.caseRunSpec(caseRun))
+        })
+    })
+})
+
+result: firstFailure
+(firstFailure === null).ifTrue(() => {
+    complete: cases.size() > 0
+    complete.ifTrue(() => {
+        complete = Runner.runSelectedCount(run) == cases.size()
+    })
+    complete.ifTrue(() => {
+        complete = Runner.runPassedCount(run) == cases.size()
+    })
+    complete.ifTrue(() => {
+        complete = Runner.runSkippedCount(run) == 0
+    })
+    complete.ifTrue(() => {
+        complete = Runner.runAllPassed(run)
+    })
+
+    complete.ifTrue(() => {
+        result = true
+    })
+    complete.ifFalse(() => {
+        result = "tool002-g2-actor-count-mismatch"
+    })
+})
+
+result
