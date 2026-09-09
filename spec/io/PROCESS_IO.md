@@ -444,3 +444,23 @@ A future external-process facility may expose stdin/stdout/stderr pipes or other
 A future host-signal facility must integrate with the Actor/concurrency model rather than asynchronously executing arbitrary Protos code inside an Actor turn. The exact signal API is outside this document.
 
 ---
+
+
+### Root network capability provisioning (D047)
+
+D047 / specification revision `0.1.388` keeps Network authority separate
+from Process authority. When the host grants the initial program a default Core
+`Network` capability, before the first source expression it provisions an
+additional local slot named `network` on the same initial `moduleContext`. When
+no default network authority is granted, that slot is absent rather than bound to
+`null`.
+
+The slot is bootstrap-local, not prelude/global state, an intrinsic, import side
+effect, or service locator. Imported modules do not receive it automatically and
+possessing `Process` cannot recover it. Additional or more restricted Network
+capabilities may be supplied explicitly. Network authority is not implied by
+Filesystem authority or by source/package loading authority.
+
+`Network`, `TcpConnection`, and `TcpListener` have no initial Actor- or P-transfer
+contract; `NETWORK.md` owns their networking semantics while the concurrency
+specifications own boundary behavior.

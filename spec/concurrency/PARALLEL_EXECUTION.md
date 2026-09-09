@@ -1670,3 +1670,17 @@ This rule applies regardless of whether producer and consumer execute in the
 same Actor, different tasks of one Actor, different Actors, or across a P
 boundary. Future failure transport is never an implicit continuation-transfer
 mechanism.
+
+
+## D047 networking P boundary
+
+D047 / specification revision `0.1.388` adds no P-transfer contract for
+live networking authority or resources. Creating isolated P work does not inherit
+a `Network`, `TcpConnection`, or `TcpListener`, and those live capabilities are
+not valid P snapshot results/inputs merely because a backend could technically
+proxy or share a host socket.
+
+`IpAddress` and `IpEndpoint` remain authority-free data and may participate in P
+value copying once their standard construction contract is implemented. Physical
+network transports used by distributed P/runtime machinery remain implementation
+details and do not become application Network authority.

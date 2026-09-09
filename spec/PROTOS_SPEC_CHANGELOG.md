@@ -9,6 +9,19 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.388] - 2026-09-09
+
+### D047 — explicit capability-oriented TCP networking foundation
+- Records explicit project-owner approval of D047 after comparative operating-system, language/runtime, capability-security, adversarial, future-scalability and Protos-philosophy review. Adds `spec/io/NETWORK.md` as the normative owner of explicit `Network` authority, numeric IP/endpoint data laws and the initial TCP connection/listener model.
+- Selects materialized `TcpConnection`/`TcpListener` roles over a mutable universal Socket, reuses Future/Byte I/O/Closable/half-close protocols, keeps IPv4/IPv6 explicit, permits multiple concurrent pending accepts, separates DNS and UDP, and keeps host event-loop/socket-handle machinery non-semantic.
+- Keeps `IpAddress` / `IpEndpoint` as ordinary frozen structural data with ordinary object identity rather than extending Core value identity. IPv6 routing/interface scope belongs to Network authority; knowing address data never conveys network authority.
+- Defines optional bootstrap-local `network` provisioning independently of Process, and keeps live `Network`, `TcpConnection` and `TcpListener` non-transferable across Actor/P in the initial contract.
+- Intentionally leaves exact public address/endpoint constructor/factory selector spellings and recognition/construction protocol for a later explicit bounded checkpoint. `I028` is therefore allocated `OPEN`; `LIB005` becomes dependency-blocked on the Core networking foundation.
+
+### Compatibility and implementation state
+- This revision defines new normative networking semantics but publishes no networking runtime/backend implementation and does not change the Maven implementation version (`0.2.274-SNAPSHOT`).
+- Existing programs without Network authority are unaffected. DNS, UDP, TLS/QUIC/HTTP, public interface discovery, formal policy attenuation, generic socket options and socket-local deadlines remain separate future designs.
+
 ## [0.1.387] - 2026-09-08
 
 ### D002 bare-assignment target-selection timing correction

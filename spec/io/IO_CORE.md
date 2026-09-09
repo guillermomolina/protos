@@ -6,7 +6,7 @@ Last updated: 2026-09-04
 
 This document is the primary normative owner of cross-cutting I/O capability, asynchronous-operation, commitment, lifecycle, wrapper-ownership, concrete-capability-shape, and pay-as-you-grow rules.
 
-The modular I/O specification consists of `IO_CORE.md`, `BYTE_IO.md`, `TEXT_IO.md`, `FILESYSTEM.md`, and `PROCESS_IO.md`. Legacy section numbers from `IO_CORE.md` and the applicable sibling I/O module are intentionally retained so historical citations remain understandable. Normative ownership now belongs to these modules; the former monolithic file is removed by revision 326.
+The modular I/O specification consists of `IO_CORE.md`, `BYTE_IO.md`, `TEXT_IO.md`, `FILESYSTEM.md`, `PROCESS_IO.md`, and `NETWORK.md`. Legacy section numbers from `IO_CORE.md` and the applicable sibling I/O module are intentionally retained so historical citations remain understandable. Normative ownership now belongs to these modules; the former monolithic file is removed by revision 326.
 
 ## 1. Scope
 
@@ -33,9 +33,9 @@ The following are intentionally outside this I/O model:
 - terminal/curses-style control protocols;
 - exact standard-library namespace/import spellings beyond standard-prelude bindings explicitly required by sibling I/O modules;
 - filesystem operations beyond those explicitly defined here;
-- network authority acquisition and policy;
-- socket creation, `connect`, `bind`, `listen`, `accept`, datagram addressing, and transport-configuration APIs;
-- DNS/name resolution and the relationship between names, addresses, and network authority;
+- DNS/name resolution and resolver authority beyond the numeric-IP TCP model in `NETWORK.md`;
+- UDP/datagram addressing and semantics;
+- generic/raw socket creation and transport-configuration APIs beyond operations explicitly standardized by `NETWORK.md`;
 - pipe creation/pairing and pipe-specific cross-endpoint semantics, including writer-close-to-reader-EOF behavior, reader-close/broken-pipe behavior, pipe buffering/capacity, and any pipe-specific readiness or atomic-write guarantee;
 - a general incremental encoder/decoder feed/reset API;
 - `print` and the exact object textual-representation protocol.
@@ -559,7 +559,7 @@ COMMITTED is an I/O-operation concept, not a Future state.
 Successful cancellation before commitment preserves zero observable effect.
 
 Capabilities are orthogonal Traits.
-Socket in v0.1 is only an already-provisioned endpoint I/O shape; socket creation, addressing, DNS, and network authority are outside this model and are never ambient by implication.
+`TcpConnection` and `TcpListener` acquisition/addressing are owned by `NETWORK.md`; established TCP byte flows reuse the capability Traits in this document. Network authority remains explicit and is never ambient by implication.
 Wrapped capabilities do not propagate automatically.
 Wrapping does not imply lifecycle ownership.
 Owning-wrapper close uses deterministic first-failure precedence in mandated close order: wrapper finalization failure remains primary, while owned-target close is still committed and any later target-close failure cannot replace it.

@@ -2220,3 +2220,20 @@ executing in such a computation does not execute as another simultaneous
 turn against the Actor's mutable object graph; it crosses a separate
 isolation boundary and may only interact with the Actor through the
 value/result semantics defined for parallel execution.
+
+
+## D047 networking transfer boundary
+
+D047 / specification revision `0.1.388` distinguishes portable network
+data from live network authority. Standard `IpAddress` and `IpEndpoint` objects,
+once their construction contract is implemented, cross Actor boundaries only
+through the ordinary applicable value/object snapshot rules; their transfer does
+not carry routing state, interface scope, Network policy, or communication
+authority.
+
+`Network`, `TcpConnection`, and `TcpListener` are live resource capabilities and
+are non-transferable between Actors in the initial networking contract. No
+implicit proxy, controlling-Actor retargeting, socket migration, or mailbox-active
+mode is created. A future explicit networking proxy/delegation facility must
+define identity, authority, ordering, cancellation, lifetime, and failure
+semantics independently.
