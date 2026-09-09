@@ -62,10 +62,9 @@ firstClose: reader.close()
 secondClose: reader.close()
 firstClose.then((first) => {
     secondClose.then((second) => {
-        (firstClose !== secondClose).and() {
-            (first === reader).and() {
-                (second === reader).and() { fixture.state.closes == 1 }
-            }
-        }
+        (firstClose !== secondClose) &&
+            (first === reader) &&
+            (second === reader) &&
+            (fixture.state.closes == 1)
     })
 })

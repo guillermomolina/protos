@@ -54,8 +54,8 @@ fixture: makeSource(Array(makeBytes(97, 13), makeBytes(10, 66, 10), null))
 reader: TextReader(fixture.source, Encoding.UTF8)
 
 reader.readLine().then((first) => {
-    firstCompleteWithoutReadAhead: (first == "a").and() { fixture.state.reads == 1 }
+    firstCompleteWithoutReadAhead: (first == "a") && (fixture.state.reads == 1)
     reader.readLine().then((second) => {
-        firstCompleteWithoutReadAhead.and() { second == "B" }
+        firstCompleteWithoutReadAhead && (second == "B")
     })
 })
