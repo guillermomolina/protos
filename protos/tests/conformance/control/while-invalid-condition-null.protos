@@ -34,10 +34,7 @@ second: Error.handle(
     },
     (caught) => caught
 )
-(first.parent() === Error).and() {
-    (second.parent() === Error).and() {
-        (first !== second).and() {
-            bodyCalls == 0
-        }
-    }
-}
+(first.parent() === Error) &&
+    (second.parent() === Error) &&
+    (first !== second) &&
+    (bodyCalls == 0)

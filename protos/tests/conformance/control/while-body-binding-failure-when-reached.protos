@@ -34,8 +34,6 @@ Error.handle(
         null
     }
 )
-handled.and() {
-    (conditionCalls == 1).and() {
-        bodyCalls == 0
-    }
-}
+handled &&
+    (conditionCalls == 1) &&
+    (bodyCalls == 0)

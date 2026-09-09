@@ -32,10 +32,7 @@ outer: () => {
     null
 }
 result: outer()
-(result === marker).and() {
-    (conditionCalls == 1).and() {
-        (bodyCalls == 0).and() {
-            afterLoop == 0
-        }
-    }
-}
+(result === marker) &&
+    (conditionCalls == 1) &&
+    (bodyCalls == 0) &&
+    (afterLoop == 0)

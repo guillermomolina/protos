@@ -24,6 +24,5 @@ condition.while() {
     iterations = iterations + 1
     saved = (() => { 42 }).future()
 }
-(saved.value() == 42).and() {
-    iterations == 1
-}
+(saved.value() == 42) &&
+    (iterations == 1)
