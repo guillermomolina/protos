@@ -67,7 +67,7 @@ freeze those decisions unless their own audited scope requires and resolves them
 | TOOL002-E | CLOSED | E1A/E1B/E2A/E2B/E3/E4 complete the retained Package/TOML migration: bundled Protos owns planning, confined source loading, Package execution, Boolean/Error expectation policy and aggregation; duplicate Java corpus-policy ownership is removed. |
 | TOOL002-F | CLOSED | F1/F2/F3 plus the F4 cutover program are published: bundled Protos now owns all retained Future expectation policy and the complete main manifest; duplicate Java Future policy is retired. |
 | TOOL002-G | CLOSED | G1/G1A establish production-scheduler cooperative inspection; G2/G3 migrate the complete retained Actor/Group manifests into bundled-Protos Runner ownership; G4 retires the duplicate Java corpus-policy owners and reconciles closure. |
-| TOOL002-H | READY | TOOL002-G is CLOSED; add bounded parallel scheduling of independent fresh Processes, private output capture, and deterministic reporting. |
+| TOOL002-H | IN_PROGRESS | H1 proves real concurrent fresh-Process/Context hosting with private output; D055 ratifies the backend-neutral async exact-execution -> caller-domain Future contract; H2 is READY to implement the bridge and bounded Protos scheduling without selecting deferred jobs/resource/timeout policy. |
 | TOOL002-I | BLOCKED_BY_DEPENDENCIES | After H, add explicit resource constraints/private capabilities where real external-resource sharing requires them. |
 | TOOL002-J | BLOCKED_BY_DEPENDENCIES | After I, integrate the final Java-first / Protos-tool-second validation pipeline. |
 
@@ -801,6 +801,32 @@ completed without introducing a test-only concurrency model:
 Actor and Group manifests remain unchanged by G4. Java continues to validate
 host/runtime mechanics, while observable corpus expectation policy belongs to
 ordinary bundled Protos. TOOL002-H is READY.
+
+## TOOL002-H decomposition
+
+TOOL002-H is IN_PROGRESS after H1 and the explicit D055 decision gate:
+
+- **H1 — CLOSED** at `7bc0d7a4dbc6788be14b33ea29b8ad8c2b12b794`.
+  Test-impact evidence proves two fresh semantic Processes can be simultaneously
+  active on one shared RuntimeHost while retaining distinct Process Contexts and
+  private per-execution stdout. H1 selects no public CLI/jobs policy and changes
+  no production mechanism.
+- **D055 — RATIFIED** by explicit project-owner approval on 2026-09-09. One exact
+  asynchronous execution returns an ordinary caller-domain Future; the host owns
+  only submission/execution/completion mechanics while bounded admission,
+  CaseId/TestPlan, later resources/capacities, aggregation and deterministic
+  reporting remain bundled-Protos policy.
+- **H2 — READY.** Implementation must keep the general async exact-execution
+  bridge independently reviewable from bounded Test Tool scheduling. The bridge
+  must marshal inert completion back to the caller Actor domain before guest
+  rematerialization, preserve private output, retain outstanding-execution
+  custody until cleanup, and avoid pretending an already-started same-runtime
+  child is hard-preemptible.
+
+H2 does not select a JVM carrier, public `--jobs` spelling/default, `jobs=auto`,
+hard timeout/kill policy, resource syntax, retry policy or remote transport.
+A newly exposed durable choice in those areas must use the normal Dxxx/PLATxxx
+approval gate.
 
 ## TOOL002-A closure
 

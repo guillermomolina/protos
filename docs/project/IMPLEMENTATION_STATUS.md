@@ -1102,7 +1102,7 @@ record distributable Standard Library functionality.
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
 | TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | D/E/F1 and F2D are CLOSED; F2E2 is CLOSED and F2E3 is READY for the active external immutable-package execution continuation. |
-| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D/E/F/G CLOSED; Actor/Group corpus policy is fully owned by bundled Protos with duplicate Java owners retired; TOOL002-H READY; I-J remain dependency-ordered. |
+| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D/E/F/G CLOSED; H1 concurrent fresh-Process substrate proof is CLOSED; D055 async exact-execution contract is RATIFIED; TOOL002-H2 READY; I-J remain dependency-ordered. |
 
 ### TOOL001 — Package Tool
 
@@ -1276,7 +1276,9 @@ the initial TOOL002 closure.
 | TOOL002-G2 | CLOSED | `e5c4a3972ff45b95aa50cefa57617318a5cf308a` / `0.2.300-SNAPSHOT`; complete retained Actor manifest moved to bundled-Protos Runner ownership; legacy Java owner retained only until G4. |
 | TOOL002-G3 | CLOSED | `ab7b1e3590ea6747da7b8d1321db5bdf5c489256` / `0.2.302-SNAPSHOT`; complete retained Group manifest plus value-membership-only `future-integer-one-of` moved to bundled-Protos Runner ownership without routing-order selection. |
 | TOOL002-G4 | CLOSED | `SAME_COMMIT`; remove duplicate Java Actor/Group corpus-policy owners, retain host-mechanical/full-corpus evidence and architecture guard, close G and release H; no implementation-version change. |
-| TOOL002-H | READY | TOOL002-G CLOSED; bounded parallel scheduling of independent fresh Processes with independent output capture and deterministic reporting. |
+| TOOL002-H | IN_PROGRESS | H1 concurrent fresh-Process/Context overlap proof is published; D055 ratifies the general async exact-execution -> caller-domain Future contract; H2 is READY for bridge + bounded Protos scheduling implementation. |
+| TOOL002-H1 | CLOSED | `7bc0d7a4dbc6788be14b33ea29b8ad8c2b12b794` / `0.2.303-SNAPSHOT`; test-impact proof that one shared RuntimeHost can host two simultaneous fresh semantic Process Contexts with private stdout; no production/version/CLI policy change. |
+| TOOL002-H2 | READY | D055 RATIFIED; implement the general asynchronous exact-execution -> ordinary caller-domain Future bridge, then bounded bundled-Protos scheduling with deterministic logical result order; JVM carrier/jobs-auto/resource/timeout policy remains deferred. |
 | TOOL002-I | BLOCKED_BY_DEPENDENCIES | TOOL002-H; explicit resource constraints/private capabilities for real external-resource sharing. |
 | TOOL002-J | BLOCKED_BY_DEPENDENCIES | TOOL002-I; CI/launcher integration: Java implementation tests first, then the Protos test tool for the Protos corpus. |
 
