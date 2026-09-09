@@ -88,7 +88,7 @@ review, not a language-specification revision merely because backend machinery c
 | I028-B2 | CLOSED | Implemented represented Network wrapper with canonical parent/opaque host target plus explicit Actor/P rejection for the capability and authority-bearing descendants; no bootstrap/TCP. |
 | I028-B3 | CLOSED | Optional exact RootActor initial-module `network` endowment from an already-provisioned represented capability; absent grant means absent slot, imports/new Actors receive no ambient grant, and Process has no Network accessor. |
 | I028-B4 | CLOSED | Retained integrated authority-confinement evidence now proves no ambient recovery through Prelude/Process/import/new-Actor plus Actor/P rejection of the exact RootActor bootstrap grant; no production/TCP change. |
-| I028-B5 | READY | Reconcile B1-B4 evidence and close the represented Network capability/bootstrap boundary before TCP implementation proceeds. |
+| I028-B5 | CLOSED | Reconciled B1-B4 retained evidence and closed the represented Network capability/bootstrap boundary; I028-C may proceed without altering PLAT002 or selecting a backend. |
 
 ## B2 implementation evidence
 
@@ -123,9 +123,18 @@ exact provisioned represented capability fails the existing Actor `NonTransferab
 `NonParallel` boundaries. This evidence adds no backend, resource proxy or authority derivation rule.
 B5 is READY for reconciliation only; PLAT002 itself is unchanged.
 
+## B5 / I028-B closure evidence
+
+I028-B5 closes at `0.2.284-SNAPSHOT` with the implementation version unchanged. The B front now has retained
+evidence for the authority-free `Network` prototype, represented host authority, optional exact RootActor
+bootstrap endowment, no Prelude/Process/import/non-root-Actor ambient recovery, and explicit Actor/P
+non-transferability. The B closure introduces no new platform architecture: PLAT002 remains RATIFIED and
+unchanged, and backend/multiplexing identity remains deliberately deferred. I028-C is released to consume
+this closed authority boundary for the already-ratified `connectTcp` semantics.
+
 ## Deliberately deferred
 
-B1/B2 do not select or implement `connectTcp`, `listenTcp`, TcpConnection, TcpListener, NIO or any
+The closed I028-B front does not select or implement `connectTcp`, `listenTcp`, TcpConnection, TcpListener, NIO or any
 other production network backend. Those remain owned by I028-C/D/E under D047. DNS, UDP, TLS, QUIC,
 HTTP/WebSocket, generic socket options, timeout/deadline APIs and formal Network attenuation remain
 outside the currently ratified networking revision.
