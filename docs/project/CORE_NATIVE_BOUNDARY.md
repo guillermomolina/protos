@@ -1,3 +1,7 @@
+## I028-D2 — TcpListener localPort / close lifecycle
+
+I028-D2 installs exactly two shared native Closures on the hidden frozen TcpListener family protocol: synchronous `localPort` observation of the already-acquired non-zero port and the standard Closable `close` bridge. Both require an actual operational TcpListener receiver; ordinary delegation does not manufacture authority. `localPort` performs no backend/network work, while `close` reuses `ProtosIoLifecycle` and remains distinct from structural `Object.close()`. `accept`, `listenTcp` and the production network backend remain outside this slice. The audited Core boundary advances from **131 sites / 34 providers** to **133 sites / 35 providers**.
+
 ## I028-A2 — standard `IpEndpoint` ordinary-object bridge
 
 I028-A2 publishes the already-ratified D048 `IpEndpoint(address, port)` factory/prototype
@@ -226,6 +230,7 @@ the standard native boundary.
 | `ProtosStandardIpEndpointProtocol.java` | 4 | representation bridge | D048 endpoint construction and recognition require direct recognized-IpAddress validation, exact unbounded-Integer port validation, fresh ordinary-object state publication plus freeze, and direct frozen/immediate-parent/exact-local-slot inspection without candidate callbacks; structural equality/hash compose the same canonical IpAddress state with port. |
 | `ProtosStandardNetworkProtocol.java` | 1 | resource/capability bridge | D047/PLAT002/PLAT003 `connectTcp` dispatch validates the represented Network receiver and recognized IpEndpoint before authority exercise, then crosses the host-neutral asynchronous acquisition/commitment/late-custody boundary without selecting a socket/reactor/backend implementation. |
 | `ProtosStandardTcpConnectionProtocol.java` | 7 | resource/capability bridge | D052 requires one hidden shared TcpConnection family protocol whose inherited `read`, `write`, `close`, `shutdownRead`, `shutdownWrite`, `localEndpoint`, and `remoteEndpoint` behavior validates actual live-family receivers. PLAT003 routes each live resource through independent read/write progress lanes sharing one Closable lifecycle, while C3 endpoint observation validates already-held recognized logical snapshots synchronously; no per-connection Closure duplication, endpoint backend query, or concrete network backend is selected. |
+| `ProtosStandardTcpListenerProtocol.java` | 2 | resource/capability bridge | D052 listener `localPort` and Closable `close` validate actual operational TcpListener receivers. Observation reads only acquired runtime state; close reuses the shared I/O lifecycle. No accept/acquisition/backend identity is introduced by D2. |
 | `ProtosStandardErrorProtocol.java` | 2 | host-irreducible | `Error.signal` performs the language Error control transfer with exact signaled-object preservation; `Error.handle` installs and consumes the dynamic handler frame whose selection precedes unwind cleanup. |
 | `ProtosStandardFutureProtocol.java` | 2 | concurrency/runtime bridge | `future`, `value`, `cancel`, `detach`, `then`, and `all` depend on Task ownership, suspension, observation, terminal states, cancellation, and Actor-local execution domains. |
 | `ProtosParallelRuntime.java` | 2 | concurrency/runtime bridge | `parallel`, Array parallel operations, Bytes/ByteRegion `parallelRange`, snapshot transfer, reservations, commitment, and bounded host carriers form the P execution substrate. |
@@ -236,7 +241,7 @@ the standard native boundary.
 | `ProtosStandardFileProtocol.java` | 10 | resource/capability bridge | File objects are acquired resource capabilities whose exact local surface depends on backend-provided authority and whose operations own cursor/append/sync/close/commitment state. |
 | `ProtosStandardFilesystemProtocol.java` | 1 | resource/capability bridge | Host-provisioned Filesystem authority exposes standard `open`, `replace`, `remove`, `entries`, and `captureTree` through one shared audited operation-Closure construction helper. Open retains confined/race-free acquisition and File materialization; D041 namespace mutation uses the host-neutral effect/commit cutover; D046 tree observation reuses the host-neutral I024 flow, materializes inert Array descriptors or a fresh structurally read-only Filesystem, and leaves unsupported backends default-fail without adding a Directory or Filesystem-close boundary. |
 
-Total audited Core production construction sites: **131 across 34 providers**.
+Total audited Core production construction sites: **133 across 35 providers**.
 
 CLI/launcher-owned host conveniences are not Core standard behavior and therefore
 do not change that 30-provider / 113-site Core boundary. They are nevertheless

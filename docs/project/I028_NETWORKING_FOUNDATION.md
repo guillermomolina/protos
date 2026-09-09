@@ -59,12 +59,17 @@ READY to implement `connectTcp`; I028-D will consume the same topology for liste
 - **D — TCP listener + `listenTcp` — IN_PROGRESS:** exact request snapshot/validation,
   `localPort`, concurrent pending accepts, lifecycle/admission behavior.
   - **D1 — ordinary TcpListener resource/prototype + transfer foundation — CLOSED (`0.2.290-SNAPSHOT` / publication commit):** source-owned runtime-only frozen authority-free protocol parent, ordinary OPEN `ProtosTcpListenerValue` with opaque host state and ordinary application slots, exact canonical parent preservation, no public TcpListener Prelude binding, plus explicit Actor/P rejection of the live capability and authority-bearing descendants. No listener selector, acquisition or backend yet; native boundary remains 131/34.
-  - **D2 — `localPort` + `close` + shared listener lifecycle — READY:** install the bounded observation/lifecycle surface on the shared hidden listener protocol without selecting the production backend.
+  - **D2 — `localPort` + `close` + shared listener lifecycle — CLOSED (`0.2.292-SNAPSHOT` / publication commit):** install `localPort` and resource `close` exactly once on the shared hidden listener protocol; retain acquired-port observation as synchronous/no-backend work and reuse the standard I/O lifecycle for one close cutover without changing ordinary structural OPEN/CLOSED/FROZEN state. No `accept`, `listenTcp` or production backend yet; native boundary becomes 133/35.
+  - **D3 — `accept()` + concurrent pending accepts + cancellation/late custody — READY:** add independently pending accept operations over the D2 shared lifecycle and materialize accepted TcpConnection custody without selecting a production backend.
 - **E — production backend portability/scalability:** preserve D047 independently
   of NIO/epoll/kqueue/io_uring/IOCP/Network.framework implementation choices;
   subdivide mechanically if required.
 - **F — cross-slice conformance/native-boundary closure:** cancellation races,
   late custody, multiple-accept scale evidence and Actor/P non-transferability.
+
+## I028-D2 TcpListener localPort/close lifecycle
+
+Published at implementation version `0.2.292-SNAPSHOT`. D2 installs `localPort` and `close` once on the hidden frozen TcpListener protocol parent. Only an operational acquired-family wrapper with that exact parent may exercise the behavior; ordinary descendants can inherit lookup but fail the receiver-domain check before resource state is touched. The acquired non-zero local port is retained as opaque runtime state and `localPort()` returns an ordinary unbounded Integer synchronously without backend work. Resource `close()` reuses one `ProtosIoLifecycle`, commits at invocation, shares one backend release outcome across fresh follower Futures, maps release failure through portable `IOError`, and does not call structural `Object.close()`, so ordinary mutation state remains orthogonal. D2 adds no `accept`, `listenTcp`, socket/channel/reactor identity or production backend. The audited native boundary becomes 133 sites across 35 providers. D3 is READY.
 
 ## I028-D1 TcpListener ordinary-resource foundation
 

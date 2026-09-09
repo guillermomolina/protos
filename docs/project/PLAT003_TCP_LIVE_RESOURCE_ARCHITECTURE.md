@@ -118,6 +118,10 @@ less-ordinary Protos representation merely as a memory optimization.
 - Backend-specific socket/channel objects in Protos semantics: violates D047 portability and D052
   ordinary-object topology.
 
+## I028-D2 implementation evidence
+
+D2 consumes the ratified listener topology at implementation version `0.2.292-SNAPSHOT` without changing PLAT003 or choosing a network backend. `ProtosStandardTcpListenerProtocol` installs only `localPort` and `close` on the shared hidden family prototype. Operational listeners retain the acquired port and one `ProtosTcpListenerFlow` as opaque runtime state; that flow reuses `ProtosIoLifecycle` for the whole-resource close cutover and is intentionally ready for D3 to admit multiple independent accept operations on the same lifecycle. Observation has no backend effect, resource close remains orthogonal to structural Object close, and no per-listener Closure, event-loop/thread/selector/channel identity, `accept`, or `listenTcp` is introduced. The native boundary becomes 133 sites across 35 providers.
+
 ## I028-C5 integrated closure evidence
 
 C5 closes the I028-C consumer at implementation version `0.2.289-SNAPSHOT` without changing PLAT003. One integrated

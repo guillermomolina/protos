@@ -17,6 +17,7 @@
 
 package com.guillermomolina.protos.runtime;
 
+import java.math.BigInteger;
 import java.util.Objects;
 
 /**
@@ -29,15 +30,57 @@ import java.util.Objects;
  */
 public final class ProtosTcpListenerValue extends ProtosObjectValue {
     private final Object resourceState;
+    private final ProtosTcpListenerFlow flow;
+    private final BigInteger localPort;
 
     public ProtosTcpListenerValue(ProtosPrelude prelude, Object resourceState) {
         super(requirePrototype(prelude));
         this.resourceState = Objects.requireNonNull(resourceState, "resourceState");
+        this.flow = null;
+        this.localPort = null;
+    }
+
+    /** Runtime construction path for an acquired/operational TCP listener. */
+    public ProtosTcpListenerValue(
+            ProtosPrelude prelude,
+            Object resourceState,
+            ProtosActivation activation,
+            ProtosTcpListenerFlow.Backend backend,
+            BigInteger localPort) {
+        super(requirePrototype(prelude));
+        this.resourceState = Objects.requireNonNull(resourceState, "resourceState");
+        this.localPort = requireLocalPort(localPort);
+        this.flow = new ProtosTcpListenerFlow(this, Objects.requireNonNull(activation, "activation"), Objects.requireNonNull(backend, "backend"));
     }
 
     /** Opaque host/runtime state. This value is never an ordinary Protos slot. */
     public Object resourceStateForRuntime() {
         return resourceState;
+    }
+
+    public boolean hasProtocolFlowForRuntime() { return flow != null; }
+
+    public BigInteger localPortForRuntime() {
+        if (localPort == null) throw new IllegalStateException("TcpListener has no acquired local port");
+        return localPort;
+    }
+
+    public ProtosFutureValue closeForRuntime(ProtosActivation activation) {
+        if (flow == null) throw new IllegalStateException("TcpListener has no operational runtime flow");
+        return flow.close(activation);
+    }
+
+    public ProtosIoLifecycle lifecycleForRuntime() {
+        if (flow == null) throw new IllegalStateException("TcpListener has no operational runtime flow");
+        return flow.lifecycleForRuntime();
+    }
+
+    private static BigInteger requireLocalPort(BigInteger value) {
+        Objects.requireNonNull(value, "localPort");
+        if (value.signum() <= 0 || value.compareTo(BigInteger.valueOf(65535)) > 0) {
+            throw new IllegalArgumentException("acquired TcpListener local port must be in 1..65535");
+        }
+        return value;
     }
 
     private static ProtosObjectValue requirePrototype(ProtosPrelude prelude) {
