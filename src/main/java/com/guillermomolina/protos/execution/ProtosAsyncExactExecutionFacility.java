@@ -42,6 +42,7 @@ import java.util.Set;
  */
 public final class ProtosAsyncExactExecutionFacility implements AutoCloseable {
     public static final String BOOTSTRAP_SLOT = "executionAsync";
+    public static final String INSPECTION_BOOTSTRAP_SLOT = "executionInspectAsync";
 
     /**
      * Host submission boundary. A successful call accepts {@code work} for execution outside the
@@ -63,6 +64,12 @@ public final class ProtosAsyncExactExecutionFacility implements AutoCloseable {
     @FunctionalInterface
     public interface Submitted {
         boolean cancelIfNotStarted();
+    }
+
+
+    @FunctionalInterface
+    private interface HostExecution {
+        ProtosCapturedProcessExecution.Result run();
     }
 
     private final ProtosPrelude executionPrelude;
@@ -135,6 +142,67 @@ public final class ProtosAsyncExactExecutionFacility implements AutoCloseable {
         return facility;
     }
 
+
+    /**
+     * Installs the asynchronous live-result inspection variant under
+     * {@link #INSPECTION_BOOTSTRAP_SLOT} using the caller's already-selected Prelude.
+     */
+    public static ProtosAsyncExactExecutionFacility installInspection(
+            ProtosActivation activation,
+            ProtosPolyglotRuntimeHost runtimeHost,
+            Submission submission) {
+        Objects.requireNonNull(activation, "activation");
+        ProtosPrelude executionPrelude =
+                activation
+                        .prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "async exact inspection facility requires Core prelude"));
+        return installInspection(
+                activation,
+                INSPECTION_BOOTSTRAP_SLOT,
+                executionPrelude,
+                runtimeHost,
+                submission);
+    }
+
+    public static ProtosAsyncExactExecutionFacility installInspection(
+            ProtosActivation activation,
+            String slotName,
+            ProtosPrelude executionPrelude,
+            ProtosPolyglotRuntimeHost runtimeHost,
+            Submission submission) {
+        Objects.requireNonNull(activation, "activation");
+        Objects.requireNonNull(slotName, "slotName");
+        Objects.requireNonNull(executionPrelude, "executionPrelude");
+        Objects.requireNonNull(runtimeHost, "runtimeHost");
+        Objects.requireNonNull(submission, "submission");
+        if (slotName.isEmpty()) {
+            throw new IllegalArgumentException(
+                    "async exact inspection bootstrap slot name must not be empty");
+        }
+        if (activation.context().hasLocalSlot(slotName)) {
+            throw new IllegalStateException(
+                    "async exact inspection bootstrap slot already exists: " + slotName);
+        }
+
+        ProtosAsyncExactExecutionFacility facility =
+                new ProtosAsyncExactExecutionFacility(
+                        executionPrelude,
+                        runtimeHost,
+                        submission);
+        activation
+                .context()
+                .createLocalSlot(
+                        slotName,
+                        ProtosExactExecutionFacility.exactExecutionBootstrapClosure(
+                                (callActivation, arguments) ->
+                                        facility.inspect(callActivation, arguments)));
+        return facility;
+    }
+
+
     private Object execute(
             ProtosActivation caller,
             List<?> arguments) {
@@ -143,6 +211,44 @@ public final class ProtosAsyncExactExecutionFacility implements AutoCloseable {
             throw ProtosExactExecutionFacility.ordinaryError(caller);
         }
 
+        ProtosCapturedProcessExecution.Request request =
+                ProtosExactExecutionFacility.executionRequest(
+                        source,
+                        executionPrelude);
+        return start(
+                caller,
+                () ->
+                        ProtosCapturedProcessExecution.execute(
+                                request,
+                                runtimeHost));
+    }
+
+    private Object inspect(
+            ProtosActivation caller,
+            List<?> arguments) {
+        if (arguments.size() != 2
+                || !(arguments.get(0) instanceof ProtosStringValue source)
+                || !(arguments.get(1) instanceof ProtosStringValue inspector)) {
+            throw ProtosExactExecutionFacility.ordinaryError(caller);
+        }
+
+        ProtosExactExecutionFacility.InspectionInvocation invocation =
+                ProtosExactExecutionFacility.inspectionInvocation(
+                        source,
+                        inspector,
+                        executionPrelude);
+        return start(
+                caller,
+                () ->
+                        ProtosCapturedProcessExecution.executeThenInspect(
+                                invocation.request(),
+                                invocation.inspector(),
+                                runtimeHost));
+    }
+
+    private ProtosFutureValue start(
+            ProtosActivation caller,
+            HostExecution hostExecution) {
         ProtosPrelude callerPrelude =
                 caller
                         .prelude()
@@ -150,10 +256,6 @@ public final class ProtosAsyncExactExecutionFacility implements AutoCloseable {
                                 () ->
                                         new IllegalStateException(
                                                 "async exact execution observation requires caller Core prelude"));
-        ProtosCapturedProcessExecution.Request request =
-                ProtosExactExecutionFacility.executionRequest(
-                        source,
-                        executionPrelude);
         ProtosFutureValue future =
                 new ProtosFutureValue(
                         callerPrelude.futurePrototype(),
@@ -163,7 +265,7 @@ public final class ProtosAsyncExactExecutionFacility implements AutoCloseable {
                         caller,
                         callerPrelude,
                         future,
-                        request);
+                        hostExecution);
 
         registerOutstanding(operation);
         future.attachCancellationProducer(operation::requestCancellation);
@@ -215,7 +317,7 @@ public final class ProtosAsyncExactExecutionFacility implements AutoCloseable {
         private final ProtosActivation caller;
         private final ProtosPrelude callerPrelude;
         private final ProtosFutureValue future;
-        private final ProtosCapturedProcessExecution.Request request;
+        private final HostExecution hostExecution;
 
         private Submitted submitted;
         private boolean cancellationRequested;
@@ -226,11 +328,11 @@ public final class ProtosAsyncExactExecutionFacility implements AutoCloseable {
                 ProtosActivation caller,
                 ProtosPrelude callerPrelude,
                 ProtosFutureValue future,
-                ProtosCapturedProcessExecution.Request request) {
+                HostExecution hostExecution) {
             this.caller = Objects.requireNonNull(caller, "caller");
             this.callerPrelude = Objects.requireNonNull(callerPrelude, "callerPrelude");
             this.future = Objects.requireNonNull(future, "future");
-            this.request = Objects.requireNonNull(request, "request");
+            this.hostExecution = Objects.requireNonNull(hostExecution, "hostExecution");
         }
 
         private void submit() {
@@ -279,10 +381,7 @@ public final class ProtosAsyncExactExecutionFacility implements AutoCloseable {
             ProtosCapturedProcessExecution.Result result = null;
             RuntimeException hostFailure = null;
             try {
-                result =
-                        ProtosCapturedProcessExecution.execute(
-                                request,
-                                runtimeHost);
+                result = hostExecution.run();
             } catch (RuntimeException failure) {
                 hostFailure = failure;
             }

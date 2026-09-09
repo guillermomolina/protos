@@ -241,6 +241,34 @@ public final class ProtosExactExecutionFacility {
                                 () ->
                                         new IllegalStateException(
                                                 "exact inspection observation requires caller Core prelude"));
+        InspectionInvocation invocation =
+                inspectionInvocation(
+                        source,
+                        inspector,
+                        executionPrelude);
+        ProtosCapturedProcessExecution.Result result =
+                runtimeHost == null
+                        ? ProtosCapturedProcessExecution.executeThenInspect(
+                                invocation.request(), invocation.inspector())
+                        : ProtosCapturedProcessExecution.executeThenInspect(
+                                invocation.request(), invocation.inspector(), runtimeHost);
+
+        return observation(result, caller, callerPrelude, executionPrelude);
+    }
+
+
+    record InspectionInvocation(
+            ProtosCapturedProcessExecution.Request request,
+            Source inspector) {}
+
+    static InspectionInvocation inspectionInvocation(
+            ProtosStringValue source,
+            ProtosStringValue inspector,
+            ProtosPrelude executionPrelude) {
+        Objects.requireNonNull(source, "source");
+        Objects.requireNonNull(inspector, "inspector");
+        Objects.requireNonNull(executionPrelude, "executionPrelude");
+
         ProtosEncodingValue utf8 = utf8(executionPrelude);
         ProtosCapturedProcessExecution.Request request =
                 new ProtosCapturedProcessExecution.Request(
@@ -254,16 +282,9 @@ public final class ProtosExactExecutionFacility {
                         utf8,
                         utf8,
                         null);
-        Source inspectorSource =
-                exactSource(inspector.value(), "<exact-inspector>");
-        ProtosCapturedProcessExecution.Result result =
-                runtimeHost == null
-                        ? ProtosCapturedProcessExecution.executeThenInspect(
-                                request, inspectorSource)
-                        : ProtosCapturedProcessExecution.executeThenInspect(
-                                request, inspectorSource, runtimeHost);
-
-        return observation(result, caller, callerPrelude, executionPrelude);
+        return new InspectionInvocation(
+                request,
+                exactSource(inspector.value(), "<exact-inspector>"));
     }
 
     static ProtosCapturedProcessExecution.Request executionRequest(

@@ -176,6 +176,153 @@ final class ProtosAsyncExactExecutionFacilityTest {
         }
     }
 
+
+    @Test
+    void inspectionAsyncPreservesLiveSourceCompositionAndCallerDomainMaterialization()
+            throws Exception {
+        ManualSubmission submission = new ManualSubmission();
+        try (Fixture fixture = fixture();
+                ProtosAsyncExactExecutionFacility facility =
+                        ProtosAsyncExactExecutionFacility.installInspection(
+                                fixture.activation,
+                                fixture.runtimeHost,
+                                submission)) {
+            ProtosFutureValue future =
+                    invokeInspection(
+                            fixture,
+                            "future: (() => { 42 }).future()\n"
+                                    + "() => { future.value() }",
+                            "(subject) => { subject() }");
+
+            assertEquals(ProtosFutureValue.State.PENDING, future.state());
+            assertTrue(submission.runNext());
+            assertEquals(
+                    ProtosFutureValue.State.PENDING,
+                    future.state(),
+                    "inspection host completion must remain inert before caller dispatch");
+            assertEquals(1, fixture.activation.executionDomain().runnableCount());
+
+            assertTrue(fixture.activation.executionDomain().dispatchOne());
+            assertCompletedObservation(future, 42, "");
+        }
+    }
+
+    @Test
+    void cancellationAfterCapturedHostCompletionDiscardsLateCallerResult()
+            throws Exception {
+        ManualSubmission submission = new ManualSubmission();
+        try (Fixture fixture = fixture();
+                ProtosAsyncExactExecutionFacility facility =
+                        ProtosAsyncExactExecutionFacility.install(
+                                fixture.activation,
+                                fixture.runtimeHost,
+                                submission)) {
+            ProtosFutureValue future =
+                    invoke(
+                            fixture,
+                            exactSource("late-result", 77));
+
+            assertTrue(submission.runNext());
+            assertEquals(ProtosFutureValue.State.PENDING, future.state());
+            assertEquals(
+                    1,
+                    fixture.activation.executionDomain().runnableCount(),
+                    "completed host evidence must already be waiting in the caller domain");
+
+            assertTrue(future.cancelRequest());
+            assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
+
+            assertTrue(fixture.activation.executionDomain().dispatchOne());
+            assertEquals(
+                    ProtosFutureValue.State.CANCELLED,
+                    future.state(),
+                    "caller completion must not resurrect a cancelled Future");
+            assertTrue(future.resolvedValue().isEmpty());
+        }
+    }
+
+    @Test
+    void actorTerminationCancelsStartedSubmissionWhileFacilityKeepsCustody()
+            throws Exception {
+        try (StartedSubmission submission = new StartedSubmission();
+                ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open()) {
+            ProtosPrelude prelude =
+                    new ProtosCoreBootstrap()
+                            .bootstrap(
+                                    CORE,
+                                    new ProtosStandardLibraryModuleResolver(
+                                            STANDARD_LIBRARY));
+            com.guillermomolina.protos.runtime.ProtosActor actor =
+                    new com.guillermomolina.protos.runtime.ProtosActor(
+                            prelude.actorRefPrototypeForRuntime());
+            assertTrue(actor.markReady());
+            ProtosActivation activation =
+                    prelude.newModuleActivation(
+                            actor.moduleState(),
+                            null,
+                            prelude.newExecutionContext(),
+                            actor.executionDomain());
+            Fixture fixture = new Fixture(prelude, activation, runtimeHost);
+            ProtosAsyncExactExecutionFacility facility =
+                    ProtosAsyncExactExecutionFacility.install(
+                            activation,
+                            runtimeHost,
+                            submission);
+            ExecutorService closer = Executors.newSingleThreadExecutor();
+            try {
+                ProtosFutureValue future =
+                        invoke(
+                                fixture,
+                                exactSource("actor-termination", 13));
+
+                assertTrue(
+                        submission.awaitStarted(30, TimeUnit.SECONDS),
+                        "host submission must be started before Actor termination");
+                assertTrue(actor.beginTermination());
+                assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
+                assertTrue(
+                        actor.markTerminated(),
+                        "ordinary non-task Future cancellation must release Actor termination");
+
+                java.util.concurrent.Future<?> closed =
+                        closer.submit(facility::close);
+                assertThrows(
+                        TimeoutException.class,
+                        () -> closed.get(150, TimeUnit.MILLISECONDS),
+                        "Actor/Future termination must not release accepted host-work custody");
+
+                submission.release();
+                closed.get(30, TimeUnit.SECONDS);
+                assertEquals(ProtosFutureValue.State.CANCELLED, future.state());
+            } finally {
+                submission.release();
+                facility.close();
+                closer.shutdownNow();
+            }
+        }
+    }
+
+
+    private static ProtosFutureValue invokeInspection(
+            Fixture fixture,
+            String source,
+            String inspector) {
+        Object execution =
+                fixture.activation
+                        .context()
+                        .readLocalSlot(
+                                ProtosAsyncExactExecutionFacility.INSPECTION_BOOTSTRAP_SLOT)
+                        .orElseThrow();
+        return assertInstanceOf(
+                ProtosFutureValue.class,
+                ProtosInvocation.invoke(
+                        execution,
+                        List.of(
+                                new ProtosStringValue(source),
+                                new ProtosStringValue(inspector)),
+                        fixture.activation));
+    }
+
     private static ProtosFutureValue invoke(
             Fixture fixture,
             String source) {
@@ -348,6 +495,73 @@ final class ProtosAsyncExactExecutionFacilityTest {
                 }
                 work.run();
                 return true;
+            }
+        }
+    }
+
+
+    private static final class StartedSubmission
+            implements ProtosAsyncExactExecutionFacility.Submission, AutoCloseable {
+        private final ExecutorService executor = Executors.newSingleThreadExecutor();
+        private final CountDownLatch started = new CountDownLatch(1);
+        private final CountDownLatch release = new CountDownLatch(1);
+
+        @Override
+        public ProtosAsyncExactExecutionFacility.Submitted submit(
+                Runnable work) {
+            Job job = new Job(Objects.requireNonNull(work, "work"));
+            executor.submit(job);
+            return job;
+        }
+
+        boolean awaitStarted(long timeout, TimeUnit unit)
+                throws InterruptedException {
+            return started.await(timeout, unit);
+        }
+
+        void release() {
+            release.countDown();
+        }
+
+        @Override
+        public void close() {
+            release();
+            executor.shutdownNow();
+        }
+
+        private final class Job
+                implements Runnable, ProtosAsyncExactExecutionFacility.Submitted {
+            private static final int QUEUED = 0;
+            private static final int RUNNING = 1;
+            private static final int CANCELLED = 2;
+            private static final int DONE = 3;
+
+            private final Runnable work;
+            private final AtomicInteger state = new AtomicInteger(QUEUED);
+
+            private Job(Runnable work) {
+                this.work = work;
+            }
+
+            @Override
+            public void run() {
+                if (!state.compareAndSet(QUEUED, RUNNING)) {
+                    return;
+                }
+                started.countDown();
+                try {
+                    release.await();
+                    work.run();
+                } catch (InterruptedException interruption) {
+                    Thread.currentThread().interrupt();
+                } finally {
+                    state.compareAndSet(RUNNING, DONE);
+                }
+            }
+
+            @Override
+            public boolean cancelIfNotStarted() {
+                return state.compareAndSet(QUEUED, CANCELLED);
             }
         }
     }
