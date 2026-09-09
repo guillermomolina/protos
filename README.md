@@ -455,7 +455,10 @@ from manifest schema v1. The logical entry is required explicitly; only the
 arguments after it become `process.args()`.
 
 Bundled developer tools such as the Package Tool and Test Tool are under active
-development; their exact implementation state is recorded in
+development. Their live work/status is coordinated through
+[GitHub Issues](https://github.com/guillermomolina/protos/issues) and the
+[`Protos Development` Project](https://github.com/users/guillermomolina/projects/1);
+durable implementation and closure history remains recorded in
 [`docs/project/IMPLEMENTATION_STATUS.md`](docs/project/IMPLEMENTATION_STATUS.md).
 
 ## Learn Protos
@@ -468,8 +471,10 @@ development; their exact implementation state is recorded in
 -   [Examples](protos/examples/README.md) — task-oriented cookbook programs.
 -   [Design philosophy](docs/design/PROTOS_DESIGN_PHILOSOPHY.md) — the
     non-normative principles behind language and architecture choices.
--   [Implementation status](docs/project/IMPLEMENTATION_STATUS.md) — the
-    canonical repository-level implementation-progress view.
+-   [Protos Development Project](https://github.com/users/guillermomolina/projects/1) —
+    live scheduling, status, priority, and roadmap position.
+-   [Implementation registry](docs/project/IMPLEMENTATION_STATUS.md) — durable
+    implementation inventory and closure evidence.
 
 ## Contributing
 

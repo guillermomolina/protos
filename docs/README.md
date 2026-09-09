@@ -28,8 +28,8 @@ Non-normative language and architecture design material.
   investigation for structured data, document models, application-data mapping,
   and object persistence without making any one format a universal serialization
   model.
-- `IDEAS.md` records exploratory possibilities that are not yet design
-  commitments or concrete implementation work.
+- `IDEAS.md` preserves the pre-GitHub historical idea archive. New exploratory
+  possibilities belong in GitHub Discussions.
 
 Material in `design/` never defines observable Protos semantics. A design
 decision becomes authoritative only when it is incorporated into its normative
