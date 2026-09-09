@@ -2,10 +2,12 @@
 
 This is a human-facing, non-normative view of project direction.
 
-It is intentionally shorter and less precise than the canonical
-[implementation status](docs/project/IMPLEMENTATION_STATUS.md). It does not
-promise dates, compatibility, or that every item will be implemented exactly as
-described here.
+It is intentionally directional rather than an exact live status view.
+Current scheduling, readiness and priority live in the
+[`Protos Development` Project](https://github.com/users/guillermomolina/projects/1)
+and the repository's [GitHub Issues](https://github.com/guillermomolina/protos/issues).
+This roadmap does not promise dates, compatibility, or that every item will be
+implemented exactly as described here.
 
 The Core v0.1 specification remains a draft and the reference implementation is
 under active development.
@@ -19,9 +21,11 @@ the Core object, closure, error, I/O, concurrency, Future/Task, and Actor model.
 The Package Tool and Test Tool are being developed as bundled Protos tools rather
 than as unrelated external systems.
 
-See the [README](README.md) for the current build/run path and
-[implementation status](docs/project/IMPLEMENTATION_STATUS.md) for exact
-component state.
+See the [README](README.md) for the current build/run path, the
+[`Protos Development` Project](https://github.com/users/guillermomolina/projects/1)
+for live scheduling/status, and the
+[implementation registry](docs/project/IMPLEMENTATION_STATUS.md) for durable
+historical/closure evidence.
 
 ## Now
 

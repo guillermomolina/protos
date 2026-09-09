@@ -1,21 +1,36 @@
-# Implementation Status
+# Implementation Registry and Closure Ledger
 
-<!-- BEGIN CANONICAL IMPLEMENTATION STATUS -->
+<!-- BEGIN DURABLE IMPLEMENTATION REGISTRY -->
+<!-- GITHUB001-F DURABLE-REGISTRY-CUTOVER -->
 
-This file is the canonical repository-level status view for implementation and
-the formally tracked project work that drives it. It is project state, not
-normative language specification.
+This file preserves durable implementation inventory, historical publication
+state, and closure evidence. It is **not** the live repository-level status,
+scheduling, readiness, priority, assignment, or blocking view.
 
-Agents must verify this ledger against the current `origin/main` before acting
-on it. Git history, the current implementation, tests, and normative dependency
-owners remain the evidence used to verify a row.
+Live actionable coordination belongs to
+[GitHub Issues](https://github.com/guillermomolina/protos/issues), and live
+scheduling/status belongs to the
+[`Protos Development` Project](https://github.com/users/guillermomolina/projects/1).
+Normative language authority remains under `spec/`; durable `Bxxx` unblock
+conditions remain in `IMPLEMENTATION_BLOCKERS.md`.
+
+Existing `OPEN`, `READY`, `IN_PROGRESS`, `BLOCKED`, and dependency states below
+are retained as historical/publication snapshots unless a later durable closure
+record explicitly supersedes them. Agents MUST NOT update this file merely to
+mirror live GitHub coordination. New actionable identifiers are allocated and
+coordinated through GitHub under `AGENTS.md`; this registry may record them later
+when doing so preserves durable implementation/closure history.
 
 Initialized: 2026-09-05
 Repository implementation version at initialization: `0.2.83-SNAPSHOT`
 
 
 <!-- PROJECT-STATUS-FAMILY-DISCOVERY: v5 -->
-## Status vocabulary
+## Historical status vocabulary
+
+The vocabulary below explains retained rows and historical publication records;
+it is not the live Project status model after GITHUB001-F.
+
 
 - `OPEN` — known implementation item not yet ready or not yet started.
 - `READY` — dependencies are satisfied and implementation may begin.
@@ -1555,11 +1570,16 @@ validated, and published. Slice progress may be recorded in a dedicated
 subsection when useful, but partial slice publication does not imply top-level
 closure.
 
-## Related project ledgers
+## Related coordination and durable records
 
-- `docs/project/IMPLEMENTATION_BLOCKERS.md` — normative implementation blockers.
-- `docs/project/OPEN_TASKS.md` — operational/project backlog.
-- `docs/project/IMPLEMENTATION_STATUS.md` — implementation progress and
-  dependency state.
+- [GitHub Issues](https://github.com/guillermomolina/protos/issues) — canonical
+  live actionable-work coordination.
+- [`Protos Development` Project](https://github.com/users/guillermomolina/projects/1)
+  — canonical live scheduling/status/priority/roadmap view.
+- `docs/project/IMPLEMENTATION_BLOCKERS.md` — durable normative implementation
+  blockers and unblock conditions.
+- `docs/project/OPEN_TASKS.md` — retired historical backlog snapshot.
+- `docs/project/IMPLEMENTATION_STATUS.md` — this durable implementation registry
+  and closure-evidence ledger.
 
-<!-- END CANONICAL IMPLEMENTATION STATUS -->
+<!-- END DURABLE IMPLEMENTATION REGISTRY -->

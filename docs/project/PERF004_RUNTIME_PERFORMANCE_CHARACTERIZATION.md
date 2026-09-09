@@ -103,8 +103,9 @@ questions:
 5. What are the 3–5 highest-value optimization opportunities, ordered by
    evidence-backed expected return?
 
-The canonical ledger must then reconcile the companion evidence. Closing PERF004
-does not require implementing those optimizations.
+The owning PERF004 Issue and durable project record must then reconcile the
+companion evidence. Closing PERF004 does not require implementing those
+optimizations.
 
 ## Non-goals
 

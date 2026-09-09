@@ -8,8 +8,9 @@ harness. It does not define Protos language semantics or performance guarantees.
 ## Repository ownership
 
 `guillermomolina/protos` remains the canonical owner of the `PERFxxx` work-item
-lifecycle. `docs/project/IMPLEMENTATION_STATUS.md` owns PERF status and closure
-evidence.
+lifecycle. GitHub Issues and the `Protos Development` Project own live PERF
+coordination/status; `docs/project/IMPLEMENTATION_STATUS.md` retains durable
+historical/closure evidence.
 
 The Protos-language workload corpus remains under `protos/benchmarks/`. Those
 sources are the canonical Protos versions of workloads used by PERF work and are
@@ -24,8 +25,8 @@ The companion repository `guillermomolina/protos-benchmarks` owns:
 - raw benchmark-run results and generated performance reports.
 
 The companion repository is execution evidence, not a competing project-status
-ledger. It must not assign, close, or redefine `PERFxxx` items independently of
-the canonical Protos status ledger.
+system. It must not assign, close, or redefine `PERFxxx` work independently of
+the owning Protos GitHub Issues, durable project records, and published evidence.
 
 The companion repository must consume a pinned Protos revision. It must not copy
 the Protos workload corpus and then silently evolve those copies independently.

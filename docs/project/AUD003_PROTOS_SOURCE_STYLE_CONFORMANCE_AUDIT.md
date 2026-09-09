@@ -211,8 +211,8 @@ AUD003 may be marked CLOSED only when all of the following are true:
   legitimate canonical/protocol source;
 - all required validation for the executable slices and the final integrated
   closure is green;
-- `OPEN_TASKS.md`, `IMPLEMENTATION_STATUS.md`, this record, and
-  `docs/guide/SOURCE_STYLE.md` agree on final state.
+- the owning AUD003 GitHub Issue, this durable record, published repository
+  evidence, and `docs/guide/SOURCE_STYLE.md` agree on final closure.
 
 No normative specification revision is required merely to close AUD003 because
 the audit consumes already-specified syntax and the already-approved

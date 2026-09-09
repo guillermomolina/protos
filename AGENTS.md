@@ -1050,9 +1050,7 @@ The authority split is:
   project work such as `Ixxx`, `CLIxxx`, `TOOLxxx`, `PERFxxx`, `DISTxxx`,
   `DOCxxx`, `LIBxxx`, `AUDxxx`, `LMxxx`, and comparable work families;
 - the `Protos Development` GitHub Project is the canonical live scheduling and
-  prioritization view once an Issue is present there. Until that Project is
-  configured/populated during `GITHUB001`, the Issue itself owns live operational
-  state; and
+  prioritization view once an Issue is present there; and
 - merged/published repository state, owning project records, tests, changelog
   entries, and Git history retain durable implementation/closure evidence.
 
@@ -1062,13 +1060,23 @@ being merged does not satisfy the explicit project-owner approval gate for a
 substantive design decision. Apply the design-authority rules above exactly as
 before.
 
-`docs/project/IMPLEMENTATION_STATUS.md` and `docs/project/OPEN_TASKS.md` are legacy
-migration inputs during `GITHUB001`. They remain useful historical/reconciliation
-evidence until their dedicated migration cleanup is published, but agents MUST
-NOT treat either file as the canonical source of live scheduling/status after
-this cutover and MUST NOT add new actionable work there merely to mirror GitHub.
-Do not delete or bulk-rewrite their historical content opportunistically; their
-retirement/reduction is owned by the bounded `GITHUB001` reconciliation work.
+<!-- GITHUB001-F LEGACY-LIVE-LEDGER-RETIREMENT -->
+`docs/project/OPEN_TASKS.md` is a retired historical backlog snapshot.
+`docs/project/IMPLEMENTATION_STATUS.md` is a durable implementation registry and
+closure-evidence ledger. Neither file is a live scheduling/status source.
+
+Agents MUST NOT add new actionable work to `OPEN_TASKS.md`, update it to mirror
+GitHub, or use it to decide what should run next. Agents MUST NOT update
+`IMPLEMENTATION_STATUS.md` merely to mirror `OPEN`, `READY`, `IN_PROGRESS`,
+`BLOCKED`, assignee, priority, or roadmap changes. New actionable work and all
+live scheduling/status belong to GitHub Issues and the `Protos Development`
+Project.
+
+`IMPLEMENTATION_STATUS.md` may still preserve or add durable historical/closure
+evidence when a repository publication genuinely needs that registry function,
+but a row there never reserves work, releases work, blocks work operationally,
+or overrides the owning Issue/Project's live coordination state. Preserve both
+legacy files as historical evidence; do not bulk-delete their retained content.
 
 Before starting actionable implementation/project work, agents MUST:
 

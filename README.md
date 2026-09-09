@@ -18,9 +18,12 @@ prototype value category.
 
 The Core v0.1 specification remains a draft, while a working reference
 implementation and command-line interface are under active development. See
-[`pom.xml`](pom.xml) for the current implementation version and
+[`pom.xml`](pom.xml) for the current implementation version, the
+[`Protos Development` Project](https://github.com/users/guillermomolina/projects/1)
+and [GitHub Issues](https://github.com/guillermomolina/protos/issues) for live
+project coordination, and
 [`docs/project/IMPLEMENTATION_STATUS.md`](docs/project/IMPLEMENTATION_STATUS.md)
-for the canonical implementation-progress view.
+for durable implementation/closure history.
 
 ## Why Protos?
 

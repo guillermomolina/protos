@@ -11,7 +11,12 @@ Architecture owners:
 - package format/identity/resolution/lock/manifest design records under
   `docs/design/`
 
-Canonical summary:
+Live coordination:
+
+- GitHub Issue `#47` (`TOOL001 — Package Tool`)
+- `Protos Development` Project
+
+Durable historical/closure summary:
 
 - `docs/project/IMPLEMENTATION_STATUS.md`
 

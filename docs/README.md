@@ -37,13 +37,17 @@ owner under `spec/`.
 
 ## `project/`
 
-Operational project state and non-normative design records tied to formally
-tracked project work items.
+Durable project records, historical implementation evidence, blockers, and
+non-normative design records tied to formally tracked work items. Live actionable
+coordination is GitHub-native: Issues own the work item and the `Protos
+Development` Project owns scheduling/status.
 
-- `OPEN_TASKS.md` is the canonical ledger of concrete non-normative work that
-  can proceed without an unresolved semantic decision.
-- `IMPLEMENTATION_BLOCKERS.md` records implementation work blocked on unresolved
-  normative semantics.
+- `OPEN_TASKS.md` is a retired historical backlog snapshot. Do not add new work
+  or mirror GitHub state into it.
+- `IMPLEMENTATION_STATUS.md` is a durable implementation registry and
+  closure-evidence ledger, not a live progress tracker.
+- `IMPLEMENTATION_BLOCKERS.md` records durable normative implementation blockers
+  and their unblock conditions.
 - `CORE_BOOTSTRAP_ARCHITECTURE.md` defines the non-normative boundary between
   irreducible host bootstrap machinery and Core behavior implemented in Protos.
 - Work-item-specific `*_DESIGN.md` records capture investigated alternatives,
@@ -51,9 +55,10 @@ tracked project work items.
   formally tracked item without becoming normative language semantics. Existing
   `LIB001_COLLECTIONS_DESIGN.md` is the precedent for Standard Library work.
 
-The repository intentionally has no parallel root `TODO.md`; project work should
-be classified in these ledgers instead of accumulating in an unstructured
-catch-all list.
+The repository intentionally has no parallel root `TODO.md`. Exploratory work
+belongs in GitHub Discussions; bounded actionable work belongs in GitHub Issues
+and the `Protos Development` Project instead of an unstructured catch-all list or
+a second repository backlog.
 
 ## Adding documentation
 

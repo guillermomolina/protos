@@ -1,28 +1,21 @@
-# Protos Open Tasks
+# Protos Open Tasks — Retired Historical Snapshot
 
-This file records concrete non-normative work that should be done but is not
-blocked by an unresolved language-semantic decision.
+<!-- GITHUB001-F RETIRED-OPEN-TASKS -->
 
-It is distinct from:
+This file is frozen as historical/reconciliation evidence from the repository's
+pre-GitHub-native coordination model. It is **not** a live backlog and its
+`OPEN`, `IN PROGRESS`, `BLOCKED`, priority, or dependency wording below must not
+be used to schedule current work.
 
-- `docs/project/IMPLEMENTATION_BLOCKERS.md`, which records implementation work that
-  cannot proceed until normative semantics are resolved;
-- `docs/design/IDEAS.md`, which records exploratory possibilities not yet committed as
-  implementation work;
-- normative specification Open Design Topics, which track unresolved semantic
-  or API design.
+Live actionable work belongs in
+[GitHub Issues](https://github.com/guillermomolina/protos/issues); live status,
+priority and roadmap position belong in the
+[`Protos Development` Project](https://github.com/users/guillermomolina/projects/1).
+Durable normative blockers remain owned by `IMPLEMENTATION_BLOCKERS.md`.
 
-An item should move here from `../design/IDEAS.md` only when there is a concrete outcome
-worth implementing or investigating. If work becomes blocked on normative
-semantics, record that dependency in `IMPLEMENTATION_BLOCKERS.md` instead.
-
-Task states:
-
-- `OPEN`: concrete work remains.
-- `IN PROGRESS`: implementation or investigation is actively underway.
-- `BLOCKED`: use only for a non-semantic external dependency; normative blockers
-  belong in `IMPLEMENTATION_BLOCKERS.md`.
-- `CLOSED`: the work is complete or obsolete.
+Do not add new tasks here and do not update historical entries merely to mirror
+GitHub. Retained entries below intentionally preserve migration-era wording and
+may therefore describe states that later changed.
 
 ## Open tasks
 

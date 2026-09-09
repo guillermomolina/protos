@@ -1,13 +1,14 @@
-# Protos Ideas
+# Protos Ideas — Historical Idea Archive
 
-This file records non-normative ideas that may be worth exploring in the future.
-An entry here is not a language commitment, an implementation requirement, or an
-open normative design decision.
+This file preserves non-normative ideas recorded before GitHub-native
+coordination. An entry here is not a language commitment, an implementation
+requirement, a live work item, or an open normative design decision.
 
-Ideas should remain here while their value, scope, or shape is still exploratory.
-If an idea becomes concrete implementation work, move or reference it from
-`../project/OPEN_TASKS.md`. If it requires a normative language decision, move the question
-to the appropriate specification design process instead.
+New exploratory questions, use cases and proposals should start in GitHub
+Discussions. Once work becomes bounded and actionable, create or use the
+appropriate GitHub Issue instead of adding it to this file or to
+`../project/OPEN_TASKS.md`. A substantive language/design choice still follows
+the applicable specification/design process and explicit approval gate.
 
 ## I001 — Concurrency Model Advisor (C/P/A)
 

@@ -789,8 +789,9 @@ No unresolved Set question above is a blocker for `LIB001-A`.
 ## Implementation sequencing recommendation
 
 LIB001 is partitioned into bounded slices so source, conformance evidence, and
-publication remain reviewable. The canonical slice statuses live in
-`docs/project/IMPLEMENTATION_STATUS.md`.
+publication remain reviewable. Live slice coordination/status belongs to the
+owning GitHub Issue/Project; `docs/project/IMPLEMENTATION_STATUS.md` preserves
+durable historical/closure evidence.
 
 Recommended execution order is:
 
