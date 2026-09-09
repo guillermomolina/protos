@@ -77,6 +77,16 @@ that region. New source should model the idiomatic language that Protos expects
 programmers to write while keeping the canonical protocol model visible where it
 is actually relevant.
 
+## Repository conformance tracking
+
+Repository-wide migration to this approved style is tracked by
+`../project/AUD003_PROTOS_SOURCE_STYLE_CONFORMANCE_AUDIT.md`.
+
+AUD003 records bounded migrations, known debt, and deliberate canonical/protocol
+exceptions. It does not strengthen this policy into a language-wide ban on
+canonical forms and does not authorize syntactic equivalences that the
+specification has not defined.
+
 ## Rationale
 
 The specification answers **what a Protos program means**. Idiomatic source style

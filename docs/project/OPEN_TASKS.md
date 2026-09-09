@@ -26,6 +26,29 @@ Task states:
 
 ## Open tasks
 
+### AUD003 — Protos source-style conformance audit
+
+Status: **IN PROGRESS**
+Priority: **NORMAL**
+Nature: non-normative repository source-style audit and bounded migration
+
+Track repository-wide conformance with the already-approved idiomatic Protos
+source-style policy instead of performing isolated syntactic-sugar rewrites with
+no durable owner. The audit distinguishes ordinary style debt from deliberate
+canonical/protocol spelling and forbids inferred equivalences such as treating
+`div` or generic `add` as surface sugar.
+
+`AUD003-A1` is already CLOSED by historical publication
+`SOURCE-STYLE-INDEXING-A1` at `a848371a6428cb1d80b688a9a27e6b74ec61f28a`, covering user-facing examples and
+tutorials. `AUD003-A2` is READY for the Standard Library indexing audit; later
+partitions cover bundled tools, benchmarks/ordinary programs, lazy Boolean and
+unary forms, conformance-test exception classification, a prevention gate, and
+final integrated closure.
+
+No language/specification decision is reopened by AUD003. See
+`docs/project/AUD003_PROTOS_SOURCE_STYLE_CONFORMANCE_AUDIT.md` and
+`docs/guide/SOURCE_STYLE.md`.
+
 ### AUD002 — GraalVM / Truffle editor-tooling compatibility audit
 
 Status: **CLOSED**
