@@ -13,8 +13,6 @@ marker: {}
 xs: Array(10, 20)
 written: xs[0] = marker
 
-(written === marker).and() {
-    (xs[0] === marker).and() {
-        xs.size() == 2
-    }
-}
+(written === marker) &&
+    (xs[0] === marker) &&
+    (xs.size() == 2)

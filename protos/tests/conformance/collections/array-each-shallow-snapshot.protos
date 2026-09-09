@@ -23,6 +23,5 @@ xs.each((value) => {
     null
 })
 
-(seen == 12).and() {
-    xs[1] == 99
-}
+(seen == 12) &&
+    (xs[1] == 99)

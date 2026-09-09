@@ -6,6 +6,6 @@
 
 values: Array(1, 2)
 written: values.atPut(1, 9)
-(written == 9).and() {
-    (values.size() == 2).and() { values.at(1) == 9 }
-}
+(written == 9) &&
+    (values.size() == 2) &&
+    (values.at(1) == 9)

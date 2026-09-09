@@ -14,4 +14,5 @@ b: Path.relative().child("same")
 m: Map()
 m.atPut(a, 10)
 m.atPut(b, 20)
-(m.size() == 1).and() { m.at(a) == 20 }
+(m.size() == 1) &&
+    (m.at(a) == 20)
