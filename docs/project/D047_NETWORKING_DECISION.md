@@ -55,21 +55,21 @@ NetworkInterface APIs, formal transferable Network attenuation, TLS/QUIC/HTTP/
 WebSocket, Unix/raw sockets, service discovery, generic socket options, or
 socket-local timeout/deadline APIs.
 
-D047 also fixes the semantic state/equality laws of `IpAddress` and `IpEndpoint`
-but **does not approve the exact public constructor/factory selector spellings or
-exact standard recognition/construction protocol**. That narrow public-API choice
-must cross a later explicit design checkpoint before `I028` publishes the
-source construction surface. This is why `I028` is allocated `OPEN`, not
-`READY`, by the ratification slice.
+D047 also fixed the semantic state/equality laws of `IpAddress` and `IpEndpoint`
+while intentionally deferring the exact public construction/recognition surface.
+That bounded checkpoint is now resolved by explicitly owner-ratified D048 /
+specification revision `0.1.391`. D048 selects ordinary invocation factories,
+transparent exact frozen structural recognition and `recognizes(value)` without
+changing D047's authority, TCP, IPv4/IPv6, DNS/UDP or transfer boundaries.
 
 ## Implementation owner
 
-`I028 — Core networking foundation` is allocated as the implementation
-owner. The identifier is mechanical; `I027` was already occupied by the time
-D047 was ratified. `I028` remains `OPEN` pending the bounded address/endpoint
-construction checkpoint, after which its implementation may be decomposed into
-address/endpoint foundation, Network provisioning, connect/TCP connection,
-listen/accept, production backend scalability and final conformance slices.
+`I028 — Core networking foundation` is the implementation owner. The identifier
+is mechanical; `I027` was already occupied by the time D047 was ratified. D048 /
+specification revision `0.1.391` closes the bounded address/endpoint entry
+checkpoint, so `I028` is now `READY` and its A slice may implement the approved
+ordinary-object address/endpoint foundation before later Network provisioning,
+connect/TCP connection, listen/accept, backend scalability and closure slices.
 
 `LIB005` remains blocked by that Core implementation. After `I028` closes,
 `LIB005-0` should select only the bounded ordinary-Protos convenience surface; it

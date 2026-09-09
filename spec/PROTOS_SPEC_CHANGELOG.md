@@ -9,6 +9,19 @@ not synchronized, and an otherwise-unaffected document is not edited merely to
 advance its revision.
 
 
+## [0.1.391] - 2026-09-09
+
+### D048 — IpAddress / IpEndpoint construction and recognition
+- Records explicit project-owner approval of the bounded construction/recognition checkpoint intentionally deferred by D047. `IpAddress` and `IpEndpoint` are standard frozen prelude factory/prototype objects that carry no Network authority and use ordinary polymorphic invocation: `IpAddress(version, bits)` and `IpEndpoint(address, port)`.
+- Each successful construction returns a fresh ordinary frozen object whose immediate parent is exactly the corresponding canonical standard factory/prototype and whose own local data slots are exactly `version`/`bits` or `address`/`port`. `IpAddress` requires ordinary unbounded Integer version 4 or 6 plus in-range exact bits; `IpEndpoint` requires a recognized standard IpAddress plus an ordinary unbounded Integer port in 1..65535. Invalid construction signals ordinary synchronous Error before any network/DNS/host effect.
+- Selects transparent structural recognition rather than a hidden runtime brand. A recognized standard value must be an ordinary frozen object with the exact immediate canonical parent, exact own-slot shape and valid canonical state. Manually constructing that ordinary shape through normal object/delegation/freeze mechanisms is sufficient; factory provenance is not required. Extra own slots, transitive-only ancestry, mutable/closed-but-not-frozen values and coincidental shape under another parent are not recognized.
+- Adds `IpAddress.recognizes(value)` and `IpEndpoint.recognizes(value)` as standard one-argument canonical-Boolean predicates. Recognition directly observes the standard structural/frozen-state invariant without invoking candidate callbacks, getters, equality or hashing and performs no DNS/network/host I/O.
+- Reaffirms D047 equality/hash laws: recognized standard addresses compare/hash by version+bits and recognized endpoints by address+port, while `===` remains ordinary object identity. The public data slots remain ordinary member-readable state so later LIB005 textual parse/format conveniences can remain ordinary Protos composition rather than requiring a native address representation.
+
+### Compatibility and implementation state
+- This revision closes the only entry checkpoint intentionally left open by D047. `I028 — Core networking foundation` becomes READY and `I028-A` may implement the approved ordinary-object factory/recognition surface; no I028 production implementation is included in this publication.
+- D049's shared-standard-object publication rule applies normally to the canonical factory/prototypes: when physically shared through the standard prelude they are published frozen before guest observation. D048 introduces no new value-identity family, hidden brand, IPv4/IPv6 prototype split, String/DNS coercion, Network authority, TCP backend, UDP/TLS/HTTP facility, native socket API or Maven implementation-version change.
+
 ## [0.1.390] - 2026-09-09
 
 ### D050 — Standard Boolean protocol completion

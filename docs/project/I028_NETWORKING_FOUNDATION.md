@@ -1,7 +1,7 @@
 # I028 — Core Networking Foundation
 
-Status: **OPEN**
-Normative dependency: D047 / specification revision `0.1.388` — RATIFIED
+Status: **READY**
+Normative dependencies: D047 / specification revision `0.1.388` — RATIFIED; D048 / specification revision `0.1.391` — RATIFIED
 Consumer: `LIB005 — Networking`
 
 ## Purpose
@@ -9,22 +9,21 @@ Consumer: `LIB005 — Networking`
 Implement the D047 portable networking foundation without importing host socket
 state machines or backend scheduling identities into Protos semantics.
 
-## Entry checkpoint
+## Entry checkpoint — CLOSED by D048
 
-D047 intentionally leaves one public protocol detail unsettled: the exact
-source-visible constructor/factory selector spellings and recognition/construction
-protocol for standard `IpAddress` and `IpEndpoint` data. Because selector names
-and public receiver-domain rules are observable API, this item remains `OPEN`
-until that bounded design checkpoint receives explicit project-owner approval.
+D048 / specification revision `0.1.391` resolves the only source-visible
+construction/recognition protocol intentionally deferred by D047. The approved
+surface is ordinary `IpAddress(version, bits)` / `IpEndpoint(address, port)`
+factory invocation over canonical frozen prelude factory/prototypes, transparent
+exact frozen structural recognition, and explicit `recognizes(value)` predicates.
+No hidden semantic family/brand or textual/DNS coercion is introduced.
 
-No implementation slice may silently choose those public names or encode a
-hidden semantic family as an implementation convenience.
+`I028-A` is therefore READY. Later slices remain bounded by D047/D048 and by the
+normal implementation dependencies established as A-F progresses.
 
 ## Planned implementation decomposition after the checkpoint
 
-- **A — address/endpoint ordinary-object foundation:** construction/recognition
-  protocol selected by the checkpoint, validation, freezing, structural equality
-  and hashing, IPv4/IPv6 exact-bit invariants, transfer conformance.
+- **A — address/endpoint ordinary-object foundation — READY:** implement the D048 construction/recognition protocol, validation, freezing, structural equality and hashing, IPv4/IPv6 exact-bit invariants and transfer conformance.
 - **B — Network capability + bootstrap provisioning:** host-neutral live
   capability shape and optional initial-module `network` endowment; no ambient
   recovery.

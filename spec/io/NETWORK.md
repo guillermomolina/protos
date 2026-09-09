@@ -52,12 +52,56 @@ The address is data, not authority. It contains no hostname, resolver, native
 socket address, interface index/name, route handle, Network capability, or host
 resource identity.
 
-D047 deliberately does not select the exact public constructor/factory selector
-spellings or the exact standard-object recognition/construction protocol for
-forming `IpAddress` values from source. Those public protocol names require a
-bounded follow-up design checkpoint before the implementation item allocated by
-D047 may publish that construction surface. This deferral does not weaken the
-state, equality, hashing, transfer, authority, or IPv4/IPv6 laws fixed here.
+D048 / specification revision `0.1.391` closes the bounded public
+construction/recognition checkpoint. `IpAddress` is a standard frozen prelude
+factory/prototype that carries no Network authority. Its canonical construction
+uses ordinary polymorphic invocation:
+
+```text
+IpAddress(version, bits) -> IpAddress
+```
+
+The standard factory behavior requires the invocation receiver to be exactly the
+canonical standard `IpAddress` factory/prototype and requires exactly two supplied
+arguments. `version` must belong to the ordinary unbounded `Integer` family and
+be exactly 4 or 6. `bits` must belong to that same ordinary unbounded `Integer`
+family and must be in `0 .. 2^32-1` for version 4 or `0 .. 2^128-1` for version
+6. A fixed-width numeric value is not accepted merely because its mathematical
+value is in range. Invalid construction signals a fresh ordinary `Error`
+synchronously and performs no DNS, routing, Network or host I/O.
+
+Every successful invocation returns one fresh ordinary frozen object whose
+immediate delegation parent is exactly the canonical standard `IpAddress`
+factory/prototype and whose own local slot names are exactly `version` and
+`bits`, containing the validated semantic values. These are ordinary public
+member-readable data slots. Factory provenance is not itself semantic membership:
+an ordinary program object constructed through the normal object/delegation/freeze
+mechanisms is a recognized standard `IpAddress` exactly when it is frozen, its
+immediate parent is exactly the canonical standard `IpAddress` factory/prototype,
+its own local slot names are exactly `version` and `bits`, and those slot values
+satisfy the same canonical numeric invariants. Extra own slots, merely transitive
+ancestry, an open or closed-but-not-frozen object, or coincidental shape under a
+different parent is not recognized.
+
+The standard factory/prototype additionally exposes:
+
+```text
+IpAddress.recognizes(value) -> true | false
+```
+
+For the exact canonical receiver and exactly one supplied argument, this
+predicate accepts any candidate and returns canonical `true` exactly for the
+recognized standard shape above, otherwise canonical `false`. Recognition
+observes the frozen state, immediate parent, exact own-slot names and required
+semantic-family/range state directly; it invokes no candidate getter, callback,
+equality or hashing behavior and performs no network/host operation. Invalid
+receiver or arity follows the ordinary standard receiver/arity Error rule.
+
+Standard `IpAddress` equality/hash behavior requires a recognized receiver,
+compares/hashes only canonical `version` plus `bits`, and yields canonical
+`false` rather than signaling merely because the other argument is not a
+recognized `IpAddress`. `===` remains ordinary object identity, so independently
+constructed equal addresses remain distinct identities.
 
 ## 3. `IpEndpoint` semantic data
 
@@ -77,9 +121,47 @@ Port zero is not a standard `IpEndpoint` value in this initial model. Automatic
 local-port selection is an acquisition request and is represented separately by
 the listen request below rather than by overloading endpoint data with a verb.
 
-As with `IpAddress`, D047 fixes the semantic state/laws but intentionally leaves
-the exact public source-construction selector surface to the bounded follow-up
-design checkpoint.
+D048 / specification revision `0.1.391` also closes the endpoint
+construction/recognition surface. `IpEndpoint` is a standard frozen prelude
+factory/prototype carrying no Network authority and is constructed through
+ordinary invocation:
+
+```text
+IpEndpoint(address, port) -> IpEndpoint
+```
+
+The standard factory behavior requires the invocation receiver to be exactly the
+canonical `IpEndpoint` factory/prototype and exactly two supplied arguments.
+`address` must be a recognized standard `IpAddress` under section 2. `port` must
+belong to the ordinary unbounded `Integer` family and be in `1 .. 65535`; a
+fixed-width numeric value is not accepted merely because its mathematical value
+is in range. Invalid construction signals a fresh ordinary `Error` synchronously
+and performs no network/DNS/host effect.
+
+Each success returns one fresh ordinary frozen object whose immediate delegation
+parent is exactly canonical `IpEndpoint` and whose own local slot names are
+exactly `address` and `port`. The `address` slot retains the exact supplied
+recognized `IpAddress` object; `port` retains the validated Integer. Both are
+ordinary public member-readable data slots.
+
+A candidate is recognized as a standard `IpEndpoint` exactly when it is an
+ordinary frozen object, its immediate parent is exactly canonical `IpEndpoint`,
+its own local slots are exactly `address` and `port`, its `address` is a
+recognized standard `IpAddress`, and its `port` is an ordinary unbounded Integer
+in `1 .. 65535`. Factory provenance is unnecessary; extra own state,
+transitive-only ancestry, mutable state or coincidental shape under another
+parent is insufficient.
+
+The standard factory/prototype exposes:
+
+```text
+IpEndpoint.recognizes(value) -> true | false
+```
+
+with the same direct, callback-free, host-effect-free recognition rule as
+`IpAddress.recognizes`. Standard endpoint equality/hash requires a recognized
+receiver and depends only on recognized `address` plus `port`; an unrecognized
+other argument compares false and `===` remains ordinary object identity.
 
 `IpAddress` and `IpEndpoint` are data suitable for ordinary value transfer under
 the applicable Actor/P snapshot rules once their standard construction contract
@@ -136,8 +218,8 @@ operation.
 ## 6. TCP connect acquisition
 
 `connectTcp(endpoint)` accepts a concrete numeric `IpEndpoint` under the standard
-endpoint-recognition contract selected by the required follow-up construction
-checkpoint. The endpoint version remains explicit.
+recognition contract selected by D048 / specification revision `0.1.391`.
+The endpoint version remains explicit.
 
 Successful resolution transfers one fresh live `TcpConnection` capability to
 the caller. The connection's logical remote endpoint equals the supplied endpoint
@@ -291,11 +373,10 @@ TLS state, UDP state, or network policy structures.
 
 ## 13. Deferred facilities
 
-The following remain separate explicit future designs:
+D048 / specification revision `0.1.391` resolves the former
+`IpAddress` / `IpEndpoint` construction and recognition checkpoint. The following
+remain separate explicit future designs:
 
-- public construction/factory selector spellings and exact standard recognition
-  protocol for `IpAddress` / `IpEndpoint` (required before implementation exposes
-  their source construction surface);
 - DNS/name resolution and resolver authority;
 - Happy Eyeballs and general time/delay composition;
 - UDP/datagram operations and truncation/size rules;
