@@ -21,6 +21,5 @@ be.add(255)
 be.add(0)
 be.add(65)
 
-(Encoding.UTF16LE.decode(le) == "A").and() {
-    Encoding.UTF16BE.decode(be) == "A"
-}
+(Encoding.UTF16LE.decode(le) == "A") &&
+    (Encoding.UTF16BE.decode(be) == "A")

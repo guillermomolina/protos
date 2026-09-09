@@ -26,6 +26,5 @@ parser.feed("false")
 parser.feed("")
 parser.finish()
 
-(seen.kind == "boolean").and() {
-    seen.value === false
-}
+(seen.kind == "boolean") &&
+    (seen.value === false)

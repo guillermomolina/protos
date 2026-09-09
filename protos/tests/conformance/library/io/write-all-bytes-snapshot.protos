@@ -24,12 +24,8 @@ payload.atPut(0, 90)
 sameFilesystem: future.value() === filesystem
 actual: Files.readAllBytes(filesystem, path).value()
 
-sameFilesystem.and() {
-    (actual.size() == 3).and() {
-        (actual.at(0) == 65).and() {
-            (actual.at(1) == 66).and() {
-                actual.at(2) == 67
-            }
-        }
-    }
-}
+sameFilesystem &&
+    (actual.size() == 3) &&
+    (actual.at(0) == 65) &&
+    (actual.at(1) == 66) &&
+    (actual.at(2) == 67)
