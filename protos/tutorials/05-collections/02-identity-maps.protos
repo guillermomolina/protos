@@ -15,9 +15,9 @@ left: { value: 1 }
 right: { value: 1 }
 
 m: IdentityMap()
-m.atPut(left, "left")
-m.atPut(right, "right")
+m[left] = "left"
+m[right] = "right"
 
 print(m.size())
-print(m.at(left))
-print(m.at(right))
+print(m[left])
+print(m[right])

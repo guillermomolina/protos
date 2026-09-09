@@ -14,4 +14,4 @@ right: (() => { 22 }).future()
 
 // Future.all preserves input ordering in the resulting Array.
 values: Future.all(left, right).value()
-print(values.at(0) + values.at(1))
+print(values[0] + values[1])

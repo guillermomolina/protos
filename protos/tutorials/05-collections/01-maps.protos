@@ -12,10 +12,10 @@
 // Map uses value equality for keys. Updating an existing key replaces its value
 // without adding another entry.
 m: Map()
-m.atPut("language", "Protos")
-m.atPut("version", 1)
-m.atPut("version", 2)
+m["language"] = "Protos"
+m["version"] = 1
+m["version"] = 2
 
-print(m.at("language"))
-print(m.at("version"))
+print(m["language"])
+print(m["version"])
 print(m.size())

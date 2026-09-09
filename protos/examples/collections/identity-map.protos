@@ -13,9 +13,9 @@ first: { name: "same shape" }
 second: { name: "same shape" }
 
 byIdentity: IdentityMap()
-byIdentity.atPut(first, "first")
-byIdentity.atPut(second, "second")
+byIdentity[first] = "first"
+byIdentity[second] = "second"
 
 print(byIdentity.size())
-print(byIdentity.at(first))
-print(byIdentity.at(second))
+print(byIdentity[first])
+print(byIdentity[second])

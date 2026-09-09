@@ -7,7 +7,7 @@
 // Rest parameters receive a fresh frozen Array containing the unconsumed
 // caller-supplied positional arguments.
 describe: (first, ...rest) => {
-    Array(first, args.size(), rest.size(), rest.at(0))
+    Array(first, args.size(), rest.size(), rest[0])
 }
 
 describe("head", "middle", "tail")

@@ -13,10 +13,10 @@
 a: Path.relative().child("same")
 b: Path.relative().child("same")
 byValue: Map()
-byValue.atPut(a, 10)
-byValue.atPut(b, 20)
+byValue[a] = 10
+byValue[b] = 20
 byIdentity: IdentityMap()
-byIdentity.atPut(a, 10)
-byIdentity.atPut(b, 20)
+byIdentity[a] = 10
+byIdentity[b] = 20
 print(byValue.size())
 print(byIdentity.size())

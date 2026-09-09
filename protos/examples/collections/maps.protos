@@ -10,10 +10,10 @@
  */
 
 scores: Map()
-scores.atPut("Ada", 10)
-scores.atPut("Grace", 20)
-scores.atPut("Ada", 15)
+scores["Ada"] = 10
+scores["Grace"] = 20
+scores["Ada"] = 15
 
-print(scores.at("Ada"))
+print(scores["Ada"])
 print(scores.containsKey("Grace"))
 print(scores.size())
