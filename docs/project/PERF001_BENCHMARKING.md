@@ -151,12 +151,15 @@ repositories.
 | PERF001-C | CLOSED | Companion correctness suite published at exact external commit `guillermomolina/protos-benchmarks@2da26df49f9b0673c56a9150a2d2f8cfc4a77c17`, consuming pinned Protos revision `42b8264a36254dafbd97d80f5181790e28b9de12`; all 11 canonical micro/runtime/algorithm workloads have materially equivalent Python and JavaScript implementations, all 33 Protos/Python/JavaScript correctness cases pass, runtime stack/recursion settings are recorded, and no timing results are published by this slice. |
 | PERF001-D | CLOSED | Companion reference measurement evidence published at exact external commit `guillermomolina/protos-benchmarks@52b083cef5f8726f73be869c56f3cd2933e919ab`, produced by harness `0a406373c497df1173ff26a3ed4fcada015e0879`. It compares exact pre/post-PERF002 Protos revisions `8f363d0146164f99e72210eb44667f4efb7b88e7` / `3c93912a5579326374782a43527fbb51046f8f91` with 10 fresh-JVM startup samples, 20 retained warmup iterations and 20 steady-state samples for each of the 11 canonical workloads in interpreter and Truffle modes, plus separate non-timing compilation diagnostics; raw samples and environment/runtime identity are retained. |
 | PERF001-E | CLOSED | Companion reference evidence published at exact commit `guillermomolina/protos-benchmarks@4bff9f7f6c5e0e006530f166c188e0e988acf565`, produced by harness `280173d743b2ed838a89be0ad930b20828d89558` against pinned Protos corpus revision `86b35d8bb2d7ab2ad54bc2947e1bf7fbff1fca15`. All 18 Protos/Python/JavaScript correctness cases PASS and 54 startup/warmup/steady result records are retained. Separate diagnostics preserve two baseline optimization findings: `array-reduce` and `array-sort` each have 40 `GraphTooBig` failures with `rc=0`; those findings are routed to PERF003 rather than invalidating or rewriting PERF001-E. |
-| PERF001-F | BLOCKED_BY_DEPENDENCIES | After B and the relevant workload audit, add Future/P/Actor concurrency measurements with explicit CPU-set and scheduling methodology. |
-| PERF001-G | BLOCKED_BY_DEPENDENCIES | Final reproducibility run and baseline report across the completed PERF001 surface. A report labelled the complete Core v0.1 baseline additionally requires I015 to be CLOSED. |
+| PERF001-F | METHODOLOGY_AUDIT_CLOSED | The project owner approved the focused Future/P/Actor fixed-cost + scalability methodology and six canonical workload contracts. Corpus/harness implementation and retained reference evidence remain pending; the final reference run is gated only on the relevant I026-A4B3 production-entry retirement. Live coordination is GitHub Issue #105. |
+| PERF001-G | BLOCKED_BY_DEPENDENCIES | Final reproducibility run and baseline report across the completed PERF001 surface. I015 is already CLOSED; PERF001-F retained reference evidence remains the outstanding PERF001 predecessor. |
 
-Dependency outline: `PERF001-A -> PERF001-B -> PERF001-C -> PERF001-D/E`, with
-`PERF001-F` depending on B plus its focused concurrency audit; `PERF001-G` closes
-only after all required preceding PERF001 slices are closed.
+Dependency outline: `PERF001-A -> PERF001-B -> PERF001-C -> PERF001-D/E`.
+The focused PERF001-F audit is now durably closed by the approved methodology in
+`PERF001_F_CONCURRENCY_METHODOLOGY.md`; corpus/harness work may proceed, while the
+final retained F reference run waits only for its documented I026-A4B3 production-entry
+stability gate. `PERF001-G` closes only after all required preceding PERF001 slices
+are closed.
 
 ### PERF001-D closure evidence
 
@@ -219,6 +222,36 @@ records are retained. Separate non-timing diagnostics remain baseline evidence:
 optimization failures; `array-reduce` and `array-sort` execute correctly but each
 records 40 `GraphTooBig` failures. Those findings motivate PERF003 and do not
 alter the PERF001-E baseline.
+
+
+### PERF001-F focused concurrency methodology audit
+
+The project owner approved the focused PERF001-F methodology on 2026-09-09. The
+durable contract is `docs/project/PERF001_F_CONCURRENCY_METHODOLOGY.md`. It
+selects a Protos-native fixed-cost + scalability model rather than manufactured
+cross-language concurrency analogues and reserves six canonical workload
+identifiers under `protos/benchmarks/concurrency/`:
+
+- `concurrency/future-roundtrip`;
+- `concurrency/future-fanout-all`;
+- `concurrency/parallel-roundtrip`;
+- `concurrency/parallel-array-map`;
+- `concurrency/actor-request-roundtrip`; and
+- `concurrency/actor-fanout-requests`.
+
+Future/task measurements characterize Actor-local asynchronous scheduling and
+deterministic coordination rather than claiming implicit CPU parallelism. P and
+multi-Actor workloads additionally include fixed-work strong-scaling series over
+explicit topology-audited physical-core CPU sets. Correctness remains a timing
+gate; raw samples plus median/MAD/p95 are retained, with speedup/efficiency
+derived only for the scaling cases.
+
+The reference harness must measure the pinned Protos revision through its
+production Process-scoped Polyglot/Truffle hosting path and verify that revision's
+repository-owned toolchain contract instead of carrying historical JDK22 /
+Truffle 24.0.0 PERF pins forward. Methodology/corpus/harness work may proceed
+now. Only the final retained reference run is gated on the relevant
+I026-A4B3 production-entry cutover/legacy-entry retirement.
 
 ## Cross-repository publication rule
 
