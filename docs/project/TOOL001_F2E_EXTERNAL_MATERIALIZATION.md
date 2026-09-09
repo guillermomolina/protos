@@ -103,7 +103,7 @@ F2E2A  captured-Filesystem ContentIdentity canonicalizer/verifier  CLOSED
 F2E2B  exact selected-root capture + verified-capture host custody CLOSED
 F2E2C same-capture integration + F2E2 closure                      CLOSED
 F2E3  external-node execution-plan construction                    CLOSED — F2E3A/B/C; D053/D056/D057 RATIFIED
-F2E4  external canonical ModuleKey + source resolver               READY
+F2E4  external canonical ModuleKey + source resolver               READY — PLAT012 RATIFIED
 F2E5  public run integration + F2 external-execution closure       BLOCKED_BY_DEPENDENCIES
 ```
 
@@ -827,3 +827,20 @@ F2E3 is therefore CLOSED. F2E4 is READY to implement the already-deferred
 generation-2 defensive detach plus canonical external ModuleKey/source resolver
 and its concrete run-local custody mapping. F2E5 remains dependency-gated on
 F2E4.
+
+## PLAT012 ratification — F2E4 architecture gate cleared
+
+PLAT012 is RATIFIED by explicit project-owner approval on 2026-09-09 after the
+expanded loader/runtime/package-store review and scalability analysis.
+
+F2E4 must now consume A+ mechanically: detached exact V2 identities are
+reconciled 1:1 with a run-owned verified package-resource scope; canonical
+external ModuleKeys use exact immutable package identity + internal logical
+module; source bytes are read lazily from the same verified backing through a
+host-neutral resource reader and returned without physical source-path identity.
+
+Equal content may be physically deduplicated without collapsing logical package
+identity. Cache policy remains tuning. F2E5 retains public run lifecycle and
+final teardown integration.
+
+F2E4 remains **READY** and is no longer architecture-blocked.

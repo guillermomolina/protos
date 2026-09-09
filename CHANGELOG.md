@@ -1,5 +1,7 @@
 ## 0.2.313-SNAPSHOT
 
+- Ratify `PLAT012 — Verified external package custody and source-resolution architecture` / GitHub #248 after explicit project-owner approval and exhaustive cross-runtime/package-store review. Select a run-owned exact immutable package-resource scope with 1:1 detached-plan/custody reconciliation and lazy host-neutral reads over the same F2E2-verified backing; canonical external ModuleKey remains exact package identity + internal logical module, while aliases, URLs, paths, Filesystems, custody objects and loader-domain identity remain excluded. Preserve optional lazy caching as tuning and future NIO/memory/mmap/CAS/brokered/distributed backing evolution. Clear the architecture gate for `TOOL001-F2E4`; F2E5 still owns public run lifecycle integration. Governance/platform-architecture only: no Core specification, executable implementation, Maven version, lock format, PackageExecutionPlan ABI or public run change.
+
 - Close `I028-E3B — NIO read lane + independent readiness` under the existing
   ByteReadable contract and ratified PLAT003/PLAT006/PLAT009. Extend the connected
   NIO TcpConnection backend with one poller-owned read request, immediate
