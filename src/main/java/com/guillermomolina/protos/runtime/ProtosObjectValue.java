@@ -17,12 +17,20 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.interop.TruffleObject;
+import com.oracle.truffle.api.interop.UnknownIdentifierException;
+import com.oracle.truffle.api.interop.UnsupportedMessageException;
+import com.oracle.truffle.api.library.ExportLibrary;
+import com.oracle.truffle.api.library.ExportMessage;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
-public class ProtosObjectValue {
+@ExportLibrary(InteropLibrary.class)
+public class ProtosObjectValue implements TruffleObject {
     public enum MutationState {
         OPEN,
         CLOSED,
@@ -237,4 +245,54 @@ public class ProtosObjectValue {
 
         return localSlots.remove(name);
     }
+    /*
+     * I026-D1 / PLAT013: tooling observation is local reflection only.
+     * Subclasses inherit the export mechanically but receive no object-member
+     * projection until their own runtime-family tranche explicitly enables it.
+     */
+    private boolean supportsInteropObjectMembers() {
+        return getClass() == ProtosObjectValue.class;
+    }
+
+    @ExportMessage
+    boolean hasMembers() {
+        return supportsInteropObjectMembers();
+    }
+
+    @ExportMessage
+    Object getMembers(@SuppressWarnings("unused") boolean includeInternal)
+            throws UnsupportedMessageException {
+        if (!supportsInteropObjectMembers()) {
+            throw UnsupportedMessageException.create();
+        }
+        return new ProtosInteropMemberNames(localSlotsSnapshot().keySet());
+    }
+
+    @ExportMessage
+    boolean isMemberReadable(String member) {
+        if (!supportsInteropObjectMembers()) {
+            return false;
+        }
+        Optional<Object> value = readLocalSlot(member);
+        return value.isPresent() && InteropLibrary.isValidValue(value.get());
+    }
+
+    @ExportMessage
+    Object readMember(String member)
+            throws UnknownIdentifierException, UnsupportedMessageException {
+        if (!supportsInteropObjectMembers()) {
+            throw UnsupportedMessageException.create();
+        }
+        Optional<Object> value = readLocalSlot(member);
+        if (value.isEmpty() || !InteropLibrary.isValidValue(value.get())) {
+            throw UnknownIdentifierException.create(member);
+        }
+        return value.get();
+    }
+
+    @ExportMessage
+    String toDisplayString(@SuppressWarnings("unused") boolean allowSideEffects) {
+        return "Object";
+    }
+
 }

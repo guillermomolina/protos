@@ -16,6 +16,8 @@
  */
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.interop.TruffleObject;
+
 /**
  * Implementation-only bridge for Protos semantic values represented by specialized
  * host objects rather than {@link ProtosObjectValue}.
@@ -25,7 +27,7 @@ package com.guillermomolina.protos.runtime;
  * membership, identity, mutability, receiver-domain compatibility, or any other
  * language-visible property.
  */
-interface ProtosRepresentedValue {
+interface ProtosRepresentedValue extends TruffleObject {
     Object representedDelegationParent(ProtosPrelude prelude);
 
     static ProtosPrelude requirePrelude(ProtosPrelude prelude, String family) {

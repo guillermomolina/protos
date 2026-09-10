@@ -76,7 +76,8 @@ see `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md`.
 | I026-A4B3 | CLOSED | `0.2.301-SNAPSHOT` | I026-A4B2 | CLI/REPL, bundled tools, exact/fresh/captured/workspace, ordinary modules, RootActor initial modules and the remaining production Process creator all use Process-scoped public-parse hosting; the final architecture guard prevents direct compiler entry from returning in Process creators. EXCLUSIVE retained; REUSE/SHARED deferred. |
 | I026-B | CLOSED | `0.2.303-SNAPSHOT` | I026-A4 + PLAT004 | Map the existing exact `SourceSpan` ranges to valid Truffle `SourceSection` values on roots/execution nodes under ratified PLAT004 root-owned Source / node-local range / on-demand projection, with focused Java-side integration evidence. |
 | I026-C | CLOSED | `0.2.311-SNAPSHOT` | I026-B + PLAT005 + PLAT008 | Implement common `InstrumentableNode` wrappers, exact `StatementTag`/`CallTag` canonical-role tagging and PLAT008 logical replay-site normalization; prove wrapper-transparent replay identity and compact no-source/no-token node metadata without changing Protos semantics. |
-| I026-D | READY | — | I026-A1 + PLAT013 | Expose semantically faithful Truffle interop/debug views for Protos runtime values needed by tooling under ratified PLAT013 C′: real guest values provide the read-only semantic-minimum interop surface; object members are local-slot-only; synthetic scopes/views remain adapters; delegated lookup, Closure execution, debugger mutation and initial Map/IdentityMap hash interop stay excluded/deferred. |
+| I026-D | IN_PROGRESS | `0.2.316-SNAPSHOT` | I026-A1 + PLAT013 | D1 publishes the first PLAT013 C′ tranche: real ordinary Object values expose read-only exact local-slot members plus bounded display; remaining runtime-family facets stay in D. |
+| I026-D1 | CLOSED | `0.2.316-SNAPSHOT` | I026-D + PLAT013 | Direct InteropLibrary receiver support on real ProtosObjectValue instances plus the implementation-only ProtosRepresentedValue marker as opaque TruffleObject; exact-class ordinary Objects enumerate/read only local slots through an immutable member-name array adapter, reject writes/delegated lookup, preserve cycles as the same guest value and keep inherited runtime families out of this tranche. |
 | I026-E | BLOCKED_BY_DEPENDENCIES | — | I026-C + I026-D | Bridge top/local debugger scopes from the existing Protos activation/context model and prove visible names/values match Protos lookup boundaries. |
 | I026-F | BLOCKED_BY_DEPENDENCIES | — | I026-C + I026-E | Run a real GraalVM DAP smoke gate over Protos source: source breakpoint, stepping, stack frames, scopes and representative values. Only successful evidence permits a Protos DAP-support claim. |
 | I026-G | BLOCKED_BY_DEPENDENCIES | — | I026-C + I026-E | Run a GraalVM dynamic-LSP smoke gate and record exactly which useful runtime-derived capabilities work for Protos. Do not treat this as a replacement for static Protos language intelligence. |
@@ -104,6 +105,27 @@ scheduler segment through the owning Process execution host and is CLOSED. A4B2B
 isolated P domains now retain implementation-only Process host placement, sibling P carriers enter the
 same Process Context concurrently, and nested P inherits that placement without gaining Process
 authority. D049 resolves B010's independent standard-root structural-state/isolation question. A4B2B3 is now CLOSED: A publishes atomic frozen Core construction and complete shared-standard graph sealing, while B publishes the already-approved A+ `ProtosLanguageContext`-local executable projection with concurrent multi-Process no-cross-CallTarget evidence. B010, A4B2B and A4B2 are CLOSED. A4B3 is IN_PROGRESS after publishing the ordinary CLI/REPL Process-context cutover in `0.2.287-SNAPSHOT`; bundled-tool + exact/fresh/captured/workspace hosting is published in `0.2.291-SNAPSHOT`; module/initial-module public-parse routing is published in `0.2.297-SNAPSHOT`; final legacy-entry retirement remains the last mechanical phase under the same I026-A4B3 work item. I026-D remains independently READY.
+
+## I026-D value interop progress
+
+`I026-D1` closes in `0.2.316-SNAPSHOT` as the first executable consumer of ratified PLAT013.
+Real `ProtosObjectValue` instances are InteropLibrary receivers directly; the
+implementation-only `ProtosRepresentedValue` bridge also becomes a bare
+`TruffleObject` marker so specialized semantic values can cross member reads
+without yet selecting primitive/string/boolean/null facets. No universal
+debugger-value wrapper or global cache is introduced. Exact ordinary
+Objects expose only their current local-slot surface. Member-name enumeration is
+an immutable tooling adapter snapshot, reads use local reflection only, reject accidental host-only non-interop slot
+values, preserve specialized represented values and cycles as the original guest
+value, and keep write/remove/insert messages unsupported. Inherited runtime families are deliberately not given object-member
+projection by this tranche, preventing Array/Map/Closure/resource behavior from
+being selected accidentally through Java inheritance. Display is a bounded
+host-opaque `Object` label.
+
+Delegated lookup, Closure extraction/execution, debugger mutation,
+Map/IdentityMap hash entries, primitive facets, Array indexed facets and I026-E
+scope topology remain outside D1. No Protos specification or observable language
+semantics change.
 
 ## Deferred ownership
 
