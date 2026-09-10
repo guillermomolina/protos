@@ -22,7 +22,7 @@ records: Identity.collectRecords(captured)
     Error().signal()
 })
 
-record: records.at(0)
+record: records[0]
 
 record.hasSlot("pathBytes").ifFalse(() => {
     Error().signal()

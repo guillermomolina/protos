@@ -22,7 +22,7 @@ check: (value, expected) => {
 
     expected.each((octet) => {
         ok.ifTrue(() => {
-            (actual.at(index) == octet).ifFalse(() => {
+            (actual[index] == octet).ifFalse(() => {
                 ok = false
             })
         })
