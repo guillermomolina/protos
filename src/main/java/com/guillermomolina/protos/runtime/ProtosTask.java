@@ -82,6 +82,16 @@ public final class ProtosTask {
     private CancellationPhase cancellationPhase = CancellationPhase.NONE;
     private boolean continuationStarted;
     private WaitDependency waitDependency;
+
+    /*
+     * PLAT019 B-prime suspension publication state. Capture-pending remains
+     * physically RUNNING and therefore is intentionally not a guest-visible
+     * or public Task.State value.
+     */
+    private WaitDependency capturePendingDependency;
+    private boolean captureWakeRecorded;
+    private Continuation publishedSuspensionContinuation;
+
     private Object result;
     private Object failure;
     private final ProtosEvaluatorContinuation evaluatorContinuation = new ProtosEvaluatorContinuation();
@@ -267,7 +277,16 @@ public final class ProtosTask {
             }
             return;
         }
-        continuation.resume(this);
+        Continuation resumeContinuation;
+        synchronized (this) {
+            resumeContinuation = publishedSuspensionContinuation;
+            publishedSuspensionContinuation = null;
+        }
+        if (resumeContinuation != null) {
+            resumeContinuation.resume(this);
+        } else {
+            continuation.resume(this);
+        }
     }
 
     public void executeAction(java.util.function.Supplier<Object> action) {
@@ -290,6 +309,108 @@ public final class ProtosTask {
         ProtosTask previous;
         synchronized (this) { previous = parent; parent = null; }
         if (previous != null) previous.removeChild(this);
+    }
+
+    /**
+     * Begins the private PLAT019 capture-pending phase after a wait relationship has been
+     * registered.
+     *
+     * <p>The task remains physically RUNNING. A concurrent dependency wake or cancellation may
+     * record its outcome, but neither is allowed to enqueue this task before
+     * {@link #publishSuspensionContinuation(WaitDependency, Continuation)} installs the complete
+     * top-level logical continuation.
+     *
+     * @return {@code true} when continuation capture/publication is required; {@code false} when
+     *     readiness or an already-recorded cancellation makes suspension unnecessary
+     */
+    public boolean beginSuspensionCapture(WaitDependency dependency) {
+        Objects.requireNonNull(dependency, "dependency");
+        boolean detachCancelledWait = false;
+        synchronized (this) {
+            requireState(State.RUNNING, "begin suspension capture");
+            if (capturePendingDependency != null) {
+                throw new IllegalStateException("suspension capture is already pending");
+            }
+            if (publishedSuspensionContinuation != null) {
+                throw new IllegalStateException(
+                        "cannot begin capture while another published continuation is retained");
+            }
+            if (cancellationPhase == CancellationPhase.REQUESTED) {
+                detachCancelledWait = true;
+            } else if (dependency.isReady()) {
+                return false;
+            } else {
+                capturePendingDependency = dependency;
+                captureWakeRecorded = false;
+                return true;
+            }
+        }
+        /*
+         * The caller contract registers the wait relationship before entering capture.
+         * Cancellation therefore removes only that relationship; it never cancels the
+         * dependency itself.
+         */
+        if (detachCancelledWait) {
+            dependency.waitingTaskCancelled(this);
+        }
+        return false;
+    }
+
+    /**
+     * Atomically publishes the complete top-level continuation for one PLAT019 suspension.
+     *
+     * <p>Publication and the RUNNABLE/SUSPENDED decision occur under the same Task monitor. A
+     * wake recorded during capture, a last-moment ready dependency, or cancellation makes the
+     * task runnable only after the continuation has become Task-owned. If the dependency remains
+     * pending, the task becomes ordinarily SUSPENDED and later {@link #resume(WaitDependency)}
+     * enqueues it through the existing Actor-local queue.
+     *
+     * @return {@code true} when the published task remains suspended; {@code false} when a
+     *     ready/cancel signal makes it immediately runnable after publication
+     */
+    public boolean publishSuspensionContinuation(
+            WaitDependency dependency, Continuation continuation) {
+        Objects.requireNonNull(dependency, "dependency");
+        Objects.requireNonNull(continuation, "continuation");
+
+        boolean enqueue;
+        boolean suspended;
+        synchronized (this) {
+            requireState(State.RUNNING, "publish suspension continuation");
+            if (capturePendingDependency != dependency) {
+                throw new IllegalStateException(
+                        "published continuation does not match the active suspension capture");
+            }
+            if (publishedSuspensionContinuation != null) {
+                throw new IllegalStateException("a suspension continuation is already published");
+            }
+
+            boolean cancellationWins = cancellationPhase == CancellationPhase.REQUESTED;
+            boolean dependencyReady = captureWakeRecorded || dependency.isReady();
+
+            publishedSuspensionContinuation = continuation;
+            capturePendingDependency = null;
+            captureWakeRecorded = false;
+
+            if (cancellationWins || dependencyReady) {
+                waitDependency = null;
+                resumedDependency = cancellationWins ? null : dependency;
+                state = State.RUNNABLE;
+                enqueue = true;
+                suspended = false;
+            } else {
+                waitDependency = dependency;
+                resumedDependency = null;
+                state = State.SUSPENDED;
+                enqueue = false;
+                suspended = true;
+            }
+        }
+
+        if (enqueue) {
+            owner.enqueue(this);
+        }
+        return suspended;
     }
 
     public boolean suspend(WaitDependency dependency) {
@@ -318,6 +439,14 @@ public final class ProtosTask {
     public boolean resume(WaitDependency dependency) {
         Objects.requireNonNull(dependency, "dependency");
         synchronized (this) {
+            /*
+             * PLAT019: a wake during capture is remembered but cannot make the task
+             * dispatchable until the complete top-level continuation is published.
+             */
+            if (state == State.RUNNING && capturePendingDependency == dependency) {
+                captureWakeRecorded = true;
+                return true;
+            }
             if (state != State.SUSPENDED || waitDependency != dependency) {
                 return false;
             }
@@ -347,7 +476,14 @@ public final class ProtosTask {
             cancellationRequestRecorded = true;
             cancellationPhase = CancellationPhase.REQUESTED;
             resumedDependency = null;
-            if (state == State.SUSPENDED) {
+            if (state == State.RUNNING && capturePendingDependency != null) {
+                /*
+                 * Detach the registered waiter immediately, but keep capture-pending
+                 * ownership until the continuation is published. Publication, not
+                 * cancellation, is the first point at which this task may be enqueued.
+                 */
+                cancelledWait = capturePendingDependency;
+            } else if (state == State.SUSPENDED) {
                 cancelledWait = waitDependency;
                 waitDependency = null;
                 state = State.RUNNABLE;
