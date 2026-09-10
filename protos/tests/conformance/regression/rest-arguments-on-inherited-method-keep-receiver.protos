@@ -12,7 +12,7 @@
 base: {
     value: 1
     combine: (head, ...tail) => {
-        (value * 100) + (head * 10) + tail.at(0)
+        (value * 100) + (head * 10) + tail[0]
     }
 }
 child: base { value: 4 }

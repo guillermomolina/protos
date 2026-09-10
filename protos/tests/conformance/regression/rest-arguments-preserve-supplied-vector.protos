@@ -5,6 +5,6 @@
  */
 
 inspect: (head, ...tail) => {
-    head + (args.size() * 100) + (tail.size() * 10) + tail.at(1)
+    head + (args.size() * 100) + (tail.size() * 10) + tail[1]
 }
 inspect(10, 20, 30)

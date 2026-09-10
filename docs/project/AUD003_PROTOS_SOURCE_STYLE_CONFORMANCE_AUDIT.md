@@ -135,7 +135,7 @@ listed in one table.
 | AUD003-A4 | CLOSED | Benchmarks and remaining ordinary-program indexing audit/migration: the final reviewed debt across two benchmark workloads and one user-facing tutorial was migrated; the complete benchmarks/examples/tutorials executable-source rescan is clean. |
 | AUD003-B1 | CLOSED | Lazy Boolean spelling audit closed: B1a migrated ordinary explicit parameterless-Closure `and`/`or` spellings while retaining direct Boolean-protocol evidence; B1b migrated the reviewed ordinary trailing-Closure population, retained protocol-teaching exceptions, and closed on a fail-closed executable/guide rescan. |
 | AUD003-B2 | CLOSED | Unary spelling audit closed: ordinary `negated()` uses, including concurrent I032-A general fixed-width arithmetic coverage, migrated to unary `-`; no ordinary `.not()` debt remained; direct protocol/lowering/error/slot-visibility evidence and protocol-teaching documentation remain explicit by purpose. |
-| AUD003-C | OPEN | Conformance-corpus exception classification: make deliberate canonical/protocol cases explicit and migrate ordinary-code cases. |
+| AUD003-C | CLOSED | Conformance-corpus exception classification closed by C17 global survivor reconciliation: all ordinary indexing debt migrated; remaining explicit forms are deliberate protocol/lowering/result-contract evidence. |
 | AUD003-D | OPEN | Prevention gate: add a bounded source-style guard that understands path/purpose exceptions or an explicit allowlist; a repository-wide dumb grep that bans canonical forms is not acceptable. |
 | AUD003-E | OPEN | Final repository rescan, exception review, documentation reconciliation, and closure evidence. |
 
@@ -441,6 +441,61 @@ The initial exception categories are:
 The register records categories rather than freezing every current line forever.
 A later edit can make a formerly justified explicit form ordinary debt, and the
 guard must allow that distinction to evolve.
+
+### AUD003-C closure retained evidence
+
+GitHub coordination: Issue `#116` (`AUD003-C`).
+
+C1 through C16 migrated 354 reviewed ordinary conformance-corpus explicit
+indexing forms to the approved idiomatic surface syntax: 265 reads and 89
+writes. C17's final reconciliation found 13 additional ordinary reads that had
+been missed by the earlier authoring inventory: eleven auxiliary Bytes
+inspections in the portable one-shot text-conversion conformance scenario and
+two auxiliary rest-argument Array reads in regression scenarios. C17 migrated
+those three files without rewriting the protocol or result contract under test.
+
+The C17 reconciliation also found two additional Map `atPut` survivors. Both are
+deliberate exceptions and remain explicit: their `atPut` result is observed
+directly while the scenarios exercise query-equality direction / stored-key
+representation and single-hash absent insertion. Rewriting those calls merely
+for style would erase result-sensitive protocol evidence.
+
+Across C1 through C17, the conformance-corpus migration therefore changed 367
+ordinary explicit indexing forms: 278 reads and 89 writes.
+
+C17 closes C only after an execution-time recursive rescan of every current
+`protos/tests/conformance/**/*.protos` source. After the final 13-read migration,
+the surviving explicit population must match the reviewed exception allowlist by
+exact path and exact `.at(...)` / `.atPut(...)` count.
+
+The retained population is exactly 42 files and 66 explicit forms: 41 reads and
+25 writes, grouped by purpose as follows:
+
+- Bytes: 14 files / 16 forms for direct `at`/`atPut` error contracts,
+  indexed-surface equivalence, delegated-receiver behavior, and write-result
+  evidence.
+- Map / IdentityMap: 12 files / 26 forms for direct lookup/update,
+  result-sensitive `atPut`, hash/equality/identity, missing-key, representative,
+  and receiver contracts.
+- Array: 3 files / 7 forms for direct indexing, fixed-width
+  protocol-versus-surface evidence, and result-sensitive `atPut`.
+- Set / IdentitySet: 4 files / 8 reads retained as direct indexed-membership
+  evidence.
+- Process: 3 files / 3 reads retained as deliberate `args().at(...)`
+  invalid-index/error-contract evidence.
+- String: 6 files / 6 reads retained for direct `String.at(...)`
+  error/index/fixed-width-index conformance.
+
+Completed ordinary-debt domains (`call`, `encoding`, `future`, `library/io`,
+`library/json`, `library/text`, `maturity`, `network`, `regression`,
+`text-reader`, and `text-writer`) are independently required to contain zero
+explicit `.at(...)` / `.atPut(...)` survivors at closure time.
+
+Any new survivor path, removed expected exception, or changed per-file count
+fails closed before publication. `AUD003-C` therefore closes as an intent-aware
+exception classification, not as a repository-wide ban on canonical protocol
+spelling. AUD003 itself remains `IN_PROGRESS`: D still owns the prevention gate
+and E owns the final repository rescan/documentation reconciliation.
 
 ## Closure criteria
 
