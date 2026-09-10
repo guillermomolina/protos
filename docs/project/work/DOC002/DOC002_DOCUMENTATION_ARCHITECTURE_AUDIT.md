@@ -2,7 +2,7 @@
 
 Status: **DOC002-A AUDIT COMPLETE; OPTION A LATER RATIFIED BY DOC002-B**
 
-Ratification note (2026-09-10): the project owner explicitly approved **Option A — role-first durable project tree** after reviewing this audit. DOC002-B records the selected architecture and compatibility rules in the [`DOC002 documentation path contract`](work/DOC002/DOC002_DOCUMENTATION_PATH_CONTRACT.md). The alternatives and approval-gate wording below are retained as the historical DOC002-A decision packet.
+Ratification note (2026-09-10): the project owner explicitly approved **Option A — role-first durable project tree** after reviewing this audit. DOC002-B records the selected architecture and compatibility rules in the [`DOC002 documentation path contract`](DOC002_DOCUMENTATION_PATH_CONTRACT.md). The alternatives and approval-gate wording below are retained as the historical DOC002-A decision packet.
 
 Owning live work item: GitHub Issue `#156` — `DOC002 — Documentation information architecture and repository reorganization`.
 

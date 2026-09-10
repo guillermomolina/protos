@@ -13,6 +13,8 @@ Current role-first DOC002 records:
 
 - [`DOC002/DOC002_DOCUMENTATION_PATH_CONTRACT.md`](DOC002/DOC002_DOCUMENTATION_PATH_CONTRACT.md)
   — ratified role-first path and compatibility contract.
+- [`DOC002/DOC002_DOCUMENTATION_ARCHITECTURE_AUDIT.md`](DOC002/DOC002_DOCUMENTATION_ARCHITECTURE_AUDIT.md)
+  — historical DOC002-A information-architecture audit and Option A decision packet.
 - [`DOC002/DOC002_NAVIGATION_FOUNDATION.md`](DOC002/DOC002_NAVIGATION_FOUNDATION.md)
   — DOC002-C2 navigation-foundation closure record.
 

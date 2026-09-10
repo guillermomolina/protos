@@ -6,7 +6,7 @@ Owning live work item: GitHub Issue `#156` — `DOC002 — Documentation informa
 
 Ratification date: **2026-09-10**.
 
-Ratification basis: the project owner explicitly approved **Option A — role-first durable project tree** after the comparison and recommendation published by the [`DOC002-A documentation architecture audit`](../../DOC002_DOCUMENTATION_ARCHITECTURE_AUDIT.md).
+Ratification basis: the project owner explicitly approved **Option A — role-first durable project tree** after the comparison and recommendation published by the [`DOC002-A documentation architecture audit`](DOC002_DOCUMENTATION_ARCHITECTURE_AUDIT.md).
 
 This document is non-normative repository governance. It defines where durable repository documentation belongs; it does not define observable Protos semantics. Normative language and Standard Library semantics remain under `spec/`. GitHub Issues and the Protos Development Project remain the live coordination, scheduling, assignment, and priority surfaces.
 

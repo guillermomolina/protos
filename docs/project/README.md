@@ -33,7 +33,7 @@ separate ownership axis and is not invented merely to make the tree symmetrical.
 The ratified path and compatibility rules are in
 [`work/DOC002/DOC002_DOCUMENTATION_PATH_CONTRACT.md`](work/DOC002/DOC002_DOCUMENTATION_PATH_CONTRACT.md).
 The original inventory and alternatives remain in the historical DOC002-A audit
-at [`DOC002_DOCUMENTATION_ARCHITECTURE_AUDIT.md`](DOC002_DOCUMENTATION_ARCHITECTURE_AUDIT.md).
+at [`DOC002_DOCUMENTATION_ARCHITECTURE_AUDIT.md`](work/DOC002/DOC002_DOCUMENTATION_ARCHITECTURE_AUDIT.md).
 The navigation-foundation closure record is
 [`work/DOC002/DOC002_NAVIGATION_FOUNDATION.md`](work/DOC002/DOC002_NAVIGATION_FOUNDATION.md).
 
