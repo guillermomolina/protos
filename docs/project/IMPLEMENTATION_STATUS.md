@@ -1014,7 +1014,7 @@ Coordination:
 - Production runtime/specification changes are outside normal LM007 scope. A
   discovered implementation defect is fixed under its proper owner and then
   consumed by LM007 conformance.
-- Plan: `docs/project/LM007_OBJECT_MODEL_MATURITY_PLAN.md`.
+- Plan: `docs/project/work/LM007/LM007_OBJECT_MODEL_MATURITY_PLAN.md`.
 
 ### LM008 — Core Language Surface Completeness
 
