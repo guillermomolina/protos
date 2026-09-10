@@ -14,9 +14,15 @@ The identifier family is orthogonal to this role. Existing `Dxxx` identifiers
 are retained when already allocated; moving such a record here does not rename
 the decision or change its outcome.
 
-The initial DOC002-F0 classification places the existing D053, D055, D056 and
-D057 records in this role. They remain at their current flat paths until the
-bounded DOC002-F2 migration performs reference and compatibility checks.
+DOC002-F2 migrated the initial ratified tooling-domain set into this role:
+
+- [`D053_PACKAGE_EXECUTION_PLAN_ABI_EVOLUTION.md`](D053_PACKAGE_EXECUTION_PLAN_ABI_EVOLUTION.md)
+- [`D055_ASYNCHRONOUS_EXACT_EXECUTION_BOUNDARY.md`](D055_ASYNCHRONOUS_EXACT_EXECUTION_BOUNDARY.md)
+- [`D056_EXTERNAL_PACKAGE_PATH_DEPENDENCY_SEMANTICS.md`](D056_EXTERNAL_PACKAGE_PATH_DEPENDENCY_SEMANTICS.md)
+- [`D057_WORKSPACE_SEMANTICS_FOR_IMMUTABLE_EXTERNAL_PACKAGES.md`](D057_WORKSPACE_SEMANTICS_FOR_IMMUTABLE_EXTERNAL_PACKAGES.md)
+
+Their existing identifiers and decision outcomes are unchanged. This list is
+not a closed manifest for future tooling decisions.
 
 Observable Protos semantics remain authoritative under `spec/`. Concrete
 runtime/host architecture belongs under [`../platform/`](../platform/README.md).

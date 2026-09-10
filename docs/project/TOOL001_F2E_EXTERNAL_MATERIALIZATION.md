@@ -130,7 +130,7 @@ No ambient scan by PackageId/name/version is allowed.
 
 ### F2E3 — external execution-plan construction
 
-D053 (`docs/project/D053_PACKAGE_EXECUTION_PLAN_ABI_EVOLUTION.md`) is now **RATIFIED**. F2E3 is READY and must consume that decision mechanically: generation 1 remains the exact workspace-only ABI; external-capable planning uses generation 2 as one mixed inert graph with typed compact refs, one ContentIdentity per immutable external package node and uniform dependency edges. Provenance, paths, custody, resolver authority and host handles remain outside the plan. F2E3 must not reopen those ratified choices.
+D053 (`docs/project/decisions/tooling/D053_PACKAGE_EXECUTION_PLAN_ABI_EVOLUTION.md`) is now **RATIFIED**. F2E3 is READY and must consume that decision mechanically: generation 1 remains the exact workspace-only ABI; external-capable planning uses generation 2 as one mixed inert graph with typed compact refs, one ContentIdentity per immutable external package node and uniform dependency edges. Provenance, paths, custody, resolver authority and host handles remain outside the plan. F2E3 must not reopen those ratified choices.
 
 Extend Protos-owned preflight only after E2 returns verified immutable material.
 
