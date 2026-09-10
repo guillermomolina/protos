@@ -44,6 +44,9 @@ def main():
     if package.get("categories") != ["Programming Languages"]:
         fail("category must remain Programming Languages")
 
+    if package.get("extensionKind") != ["workspace"]:
+        fail("LM009-C must run as a workspace extension")
+
     for forbidden in ("browser", "activationEvents", "scripts",
                       "dependencies", "devDependencies"):
         if forbidden in package:
@@ -86,7 +89,7 @@ def main():
         "title": "Run Current File",
         "category": "Protos",
         "enablement": (
-            "editorLangId == protos && resourceScheme == file && "
+            "editorLangId == protos && (resourceScheme == file || resourceScheme == vscode-remote) && "
             "isWorkspaceTrusted"
         ),
     }]:
@@ -96,7 +99,7 @@ def main():
         "commandPalette": [{
             "command": "protos.runCurrentFile",
             "when": (
-                "editorLangId == protos && resourceScheme == file && "
+                "editorLangId == protos && (resourceScheme == file || resourceScheme == vscode-remote) && "
                 "isWorkspaceTrusted"
             ),
         }]
@@ -154,7 +157,10 @@ def main():
         'DEFAULT_RUNTIME_EXECUTABLE = "protos"',
         "vscode.workspace.isTrusted",
         'document.languageId !== "protos"',
-        'document.uri.scheme !== "file"',
+        'EXECUTABLE_RESOURCE_SCHEMES = new Set(["file", "vscode-remote"])',
+        'uri.scheme === "file"',
+        'vscode.Uri.from({ scheme: "file", path: uri.path }).fsPath',
+        'executionPathForUri(vscode, document.uri)',
         "await document.save()",
         '.get("runtime.executable", DEFAULT_RUNTIME_EXECUTABLE)',
         "new vscode.ProcessExecution(",
@@ -202,6 +208,9 @@ def main():
     print("RUNTIME_DEFAULT=protos")
     print("RUN_EXECUTION=TASK_PROCESS_EXECUTION")
     print("RUN_CWD=SOURCE_PARENT")
+    print("EXTENSION_KIND=workspace")
+    print("EXECUTABLE_RESOURCE_SCHEMES=file,vscode-remote")
+    print("VIRTUAL_WORKSPACE_EXECUTION=REJECTED")
     print("WORKSPACE_TRUST=LIMITED_RUN_GATED")
     print("APPLICATION_ARGUMENTS=NOT_INCLUDED")
 

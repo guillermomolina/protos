@@ -465,8 +465,10 @@ The selected editor contract is:
   ordinary PATH resolution; an explicit configured value overrides that default;
 - the extension performs no workspace launcher scanning, repository-layout
   guessing, Java/JAR reconstruction, or duplicate runtime validation;
-- `Protos: Run Current File` accepts only an active file-backed `protos`
-  document, saves it before launch when dirty, and aborts if that save does not
+- `Protos: Run Current File` accepts an active `protos` document only when it
+  resolves to an execution-host filesystem path: local `file:` or VS Code Remote
+  `vscode-remote:`; other/virtual schemes remain non-executable, the document is
+  saved before launch when dirty, and launch aborts if that save does not
   complete;
 - execution uses a VS Code Task backed by `ProcessExecution(executable,
   [absoluteSourcePath], { cwd: sourceParent })`, with no shell command
@@ -523,3 +525,46 @@ Repository-side validation proves the wiring and guard logic. LM009-C remains
 `IN_PROGRESS` until S2 is exercised in a real VS Code Extension Development Host
 against the real Protos launcher with stdout/stderr and completion visible in
 the Task terminal.
+## LM009-C remote execution correction
+
+Decision status: **APPROVED — C REMOTE WORKSPACE-HOST MODEL**
+
+S2 live testing on 2026-09-10 exposed a portability defect in the first
+run-wiring tranche: a Dev Container correctly installed `guillermomolina.protos`
+0.1.0 and recognized `.protos`, but the Run command was hidden because the
+manifest and extension implementation treated only URI scheme `file:` as
+executable. VS Code Remote represents the workspace-host filesystem through
+`vscode-remote:` URIs.
+
+The project owner explicitly approved Option C after comparison with retaining a
+local-only contract and with special-casing `vscode-remote:` while consuming its
+`fsPath` directly.
+
+The selected correction is:
+
+- the extension declares `extensionKind: ["workspace"]`, so executable editor
+  integration runs where the workspace and Protos launcher live;
+- Run Current File accepts exactly local `file:` and VS Code Remote
+  `vscode-remote:` execution resources;
+- local `file:` uses its ordinary `fsPath`;
+- `vscode-remote:` never consumes the remote URI's `fsPath` directly: its
+  decoded URI `path` is converted to a `file:` URI in the workspace extension
+  host, and only that file-scheme URI is converted to the host-native filesystem
+  path;
+- the resulting host-native source path remains the single `ProcessExecution`
+  argument and its parent remains `cwd`;
+- virtual/non-executable schemes such as `vscode-vfs:` are rejected rather than
+  fabricating a host filesystem path;
+- Restricted Mode, save-before-run, launcher configuration/PATH behavior,
+  dedicated Task terminal, no-shell construction and all previous LM009-C
+  exclusions remain unchanged; and
+- safe LM009-B lexical/editor functionality is not disabled merely because a
+  virtual resource cannot be executed.
+
+This refines the original phrase `file-backed`: in a Remote workspace, a physical
+file is represented to the editor by a `vscode-remote:` URI while the workspace
+extension host is colocated with the actual filesystem and launcher.
+
+S2 remains **PENDING** until the repaired extension is exercised through a real
+VS Code Remote/Dev Container command invocation and the Task terminal shows the
+real Protos stdout/stderr and normal completion.

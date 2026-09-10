@@ -5,8 +5,10 @@ const path = require("node:path");
 const {
     activate,
     createRunCurrentFile,
+    executionPathForUri,
     RUN_CURRENT_FILE_COMMAND,
-    DEFAULT_RUNTIME_EXECUTABLE
+    DEFAULT_RUNTIME_EXECUTABLE,
+    EXECUTABLE_RESOURCE_SCHEMES
 } = require("../extension.js");
 
 function harness(options = {}) {
@@ -19,10 +21,14 @@ function harness(options = {}) {
     };
 
     const filePath = options.filePath || path.join("/tmp", "space dir", "demo.protos");
+    const uriPath = Object.prototype.hasOwnProperty.call(options, "uriPath")
+        ? options.uriPath
+        : filePath;
     const document = {
         languageId: options.languageId || "protos",
         uri: {
             scheme: options.scheme || "file",
+            path: uriPath,
             fsPath: filePath
         },
         isDirty: Boolean(options.dirty),
@@ -58,6 +64,17 @@ function harness(options = {}) {
     const TaskPanelKind = { Dedicated: Symbol("dedicated") };
 
     const vscode = {
+        Uri: {
+            from(components) {
+                calls.sequence.push("uriFrom");
+                assert.deepEqual(components, { scheme: "file", path: document.uri.path });
+                return {
+                    fsPath: Object.prototype.hasOwnProperty.call(options, "convertedFsPath")
+                        ? options.convertedFsPath
+                        : document.uri.path
+                };
+            }
+        },
         workspace: {
             isTrusted: options.trusted !== false,
             getConfiguration(section) {
@@ -139,6 +156,56 @@ async function testConfiguredRuntimeIsPassedWithoutShellQuoting() {
     assert.deepEqual(h.calls.tasks[0].execution.args, [h.document.uri.fsPath]);
 }
 
+async function testRemoteProcessExecutionUsesWorkspaceHostPath() {
+    const remotePath = "/workspaces/protos/examples/hello-world.protos";
+    const h = harness({
+        scheme: "vscode-remote",
+        uriPath: remotePath,
+        filePath: "/must/not/use/remote-uri-fsPath.protos",
+        convertedFsPath: remotePath
+    });
+    await createRunCurrentFile(h.vscode)();
+
+    assert.equal(h.calls.tasks.length, 1);
+    const task = h.calls.tasks[0];
+    assert.deepEqual(task.execution.args, [remotePath]);
+    assert.equal(task.execution.options.cwd, path.dirname(remotePath));
+    assert.deepEqual(h.calls.sequence, ["uriFrom", "execute"]);
+}
+
+async function testRemoteWindowsPathUsesRemoteHostNativeConversion() {
+    const uriPath = "/C:/work/protos/demo.protos";
+    const remoteFsPath = "C:\\work\\protos\\demo.protos";
+    const h = harness({
+        scheme: "vscode-remote",
+        uriPath,
+        filePath: "/must/not/use/ui-host/path.protos",
+        convertedFsPath: remoteFsPath
+    });
+    await createRunCurrentFile(h.vscode, path.win32)();
+
+    assert.equal(h.calls.tasks.length, 1);
+    assert.deepEqual(h.calls.tasks[0].execution.args, [remoteFsPath]);
+    assert.equal(h.calls.tasks[0].execution.options.cwd, "C:\\work\\protos");
+}
+
+function testExecutionPathSchemeContract() {
+    assert.deepEqual(
+        Array.from(EXECUTABLE_RESOURCE_SCHEMES).sort(),
+        ["file", "vscode-remote"]
+    );
+
+    const h = harness();
+    assert.equal(executionPathForUri(h.vscode, h.document.uri), h.document.uri.fsPath);
+
+    const virtual = {
+        scheme: "vscode-vfs",
+        path: "/guillermomolina/protos/demo.protos",
+        fsPath: "/must/not/be/used"
+    };
+    assert.equal(executionPathForUri(h.vscode, virtual), undefined);
+}
+
 async function testWorkspaceFallbackScopeKeepsFileParentCwd() {
     const h = harness({ noWorkspaceFolder: true });
     await createRunCurrentFile(h.vscode)();
@@ -174,6 +241,7 @@ async function testTrustAndDocumentGuards() {
         { noEditor: true },
         { languageId: "plaintext" },
         { scheme: "untitled" },
+        { scheme: "vscode-vfs" },
         { runtime: "   " }
     ]) {
         const h = harness(options);
@@ -207,6 +275,9 @@ function testActivationRegistersOnlyTheRunCommand() {
 async function main() {
     await testDefaultProcessExecution();
     await testConfiguredRuntimeIsPassedWithoutShellQuoting();
+    await testRemoteProcessExecutionUsesWorkspaceHostPath();
+    await testRemoteWindowsPathUsesRemoteHostNativeConversion();
+    testExecutionPathSchemeContract();
     await testWorkspaceFallbackScopeKeepsFileParentCwd();
     await testDirtyDocumentSavesBeforeExecution();
     await testCancelledSaveDoesNotExecute();

@@ -43,14 +43,14 @@
         "command": "protos.runCurrentFile",
         "title": "Run Current File",
         "category": "Protos",
-        "enablement": "editorLangId == protos && resourceScheme == file && isWorkspaceTrusted"
+        "enablement": "editorLangId == protos && (resourceScheme == file || resourceScheme == vscode-remote) && isWorkspaceTrusted"
       }
     ],
     "menus": {
       "commandPalette": [
         {
           "command": "protos.runCurrentFile",
-          "when": "editorLangId == protos && resourceScheme == file && isWorkspaceTrusted"
+          "when": "editorLangId == protos && (resourceScheme == file || resourceScheme == vscode-remote) && isWorkspaceTrusted"
         }
       ]
     },
@@ -74,5 +74,8 @@
         "protos.runtime.executable"
       ]
     }
-  }
+  },
+  "extensionKind": [
+    "workspace"
+  ]
 }

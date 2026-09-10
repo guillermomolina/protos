@@ -104,8 +104,21 @@ argument, so spaces in launcher/source paths do not create shell-quoting policy.
 The Run action requires:
 
 - a trusted VS Code workspace/window;
-- an active file-backed document whose language id is `protos`;
+- an active `protos` document backed by either the local `file:` filesystem or
+  VS Code Remote's `vscode-remote:` workspace filesystem;
 - a successful save first when the document is dirty.
+
+The executable integration is explicitly a VS Code `workspace` extension, so it
+runs where the workspace and configured Protos launcher live. Local `file:`
+resources use ordinary `Uri.fsPath`. For `vscode-remote:`, the decoded URI path
+is first converted to a `file:` URI in that workspace extension host and only
+then converted to the host-native filesystem path. The extension never treats a
+remote URI's `fsPath` as if it belonged to the UI machine.
+
+Other schemes, including virtual-workspace resources such as `vscode-vfs:`, are
+not executable by Run Current File. Safe language association and highlighting
+remain available; LM009-C simply does not fabricate a filesystem path that an
+external launcher cannot consume.
 
 Execution uses a VS Code Task with a dedicated, revealed terminal. Its working
 directory is always the current file's parent directory. LM009-C does not add
@@ -120,9 +133,12 @@ configuration, and the command implementation independently checks
 ### S2 live VS Code check
 
 After the LM009-C run-wiring tranche is published, load the extension from
-`editors/vscode/` in an Extension Development Host, ensure a real Protos launcher
-is available through `PATH` or `protos.runtime.executable`, trust the test window,
-and open an ordinary standalone `.protos` file.
+`editors/vscode/` in an Extension Development Host or install a local test VSIX,
+ensure a real Protos launcher is available through `PATH` or
+`protos.runtime.executable`, trust the test window, and open an ordinary
+standalone `.protos` file. Local `file:` and VS Code Remote `vscode-remote:`
+resources are valid execution surfaces when the launcher exists in the same
+workspace extension-host environment.
 
 Invoke:
 

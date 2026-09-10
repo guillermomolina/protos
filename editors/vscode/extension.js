@@ -4,6 +4,22 @@ const path = require("path");
 
 const RUN_CURRENT_FILE_COMMAND = "protos.runCurrentFile";
 const DEFAULT_RUNTIME_EXECUTABLE = "protos";
+const EXECUTABLE_RESOURCE_SCHEMES = new Set(["file", "vscode-remote"]);
+
+function executionPathForUri(vscode, uri) {
+    if (!EXECUTABLE_RESOURCE_SCHEMES.has(uri.scheme)) {
+        return undefined;
+    }
+
+    if (uri.scheme === "file") {
+        return uri.fsPath;
+    }
+
+    // A workspace extension runs where the Remote workspace and launcher live.
+    // Convert the decoded remote URI path into a file URI in that extension host
+    // before applying host-native filesystem path rules.
+    return vscode.Uri.from({ scheme: "file", path: uri.path }).fsPath;
+}
 
 function createRunCurrentFile(vscode, pathModule = path) {
     return async function runCurrentFile() {
@@ -24,13 +40,6 @@ function createRunCurrentFile(vscode, pathModule = path) {
         if (document.languageId !== "protos") {
             await vscode.window.showErrorMessage(
                 "The active editor is not a Protos document."
-            );
-            return;
-        }
-
-        if (document.uri.scheme !== "file") {
-            await vscode.window.showErrorMessage(
-                "Run Current File requires a file-backed Protos document."
             );
             return;
         }
@@ -59,7 +68,14 @@ function createRunCurrentFile(vscode, pathModule = path) {
             return;
         }
 
-        const sourcePath = document.uri.fsPath;
+        const sourcePath = executionPathForUri(vscode, document.uri);
+        if (!sourcePath) {
+            await vscode.window.showErrorMessage(
+                "Run Current File requires a local or VS Code Remote filesystem resource."
+            );
+            return;
+        }
+
         const cwd = pathModule.dirname(sourcePath);
         const execution = new vscode.ProcessExecution(
             configuredRuntime,
@@ -114,6 +130,8 @@ module.exports = {
     activate,
     deactivate,
     createRunCurrentFile,
+    executionPathForUri,
     RUN_CURRENT_FILE_COMMAND,
-    DEFAULT_RUNTIME_EXECUTABLE
+    DEFAULT_RUNTIME_EXECUTABLE,
+    EXECUTABLE_RESOURCE_SCHEMES
 };
