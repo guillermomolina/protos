@@ -1,5 +1,7 @@
 ## 0.2.340-SNAPSHOT
 
+- Migrate DOC002-G3 residual AUD003 owner batch into `docs/project/work/AUD003/`, preserving its execution-time status, non-normative source-style audit authority, policy/slice/exception evidence and complete content while rebasing only path/link effects and reconciling maintained active references. Historical publication-time path spellings remain unchanged. No specification, observable semantics, AUD003 policy/slice/work-item state, implementation/runtime behavior, version, API, platform architecture, registry/blocker meaning, or license term changes.
+
 - Advance `LM009-B — Language association + syntax highlighting` with the first executable editor-assets tranche. Establish the approved `editors/vscode/` subtree with a non-normative TextMate grammar, representative valid `.protos` lexical fixture, editor-local structural validation and development notes. Highlight only the exact seven Core v0.1 reserved spellings as language-special tokens, keep reserved spellings after `.` ordinary, cover comments, String/escape forms, numeric literal families, ellipsis, delimiters and symbolic operators, and do not invent JavaScript/Python-style keywords. No installable `package.json`, `engines.vscode` support floor, language association, language configuration, Run action, DAP/LSP client, Marketplace policy, specification or runtime semantic change is selected in this tranche. Maven implementation version becomes `0.2.340-SNAPSHOT`.
 
 ## 0.2.339-SNAPSHOT
