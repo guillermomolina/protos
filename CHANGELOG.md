@@ -1,3 +1,7 @@
+## 0.2.328-SNAPSHOT
+
+- Close `I026-D6 — remaining exact indexed-value Truffle interop` under ratified PLAT013. Extend the already-approved read-only array-like projection to `Bytes`, `ByteRegion`, and immutable Process-argument snapshots using only their existing exact runtime indexing authorities. Bytes/ByteRegion observations use synchronized `indexedSize`/`indexedAt`; ProcessArguments uses its immutable captured indexed representation. Successful reads return exact guest references, accidental host-only values fail closed, mutation and ordinary member facets remain unavailable, implicit iterator derivation is disabled, and bounded family display avoids host leakage. No guest `at`/`size`/`each` invocation, snapshot copy, wrapper graph, debugger lock, Map/IdentityMap hash interop, Closure execution or Protos specification change is introduced. I026-D remains IN_PROGRESS for the final safe-value/display coverage audit. Implementation version becomes `0.2.328-SNAPSHOT`.
+
 ## 0.2.327-SNAPSHOT
 
 - Advance `I032 — Fixed-width numeric arithmetic publication` with bounded slice

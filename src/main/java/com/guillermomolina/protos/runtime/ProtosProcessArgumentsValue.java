@@ -17,6 +17,12 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.interop.InvalidArrayIndexException;
+import com.oracle.truffle.api.interop.UnsupportedMessageException;
+import com.oracle.truffle.api.library.ExportLibrary;
+import com.oracle.truffle.api.library.ExportMessage;
+
 import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,6 +36,7 @@ import java.util.Objects;
  * Actor/P value transfer rematerializes a destination snapshot with a fresh semantic identity while
  * immutable String backing may be shared invisibly.
  */
+@ExportLibrary(InteropLibrary.class)
 public final class ProtosProcessArgumentsValue implements ProtosRepresentedValue {
     private final ProtosObjectValue prototype;
     private final List<ProtosStringValue> arguments;
@@ -112,4 +119,61 @@ public final class ProtosProcessArgumentsValue implements ProtosRepresentedValue
         }
         return true;
     }
+
+
+    @ExportMessage
+    boolean hasArrayElements() {
+        return true;
+    }
+
+    @ExportMessage
+    long getArraySize() {
+        return indexedSizeForRuntime().longValueExact();
+    }
+
+    @ExportMessage
+    boolean isArrayElementReadable(long index) {
+        if (index < 0) {
+            return false;
+        }
+        try {
+            return InteropLibrary.isValidValue(
+                    indexedAtForRuntime(BigInteger.valueOf(index)));
+        } catch (IndexOutOfBoundsException failure) {
+            return false;
+        }
+    }
+
+    @ExportMessage
+    Object readArrayElement(long index) throws InvalidArrayIndexException {
+        if (index < 0) {
+            throw InvalidArrayIndexException.create(index);
+        }
+        final Object value;
+        try {
+            value = indexedAtForRuntime(BigInteger.valueOf(index));
+        } catch (IndexOutOfBoundsException failure) {
+            throw InvalidArrayIndexException.create(index);
+        }
+        if (!InteropLibrary.isValidValue(value)) {
+            throw InvalidArrayIndexException.create(index);
+        }
+        return value;
+    }
+
+    @ExportMessage
+    boolean hasIterator() {
+        return false;
+    }
+
+    @ExportMessage
+    Object getIterator() throws UnsupportedMessageException {
+        throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    String toDisplayString(@SuppressWarnings("unused") boolean allowSideEffects) {
+        return "ProcessArguments";
+    }
+
 }
