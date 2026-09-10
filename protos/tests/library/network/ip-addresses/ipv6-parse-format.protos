@@ -1,0 +1,90 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+IpAddresses: import("std:network/IpAddresses")
+
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+assertCanonical: (source, expected) => {
+    address: IpAddresses.parse(source)
+    require(IpAddress.recognizes(address))
+    require(address.version == 6)
+    require(IpAddresses.format(address) == expected)
+
+    reparsed: IpAddresses.parse(expected)
+    require(reparsed == address)
+    require(reparsed !== address)
+}
+
+assertCanonical("::", "::")
+assertCanonical("::1", "::1")
+assertCanonical("1::", "1::")
+assertCanonical("1:2:3:4:5:6:7:8", "1:2:3:4:5:6:7:8")
+assertCanonical(
+    "2001:0DB8:0000:0000:0000:0000:0000:0001",
+    "2001:db8::1"
+)
+assertCanonical("FE80::ABCD", "fe80::abcd")
+assertCanonical(
+    "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff",
+    "ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff"
+)
+
+// Longest run wins.
+assertCanonical(
+    "2001:0:0:0:1:0:0:1",
+    "2001::1:0:0:1"
+)
+
+// A single zero hextet is not compressed.
+assertCanonical(
+    "2001:db8:0:1:2:3:4:5",
+    "2001:db8:0:1:2:3:4:5"
+)
+
+// Equal longest runs select the first.
+assertCanonical(
+    "2001:0:0:1:0:0:1:1",
+    "2001::1:0:0:1:1"
+)
+
+// IPv4-mapped IPv6 has canonical mixed output but remains semantic IPv6.
+mapped: IpAddresses.parse("::ffff:192.0.2.1")
+require(mapped.version == 6)
+require(IpAddresses.format(mapped) == "::ffff:192.0.2.1")
+require(IpAddresses.parse(IpAddresses.format(mapped)) == mapped)
+
+// The same mapped value written with hexadecimal final hextets canonicalizes
+// to the selected mixed notation.
+mappedHex: IpAddresses.parse("0:0:0:0:0:ffff:c000:0201")
+require(mappedHex == mapped)
+require(IpAddresses.format(mappedHex) == "::ffff:192.0.2.1")
+
+// Other legal embedded-IPv4 inputs remain IPv6 but canonicalize to ordinary
+// hexadecimal RFC-5952-oriented output.
+mixed: IpAddresses.parse("2001:db8::192.0.2.33")
+require(mixed.version == 6)
+require(IpAddresses.format(mixed) == "2001:db8::c000:221")
+require(IpAddresses.parse(IpAddresses.format(mixed)) == mixed)
+
+// IPv4 behavior published by A2 remains unchanged.
+v4: IpAddresses.parse("192.0.2.1")
+require(v4.version == 4)
+require(IpAddresses.format(v4) == "192.0.2.1")
+
+true

@@ -52,20 +52,17 @@ require(reject(() => { IpAddresses.parse("+1.2.3.4") }))
 require(reject(() => { IpAddresses.parse("0x7f.0.0.1") }))
 require(reject(() => { IpAddresses.parse("0300.0.0.1") }))
 
-// No whitespace, Unicode-digit substitution, hostname, or IPv6 interpretation.
+// No whitespace, Unicode-digit substitution, or hostname interpretation.
 require(reject(() => { IpAddresses.parse(" 1.2.3.4") }))
 require(reject(() => { IpAddresses.parse("1.2.3.4 ") }))
 require(reject(() => { IpAddresses.parse("١.2.3.4") }))
 require(reject(() => { IpAddresses.parse("example.com") }))
-require(reject(() => { IpAddresses.parse("2001:db8::1") }))
 
 // Exact String receiver domain.
 require(reject(() => { IpAddresses.parse(1234) }))
 require(reject(() => { IpAddresses.parse({}) }))
 require(reject(() => { IpAddresses.parse(null) }))
 
-// A2 formatting is deliberately IPv4-only; LIB005-B owns IPv6 formatting.
-require(reject(() => { IpAddresses.format(IpAddress(6, 1)) }))
 require(reject(() => { IpAddresses.format({}) }))
 require(reject(() => { IpAddresses.format(1234) }))
 

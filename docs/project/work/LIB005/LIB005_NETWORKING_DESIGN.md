@@ -681,3 +681,42 @@ enumeration is not currently available.
 
 `LIB005-B — IPv6 parse/format` is the next dependency-ordered implementation
 slice.
+
+### LIB005-B — implementation CLOSED
+
+Published implementation version: `0.2.336-SNAPSHOT`
+Closure evidence: `SAME_COMMIT`
+Live work item: GitHub Issue `#279`
+
+B completes the already-approved IPv6 behavior of the existing
+`std:network/IpAddresses.parse` and `format` selectors without adding any new
+public selector or module.
+
+Parsing remains ordinary Protos and dispatches numeric text between the retained
+strict A2 IPv4 path and an IPv6 direct scanner. Because the current Core Array
+protocol has fixed indexed extent and no append selector, the scanner uses only
+two call-local eight-entry Array workspaces plus explicit logical counts and
+indexed assignment. IPv6 accepts RFC-4291 full and compressed forms, at most one
+`::`, case-insensitive ASCII hexadecimal hextets and a final strict dotted-decimal
+IPv4 component contributing exactly two hextets. Compression must stand for at least one zero hextet. Zone/scope text,
+brackets, whitespace, malformed component counts, invalid hexadecimal and
+non-final/bad dotted tails fail synchronously. Successful expansion produces
+exactly eight ordinary Integer hextets and delegates canonical construction to
+the existing A1 `v6` helper.
+
+Formatting decomposes standard Core IPv6 bits into eight hextets with exact
+ordinary Integer arithmetic. Ordinary IPv6 uses lowercase hexadecimal, removes
+unnecessary leading zeros, compresses only the first longest run of at least two
+zero hextets and never compresses a single zero. The approved IPv4-mapped shape
+(first five zero hextets followed by `ffff`) emits the selected
+`::ffff:a.b.c.d` mixed spelling while remaining a version-6 `IpAddress`;
+other legal mixed-input addresses canonicalize to ordinary hexadecimal IPv6.
+
+Parser/formatter state is call-local and protocol-bounded. There is no regex,
+backtracking framework, DNS/Resolver, Network authority, Future, host I/O,
+cache/global mutable state or production Java/native Standard Library bridge.
+The existing A1/A2 regression corpus remains active; only A2's two intentionally
+temporary assertions that IPv6 itself must fail are retired by this slice.
+
+`LIB005-C — endpoint parse/format` is the next dependency-ordered implementation
+slice.

@@ -81,15 +81,12 @@ parse: (text) => {
         Error().signal()
     }
 
-    size: text.size()
-    (size < 7).ifTrue(() => {
-        fail()
-    })
-    (size > 15).ifTrue(() => {
+    totalSize: text.size()
+    (totalSize > 45).ifTrue(() => {
         fail()
     })
 
-    digitValue: (character) => {
+    decimalDigitValue: (character) => {
         result: -1
 
         (character == "0").ifTrue(() => { result = 0 })
@@ -106,86 +103,330 @@ parse: (text) => {
         result
     }
 
-    index: 0
-    octetIndex: 0
-    current: 0
-    digitCount: 0
-    leadingZero: false
-
-    a: null
-    b: null
-    c: null
-    d: null
-
-    finishOctet: () => {
-        (digitCount == 0).ifTrue(() => {
+    parseIpv4Components: (source) => {
+        size: source.size()
+        (size < 7).ifTrue(() => {
             fail()
         })
-        (current > 255).ifTrue(() => {
+        (size > 15).ifTrue(() => {
             fail()
         })
 
-        (octetIndex == 0).ifTrue(() => { a = current })
-        (octetIndex == 1).ifTrue(() => { b = current })
-        (octetIndex == 2).ifTrue(() => { c = current })
-        (octetIndex == 3).ifTrue(() => { d = current })
+        index: 0
+        octetIndex: 0
+        current: 0
+        digitCount: 0
+        leadingZero: false
 
-        octetIndex = octetIndex + 1
-        current = 0
-        digitCount = 0
-        leadingZero = false
-    }
+        a: null
+        b: null
+        c: null
+        d: null
 
-    (() => index < size).while() {
-        character: text.at(index)
-        isSeparator: character == "."
-
-        isSeparator.ifTrue(() => {
-            (octetIndex >= 3).ifTrue(() => {
-                fail()
-            })
-            finishOctet()
-        })
-
-        isSeparator.ifFalse(() => {
-            digit: digitValue(character)
-            (digit < 0).ifTrue(() => {
-                fail()
-            })
-
+        finishOctet: () => {
             (digitCount == 0).ifTrue(() => {
-                (digit == 0).ifTrue(() => {
-                    leadingZero = true
-                })
+                fail()
+            })
+            (current > 255).ifTrue(() => {
+                fail()
             })
 
-            (digitCount > 0).ifTrue(() => {
-                leadingZero.ifTrue(() => {
+            (octetIndex == 0).ifTrue(() => { a = current })
+            (octetIndex == 1).ifTrue(() => { b = current })
+            (octetIndex == 2).ifTrue(() => { c = current })
+            (octetIndex == 3).ifTrue(() => { d = current })
+
+            octetIndex = octetIndex + 1
+            current = 0
+            digitCount = 0
+            leadingZero = false
+        }
+
+        (() => index < size).while() {
+            character: source.at(index)
+            isSeparator: character == "."
+
+            isSeparator.ifTrue(() => {
+                (octetIndex >= 3).ifTrue(() => {
+                    fail()
+                })
+                finishOctet()
+            })
+
+            isSeparator.ifFalse(() => {
+                digit: decimalDigitValue(character)
+                (digit < 0).ifTrue(() => {
+                    fail()
+                })
+
+                (digitCount == 0).ifTrue(() => {
+                    (digit == 0).ifTrue(() => {
+                        leadingZero = true
+                    })
+                })
+
+                (digitCount > 0).ifTrue(() => {
+                    leadingZero.ifTrue(() => {
+                        fail()
+                    })
+                })
+
+                digitCount = digitCount + 1
+                (digitCount > 3).ifTrue(() => {
+                    fail()
+                })
+
+                current = current * 10 + digit
+                (current > 255).ifTrue(() => {
                     fail()
                 })
             })
 
-            digitCount = digitCount + 1
-            (digitCount > 3).ifTrue(() => {
+            index = index + 1
+        }
+
+        finishOctet()
+
+        (octetIndex == 4).ifFalse(() => {
+            fail()
+        })
+
+        Array(a, b, c, d)
+    }
+
+    parseIpv4: (source) => {
+        components: parseIpv4Components(source)
+        v4(components[0], components[1], components[2], components[3])
+    }
+
+    hexDigitValue: (character) => {
+        result: decimalDigitValue(character)
+
+        (result < 0).ifTrue(() => {
+            (character == "a").ifTrue(() => { result = 10 })
+            (character == "b").ifTrue(() => { result = 11 })
+            (character == "c").ifTrue(() => { result = 12 })
+            (character == "d").ifTrue(() => { result = 13 })
+            (character == "e").ifTrue(() => { result = 14 })
+            (character == "f").ifTrue(() => { result = 15 })
+
+            (character == "A").ifTrue(() => { result = 10 })
+            (character == "B").ifTrue(() => { result = 11 })
+            (character == "C").ifTrue(() => { result = 12 })
+            (character == "D").ifTrue(() => { result = 13 })
+            (character == "E").ifTrue(() => { result = 14 })
+            (character == "F").ifTrue(() => { result = 15 })
+        })
+
+        result
+    }
+
+    parseIpv6: (source) => {
+        size: source.size()
+        (size < 2).ifTrue(() => {
+            fail()
+        })
+        (size > 45).ifTrue(() => {
+            fail()
+        })
+
+        // Core Array has fixed indexed extent; it deliberately has no append
+        // selector. IPv6 itself is bounded to eight hextets, so use an exact
+        // eight-entry call-local workspace and an explicit logical count.
+        hextets: Array(0, 0, 0, 0, 0, 0, 0, 0)
+        hextetCount: 0
+        compressionIndex: -1
+        index: 0
+
+        appendHextet: (value) => {
+            (hextetCount >= 8).ifTrue(() => {
+                fail()
+            })
+            hextets[hextetCount] = value
+            hextetCount = hextetCount + 1
+        }
+
+        (source.at(0) == ":").ifTrue(() => {
+            (size < 2).ifTrue(() => {
+                fail()
+            })
+            (source.at(1) == ":").ifFalse(() => {
+                fail()
+            })
+            compressionIndex = 0
+            index = 2
+        })
+
+        appendHexToken: (token) => {
+            tokenSize: token.size()
+            (tokenSize == 0).ifTrue(() => {
+                fail()
+            })
+            (tokenSize > 4).ifTrue(() => {
                 fail()
             })
 
-            current = current * 10 + digit
-            (current > 255).ifTrue(() => {
+            tokenIndex: 0
+            value: 0
+
+            (() => tokenIndex < tokenSize).while() {
+                digit: hexDigitValue(token.at(tokenIndex))
+                (digit < 0).ifTrue(() => {
+                    fail()
+                })
+                value = value * 16 + digit
+                tokenIndex = tokenIndex + 1
+            }
+
+            appendHextet(value)
+        }
+
+        (() => index < size).while() {
+            token: ""
+            containsDot: false
+
+            (() => {
+                stillInside: index < size
+                stillInside.ifTrue(() => {
+                    stillInside = source.at(index) != ":"
+                })
+                stillInside
+            }).while() {
+                character: source.at(index)
+                (character == ".").ifTrue(() => {
+                    containsDot = true
+                })
+                token = token + character
+                index = index + 1
+            }
+
+            (token.size() == 0).ifTrue(() => {
                 fail()
+            })
+
+            containsDot.ifTrue(() => {
+                // An embedded dotted-decimal IPv4 component is legal only as
+                // the final 32 bits of the IPv6 text.
+                (index < size).ifTrue(() => {
+                    fail()
+                })
+
+                components: parseIpv4Components(token)
+                appendHextet(components[0] * 256 + components[1])
+                appendHextet(components[2] * 256 + components[3])
+            })
+
+            containsDot.ifFalse(() => {
+                appendHexToken(token)
+            })
+
+            (index < size).ifTrue(() => {
+                // The token scan stopped on exactly one colon.
+                index = index + 1
+
+                // A single trailing colon is never valid.
+                (index == size).ifTrue(() => {
+                    fail()
+                })
+
+                (source.at(index) == ":").ifTrue(() => {
+                    (compressionIndex >= 0).ifTrue(() => {
+                        fail()
+                    })
+                    compressionIndex = hextetCount
+                    index = index + 1
+                })
+            })
+        }
+
+        count: hextetCount
+        expanded: Array(0, 0, 0, 0, 0, 0, 0, 0)
+        expandedCount: 0
+
+        appendExpanded: (value) => {
+            (expandedCount >= 8).ifTrue(() => {
+                fail()
+            })
+            expanded[expandedCount] = value
+            expandedCount = expandedCount + 1
+        }
+
+        (compressionIndex >= 0).ifTrue(() => {
+            // `::` must stand for at least one zero hextet.
+            (count >= 8).ifTrue(() => {
+                fail()
+            })
+
+            zeroCount: 8 - count
+            sourceIndex: 0
+
+            (() => sourceIndex < count).while() {
+                (sourceIndex == compressionIndex).ifTrue(() => {
+                    zerosAdded: 0
+                    (() => zerosAdded < zeroCount).while() {
+                        appendExpanded(0)
+                        zerosAdded = zerosAdded + 1
+                    }
+                })
+
+                appendExpanded(hextets[sourceIndex])
+                sourceIndex = sourceIndex + 1
+            }
+
+            (compressionIndex == count).ifTrue(() => {
+                zerosAdded: 0
+                (() => zerosAdded < zeroCount).while() {
+                    appendExpanded(0)
+                    zerosAdded = zerosAdded + 1
+                }
             })
         })
 
-        index = index + 1
+        (compressionIndex < 0).ifTrue(() => {
+            (count == 8).ifFalse(() => {
+                fail()
+            })
+
+            sourceIndex: 0
+            (() => sourceIndex < count).while() {
+                appendExpanded(hextets[sourceIndex])
+                sourceIndex = sourceIndex + 1
+            }
+        })
+
+        (expandedCount == 8).ifFalse(() => {
+            fail()
+        })
+
+        v6(
+            expanded[0],
+            expanded[1],
+            expanded[2],
+            expanded[3],
+            expanded[4],
+            expanded[5],
+            expanded[6],
+            expanded[7]
+        )
     }
 
-    finishOctet()
+    containsColon: false
+    scanIndex: 0
+    (() => scanIndex < totalSize).while() {
+        (text.at(scanIndex) == ":").ifTrue(() => {
+            containsColon = true
+        })
+        scanIndex = scanIndex + 1
+    }
 
-    (octetIndex == 4).ifFalse(() => {
-        fail()
+    result: null
+    containsColon.ifTrue(() => {
+        result = parseIpv6(text)
     })
-
-    v4(a, b, c, d)
+    containsColon.ifFalse(() => {
+        result = parseIpv4(text)
+    })
+    result
 }
 
 format: (address) => {
@@ -196,11 +437,8 @@ format: (address) => {
     IpAddress.recognizes(address).ifFalse(() => {
         fail()
     })
-    (address.version == 4).ifFalse(() => {
-        fail()
-    })
 
-    digitText: (digit) => {
+    decimalDigitText: (digit) => {
         result: null
 
         (digit == 0).ifTrue(() => { result = "0" })
@@ -230,31 +468,197 @@ format: (address) => {
         result: ""
 
         (hundreds > 0).ifTrue(() => {
-            result = digitText(hundreds) + digitText(tens) + digitText(ones)
+            result =
+                decimalDigitText(hundreds) +
+                decimalDigitText(tens) +
+                decimalDigitText(ones)
         })
 
         (hundreds > 0).ifFalse(() => {
             (tens > 0).ifTrue(() => {
-                result = digitText(tens) + digitText(ones)
+                result = decimalDigitText(tens) + decimalDigitText(ones)
             })
             (tens > 0).ifFalse(() => {
-                result = digitText(ones)
+                result = decimalDigitText(ones)
             })
         })
 
         result
     }
 
-    bits: address.bits
+    ipv4BitsText: (bits) => {
+        a: bits.div(16777216)
+        remainder: bits.mod(16777216)
 
-    a: bits.div(16777216)
-    remainder: bits.mod(16777216)
+        b: remainder.div(65536)
+        remainder = remainder.mod(65536)
 
-    b: remainder.div(65536)
-    remainder = remainder.mod(65536)
+        c: remainder.div(256)
+        d: remainder.mod(256)
 
-    c: remainder.div(256)
-    d: remainder.mod(256)
+        octetText(a) + "." + octetText(b) + "." + octetText(c) + "." + octetText(d)
+    }
 
-    octetText(a) + "." + octetText(b) + "." + octetText(c) + "." + octetText(d)
+    hexDigitText: (digit) => {
+        result: null
+
+        (digit == 0).ifTrue(() => { result = "0" })
+        (digit == 1).ifTrue(() => { result = "1" })
+        (digit == 2).ifTrue(() => { result = "2" })
+        (digit == 3).ifTrue(() => { result = "3" })
+        (digit == 4).ifTrue(() => { result = "4" })
+        (digit == 5).ifTrue(() => { result = "5" })
+        (digit == 6).ifTrue(() => { result = "6" })
+        (digit == 7).ifTrue(() => { result = "7" })
+        (digit == 8).ifTrue(() => { result = "8" })
+        (digit == 9).ifTrue(() => { result = "9" })
+        (digit == 10).ifTrue(() => { result = "a" })
+        (digit == 11).ifTrue(() => { result = "b" })
+        (digit == 12).ifTrue(() => { result = "c" })
+        (digit == 13).ifTrue(() => { result = "d" })
+        (digit == 14).ifTrue(() => { result = "e" })
+        (digit == 15).ifTrue(() => { result = "f" })
+
+        (result === null).ifTrue(() => {
+            fail()
+        })
+
+        result
+    }
+
+    hextetText: (value) => {
+        d0: value.div(4096)
+        d1: value.div(256).mod(16)
+        d2: value.div(16).mod(16)
+        d3: value.mod(16)
+
+        result: ""
+        started: false
+
+        (d0 > 0).ifTrue(() => {
+            result = result + hexDigitText(d0)
+            started = true
+        })
+
+        started.ifTrue(() => {
+            result = result + hexDigitText(d1)
+        })
+        started.ifFalse(() => {
+            (d1 > 0).ifTrue(() => {
+                result = result + hexDigitText(d1)
+                started = true
+            })
+        })
+
+        started.ifTrue(() => {
+            result = result + hexDigitText(d2)
+        })
+        started.ifFalse(() => {
+            (d2 > 0).ifTrue(() => {
+                result = result + hexDigitText(d2)
+                started = true
+            })
+        })
+
+        result = result + hexDigitText(d3)
+        result
+    }
+
+    result: null
+
+    (address.version == 4).ifTrue(() => {
+        result = ipv4BitsText(address.bits)
+    })
+
+    (address.version == 6).ifTrue(() => {
+        hextets: Array(0, 0, 0, 0, 0, 0, 0, 0)
+        remaining: address.bits
+        hextetIndex: 7
+
+        (() => hextetIndex >= 0).while() {
+            hextets[hextetIndex] = remaining.mod(65536)
+            remaining = remaining.div(65536)
+            hextetIndex = hextetIndex - 1
+        }
+
+        mapped: true
+        (hextets[0] == 0).ifFalse(() => { mapped = false })
+        (hextets[1] == 0).ifFalse(() => { mapped = false })
+        (hextets[2] == 0).ifFalse(() => { mapped = false })
+        (hextets[3] == 0).ifFalse(() => { mapped = false })
+        (hextets[4] == 0).ifFalse(() => { mapped = false })
+        (hextets[5] == 65535).ifFalse(() => { mapped = false })
+
+        mapped.ifTrue(() => {
+            ipv4Bits: hextets[6] * 65536 + hextets[7]
+            result = "::ffff:" + ipv4BitsText(ipv4Bits)
+        })
+
+        mapped.ifFalse(() => {
+            bestStart: -1
+            bestLength: 0
+            currentStart: -1
+            currentLength: 0
+
+            considerCurrentRun: () => {
+                (currentLength >= 2).ifTrue(() => {
+                    (currentLength > bestLength).ifTrue(() => {
+                        bestStart = currentStart
+                        bestLength = currentLength
+                    })
+                })
+            }
+
+            scanIndex: 0
+            (() => scanIndex < 8).while() {
+                (hextets[scanIndex] == 0).ifTrue(() => {
+                    (currentLength == 0).ifTrue(() => {
+                        currentStart = scanIndex
+                    })
+                    currentLength = currentLength + 1
+                })
+
+                (hextets[scanIndex] == 0).ifFalse(() => {
+                    considerCurrentRun()
+                    currentStart = -1
+                    currentLength = 0
+                })
+
+                scanIndex = scanIndex + 1
+            }
+            considerCurrentRun()
+
+            text: ""
+            needsColon: false
+            emitIndex: 0
+
+            (() => emitIndex < 8).while() {
+                compressed: false
+
+                (emitIndex == bestStart).ifTrue(() => {
+                    text = text + "::"
+                    emitIndex = emitIndex + bestLength
+                    needsColon = false
+                    compressed = true
+                })
+
+                compressed.ifFalse(() => {
+                    needsColon.ifTrue(() => {
+                        text = text + ":"
+                    })
+                    text = text + hextetText(hextets[emitIndex])
+                    needsColon = true
+                    emitIndex = emitIndex + 1
+                })
+            }
+
+            result = text
+        })
+    })
+
+    (result === null).ifTrue(() => {
+        fail()
+    })
+
+    result
 }

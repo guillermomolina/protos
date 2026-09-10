@@ -31,9 +31,10 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
- * LIB005 IpAddresses harness. Protos fixtures own observable constructor and
- * textual IPv4 behavior. Java only supplies real Core/std bootstrap plus exact
- * local export-surface observation while guest slot-name enumeration is absent.
+ * LIB005 IpAddresses harness. Protos fixtures own all observable numeric IP
+ * construction/parsing/formatting behavior. Java supplies real Core/std
+ * bootstrap plus exact local export-surface observation while guest slot-name
+ * enumeration is absent.
  */
 final class ProtosNetworkingIpAddressesModuleTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -42,7 +43,7 @@ final class ProtosNetworkingIpAddressesModuleTest {
             Path.of("protos", "tests", "library", "network", "ip-addresses");
 
     @Test
-    void importedModuleExportsExactlyApprovedA2Surface() throws Exception {
+    void importedModuleExportsExactlyApprovedSurface() throws Exception {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
@@ -86,6 +87,16 @@ final class ProtosNetworkingIpAddressesModuleTest {
     @Test
     void malformedIpv4AndWrongDomainsFailClosed() throws Exception {
         assertFixture("ipv4-invalid.protos");
+    }
+
+    @Test
+    void ipv6ParsingCanonicalFormattingAndRoundTripConform() throws Exception {
+        assertFixture("ipv6-parse-format.protos");
+    }
+
+    @Test
+    void malformedIpv6FailsClosed() throws Exception {
+        assertFixture("ipv6-invalid.protos");
     }
 
     private static void assertFixture(String fixture) throws Exception {
