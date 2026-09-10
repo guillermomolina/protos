@@ -9,9 +9,10 @@ Many such records use the `Dxxx` family, but `Dxxx` does not mean
 "language" by itself. New unambiguous language/specification decision records
 use this directory. Implementation-independent tool/package decisions use
 [`../tooling/`](../tooling/README.md), while host/runtime decisions use
-[`../platform/`](../platform/README.md). Existing flat decision records remain
-at their current paths until the bounded DOC002 decision-migration slice moves
-them with link, role, compatibility, and authority checks.
+[`../platform/`](../platform/README.md). DOC002-F1 completed the legacy flat
+language-decision migration with link, role, compatibility, and authority
+checks; new unambiguous language/specification decision records use this
+directory directly.
 
 ## Migrated language-domain decisions
 

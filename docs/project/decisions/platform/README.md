@@ -4,7 +4,10 @@ This role contains durable `PLATxxx` records for non-normative implementation
 architecture tied to a concrete runtime, VM, operating system, or host substrate.
 They must not be used as an alternate source of observable Protos semantics.
 
-New unambiguous `PLATxxx` records use this directory. DOC002-F3 migrated the residual legacy flat platform-decision records here; `PLATFORM_ARCHITECTURE_DECISIONS.md` remains at its current registry path until the bounded registry migration owns that separate relocation.
+New unambiguous `PLATxxx` records use this directory. DOC002-F3 migrated the
+residual legacy flat platform-decision records here, and DOC002-F5A moved the
+separate platform decision registry to
+[`../../registries/PLATFORM_ARCHITECTURE_DECISIONS.md`](../../registries/PLATFORM_ARCHITECTURE_DECISIONS.md).
 
 ## Current platform decision records
 

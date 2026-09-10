@@ -49,3 +49,8 @@ DOC002 migration slices discover candidates from their execution-time
 `PUBLICATION_BASE`. Before DOC002 closes, current `docs/project/` is re-inventoried
 and every residual flat legacy/straggler path is either migrated or explicitly
 retained for a documented compatibility reason.
+
+DOC002-F6 closes the decisions/architecture/registries migration phase after an
+execution-time audit of those roles. Remaining direct children of `docs/project/`
+are not implicitly approved in place: DOC002-G owns their final owner/classification,
+migration-or-retention decision, navigation reconciliation, and closing rescan.

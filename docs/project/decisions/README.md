@@ -16,6 +16,7 @@ does not create semantic authority.
   except where separate Protos semantics explicitly require otherwise.
 
 Identifier family does not by itself select the role: existing `Dxxx` records
-may be language-domain or tooling-domain decisions. Existing flat decision files
-are migrated only by bounded DOC002 slices after durable-reference, authority,
-role, and compatibility review.
+may be language-domain or tooling-domain decisions. DOC002-F1/F2 completed the
+legacy flat Dxxx decision migration after durable-reference, authority, role, and
+compatibility review. New unambiguous decisions use their canonical role
+directory; DOC002-G owns only later residual/straggler reconciliation.
