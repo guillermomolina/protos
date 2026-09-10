@@ -19,14 +19,9 @@ stderr: ProcessStreams.stderrWriter(process)
 text: reader.readText().value()
 stdout.writeText("A").value()
 stderr.writeText("é").value()
-(text == "é").and() {
-    (stdoutCapture.size() == 2).and() {
-        (stdoutCapture.at(0) == 0).and() {
-            (stdoutCapture.at(1) == 65).and() {
-                (stderrCapture.size() == 1).and() {
-                    stderrCapture.at(0) == 233
-                }
-            }
-        }
-    }
-}
+(text == "é") &&
+    (stdoutCapture.size() == 2) &&
+    (stdoutCapture.at(0) == 0) &&
+    (stdoutCapture.at(1) == 65) &&
+    (stderrCapture.size() == 1) &&
+    (stderrCapture.at(0) == 233)

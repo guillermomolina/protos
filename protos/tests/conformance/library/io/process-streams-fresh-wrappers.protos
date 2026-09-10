@@ -19,10 +19,7 @@ stdout1: ProcessStreams.stdoutWriter(process)
 stdout2: ProcessStreams.stdoutWriter(process)
 stderr1: ProcessStreams.stderrWriter(process)
 stderr2: ProcessStreams.stderrWriter(process)
-(stdin1 !== stdin2).and() {
-    (stdout1 !== stdout2).and() {
-        (stderr1 !== stderr2).and() {
-            (stdout1 !== stderr1)
-        }
-    }
-}
+(stdin1 !== stdin2) &&
+    (stdout1 !== stdout2) &&
+    (stderr1 !== stderr2) &&
+    (stdout1 !== stderr1)

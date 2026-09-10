@@ -21,10 +21,7 @@ writer1: ProcessStreams.stdoutWriter(process)
 writer1.close().value()
 writer2: ProcessStreams.stdoutWriter(process)
 writer2.writeText("B").value()
-(text == "é").and() {
-    (stdoutCapture.size() == 2).and() {
-        (stdoutCapture.at(0) == 0).and() {
-            stdoutCapture.at(1) == 66
-        }
-    }
-}
+(text == "é") &&
+    (stdoutCapture.size() == 2) &&
+    (stdoutCapture.at(0) == 0) &&
+    (stdoutCapture.at(1) == 66)
