@@ -10,12 +10,12 @@
  */
 
 m: Map()
-m.atPut("a", 1)
-m.atPut("b", 2)
+m["a"] = 1
+m["b"] = 2
 
 old: m.remove("a")
-m.atPut("a", 3)
+m["a"] = 3
 
 (old == 1) &&
     (m.size() == 2) &&
-    (m.at("a") == 3)
+    (m["a"] == 3)

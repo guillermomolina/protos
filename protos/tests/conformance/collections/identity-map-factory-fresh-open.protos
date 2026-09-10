@@ -12,7 +12,7 @@
 a: IdentityMap()
 b: IdentityMap()
 
-a.atPut("x", 1)
+a["x"] = 1
 
 (a !== b) &&
     (a.size() == 1) &&

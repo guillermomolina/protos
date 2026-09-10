@@ -10,8 +10,8 @@
  */
 
 m: Map()
-m.atPut("a", 1)
-m.atPut("b", 2)
+m["a"] = 1
+m["b"] = 2
 m.remove("a")
-m.atPut("a", 3)
-m.at("a")
+m["a"] = 3
+m["a"]
