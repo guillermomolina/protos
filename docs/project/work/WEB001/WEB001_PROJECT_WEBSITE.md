@@ -120,3 +120,23 @@ render/curate-from-canonical-sources contract are **RATIFIED**; WEB001-A is
 **CLOSED**. Repository topology, website framework, hosting, deployment, DNS,
 visual design, and playground architecture remain unselected downstream
 questions.
+
+<!-- WEB001-B-WEBSITE-ARCHITECTURE-AUDIT -->
+## WEB001-B — website repository, stack and deployment architecture audit
+
+GitHub Issue [#282](https://github.com/guillermomolina/protos/issues/282) owns
+the independently reviewable WEB001-B architecture audit.
+
+`WEB001_B_WEBSITE_ARCHITECTURE_AUDIT.md` evaluates repository topology,
+canonical-source acquisition, local execution, static-site frameworks, hosting,
+deployment/security boundaries, and future playground isolation.
+
+The audit recommends, pending explicit project-owner approval, an independent
+`guillermomolina/protos-website` companion repository using exact-SHA canonical
+Protos source acquisition, dual native-Node/Docker-Compose local execution,
+Astro + Starlight static generation, and GitHub Pages deployment for
+`protos.guillermolina.com`.
+
+The recommendation remains **NEEDS_USER_DECISION**. No repository topology,
+source-consumption mechanism, framework, hosting provider, deployment contract,
+or playground architecture is selected by publication of the audit.
