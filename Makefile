@@ -6,6 +6,7 @@ PYTHON ?= python3
 SH ?= sh
 MVN_FLAGS ?=
 DIST_VALIDATE_FLAGS ?= --require-clean-source
+MAVEN_GUARD ?= $(PYTHON) scripts/maven_worktree_guard.py --repo . --
 
 .PHONY: help toolchain compile build test check verify clean dist dist-validate
 
@@ -28,21 +29,21 @@ toolchain:
 	$(PYTHON) tools/verify_toolchain.py --mode check --scope development
 
 compile:
-	$(MVN) $(MVN_FLAGS) compile
+	$(MAVEN_GUARD) $(MVN) $(MVN_FLAGS) compile
 
 build:
-	$(MVN) $(MVN_FLAGS) clean package -DskipTests
+	$(MAVEN_GUARD) $(MVN) $(MVN_FLAGS) clean package -DskipTests
 
 test:
-	$(MVN) $(MVN_FLAGS) clean test
+	$(MAVEN_GUARD) $(MVN) $(MVN_FLAGS) clean test
 
 check: toolchain test
 
 verify:
-	$(MVN) $(MVN_FLAGS) clean verify
+	$(MAVEN_GUARD) $(MVN) $(MVN_FLAGS) clean verify
 
 clean:
-	$(MVN) $(MVN_FLAGS) clean
+	$(MAVEN_GUARD) $(MVN) $(MVN_FLAGS) clean
 
 dist:
 	$(PYTHON) dist/build_portable.py
