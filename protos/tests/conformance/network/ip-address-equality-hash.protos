@@ -28,7 +28,7 @@ ok: true
 (left == {}).ifTrue(() => { ok = false })
 (left.hash() == same.hash()).ifFalse(() => { ok = false })
 
-addresses.atPut(left, 77)
-(addresses.at(same) == 77).ifFalse(() => { ok = false })
+addresses[left] = 77
+(addresses[same] == 77).ifFalse(() => { ok = false })
 
 ok

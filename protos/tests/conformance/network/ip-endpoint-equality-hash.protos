@@ -32,7 +32,7 @@ ok: true
 (left == {}).ifTrue(() => { ok = false })
 (left.hash() == same.hash()).ifFalse(() => { ok = false })
 
-endpoints.atPut(left, 91)
-(endpoints.at(same) == 91).ifFalse(() => { ok = false })
+endpoints[left] = 91
+(endpoints[same] == 91).ifFalse(() => { ok = false })
 
 ok
