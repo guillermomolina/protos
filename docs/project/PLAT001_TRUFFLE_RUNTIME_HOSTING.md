@@ -155,7 +155,7 @@ enter/leave. A fair per-Context read/write lifecycle lock permits concurrent
 executions under shared read ownership while `close()` alone takes exclusive
 ownership; this is lifecycle coordination rather than a guest-execution GIL.
 
-The retained audit is `docs/project/I026_A4B1_TRUFFLE_MULTITHREAD_SAFETY.md`. It
+The retained audit is `docs/project/work/I026/I026_A4B1_TRUFFLE_MULTITHREAD_SAFETY.md`. It
 records the stateless/immutable compiler and language-context evidence and one
 important remaining B2 requirement: Core bootstrap still mutates the static root
 Object during protocol installation, so concurrent bootstrap of multiple hosted
