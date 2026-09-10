@@ -137,10 +137,76 @@ The website architecture is **RATIFIED** and WEB001-B is **CLOSED**.
 The selected architecture uses independent companion repository
 `guillermomolina/protos-website`; read-only exact-SHA acquisition of canonical
 Protos sources from `guillermomolina/protos`; equivalent native-Node and
-Docker-Compose local execution; Astro + Starlight static generation; GitHub Pages
-for the initial `protos.guillermolina.com` deployment; explicit website/Protos
-revision provenance; and an independently secured future playground execution
-boundary.
+Docker-Compose local execution; Astro + Starlight static generation; explicit
+website/Protos revision provenance; and an independently secured future
+playground execution boundary.
 
-No website bootstrap, dependency pin, Pages configuration, DNS change, logo
-publication, or playground implementation is included in this ratification.
+WEB001-B originally selected GitHub Pages for the initial
+`protos.guillermolina.com` deployment. That **hosting component only** is
+superseded by the later WEB001-F production-hosting ratification below. The
+repository topology, source-authority, exact-SHA acquisition, local execution,
+framework, static-output, provenance and playground-boundary decisions remain
+ratified.
+
+No website bootstrap, dependency pin, production-host implementation, DNS
+change, logo publication, or playground implementation is included in the
+WEB001-B ratification.
+
+<!-- WEB001-F-PRODUCTION-HOSTING-ARCHITECTURE -->
+## WEB001-F — production hosting architecture
+
+GitHub Issue [#294](https://github.com/guillermomolina/protos/issues/294) owns
+the production-hosting architecture checkpoint.
+
+After the initial website was bootstrapped and reviewed, the project owner
+explicitly approved WEB001-F Candidate B on 2026-09-10: the official static site
+will be self-hosted through the owner's existing Docker + Traefik infrastructure
+rather than GitHub Pages.
+
+The ratified production boundary is:
+
+```text
+guillermomolina/protos
+    canonical source authority
+            |
+            | public read-only exact SHA
+            v
+guillermomolina/protos-website
+    portable Astro/Starlight source + generic production image contract
+            |
+            | immutable static build/image
+            v
+private deployment configuration
+    guillermomolina/docker-home
+            |
+            | Docker network `proxy`
+            v
+Traefik
+    TLS termination + Let's Encrypt
+            |
+            v
+protos.guillermolina.com
+```
+
+The public website repository owns only portable website/build behavior. The
+environment-specific Compose file, Traefik labels, Docker-network details and
+operational deployment configuration remain private infrastructure concerns.
+
+Production must not bind-mount the website source tree into the running
+container. A deployment builds an immutable image from an identified website
+revision, copies only the generated static site into a minimal HTTP-serving
+runtime, and lets Traefik terminate TLS externally.
+
+GitHub Pages is no longer an active or standby production path for WEB001. The
+existing dormant/manual Pages workflow is to be retired by the bounded website
+implementation slice so there is one production authority rather than two.
+
+This hosting change does **not** alter the WEB001-B decisions for companion-repo
+topology, exact-SHA canonical-source consumption, native/Docker local execution,
+Astro + Starlight, static output, provenance, or the independent security
+boundary required by any future code-executing playground.
+
+WEB001-F is **RATIFIED / CLOSED** at the design level. Its implementation is
+downstream: first provide the generic public production Docker target, then add
+the private `protos.guillermolina.com` stack, and finally perform DNS/production
+activation as an explicit operational step.

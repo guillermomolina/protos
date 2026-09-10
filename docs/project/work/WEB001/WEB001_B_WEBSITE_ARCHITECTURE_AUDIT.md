@@ -6,6 +6,15 @@ WEB001 / [#278](https://github.com/guillermomolina/protos/issues/278).
 
 Status: **RATIFIED — CANDIDATE C SELECTED**
 
+> **Hosting supersession (WEB001-F, 2026-09-10):** WEB001-B remains the
+> authoritative ratification for repository topology, source authority,
+> exact-SHA source acquisition, local execution, Astro + Starlight, static
+> output, provenance, and future playground isolation. Its GitHub Pages hosting
+> component was later superseded by the explicitly approved WEB001-F Candidate
+> B: self-hosted immutable static Docker image behind the owner's private
+> Traefik infrastructure. GitHub Pages is no longer an active or standby
+> production path.
+
 ## Scope
 
 WEB001-A ratified the visitor-journey information architecture and the
