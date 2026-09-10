@@ -813,7 +813,7 @@ left: (() => 20).future()
 right: (() => 22).future()
 
 values: Future.all(left, right).value()
-values.at(0) + values.at(1)
+values[0] + values[1]
 ```
 
 ### Explicitly observe child failure when it matters
