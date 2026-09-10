@@ -9,23 +9,23 @@ source: Array(1, 2, 3, 4)
 seen: Map()
 calls: 0
 filtered: Arrays.filter(source, (element) => {
-    seen.atPut(calls, element)
+    seen[calls] = element
     (calls == 0).ifTrue(() => {
-        source.atPut(1, 99)
+        source[1] = 99
     })
     calls = calls + 1
     (element == 2) || (element == 4)
 })
-filtered.atPut(0, filtered.at(0))
+filtered[0] = filtered[0]
 ok: true
 (filtered !== source).ifFalse(() => { ok = false })
 (filtered.size() == 2).ifFalse(() => { ok = false })
-(filtered.at(0) == 2).ifFalse(() => { ok = false })
-(filtered.at(1) == 4).ifFalse(() => { ok = false })
-(source.at(1) == 99).ifFalse(() => { ok = false })
-(seen.at(0) == 1).ifFalse(() => { ok = false })
-(seen.at(1) == 2).ifFalse(() => { ok = false })
-(seen.at(2) == 3).ifFalse(() => { ok = false })
-(seen.at(3) == 4).ifFalse(() => { ok = false })
+(filtered[0] == 2).ifFalse(() => { ok = false })
+(filtered[1] == 4).ifFalse(() => { ok = false })
+(source[1] == 99).ifFalse(() => { ok = false })
+(seen[0] == 1).ifFalse(() => { ok = false })
+(seen[1] == 2).ifFalse(() => { ok = false })
+(seen[2] == 3).ifFalse(() => { ok = false })
+(seen[3] == 4).ifFalse(() => { ok = false })
 (calls == 4).ifFalse(() => { ok = false })
 ok

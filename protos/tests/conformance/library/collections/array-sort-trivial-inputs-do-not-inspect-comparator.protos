@@ -8,10 +8,10 @@ Arrays: import("std:collections/Array")
 marker: Array(7)
 empty: Arrays.sort(Array(), 42)
 singleton: Arrays.sort(Array(marker), 42)
-singleton.atPut(0, marker)
+singleton[0] = marker
 ok: true
 (empty.size() == 0).ifFalse(() => { ok = false })
 (singleton.size() == 1).ifFalse(() => { ok = false })
-(singleton.at(0) === marker).ifFalse(() => { ok = false })
+(singleton[0] === marker).ifFalse(() => { ok = false })
 (empty !== singleton).ifFalse(() => { ok = false })
 ok

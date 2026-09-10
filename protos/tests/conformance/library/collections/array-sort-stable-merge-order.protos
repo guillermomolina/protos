@@ -11,25 +11,25 @@ calls: 0
 
 sorted: Arrays.sort(source, (left, right) => {
     (calls == 0).ifTrue(() => {
-        source.atPut(0, 99)
+        source[0] = 99
     })
-    trace.atPut(calls, left * 10 + right)
+    trace[calls] = left * 10 + right
     calls = calls + 1
     left < right
 })
-sorted.atPut(0, sorted.at(0))
+sorted[0] = sorted[0]
 
 ok: true
 (sorted !== source).ifFalse(() => { ok = false })
-(sorted.at(0) == 1).ifFalse(() => { ok = false })
-(sorted.at(1) == 2).ifFalse(() => { ok = false })
-(sorted.at(2) == 3).ifFalse(() => { ok = false })
-(source.at(0) == 99).ifFalse(() => { ok = false })
+(sorted[0] == 1).ifFalse(() => { ok = false })
+(sorted[1] == 2).ifFalse(() => { ok = false })
+(sorted[2] == 3).ifFalse(() => { ok = false })
+(source[0] == 99).ifFalse(() => { ok = false })
 (calls == 6).ifFalse(() => { ok = false })
-(trace.at(0) == 12).ifFalse(() => { ok = false })
-(trace.at(1) == 21).ifFalse(() => { ok = false })
-(trace.at(2) == 31).ifFalse(() => { ok = false })
-(trace.at(3) == 13).ifFalse(() => { ok = false })
-(trace.at(4) == 32).ifFalse(() => { ok = false })
-(trace.at(5) == 23).ifFalse(() => { ok = false })
+(trace[0] == 12).ifFalse(() => { ok = false })
+(trace[1] == 21).ifFalse(() => { ok = false })
+(trace[2] == 31).ifFalse(() => { ok = false })
+(trace[3] == 13).ifFalse(() => { ok = false })
+(trace[4] == 32).ifFalse(() => { ok = false })
+(trace[5] == 23).ifFalse(() => { ok = false })
 ok

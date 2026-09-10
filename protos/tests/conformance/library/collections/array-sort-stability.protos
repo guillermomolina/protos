@@ -12,9 +12,9 @@ zero: Array(0, 30)
 sorted: Arrays.sort(
     Array(first, second, zero),
     (left, right) => {
-        left.at(0) < right.at(0)
+        left[0] < right[0]
     }
 )
 
-((sorted.at(0) === zero) && (sorted.at(1) === first)) &&
-    (sorted.at(2) === second)
+((sorted[0] === zero) && (sorted[1] === first)) &&
+    (sorted[2] === second)

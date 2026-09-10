@@ -9,17 +9,17 @@ source: Array(1, 2)
 calls: 0
 mapped: Arrays.map(source, (element) => {
     (calls == 0).ifTrue(() => {
-        source.atPut(1, 99)
+        source[1] = 99
     })
     calls = calls + 1
     element * 10
 })
-mapped.atPut(0, mapped.at(0))
+mapped[0] = mapped[0]
 ok: true
 (mapped !== source).ifFalse(() => { ok = false })
 (mapped.size() == 2).ifFalse(() => { ok = false })
-(mapped.at(0) == 10).ifFalse(() => { ok = false })
-(mapped.at(1) == 20).ifFalse(() => { ok = false })
-(source.at(1) == 99).ifFalse(() => { ok = false })
+(mapped[0] == 10).ifFalse(() => { ok = false })
+(mapped[1] == 20).ifFalse(() => { ok = false })
+(source[1] == 99).ifFalse(() => { ok = false })
 (calls == 2).ifFalse(() => { ok = false })
 ok

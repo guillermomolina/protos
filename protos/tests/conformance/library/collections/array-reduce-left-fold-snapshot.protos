@@ -9,7 +9,7 @@ source: Array(10, 3, 2, 1)
 calls: 0
 reduced: Arrays.reduce(source, (accumulator, element) => {
     (calls == 0).ifTrue(() => {
-        source.atPut(2, 99)
+        source[2] = 99
     })
     calls = calls + 1
     accumulator - element
@@ -28,7 +28,7 @@ withInitial: Arrays.reduce(
 ok: true
 (reduced == 4).ifFalse(() => { ok = false })
 (calls == 3).ifFalse(() => { ok = false })
-(source.at(2) == 99).ifFalse(() => { ok = false })
+(source[2] == 99).ifFalse(() => { ok = false })
 (withInitial == 4).ifFalse(() => { ok = false })
 (withInitialCalls == 4).ifFalse(() => { ok = false })
 ok

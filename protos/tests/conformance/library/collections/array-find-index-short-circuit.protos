@@ -9,7 +9,7 @@ source: Array(1, 2, 2, 3)
 calls: 0
 found: Arrays.findIndex(source, (element) => {
     (calls == 0).ifTrue(() => {
-        source.atPut(1, 99)
+        source[1] = 99
     })
     calls = calls + 1
     element == 2
@@ -20,6 +20,6 @@ missing: Arrays.findIndex(source, (element) => {
 ok: true
 (found == 1).ifFalse(() => { ok = false })
 (calls == 2).ifFalse(() => { ok = false })
-(source.at(1) == 99).ifFalse(() => { ok = false })
+(source[1] == 99).ifFalse(() => { ok = false })
 (missing === null).ifFalse(() => { ok = false })
 ok
