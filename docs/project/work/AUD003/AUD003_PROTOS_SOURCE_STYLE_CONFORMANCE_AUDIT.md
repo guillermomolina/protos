@@ -1,6 +1,6 @@
 # AUD003 — Protos source-style conformance audit
 
-Status: **IN_PROGRESS**
+Status: **CLOSED**
 
 Nature: non-normative repository source-style audit and bounded migration
 
@@ -137,7 +137,7 @@ listed in one table.
 | AUD003-B2 | CLOSED | Unary spelling audit closed: ordinary `negated()` uses, including concurrent I032-A general fixed-width arithmetic coverage, migrated to unary `-`; no ordinary `.not()` debt remained; direct protocol/lowering/error/slot-visibility evidence and protocol-teaching documentation remain explicit by purpose. |
 | AUD003-C | CLOSED | Conformance-corpus exception classification closed by C17 global survivor reconciliation: all ordinary indexing debt migrated; remaining explicit forms are deliberate protocol/lowering/result-contract evidence. |
 | AUD003-D | CLOSED | Differential prevention gate integrated into publication validation/CI; increases in confirmed canonical-form families fail unless admitted by an exact path/family/count/reason exception, while existing debt may stay flat or shrink. |
-| AUD003-E | OPEN | Final repository rescan, exception review, documentation reconciliation, and closure evidence. |
+| AUD003-E | CLOSED | Final execution-time whole-repository rescan and top-level publication validation are green; survivor inventories match the reviewed B1/B2/C17 contracts exactly, E1-E14 remove all discovered ordinary residual debt, active documentation is reconciled, and the D differential prevention gate remains active. |
 
 ### AUD003-A1 retained evidence
 
@@ -527,6 +527,67 @@ fails closed before publication. `AUD003-C` therefore closes as an intent-aware
 exception classification, not as a repository-wide ban on canonical protocol
 spelling. AUD003 itself remains `IN_PROGRESS`: D still owns the prevention gate
 and E owns the final repository rescan/documentation reconciliation.
+
+### AUD003-E final closure retained evidence
+
+GitHub coordination: Issue `#118` (`AUD003-E`), under parent Issue `#53`
+(`AUD003`).
+
+E1 through E13 progressively removed the residual ordinary indexing debt found
+outside the already-classified C17 conformance allowlist, including Network
+library source, SHA-256/filesystem/tooling and Package Tool test source, and the
+remaining ordinary Programming Guide examples.
+
+The first integrated closure attempt then did exactly what the closure gate is
+for: it rejected two post-B2 `.not()` occurrences that had been introduced by
+the LM008-D4 collection audit before the AUD003-D differential prevention gate
+existed. They were ordinary Boolean-result negations inside Map/IdentityMap
+tests, not direct `not` protocol evidence. E14 migrated them to `!` and restored
+the exact B2 guard-visible survivor inventory while preserving both conformance
+expectations.
+
+E15 closes AUD003 only from the current execution-time publication base. Its
+mandatory recursive rescan fail-closes unless all already-reviewed survivor
+contracts still hold:
+
+- conformance indexing equals the exact C17 allowlist: 42 files and 66 explicit
+  forms, split into 41 reads and 25 writes;
+- no explicit indexing form survives anywhere else in executable
+  `protos/**/*.protos` source;
+- Programming Guide indexing is exactly the four chapter-05 forms that directly
+  teach the `at`/`atPut` indexing protocol;
+- lazy-Boolean survivors equal the exact B1 path/count inventory, with the three
+  chapter-04 protocol-teaching examples retained;
+- guard-visible `.not()` survivors equal the exact B2 path/count inventory:
+  three executable direct Boolean-protocol cases, one guarded chapter-04
+  protocol example and the one `SOURCE_STYLE.md` canonical policy example;
+- three additional chapter-04 `.not()` spellings occur only in non-executable
+  `text` exposition and remain deliberate pedagogy outside the guard's source
+  fence scope;
+- `.negated()` survivors equal the exact B2 path/count inventory of six direct
+  executable protocol/domain/error cases;
+- root `README.md` contains no guarded canonical forms; and
+- `scripts/source_style_exceptions.json` remains the reviewed empty manifest.
+
+The same exact rescan is rerun against the closure candidate itself. The
+candidate then runs `scripts/publication_validation.py --top-level-closure`,
+which invokes the AUD003-D source-style prevention gate and forces the broad
+top-level reconciliation selected by current repository policy. No validation
+result is reused across a concurrent `main` advance: E15 discards that candidate,
+restarts from the newer `origin/main`, repeats the entire rescan, rematerializes
+the bounded documentation closure and reruns top-level validation.
+
+AUD003-D therefore remains the steady-state prevention mechanism after this audit
+closes. Canonical protocol spellings remain valid language source when their
+purpose requires them; the closure records that ordinary maintained repository
+source is reconciled to the approved idiom and that later increases are
+explicitly reviewed rather than silently grandfathered.
+
+This closure changes only the durable AUD003 audit record, the active
+`SOURCE_STYLE.md` tracking reference, the durable implementation/closure registry
+and CHANGELOG. It changes no Protos specification, observable semantics, runtime
+implementation, public API, implementation version, native boundary, performance
+guarantee or license term.
 
 ## Closure criteria
 
