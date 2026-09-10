@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosNumberLiteral;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
+import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.guillermomolina.protos.source.SourceSpan;
 import com.oracle.truffle.api.CallTarget;
@@ -36,9 +37,10 @@ import java.util.Objects;
 /**
  * Parallel canonical-to-Bytecode lowering seam for the PERF006-B migration.
  *
- * <p>B1 intentionally supports only the closed, side-effect-free
- * {@link CanonicalLiteral} + top-level {@link CanonicalSequence} subset. The
- * ordinary {@link ProtosSourceCompiler} remains on the established AST lowerer
+ * <p>PERF006-B2A extends the B1 subset from literals to lexical
+ * {@link CanonicalLookup} while retaining top-level/body
+ * {@link CanonicalSequence}. The ordinary {@link ProtosSourceCompiler} remains
+ * on the established AST lowerer
  * until later PERF006-B slices have migrated calls, suspension and control
  * semantics coherently.</p>
  */
@@ -88,9 +90,7 @@ final class CanonicalToBytecodeLowerer {
 
                                 for (CanonicalExpression expression :
                                         sequence.expressions()) {
-                                    CanonicalLiteral literal =
-                                            (CanonicalLiteral) expression;
-                                    SourceSpan span = literal.span();
+                                    SourceSpan span = expression.span();
 
                                     builder.beginSourceSection(
                                             span.startOffset(),
@@ -99,7 +99,7 @@ final class CanonicalToBytecodeLowerer {
                                             StandardTags.StatementTag.class);
 
                                     builder.beginStoreLocal(result);
-                                    builder.emitLoadConstant(materialize(literal));
+                                    emitExpression(builder, expression);
                                     builder.endStoreLocal();
 
                                     builder.endTag(
@@ -122,9 +122,10 @@ final class CanonicalToBytecodeLowerer {
 
     private void validateSupported(CanonicalSequence sequence) {
         for (CanonicalExpression expression : sequence.expressions()) {
-            if (!(expression instanceof CanonicalLiteral)) {
+            if (!(expression instanceof CanonicalLiteral)
+                    && !(expression instanceof CanonicalLookup)) {
                 throw new UnsupportedOperationException(
-                        "PERF006-B1 Bytecode lowerer supports only canonical literals; got "
+                        "PERF006-B2A Bytecode lowerer does not yet support "
                                 + expression.getClass().getSimpleName());
             }
             validateSpan(expression.span());
@@ -142,6 +143,25 @@ final class CanonicalToBytecodeLowerer {
                             + " for "
                             + source.getName());
         }
+    }
+
+    private static void emitExpression(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression expression) {
+        if (expression instanceof CanonicalLiteral literal) {
+            builder.emitLoadConstant(materialize(literal));
+            return;
+        }
+        if (expression instanceof CanonicalLookup lookup) {
+            builder.beginLookup();
+            builder.emitLoadArgument(0);
+            builder.emitLoadConstant(lookup.name());
+            builder.endLookup();
+            return;
+        }
+        throw new AssertionError(
+                "validated Bytecode expression became unsupported: "
+                        + expression.getClass().getSimpleName());
     }
 
     private static Object materialize(CanonicalLiteral literal) {

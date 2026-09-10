@@ -18,7 +18,12 @@
 package com.guillermomolina.protos.execution;
 
 import com.oracle.truffle.api.bytecode.BytecodeRootNode;
+import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.oracle.truffle.api.bytecode.GenerateBytecode;
+import com.oracle.truffle.api.bytecode.Operation;
+import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.nodes.RootNode;
 
@@ -40,5 +45,24 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             ProtosLanguage language,
             FrameDescriptor frameDescriptor) {
         super(language, frameDescriptor);
+    }
+
+    /**
+     * Bytecode equivalent of the existing ProtosLookupNode operation.
+     *
+     * <p>The activation is loaded from frame argument 0 by the lowerer, preserving
+     * the established Protos root calling convention.</p>
+     */
+    @Operation
+    public static final class Lookup {
+        @Specialization
+        public static Object perform(ProtosActivation activation, String name) {
+            return activation.lookup(name)
+                    .orElseThrow(
+                            () ->
+                                    new ProtosSignalException(
+                                            ProtosCoreErrors.newUnqualifiedLookupError(
+                                                    activation)));
+        }
     }
 }

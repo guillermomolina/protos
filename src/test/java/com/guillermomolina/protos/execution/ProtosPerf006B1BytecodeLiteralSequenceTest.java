@@ -148,11 +148,11 @@ final class ProtosPerf006B1BytecodeLiteralSequenceTest {
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
-                                        "name",
+                                        "() => 1",
                                         "perf006-b1-unsupported.protos")
                                 .build();
 
-                CanonicalSequence sequence = canonicalize("name");
+                CanonicalSequence sequence = canonicalize("() => 1");
 
                 UnsupportedOperationException failure =
                         assertThrows(
