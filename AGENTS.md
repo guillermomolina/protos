@@ -480,7 +480,12 @@ work is otherwise authorized and correctly coordinated.
 Project `Priority` is different: agents MAY recommend a priority, but MUST NOT
 invent or bulk-assign `P0`/`P1`/`P2`/`P3` merely because work is active. Priority
 reflects project-owner scheduling intent unless the user explicitly delegates
-that prioritization.
+that prioritization. Priority reconciliation is nevertheless mandatory: before
+finishing allocation, activation, blocking, or closure coordination, inspect
+whether an authoritative priority is already established and set/preserve it
+when it is. When no priority has been established, leave the Project field
+deliberately unset and report that fact; an unset priority must not be the
+accidental result of creating an incomplete Project item.
 
 ## Mandatory pre-implementation audit
 
@@ -1236,8 +1241,8 @@ Every GitHub Issue that represents a formal Protos identifier MUST carry exactly
 one stable family-classification label named `family:<FAMILY>`, where `<FAMILY>`
 is the identifier prefix. Examples include `family:I`, `family:LIB`,
 `family:TOOL`, `family:CLI`, `family:PERF`, `family:DOC`, `family:DIST`,
-`family:AUD`, `family:LM`, `family:GITHUB`, `family:D`, `family:PLAT`, and
-`family:B`.
+`family:AUD`, `family:LM`, `family:GITHUB`, `family:D`, `family:PLAT`,
+`family:B`, and `family:BUG`.
 
 A formal sub-issue keeps the same family label as its formal identifier. The
 family label classifies durable project ownership only. Do not encode live
@@ -1258,6 +1263,65 @@ duplicating semantic authority in the consuming Issue.
 GitHub's numeric Issue identifier and a Protos formal identifier are independent
 namespaces. For example, GitHub Issue `#73` may own `I031`; agents MUST NOT try to
 make those numbers coincide.
+
+<!-- GITHUB001-A2 PROJECT-METADATA-COMPLETENESS -->
+##### Project metadata completeness
+
+Creating a formal GitHub Issue is not complete merely because the title and
+`family:<FAMILY>` label exist. The Issue and the `Protos Development` Project
+together are the live coordination record. When the available GitHub capability
+can mutate Project metadata, the coordinating agent MUST add or reconcile the
+formal Issue in that Project as part of allocation and again whenever the Issue
+is actively started/resumed or materially changes coordination state.
+
+For every formal work item, reconcile all applicable live metadata rather than
+updating only the field that prompted the current action:
+
+- the Issue carries exactly one `family:<FAMILY>` label matching its formal
+  identifier;
+- a newly introduced family label is verified as a real stable classification
+  label and SHOULD have a meaningful description of the family boundary rather
+  than relying indefinitely on an accidental blank auto-created label;
+- `Assignee` represents active responsibility under the assignee discipline
+  above; when an agent immediately works the item on behalf of the repository
+  owner and no other human is responsible, assign `guillermomolina`;
+- Project `Status` reflects the real live state. Work being actively executed is
+  `In progress`; independently actionable unclaimed work is normally `Ready`;
+  blocked/decision/review states use the corresponding existing Project option
+  when applicable; `Done` is not set before the repository-defined closure
+  condition is actually satisfied;
+- Project `Area` is set to the closest existing area that owns the work. Infer it
+  from the primary work surface and established Project taxonomy, not merely
+  from the spelling of the formal prefix, and never invent an ad-hoc Project
+  option to make a field non-empty;
+- Project `Roadmap` reflects established scheduling intent. Work that is
+  actually being driven now, or that the project owner explicitly places in the
+  current tranche, belongs in `Now`; creation alone MUST NOT promote queued work
+  into `Now`. Preserve/use `Next`, `Later`, or another existing option when that
+  is the established roadmap position;
+- Project `Priority` is always checked. Set or preserve `P0`/`P1`/`P2`/`P3` only
+  when project-owner intent or an already-established project policy provides
+  that priority. Do not invent urgency from the family prefix, issue number,
+  activity, or agent preference. If no authoritative priority exists, leave the
+  field deliberately unset and report `PRIORITY_UNSET: NO_OWNER_PRIORITY`
+  instead of silently omitting reconciliation; and
+- if the Project exposes a separate `Owner`/responsibility field in addition to
+  GitHub Assignees, reconcile it consistently with the active-responsibility
+  model rather than leaving stale ownership metadata.
+
+An agent MUST NOT claim that formal Issue creation/activation is fully
+reconciled when it updated only the Issue object but omitted Project metadata it
+had the capability and authority to update. If the environment cannot add the
+Issue to the Project or cannot mutate one of the required fields, continue the
+authorized repository work when otherwise safe but report the exact missing
+coordination operation/field. Do not compensate for a missing Project API by
+inventing repository ledger state.
+
+When introducing an entirely new formal family, its first policy publication
+MUST define the family boundary and add it to the `family:<FAMILY>` policy before
+agents treat the prefix as generally available. The first Issue may be allocated
+concurrently with that publication when needed to track the work, but the
+publication must make the classification durable.
 
 ##### Collision-safe formal identifier allocation
 
@@ -1303,10 +1367,11 @@ numbers.
 
 Standard Library work uses `LIBxxx`; documentation initiatives use `DOCxxx`;
 official bundled tools use `TOOLxxx`; performance work uses `PERFxxx`; Language
-Maturity uses `LMxxx`; and the other existing families retain their documented
-boundaries. Moving lifecycle coordination to GitHub does not change those family
-semantics and MUST NOT be used to smuggle language-design authority into an
-implementation/project family.
+Maturity uses `LMxxx`; defect/regression work uses `BUGxxx`; and the other
+existing families retain their documented boundaries. Moving lifecycle
+coordination to GitHub does not change those family semantics and MUST NOT be
+used to smuggle language-design authority into an implementation/project
+family.
 
 Parent Issues remain open until the repository-defined parent outcome is
 actually complete. Use a sub-issue only for a durable independently meaningful
@@ -1318,6 +1383,47 @@ Retrospective GitHub backfill MUST identify itself as retrospective. GitHub
 creation/closure timestamps are not historical project dates. Preserve original
 closure commits, versions, durable records, and Git history where available; do
 not fabricate unavailable evidence merely to make an old Issue look complete.
+
+<!-- BUG-FAMILY-POLICY -->
+### Defect and regression work
+
+Confirmed or credibly reproducible defects/regressions in behavior that Protos
+already intends to provide use the `BUGxxx` family when the defect has durable,
+independently trackable project identity. `BUGxxx` names the defect, not a
+particular attempted fix.
+
+Appropriate `BUGxxx` scope includes implementation regressions against already
+defined semantics, build/test/package/CI failures, broken maintained tooling,
+and other failures where the expected project behavior is already sufficiently
+determined to diagnose and repair without inventing a new contract.
+
+Keep these boundaries explicit:
+
+- `BUGxxx` MUST NOT define new observable language semantics, public API policy,
+  or durable platform/runtime architecture merely to make a failure disappear;
+- when diagnosis exposes an unresolved substantive semantic choice, block only
+  the affected bug work and route the choice through the applicable `Dxxx`
+  decision and explicit approval gate;
+- when diagnosis exposes a durable host/runtime architecture choice, route it
+  through `PLATxxx` rather than embedding it in the bug fix;
+- a performance regression whose primary problem is performance engineering may
+  remain `PERFxxx`; a correctness defect found during performance work may use a
+  `BUGxxx` item when it has independent defect identity;
+- feature work, planned capability expansion, ordinary implementation slices,
+  refactoring without a defect, and speculative cleanup do not become
+  `BUGxxx` merely because they change code;
+- one bug may require multiple diagnostic or patch attempts without allocating a
+  new top-level `BUGxxx`; create a separate bug only for an independently
+  meaningful defect; and
+- if investigation proves the reported behavior is only local checkout
+  divergence, unsupported environment state, duplicate reporting, or otherwise
+  not a repository defect, close the Issue with that evidence rather than
+  manufacturing a code change.
+
+New `BUGxxx` identifiers follow the normal collision-safe allocation policy,
+carry `family:BUG`, use GitHub Issues/Project for live coordination, and obey the
+same audit, validation, publication, changelog, versioning, and design-authority
+rules as the affected project surface.
 
 ### Documentation work
 
