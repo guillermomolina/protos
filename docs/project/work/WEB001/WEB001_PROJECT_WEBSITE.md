@@ -100,3 +100,21 @@ project identity under the repository governance rules.
   updated merely to open WEB001.
 - Opening WEB001 changes no Protos implementation version, runtime behavior,
   public language API, or specification semantics.
+
+<!-- WEB001-A-PUBLIC-INFORMATION-ARCHITECTURE-AUDIT -->
+## WEB001-A — public information architecture and source-authority audit
+
+GitHub Issue [#280](https://github.com/guillermomolina/protos/issues/280) owns
+the independently reviewable WEB001-A audit.
+
+`WEB001_A_INFORMATION_ARCHITECTURE_AUDIT.md` compares repository-shaped,
+visitor-journey, and single-docs-portal information architectures; maps the
+current README, Programming Guide/tutorials/examples, design philosophy,
+normative specification, and GitHub community surfaces to public website roles;
+and records representative prior art from Rust, Zig, Gleam, Elixir, and Julia.
+
+The audit recommends a visitor-journey top level
+`Home / Learn / Reference / Design / Community / GitHub` plus a
+render/curate-from-canonical-sources contract. The recommendation remains
+`NEEDS_USER_DECISION`: publication of the audit does not select the information
+architecture, route contract, source contract, website stack, or hosting.
