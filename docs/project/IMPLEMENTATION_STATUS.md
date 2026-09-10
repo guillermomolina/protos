@@ -748,7 +748,7 @@ Description: Higher-level filesystem and Process conveniences layered over the
 standard capability-based File/Filesystem and Process I/O surfaces.
 
 Design record:
-- `docs/project/LIB004_FILESYSTEM_PROCESS_CONVENIENCES_DESIGN.md` records the
+- `docs/project/work/LIB004/LIB004_FILESYSTEM_PROCESS_CONVENIENCES_DESIGN.md` records the
   completed non-normative LIB004-0 design closure;
 - the bounded initial filesystem module is `std:io/Files`, with exactly
   `readAllBytes`, `writeAllBytes`, `readAllText`, and `writeAllText`, explicit
