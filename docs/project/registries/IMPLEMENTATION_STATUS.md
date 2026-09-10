@@ -1048,7 +1048,7 @@ Coordination:
 - Capabilities intentionally outside current Core, including D044-deferred
   loop-local `break`/`continue`, are not implementation defects merely because
   another language commonly provides them.
-- Plan: `docs/project/LM008_CORE_LANGUAGE_SURFACE_COMPLETENESS.md`.
+- Plan: `docs/project/work/LM008/LM008_CORE_LANGUAGE_SURFACE_COMPLETENESS.md`.
 
 New Language Maturity work MUST allocate and persist its `LMxxx` identifier in
 the repository at publication time rather than relying on chat/prompt history.

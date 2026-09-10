@@ -141,7 +141,7 @@ implementation owners opened by their confirmed findings.
 ## LM008-B detailed audit record
 
 The bounded B audit matrix and checkpoint evidence live in
-`docs/project/LM008_B_GRAMMAR_EVALUATION_BINDING_CALLABLE_AUDIT.md`.
+`docs/project/work/LM008/LM008_B_GRAMMAR_EVALUATION_BINDING_CALLABLE_AUDIT.md`.
 `LM008-B` is CLOSED: B1-B4 are complete with retained guest-visible
 evidence, no new design decision and no production implementation finding.
 Parent LM008 remains IN_PROGRESS for independent C/D/E fronts and final F
@@ -150,7 +150,7 @@ reconciliation.
 ## LM008-C detailed audit record
 
 The bounded object structural/reflection/mutation audit matrix lives in
-`docs/project/LM008_C_OBJECT_STRUCTURAL_REFLECTION_MUTATION_AUDIT.md`.
+`docs/project/work/LM008/LM008_C_OBJECT_STRUCTURAL_REFLECTION_MUTATION_AUDIT.md`.
 LM008-C has confirmed four implementation/publication gaps against
 already-closed Object semantics and allocated I031 / GitHub #242 as the
 single implementation owner with separate A-D slices. LM008-C is
@@ -160,7 +160,7 @@ regressions; no new Dxxx/PLATxxx decision is required by this checkpoint.
 ## LM008-D detailed audit record
 
 The bounded values/Core-collections audit matrix lives in
-`docs/project/LM008_D_VALUES_CORE_COLLECTIONS_AUDIT.md`.
+`docs/project/work/LM008/LM008_D_VALUES_CORE_COLLECTIONS_AUDIT.md`.
 LM008-D is `BLOCKED_BY_DEPENDENCIES`: D1-D3 are complete and the D4
 Array/Map/IdentityMap audit is complete pending reconciliation. D4 confirmed
 three already-normative implementation gaps owned by I034/#272, I035/#273 and
