@@ -22,6 +22,5 @@ text:
     "registry-node registry \"json-pkg\" \"1.0.0\" locator \"json\" authority \"public\" content protos-package-tree-v1 sha256:aaaa\n" +
     "root workspace \"root-pkg\"\n"
 model: Lock.parseStructural(text)
-(model.root.packageId == "root-pkg").and() {
-    model.dependencies.size() == 1
-}
+(model.root.packageId == "root-pkg") &&
+    (model.dependencies.size() == 1)
