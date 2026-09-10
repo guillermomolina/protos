@@ -1,5 +1,7 @@
 ## 0.2.345-SNAPSHOT
 
+- Close `LM009-D — Public debugger launch contract` after D1/D2 publication and final D3 evidence reconciliation. Retain ratified PLAT018 C-prime RuntimeHost/Engine ownership and D060 B-prime `protos debug <file> [args...]` stdout-readiness contract; record production GraalVM DAP availability, OS-ephemeral loopback endpoint discovery, real DAP initialize/launch/configuration flow, application-argument preservation, guest stdout/stderr projection through DAP without control-stream duplication, and normal completion lifecycle through DAP `terminated`, client transport teardown, RuntimeHost/Engine cleanup and launcher exit 0. The earlier D2 test failures are retained as implementation evidence that exposed and corrected Process standard-stream bypass and DAP transport teardown ordering rather than being suppressed. Release LM009-E for the actual VS Code F5/S3 integration. No attach, remote-listen, readiness-file, stop-on-entry or stronger Stop/`terminateDebuggee` contract is selected; no specification, executable runtime, editor asset or Maven implementation-version change is made by this reconciliation.
+
 - Activate `GITHUB006 — Native Issue hierarchy authority and migration closure`
   (GitHub #316) after the project-owner-approved native hierarchy reconciliation
   reports 106 declared parent relationships, 68 already native, 38 added, zero

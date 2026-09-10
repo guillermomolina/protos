@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS); LM009-D CLOSED**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -613,7 +613,7 @@ boundary.
 
 ## LM009-D public debugger decision release
 
-Decision status: **PLAT018 C-prime RATIFIED; D060 B-prime RATIFIED; IMPLEMENTATION PENDING**
+Decision status: **PLAT018 C-prime RATIFIED; D060 B-prime RATIFIED; IMPLEMENTATION CLOSED BY D1+D2**
 
 The platform/runtime debugger-hosting boundary is fixed by
 [`../../decisions/platform/PLAT018_DAP_DEBUG_SESSION_HOSTING.md`](../../decisions/platform/PLAT018_DAP_DEBUG_SESSION_HOSTING.md),
@@ -642,3 +642,74 @@ LM009-E remains the owner of the actual VS Code F5/debug integration and S3 live
 editor evidence. Any new substantive CLI, remote-network, attach, stop-on-entry,
 termination, distribution or editor-configuration choice still crosses its own
 approval gate.
+
+## LM009-D implementation evidence and closure
+
+Status: **CLOSED**
+
+LM009-D is closed by the combined published D1/D2 implementation and the D3
+reconciliation recorded here.
+
+Published implementation:
+
+- **D1** — `d61a92a61d0ca81c966870e915dfed834daca92f`:
+  the debug-only `ProtosPolyglotRuntimeHost` activates the real GraalVM DAP,
+  binds IPv4 loopback port `0`, retains `Suspend=false` and
+  `WaitAttached=true`, keeps raw Graal readiness behind a version-bounded
+  adapter, and makes the matching DAP tool available in the production/runtime
+  distribution while ordinary RuntimeHosts remain DAP-disabled.
+- **D2** — `fcfa8932757c0300248e77bbf50e6ab7e299006b`:
+  the ordinary launcher exposes the ratified
+  `protos debug <file> [application-args...]` surface and emits exactly one
+  compact D060 version-1 `PROTOS_DEBUG_READY {json}` record on stdout after the
+  real endpoint is bound and before guest execution.
+
+The final D2 focal evidence proves the complete LM009-D public-launch path
+against the real GraalVM DAP:
+
+1. the public launcher produces a valid numeric loopback endpoint allocated by
+   the OS rather than by the editor or a Protos port registry;
+2. DAP `initialize`, `launch` and `configurationDone` succeed against that
+   endpoint;
+3. `<file>` and `debug` remain launcher identity while arguments following the
+   file remain ordinary application arguments through `process.args()`;
+4. guest stdout and guest stderr are observed as DAP `output` events with the
+   corresponding categories;
+5. guest output is not duplicated onto the D060 readiness stdout or launcher
+   diagnostics stderr;
+6. normal guest completion leads to DAP `terminated`; after the client closes
+   the session transport, the owning RuntimeHost/Engine completes cleanup and
+   `protos debug` exits successfully; and
+7. complete repository publication validation and isolated-worktree cleanup
+   pass on the published candidate.
+
+The failed D2 v1 and v3 attempts are useful retained implementation evidence.
+v1 exposed that Protos Process standard-stream backends are explicit capabilities
+and therefore bypass Truffle output consumers unless debug mode deliberately
+routes them through the entered `Env.out()` / `Env.err()` channels. v3 then
+proved both guest output categories through DAP and exposed that the focal test
+was incorrectly requiring launcher exit while the DAP client transport remained
+open. The final publication corrects both boundaries rather than weakening the
+test.
+
+No additional executable D3 change is justified: the D2 publication already
+contains the real public-launch lifecycle evidence that D3 was decomposed to
+obtain. D3 is therefore this governance/documentation-only reconciliation.
+
+LM009-D deliberately does **not** select or promise manual attach,
+remote-network listening, rendezvous/readiness files, stop-on-entry,
+`terminateDebuggee`, or a stronger user-visible Stop contract. Those remain
+outside this closure exactly as preserved by PLAT018 and D060.
+
+LM009-E is now released to consume this public launcher/readiness boundary and
+implement the actual VS Code F5 integration plus live S3 evidence. LM009-E must
+remain a thin client of `protos debug` and the real DAP; it must not reconstruct
+GraalVM options, allocate a debugger port, parse raw Graal readiness, proxy DAP,
+or implement Protos semantics in TypeScript.
+
+LM009 as a whole remains **IN_PROGRESS**. Static-language-service work remains
+owned by LM009-F/G/H and packaging/end-to-end release by LM009-I.
+
+This closure reconciliation changes no Protos specification, executable runtime,
+editor executable asset, Maven implementation version, public debugger contract,
+license term or Marketplace publication state.
