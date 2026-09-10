@@ -17,4 +17,4 @@
 
 JSON: import("std:json/JSON")
 node: JSON.array(JSON.nullValue())
-node.value.atPut(0, JSON.boolean(true))
+node.value[0] = JSON.boolean(true)

@@ -19,7 +19,7 @@ JSON: import("std:json/JSON")
 events: Map()
 count: 0
 parser: JSON.eventParser((event) => {
-    events.atPut(count, event)
+    events[count] = event
     count = count + 1
 })
 
@@ -36,19 +36,19 @@ check: (condition) => {
 }
 
 check(count == 8)
-check(events.at(0).kind == "objectStart")
-check(events.at(0).value === null)
-check(events.at(1).kind == "name")
-check(events.at(1).value == "a")
-check(events.at(2).kind == "arrayStart")
-check(events.at(3).kind == "boolean")
-check(events.at(3).value === true)
-check(events.at(4).kind == "string")
-check(events.at(4).value == "A\u{1F600}")
-check(events.at(5).kind == "number")
-check(events.at(5).value.coefficient == -1230)
-check(events.at(5).value.exponent == -4)
-check(events.at(6).kind == "arrayEnd")
-check(events.at(7).kind == "objectEnd")
+check(events[0].kind == "objectStart")
+check(events[0].value === null)
+check(events[1].kind == "name")
+check(events[1].value == "a")
+check(events[2].kind == "arrayStart")
+check(events[3].kind == "boolean")
+check(events[3].value === true)
+check(events[4].kind == "string")
+check(events[4].value == "A\u{1F600}")
+check(events[5].kind == "number")
+check(events[5].value.coefficient == -1230)
+check(events[5].value.exponent == -4)
+check(events[6].kind == "arrayEnd")
+check(events[7].kind == "objectEnd")
 
 ok

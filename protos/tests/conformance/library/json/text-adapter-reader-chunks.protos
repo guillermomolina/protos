@@ -21,7 +21,7 @@ chunks: Array("{\"a\":", "[1,true]}", null)
 index: 0
 reader: {
     readText: () => {
-        chunk: chunks.at(index)
+        chunk: chunks[index]
         index = index + 1
         (() => { chunk }).future()
     }

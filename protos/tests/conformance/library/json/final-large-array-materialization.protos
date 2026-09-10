@@ -22,8 +22,8 @@ node: JSON.parse("[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 ok: true
 (node.kind == "array").ifFalse(() => { ok = false })
 (node.value.size() == 2048).ifFalse(() => { ok = false })
-(node.value.at(0).kind == "number").ifFalse(() => { ok = false })
-(node.value.at(2047).kind == "number").ifFalse(() => { ok = false })
-(node.value.at(0).value.coefficient == 0).ifFalse(() => { ok = false })
-(node.value.at(2047).value.coefficient == 0).ifFalse(() => { ok = false })
+(node.value[0].kind == "number").ifFalse(() => { ok = false })
+(node.value[2047].kind == "number").ifFalse(() => { ok = false })
+(node.value[0].value.coefficient == 0).ifFalse(() => { ok = false })
+(node.value[2047].value.coefficient == 0).ifFalse(() => { ok = false })
 ok

@@ -24,7 +24,7 @@ target: {
     write: (bytes) => {
         state.writes = state.writes + 1
         state.size = bytes.size()
-        state.byte0 = bytes.at(0)
+        state.byte0 = bytes[0]
         (() => { target }).future()
     }
 }

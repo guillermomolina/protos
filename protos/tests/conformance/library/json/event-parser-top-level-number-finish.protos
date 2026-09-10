@@ -19,7 +19,7 @@ JSON: import("std:json/JSON")
 events: Map()
 count: 0
 parser: JSON.eventParser((event) => {
-    events.atPut(count, event)
+    events[count] = event
     count = count + 1
 })
 
@@ -28,7 +28,7 @@ parser.feed("2.5e")
 parser.feed("+3")
 parser.finish()
 
-event: events.at(0)
+event: events[0]
 (count == 1) &&
     (event.kind == "number") &&
     (event.value.coefficient == -125) &&

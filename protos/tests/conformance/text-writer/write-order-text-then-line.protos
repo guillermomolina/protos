@@ -29,12 +29,12 @@ target: {
         current: state.writes
         (current == 0).ifTrue(() => {
             state.firstSize = bytes.size()
-            state.first0 = bytes.at(0)
+            state.first0 = bytes[0]
         })
         (current == 1).ifTrue(() => {
             state.secondSize = bytes.size()
-            state.second0 = bytes.at(0)
-            state.second1 = bytes.at(1)
+            state.second0 = bytes[0]
+            state.second1 = bytes[1]
         })
         state.writes = current + 1
         (() => { target }).future()

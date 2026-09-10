@@ -17,4 +17,4 @@
 
 JSON: import("std:json/JSON")
 node: JSON.parse("[1]")
-node.value.atPut(0, JSON.nullValue())
+node.value[0] = JSON.nullValue()
