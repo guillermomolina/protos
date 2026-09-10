@@ -1,0 +1,69 @@
+/*
+ * THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+ * ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+ * DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+ * DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+ * OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+ * THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+ * OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+ * THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+ * FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+ * https://github.com/guillermomolina/protos
+ *
+ * Software distributed under the License is distributed on an "AS IS" basis,
+ * WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+ * the specific language governing rights and limitations under the License.
+ */
+
+Object
+Context
+Number
+Integer
+Float
+UInt8
+Int8
+UInt16
+Int16
+UInt32
+Int32
+UInt64
+Int64
+Error
+InvalidReturn
+SlotNotFound
+InvalidSuper
+Cancelled
+FutureResolutionCycle
+RequestOutcomeUncertain
+NonTransferableValue
+NonParallelValue
+InvalidPredicateResult
+InvalidComparatorResult
+InvalidComparatorOrder
+ParallelRegionOverlap
+ParallelRegionInUse
+ParallelRegionOutsideP
+IOError
+InvalidIOArgument
+IOLifecycleError
+IOCapacityExhausted
+EncodingError
+LineTooLong
+Array
+String
+Encoding
+Map
+IdentityMap
+Path
+IpAddress
+IpEndpoint
+Network
+Future
+Actor
+Process
+TextReader
+TextWriter
+BufferedReader
+BufferedWriter
+import
+true

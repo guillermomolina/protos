@@ -132,8 +132,8 @@ not be repaired or tested as though they were one operation.
 | `LM008-B` | CLOSED | Grammar/evaluation/binding/callable surface audit complete through B1-B4: lexical/literal/separator grammar; binding/writes/lowering/evaluation/object composition; Closure/invocation/parameter/default/rest/spread/trailing-Closure surface; receiver binding/extraction, `super`, non-local return and final B reconciliation. No new semantic decision or production implementation gap was found; retained Protos evidence is recorded in `LM008_B_GRAMMAR_EVALUATION_BINDING_CALLABLE_AUDIT.md`. |
 | `LM008-C` | CLOSED | Object structural/reflection/mutation audit is closed after I031/#242 published `slotNames()`, `removeSlot(name)`, structural `close()` and `freeze()` independently with retained ordinary-Protos conformance. Current-main reconciliation reclassifies every C row `COVERED`; no new semantic/platform decision. |
 | `LM008-D` | CLOSED | Values/Core-collections audit D1-D4 is closed. I032 and I034/I035/I036 repaired the already-normative fixed-width/collection gaps under their implementation owners; I031 supplies the formerly missing closed/frozen guest state. Final D4 reconciliation retains keyed-state Protos evidence and finds every D row `COVERED`, with no new semantic/platform decision. |
-| `LM008-E` | IN_PROGRESS | E1 control, E2 Error and E3 modules/import are COMPLETE with all audited rows `COVERED`; E3 strengthens executable Protos module-context/namespace/specifier/identity evidence in the existing module harness. E4 prelude/final reconciliation remains. No semantic/platform decision or production change. |
-| `LM008-F` | BLOCKED_BY_DEPENDENCIES | Final reconciliation: cross-check retained LM005/LM006 advanced-domain evidence, require every matrix row to have an explained state, require all discovered implementation gaps to have owners/regressions, rerun the complete retained surface corpus and close LM008 without inventing semantics. |
+| `LM008-E` | CLOSED | E1-E4 are complete: control, Error, modules/import and required/forbidden Prelude surface rows are reconciled with retained Protos evidence. E4 adds exact required-binding lookup coverage, frozen-Prelude/shadow evidence and focused intentional-absence probes; no semantic/platform decision or production change. |
+| `LM008-F` | READY | Final reconciliation is released now that B-E are CLOSED: cross-check retained LM005/LM006 advanced-domain evidence, require every matrix row to have an explained state and every discovered implementation gap to be closed with retained regression evidence, rerun the complete retained surface corpus/repository validation, and close LM008 without inventing semantics. |
 
 B-E are independent audit fronts after A. F depends on B-E and on any
 implementation owners opened by their confirmed findings.
@@ -175,14 +175,15 @@ final F reconciliation.
 
 The bounded control/Error/modules/prelude audit matrix lives in
 `docs/project/work/LM008/LM008_E_CONTROL_ERRORS_MODULES_PRELUDE_AUDIT.md`.
-LM008-E is `IN_PROGRESS`: E1 control, E2 Error and E3 modules/import are COMPLETE.
-E1 finds the standard Closure `while` / `ensure` surface fully guest-visible; E2
-retains signaling/handler/failure-identity coverage and the complete Error taxonomy;
-E3 confirms module-context identity, explicit non-transitive namespaces, exact
-specifier/resolver boundaries, canonical-key caching, cycles, retry and Actor-local
-module state with executable Protos evidence in the existing module harness. No new
-Dxxx/PLATxxx decision or implementation owner is opened by E1-E3. E4 prelude/final
-E reconciliation is next.
+LM008-E is `CLOSED`: E1 control, E2 Error, E3 modules/import and E4 Prelude/final
+reconciliation are COMPLETE. The standard control and Error surfaces remain fully
+covered; module-context/identity/cache semantics retain executable guest evidence;
+and E4 closes the standard Prelude publication boundary with all 51 required names,
+frozen-binding/local-shadow behavior and focused intentional-absence coverage.
+Names that Core merely does not require, such as `Bytes`/`Filesystem`, are not
+silently reclassified as forbidden. No new Dxxx/PLATxxx decision, implementation
+owner, production/runtime change or specification change is introduced. `LM008-F`
+is READY for final cross-domain reconciliation and closure validation.
 
 ## Interaction with implementation findings
 

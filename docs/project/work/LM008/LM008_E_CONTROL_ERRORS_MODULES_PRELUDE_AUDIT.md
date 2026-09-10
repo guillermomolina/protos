@@ -1,6 +1,6 @@
 # LM008-E — Control, Errors, Modules and Prelude surface audit
 
-Status: IN_PROGRESS
+Status: CLOSED
 
 Parent: `LM008 — Core Language Surface Completeness`
 
@@ -148,3 +148,42 @@ runtime harness instead of introducing a second module test framework.
 
 `LM008-E` remains `IN_PROGRESS`. E4 is next and audits required/forbidden Core
 Prelude bindings and performs final E reconciliation without pre-closing LM008-F.
+
+## E4 checkpoint — Prelude/final reconciliation
+
+Checkpoint state: COMPLETE
+
+Validation class: `TEST_IMPACT`
+
+Normative authority: the standard-binding requirements owned by the applicable
+Core semantic/concurrency/I/O specifications, especially `MODULES.md`,
+`OBJECT_MODEL.md`, `VALUES_AND_COLLECTIONS.md`, `ERRORS.md`,
+`PARALLEL_EXECUTION.md`, and the standard I/O owners. E4 does not turn
+implementation-only or merely optional names into Core promises.
+
+### Evidence matrix
+
+| Surface row | Normative requirement | Retained language-level evidence | Current implementation/mechanism evidence | Classification |
+|---|---|---|---|---|
+| Required standard Prelude bindings | Every Core facility that its normative owner requires as a standard Prelude binding must resolve by ordinary bare-name lookup; standard names are ordinary identifiers rather than reserved syntax. | New `core-surface/prelude-required-bindings.protos` evaluates all 51 required names from ordinary Protos and reaches final `true` only if every lookup succeeds. Domain-specific conformance elsewhere exercises the corresponding protocols. | Distributable `protos/lib/core/prelude.protos` source-declares exactly the same 51 public bindings; `ProtosCoreBootstrapTest.bootstrapsContextPrototypeFromDistributableCoreSource` retains an exact-set assertion over the frozen binding object. | `COVERED` |
+| Prelude immutability and explicit local shadowing | The shared standard Prelude is frozen. Bare `=` cannot mutate a binding found only there, while `:` may create a module-local slot that shadows the standard name. | New guest source executed by `ProtosCoreBootstrapTest.guestCannotAssignFrozenPreludeBindingButCanShadowLocally` catches the rejected `Object = 1`, then creates local `Object: 7` and proves the original standard object was not replaced. | Bootstrap freezes the completed Prelude graph before guest observation; the exact-set bootstrap test also asserts `bindings.mutationState() == FROZEN`. | `COVERED` |
+| Boolean binding is intentionally absent | Core explicitly defines no standard Prelude binding/object/prototype named `Boolean`; canonical `true`/`false` are the Boolean semantic family. | Existing `core-surface/missing-boolean-binding.protos` retains ordinary `SlotNotFound` evidence. | `prelude.protos` contains no `Boolean`; Boolean-family behavior remains on canonical values rather than a fabricated public prototype. | `INTENTIONAL_ABSENCE_COVERED` |
+| Closure has no standard family prototype, without inventing a no-binding rule | Core defines no standard `Closure` prototype merely to organize Closure values. That does not independently require LM008-E4 to turn the bare spelling `Closure` into a forever-forbidden Prelude name. | No new negative `Closure` binding probe is added. Existing Closure conformance already proves its direct-`Object` family topology and ordinary callable behavior. | Current `prelude.protos` happens to omit `Closure`, consistent with the present Core surface, but E4 records no stronger absence promise than the normative owner states. | `DEFERRED_NOT_NORMATIVE` |
+| `P` remains specification shorthand, not a public object | Core parallel execution exposes ordinary operations but no public value/prototype/capability/namespace/Prelude binding named `P`. | Existing `core-surface/missing-p-binding.protos`. | `prelude.protos` contains no `P`; parallel runtime machinery remains behind ordinary Closure/collection operations. | `INTENTIONAL_ABSENCE_COVERED` |
+| Small-/big-integer representation names remain non-semantic | `SmallInteger` and `BigInteger` are representation categories only; Core defines no standard numeric family/prototype/Prelude binding with those names. | New `core-surface/missing-smallinteger-binding.protos` and `missing-biginteger-binding.protos`. | Public numeric bindings remain `Number`, `Integer`, `Float` and the fixed-width Integer-family prototypes; runtime representation is not surfaced through Prelude names. | `INTENTIONAL_ABSENCE_COVERED` |
+| Capability/representation names that Core merely does not require | `Bytes` and `Filesystem` are explicitly not required Core-Prelude bindings; concrete network connection/listener capability names likewise remain outside the required standard Prelude surface unless their own normative owner says otherwise. E4 must not strengthen “not required” into “must be absent”. | No new negative conformance is added for these optional/non-required names. Existing domain tests continue to verify acquisition and authority through their actual public paths. | Current `prelude.protos` omits these names; runtime may retain internal prototypes/capabilities without turning them into required Core bindings. | `DEFERRED_NOT_NORMATIVE` |
+| Bootstrap-only/internal names do not define language surface | Temporary/internal bootstrap names are implementation machinery, not a second namespace or portable Prelude contract. | Existing focused negative/internal probes remain retained where previously established; E4 adds no language promise for implementation spellings. | `ProtosCoreBootstrapTest` already proves `_coreRootObject` is absent after bootstrap and the exact public binding set excludes internal runtime objects. | `COVERED` supplementary implementation evidence |
+
+### E4 / LM008-E final audit result
+
+E1-E4 are COMPLETE. Every audited control, Error, module/import and Prelude row
+has an explained state; no row remains `RUNNABLE_UNCOVERED`,
+`SPECIFIED_NOT_GUEST_VISIBLE`, `TRACKED_IMPLEMENTATION_GAP`,
+`NEEDS_DESIGN_DECISION`, or otherwise unresolved inside LM008-E. E4 adds only
+retained executable evidence for already-normative publication/absence rules and
+does not change the specification, production runtime, implementation version,
+native boundary, public API or language semantics.
+
+`LM008-E` is CLOSED. Parent `LM008` remains `IN_PROGRESS`; `LM008-F` becomes
+`READY` for the final B-E plus LM005/LM006 cross-domain reconciliation and the
+complete retained-corpus/repository closure gate.

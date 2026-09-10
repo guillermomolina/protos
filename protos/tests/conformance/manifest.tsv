@@ -663,6 +663,9 @@ core-surface/missing-boolean-binding.protos	error-parent	SlotNotFound
 core-surface/missing-p-binding.protos	error-parent	SlotNotFound
 core-surface/missing-groupref-binding.protos	error-parent	SlotNotFound
 core-surface/missing-internal-groupref-binding.protos	error-parent	SlotNotFound
+core-surface/prelude-required-bindings.protos	boolean	true
+core-surface/missing-smallinteger-binding.protos	error-parent	SlotNotFound
+core-surface/missing-biginteger-binding.protos	error-parent	SlotNotFound
 core-surface/grammar-identifiers-and-member-names.protos	integer	154
 core-surface/grammar-integer-literals.protos	integer	1052194
 core-surface/grammar-decimal-float-literal.protos	float-bits	4062c00000000000

@@ -25,6 +25,7 @@ import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -191,6 +192,27 @@ class ProtosCoreBootstrapTest {
         assertNotSame(first, second);
         assertSame(contextPrototype, first.parent().orElseThrow());
         assertSame(contextPrototype, second.parent().orElseThrow());
+    }
+
+    @Test
+    void guestCannotAssignFrozenPreludeBindingButCanShadowLocally() throws Exception {
+        ProtosPrelude prelude =
+                new ProtosCoreBootstrap()
+                        .bootstrap(Path.of("protos", "lib", "core"));
+
+        Object result =
+                new ProtosSourceCompiler()
+                        .compile(
+                                "original: Object\n"
+                                        + "blocked: Error.handle(() => { Object = 1 }, (caught) => true)\n"
+                                        + "Object: 7\n"
+                                        + "blocked.and() { (Object == 7).and() { original !== Object } }")
+                        .call(prelude.newModuleActivation());
+
+        assertSame(ProtosBooleanValue.TRUE, result);
+        assertSame(
+                ProtosObjectValue.MutationState.FROZEN,
+                prelude.bindings().mutationState());
     }
 
     @Test
