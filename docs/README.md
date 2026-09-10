@@ -37,6 +37,8 @@ owner under `spec/`.
 
 ## `project/`
 
+Start with the [project documentation index](project/README.md) for the ratified role-first navigation and legacy-path transition rules.
+
 The current repository-documentation information-architecture audit is [`DOC002-A`](project/DOC002_DOCUMENTATION_ARCHITECTURE_AUDIT.md). It is a non-normative audit artifact; GitHub Issue #156 remains the live coordination surface for DOC002.
 
 The selected destination architecture is the ratified [`DOC002-B role-first path contract`](project/work/DOC002/DOC002_DOCUMENTATION_PATH_CONTRACT.md). New unambiguous durable project records use that role-first model; existing flat paths remain compatibility locations until bounded migration slices move them.
