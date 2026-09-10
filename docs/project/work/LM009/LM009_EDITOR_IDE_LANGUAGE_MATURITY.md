@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED**
+Current published slice after this record: **LM009-A CLOSED; LM009-B TOPOLOGY APPROVED / IMPLEMENTATION READY**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -245,3 +245,67 @@ true:
 
 The next independent work fronts after publication are LM009-B/#11, LM009-C,
 LM009-D investigation and LM009-F investigation.
+
+## LM009-B approved current reference-extension topology
+
+Decision status: **APPROVED CURRENT TOPOLOGY**
+
+Approval: explicit project-owner approval on 2026-09-10, with future
+reconsideration deliberately permitted.
+
+The first reference VS Code integration is selected to live inside the
+`guillermomolina/protos` monorepo at:
+
+```text
+editors/
+└── vscode/
+```
+
+This is the current-scale ownership topology, not a permanent prohibition on a
+future repository split.
+
+The selected boundary is:
+
+- `spec/` remains the normative lexical/syntactic authority;
+- the real Protos parser, resolver, runtime and later static language-service
+  implementation remain their own authorities rather than being reimplemented
+  in the extension;
+- `editors/vscode/` is a thin editor/product-integration subtree;
+- the editor subtree may own its own package version and Node/editor
+  dependencies, but ordinary Protos Maven builds and runtime execution must not
+  depend on Node, npm or VS Code assets merely because the reference extension
+  exists;
+- lexical assets should remain reusable where practical rather than encoding a
+  VS Code-only semantic model;
+- a future move to a dedicated `protos-vscode` repository remains allowed when
+  independent editor release cadence, contributor volume, multiple editor
+  clients, or product ownership makes the additional cross-repository
+  coordination worthwhile.
+
+This approval resolves only the repository/distribution topology checkpoint
+exposed by LM009-A. It deliberately does **not** select:
+
+- a Visual Studio Marketplace publisher identifier or permanent extension ID;
+- the final minimum/supported VS Code version policy;
+- public VSIX/Marketplace release policy;
+- Protos runtime discovery/configuration UX;
+- public GraalVM DAP launcher/port/server lifecycle;
+- static Protos language-service process/transport/lifecycle architecture; or
+- Graal dynamic-LSP product policy.
+
+Those remain independently owned by the later LM009 slices that expose them.
+Any substantive new choice encountered while implementing LM009-B must still
+stop at the normal approval gate.
+
+The LM009-A capability matrix records the topology row as `DECISION_REQUIRED`
+because that was the correct state at A closure. This section is the durable
+post-A resolution of that checkpoint; the historical A classification is not
+rewritten retroactively.
+
+With this topology published, LM009-B implementation is released to add only
+the approved lexical/editor-metadata surface under `editors/vscode/`: `.protos`
+language association, comment/bracket configuration, non-normative TextMate
+highlighting, representative fixtures/validation, and development/install-use
+instructions. Run integration remains LM009-C; DAP remains LM009-D/E; static
+language intelligence remains LM009-F/G/H; public packaging/Marketplace closure
+remains LM009-I.
