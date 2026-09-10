@@ -16,7 +16,7 @@
  */
 
 entries: filesystem.entries(Path.relative()).value()
-entry: entries.at(0)
+entry: entries[0]
 
 ok: entries.size() == 1
 (entry.name == "socket-node").ifFalse(() => { ok = false })

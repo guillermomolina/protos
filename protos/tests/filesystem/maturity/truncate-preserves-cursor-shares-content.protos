@@ -35,5 +35,5 @@ file.close().value()
     (position == 5) &&
     (size == 2) &&
     (remaining.size() == 2) &&
-    (remaining.at(0) == 1) &&
-    (remaining.at(1) == 2)
+    (remaining[0] == 1) &&
+    (remaining[1] == 2)

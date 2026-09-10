@@ -35,8 +35,8 @@ writer.close().value()
     (position == 5) &&
     (size == 5) &&
     (bytes.size() == 5) &&
-    (bytes.at(0) == 65) &&
-    (bytes.at(1) == 66) &&
-    (bytes.at(2) == 0) &&
-    (bytes.at(3) == 0) &&
-    (bytes.at(4) == 90)
+    (bytes[0] == 65) &&
+    (bytes[1] == 66) &&
+    (bytes[2] == 0) &&
+    (bytes[3] == 0) &&
+    (bytes[4] == 90)

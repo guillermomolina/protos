@@ -29,10 +29,10 @@ firstFile.close().value()
 secondFile.close().value()
 
 (firstByte.size() == 1) &&
-    (firstByte.at(0) == 7) &&
+    (firstByte[0] == 7) &&
     (secondPositionBefore == 0) &&
     (secondBytes.size() == 2) &&
-    (secondBytes.at(0) == 7) &&
-    (secondBytes.at(1) == 8) &&
+    (secondBytes[0] == 7) &&
+    (secondBytes[1] == 8) &&
     (firstPositionAfter == 1) &&
     (secondPositionAfter == 2)
