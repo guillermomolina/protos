@@ -45,6 +45,7 @@ process remains authoritative first.
 | PLAT011 | RuntimeHost-owned shared Actor carrier substrate across local Processes | RATIFIED | Explicit project-owner approval, 2026-09-09 after cross-runtime many-Process, 64/128+ core, NUMA/affinity, blocking-lane and distributed-evolution review | Actor runtime hosting, #239, PERF001-F and future host capacity governance |
 | PLAT012 | Verified external package custody and source-resolution architecture | RATIFIED | Explicit project-owner approval, 2026-09-09 after exhaustive loader/runtime/package-store, CAS/distributed, lifetime and scalability review | TOOL001-F2E4/F2E5 and future immutable external package resource loading |
 | PLAT013 | Truffle debugger/interop value projection architecture | RATIFIED | Explicit project-owner approval, 2026-09-09 after exhaustive Truffle-language (including Apple Pkl), Bytecode-DSL, identity, large-graph and scalability review | I026-D/E/F/G |
+| PLAT014 | Truffle cooperative suspension continuation/compilation boundary | RATIFIED | Explicit project-owner approval, 2026-09-10 after deep Truffle-language/runtime review and complete A1/A2a/A2b/A2c/A2d feasibility evidence | PERF006, I026 continuation/backend work and future JVM/Truffle Task/Future execution |
 | PLAT015 | Truffle debugger scope projection topology | RATIFIED | Explicit project-owner approval, 2026-09-10 after deep Truffle implementation audit including Apple Pkl, GraalPy Bytecode DSL, SimpleLanguage, TruffleRuby, GraalJS, FastR, Sulong and Espresso; future/scalability/Protos-fit review | I026-E/F/G |
 
 See `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md` for the selected topology,
@@ -79,5 +80,7 @@ See `docs/project/PLAT011_RUNTIMEHOST_CARRIER_SUBSTRATE.md` for the selected Run
 See `docs/project/PLAT012_VERIFIED_EXTERNAL_PACKAGE_CUSTODY_SOURCE_RESOLUTION.md` for the run-owned exact immutable package-resource scope, lazy host-neutral verified-resource reader, canonical no-path external ModuleKey boundary and future CAS/distributed backing evolution.
 
 See `docs/project/PLAT013_TRUFFLE_DEBUGGER_INTEROP_VALUE_PROJECTION.md` for the selected semantic-value-native read-only interop baseline, local-slot-only object projection, synthetic scope/view adapter boundary, identity/side-effect constraints and future Bytecode DSL / non-JVM evolution path.
+
+See `docs/project/decisions/platform/PLAT014_TRUFFLE_COOPERATIVE_CONTINUATIONS.md` for the selected C-prime stackful continuation composition over Truffle Bytecode DSL, its suspension-only cost boundary, semantic-preservation constraints, cross-runtime evidence, scalability invariants and deliberately deferred implementation choices.
 
 See `docs/project/PLAT015_TRUFFLE_DEBUGGER_SCOPE_PROJECTION.md` for the selected activation-native debugger-scope projection, absence of an artificial language top scope or named receiver, one-runtime-lookup authority, suspension-bounded lifetime and AST/Bytecode-DSL-independent tooling boundary.
