@@ -1,7 +1,6 @@
 # LM008 — Core Language Surface Completeness
 
-Status: IN_PROGRESS
-
+Status: CLOSED
 ## Objective
 
 LM008 audits whether already-normative Protos Core language surface is actually
@@ -133,7 +132,7 @@ not be repaired or tested as though they were one operation.
 | `LM008-C` | CLOSED | Object structural/reflection/mutation audit is closed after I031/#242 published `slotNames()`, `removeSlot(name)`, structural `close()` and `freeze()` independently with retained ordinary-Protos conformance. Current-main reconciliation reclassifies every C row `COVERED`; no new semantic/platform decision. |
 | `LM008-D` | CLOSED | Values/Core-collections audit D1-D4 is closed. I032 and I034/I035/I036 repaired the already-normative fixed-width/collection gaps under their implementation owners; I031 supplies the formerly missing closed/frozen guest state. Final D4 reconciliation retains keyed-state Protos evidence and finds every D row `COVERED`, with no new semantic/platform decision. |
 | `LM008-E` | CLOSED | E1-E4 are complete: control, Error, modules/import and required/forbidden Prelude surface rows are reconciled with retained Protos evidence. E4 adds exact required-binding lookup coverage, frozen-Prelude/shadow evidence and focused intentional-absence probes; no semantic/platform decision or production change. |
-| `LM008-F` | READY | Final reconciliation is released now that B-E are CLOSED: cross-check retained LM005/LM006 advanced-domain evidence, require every matrix row to have an explained state and every discovered implementation gap to be closed with retained regression evidence, rerun the complete retained surface corpus/repository validation, and close LM008 without inventing semantics. |
+| `LM008-F` | CLOSED | Final reconciliation cross-checks retained LM005/LM006 advanced-domain evidence, accounts every LM008 finding/owner, and requires the complete Test Tool corpus plus repository publication validation on the closure candidate. LM008 is CLOSED with no new semantics or production change. |
 
 B-E are independent audit fronts after A. F depends on B-E and on any
 implementation owners opened by their confirmed findings.
@@ -168,8 +167,7 @@ numeric families, D3 String, and D4 Array/Map/IdentityMap are all complete. I032
 I034/#272, I035/#273, I036/#275 and I031/#242 are closed; retained ordinary-Protos
 regressions cover every formerly blocked implementation/evidence row, including
 closed/frozen keyed collection state. No new Dxxx/PLATxxx decision or
-specification change was required. Parent LM008 remains IN_PROGRESS for E and
-final F reconciliation.
+specification change was required. Parent LM008 is CLOSED by the final LM008-F reconciliation.
 
 ## LM008-E detailed audit record
 
@@ -184,6 +182,22 @@ Names that Core merely does not require, such as `Bytes`/`Filesystem`, are not
 silently reclassified as forbidden. No new Dxxx/PLATxxx decision, implementation
 owner, production/runtime change or specification change is introduced. `LM008-F`
 is READY for final cross-domain reconciliation and closure validation.
+
+## LM008-F final reconciliation
+
+`LM008-F` is CLOSED by the final publication. The detailed closure record is
+`LM008_F_FINAL_RECONCILIATION.md`.
+
+F reconciles A-E as closed, reuses rather than duplicates the already-closed
+LM005 concurrency and LM006 system/resource maturity evidence, accounts every
+LM008-discovered implementation finding under its closed Ixxx/BUG owner, and
+requires the complete central Test Tool corpus plus repository-selected
+publication validation on the same closure candidate. No unresolved positive
+surface row, implementation gap or design-decision classification remains.
+
+Parent `LM008` is therefore CLOSED. This reconciliation adds no normative
+language semantics and no production/runtime, implementation-version or Core
+native-boundary change.
 
 ## Interaction with implementation findings
 

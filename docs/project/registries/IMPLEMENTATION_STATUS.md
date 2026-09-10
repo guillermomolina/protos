@@ -861,7 +861,7 @@ the already-published implementation commit.
 | LM005 | Concurrent Language Maturity | CLOSED | `SAME_COMMIT` | LM005-A Future, LM005-B Actor, and LM005-C Group/GroupRef conformance/examples/tutorials complete; no runtime or normative feature added. |
 | LM006 | System & Resource Language Maturity | CLOSED | `SAME_COMMIT` | LM006-A/B/C/D/E/F system/resource maturity complete; executable learning material and final cross-slice reconciliation are published; no runtime or normative feature was added by LM006. |
 | LM007 | Object Model Maturity | CLOSED | `SAME_COMMIT` | LM007-A/B/C/D/E are CLOSED after final cross-slice execution of all 16 retained object-model maturity programs, the complete Test Tool corpus and the repository full suite. Findings I027 and I030 are CLOSED under their implementation owners; LM007 owns no runtime or normative feature. |
-| LM008 | Core Language Surface Completeness | IN_PROGRESS | — | LM008-A/B/C/D/E are CLOSED. E1-E4 cover control, Error, modules/import and the required/forbidden standard Prelude boundary with retained executable evidence; no unresolved E finding remains. LM008-F is READY for the final LM005/LM006 cross-check, complete matrix reconciliation and closure gate. |
+| LM008 | Core Language Surface Completeness | CLOSED | `SAME_COMMIT` | LM008-A/B/C/D/E/F are CLOSED. Final F reconciliation cross-checks the retained LM005/LM006 advanced-domain evidence, accounts all LM008 implementation findings under their closed owners, and requires complete Test Tool corpus plus repository publication validation on the closure candidate; no specification, runtime, implementation-version or native-boundary change. |
 
 ### LM005 — Concurrent Language Maturity
 
@@ -1018,8 +1018,7 @@ Coordination:
 
 ### LM008 — Core Language Surface Completeness
 
-Status: IN_PROGRESS
-
+Status: CLOSED
 Scope: audit already-normative Core from its owning specification through the
 reference implementation's actual guest-visible path to retained executable
 Protos conformance. LM008 does not define new semantics and does not hide
@@ -1028,11 +1027,11 @@ production fixes inside maturity work.
 | Slice | Status | Closure evidence | Surface |
 |---|---|---|---|
 | LM008-A | CLOSED | `SAME_COMMIT` | Normative-owner inventory, surface-row classifications, evidence hierarchy, bounded B-F decomposition and seed findings. Records four candidate standard Object guest-publication gaps (`slotNames`, `removeSlot`, structural `close`, structural `freeze`) for executable verification under LM008-C and records the now-closed I025 parser/conformance repair as a covered baseline rather than duplicating it. Documentation/governance only. |
-| LM008-B | IN_PROGRESS | — | Grammar/evaluation/binding/callable surface audit. B1 lexical/literal/separator evidence is complete: five positive central-corpus probes plus seven retained source-rejection fixtures cover Unicode/NFC/reserved names, numeric and String forms, exact whitespace/newline/comment rules and continuation/separation. No specification, production implementation, implementation version or design decision changed; B2-B4 remain. |
-| LM008-C | READY | — | Object structural/reflection/mutation guest-surface completeness and focused verification of the four A seed findings. |
-| LM008-D | READY | — | Canonical values, Boolean protocols, equality/identity/hash, numbers, String and fundamental Array/Map/IdentityMap surface completeness. |
-| LM008-E | CLOSED | E1/E2/E3 prior; E4 `SAME_COMMIT` | E1-E4 COMPLETE. E4 retains ordinary-Protos lookup evidence for all 51 required standard Prelude bindings, frozen-binding/local-shadow guest evidence, and focused intentional-absence probes without strengthening optional names into Core requirements. No production/specification/version/native-boundary change. |
-| LM008-F | READY | — | B-E are CLOSED and no LM008-discovered implementation/design blocker remains. Final reconciliation must cross-check LM005/LM006 retained evidence, account for every matrix row/finding, rerun complete retained surface/corpus and repository-required closure validation, then close LM008 without inventing semantics. |
+| LM008-B | CLOSED | `e0d804aab36914cef13ecda890c8dbf3a0f1b032` | B1-B4 grammar/evaluation/binding/callable audit complete; retained Protos evidence covers every positive row and no unresolved surface/design classification remains. |
+| LM008-C | CLOSED | `ff0e152bf8a1284050f48e65eeecab9719bf6a75` | Object structural/reflection/mutation audit complete; I031/#242 closed the four guest-publication gaps with retained ordinary-Protos regressions. |
+| LM008-D | CLOSED | `a775297514808728a5e22d2bc0e7e01f1d74b53c` | Values/Core-collections D1-D4 complete; I032/I034/I035/I036 plus I031 state evidence are closed and every D row is reconciled `COVERED`. |
+| LM008-E | CLOSED | `0076a76ab8a441df973931421e107811e6308c41` | E1-E4 control/Error/modules/Prelude audit complete with 51 required Prelude bindings probed, focused intentional-absence evidence and no unresolved E finding. |
+| LM008-F | CLOSED | `SAME_COMMIT` | Final LM005/LM006 cross-check, matrix/finding accounting and complete closure validation published; closes parent LM008 without new semantics or implementation. |
 
 Coordination:
 - B-E are independent audit fronts after A; they may proceed without serializing
