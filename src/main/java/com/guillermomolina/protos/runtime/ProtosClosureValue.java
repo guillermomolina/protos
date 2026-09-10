@@ -138,6 +138,51 @@ public final class ProtosClosureValue extends ProtosObjectValue {
         return new ProtosClosureValue(null, List.of(), ProtosObjectValue.rootObject(), null, null, null, null, Objects.requireNonNull(body, "body"));
     }
 
+    /**
+     * Creates one ordinary native Closure whose implementation also exposes the
+     * private PLAT019 Bytecode+Task suspension capability.
+     *
+     * <p>The ordinary body remains the established evaluator/non-Task entry.
+     * The continuation body is reachable only through the Bytecode composed
+     * invocation path when an Actor-local Task is present. Both entries are
+     * carried by one implementation object, so ordinary extraction, aliasing,
+     * parallel projection and method rebinding preserve exact capability
+     * provenance without selector-specific metadata.
+     */
+    public static ProtosClosureValue suspensionCapableNativeClosure(
+            ProtosNativeClosureBody ordinaryBody,
+            ProtosNativeClosureBody continuationBody) {
+        ProtosNativeClosureBody ordinary =
+                Objects.requireNonNull(
+                        ordinaryBody,
+                        "ordinaryBody");
+        ProtosNativeClosureBody continuation =
+                Objects.requireNonNull(
+                        continuationBody,
+                        "continuationBody");
+        ProtosSuspensionCapableNativeClosureBody implementation =
+                new ProtosSuspensionCapableNativeClosureBody() {
+                    @Override
+                    public Object execute(
+                            ProtosActivation activation,
+                            List<?> supplied) {
+                        return ordinary.execute(
+                                activation,
+                                supplied);
+                    }
+
+                    @Override
+                    public Object executeForBytecodeContinuation(
+                            ProtosActivation activation,
+                            List<?> supplied) {
+                        return continuation.execute(
+                                activation,
+                                supplied);
+                    }
+                };
+        return nativeClosure(implementation);
+    }
+
     public CanonicalClosure definition() {
         return definition;
     }

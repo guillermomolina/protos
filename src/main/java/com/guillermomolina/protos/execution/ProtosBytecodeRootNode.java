@@ -26,6 +26,7 @@ import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
+import com.guillermomolina.protos.runtime.ProtosSuspensionCapableNativeClosureBody;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSlotLookupResult;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
@@ -257,8 +258,22 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         ProtosActivation activation() { return activation; }
         boolean isNative() { return nativeBody != null; }
         Object enterNative() {
-            if (nativeBody == null) throw new IllegalStateException("prepared Closure call is not native");
-            return nativeBody.execute(activation, supplied);
+            if (nativeBody == null) {
+                throw new IllegalStateException(
+                        "prepared Closure call is not native");
+            }
+            if (activation.task().isPresent()
+                    && nativeBody
+                            instanceof ProtosSuspensionCapableNativeClosureBody
+                                    suspensionCapable) {
+                return suspensionCapable
+                        .executeForBytecodeContinuation(
+                                activation,
+                                supplied);
+            }
+            return nativeBody.execute(
+                    activation,
+                    supplied);
         }
         Object finish(Object result) {
             if (ownsReturnHome && returnHome.isActive()) returnHome.complete();
@@ -561,18 +576,21 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     private static PreparedClosureCall finishPreparingComposedCall(
             ProtosClosureValue closure, List<?> supplied, ProtosActivation activation) {
         if (closure.nativeBody().isPresent()) {
-            if (activation.task().isPresent()) {
+            ProtosNativeClosureBody nativeBody =
+                    closure.nativeBody().orElseThrow();
+            if (activation.task().isPresent()
+                    && !(nativeBody
+                            instanceof ProtosSuspensionCapableNativeClosureBody)) {
                 /*
-                 * B3B enables Task identity only for source-backed C-prime
-                 * composition. Until the explicit PLAT019 native capability
-                 * bridge lands, Task-backed native execution stays fail-closed
-                 * rather than entering the replay suspension path.
+                 * PLAT019 capability is explicit. An ordinary Task-backed native
+                 * remains fail-closed so it cannot accidentally enter the legacy
+                 * replay suspension path.
                  */
                 throw new UnsupportedOperationException(
-                        "PERF006-B3 native suspension capability bridge is not migrated yet");
+                        "PERF006-B3 native suspension capability is required for Task-backed Bytecode invocation");
             }
             return PreparedClosureCall.nativeCall(
-                    closure.nativeBody().orElseThrow(),
+                    nativeBody,
                     supplied,
                     activation);
         }
@@ -617,12 +635,30 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     public static final class IsContinuation {
         @Specialization
         public static boolean perform(Object value) {
-            return value instanceof ContinuationResult;
+            /*
+             * A native suspension is the leaf request. Yielding it from this
+             * root materializes the real C-prime ContinuationResult; callers
+             * then continue to see only ordinary nested ContinuationResults.
+             */
+            return value instanceof ContinuationResult
+                    || value instanceof ProtosNativeSuspension;
         }
     }
 
     @Operation
     public static final class ResumeContinuation {
+        @Specialization
+        public static Object nativeSuspension(
+                ProtosNativeSuspension suspension,
+                Object resumeValue) {
+            /*
+             * resumeValue is only C-prime transport through caller roots.
+             * The native descriptor already owns the state needed to finish the
+             * logical operation, so the Java native activation is not re-entered.
+             */
+            return suspension.resume();
+        }
+
         @Specialization(
                 guards = "result.getContinuationRootNode() == cachedRoot",
                 limit = "3")
