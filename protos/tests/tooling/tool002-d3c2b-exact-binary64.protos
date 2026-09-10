@@ -36,7 +36,7 @@ positiveInfinity: fromHex("7ff0000000000000")
 negativeInfinity: fromHex("fff0000000000000")
 
 negativeZeroReference: (0.0 - 1.0) * 0.0
-negativeMinReference: (4.9406564584124654e-324).negated()
+negativeMinReference: -4.9406564584124654e-324
 negativeInfinityReference: (0.0 - 1.0) / 0.0
 
 (positiveZero === 0.0) &&

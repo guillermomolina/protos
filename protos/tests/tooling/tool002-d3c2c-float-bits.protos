@@ -35,13 +35,13 @@ one: Runner.evaluateSimple(
 negativeZero: Runner.evaluateSimple(
     Manifest.parseLine("negative-zero.protos\tfloat-bits\t8000000000000000"),
     "",
-    completedWith(0.0.negated())
+    completedWith(-0.0)
 )
 
 wrongZeroSign: Runner.evaluateSimple(
     Manifest.parseLine("wrong-zero.protos\tfloat-bits\t0000000000000000"),
     "",
-    completedWith(0.0.negated())
+    completedWith(-0.0)
 )
 
 positiveInfinity: Runner.evaluateSimple(
