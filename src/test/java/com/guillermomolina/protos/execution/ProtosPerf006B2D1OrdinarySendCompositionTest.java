@@ -190,18 +190,18 @@ final class ProtosPerf006B2D1OrdinarySendCompositionTest {
     }
 
     @Test
-    void nestedArgumentCompositionRemainsFailClosed() throws Exception {
+    void composedReceiverRemainsFailClosed() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
-                String characters = "receiver.echo(other())";
+                String characters = "factory().echo(null)";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
                                         characters,
-                                        "perf006-b2d1-nested-send-argument.protos")
+                                        "perf006-b2d1-composed-receiver.protos")
                                 .build();
 
                 UnsupportedOperationException failure =
@@ -218,14 +218,14 @@ final class ProtosPerf006B2D1OrdinarySendCompositionTest {
                 assertTrue(
                         failure.getMessage()
                                 .contains(
-                                        "PERF006-B2D1 send argument must be literal or lexical lookup"));
+                                        "PERF006-B2D1 send receiver must be literal or lexical lookup"));
             } finally {
                 context.leave();
             }
         }
 
         System.out.println(
-                "PERF006_B2D1_NESTED_ARGUMENT_COMPOSITION_DEFERRED=PASS");
+                "PERF006_B2D1_COMPOSED_RECEIVER_DEFERRED=PASS");
     }
 
     private static ProtosBytecodeRootNode yieldingMethodRoot(

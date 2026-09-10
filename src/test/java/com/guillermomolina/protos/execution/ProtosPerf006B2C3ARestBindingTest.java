@@ -200,7 +200,7 @@ final class ProtosPerf006B2C3ARestBindingTest {
     }
 
     @Test
-    void requiredPrefixStillRejectsTooFewArgumentsAndNestedDefaultArgumentsRemainDeferred()
+    void requiredPrefixStillRejectsTooFewArgumentsAndComposedDefaultReceiverRemainsDeferred()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -237,7 +237,7 @@ final class ProtosPerf006B2C3ARestBindingTest {
                         ProtosSignalException.class,
                         () -> missingRequired.getCallTarget().call(module));
 
-                String defaultCharacters = "(head, fallback = child(other())) => { fallback }";
+                String defaultCharacters = "(head, fallback = child().pick()) => { fallback }";
                 Source defaultSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -257,14 +257,14 @@ final class ProtosPerf006B2C3ARestBindingTest {
                                                 defaultSource));
                 org.junit.jupiter.api.Assertions.assertTrue(
                         defaultFailure.getMessage()
-                                .contains("default call argument must be literal or lexical lookup"));
+                                .contains("default send receiver must be literal or lexical lookup"));
             } finally {
                 context.leave();
             }
         }
 
         System.out.println("PERF006_B2C3A_REQUIRED_PREFIX_ARITY=PASS");
-        System.out.println("PERF006_B2C3A_NESTED_DEFAULT_ARGUMENT_STILL_DEFERRED=PASS");
+        System.out.println("PERF006_B2C3A_COMPOSED_DEFAULT_RECEIVER_STILL_DEFERRED=PASS");
     }
 
     private static ProtosBytecodeRootNode lowerCall(

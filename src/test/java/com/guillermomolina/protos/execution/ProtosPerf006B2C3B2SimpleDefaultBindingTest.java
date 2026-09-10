@@ -260,7 +260,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
     }
 
     @Test
-    void requiredArityAndComplexDefaultBoundaryRemainFailClosed()
+    void requiredArityAndComposedDefaultReceiverBoundaryRemainFailClosed()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -305,7 +305,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                         () -> requiredPlan.executeActivation(missing));
 
                 String complexCharacters =
-                        "(head, fallback = child(other())) => { fallback }";
+                        "(head, fallback = child().pick()) => { fallback }";
                 Source complexSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -325,14 +325,14 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                 assertTrue(
                         failure.getMessage()
                                 .contains(
-                                        "default call argument must be literal or lexical lookup"));
+                                        "default send receiver must be literal or lexical lookup"));
             } finally {
                 context.leave();
             }
         }
 
         System.out.println("PERF006_B2C3B2_REQUIRED_ARITY_ERROR=PASS");
-        System.out.println("PERF006_B2C3B2_NESTED_DEFAULT_ARGUMENT_STILL_DEFERRED=PASS");
+        System.out.println("PERF006_B2C3B2_COMPOSED_DEFAULT_RECEIVER_STILL_DEFERRED=PASS");
     }
 
     private static ProtosClosureValue semanticClosure(

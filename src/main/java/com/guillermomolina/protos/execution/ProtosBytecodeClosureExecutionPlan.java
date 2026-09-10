@@ -36,10 +36,11 @@ import java.util.Objects;
 /**
  * Internal Bytecode DSL execution plan for the first Closure migration seam.
  *
- * <p>PERF006-B2C3B3 keeps one Bytecode Closure activation root and extends
- * its ordered parameter-binding prologue through ordinary call/send default
- * composition. Supplied arguments still suppress defaults and completed default
- * effects are not replayed across Bytecode suspension.</p>
+ * <p>PERF006-B2D2 keeps one Bytecode Closure activation root and extends
+ * call/send composition recursively through argument expressions in both the
+ * ordinary body and default-parameter paths. Supplied arguments still suppress
+ * defaults, argument evaluation remains left-to-right/exactly-once, and completed
+ * argument/default effects are not replayed across Bytecode suspension.</p>
  */
 final class ProtosBytecodeClosureExecutionPlan {
     private final CanonicalClosure definition;

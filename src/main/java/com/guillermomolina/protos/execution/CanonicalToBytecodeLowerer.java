@@ -41,11 +41,13 @@ import java.util.Objects;
 /**
  * Parallel canonical-to-Bytecode lowering seam for the PERF006-B migration.
  *
- * <p>PERF006-B2D1 keeps the B2C parameter/default activation contract and
- * extends the ordinary Bytecode body subset with message-send composition.
- * Body sends and migrated default sends use the same immediate-method activation
- * preparation and child-continuation composition machinery. Nested call/send
- * expressions inside receiver/argument positions remain deliberately fail-closed.
+ * <p>PERF006-B2D2 keeps the B2C parameter/default activation contract and
+ * composes nested call/send argument expressions through the same Bytecode
+ * continuation machinery used by top-level calls and sends. When composition is
+ * required, receiver and argument values are staged in Bytecode locals strictly
+ * in source evaluation order before the outer invocation is prepared. Composed
+ * call targets and send receivers remain deliberately fail-closed for the later
+ * polymorphic invocation tranche.
  * The ordinary {@link ProtosSourceCompiler} remains
  * on the established AST lowerer
  * until later PERF006-B slices have migrated calls, suspension and control
@@ -229,11 +231,6 @@ final class CanonicalToBytecodeLowerer {
             }
             validateSupportedDefaultExpression(call.receiver());
             for (CanonicalExpression argument : call.arguments()) {
-                if (!(argument instanceof CanonicalLiteral)
-                        && !(argument instanceof CanonicalLookup)) {
-                    throw new UnsupportedOperationException(
-                            "PERF006-B2C3B3 default call argument must be literal or lexical lookup");
-                }
                 validateSupportedDefaultExpression(argument);
             }
             return;
@@ -246,11 +243,6 @@ final class CanonicalToBytecodeLowerer {
             }
             validateSupportedDefaultExpression(send.receiver());
             for (CanonicalExpression argument : send.arguments()) {
-                if (!(argument instanceof CanonicalLiteral)
-                        && !(argument instanceof CanonicalLookup)) {
-                    throw new UnsupportedOperationException(
-                            "PERF006-B2C3B3 default send argument must be literal or lexical lookup");
-                }
                 validateSupportedDefaultExpression(argument);
             }
             return;
@@ -371,6 +363,87 @@ final class CanonicalToBytecodeLowerer {
         builder.endBindClosureParameter();
     }
 
+    private static boolean hasComposedArgument(
+            java.util.List<CanonicalExpression> arguments) {
+        return arguments.stream()
+                .anyMatch(
+                        argument ->
+                                argument instanceof CanonicalCall
+                                        || argument instanceof CanonicalSend);
+    }
+
+    private static void emitBodyExpressionToLocal(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression expression,
+            BytecodeLocal target,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        if (expression instanceof CanonicalCall call) {
+            builder.beginSourceSection(
+                    call.span().startOffset(),
+                    call.span().length());
+            emitComposedCall(
+                    builder,
+                    call,
+                    target,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            builder.endSourceSection();
+            return;
+        }
+        if (expression instanceof CanonicalSend send) {
+            builder.beginSourceSection(
+                    send.span().startOffset(),
+                    send.span().length());
+            emitComposedSend(
+                    builder,
+                    send,
+                    target,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            builder.endSourceSection();
+            return;
+        }
+        builder.beginStoreLocal(target);
+        emitExpression(builder, expression);
+        builder.endStoreLocal();
+    }
+
+    private static void emitDefaultExpressionToLocal(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalExpression expression,
+            BytecodeLocal target,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        if (expression instanceof CanonicalCall call) {
+            emitComposedDefaultCall(
+                    builder,
+                    call,
+                    target,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            return;
+        }
+        if (expression instanceof CanonicalSend send) {
+            emitComposedDefaultSend(
+                    builder,
+                    send,
+                    target,
+                    preparedCall,
+                    childResult,
+                    resumeValue);
+            return;
+        }
+        builder.beginStoreLocal(target);
+        emitExpression(builder, expression);
+        builder.endStoreLocal();
+    }
+
     private static void emitComposedDefaultCall(
             ProtosBytecodeRootNodeGen.Builder builder,
             CanonicalCall call,
@@ -380,18 +453,59 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal resumeValue) {
         requireDefaultScratch(result, preparedCall, childResult, resumeValue);
         CanonicalLookup receiver = (CanonicalLookup) call.receiver();
+        boolean stageArguments = hasComposedArgument(call.arguments());
+        BytecodeLocal receiverValue = null;
+        java.util.List<BytecodeLocal> argumentValues = java.util.List.of();
+
         builder.beginSourceSection(call.span().startOffset(), call.span().length());
         builder.beginTag(StandardTags.CallTag.class);
+
+        if (stageArguments) {
+            receiverValue = builder.createLocal("defaultCallReceiver", null);
+            builder.beginStoreLocal(receiverValue);
+            emitLookup(builder, receiver);
+            builder.endStoreLocal();
+
+            argumentValues = new java.util.ArrayList<>(call.arguments().size());
+            for (CanonicalExpression argument : call.arguments()) {
+                BytecodeLocal argumentValue =
+                        builder.createLocal("defaultCallArgument", null);
+                emitDefaultExpressionToLocal(
+                        builder,
+                        argument,
+                        argumentValue,
+                        preparedCall,
+                        childResult,
+                        resumeValue);
+                argumentValues.add(argumentValue);
+            }
+        }
+
         builder.beginStoreLocal(preparedCall);
         builder.beginPrepareDefaultClosureCallArguments();
-        emitLookup(builder, receiver);
+        if (stageArguments) {
+            builder.emitLoadLocal(receiverValue);
+        } else {
+            emitLookup(builder, receiver);
+        }
         builder.emitLoadArgument(0);
-        for (CanonicalExpression argument : call.arguments()) {
-            emitExpression(builder, argument);
+        if (stageArguments) {
+            for (BytecodeLocal argumentValue : argumentValues) {
+                builder.emitLoadLocal(argumentValue);
+            }
+        } else {
+            for (CanonicalExpression argument : call.arguments()) {
+                emitExpression(builder, argument);
+            }
         }
         builder.endPrepareDefaultClosureCallArguments();
         builder.endStoreLocal();
-        emitComposedPreparedDefaultInvocation(builder, result, preparedCall, childResult, resumeValue);
+        emitComposedPreparedDefaultInvocation(
+                builder,
+                result,
+                preparedCall,
+                childResult,
+                resumeValue);
         builder.endTag(StandardTags.CallTag.class);
         builder.endSourceSection();
     }
@@ -404,19 +518,60 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
         requireDefaultScratch(result, preparedCall, childResult, resumeValue);
+        boolean stageArguments = hasComposedArgument(send.arguments());
+        BytecodeLocal receiverValue = null;
+        java.util.List<BytecodeLocal> argumentValues = java.util.List.of();
+
         builder.beginSourceSection(send.span().startOffset(), send.span().length());
         builder.beginTag(StandardTags.CallTag.class);
+
+        if (stageArguments) {
+            receiverValue = builder.createLocal("defaultSendReceiver", null);
+            builder.beginStoreLocal(receiverValue);
+            emitExpression(builder, send.receiver());
+            builder.endStoreLocal();
+
+            argumentValues = new java.util.ArrayList<>(send.arguments().size());
+            for (CanonicalExpression argument : send.arguments()) {
+                BytecodeLocal argumentValue =
+                        builder.createLocal("defaultSendArgument", null);
+                emitDefaultExpressionToLocal(
+                        builder,
+                        argument,
+                        argumentValue,
+                        preparedCall,
+                        childResult,
+                        resumeValue);
+                argumentValues.add(argumentValue);
+            }
+        }
+
         builder.beginStoreLocal(preparedCall);
         builder.beginPrepareSendArguments();
-        emitExpression(builder, send.receiver());
+        if (stageArguments) {
+            builder.emitLoadLocal(receiverValue);
+        } else {
+            emitExpression(builder, send.receiver());
+        }
         builder.emitLoadConstant(send.message());
         builder.emitLoadArgument(0);
-        for (CanonicalExpression argument : send.arguments()) {
-            emitExpression(builder, argument);
+        if (stageArguments) {
+            for (BytecodeLocal argumentValue : argumentValues) {
+                builder.emitLoadLocal(argumentValue);
+            }
+        } else {
+            for (CanonicalExpression argument : send.arguments()) {
+                emitExpression(builder, argument);
+            }
         }
         builder.endPrepareSendArguments();
         builder.endStoreLocal();
-        emitComposedPreparedDefaultInvocation(builder, result, preparedCall, childResult, resumeValue);
+        emitComposedPreparedDefaultInvocation(
+                builder,
+                result,
+                preparedCall,
+                childResult,
+                resumeValue);
         builder.endTag(StandardTags.CallTag.class);
         builder.endSourceSection();
     }
@@ -502,11 +657,6 @@ final class CanonicalToBytecodeLowerer {
             }
             validateSupportedExpression(call.receiver());
             for (CanonicalExpression argument : call.arguments()) {
-                if (!(argument instanceof CanonicalLiteral)
-                        && !(argument instanceof CanonicalLookup)) {
-                    throw new UnsupportedOperationException(
-                            "PERF006-B2C2 call argument must be literal or lexical lookup");
-                }
                 validateSupportedExpression(argument);
             }
             return;
@@ -519,11 +669,6 @@ final class CanonicalToBytecodeLowerer {
             }
             validateSupportedExpression(send.receiver());
             for (CanonicalExpression argument : send.arguments()) {
-                if (!(argument instanceof CanonicalLiteral)
-                        && !(argument instanceof CanonicalLookup)) {
-                    throw new UnsupportedOperationException(
-                            "PERF006-B2D1 send argument must be literal or lexical lookup");
-                }
                 validateSupportedExpression(argument);
             }
             return;
@@ -586,15 +731,50 @@ final class CanonicalToBytecodeLowerer {
                     "Bytecode send result/scratch locals were not allocated");
         }
 
+        boolean stageArguments = hasComposedArgument(send.arguments());
+        BytecodeLocal receiverValue = null;
+        java.util.List<BytecodeLocal> argumentValues = java.util.List.of();
+
         builder.beginTag(StandardTags.CallTag.class);
+
+        if (stageArguments) {
+            receiverValue = builder.createLocal("sendReceiver", null);
+            builder.beginStoreLocal(receiverValue);
+            emitExpression(builder, send.receiver());
+            builder.endStoreLocal();
+
+            argumentValues = new java.util.ArrayList<>(send.arguments().size());
+            for (CanonicalExpression argument : send.arguments()) {
+                BytecodeLocal argumentValue =
+                        builder.createLocal("sendArgument", null);
+                emitBodyExpressionToLocal(
+                        builder,
+                        argument,
+                        argumentValue,
+                        preparedCall,
+                        childResult,
+                        resumeValue);
+                argumentValues.add(argumentValue);
+            }
+        }
 
         builder.beginStoreLocal(preparedCall);
         builder.beginPrepareSendArguments();
-        emitExpression(builder, send.receiver());
+        if (stageArguments) {
+            builder.emitLoadLocal(receiverValue);
+        } else {
+            emitExpression(builder, send.receiver());
+        }
         builder.emitLoadConstant(send.message());
         builder.emitLoadArgument(0);
-        for (CanonicalExpression argument : send.arguments()) {
-            emitExpression(builder, argument);
+        if (stageArguments) {
+            for (BytecodeLocal argumentValue : argumentValues) {
+                builder.emitLoadLocal(argumentValue);
+            }
+        } else {
+            for (CanonicalExpression argument : send.arguments()) {
+                emitExpression(builder, argument);
+            }
         }
         builder.endPrepareSendArguments();
         builder.endStoreLocal();
@@ -657,7 +837,32 @@ final class CanonicalToBytecodeLowerer {
         CanonicalLookup receiver =
                 (CanonicalLookup) call.receiver();
 
+        boolean stageArguments = hasComposedArgument(call.arguments());
+        BytecodeLocal receiverValue = null;
+        java.util.List<BytecodeLocal> argumentValues = java.util.List.of();
+
         builder.beginTag(StandardTags.CallTag.class);
+
+        if (stageArguments) {
+            receiverValue = builder.createLocal("callReceiver", null);
+            builder.beginStoreLocal(receiverValue);
+            emitLookup(builder, receiver);
+            builder.endStoreLocal();
+
+            argumentValues = new java.util.ArrayList<>(call.arguments().size());
+            for (CanonicalExpression argument : call.arguments()) {
+                BytecodeLocal argumentValue =
+                        builder.createLocal("callArgument", null);
+                emitBodyExpressionToLocal(
+                        builder,
+                        argument,
+                        argumentValue,
+                        preparedCall,
+                        childResult,
+                        resumeValue);
+                argumentValues.add(argumentValue);
+            }
+        }
 
         builder.beginStoreLocal(preparedCall);
         if (call.arguments().isEmpty()) {
@@ -667,10 +872,20 @@ final class CanonicalToBytecodeLowerer {
             builder.endPrepareClosureCall();
         } else {
             builder.beginPrepareClosureCallArguments();
-            emitLookup(builder, receiver);
+            if (stageArguments) {
+                builder.emitLoadLocal(receiverValue);
+            } else {
+                emitLookup(builder, receiver);
+            }
             builder.emitLoadArgument(0);
-            for (CanonicalExpression argument : call.arguments()) {
-                emitExpression(builder, argument);
+            if (stageArguments) {
+                for (BytecodeLocal argumentValue : argumentValues) {
+                    builder.emitLoadLocal(argumentValue);
+                }
+            } else {
+                for (CanonicalExpression argument : call.arguments()) {
+                    emitExpression(builder, argument);
+                }
             }
             builder.endPrepareClosureCallArguments();
         }

@@ -186,7 +186,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
     }
 
     @Test
-    void nestedCallArgumentsRemainFailClosedInBodyAndDefaults()
+    void composedReceiversRemainFailClosedInBodyAndDefaults()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -194,7 +194,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
 
-                String nestedCharacters = "entry(child())";
+                String nestedCharacters = "entry().pick()";
                 Source nestedSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -214,9 +214,9 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                 assertTrue(
                         nested.getMessage()
                                 .contains(
-                                        "argument must be literal or lexical lookup"));
+                                        "PERF006-B2D1 send receiver must be literal or lexical lookup"));
 
-                String defaultCharacters = "(a, b = child(other())) => { b }";
+                String defaultCharacters = "(a, b = child().pick()) => { b }";
                 CanonicalClosure defaultDefinition =
                         closureDefinition(defaultCharacters);
                 Source defaultSource =
@@ -235,7 +235,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                                                 defaultSource));
                 assertTrue(
                         defaultFailure.getMessage()
-                                .contains("default call argument must be literal or lexical lookup"));
+                                .contains("default send receiver must be literal or lexical lookup"));
 
             } finally {
                 context.leave();
@@ -243,9 +243,9 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
         }
 
         System.out.println(
-                "PERF006_B2C2_NESTED_ARGUMENT_COMPOSITION_DEFERRED=PASS");
+                "PERF006_B2C2_COMPOSED_RECEIVER_DEFERRED=PASS");
         System.out.println(
-                "PERF006_B2C2_NESTED_DEFAULT_ARGUMENT_COMPOSITION_DEFERRED=PASS");
+                "PERF006_B2C2_COMPOSED_DEFAULT_RECEIVER_DEFERRED=PASS");
     }
 
     private static void assertGuestArityError(
