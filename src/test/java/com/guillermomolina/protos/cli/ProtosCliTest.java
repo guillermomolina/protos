@@ -33,6 +33,8 @@ final class ProtosCliTest {
         assertTrue(help.o.contains("process.args()"));
         assertTrue(help.o.contains("protos package"));
         assertTrue(help.o.contains("protos test"));
+        assertTrue(help.o.contains("protos debug <file> [args...]"));
+        assertTrue(help.o.contains("PROTOS_DEBUG_READY"));
         assertTrue(help.o.contains("explicit program output"));
 
         assertTrue(run("--version").o.startsWith("Protos "));
@@ -145,7 +147,17 @@ final class ProtosCliTest {
     void syntaxUsageAndMissingFile() throws Exception {
         assertNotEquals(0, run("-e", "(").c);
         assertEquals(2, run("-e").c);
+        assertEquals(2, run("debug").c);
         assertEquals(2, run("--unknown").c);
+
+        Path missingDebug = Files.createTempFile("protos-cli-debug-", ".protos");
+        Files.deleteIfExists(missingDebug);
+        R missingDebugResult = run("debug", missingDebug.toString());
+        assertEquals(1, missingDebugResult.c);
+        assertTrue(missingDebugResult.o.isBlank(), missingDebugResult.o);
+        assertTrue(
+                missingDebugResult.e.startsWith("protos debug: cannot read"),
+                missingDebugResult.e);
 
         Path file = Files.createTempFile("protos-cli-", ".protos");
         Files.deleteIfExists(file);

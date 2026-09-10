@@ -61,6 +61,17 @@ public final class ProtosCli {
                 out.println("Protos " + (v == null ? "development" : v));
                 return 0;
             }
+            if (args[0].equals("debug")) {
+                if (args.length < 2) {
+                    return usage(err, "debug requires a source file");
+                }
+                return debugFile(
+                        args[1],
+                        applicationArguments(args, 2),
+                        in,
+                        out,
+                        err);
+            }
             if (args[0].equals("run")) {
                 if (args.length < 2) {
                     return usage(err, "run requires a root-package logical entry");
@@ -115,6 +126,58 @@ public final class ProtosCli {
             e.printStackTrace(err);
             return 70;
         }
+    }
+
+    private int debugFile(
+            String sourceArgument,
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream out,
+            PrintStream err)
+            throws IOException {
+        Path sourcePath = Path.of(sourceArgument);
+        String sourceText;
+        try {
+            sourceText = Files.readString(sourcePath, StandardCharsets.UTF_8);
+        } catch (IOException failure) {
+            err.println(
+                    "protos debug: cannot read "
+                            + sourceArgument
+                            + ": "
+                            + failure.getMessage());
+            return 1;
+        }
+
+        try (Session session =
+                debugSession(applicationArguments, in, out, err)) {
+            return eval(
+                    sourceFromPath(sourcePath, sourceText),
+                    session,
+                    err);
+        } catch (IOException | RuntimeException failure) {
+            err.println("protos debug: " + failure.getMessage());
+            return 1;
+        }
+    }
+
+    private Session debugSession(
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream out,
+            PrintStream err)
+            throws IOException {
+        Path core = core();
+        Session session =
+                createDebugSession(
+                        core,
+                        new ProtosStandardLibraryModuleResolver(core.getParent()),
+                        applicationArguments,
+                        in,
+                        out,
+                        err);
+        ProtosCliPrintFacility.install(
+                session.activation(), session.process(), renderer);
+        return session;
     }
 
     int runWorkspaceApplication(
@@ -611,25 +674,91 @@ public final class ProtosCli {
             PrintStream out,
             PrintStream err)
             throws IOException {
+        ProtosStandaloneProcessBootstrap.Result bootstrap =
+                bootstrapStandaloneProcess(
+                        core,
+                        moduleResolver,
+                        applicationArguments,
+                        readableBackend(in),
+                        writableBackend(out),
+                        writableBackend(err));
+        return bindStandaloneProcess(
+                bootstrap,
+                ProtosPolyglotRuntimeHost.open(),
+                in,
+                out,
+                err);
+    }
+
+    private Session createDebugSession(
+            Path core,
+            ProtosModuleResolver moduleResolver,
+            List<String> applicationArguments,
+            InputStream in,
+            PrintStream controlOut,
+            PrintStream diagnostics)
+            throws IOException {
+        ProtosStandaloneProcessBootstrap.Result bootstrap =
+                bootstrapStandaloneProcess(
+                        core,
+                        moduleResolver,
+                        applicationArguments,
+                        readableBackend(in),
+                        ProtosPolyglotStandardStreamRouting.stdoutBackend(),
+                        ProtosPolyglotStandardStreamRouting.stderrBackend());
+
+        ProtosPolyglotRuntimeHost runtimeHost =
+                ProtosPolyglotRuntimeHost.openDebug(diagnostics);
+        boolean handedToBinding = false;
+        try {
+            publishDebugReadiness(controlOut, runtimeHost.debugEndpoint());
+            handedToBinding = true;
+            return bindStandaloneProcess(
+                    bootstrap,
+                    runtimeHost,
+                    in,
+                    OutputStream.nullOutputStream(),
+                    OutputStream.nullOutputStream());
+        } finally {
+            if (!handedToBinding) {
+                bootstrap.process().requestTerminationForRuntime();
+                runtimeHost.close();
+            }
+        }
+    }
+
+    private static ProtosStandaloneProcessBootstrap.Result
+            bootstrapStandaloneProcess(
+                    Path core,
+                    ProtosModuleResolver moduleResolver,
+                    List<String> applicationArguments,
+                    ProtosProcessStandardStreamBinding.ReadableBackend stdinBackend,
+                    ProtosProcessStandardStreamBinding.WritableBackend stdoutBackend,
+                    ProtosProcessStandardStreamBinding.WritableBackend stderrBackend)
+                    throws IOException {
         ProtosPrelude prelude =
                 new ProtosCoreBootstrap().bootstrap(core, moduleResolver);
         ProtosEncodingValue utf8 = utf8(prelude);
+        return ProtosStandaloneProcessBootstrap.create(
+                prelude,
+                applicationArguments,
+                HOST_ENVIRONMENT_NAME_DOMAIN,
+                hostEnvironmentEntries(),
+                stdinBackend,
+                stdoutBackend,
+                stderrBackend,
+                utf8,
+                utf8,
+                utf8,
+                null);
+    }
 
-        ProtosStandaloneProcessBootstrap.Result bootstrap =
-                ProtosStandaloneProcessBootstrap.create(
-                        prelude,
-                        applicationArguments,
-                        HOST_ENVIRONMENT_NAME_DOMAIN,
-                        hostEnvironmentEntries(),
-                        readableBackend(in),
-                        writableBackend(out),
-                        writableBackend(err),
-                        utf8,
-                        utf8,
-                        utf8,
-                        null);
-
-        ProtosPolyglotRuntimeHost runtimeHost = ProtosPolyglotRuntimeHost.open();
+    private static Session bindStandaloneProcess(
+            ProtosStandaloneProcessBootstrap.Result bootstrap,
+            ProtosPolyglotRuntimeHost runtimeHost,
+            InputStream in,
+            OutputStream out,
+            OutputStream err) {
         boolean bound = false;
         try {
             ProtosPolyglotProcessContext processContext =
@@ -645,6 +774,29 @@ public final class ProtosCli {
                 bootstrap.process().requestTerminationForRuntime();
                 runtimeHost.close();
             }
+        }
+    }
+
+    private static void publishDebugReadiness(
+            PrintStream out,
+            ProtosPolyglotRuntimeHost.DebugEndpoint endpoint)
+            throws IOException {
+        String record =
+                "PROTOS_DEBUG_READY "
+                        + "{\"version\":1,"
+                        + "\"protocol\":\"dap\","
+                        + "\"transport\":\"tcp\","
+                        + "\"host\":\""
+                        + endpoint.host()
+                        + "\","
+                        + "\"port\":"
+                        + endpoint.port()
+                        + "}";
+        out.println(record);
+        out.flush();
+        if (out.checkError()) {
+            throw new IOException(
+                    "cannot publish debugger readiness on stdout");
         }
     }
 
@@ -878,6 +1030,7 @@ public final class ProtosCli {
                 "Usage:\n"
                         + "  protos <file> [args...]\n"
                         + "  protos -e <source> [args...]\n"
+                        + "  protos debug <file> [args...]\n"
                         + "  protos run <entry> [args...]\n"
                         + "  protos package [args...]\n"
                         + "  protos test [args...]\n"
@@ -889,6 +1042,9 @@ public final class ProtosCli {
                         + "Workspace run executes the explicit root-package logical <entry> "
                         + "from the current directory; neither 'run' nor <entry> is included "
                         + "in process.args().\n"
+                        + "Debug executes one explicit file through the standard DAP debugger; "
+                        + "its one PROTOS_DEBUG_READY JSON record is emitted on stdout before "
+                        + "guest execution and guest output then travels through DAP.\n"
                         + "Application arguments are available through process.args(); "
                         + "the file/source launcher identity is excluded.\n"
                         + "The CLI provisions stdin/stdout/stderr as byte streams with "
