@@ -148,8 +148,14 @@ Protos: Run Current File
 
 The S2 live check passes when the dedicated Task terminal shows the real Protos
 program's stdout/stderr and ordinary task/process completion outcome, with the
-source executed from its parent directory. That live observation remains
-required before LM009-C closes.
+source executed from its parent directory.
+
+LM009-C S2 was completed by the project owner on 2026-09-10 in a real VS Code
+Dev Container with the repaired workspace extension. The installed
+`guillermomolina.protos` 0.1.0 extension recognized `.protos`, exposed
+`Protos: Run Current File` for the `vscode-remote:` resource, and the command
+successfully executed the current source through the real external Protos
+launcher. LM009-C is therefore CLOSED; packaging/Marketplace remains LM009-I.
 
 The current supported end-user distribution is POSIX/JVM, but this editor
 contract is not POSIX-specific: it consumes a directly executable Protos launcher.

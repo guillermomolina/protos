@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C RUN WIRING PUBLISHED / S2 LIVE EVIDENCE PENDING**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C CLOSED (S2 PASS)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -498,7 +498,7 @@ or Marketplace release policy.
 
 ## LM009-C run-wiring tranche
 
-Status: **RUN WIRING PUBLISHED; S2 LIVE VS CODE EVIDENCE PENDING**
+Status: **CLOSED — S2 LIVE VS CODE EVIDENCE PASS**
 
 This tranche implements only the approved LM009-C contract:
 
@@ -565,6 +565,48 @@ This refines the original phrase `file-backed`: in a Remote workspace, a physica
 file is represented to the editor by a `vscode-remote:` URI while the workspace
 extension host is colocated with the actual filesystem and launcher.
 
-S2 remains **PENDING** until the repaired extension is exercised through a real
-VS Code Remote/Dev Container command invocation and the Task terminal shows the
-real Protos stdout/stderr and normal completion.
+The repaired VS Code Remote/Dev Container path was subsequently exercised by
+the project owner and passed S2. The durable live evidence and closure are
+recorded in the section below.
+
+## LM009-C S2 live evidence and closure
+
+Status: **CLOSED**
+
+Live evidence was completed by the project owner on 2026-09-10 after publication
+of the remote workspace-host correction at
+`3fe7ec18e0be84e5c5598eb669fb8a12b77326c1`.
+
+Observed S2 evidence:
+
+- the local test VSIX was installed in the real VS Code Dev Container extension
+  host as `guillermomolina.protos@0.1.0`;
+- ordinary `.protos` source was recognized as Protos;
+- after the `vscode-remote:` correction, `Protos: Run Current File` was exposed
+  for the remote file;
+- invoking that command successfully executed the current Protos source through
+  the real external launcher in the Dev Container using the selected VS Code
+  Task / `ProcessExecution` path; and
+- the same real launcher had independently been exercised in that container
+  against `hello-world.protos` and produced `Hello, Protos!`, establishing that
+  the editor action delegates to the actual Protos runtime rather than an
+  editor-side evaluator.
+
+Together with the repository-side tests and structural validation, this
+satisfies scenario S2 and the LM009-C closure rule: runtime discovery remains the
+single machine-local `protos.runtime.executable` setting with ordinary PATH
+fallback; execution remains shell-free and task-backed; the source parent is the
+working directory; dirty source is saved before execution; Restricted Mode
+blocks code execution; local `file:` and VS Code Remote `vscode-remote:` are the
+only executable filesystem schemes selected by this slice; virtual resources do
+not receive a fabricated launcher path; and no Protos language semantics are
+implemented in the editor.
+
+LM009 remains **IN_PROGRESS**. Public DAP launch/lifecycle and VS Code debugging
+remain LM009-D/E; static language intelligence remains LM009-F/G/H; and public
+VSIX/Marketplace plus clean end-to-end packaging closure remains LM009-I.
+
+This closure changes no Protos specification, runtime implementation, Maven
+implementation version, public DAP contract, static-language-service
+architecture, Marketplace release state, or ordinary Maven/Node dependency
+boundary.
