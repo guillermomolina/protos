@@ -38,10 +38,12 @@ import java.util.Objects;
 /**
  * Parallel canonical-to-Bytecode lowering seam for the PERF006-B migration.
  *
- * <p>PERF006-B2B extends the B2A subset with zero-argument
- * source-level {@link CanonicalCall} whose receiver is a lexical
- * {@link CanonicalLookup}. Calls compose child Bytecode continuations through
- * their caller rather than treating a child continuation as a guest value.
+ * <p>PERF006-B2C2 supports general positional arity for source-level
+ * {@link CanonicalCall} whose receiver is a lexical {@link CanonicalLookup}.
+ * Arguments are evaluated left-to-right after the receiver and are collected by
+ * the Bytecode DSL variadic operand mechanism. Calls compose child Bytecode
+ * continuations through their caller rather than treating a child continuation
+ * as a guest value.
  * The ordinary {@link ProtosSourceCompiler} remains
  * on the established AST lowerer
  * until later PERF006-B slices have migrated calls, suspension and control
@@ -168,20 +170,16 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalCall call) {
-            if (call.arguments().size() > 1) {
-                throw new UnsupportedOperationException(
-                        "PERF006-B2C1 Bytecode Closure dispatch supports at most one argument");
-            }
             if (!(call.receiver() instanceof CanonicalLookup)) {
                 throw new UnsupportedOperationException(
-                        "PERF006-B2B Bytecode Closure dispatch requires a lexical lookup receiver");
+                        "PERF006-B2C2 Bytecode Closure dispatch requires a lexical lookup receiver");
             }
             validateSupportedExpression(call.receiver());
-            if (!call.arguments().isEmpty()) {
-                CanonicalExpression argument = call.arguments().get(0);
-                if (!(argument instanceof CanonicalLiteral) && !(argument instanceof CanonicalLookup)) {
+            for (CanonicalExpression argument : call.arguments()) {
+                if (!(argument instanceof CanonicalLiteral)
+                        && !(argument instanceof CanonicalLookup)) {
                     throw new UnsupportedOperationException(
-                            "PERF006-B2C1 call argument must be literal or lexical lookup");
+                            "PERF006-B2C2 call argument must be literal or lexical lookup");
                 }
                 validateSupportedExpression(argument);
             }
@@ -257,11 +255,13 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadArgument(0);
             builder.endPrepareClosureCall();
         } else {
-            builder.beginPrepareClosureCallOneArgument();
+            builder.beginPrepareClosureCallArguments();
             emitLookup(builder, receiver);
-            emitExpression(builder, call.arguments().get(0));
             builder.emitLoadArgument(0);
-            builder.endPrepareClosureCallOneArgument();
+            for (CanonicalExpression argument : call.arguments()) {
+                emitExpression(builder, argument);
+            }
+            builder.endPrepareClosureCallArguments();
         }
         builder.endStoreLocal();
 

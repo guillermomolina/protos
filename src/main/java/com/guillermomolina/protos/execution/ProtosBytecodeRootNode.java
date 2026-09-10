@@ -28,6 +28,7 @@ import com.oracle.truffle.api.bytecode.ContinuationResult;
 import com.oracle.truffle.api.bytecode.ContinuationRootNode;
 import com.oracle.truffle.api.bytecode.GenerateBytecode;
 import com.oracle.truffle.api.bytecode.Operation;
+import com.oracle.truffle.api.bytecode.Variadic;
 import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.FrameDescriptor;
@@ -124,10 +125,16 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
-    public static final class PrepareClosureCallOneArgument {
+    public static final class PrepareClosureCallArguments {
         @Specialization
-        public static PreparedClosureCall perform(Object receiver, Object argument, ProtosActivation caller) {
-            return prepareClosureCall(receiver, List.of(argument), caller);
+        public static PreparedClosureCall perform(
+                Object receiver,
+                ProtosActivation caller,
+                @Variadic Object[] supplied) {
+            return prepareClosureCall(
+                    receiver,
+                    List.of(supplied),
+                    caller);
         }
     }
 

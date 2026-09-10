@@ -258,14 +258,14 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
     }
 
     @Test
-    void multipleArgumentsRemainFailClosedUntilGeneralArgumentMigration()
+    void nestedCallArgumentRemainsFailClosedUntilArgumentCompositionMigration()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
-                String characters = "entry(1, 2)";
+                String characters = "entry(child())";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -285,13 +285,14 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
                                                 .lowerRoot(canonical));
                 assertTrue(
                         failure.getMessage()
-                                .contains("at most one argument"));
+                                .contains(
+                                        "argument must be literal or lexical lookup"));
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println("PERF006_B2B_MULTI_ARGUMENT_BINDING_NOT_SILENTLY_MIGRATED=PASS");
+        System.out.println("PERF006_B2B_NESTED_ARGUMENT_COMPOSITION_NOT_SILENTLY_MIGRATED=PASS");
     }
 
     private static ProtosBytecodeRootNode yieldingLeafRoot(

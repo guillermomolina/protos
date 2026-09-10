@@ -29,10 +29,10 @@ import java.util.Objects;
 /**
  * Internal Bytecode DSL execution plan for the first Closure migration seam.
  *
- * <p>PERF006-B2A intentionally supports only zero-parameter Closure bodies whose
- * canonical expressions are already supported by {@link CanonicalToBytecodeLowerer}.
- * Parameter/default/rest binding and normal Closure dispatch remain on the AST
- * backend until later PERF006-B2 slices.</p>
+ * <p>PERF006-B2C2 supports general required positional parameter binding for
+ * Closure bodies whose canonical expressions are already supported by
+ * {@link CanonicalToBytecodeLowerer}. Default/rest binding and normal Closure
+ * dispatch remain staged for later PERF006-B slices.</p>
  */
 final class ProtosBytecodeClosureExecutionPlan {
     private final CanonicalClosure definition;
@@ -69,10 +69,6 @@ final class ProtosBytecodeClosureExecutionPlan {
         this.source =
                 Objects.requireNonNull(source, "source");
 
-        if (definition.parameters().size() > 1) {
-            throw new UnsupportedOperationException(
-                    "PERF006-B2C1 Bytecode Closure plan supports at most one parameter");
-        }
         for (CanonicalParameter parameter : definition.parameters()) {
             if (parameter.rest()) {
                 throw new UnsupportedOperationException("PERF006-B2C1 rest parameter binding is deferred");
