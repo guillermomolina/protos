@@ -211,3 +211,95 @@ D3 adds only the previously indirect guest-visible evidence for:
 
 D3 is COMPLETE. `LM008-D` remains `IN_PROGRESS`; D4 is next and owns Array, Map,
 IdentityMap and the final LM008-D reconciliation.
+
+## D4 checkpoint
+
+Checkpoint state: BLOCKED_BY_DEPENDENCIES (`I031`, `I034`, `I035`, `I036`)
+
+Audit state: COMPLETE pending implementation/evidence reconciliation
+
+Validation class: `TEST_IMPACT`
+
+Normative authority: `spec/semantics/VALUES_AND_COLLECTIONS.md`.
+
+Implementation dependencies:
+
+- `I034 — Array semantic-Integer indexing publication` / GitHub #272;
+- `I035 — Map single-hash insertion publication` / GitHub #273;
+- `I036 — Keyed Map iteration snapshot publication` / GitHub #275.
+
+Evidence dependency:
+
+- `I031 — Standard Object reflection/mutation/state publication` / GitHub #242,
+  specifically guest-visible `Object.close()` / `freeze()` needed to exercise
+  closed/frozen collection-state boundaries from ordinary Protos.
+
+D4 audits the fundamental standard Array, Map and IdentityMap value/protocol
+surface. It introduces no collection semantics. The three implementation gaps
+below are mismatches against already-settled contracts, not design questions.
+
+### Evidence matrix
+
+| Surface row | Normative requirement | Retained language-level evidence | Current implementation/mechanism evidence | Classification / owner |
+|---|---|---|---|---|
+| Array factory / topology / identity | `Array(...)` is a variadic shallow factory; every successful invocation creates a fresh open identity-bearing Array whose parent is the invocation receiver; inherited factory behavior composes with prototypes; ordinary default equality/hash remain identity-based. | Existing `collections/array-construction-and-indexing.protos`, `array-factory-fresh-single-and-shallow.protos`, `array-inherited-factory-parent-observable.protos`, copied-factory receiver rejection and `array-ordinary-identity-and-equality.protos`. | `ProtosStandardArrayProtocol.call` constructs `ProtosArrayValue(receiver, supplied)` and `ProtosArrayValue` owns a private copied element sequence while retaining element references. | `COVERED` |
+| Array `at` / `atPut` semantic Integer domain | `at(index)` and `atPut(index,value)` accept any semantic Integer family according to exact mathematical value, reject non-Integer/negative/out-of-range indexes, preserve dense length, and `atPut` returns the exact supplied value. | Existing ordinary-Integer, Float/negative/out-of-range, bracket and exact-RHS cases cover all but fixed-width success. A fixed-width success expectation is deliberately not weakened or placed in the passing manifest while the defect is open. | Current `ProtosStandardArrayProtocol` requires `ProtosIntegerValue` for both selectors and therefore rejects represented `ProtosFixedIntegerValue` before bounds handling. | `TRACKED_IMPLEMENTATION_GAP` — I034/#272 |
+| Array receiver / size / basic `each` | Indexed methods require actual Array state; `size()` is ordinary unbounded Integer; `each` validates polymorphic callability, snapshots the indexed values in ascending order, invokes once per element and returns the receiver. | Existing delegated/copied receiver errors, size arity/domain, and `array-each-*` order/callability/shallow-snapshot cases. | `ProtosStandardArrayProtocol` requires `ProtosArrayValue`; Array snapshot is `List.copyOf(elements)`, which preserves the exact element references even when live indexed positions are later replaced. | `COVERED` |
+| Array open / closed / frozen indexed mutation | Reads remain available in all states; open and closed Arrays may replace existing positions; frozen `atPut` fails before index validation/mutation. | Direct open-state behavior is retained. Closed/frozen guest probes cannot yet be authored faithfully because standard `Object.close()` / `freeze()` remain guest-unpublished under I031. | `ProtosArrayValue`/`ProtosStandardArrayProtocol` already carry the state mechanism and frozen-first mutation check. Java-side mechanism evidence is supplementary only. | `RUNNABLE_UNCOVERED` — evidence blocker I031/#242 |
+| Map / IdentityMap factory, topology and default identity | `Map` and `IdentityMap` independently delegate directly to `Object`; zero-argument factories create fresh open identity-bearing keyed objects, inherited factory behavior preserves kind/receiver parent, and default equality/hash remain object-identity based. | New `collections/keyed-map-prototype-topology.protos`, `map-factory-fresh-open.protos`, `map-factory-wrong-arity-error.protos`, `keyed-map-default-identity-equality.protos`; existing IdentityMap factory cases. | Both standard providers construct their represented keyed value with the invocation receiver as parent; neither installs structural equality/hash. | `COVERED` |
+| Map query hash / equality search contract | Each key search obtains the query key's standard `hash`, accepts any semantic Integer-family result by exact value, filters by recorded hash, then sends `queryKey == storedKey` in insertion order and requires canonical Boolean. There is no identity shortcut. | New `map-fixed-width-hash-result.protos`, `map-query-equality-direction-representative.protos`, `map-invalid-hash-result-error.protos`, `map-invalid-equality-result-error.protos`, and `map-recorded-hash-no-identity-shortcut.protos`, plus existing lookup/missing/equal-key cases. | `ProtosStandardMapProtocol.find/hash` implements fixed-width hash acceptance, recorded-hash filtering, query-to-stored dispatch, canonical-Boolean validation and no identity shortcut. | `COVERED` |
+| Map absent insertion hash count / recorded hash | An absent `atPut` obtains query-key `hash` exactly once for that operation and stores that exact `queryHash` as the new entry's insertion-time recorded hash. | No passing positive probe is added while the current implementation violates the callback-count contract. Existing recorded-hash mutation evidence does not prove single dispatch during insertion. | Current `atPut` calls `find`, which already invokes `hash`, then invokes `hash` again before `append` when no entry matches. User behavior can therefore execute twice and the stored hash can differ from the search hash. | `TRACKED_IMPLEMENTATION_GAP` — I035/#273 |
+| Map replacement / representative / order / remove | Equal-key update replaces only the value, retains representative key and insertion position; remove returns the old value; remove/reinsert moves the new association to the end; insertion-time recorded hash is not recomputed by key mutation. | Existing replacement/remove/reinsert cases plus new `map-query-equality-direction-representative.protos` and `map-recorded-hash-no-identity-shortcut.protos`. | Mutable keyed entries retain key and recorded hash while replacing only `value`; list order is insertion order. | `COVERED` |
+| Map comparison reentrancy | While user `hash`/`==` is active for a Map key comparison, keyed mutation of that same Map fails instead of waiting or mutating through the comparison; unrelated Map effects remain ordinary. | New `map-reentrant-mutation-from-hash-error.protos` directly covers the synchronous guest-visible guard. Explicit-suspension continuity remains part of LM008-F's advanced LM005/LM006 cross-check rather than being duplicated by this fundamental D4 checkpoint. | `ProtosMapValue.comparisonDepth` is entered around both user hash and equality dispatch, and `mutationEntry` rejects same-Map keyed mutation while active. | `COVERED` for fundamental synchronous surface; suspension cross-check deferred to LM008-F |
+| Map / IdentityMap basic `each` callability, order and result | `each(block)` validates receiver then polymorphic callability, calls with exactly `(key,value)` in insertion order and returns the exact receiver on normal completion. | New `map-each-order-return.protos`, `map-each-noninvokable-error.protos`, `map-each-wrong-arity-error.protos`, `identity-map-each-order-return.protos`, `identity-map-each-noninvokable-error.protos`, and `identity-map-each-wrong-arity-error.protos`. | Both providers validate callability before iteration and traverse keyed snapshot order. | `COVERED` for basic invocation/order/result surface |
+| Map / IdentityMap association snapshot stability | The `each` snapshot captures each representative key and exact mapped value reference at snapshot establishment; later insert/remove/replacement/reinsert must not alter or duplicate pending visits; snapshot remains shallow. | A passing mutation-during-iteration regression cannot be retained until the representation defect is repaired. | Both represented keyed values currently return `List.copyOf(entries)`, but Entry values are mutable and `replaceValue` mutates the aliased Entry in place. A pending visit can therefore observe a post-snapshot replacement. | `TRACKED_IMPLEMENTATION_GAP` — I036/#275 |
+| IdentityMap deterministic identity keys | IdentityMap search uses primitive non-overridable `identityHashOf` plus `===`; it sends no user `identityHash`, `hash`, `==` or other key callback and retains exact representative identity. | Existing distinct/equal String/path/numeric-family IdentityMap cases plus new `identity-map-no-key-callbacks.protos`. | `ProtosStandardIdentityMapProtocol.find` uses only `ProtosIdentity.identityHash` and `ProtosIdentity.identical`; identity-hash recomputation is observationally permitted because the primitive hash is stable and non-overridable. | `COVERED` |
+| Map / IdentityMap open / closed / frozen mutation boundaries | Open maps insert/replace/remove; closed maps permit existing-key replacement but reject insertion/removal after required search ordering; frozen mutation fails before key callbacks. | Open-state behavior is retained. Full closed/frozen ordinary-Protos evidence waits on standard `Object.close()` / `freeze()` publication. | Current providers implement the expected state gates; historical Java lifecycle evidence exists for Map but is supplementary under LM008 evidence rules. | `RUNNABLE_UNCOVERED` — evidence blocker I031/#242 |
+
+### Confirmed D4 implementation gaps
+
+D4 confirms exactly three collection-specific implementation/publication
+mismatches on this audit baseline:
+
+1. **I034 / #272 — Array semantic-Integer indexing.** Standard `at` / `atPut`
+   reject fixed-width semantic Integer values even though the normative index
+   domain includes every Integer family.
+2. **I035 / #273 — Map single-hash insertion.** Absent `Map.atPut` dispatches
+   user `hash` twice instead of preserving the one query hash obtained for the
+   operation.
+3. **I036 / #275 — keyed `each` association snapshots.** Map and IdentityMap
+   snapshot lists alias mutable Entry value fields, so later replacement can
+   change a pending callback argument.
+
+None requires a new semantic or platform decision. Each owner is intentionally
+narrow and must publish its own production repair and ordinary-Protos
+regressions before D4 reclassifies the corresponding row.
+
+### D4 evidence dependency on I031
+
+The collection providers already contain state machinery for open/closed/frozen
+behavior, but LM008 does not count Java-side lifecycle setup as positive
+guest-visible evidence. Until I031 publishes standard `Object.close()` and
+`Object.freeze()`, ordinary Protos cannot establish the required closed/frozen
+receiver states directly. D4 therefore records those state rows as
+`RUNNABLE_UNCOVERED` with explicit evidence blocker I031/#242 rather than opening
+duplicate collection implementation owners.
+
+### D4 audit result and resumption
+
+No D4 row requires a new Dxxx or PLATxxx decision.
+
+The unaffected fundamental collection surface is classified and supplemented by
+ordinary-Protos evidence for Map/IdentityMap topology/factory identity, strict
+factory arity, default object identity/equality, fixed-width Map hash results,
+query-to-stored equality direction, representative retention, recorded-hash
+behavior, invalid hash/equality results, synchronous comparison reentrancy,
+basic `each` order/return/callability and IdentityMap's no-user-callback key
+semantics.
+
+D4 remains `BLOCKED_BY_DEPENDENCIES` on I034, I035 and I036 for production
+repair, and on I031 only for closed/frozen guest-evidence publication. After
+those dependencies close, D4 must add/retain the formerly impossible positive
+regressions, reclassify every blocked row to `COVERED`, and perform final
+LM008-D reconciliation. `LM008-D` therefore becomes `BLOCKED_BY_DEPENDENCIES`;
+it is not closed by this audit checkpoint.

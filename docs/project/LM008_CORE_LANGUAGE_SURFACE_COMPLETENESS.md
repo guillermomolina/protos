@@ -131,7 +131,7 @@ not be repaired or tested as though they were one operation.
 | `LM008-A` | CLOSED | Establish normative-owner inventory, audit classifications, evidence rules, decomposition and seed findings from current repository state. Documentation/governance only. |
 | `LM008-B` | CLOSED | Grammar/evaluation/binding/callable surface audit complete through B1-B4: lexical/literal/separator grammar; binding/writes/lowering/evaluation/object composition; Closure/invocation/parameter/default/rest/spread/trailing-Closure surface; receiver binding/extraction, `super`, non-local return and final B reconciliation. No new semantic decision or production implementation gap was found; retained Protos evidence is recorded in `LM008_B_GRAMMAR_EVALUATION_BINDING_CALLABLE_AUDIT.md`. |
 | `LM008-C` | BLOCKED_BY_DEPENDENCIES | Object structural/reflection/mutation audit has confirmed four already-normative guest-publication gaps: `Object.slotNames()`, `removeSlot(name)`, structural `close()` and `freeze()`. They are tracked by I031 / GitHub #242 as separate A-D implementation slices; all other audited C rows are covered by retained Protos evidence. C resumes after I031 closure for positive regression reconciliation. |
-| `LM008-D` | IN_PROGRESS | D1-D3 are complete. D3 finds the fundamental String surface fully guest-visible; retained grapheme/index/concatenation/value-identity evidence is supplemented by explicit String prototype-topology and specialized `hash()` coherence/domain/arity probes. D4 remains for Array/Map/IdentityMap plus final-D reconciliation. |
+| `LM008-D` | BLOCKED_BY_DEPENDENCIES | D1-D3 are complete and the D4 Array/Map/IdentityMap audit is complete pending repair/evidence reconciliation. D4 confirmed three already-normative implementation gaps: I034/#272 Array any-Integer-family indexing, I035/#273 single-dispatch Map insertion hash, and I036/#275 stable Map/IdentityMap association snapshots for `each`. Closed/frozen collection-state guest evidence additionally waits on I031/#242. No D4 semantic decision is open. |
 | `LM008-E` | READY | Audit control/errors/modules/prelude surface: `while`, `ensure`, Error signaling/handling, module contexts/import/cache-visible rules, and required/forbidden Core prelude bindings. |
 | `LM008-F` | BLOCKED_BY_DEPENDENCIES | Final reconciliation: cross-check retained LM005/LM006 advanced-domain evidence, require every matrix row to have an explained state, require all discovered implementation gaps to have owners/regressions, rerun the complete retained surface corpus and close LM008 without inventing semantics. |
 
@@ -161,12 +161,13 @@ regressions; no new Dxxx/PLATxxx decision is required by this checkpoint.
 
 The bounded values/Core-collections audit matrix lives in
 `docs/project/LM008_D_VALUES_CORE_COLLECTIONS_AUDIT.md`.
-LM008-D is `IN_PROGRESS`: D1-D3 are complete. D3 finds no String
-implementation gap: grapheme-aware `size`/`at`, exact concatenation, String
-value identity/equality, receiver-domain behavior and representation separation
-are already retained, with new explicit prototype-topology and specialized
-`hash()` coherence/domain/arity evidence. D4 remains for Array/Map/IdentityMap
-plus final-D reconciliation.
+LM008-D is `BLOCKED_BY_DEPENDENCIES`: D1-D3 are complete and the D4
+Array/Map/IdentityMap audit is complete pending reconciliation. D4 confirmed
+three already-normative implementation gaps owned by I034/#272, I035/#273 and
+I036/#275. Collection closed/frozen guest-visible evidence additionally depends
+on I031/#242 publishing `Object.close()` / `freeze()`. The remaining D4
+collection surface is classified with retained or newly added ordinary-Protos
+evidence; no new Dxxx/PLATxxx decision is required.
 
 ## Interaction with implementation findings
 
