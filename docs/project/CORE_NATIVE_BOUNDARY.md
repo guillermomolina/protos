@@ -1,3 +1,31 @@
+## I032-B — fixed-width exact-rational division
+
+I032-B publishes same-family fixed-width `/` without creating another native
+Closure construction site. `ProtosStandardFixedIntegerProtocol` now routes
+`+`, `-`, `*`, and `/` through its existing family-parameterized primitive
+installation site. Receiver and argument must both be represented values of the
+exact selected fixed-width family; a zero divisor signals the ordinary fresh
+`Error`.
+
+Division returns a semantic `Float`, not the fixed-width family. The provider
+passes the exact mathematical numerator and denominator directly to the existing
+`ProtosBinary64Rounding.divideExactIntegers` helper, preserving the same
+round-to-nearest-ties-to-even binary64 rule used by ordinary Integer division.
+It does not convert either operand to Float first, perform a fixed-width quotient,
+or expose host integer width.
+
+The native selector surface of each fixed-width prototype expands by `/`, while
+the audited construction-site/provider cardinality remains **136 sites /
+36 providers** because no additional native Closure construction site
+is introduced. This publication also reconciles the stale aggregate inventory
+line left after I032-A to the executable guard's already-published count.
+
+The nine I032-A conformance sources receive the exact repository-required APL
+Part 5 License Notice that was missing from their initial publication. This is a
+source-compliance correction only; their executable bodies and A's numeric
+semantics remain unchanged. Fixed-width `div`, `mod`, and `%` remain outside this
+slice for I032-C.
+
 ## I032-A — fixed-width checked arithmetic and source-backed negation
 
 I032-A publishes the first bounded repair for the already-normative fixed-width
@@ -246,7 +274,7 @@ the standard native boundary.
 | `ProtosStandardNumberEqualityProtocol.java` | 1 | representation bridge | Exact cross-family Number equality needs Integer/fixed/binary64 representation knowledge, including NaN and exact-integral Float handling. |
 | `ProtosStandardNumberOrderingProtocol.java` | 1 | representation bridge | Exact cross-family ordering and unordered NaN behavior require representation-aware comparison. |
 | `ProtosStandardIntegerProtocol.java` | 3 | representation bridge | `+`, `-`, `*`, `/`, `div`, and `mod` are exact numeric representation primitives; derived `negated` and `%` are already source-backed. |
-| `ProtosStandardFixedIntegerProtocol.java` | 1 | representation bridge | Checked same-family fixed-width `+`, `-`, and `*` require exact represented family membership, compute in exact mathematical-integer space, fail before materialization when the result is outside the normative family range, and return the same semantic fixed-width family. Derived `negated` remains source-backed on each fixed prototype. |
+| `ProtosStandardFixedIntegerProtocol.java` | 1 | representation bridge | Checked same-family fixed-width `+`, `-`, and `*` require exact represented family membership, compute in exact mathematical-integer space, fail before materialization when a fixed-width result is outside the normative family range, and return the same semantic fixed-width family. Same-family `/` reuses exact mathematical operands and the standard exact-rational binary64 rounding helper to return Float without first converting either operand. Derived `negated` remains source-backed on each fixed prototype. |
 | `ProtosStandardFloatProtocol.java` | 1 | representation bridge | Binary64 arithmetic is the primitive represented-value boundary; derived `negated` is already source-backed. |
 | `ProtosStandardNumericConversionProtocol.java` | 1 | representation bridge | Numeric factory conversion performs exact family/range/binary64 conversion over host representations. |
 | `ProtosStandardStringProtocol.java` | 3 | representation bridge | String size/indexing use required Unicode grapheme segmentation and `+` constructs semantic String representation values. |
@@ -277,7 +305,7 @@ the standard native boundary.
 | `ProtosStandardFileProtocol.java` | 10 | resource/capability bridge | File objects are acquired resource capabilities whose exact local surface depends on backend-provided authority and whose operations own cursor/append/sync/close/commitment state. |
 | `ProtosStandardFilesystemProtocol.java` | 1 | resource/capability bridge | Host-provisioned Filesystem authority exposes standard `open`, `replace`, `remove`, `entries`, and `captureTree` through one shared audited operation-Closure construction helper. Open retains confined/race-free acquisition and File materialization; D041 namespace mutation uses the host-neutral effect/commit cutover; D046 tree observation reuses the host-neutral I024 flow, materializes inert Array descriptors or a fresh structurally read-only Filesystem, and leaves unsupported backends default-fail without adding a Directory or Filesystem-close boundary. |
 
-Total audited Core production construction sites: **135 across 35 providers**.
+Total audited Core production construction sites: **136 across 36 providers**.
 
 CLI/launcher-owned host conveniences are not Core standard behavior and therefore
 do not change that 30-provider / 113-site Core boundary. They are nevertheless

@@ -20,6 +20,7 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
+import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import java.math.BigInteger;
@@ -30,7 +31,7 @@ import java.util.function.BiFunction;
  * Representation bridge for the Core fixed-width exact-integer arithmetic primitives.
  *
  * <p>Each installed closure is family-specific even though one Java construction site is reused
- * across all eight fixed-width prototypes and the three primitive binary selectors. Derived unary
+ * across all eight fixed-width prototypes and the four primitive binary selectors. Derived unary
  * negation remains source-backed on the individual Core prototypes.
  */
 public final class ProtosStandardFixedIntegerProtocol {
@@ -43,19 +44,50 @@ public final class ProtosStandardFixedIntegerProtocol {
         Objects.requireNonNull(family, "family");
 
         requireSourceBackedClosure(prototype, "negated");
-        installBinary(prototype, family, "+", BigInteger::add);
-        installBinary(prototype, family, "-", BigInteger::subtract);
-        installBinary(prototype, family, "*", BigInteger::multiply);
+        installFixedResultBinary(prototype, family, "+", BigInteger::add);
+        installFixedResultBinary(prototype, family, "-", BigInteger::subtract);
+        installFixedResultBinary(prototype, family, "*", BigInteger::multiply);
+        installOperation(
+                prototype,
+                family,
+                "/",
+                (activation, left, right) -> {
+                    if (right.signum() == 0) {
+                        throw error(activation);
+                    }
+                    return new ProtosFloatValue(
+                            ProtosBinary64Rounding.divideExactIntegers(left, right));
+                });
     }
 
-    private static void installBinary(
+    private static void installFixedResultBinary(
             ProtosObjectValue prototype,
             ProtosFixedIntegerValue.Family family,
             String selector,
             BiFunction<BigInteger, BigInteger, BigInteger> operation) {
+        installOperation(
+                prototype,
+                family,
+                selector,
+                (activation, left, right) ->
+                        checkedFixedResult(
+                                activation,
+                                family,
+                                operation.apply(left, right)));
+    }
+
+    private static void installOperation(
+            ProtosObjectValue prototype,
+            ProtosFixedIntegerValue.Family family,
+            String selector,
+            FixedBinaryOperation operation) {
         if (prototype.hasLocalSlot(selector)) {
             throw new IllegalStateException(
-                    "Core " + family.prototypeName() + " already defines a local " + selector + " slot");
+                    "Core "
+                            + family.prototypeName()
+                            + " already defines a local "
+                            + selector
+                            + " slot");
         }
 
         prototype.createLocalSlot(
@@ -70,14 +102,29 @@ public final class ProtosStandardFixedIntegerProtocol {
                                     || argument.family() != family) {
                                 throw error(activation);
                             }
-
-                            BigInteger result =
-                                    operation.apply(receiver.value(), argument.value());
-                            if (!family.contains(result)) {
-                                throw error(activation);
-                            }
-                            return new ProtosFixedIntegerValue(family, result);
+                            return operation.apply(
+                                    activation,
+                                    receiver.value(),
+                                    argument.value());
                         }));
+    }
+
+    private static ProtosFixedIntegerValue checkedFixedResult(
+            ProtosActivation activation,
+            ProtosFixedIntegerValue.Family family,
+            BigInteger result) {
+        if (!family.contains(result)) {
+            throw error(activation);
+        }
+        return new ProtosFixedIntegerValue(family, result);
+    }
+
+    @FunctionalInterface
+    private interface FixedBinaryOperation {
+        Object apply(
+                ProtosActivation activation,
+                BigInteger left,
+                BigInteger right);
     }
 
     private static ProtosFixedIntegerValue requireReceiver(

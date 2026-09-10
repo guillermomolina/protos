@@ -13,4 +13,11 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-UInt8(1).negated()
+(UInt8(3) / UInt8(2) === 1.5) &&
+    (Int8(-3) / Int8(2) === -1.5) &&
+    (UInt16(3) / UInt16(2) === 1.5) &&
+    (Int16(-3) / Int16(2) === -1.5) &&
+    (UInt32(3) / UInt32(2) === 1.5) &&
+    (Int32(-3) / Int32(2) === -1.5) &&
+    (UInt64(3) / UInt64(2) === 1.5) &&
+    (Int64(-3) / Int64(2) === -1.5)

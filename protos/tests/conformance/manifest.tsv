@@ -318,6 +318,16 @@ fixed-width/arithmetic-a-unsigned-positive-negated-error.protos	error	-
 fixed-width/arithmetic-a-mixed-family-error.protos	error	-
 fixed-width/arithmetic-a-delegated-receiver-error.protos	error	-
 fixed-width/arithmetic-a-negated-delegated-receiver-error.protos	error	-
+fixed-width/arithmetic-b-division-all-families.protos	boolean	true
+fixed-width/arithmetic-b-division-tie-even-down.protos	float-bits	3ff0000000000000
+fixed-width/arithmetic-b-division-tie-even-up.protos	float-bits	3ff0000000000002
+fixed-width/arithmetic-b-division-zero-positive-zero.protos	float-bits	0000000000000000
+fixed-width/arithmetic-b-division-zero-error.protos	error	-
+fixed-width/arithmetic-b-division-mixed-family-error.protos	error	-
+fixed-width/arithmetic-b-division-integer-error.protos	error	-
+fixed-width/arithmetic-b-division-float-error.protos	error	-
+fixed-width/arithmetic-b-division-delegated-receiver-error.protos	error	-
+fixed-width/arithmetic-b-division-delegated-argument-error.protos	error	-
 fixed-width/int64-overflow-error.protos	error	-
 fixed-width/int8-float-min.protos	fixed-integer	Int8:-128
 fixed-width/int8-float-overflow-error.protos	error	-

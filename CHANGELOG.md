@@ -1,3 +1,21 @@
+## 0.2.325-SNAPSHOT
+
+- Advance `I032 — Fixed-width numeric arithmetic publication` with bounded slice
+  I032-B. Publish same-family fixed-width `/` for all eight fixed-width Integer
+  families through the already-existing single family-parameterized
+  representation-bridge construction site. Validate exact family membership and
+  zero divisor before applying the same exact-rational round-to-nearest-ties-even
+  binary64 helper used by ordinary Integer division; return Float without
+  fixed-width quotienting or operand conversion. Add ordinary-Protos evidence
+  across all families, exact tie-even cases, positive exact zero, zero-divisor,
+  mixed-family, ordinary-Integer/Float and delegated receiver/argument rejection.
+  Reconcile the stale native-boundary aggregate left after I032-A and add the
+  required APL Part 5 License Notice to A's nine new conformance sources without
+  changing their bodies. `div`, `mod`, and `%` remain for I032-C. Specification
+  and public syntax are unchanged; native selector surface expands but native
+  construction-site/provider cardinality is unchanged. Implementation version
+  becomes `0.2.325-SNAPSHOT`.
+
 ## 0.2.324-SNAPSHOT
 
 - Close `I026-D4 — Float exact binary64 Truffle interop` under ratified PLAT013. Keep the real `ProtosFloatValue` as the interop receiver and project its existing binary64 payload through exact Truffle numeric `fitsIn*/as*` semantics: preserve signed zero in float/double, reject integral projection of `-0.0`, keep NaN/infinities floating-only, reject lossy binary32 conversion, and guard the Java `Long.MAX_VALUE` saturating-cast false-positive. Add bounded value-based host-opaque display plus focused finite/fractional/signed-zero/NaN/infinity/precision/long-boundary/D1-composition evidence. This does not redefine Protos Float family, semantic NaN, signed-zero identity, equality/hash, arithmetic, conversion or coercion behavior. I026-D remains IN_PROGRESS for Array and remaining safe runtime-family facets; Map/IdentityMap hash interop, Closure execution, debugger mutation and scopes remain excluded. No Protos specification change. Implementation version becomes `0.2.324-SNAPSHOT`.
