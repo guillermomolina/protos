@@ -22,8 +22,8 @@ ok: plan.generation == 1
 (plan.packages.size() == 1).ifFalse(() => { ok = false })
 (plan.dependencies.size() == 0).ifFalse(() => { ok = false })
 
-package: plan.packages.at(0)
+package: plan.packages[0]
 (package.location == "").ifFalse(() => { ok = false })
-(package.exports.at("Main") == "app/Main").ifFalse(() => { ok = false })
-(package.exports.at("Alias") == "app/Main").ifFalse(() => { ok = false })
+(package.exports["Main"] == "app/Main").ifFalse(() => { ok = false })
+(package.exports["Alias"] == "app/Main").ifFalse(() => { ok = false })
 ok

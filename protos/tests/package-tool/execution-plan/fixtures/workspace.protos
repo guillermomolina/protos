@@ -20,14 +20,14 @@ ok: plan.generation == 1
 (plan.packages.size() == 2).ifFalse(() => { ok = false })
 (plan.dependencies.size() == 2).ifFalse(() => { ok = false })
 
-rootPackage: plan.packages.at(0)
-memberPackage: plan.packages.at(1)
+rootPackage: plan.packages[0]
+memberPackage: plan.packages[1]
 
 (rootPackage.ref.packageId == "root").ifFalse(() => { ok = false })
 (rootPackage.location == "").ifFalse(() => { ok = false })
 (memberPackage.ref.packageId == "a-pkg").ifFalse(() => { ok = false })
 (memberPackage.location == "libs/a").ifFalse(() => { ok = false })
-(memberPackage.exports.at("Public") == "internal/Thing").ifFalse(() => { ok = false })
+(memberPackage.exports["Public"] == "internal/Thing").ifFalse(() => { ok = false })
 
 rootEdge: null
 memberEdge: null
