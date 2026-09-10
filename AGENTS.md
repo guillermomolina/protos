@@ -1244,10 +1244,19 @@ is the identifier prefix. Examples include `family:I`, `family:LIB`,
 `family:B`, and `family:BUG`.
 
 A formal sub-issue keeps the same family label as its formal identifier. The
-family label classifies durable project ownership only. Do not encode live
-status, priority, roadmap position, assignee, blocking state, or parent/child
-structure in family labels; those belong to the Issue/native hierarchy. Optional
-Project metadata may mirror them but is not required agent state.
+family label classifies durable project ownership only.
+
+<!-- GITHUB001-A2 FAMILY-CLASSIFICATION-SINGLE-SOURCE -->
+The owning Issue's `family:<FAMILY>` label is the **single source of truth** for
+formal Protos family classification. Agents MUST NOT create, populate, reconcile,
+or require a custom GitHub Project `Family` field that duplicates that label. If
+a Project view wants family visibility, it SHOULD display GitHub's standard Issue
+`Labels` field instead of maintaining a second family value.
+
+Do not encode live status, priority, roadmap position, assignee, blocking state,
+or parent/child structure in family labels; those belong to the Issue/native
+hierarchy. Optional Project scheduling metadata may mirror scheduling information,
+but it MUST NOT become a second family-classification authority.
 Ordinary community Issues that do not have a formal Protos work identifier do not
 need a family label.
 
@@ -1270,6 +1279,12 @@ make those numbers coincide.
 Creating, activating, blocking, reviewing, or closing a formal GitHub Issue does
 not require a matching mutation in the `Protos Development` Project. The owning
 Issue is the required live coordination record for formal work.
+
+Family classification is intentionally not mirrored into Project metadata. An
+existing custom Project `Family` field is redundant presentation state, is
+non-authoritative, and SHOULD be retired from the Project layout when convenient.
+Removing or leaving that redundant field is a manual presentation choice and is
+never a prerequisite for repository work; routine agents MUST NOT maintain it.
 
 Agents MUST NOT inspect, probe for, emulate, or attempt GitHub Project mutations
 solely to satisfy repository governance. Project membership and Project

@@ -1,5 +1,7 @@
 ## 0.2.314-SNAPSHOT
 
+- Make the owning GitHub Issue `family:*` label the single source of truth for formal work-family classification. Treat any custom `Family` field in the `Protos Development` Project as redundant, non-authoritative presentation state that routine agents must not populate or synchronize; Project views that need family visibility should display the standard Issue `Labels` field instead. This does not require agents to inspect or mutate GitHub Projects. Governance only: no Protos specification, executable implementation, implementation version, or license terms change.
+
 - Close `I028-E3C — NIO write lane + PLAT009 partial-write arbitration` under
   D047/D052, ByteWritable and ratified PLAT003/PLAT006/PLAT009. Add one
   poller-owned ordered NIO write request, immediate/`OP_WRITE` partial progress,
@@ -12,7 +14,7 @@
 
 ## 0.2.313-SNAPSHOT
 
-- Stop requiring routine agents to reconcile GitHub Project metadata to reconcile GitHub Project metadata during formal
+- Stop requiring routine agents to reconcile GitHub Project metadata during formal
   Issue allocation, activation, blocking, review, publication, or closure. Keep
   GitHub Issues, `family:*` classification, assignee discipline, and Issue work
   logs as the required agent-facing coordination surfaces when their actions are
