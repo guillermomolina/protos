@@ -31,20 +31,12 @@ bytes: reader.read(10).value()
 reader.close().value()
 writer.close().value()
 
-(writeResult === writer).and() {
-    (position == 5).and() {
-        (size == 5).and() {
-            (bytes.size() == 5).and() {
-                (bytes.at(0) == 65).and() {
-                    (bytes.at(1) == 66).and() {
-                        (bytes.at(2) == 0).and() {
-                            (bytes.at(3) == 0).and() {
-                                bytes.at(4) == 90
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+(writeResult === writer) &&
+    (position == 5) &&
+    (size == 5) &&
+    (bytes.size() == 5) &&
+    (bytes.at(0) == 65) &&
+    (bytes.at(1) == 66) &&
+    (bytes.at(2) == 0) &&
+    (bytes.at(3) == 0) &&
+    (bytes.at(4) == 90)

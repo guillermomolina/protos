@@ -30,16 +30,10 @@ bytes: reader.read(10).value()
 reader.close().value()
 file.close().value()
 
-(endPosition == 3).and() {
-    (positionAfterWrite == 4).and() {
-        (bytes.size() == 4).and() {
-            (bytes.at(0) == 65).and() {
-                (bytes.at(1) == 66).and() {
-                    (bytes.at(2) == 67).and() {
-                        bytes.at(3) == 68
-                    }
-                }
-            }
-        }
-    }
-}
+(endPosition == 3) &&
+    (positionAfterWrite == 4) &&
+    (bytes.size() == 4) &&
+    (bytes.at(0) == 65) &&
+    (bytes.at(1) == 66) &&
+    (bytes.at(2) == 67) &&
+    (bytes.at(3) == 68)

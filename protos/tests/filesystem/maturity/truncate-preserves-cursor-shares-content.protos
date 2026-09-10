@@ -31,14 +31,9 @@ remaining: reader.read(10).value()
 reader.close().value()
 file.close().value()
 
-(truncateResult === file).and() {
-    (position == 5).and() {
-        (size == 2).and() {
-            (remaining.size() == 2).and() {
-                (remaining.at(0) == 1).and() {
-                    remaining.at(1) == 2
-                }
-            }
-        }
-    }
-}
+(truncateResult === file) &&
+    (position == 5) &&
+    (size == 2) &&
+    (remaining.size() == 2) &&
+    (remaining.at(0) == 1) &&
+    (remaining.at(1) == 2)

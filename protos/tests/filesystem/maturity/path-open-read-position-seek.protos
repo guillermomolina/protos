@@ -24,20 +24,12 @@ second: file.read(2).value()
 size: file.size().value()
 file.close().value()
 
-(first.size() == 2).and() {
-    (first.at(0) == 10).and() {
-        (first.at(1) == 20).and() {
-            (positionAfterRead == 2).and() {
-                (seekResult == 1).and() {
-                    (second.size() == 2).and() {
-                        (second.at(0) == 20).and() {
-                            (second.at(1) == 30).and() {
-                                size == 4
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
+(first.size() == 2) &&
+    (first.at(0) == 10) &&
+    (first.at(1) == 20) &&
+    (positionAfterRead == 2) &&
+    (seekResult == 1) &&
+    (second.size() == 2) &&
+    (second.at(0) == 20) &&
+    (second.at(1) == 30) &&
+    (size == 4)
