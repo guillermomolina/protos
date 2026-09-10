@@ -1104,7 +1104,7 @@ record distributable Standard Library functionality.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/TOOL001_PACKAGE_TOOL.md` | D/E/F1 and F2D are CLOSED; F2E2 is CLOSED and F2E3 is READY for the active external immutable-package execution continuation. |
+| TOOL001 | Package Tool | IN_PROGRESS | `docs/project/work/TOOL001/TOOL001_PACKAGE_TOOL.md` | D/E/F1 and F2D are CLOSED; F2E2 is CLOSED and F2E3 is READY for the active external immutable-package execution continuation. |
 | TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D/E/F/G CLOSED; H1 concurrent fresh-Process substrate proof is CLOSED; D055 async exact-execution contract is RATIFIED; TOOL002-H2 READY; I-J remain dependency-ordered. |
 
 ### TOOL001 — Package Tool
@@ -1213,7 +1213,7 @@ forward.
 
 
 Detailed migration and continuation rules live in
-`docs/project/TOOL001_PACKAGE_TOOL.md`.
+`docs/project/work/TOOL001/TOOL001_PACKAGE_TOOL.md`.
 
 ### TOOL002 — Test Tool
 

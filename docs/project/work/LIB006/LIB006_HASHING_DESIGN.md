@@ -37,7 +37,7 @@ Materially reviewed for this decision:
 - `docs/design/STANDARD_LIBRARY_IDEAS.md`
 - `docs/design/PROTOS_DESIGN_PHILOSOPHY.md`
 - `docs/project/registries/IMPLEMENTATION_STATUS.md`
-- `docs/project/TOOL001_PACKAGE_TOOL.md`
+- `docs/project/work/TOOL001/TOOL001_PACKAGE_TOOL.md`
 - `docs/design/PACKAGE_LOCKFILE_FORMAT.md`
 - `docs/design/PACKAGE_VERSION_RESOLUTION.md`
 - `spec/semantics/VALUES_AND_COLLECTIONS.md`

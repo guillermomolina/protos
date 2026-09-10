@@ -11,6 +11,11 @@ migration moves them; new unambiguous records use `work/<formal-work-item>/`.
 
 Current role-first DOC002 records:
 
+- [`TOOL001/TOOL001_PACKAGE_TOOL.md`](TOOL001/TOOL001_PACKAGE_TOOL.md)
+  — canonical non-normative TOOL001 Package Tool lifecycle record.
+  - [`TOOL001-F2D workspace execution preflight`](TOOL001/TOOL001_F2D_EXECUTION_PREFLIGHT.md)
+  - [`TOOL001-F2E external immutable-package execution`](TOOL001/TOOL001_F2E_EXTERNAL_MATERIALIZATION.md)
+
 - [`PERF004/PERF004_RUNTIME_PERFORMANCE_CHARACTERIZATION.md`](PERF004/PERF004_RUNTIME_PERFORMANCE_CHARACTERIZATION.md)
   — canonical non-normative PERF004 cross-language runtime-performance characterization record.
 

@@ -68,7 +68,7 @@ class ValidationImpactTest(unittest.TestCase):
     def test_package_with_docs_is_still_local(self):
         self.assert_package([
             "protos/tools/package/ExecutionPlan.protos",
-            "docs/project/TOOL001_PACKAGE_TOOL.md",
+            "docs/project/work/TOOL001/TOOL001_PACKAGE_TOOL.md",
             "CHANGELOG.md",
         ])
 

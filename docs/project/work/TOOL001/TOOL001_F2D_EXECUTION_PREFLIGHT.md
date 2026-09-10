@@ -1129,7 +1129,7 @@ TOOL001             CLOSED: NO
 F2D remains CLOSED as the complete workspace-only execution subset.
 
 The fresh post-closure audit is recorded in
-`docs/project/TOOL001_F2E_EXTERNAL_MATERIALIZATION.md` and allocates
+`docs/project/work/TOOL001/TOOL001_F2E_EXTERNAL_MATERIALIZATION.md` and allocates
 `TOOL001-F2E` for immutable registry/Git execution. No F2D invariant is weakened:
 external nodes remain non-executable until an exact materialized source root is
 store-confined and its recorded ContentIdentity has been verified under the
