@@ -89,7 +89,9 @@ see `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md`.
 | I026-E | CLOSED | `0.2.330-SNAPSHOT` | I026-C + I026-D + PLAT015 | Activation-native debugger scope bridge complete. E1 publishes the read-only NodeLibrary/synthetic-scope implementation; E2 proves that a real GraalVM DebuggerSession consumes it at source breakpoints and that two same-Process-Context carrier threads can be suspended concurrently while observing independent activation-local values. No production change is required by E2. |
 | I026-E1 | CLOSED | `0.2.330-SNAPSHOT` | I026-C + I026-D + PLAT015 | Project the exact ProtosActivation carried in Truffle frame argument 0 through one synthetic read-only scope. Enumerate flattened current-context, captured-lexical and receiver/delegation names nearest-first without guest execution; resolve reads through ProtosActivation.lookup; expose no top scope, named receiver, parent-scope fiction, debugger mutation or global registry. Truffle wrapper nodes remain non-instrumentable by contract; their wrapped guest/delegate retains the NodeLibrary bridge. |
 | I026-E2 | CLOSED | `0.2.330-SNAPSHOT` | I026-E1 + PLAT015 | Real DebuggerSession evidence: source breakpoint -> DebugStackFrame -> activation-native DebugScope; no top scope/receiver/parent fiction; two overlapping guest carriers in one exact ProtosLanguageContext reach the same breakpoint concurrently, both suspension callbacks overlap, and each scope returns its own activation-local marker. Production/runtime code and implementation version remain unchanged. |
-| I026-F | READY | — | I026-C + I026-E | Run a real GraalVM DAP smoke gate over Protos source: source breakpoint, stepping, stack frames, scopes and representative values. Only successful evidence permits a Protos DAP-support claim. |
+| I026-F | IN_PROGRESS | — | I026-C + I026-E | F1 proves the real GraalVM DAP instrument can be supplied only on the test/evidence classpath, start its loopback TCP server and complete a raw DAP initialize/attach/configurationDone/disconnect handshake. F2 retains breakpoint/stack/scope/value/stepping evidence and the final support claim. |
+| I026-F1 | CLOSED | — | I026-E | Test-only GraalVM `org.graalvm.polyglot:dap` POM supplies the real DAP instrument without entering the production/shaded dependency surface. A raw socket client proves Content-Length transport plus initialize -> initialized -> attach -> configurationDone -> disconnect against a loopback ephemeral test-selected port. No public Protos CLI/port/server lifecycle is selected and no DAP support claim is made yet. |
+| I026-F2 | READY | — | I026-F1 + I026-D + I026-E | Run the real protocol behavior gate: verified source breakpoint/hit, threads, stackTrace, activation-native scopes, representative String/Boolean/Integer/Array values, one real next/step transition, continue and clean disconnect. Only successful retained evidence may close I026-F and establish the bounded DAP compatibility claim. |
 | I026-G | READY | — | I026-C + I026-E | Run a GraalVM dynamic-LSP smoke gate and record exactly which useful runtime-derived capabilities work for Protos. Do not treat this as a replacement for static Protos language intelligence. |
 
 After I026-A3, top-level Polyglot parsing and resolver-loaded modules both retain
@@ -371,6 +373,26 @@ The debugger remains an observer of the existing activation authority.
 `I026-E` is therefore CLOSED. `I026-F` (real DAP smoke) and `I026-G`
 (dynamic-LSP smoke) are released as separate evidence gates; E2 itself makes no
 DAP/LSP compatibility claim.
+
+### I026-F1 real DAP transport availability and handshake
+
+`I026-F1` is evidence-only and does not modify Protos production/runtime code.
+It adds the GraalVM `org.graalvm.polyglot:dap` tool as a Maven POM dependency
+with test scope, matching the existing `${graalvm.version}`. Because Maven test
+dependencies are excluded from the shaded production artifact, this does not
+select a production distribution or public DAP-hosting contract.
+
+The retained test enables the real registered `dap` Truffle instrument only on
+one test-created Polyglot Context, binds it to loopback on an ephemeral
+test-selected TCP port, and uses a minimal raw DAP client rather than internal
+GraalVM DAP Java APIs. The client speaks the standard Content-Length framed
+transport and proves `initialize`, the `initialized` event, `attach`,
+`configurationDone`, and `disconnect` succeed end to end.
+
+F1 intentionally does not claim source breakpoint, stack, scope, value or
+stepping compatibility and therefore does not close I026-F. Those behaviors
+remain I026-F2. F1 also introduces no public `--dap` option, user-visible port
+default, server ownership/lifetime policy or IDE packaging decision.
 
 ## Deferred ownership
 
