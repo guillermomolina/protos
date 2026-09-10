@@ -23,7 +23,7 @@ result: (() => {
     text: reader.readText().value()
     reader.close().value()
 
-    parts: Array(text, process.args().at(0))
+    parts: Array(text, process.args()[0])
     joined: Arrays.reduce(parts, (left, right) => left + ":" + right)
 
     writer: ProcessStreams.stdoutWriter(process)

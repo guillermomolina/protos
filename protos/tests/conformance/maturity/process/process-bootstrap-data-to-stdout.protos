@@ -14,7 +14,7 @@
 // the specific language governing rights and limitations under the License.
 ProcessStreams: import("std:io/ProcessStreams")
 writer: ProcessStreams.stdoutWriter(process)
-writer.writeText(process.args().at(0)).value()
+writer.writeText(process.args()[0]).value()
 writer.writeText(":").value()
 writer.writeText(process.environment().get("MODE")).value()
 process.stdoutEncoding().decode(stdoutCapture) == "alpha:beta"

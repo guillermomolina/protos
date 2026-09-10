@@ -17,7 +17,7 @@ Files: import("std:io/Files")
 ProcessStreams: import("std:io/ProcessStreams")
 Arrays: import("std:collections/Array")
 
-parts: Array(process.args().at(0), process.environment().get("MODE"))
+parts: Array(process.args()[0], process.environment().get("MODE"))
 report: Arrays.reduce(parts, (left, right) => left + ":" + right)
 path: Path.relative().child("report.txt")
 

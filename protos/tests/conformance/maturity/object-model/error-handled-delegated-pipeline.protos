@@ -56,7 +56,7 @@ safeRun: (task) => {
 results: Arrays.map(tasks, safeRun)
 total: Arrays.reduce(results, (sum, value) => { sum + value }, 0)
 summary: Map()
-summary.atPut("total", total)
-summary.atPut("fallbacks", fallbacks)
+summary["total"] = total
+summary["fallbacks"] = fallbacks
 
-(summary.at("total") * 10) + summary.at("fallbacks")
+(summary["total"] * 10) + summary["fallbacks"]

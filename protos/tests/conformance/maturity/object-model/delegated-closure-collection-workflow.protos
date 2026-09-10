@@ -48,12 +48,12 @@ triple.factor = 5
 
 outputs: Arrays.map(jobs, (job) => { job() })
 byName: Map()
-byName.atPut("double", outputs.at(0))
-byName.atPut("triple", outputs.at(1))
-byName.atPut("quad", outputs.at(2))
+byName["double"] = outputs[0]
+byName["triple"] = outputs[1]
+byName["quad"] = outputs[2]
 
 total: Arrays.reduce(outputs, (sum, value) => { sum + value }, 0)
 (total * 1000) +
-    (byName.at("double") * 100) +
-    (byName.at("triple") * 10) +
-    byName.at("quad")
+    (byName["double"] * 100) +
+    (byName["triple"] * 10) +
+    byName["quad"]

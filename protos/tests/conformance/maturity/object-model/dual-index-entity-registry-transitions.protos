@@ -46,15 +46,15 @@ c: record {
 logical: Map()
 exact: IdentityMap()
 
-logical.atPut(a.key, a)
-exact.atPut(a, a.makeReader())
-logical.atPut(b.key, b)
-exact.atPut(b, b.makeReader())
-logical.atPut(c.key, c)
-exact.atPut(c, c.makeReader())
+logical[a.key] = a
+exact[a] = a.makeReader()
+logical[b.key] = b
+exact[b] = b.makeReader()
+logical[c.key] = c
+exact[c] = c.makeReader()
 
 flags: 0
-(logical.at("shared") === b).ifTrue(() => { flags = flags + 1 })
+(logical["shared"] === b).ifTrue(() => { flags = flags + 1 })
 (exact.size() == 3).ifTrue(() => { flags = flags + 1 })
 
 operations: Array(
@@ -62,13 +62,13 @@ operations: Array(
     () => { b.step(7) },
     () => { c.step(-4) },
     () => {
-        logical.atPut("shared", a)
+        logical["shared"] = a
         a.step(2)
     },
     () => {
         b.step(3)
         exact.remove(c)
-        exact.atPut(c, c.makeReader())
+        exact[c] = c.makeReader()
         c.step(6)
     }
 )
@@ -77,20 +77,20 @@ operationTotal: Arrays.reduce(operationResults, (sum, value) => { sum + value },
 
 logical.remove("other")
 logical.containsKey("other").ifFalse(() => { flags = flags + 1 })
-logical.atPut("other", c)
+logical["other"] = c
 
-(logical.at("shared") === a).ifTrue(() => { flags = flags + 1 })
+(logical["shared"] === a).ifTrue(() => { flags = flags + 1 })
 (exact.containsKey(c)).ifTrue(() => { flags = flags + 1 })
 
 readExact: (entity) => {
-    reader: exact.at(entity)
+    reader: exact[entity]
     reader()
 }
 readerTotal: readExact(a) + readExact(b) + readExact(c)
 
-logical.atPut("shared", b)
-(logical.at("shared") === b).ifTrue(() => { flags = flags + 1 })
-(logical.at("other") === c).ifTrue(() => { flags = flags + 1 })
+logical["shared"] = b
+(logical["shared"] === b).ifTrue(() => { flags = flags + 1 })
+(logical["other"] === c).ifTrue(() => { flags = flags + 1 })
 (exact.size() == 3).ifTrue(() => { flags = flags + 1 })
 
 transitionTotal: a.transitions + b.transitions + c.transitions
@@ -102,8 +102,8 @@ transitionTotal: a.transitions + b.transitions + c.transitions
 result:
     (operationTotal * 1000000000000000) +
     (readerTotal * 1000000000000) +
-    (logical.at("shared").value * 1000000000) +
-    (logical.at("other").value * 1000000) +
+    (logical["shared"].value * 1000000000) +
+    (logical["other"].value * 1000000) +
     (transitionTotal * 1000) +
     (logical.size() * 100) +
     (exact.size() * 10) +
