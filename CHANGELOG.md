@@ -1,5 +1,7 @@
 ## 0.2.315-SNAPSHOT
 
+- Close `I032 — Developer Makefile workflow` with a small self-documenting repository-root developer interface. Keep the existing `build`, `test`, and `dist` command contracts, add `.PHONY`, `help` as the safe default, overridable Maven/Python/shell flags, and focused `toolchain`, `compile`, `check`, `verify`, `clean`, and `dist-validate` targets. The Makefile delegates policy to the existing Maven/toolchain/distribution machinery rather than duplicating CI or PERF007 routing, and does not mask test compilation with `maven.test.skip`. No Protos semantics, public API, implementation version or license terms change.
+
 - Close `I028-E3D — directional shutdown/close + integrated E3 closure` under the
   existing Closable/ReadShutdown/WriteShutdown contracts and ratified
   PLAT003/PLAT006/PLAT009. Map logical half-closes to poller-owned
