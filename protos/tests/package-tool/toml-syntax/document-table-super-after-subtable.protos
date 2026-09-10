@@ -15,7 +15,7 @@
 
 Document: import("self:TomlDocument")
 root: Document.table("[x.y.z]\nleaf = 1\n[x]\nroot-value = 2\n")
-x: root.value.at("x").value
-ok: x.at("root-value").value == 2
-(x.at("y").value.at("z").value.at("leaf").value == 1).ifFalse(() => { ok = false })
+x: root.value["x"].value
+ok: x["root-value"].value == 2
+(x["y"].value["z"].value["leaf"].value == 1).ifFalse(() => { ok = false })
 ok

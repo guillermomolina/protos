@@ -16,6 +16,6 @@
 Toml: import("self:TomlSyntax")
 parts: Toml.keyPath("\"site.name\" . 'ʞ'")
 ok: parts.size() == 2
-(parts.at(0) == "site.name").ifFalse(() => { ok = false })
-(parts.at(1) == "ʞ").ifFalse(() => { ok = false })
+(parts[0] == "site.name").ifFalse(() => { ok = false })
+(parts[1] == "ʞ").ifFalse(() => { ok = false })
 ok

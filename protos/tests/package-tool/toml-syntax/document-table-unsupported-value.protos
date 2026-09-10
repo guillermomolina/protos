@@ -15,7 +15,7 @@
 
 Document: import("self:TomlDocument")
 root: Document.table("ratio = 1.5\n")
-value: root.value.at("ratio")
+value: root.value["ratio"]
 ok: value.kind == "unsupported"
 (value.value == "1.5").ifFalse(() => { ok = false })
 ok

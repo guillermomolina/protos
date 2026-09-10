@@ -16,9 +16,9 @@
 Document: import("self:TomlDocument")
 dotted: Document.table("[dependencies]\nparser.authority = \"public\"\nparser.package = \"community/parser\"\nparser.version = \"^2.1.0\"\n")
 expanded: Document.table("[dependencies.parser]\nauthority = \"public\"\npackage = \"community/parser\"\nversion = \"^2.1.0\"\n")
-a: dotted.value.at("dependencies").value.at("parser").value
-b: expanded.value.at("dependencies").value.at("parser").value
-ok: a.at("authority").value == b.at("authority").value
-(a.at("package").value == b.at("package").value).ifFalse(() => { ok = false })
-(a.at("version").value == b.at("version").value).ifFalse(() => { ok = false })
+a: dotted.value["dependencies"].value["parser"].value
+b: expanded.value["dependencies"].value["parser"].value
+ok: a["authority"].value == b["authority"].value
+(a["package"].value == b["package"].value).ifFalse(() => { ok = false })
+(a["version"].value == b["version"].value).ifFalse(() => { ok = false })
 ok

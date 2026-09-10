@@ -15,8 +15,8 @@
 
 Document: import("self:TomlDocument")
 root: Document.table("[fruit]\napple.color = \"red\"\napple.taste.sweet = true\n[fruit.apple.texture]\nsmooth = true\n")
-apple: root.value.at("fruit").value.at("apple").value
-ok: apple.at("color").value == "red"
-(apple.at("taste").value.at("sweet").value == true).ifFalse(() => { ok = false })
-(apple.at("texture").value.at("smooth").value == true).ifFalse(() => { ok = false })
+apple: root.value["fruit"].value["apple"].value
+ok: apple["color"].value == "red"
+(apple["taste"].value["sweet"].value == true).ifFalse(() => { ok = false })
+(apple["texture"].value["smooth"].value == true).ifFalse(() => { ok = false })
 ok

@@ -15,7 +15,7 @@
 
 Document: import("self:TomlDocument")
 root: Document.table("site.\"a=b\" = \"x=y\"\n")
-value: root.value.at("site").value.at("a=b")
+value: root.value["site"].value["a=b"]
 ok: value.kind == "string"
 (value.value == "x=y").ifFalse(() => { ok = false })
 ok

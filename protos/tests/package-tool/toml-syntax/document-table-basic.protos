@@ -15,12 +15,12 @@
 
 Document: import("self:TomlDocument")
 root: Document.table("manifest-version = 1\n[package]\nid = \"pkg-1\"\nversion = \"1.2.3\"\n")
-version: root.value.at("manifest-version")
-package: root.value.at("package")
+version: root.value["manifest-version"]
+package: root.value["package"]
 ok: root.kind == "table"
 (version.kind == "integer").ifFalse(() => { ok = false })
 (version.value == 1).ifFalse(() => { ok = false })
 (package.kind == "table").ifFalse(() => { ok = false })
-(package.value.at("id").value == "pkg-1").ifFalse(() => { ok = false })
-(package.value.at("version").value == "1.2.3").ifFalse(() => { ok = false })
+(package.value["id"].value == "pkg-1").ifFalse(() => { ok = false })
+(package.value["version"].value == "1.2.3").ifFalse(() => { ok = false })
 ok

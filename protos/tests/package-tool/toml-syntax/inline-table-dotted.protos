@@ -16,9 +16,9 @@
 Toml: import("self:TomlSyntax")
 parsed: Toml.value("{ package = \"community/parser\", source.rev = 'abc', public = true }")
 root: parsed.value
-source: root.at("source").value
+source: root["source"].value
 ok: parsed.kind == "table"
-(root.at("package").value == "community/parser").ifFalse(() => { ok = false })
-(source.at("rev").value == "abc").ifFalse(() => { ok = false })
-(root.at("public").value === true).ifFalse(() => { ok = false })
+(root["package"].value == "community/parser").ifFalse(() => { ok = false })
+(source["rev"].value == "abc").ifFalse(() => { ok = false })
+(root["public"].value === true).ifFalse(() => { ok = false })
 ok

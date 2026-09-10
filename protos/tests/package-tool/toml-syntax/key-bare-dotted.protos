@@ -16,6 +16,6 @@
 Toml: import("self:TomlSyntax")
 parts: Toml.keyPath("dependencies . parser-core")
 ok: parts.size() == 2
-(parts.at(0) == "dependencies").ifFalse(() => { ok = false })
-(parts.at(1) == "parser-core").ifFalse(() => { ok = false })
+(parts[0] == "dependencies").ifFalse(() => { ok = false })
+(parts[1] == "parser-core").ifFalse(() => { ok = false })
 ok

@@ -17,9 +17,9 @@ Schema: import("self:ManifestSchemaV1")
 model: Schema.parseSections("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\nlocator = \"community/pkg\"\n[compatibility]\nlanguage = \">=0.1\"\n[exports]\nWidget = \"Widget\"\nParser = \"parser/Parser\"\n[dependencies.deferred]\nfuture-field = \"owned-by-c5d\"\n[workspace]\nmembers = [\"app\", \"parser\"]\n")
 ok: model.package.locator == "community/pkg"
 (model.compatibility.language == ">=0.1").ifFalse(() => { ok = false })
-(model.exports.at("Widget") == "Widget").ifFalse(() => { ok = false })
-(model.exports.at("Parser") == "parser/Parser").ifFalse(() => { ok = false })
+(model.exports["Widget"] == "Widget").ifFalse(() => { ok = false })
+(model.exports["Parser"] == "parser/Parser").ifFalse(() => { ok = false })
 (model.workspace.members.size() == 2).ifFalse(() => { ok = false })
-(model.workspace.members.at(0) == "app").ifFalse(() => { ok = false })
-(model.workspace.members.at(1) == "parser").ifFalse(() => { ok = false })
+(model.workspace.members[0] == "app").ifFalse(() => { ok = false })
+(model.workspace.members[1] == "parser").ifFalse(() => { ok = false })
 ok

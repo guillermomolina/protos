@@ -16,6 +16,6 @@
 Document: import("self:TomlDocument")
 items: Document.statements("text = \"\"\"\nalpha # data\nbeta\n\"\"\"\n[package]\n")
 ok: items.size() == 2
-(items.at(0) == "text = \"\"\"\nalpha # data\nbeta\n\"\"\"").ifFalse(() => { ok = false })
-(items.at(1) == "[package]").ifFalse(() => { ok = false })
+(items[0] == "text = \"\"\"\nalpha # data\nbeta\n\"\"\"").ifFalse(() => { ok = false })
+(items[1] == "[package]").ifFalse(() => { ok = false })
 ok

@@ -16,6 +16,6 @@
 Document: import("self:TomlDocument")
 items: Document.statements("a = 1\r\n# comment\r\nb = \"c\"\r\n")
 ok: items.size() == 2
-(items.at(0) == "a = 1").ifFalse(() => { ok = false })
-(items.at(1) == "b = \"c\"").ifFalse(() => { ok = false })
+(items[0] == "a = 1").ifFalse(() => { ok = false })
+(items[1] == "b = \"c\"").ifFalse(() => { ok = false })
 ok

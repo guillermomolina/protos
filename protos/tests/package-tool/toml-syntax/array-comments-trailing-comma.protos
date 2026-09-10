@@ -18,6 +18,6 @@ parsed: Toml.value("[\n  \"a\", # first\n  'b',\n]")
 values: parsed.value
 ok: parsed.kind == "array"
 (values.size() == 2).ifFalse(() => { ok = false })
-(values.at(0).value == "a").ifFalse(() => { ok = false })
-(values.at(1).value == "b").ifFalse(() => { ok = false })
+(values[0].value == "a").ifFalse(() => { ok = false })
+(values[1].value == "b").ifFalse(() => { ok = false })
 ok

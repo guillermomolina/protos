@@ -17,6 +17,6 @@ Toml: import("self:TomlSyntax")
 parsed: Toml.value("[[1, 2], [3]]")
 ok: parsed.kind == "array"
 (parsed.value.size() == 2).ifFalse(() => { ok = false })
-(parsed.value.at(0).value.at(1).value == 2).ifFalse(() => { ok = false })
-(parsed.value.at(1).value.at(0).value == 3).ifFalse(() => { ok = false })
+(parsed.value[0].value[1].value == 2).ifFalse(() => { ok = false })
+(parsed.value[1].value[0].value == 3).ifFalse(() => { ok = false })
 ok

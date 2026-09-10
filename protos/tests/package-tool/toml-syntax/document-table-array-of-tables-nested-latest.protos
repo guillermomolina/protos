@@ -15,19 +15,19 @@
 
 Document: import("self:TomlDocument")
 root: Document.table("[[fruits]]\nname = \"apple\"\n[fruits.physical]\ncolor = \"red\"\n[[fruits.varieties]]\nname = \"red delicious\"\n[[fruits.varieties]]\nname = \"granny smith\"\n[[fruits]]\nname = \"banana\"\n[[fruits.varieties]]\nname = \"plantain\"\n")
-fruits: root.value.at("fruits").value
-apple: fruits.at(0)
-banana: fruits.at(1)
-appleVarieties: apple.value.at("varieties").value
-bananaVarieties: banana.value.at("varieties").value
+fruits: root.value["fruits"].value
+apple: fruits[0]
+banana: fruits[1]
+appleVarieties: apple.value["varieties"].value
+bananaVarieties: banana.value["varieties"].value
 ok: fruits.size() == 2
-(apple.value.at("name").value == "apple").ifFalse(() => { ok = false })
-(apple.value.at("physical").value.at("color").value == "red").ifFalse(() => { ok = false })
+(apple.value["name"].value == "apple").ifFalse(() => { ok = false })
+(apple.value["physical"].value["color"].value == "red").ifFalse(() => { ok = false })
 (appleVarieties.size() == 2).ifFalse(() => { ok = false })
-(appleVarieties.at(0).value.at("name").value == "red delicious").ifFalse(() => { ok = false })
-(appleVarieties.at(1).value.at("name").value == "granny smith").ifFalse(() => { ok = false })
-(banana.value.at("name").value == "banana").ifFalse(() => { ok = false })
+(appleVarieties[0].value["name"].value == "red delicious").ifFalse(() => { ok = false })
+(appleVarieties[1].value["name"].value == "granny smith").ifFalse(() => { ok = false })
+(banana.value["name"].value == "banana").ifFalse(() => { ok = false })
 (banana.value.containsKey("physical")).ifTrue(() => { ok = false })
 (bananaVarieties.size() == 1).ifFalse(() => { ok = false })
-(bananaVarieties.at(0).value.at("name").value == "plantain").ifFalse(() => { ok = false })
+(bananaVarieties[0].value["name"].value == "plantain").ifFalse(() => { ok = false })
 ok

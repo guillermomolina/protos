@@ -16,8 +16,8 @@
 Document: import("self:TomlDocument")
 items: Document.statements("manifest-version = 1\n[package]\nid = \"pkg#1\"# trailing\nversion = \"1.0.0\"\n")
 ok: items.size() == 4
-(items.at(0) == "manifest-version = 1").ifFalse(() => { ok = false })
-(items.at(1) == "[package]").ifFalse(() => { ok = false })
-(items.at(2) == "id = \"pkg#1\"").ifFalse(() => { ok = false })
-(items.at(3) == "version = \"1.0.0\"").ifFalse(() => { ok = false })
+(items[0] == "manifest-version = 1").ifFalse(() => { ok = false })
+(items[1] == "[package]").ifFalse(() => { ok = false })
+(items[2] == "id = \"pkg#1\"").ifFalse(() => { ok = false })
+(items[3] == "version = \"1.0.0\"").ifFalse(() => { ok = false })
 ok

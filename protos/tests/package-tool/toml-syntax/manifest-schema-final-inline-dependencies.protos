@@ -15,10 +15,10 @@
 
 Schema: import("self:ManifestSchemaV1")
 model: Schema.parse("manifest-version = 1\n[package]\nid = \"pkg\"\nversion = \"1.0.0\"\n[dependencies]\nregistry = { authority = \"a\", package = \"p\", version = \"v\" }\ngitdep = { git = \"g\", rev = \"r\" }\npathdep = { path = \"../p\" }\n")
-ok: model.dependencies.at("registry").authority == "a"
-(model.dependencies.at("registry").package == "p").ifFalse(() => { ok = false })
-(model.dependencies.at("registry").version == "v").ifFalse(() => { ok = false })
-(model.dependencies.at("gitdep").git == "g").ifFalse(() => { ok = false })
-(model.dependencies.at("gitdep").rev == "r").ifFalse(() => { ok = false })
-(model.dependencies.at("pathdep").path == "../p").ifFalse(() => { ok = false })
+ok: model.dependencies["registry"].authority == "a"
+(model.dependencies["registry"].package == "p").ifFalse(() => { ok = false })
+(model.dependencies["registry"].version == "v").ifFalse(() => { ok = false })
+(model.dependencies["gitdep"].git == "g").ifFalse(() => { ok = false })
+(model.dependencies["gitdep"].rev == "r").ifFalse(() => { ok = false })
+(model.dependencies["pathdep"].path == "../p").ifFalse(() => { ok = false })
 ok

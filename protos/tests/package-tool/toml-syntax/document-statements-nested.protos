@@ -16,6 +16,6 @@
 Document: import("self:TomlDocument")
 items: Document.statements("values = [1,\n# inside array\n2]\nmeta = { name = \"x#y\", enabled = true }\n")
 ok: items.size() == 2
-(items.at(0) == "values = [1,\n\n2]").ifFalse(() => { ok = false })
-(items.at(1) == "meta = { name = \"x#y\", enabled = true }").ifFalse(() => { ok = false })
+(items[0] == "values = [1,\n\n2]").ifFalse(() => { ok = false })
+(items[1] == "meta = { name = \"x#y\", enabled = true }").ifFalse(() => { ok = false })
 ok

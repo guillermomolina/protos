@@ -15,11 +15,11 @@
 
 Document: import("self:TomlDocument")
 root: Document.table("[[products]]\nname = \"Hammer\"\n[[products]]\n[[products]]\nname = \"Nail\"\n")
-products: root.value.at("products")
+products: root.value["products"]
 ok: products.kind == "array"
 (products.value.size() == 3).ifFalse(() => { ok = false })
-(products.value.at(0).kind == "table").ifFalse(() => { ok = false })
-(products.value.at(0).value.at("name").value == "Hammer").ifFalse(() => { ok = false })
-(products.value.at(1).value.size() == 0).ifFalse(() => { ok = false })
-(products.value.at(2).value.at("name").value == "Nail").ifFalse(() => { ok = false })
+(products.value[0].kind == "table").ifFalse(() => { ok = false })
+(products.value[0].value["name"].value == "Hammer").ifFalse(() => { ok = false })
+(products.value[1].value.size() == 0).ifFalse(() => { ok = false })
+(products.value[2].value["name"].value == "Nail").ifFalse(() => { ok = false })
 ok
