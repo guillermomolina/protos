@@ -1,5 +1,7 @@
 ## 0.2.347-SNAPSHOT
 
+- Begin `LM009-E — VS Code debugging integration` with the explicitly owner-approved Candidate B-prime E1 wiring. Contribute Protos source breakpoints and a launch-only `protos` debugger surface; derive F5 active-file configuration without requiring `launch.json`; retain `program` plus optional string `args` as the persisted launch surface; reuse `protos.runtime.executable`; and have one `DebugAdapterDescriptorFactory` launcher child per session start `protos debug <absolute-file> [args...]` without a shell, consume only D060 version-1 `PROTOS_DEBUG_READY` stdout framing, validate numeric loopback endpoint data, and return `DebugAdapterServer` so VS Code talks directly to the real GraalVM DAP. Add deterministic Node/Python coverage for local/Remote active-file configuration, argument/runtime handling, readiness validation, failure cleanup and concurrent-session isolation. Keep attach, remote listen, readiness files, stop-on-entry, DAP proxying and stronger `terminateDebuggee` behavior out of the baseline. S3 live VS Code evidence remains required before LM009-E closure. No Protos specification/runtime, Maven implementation-version, static language service or Marketplace release change.
+
 - Advance `CLI008-B — value inspection / pretty rendering implementation` with bounded
   `CLI008-B2A` specialized-family inspection coverage under ratified D063. Keep content-backed,
   authority-free sequence values inspectable from already-materialized semantic snapshots:

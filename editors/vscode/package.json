@@ -62,10 +62,54 @@
           "type": "string",
           "default": "protos",
           "scope": "machine",
-          "description": "Protos launcher executable used by Run Current File. Defaults to 'protos' resolved through PATH."
+          "description": "Protos launcher executable used by Run Current File and debugging. Defaults to 'protos' resolved through PATH."
         }
       }
-    }
+    },
+    "breakpoints": [
+      {
+        "language": "protos"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "protos",
+        "label": "Protos",
+        "languages": [
+          "protos"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Absolute Protos source-file path to debug after VS Code variable substitution."
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "default": [],
+                "description": "Application arguments passed after the Protos source file."
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "protos",
+            "request": "launch",
+            "name": "Debug Protos File",
+            "program": "${file}",
+            "args": []
+          }
+        ]
+      }
+    ]
   },
   "main": "./extension.js",
   "capabilities": {

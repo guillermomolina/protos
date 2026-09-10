@@ -713,3 +713,38 @@ owned by LM009-F/G/H and packaging/end-to-end release by LM009-I.
 This closure reconciliation changes no Protos specification, executable runtime,
 editor executable asset, Maven implementation version, public debugger contract,
 license term or Marketplace publication state.
+
+## LM009-E approved VS Code F5 integration — E1
+
+Status: **IN_PROGRESS — Candidate B-prime explicitly approved; E1 editor wiring published/pending S3**
+
+The project owner explicitly approved LM009-E Candidate B-prime on 2026-09-10.
+The selected reference-editor boundary consumes LM009-D rather than creating a
+second debugger architecture:
+
+- debugger identity is `type: "protos"` with `request: "launch"` only;
+- source breakpoints are contributed for Protos;
+- F5 without a persisted `launch.json` derives one in-memory configuration from
+  the active executable Protos document;
+- persisted configurations expose only `program` plus optional string `args`;
+- the existing machine-local `protos.runtime.executable` remains the sole
+  launcher configuration;
+- a `DebugAdapterDescriptorFactory` owns one child launcher per VS Code session,
+  starts `protos debug <absolute-file> [args...]` without a shell, consumes only
+  D060 version-1 readiness, and returns `DebugAdapterServer(host, port)`;
+- the editor never allocates/probes a port, parses raw GraalVM readiness,
+  proxies DAP, or interprets Protos values/scopes;
+- executable editor integration remains workspace-hosted and Restricted-Mode
+  gated under the LM009-C local/Remote filesystem rule; and
+- attach, remote-listen, readiness-file, stop-on-entry and stronger
+  `terminateDebuggee` behavior remain deliberately unselected.
+
+E1 owns the repository-side VS Code wiring and deterministic Node/Python
+validation. It does **not** close LM009-E: S3 still requires live VS Code
+evidence against the real external launcher for breakpoint, stop location,
+threads, stack, activation-local scope/values, step, continue and clean normal
+termination.
+
+No Protos specification, runtime implementation, Maven implementation version,
+DAP protocol implementation, static language-service architecture or
+Marketplace release is changed by the editor-only E1 tranche.

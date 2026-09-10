@@ -43,9 +43,12 @@ From `editors/vscode/`:
 ```sh
 python3 test/validate_grammar.py
 python3 test/validate_extension.py
+node test/run_current_file.test.js
+node test/debug_integration.test.js
 ```
 
-These checks require only Python and do not add Node/npm to ordinary Protos
+The structural validators use Python; executable editor-wiring checks use Node.
+They add no npm dependency and do not add Node/npm to ordinary Protos
 Maven/runtime development.
 
 ## S1 live VS Code check
@@ -161,3 +164,72 @@ The current supported end-user distribution is POSIX/JVM, but this editor
 contract is not POSIX-specific: it consumes a directly executable Protos launcher.
 A future Windows/native launcher can satisfy the same contract without changing
 the editor command semantics.
+
+## Debug Protos in VS Code (LM009-E)
+
+LM009-E consumes the public debugger launcher closed by LM009-D; the extension
+does not construct GraalVM options or implement a second debug adapter.
+
+The ordinary single-file path is F5 with an active executable Protos document.
+A `launch.json` file is not required for that case. The in-memory configuration
+is equivalent to:
+
+```json
+{
+  "type": "protos",
+  "request": "launch",
+  "name": "Debug Protos File",
+  "program": "${file}",
+  "args": []
+}
+```
+
+For repeatable configurations, the same shape may be stored in `launch.json`.
+`program` must resolve to an absolute path in the workspace extension host, and
+`args` contains ordinary application arguments passed after the source file.
+
+The runtime executable is the same machine-scoped
+`protos.runtime.executable` setting used by Run Current File. The extension
+starts it directly, without a shell, as:
+
+```text
+protos debug <absolute-source-file> [application-args...]
+```
+
+The launcher publishes exactly one D060 startup record on stdout:
+
+```text
+PROTOS_DEBUG_READY {"version":1,"protocol":"dap","transport":"tcp","host":"127.0.0.1","port":54321}
+```
+
+The extension validates that record, including a numeric loopback endpoint, and
+returns a VS Code `DebugAdapterServer` descriptor. VS Code then speaks DAP
+directly to the real GraalVM adapter. The extension does not choose a port,
+probe sockets, parse raw GraalVM readiness, relay DAP messages, or introduce a
+readiness file.
+
+Launcher diagnostics are shown through the **Protos Debug** output channel.
+Guest stdout/stderr remains debugger output delivered by DAP. The extension
+retains only one launcher child handle per active debug session and has no
+global port or session registry.
+
+Debug execution remains disabled in Restricted Mode. As with Run Current File,
+the executable extension runs in the VS Code workspace extension host, so local
+and Dev Container/Remote sessions use the launcher and filesystem of that
+workspace host.
+
+The LM009-E baseline intentionally exposes only `request: "launch"`. Attach,
+remote-network listen configuration, stop-on-entry, readiness-file discovery and
+a stronger `terminateDebuggee` promise remain outside this slice.
+
+### S3 live VS Code check
+
+Repository-side Node/Python tests validate the orchestration contract but do not
+close LM009-E. After the E1 wiring is published, S3 must still be exercised in a
+real VS Code extension host against the real external Protos launcher.
+
+Set a source breakpoint in an ordinary `.protos` file and press F5. S3 requires
+live evidence for: breakpoint stop location, threads, stack, activation-local
+scope, representative scalar/indexed values, step, continue, guest output and
+clean normal termination. The project owner live check is the acceptance
+surface; Marketplace publication remains LM009-I.
