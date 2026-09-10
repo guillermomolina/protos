@@ -614,3 +614,35 @@ The parent `LIB005` remains open until A1/A2/B/C/D implementation, conformance
 and publication are complete. GitHub Issue #54 remains the live coordination and
 work-log surface; this document is durable design authority for the selected
 non-normative Standard Library API.
+
+## Implementation progress
+
+### LIB005-A1 — implementation CLOSED
+
+Published implementation version: `0.2.333-SNAPSHOT`
+Closure evidence: `SAME_COMMIT`
+Live work item: GitHub Issue `#274`
+
+A1 publishes `protos/lib/network/IpAddresses.protos` with exactly the approved
+`v4(a, b, c, d)` and `v6(a, b, c, d, e, f, g, h)` component constructors.
+
+The implementation remains ordinary Protos. Exact-domain validation reuses the
+already-established strict `Integer.div(1)` receiver domain as a validation
+probe, matching the prior LIB003 Standard Library pattern and deliberately
+keeping family validation separate from numeric conversion. Fixed-width values
+and delegated numeric lookalikes may resolve the selector through delegation,
+but the Core protocol rejects any receiver that is not an actual ordinary
+unbounded Integer value. Range validation then enforces `0..255` or `0..65535`
+before exact positional arithmetic assembles the Core address bits.
+
+Successful construction still goes exclusively through the existing
+`IpAddress(4, bits)` / `IpAddress(6, bits)` Core factory. A1 adds no parser,
+formatter, Network authority, DNS/resolver, Future, TCP operation, native
+Standard Library bridge or specification behavior.
+
+Focused real-`std:` Protos conformance validates constructor behavior. The
+Java harness separately checks the imported module's exact local-slot surface
+because slot-name enumeration is not currently guest-visible; that harness does
+not implement or compute networking behavior. The current adaptive publication
+gate validates the complete executable delta. `LIB005-A2 — strict IPv4 parse/format` is the
+next dependency-ordered implementation slice.
