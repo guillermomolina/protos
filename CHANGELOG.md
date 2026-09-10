@@ -1,5 +1,19 @@
 ## 0.2.348-SNAPSHOT
 
+- Ratify `GITHUB009 — Native Issue dependency governance and reconciliation`
+  (GitHub #321) after explicit project-owner approval of Candidate C-prime. Make
+  native GitHub `blocked by` / `blocking` relationships the live authority for
+  specific Issue-to-Issue dependencies while keeping Parent/Sub-issue hierarchy,
+  `status:*`, `priority:*`, and durable repository evidence orthogonal. Forbid
+  inferring dependency edges from blocked status, hierarchy, family, `Triggered
+  by`, stale `State at creation` prose, satisfied prerequisites or numbering;
+  forbid mechanical hierarchy propagation; preserve closed-blocker dependency
+  history; and require explicit coordination to choose a dependent Issue's next
+  Status. Keep publication launchers repository-only and defer the reviewed live
+  dependency-graph reconciliation to the post-publication GITHUB009 activation
+  step. No specification, Protos semantics, runtime implementation,
+  implementation version, release artifact or scheduling-priority change.
+
 - Close `PERF001 — Core v0.1 baseline benchmark suite` after PERF001-F retained
   Future/P/Actor reference evidence and PERF001-G final reproducibility/reporting.
   Record F evidence `guillermomolina/protos-benchmarks@f34e37da11f209aa9f9ea84465822c3362fc4da0` from H3 harness

@@ -648,6 +648,56 @@ Do not create a future milestone such as `0.3.0` merely because it is the next
 plausible semantic version. Selecting the next public release target remains an
 explicit project-owner scheduling/release decision.
 
+## Native GitHub Issue dependencies
+<!-- GITHUB009 NATIVE-ISSUE-DEPENDENCY-AUTHORITY -->
+
+GitHub's native Issue `blocked by` / `blocking` relationships are the canonical
+**live dependency graph** for specific Issue-to-Issue blocking relationships.
+They are deliberately orthogonal to native Parent/Sub-issue hierarchy,
+Issue-owned `status:*`, explicit `priority:*`, and durable repository evidence.
+
+When a formal Protos Issue is genuinely prevented from progressing by another
+specific Issue:
+
+- establish the native `blocked by` / `blocking` relationship in the same
+  coordination step when the exact current blocker is already known and the
+  available interface supports dependency mutation;
+- explanatory or historical `Blocked by`, `Prerequisite`, `State at creation`,
+  checklist, title, family, Project, or repository prose is not a substitute for
+  the native relationship once the exact live dependency is known;
+- do not infer a dependency merely from `status:blocked`, Parent/Sub-issue
+  hierarchy, sibling order, `family:*`, `Triggered by`, roadmap position,
+  identifier numbering, or a prerequisite that has already been satisfied;
+- do not propagate dependency edges mechanically through Parent/Sub-issue
+  hierarchy in either direction;
+- prefer direct real blockers rather than copying every transitive upstream
+  prerequisite onto each downstream Issue;
+- when several exact Issues independently block one Issue, retain one native
+  relationship for each real blocker;
+- if native dependency state conflicts with current explicit coordination or
+  durable evidence, stop and reconcile the conflict rather than silently
+  trusting stale prose or rewriting the graph heuristically; and
+- if the current environment cannot mutate native dependencies, report the exact
+  pending coordination step instead of claiming that text alone reconciled it.
+
+`status:blocked` answers whether an open Issue is currently blocked as lifecycle
+state; a native dependency answers which specific Issue participates in the
+blocking graph. An Issue may therefore be `status:blocked` without a native edge
+when the blocker is external or not represented by one exact Issue.
+
+Closing a blocker does not mechanically select the dependent Issue's next
+`status:*` value and does not require deleting the dependency relationship.
+Closed blocker edges may remain as useful history while GitHub distinguishes
+active unresolved blockers from the complete historical dependency set. Change
+the dependent Issue to `Ready`, `In progress`, `Needs decision`, `Paused`,
+`Review`, or another valid state only from current coordination evidence.
+
+Dependency automation may verify explicit/native state and report drift, but it
+MUST NOT infer blocker identity from arbitrary prose, family, hierarchy, title
+similarity, Status, Project grouping, or implementation numbering. It also MUST
+NOT close dependent Issues or choose lifecycle transitions merely because a
+blocker closes.
+
 ## Live GitHub assignee discipline
 <!-- LIVE-GITHUB-ASSIGNEE-DISCIPLINE -->
 
