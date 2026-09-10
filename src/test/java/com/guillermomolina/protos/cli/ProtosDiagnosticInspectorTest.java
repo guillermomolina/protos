@@ -72,7 +72,8 @@ final class ProtosDiagnosticInspectorTest {
                 inspector.render(
                         new ProtosArrayValue(ProtosObjectValue.rootObject(), elements));
 
-        assertTrue(rendered.startsWith("[null, null"), rendered);
+        assertTrue(rendered.startsWith("["), rendered);
+        assertTrue(rendered.contains("\n"), rendered);
         assertTrue(rendered.contains("..."), rendered);
         assertTrue(rendered.length() <= ProtosDiagnosticInspector.MAX_OUTPUT_CHARS, rendered);
     }
@@ -99,6 +100,7 @@ final class ProtosDiagnosticInspectorTest {
 
         assertEquals("<closure>", inspector.render(closure));
     }
+
     @Test
     void byteSequencesExposeOnlyBoundedSemanticContent() {
         ProtosBytesValue bytes = new ProtosBytesValue(ProtosObjectValue.rootObject());
@@ -128,6 +130,60 @@ final class ProtosDiagnosticInspectorTest {
                                 ProtosObjectValue.rootObject(),
                                 false,
                                 List.of(new ProtosPathValue.Normal("component")))));
+    }
+
+    @Test
+    void wideStructuredValueSwitchesToDeterministicMultilineLayout() {
+        String first = "a".repeat(40);
+        String second = "b".repeat(40);
+        String third = "c".repeat(40);
+
+        ProtosObjectValue object = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        object.createLocalSlot("first", new ProtosStringValue(first));
+        object.createLocalSlot("second", new ProtosStringValue(second));
+        object.createLocalSlot("third", new ProtosStringValue(third));
+
+        assertEquals(
+                "Object {\n"
+                        + "  first: \"" + first + "\",\n"
+                        + "  second: \"" + second + "\",\n"
+                        + "  third: \"" + third + "\"\n"
+                        + "}",
+                inspector.render(object));
+    }
+
+    @Test
+    void multilineLayoutIndentsNestedStructuredValues() {
+        String longText = "x".repeat(44);
+        ProtosArrayValue items =
+                new ProtosArrayValue(
+                        ProtosObjectValue.rootObject(),
+                        List.of(
+                                new ProtosStringValue(longText),
+                                new ProtosStringValue(longText)));
+
+        ProtosObjectValue object = new ProtosObjectValue(ProtosObjectValue.rootObject());
+        object.createLocalSlot("items", items);
+        object.createLocalSlot("note", new ProtosStringValue(longText));
+
+        assertEquals(
+                "Object {\n"
+                        + "  items: [\n"
+                        + "    \"" + longText + "\",\n"
+                        + "    \"" + longText + "\"\n"
+                        + "  ],\n"
+                        + "  note: \"" + longText + "\"\n"
+                        + "}",
+                inspector.render(object));
+    }
+
+    @Test
+    void wideScalarStaysSingleLineBecausePrettyLayoutIsStructural() {
+        String value = "x".repeat(ProtosDiagnosticInspector.MAX_COMPACT_CHARS + 8);
+        String rendered = inspector.render(new ProtosStringValue(value));
+
+        assertEquals("\"" + value + "\"", rendered);
+        assertFalse(rendered.contains("\n"), rendered);
     }
 
     private static ProtosFixedIntegerValue uint8(int value) {

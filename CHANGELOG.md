@@ -1,3 +1,21 @@
+## 0.2.348-SNAPSHOT
+
+- Complete `CLI008-B — value inspection / pretty rendering implementation` with bounded
+  `CLI008-B2B` compact/multiline diagnostic layout under ratified D063. Keep structured
+  values on one line while their bounded compact diagnostic representation is at most 96
+  characters; above that evolvable CLI-only threshold, render Array/Map/IdentityMap,
+  ordinary Object, Bytes/ByteRegion and ProcessArguments structures with deterministic
+  two-space indentation and explicit line breaks. Wide scalar/String diagnostics remain
+  single-line values rather than being reformatted as structure. Preserve the existing
+  depth/item/String/output bounds, cycle handling, local-slot-first Object projection,
+  specialized-family opacity, non-evaluating behavior, and `inspect != print != serialize`
+  separation. Add focused evidence that short structures stay compact, wide structures
+  switch deterministically to multiline layout, nested structure is indented, and wide
+  scalars remain single-line. `CLI008-B` and `CLI008-B2` are now CLOSED; `CLI008-C`
+  remains blocked on PERF006-B4/B5 and no guest-stack capture is included. No specification,
+  serialization API, Error-object, `print(...)`, Actor/Process semantics, runtime resource
+  behavior, or public compatibility promise for the exact width/indentation is introduced.
+
 ## 0.2.347-SNAPSHOT
 
 - Add `GITHUB007 — Issue intake and creation governance` (GitHub #319) to keep

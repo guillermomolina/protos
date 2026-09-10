@@ -61,18 +61,44 @@ final class ProtosDiagnosticInspector {
     static final int MAX_ITEMS = 24;
     static final int MAX_STRING_CODE_POINTS = 256;
     static final int MAX_OUTPUT_CHARS = 4096;
+    // Evolvable CLI presentation policy under D063; not a print/serialization contract.
+    static final int MAX_COMPACT_CHARS = 96;
+    private static final int INDENT_SPACES = 2;
+
+    private enum Layout {
+        COMPACT,
+        MULTILINE
+    }
 
     String render(Object value) {
-        RenderState state = new RenderState();
-        appendValue(value, state, new IdentityHashMap<>(), 0);
-        return state.finish();
+        RenderState compact = new RenderState();
+        appendValue(value, compact, new IdentityHashMap<>(), 0, Layout.COMPACT);
+        String oneLine = compact.finish();
+        if (!isStructuredValue(value) || oneLine.length() <= MAX_COMPACT_CHARS) {
+            return oneLine;
+        }
+
+        RenderState pretty = new RenderState();
+        appendValue(value, pretty, new IdentityHashMap<>(), 0, Layout.MULTILINE);
+        return pretty.finish();
+    }
+
+    private static boolean isStructuredValue(Object value) {
+        return value instanceof ProtosBytesValue
+                || value instanceof ProtosByteRegionValue
+                || value instanceof ProtosProcessArgumentsValue
+                || value instanceof ProtosArrayValue
+                || value instanceof ProtosMapValue
+                || value instanceof ProtosIdentityMapValue
+                || (value instanceof ProtosObjectValue && value.getClass() == ProtosObjectValue.class);
     }
 
     private void appendValue(
             Object value,
             RenderState state,
             IdentityHashMap<Object, Boolean> path,
-            int depth) {
+            int depth,
+            Layout layout) {
         if (state.full()) return;
 
         if (value == ProtosNullValue.INSTANCE) {
@@ -181,63 +207,38 @@ final class ProtosDiagnosticInspector {
 
         try {
             if (value instanceof ProtosBytesValue bytes) {
-                appendNamedSequence("Bytes", bytes.indexedSnapshot(), state, path, depth);
+                appendNamedSequence("Bytes", bytes.indexedSnapshot(), state, path, depth, layout);
                 return;
             }
             if (value instanceof ProtosByteRegionValue bytes) {
-                appendNamedSequence("ByteRegion", bytes.indexedSnapshot(), state, path, depth);
+                appendNamedSequence("ByteRegion", bytes.indexedSnapshot(), state, path, depth, layout);
                 return;
             }
             if (value instanceof ProtosProcessArgumentsValue arguments) {
                 appendNamedSequence(
-                        "ProcessArguments", arguments.valuesForRuntime(), state, path, depth);
+                        "ProcessArguments",
+                        arguments.valuesForRuntime(),
+                        state,
+                        path,
+                        depth,
+                        layout);
                 return;
             }
             if (value instanceof ProtosArrayValue array) {
-                appendArray(array.indexedSnapshot(), state, path, depth);
+                appendArray(array.indexedSnapshot(), state, path, depth, layout);
                 return;
             }
             if (value instanceof ProtosMapValue map) {
-                var entries = map.keyedSnapshot();
-                state.append("{");
-                int index = 0;
-                for (var entry : entries) {
-                    if (index >= MAX_ITEMS || state.full()) break;
-                    if (index > 0) state.append(", ");
-                    appendValue(entry.key(), state, path, depth + 1);
-                    state.append(": ");
-                    appendValue(entry.value(), state, path, depth + 1);
-                    index++;
-                }
-                if (entries.size() > MAX_ITEMS && !state.full()) {
-                    if (index > 0) state.append(", ");
-                    state.append("...");
-                }
-                state.append("}");
+                appendMap(map.keyedSnapshot(), state, path, depth, layout);
                 return;
             }
             if (value instanceof ProtosIdentityMapValue map) {
-                var entries = map.keyedSnapshot();
-                state.append("IdentityMap{");
-                int index = 0;
-                for (var entry : entries) {
-                    if (index >= MAX_ITEMS || state.full()) break;
-                    if (index > 0) state.append(", ");
-                    appendValue(entry.key(), state, path, depth + 1);
-                    state.append(": ");
-                    appendValue(entry.value(), state, path, depth + 1);
-                    index++;
-                }
-                if (entries.size() > MAX_ITEMS && !state.full()) {
-                    if (index > 0) state.append(", ");
-                    state.append("...");
-                }
-                state.append("}");
+                appendIdentityMap(map.keyedSnapshot(), state, path, depth, layout);
                 return;
             }
             if (value instanceof ProtosObjectValue object
                     && value.getClass() == ProtosObjectValue.class) {
-                appendObject(object.localSlotsSnapshot(), state, path, depth);
+                appendObject(object.localSlotsSnapshot(), state, path, depth, layout);
                 return;
             }
 
@@ -255,18 +256,9 @@ final class ProtosDiagnosticInspector {
             List<Object> elements,
             RenderState state,
             IdentityHashMap<Object, Boolean> path,
-            int depth) {
-        state.append("[");
-        int limit = Math.min(elements.size(), MAX_ITEMS);
-        for (int i = 0; i < limit && !state.full(); i++) {
-            if (i > 0) state.append(", ");
-            appendValue(elements.get(i), state, path, depth + 1);
-        }
-        if (elements.size() > MAX_ITEMS && !state.full()) {
-            if (limit > 0) state.append(", ");
-            state.append("...");
-        }
-        state.append("]");
+            int depth,
+            Layout layout) {
+        appendSequence(null, elements, state, path, depth, layout);
     }
 
     private void appendNamedSequence(
@@ -274,41 +266,189 @@ final class ProtosDiagnosticInspector {
             List<?> elements,
             RenderState state,
             IdentityHashMap<Object, Boolean> path,
-            int depth) {
-        state.append(family);
+            int depth,
+            Layout layout) {
+        appendSequence(family, elements, state, path, depth, layout);
+    }
+
+    private void appendSequence(
+            String family,
+            List<?> elements,
+            RenderState state,
+            IdentityHashMap<Object, Boolean> path,
+            int depth,
+            Layout layout) {
+        if (family != null) state.append(family);
         state.append("[");
         int limit = Math.min(elements.size(), MAX_ITEMS);
+        boolean truncatedItems = elements.size() > MAX_ITEMS;
+
+        if (layout == Layout.COMPACT || (limit == 0 && !truncatedItems)) {
+            for (int i = 0; i < limit && !state.full(); i++) {
+                if (i > 0) state.append(", ");
+                appendValue(elements.get(i), state, path, depth + 1, layout);
+            }
+            if (truncatedItems && !state.full()) {
+                if (limit > 0) state.append(", ");
+                state.append("...");
+            }
+            state.append("]");
+            return;
+        }
+
+        state.append("\n");
         for (int i = 0; i < limit && !state.full(); i++) {
-            if (i > 0) state.append(", ");
-            appendValue(elements.get(i), state, path, depth + 1);
+            appendIndent(state, depth + 1);
+            appendValue(elements.get(i), state, path, depth + 1, layout);
+            if (i + 1 < limit || truncatedItems) state.append(",");
+            state.append("\n");
         }
-        if (elements.size() > MAX_ITEMS && !state.full()) {
-            if (limit > 0) state.append(", ");
-            state.append("...");
+        if (truncatedItems && !state.full()) {
+            appendIndent(state, depth + 1);
+            state.append("...\n");
         }
+        appendIndent(state, depth);
         state.append("]");
+    }
+
+    private void appendMap(
+            List<ProtosMapValue.Entry> entries,
+            RenderState state,
+            IdentityHashMap<Object, Boolean> path,
+            int depth,
+            Layout layout) {
+        state.append("{");
+        int limit = Math.min(entries.size(), MAX_ITEMS);
+        boolean truncatedItems = entries.size() > MAX_ITEMS;
+
+        if (layout == Layout.COMPACT || (limit == 0 && !truncatedItems)) {
+            for (int i = 0; i < limit && !state.full(); i++) {
+                if (i > 0) state.append(", ");
+                var entry = entries.get(i);
+                appendValue(entry.key(), state, path, depth + 1, layout);
+                state.append(": ");
+                appendValue(entry.value(), state, path, depth + 1, layout);
+            }
+            if (truncatedItems && !state.full()) {
+                if (limit > 0) state.append(", ");
+                state.append("...");
+            }
+            state.append("}");
+            return;
+        }
+
+        state.append("\n");
+        for (int i = 0; i < limit && !state.full(); i++) {
+            var entry = entries.get(i);
+            appendIndent(state, depth + 1);
+            appendValue(entry.key(), state, path, depth + 1, layout);
+            state.append(": ");
+            appendValue(entry.value(), state, path, depth + 1, layout);
+            if (i + 1 < limit || truncatedItems) state.append(",");
+            state.append("\n");
+        }
+        if (truncatedItems && !state.full()) {
+            appendIndent(state, depth + 1);
+            state.append("...\n");
+        }
+        appendIndent(state, depth);
+        state.append("}");
+    }
+
+    private void appendIdentityMap(
+            List<ProtosIdentityMapValue.Entry> entries,
+            RenderState state,
+            IdentityHashMap<Object, Boolean> path,
+            int depth,
+            Layout layout) {
+        state.append("IdentityMap{");
+        int limit = Math.min(entries.size(), MAX_ITEMS);
+        boolean truncatedItems = entries.size() > MAX_ITEMS;
+
+        if (layout == Layout.COMPACT || (limit == 0 && !truncatedItems)) {
+            for (int i = 0; i < limit && !state.full(); i++) {
+                if (i > 0) state.append(", ");
+                var entry = entries.get(i);
+                appendValue(entry.key(), state, path, depth + 1, layout);
+                state.append(": ");
+                appendValue(entry.value(), state, path, depth + 1, layout);
+            }
+            if (truncatedItems && !state.full()) {
+                if (limit > 0) state.append(", ");
+                state.append("...");
+            }
+            state.append("}");
+            return;
+        }
+
+        state.append("\n");
+        for (int i = 0; i < limit && !state.full(); i++) {
+            var entry = entries.get(i);
+            appendIndent(state, depth + 1);
+            appendValue(entry.key(), state, path, depth + 1, layout);
+            state.append(": ");
+            appendValue(entry.value(), state, path, depth + 1, layout);
+            if (i + 1 < limit || truncatedItems) state.append(",");
+            state.append("\n");
+        }
+        if (truncatedItems && !state.full()) {
+            appendIndent(state, depth + 1);
+            state.append("...\n");
+        }
+        appendIndent(state, depth);
+        state.append("}");
     }
 
     private void appendObject(
             Map<String, Object> slots,
             RenderState state,
             IdentityHashMap<Object, Boolean> path,
-            int depth) {
+            int depth,
+            Layout layout) {
         state.append("Object {");
+        int limit = Math.min(slots.size(), MAX_ITEMS);
+        boolean truncatedItems = slots.size() > MAX_ITEMS;
+
+        if (layout == Layout.COMPACT || (limit == 0 && !truncatedItems)) {
+            int index = 0;
+            for (Map.Entry<String, Object> entry : slots.entrySet()) {
+                if (index >= limit || state.full()) break;
+                if (index > 0) state.append(", ");
+                appendSlotName(entry.getKey(), state);
+                state.append(": ");
+                appendValue(entry.getValue(), state, path, depth + 1, layout);
+                index++;
+            }
+            if (truncatedItems && !state.full()) {
+                if (limit > 0) state.append(", ");
+                state.append("...");
+            }
+            state.append("}");
+            return;
+        }
+
+        state.append("\n");
         int index = 0;
         for (Map.Entry<String, Object> entry : slots.entrySet()) {
-            if (index >= MAX_ITEMS || state.full()) break;
-            if (index > 0) state.append(", ");
+            if (index >= limit || state.full()) break;
+            appendIndent(state, depth + 1);
             appendSlotName(entry.getKey(), state);
             state.append(": ");
-            appendValue(entry.getValue(), state, path, depth + 1);
+            appendValue(entry.getValue(), state, path, depth + 1, layout);
+            if (index + 1 < limit || truncatedItems) state.append(",");
+            state.append("\n");
             index++;
         }
-        if (slots.size() > MAX_ITEMS && !state.full()) {
-            if (index > 0) state.append(", ");
-            state.append("...");
+        if (truncatedItems && !state.full()) {
+            appendIndent(state, depth + 1);
+            state.append("...\n");
         }
+        appendIndent(state, depth);
         state.append("}");
+    }
+
+    private static void appendIndent(RenderState state, int depth) {
+        state.append(" ".repeat(Math.max(0, depth * INDENT_SPACES)));
     }
 
     private void appendSlotName(String name, RenderState state) {
