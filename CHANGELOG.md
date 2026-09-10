@@ -1,5 +1,20 @@
 ## 0.2.348-SNAPSHOT
 
+- Close `GITHUB008 — Release milestone governance` (GitHub #320) with a narrow
+  release-only Milestone contract. Reserve GitHub Milestones for concrete
+  project-owner-selected release targets rather than families, implementation
+  phases, backlog buckets, Project Roadmap, Status or Priority; keep native
+  parent/sub-issue links as hierarchy and Git tags/GitHub Releases as source
+  identity/published delivery. Make milestone due dates optional and real,
+  require release-significant membership rather than mechanical hierarchy
+  propagation, avoid duplicate progress accounting through container parents and
+  children, and forbid inferring milestones from family/status/priority/version
+  movement. Keep historical prerelease `v0.2.236` without a retrospective
+  milestone and deliberately do not create `0.3.0` or any future milestone until
+  the project owner selects an actual release target. No specification, Protos
+  semantics, runtime implementation, implementation version, release artifact,
+  release target, compatibility promise or scheduling priority changes.
+
 - Ratify `D064 — Neutral documentation model schema and stable symbol identity` (GitHub #317) after explicit project-owner approval and exhaustive cross-ecosystem review. Select Candidate G-prime: a compact versioned graph-lite JSON documentation model with durable semantic `SymbolIdentity = (module lineage, top-level slot name)` separated from exact `SymbolOccurrenceKey = (ExactArtifactScope, SymbolIdentity)` and from source/release/content provenance. Keep callable parameter/rest shape as mechanical data rather than identity; treat true module/slot renames as new identities; reject duplicate semantic IDs within one exact artifact; permit only artifact-local numeric indexes as optimizations; require deterministic UTF-8/LF output without timestamps or absolute paths; and allow future sharded/serving formats without redefining symbol identity. Preserve PackageId/version/content separation and defer API coverage, stability/deprecation, doctests, article-ID authoring, rename relations, runtime reflection and website presentation. No specification, runtime/implementation, Maven implementation-version, Standard Library semantic, package-format or deployment change.
 
 - Complete `CLI008-B — value inspection / pretty rendering implementation` with bounded

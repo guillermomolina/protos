@@ -595,6 +595,59 @@ live status/assignee when known, and the native parent in the same coordination
 step when the Issue is a formal child. The intake workflow is a convergence
 safety net, not permission to omit those obligations.
 
+## GitHub release milestone governance
+<!-- GITHUB008 RELEASE-MILESTONE-GOVERNANCE -->
+
+GitHub Milestones are reserved for **concrete release targets**. They are not a
+general work-classification or scheduling mechanism.
+
+The repository separates GitHub responsibilities as follows:
+
+- Project `Status` / `Priority` — live scheduling and lifecycle;
+- native Issue parent/sub-issue relationships — formal work hierarchy;
+- `family:<FAMILY>` — formal work-family classification;
+- Milestone — one selected release target / release gate; and
+- Git tag + GitHub Release — source identity and published deliverable for that
+  version.
+
+Agents MUST NOT use Milestones to represent work families, implementation
+phases, generic backlog buckets, `Now` / `Next` / `Later`, priority, status, or a
+second roadmap taxonomy.
+
+Create a milestone only after the project owner has selected a concrete intended
+release target. A milestone title uses the release version without the Git tag
+prefix (for example `0.3.0`); the corresponding tag remains `v0.3.0` and the
+release title may be `Protos 0.3.0`.
+
+A due date is optional. Do not invent a date merely because GitHub supports one;
+use it only when a real project or external commitment exists.
+
+Assign an Issue or Pull Request to a release milestone only when its completion
+is genuinely part of that release gate or explicitly planned release contents.
+Do not propagate milestone membership mechanically through parent/sub-issue
+hierarchy in either direction. Prefer the smallest set of release-significant
+work items that makes milestone progress meaningful, and avoid counting one
+deliverable twice through both a container parent and every child unless those
+items independently gate the release.
+
+Do not infer milestone membership from `family:*`, `status:*`, `priority:*`,
+Project Roadmap, title prefixes, parent relations, implementation-version bumps,
+or proximity to a release. Future release automation may validate a
+project-owner-selected milestone, but it MUST NOT silently choose the target or
+populate release membership.
+
+Closing a milestone means the selected release outcome has been completed and
+published, or has been explicitly abandoned/reconciled. Milestone completion
+percentage alone is not authority to publish or close a release target.
+
+Historical releases do not require retroactive milestones for symmetry. In
+particular, the existing `v0.2.236` prerelease remains valid without a matching
+historical milestone.
+
+Do not create a future milestone such as `0.3.0` merely because it is the next
+plausible semantic version. Selecting the next public release target remains an
+explicit project-owner scheduling/release decision.
+
 ## Live GitHub assignee discipline
 <!-- LIVE-GITHUB-ASSIGNEE-DISCIPLINE -->
 
