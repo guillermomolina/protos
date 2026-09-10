@@ -430,7 +430,7 @@ Array construction keeps the exact supplied objects:
 item: { value: 1 }
 items: Array(item)
 
-items.at(0) === item
+items[0] === item
 ```
 
 The element is not cloned or frozen merely because it was inserted into an
@@ -527,12 +527,12 @@ A typical Map:
 ```protos
 m: Map()
 
-m.atPut("language", "Protos")
-m.atPut("version", 1)
-m.atPut("version", 2)
+m["language"] = "Protos"
+m["version"] = 1
+m["version"] = 2
 
-m.at("language")
-m.at("version")
+m["language"]
+m["version"]
 m.size()
 ```
 
@@ -577,8 +577,8 @@ An IdentityMap treats them as distinct keys:
 ```protos
 m: IdentityMap()
 
-m.atPut(left, "left")
-m.atPut(right, "right")
+m[left] = "left"
+m[right] = "right"
 
 m.size()  // 2
 ```
@@ -647,7 +647,7 @@ An absent `at` signals Error rather than returning `null`.
 That keeps "missing key" distinct from:
 
 ```protos
-m.atPut(key, null)
+m[key] = null
 ```
 
 where the key exists and deliberately stores `null`.
