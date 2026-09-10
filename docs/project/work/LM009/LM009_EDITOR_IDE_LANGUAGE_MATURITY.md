@@ -2,13 +2,15 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS)**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS); LM009-C RUN WIRING PUBLISHED / S2 LIVE EVIDENCE PENDING**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
 Live coordination: GitHub Issue #288
 
 LM009-A coordination: GitHub Issue #289
+
+LM009-C coordination: GitHub Issue #302
 
 Authoring evidence snapshot: `36be9e0a8613c690f2cb23043fe5ce35fab57b04`.
 The publication launcher revalidates the relevant execution-time repository
@@ -445,3 +447,79 @@ remains LM009-I.
 This closure changes no Protos specification, runtime implementation, Maven
 implementation version, public DAP contract, static-language-service
 architecture, Marketplace release state, or Node/npm dependency boundary.
+
+## LM009-C approved Run Current File contract
+
+Decision status: **APPROVED**
+
+Coordination: GitHub Issue #302.
+
+Project-owner approval on 2026-09-10 selected the launcher-command +
+VS Code Task `ProcessExecution` design.
+
+The selected editor contract is:
+
+- the runtime authority consumed by VS Code is one external Protos launcher
+  executable, never repository-internal Java/JAR/classpath structure;
+- machine setting `protos.runtime.executable` defaults to `protos`, using
+  ordinary PATH resolution; an explicit configured value overrides that default;
+- the extension performs no workspace launcher scanning, repository-layout
+  guessing, Java/JAR reconstruction, or duplicate runtime validation;
+- `Protos: Run Current File` accepts only an active file-backed `protos`
+  document, saves it before launch when dirty, and aborts if that save does not
+  complete;
+- execution uses a VS Code Task backed by `ProcessExecution(executable,
+  [absoluteSourcePath], { cwd: sourceParent })`, with no shell command
+  construction;
+- task UI uses a dedicated/revealed terminal so stdout/stderr and ordinary
+  process completion remain editor-visible;
+- LM009-C introduces no application-argument UX;
+- Workspace Trust support is `limited`, the runtime setting is listed in
+  `restrictedConfigurations`, and the command performs an independent
+  `workspace.isTrusted` guard before execution;
+- safe declarative LM009-B highlighting remains available in Restricted Mode;
+- current S2 live proof may use the supported POSIX/JVM distribution while the
+  editor contract remains compatible with a future directly executable
+  Windows/native launcher; and
+- LM009-D's public DAP launch/server/lifecycle contract remains entirely
+  unselected.
+
+Task scoping is implementation machinery rather than execution semantics: use
+the owning `WorkspaceFolder` when one exists, otherwise VS Code's supported
+`TaskScope.Workspace`. The task `cwd` remains the source parent in either case.
+`TaskScope.Global` is deliberately not used because current VS Code documents it
+as unsupported.
+
+This decision changes no Protos language semantics, runtime semantics, package
+execution semantics, public DAP contract, static-language-service architecture,
+or Marketplace release policy.
+
+## LM009-C run-wiring tranche
+
+Status: **RUN WIRING PUBLISHED; S2 LIVE VS CODE EVIDENCE PENDING**
+
+This tranche implements only the approved LM009-C contract:
+
+- `editors/vscode/extension.js` registers `protos.runCurrentFile`, retains the
+  Workspace Trust/file/language/save guards and delegates execution to a VS Code
+  Task `ProcessExecution`;
+- `editors/vscode/package.json` gains the extension-host entry point, the
+  `Protos: Run Current File` command, machine-local launcher setting, command
+  visibility/enabling guards, and limited Workspace Trust declaration;
+- `editors/vscode/test/run_current_file.test.js` exercises runtime override,
+  argument separation, source-parent cwd, task scope, save-before-run, trust and
+  document guards, and start-failure reporting without requiring VS Code itself;
+- `editors/vscode/test/validate_extension.py` retains the LM009-B lexical/editor
+  invariants while guarding the approved LM009-C manifest/runtime boundary; and
+- `editors/vscode/README.md` documents configuration, security boundary and the
+  live S2 procedure.
+
+There is no shell command construction, child-process owner outside VS Code
+Tasks, editor-side Protos evaluator, workspace runtime scan, application
+arguments, package logical-module run mode, DAP/LSP behavior, or Java/JAR
+reconstruction.
+
+Repository-side validation proves the wiring and guard logic. LM009-C remains
+`IN_PROGRESS` until S2 is exercised in a real VS Code Extension Development Host
+against the real Protos launcher with stdout/stderr and completion visible in
+the Task terminal.

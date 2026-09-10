@@ -37,6 +37,42 @@
         "scopeName": "source.protos",
         "path": "./syntaxes/protos.tmLanguage.json"
       }
-    ]
+    ],
+    "commands": [
+      {
+        "command": "protos.runCurrentFile",
+        "title": "Run Current File",
+        "category": "Protos",
+        "enablement": "editorLangId == protos && resourceScheme == file && isWorkspaceTrusted"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "protos.runCurrentFile",
+          "when": "editorLangId == protos && resourceScheme == file && isWorkspaceTrusted"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Protos",
+      "properties": {
+        "protos.runtime.executable": {
+          "type": "string",
+          "default": "protos",
+          "scope": "machine",
+          "description": "Protos launcher executable used by Run Current File. Defaults to 'protos' resolved through PATH."
+        }
+      }
+    }
+  },
+  "main": "./extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "restrictedConfigurations": [
+        "protos.runtime.executable"
+      ]
+    }
   }
 }
