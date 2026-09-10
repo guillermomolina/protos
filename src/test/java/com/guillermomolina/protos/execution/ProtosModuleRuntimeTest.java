@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import static org.junit.jupiter.api.Assertions.*;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosModuleKey;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
@@ -79,6 +80,72 @@ class ProtosModuleRuntimeTest {
         assertThrows(ProtosSignalException.class,
                 () -> new ProtosSourceCompiler().compile("fake: String {}\nimport(fake)").call(actor));
         assertEquals(1, resolver.resolveCalls.get(), "invalid semantic domain must fail before resolution");
+    }
+
+    @Test
+    void moduleInstanceIsContextWithExplicitNamespaceAndNoImporterInheritance()
+            throws Exception {
+        MemoryResolver resolver =
+                new MemoryResolver()
+                        .module("leaf", "secret: 9")
+                        .module(
+                                "mid",
+                                "dep: import(\"leaf\")\n"
+                                        + "notInherited: Error.handle(() => importerOnly, "
+                                        + "(caught) => caught.parent() === SlotNotFound)");
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation actor = prelude.newModuleActivation();
+
+        Object result =
+                new ProtosSourceCompiler()
+                        .compile(
+                                "importerOnly: 7\n"
+                                        + "mid: import(\"mid\")\n"
+                                        + "transitiveMissing: Error.handle(() => mid.secret, "
+                                        + "(caught) => caught.parent() === SlotNotFound)\n"
+                                        + "(mid.parent() === Context).and() {\n"
+                                        + "    (mid.dep.secret == 9).and() {\n"
+                                        + "        mid.notInherited.and() { transitiveMissing }\n"
+                                        + "    }\n"
+                                        + "}")
+                        .call(actor);
+
+        assertSame(ProtosBooleanValue.TRUE, result);
+        assertEquals(java.util.List.of("<root>", "mid"), resolver.resolvedFrom);
+    }
+
+    @Test
+    void exactSpecifierTextAndCanonicalIdentityAreDistinctBoundaries() throws Exception {
+        MemoryResolver resolver =
+                new MemoryResolver()
+                        .module("empty", "value: 2")
+                        .alias("", "empty")
+                        .module("a", "value: 1")
+                        .alias("β/../A", "a")
+                        .alias("alias-a", "a")
+                        .module("b", "value: 1");
+        ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
+        ProtosActivation actor = prelude.newModuleActivation();
+
+        Object result =
+                new ProtosSourceCompiler()
+                        .compile(
+                                "empty: import(\"\")\n"
+                                        + "a: import(\"β/../A\")\n"
+                                        + "same: import(\"alias-a\")\n"
+                                        + "b: import(\"b\")\n"
+                                        + "(empty.value == 2).and() {\n"
+                                        + "    (a === same).and() { a !== b }\n"
+                                        + "}")
+                        .call(actor);
+
+        assertSame(ProtosBooleanValue.TRUE, result);
+        assertEquals(
+                java.util.List.of("", "β/../A", "alias-a", "b"),
+                resolver.resolvedSpecifiers);
+        assertEquals(1, resolver.loads("empty"));
+        assertEquals(1, resolver.loads("a"));
+        assertEquals(1, resolver.loads("b"));
     }
 
     @Test
@@ -156,6 +223,8 @@ class ProtosModuleRuntimeTest {
         final Map<String, String> sources = new HashMap<>();
         final Map<String, Integer> loadCounts = new HashMap<>();
         final AtomicInteger resolveCalls = new AtomicInteger();
+        final java.util.List<String> resolvedSpecifiers = new java.util.ArrayList<>();
+        final java.util.List<String> resolvedFrom = new java.util.ArrayList<>();
 
         MemoryResolver module(String key, String source) { aliases.put(key, key); sources.put(key, source); return this; }
         MemoryResolver alias(String spelling, String key) { aliases.put(spelling, key); return this; }
@@ -163,6 +232,8 @@ class ProtosModuleRuntimeTest {
 
         @Override public ProtosModuleKey resolve(String exactSpecifier, Optional<ProtosModuleKey> importingModule) throws Exception {
             resolveCalls.incrementAndGet();
+            resolvedSpecifiers.add(exactSpecifier);
+            resolvedFrom.add(importingModule.map(ProtosModuleKey::canonicalId).orElse("<root>"));
             String key = aliases.get(exactSpecifier);
             if (key == null) throw new java.io.IOException("not found");
             return new ProtosModuleKey(key);

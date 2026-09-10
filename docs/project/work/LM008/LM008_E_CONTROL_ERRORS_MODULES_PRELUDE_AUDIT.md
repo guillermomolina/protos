@@ -111,3 +111,40 @@ relations.
 
 `LM008-E` remains `IN_PROGRESS`. E3 is next and audits module context, import,
 module identity/cache and isolation-visible module surface.
+
+## E3 checkpoint — modules/import
+
+Checkpoint state: COMPLETE
+
+Validation class: `TEST_IMPACT`
+
+Normative authority: `spec/semantics/MODULES.md`, with Actor isolation and root
+bootstrap composition delegated to their existing concurrency/runtime owners.
+
+E3 audits the existing module/import surface only. Host-specific resolution
+policy remains deliberately outside Core; the audit checks only the exact
+language-to-resolver boundary and the Core-owned identity/cache/lifecycle rules.
+
+### Evidence matrix
+
+| Surface row | Normative requirement | Retained language-level evidence | Current implementation/mechanism evidence | Classification |
+|---|---|---|---|---|
+| Module instance / context / explicit namespace | An imported module is exactly its ordinary `moduleContext`, delegates through `Context`, exposes top-level definitions as its own slots, and is accessed explicitly through the returned module object; imports do not merge bindings transitively or make the imported module inherit importer locals. | `ProtosModuleRuntimeTest.moduleInstanceIsContextWithExplicitNamespaceAndNoImporterInheritance` executes Protos that checks `mid.parent() === Context`, reads `mid.dep.secret`, proves importer-local `importerOnly` is absent inside `mid`, and proves `mid.secret` is absent despite `mid` importing `leaf`. | `ProtosModuleRuntime` creates each module with `prelude.newExecutionContext()` and evaluates source with that object as module context; `ProtosActivation` resolves module-local then Prelude bindings without any imported-namespace channel. | `COVERED` |
+| `import` argument / exact specifier boundary | `import` takes exactly one semantic String; invalid domains fail before resolution; valid String text, including empty/path-like/Unicode spellings, reaches the host resolver unchanged and receives no Core path normalization. | Existing `semanticStringImportsAndStringLikeObjectIsRejectedBeforeResolver` plus `exactSpecifierTextAndCanonicalIdentityAreDistinctBoundaries`; the latter executes `import("")` and `import("β/../A")` from Protos while the deterministic resolver records the exact received strings. | `ProtosStandardImportProtocol` validates one argument and `ProtosModuleRuntime.resolveModuleKey` accepts only `ProtosStringValue` then passes `value()` directly to the resolver. | `COVERED` |
+| Importer-relative resolver input | Host resolution may use the canonical identity of the importing module; a nested import must be resolved in that module's environment rather than as an ambient root import. | The explicit-namespace Protos case imports `mid` from the root and `leaf` from `mid`; its deterministic resolver records `<root>` then canonical importer key `mid`. | `resolveModuleKey` passes `caller.currentModuleKey()` to `ProtosModuleResolver.resolve`. | `COVERED` |
+| Canonical ModuleKey versus guest identity | Distinct specifier spellings resolving to one canonical key yield the exact same Actor-local module object; different canonical keys yield distinct module objects even when source content is equal. | `exactSpecifierTextAndCanonicalIdentityAreDistinctBoundaries` checks `(a === same)` and `(a !== b)` in Protos, while the existing canonical-key cycle case retains single-load evidence for an alias. | `ProtosActorModuleState` is keyed by `ProtosModuleKey`; cache lookup precedes instance creation/source load. | `COVERED` |
+| Cache-before-execute / cyclic partial visibility | A cache miss creates and registers the real module instance as `INITIALIZING` before body execution; recursive imports return that same in-progress object immediately, exposing only slots created so far; successful completion retains that exact instance as `READY`. | Existing `canonicalKeyCachesBeforeExecutionSupportsCyclesAndSingleEvaluation` executes the A→B→A Protos cycle and observes A's earlier `before` slot through B while retaining single-evaluation evidence. | `ProtosModuleRuntime.loadCanonicalModuleInternal` inserts `ModuleRecord(moduleInstance)` before loading/executing source and returns any existing INITIALIZING/READY record. | `COVERED` |
+| Failed initialization / retry / host failure translation | An unhandled initialization failure evicts the active cache record; a later import may create a fresh attempt; resolver/source host failures surface as language Error rather than host exceptions. | Existing `failedInitializationIsEvictedAndRetryCreatesFreshInstance` drives import from Protos twice and observes the second module's `ok` slot; `resolverAndSourceFailuresBecomeCoreErrorsNotHostExceptions` executes a Protos import against a failing resolver. | The module runtime removes the exact record in both signal and host/compiler failure paths and converts non-Protos failures to a fresh Core Error. | `COVERED` |
+| Actor-local cache / initial-module integration | Mutable module instances and cache state are Actor-local; two Actors importing one canonical key receive distinct module contexts. Importable Actor initial modules use the same cache-before-execute lifecycle; standalone entries remain uncached when no canonical key exists. | `cachesAreActorLocal` executes imports in two independent module activations and proves same-Actor identity versus cross-Actor distinction; retained `ProtosActorBootstrapTest` exercises initial-module bootstrap through real Protos source. | Each activation owns/shares its Actor's `ProtosActorModuleState`; `ProtosActorBootstrap` routes importable initial modules through `loadCanonicalInitialModule`, while ordinary module runtime state is never process-global. | `COVERED` |
+| Import facility shape / no extra Core module syntax | `import` remains an ordinary frozen prelude facility; modules have no export/import declaration syntax or hidden namespace object. | Existing `coreImportFacilityIsSourceBackedIdentityWithOnlyNativeCallBridge` plus all E3 executable Protos programs use ordinary `import(...)` calls and returned objects. | The prelude facility is one frozen Object-rooted object with only native `call`; module result is the actual execution context. | `COVERED` |
+
+### E3 audit result
+
+No E3 row exposes a new semantic/platform decision or production implementation
+mismatch. The existing loader already implements the normative module-context,
+canonical-identity, Actor-local cache-before-execute, cycle and failure semantics.
+E3 strengthens executable guest-surface evidence inside the existing module
+runtime harness instead of introducing a second module test framework.
+
+`LM008-E` remains `IN_PROGRESS`. E4 is next and audits required/forbidden Core
+Prelude bindings and performs final E reconciliation without pre-closing LM008-F.
