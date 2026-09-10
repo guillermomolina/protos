@@ -1,0 +1,39 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+
+(UInt8(7) + UInt8(3) === UInt8(10)) &&
+    (UInt8(7) - UInt8(3) === UInt8(4)) &&
+    (UInt8(7) * UInt8(3) === UInt8(21)) &&
+    (Int8(7) + Int8(3) === Int8(10)) &&
+    (Int8(7) - Int8(3) === Int8(4)) &&
+    (Int8(7) * Int8(3) === Int8(21)) &&
+    (UInt16(7) + UInt16(3) === UInt16(10)) &&
+    (UInt16(7) - UInt16(3) === UInt16(4)) &&
+    (UInt16(7) * UInt16(3) === UInt16(21)) &&
+    (Int16(7) + Int16(3) === Int16(10)) &&
+    (Int16(7) - Int16(3) === Int16(4)) &&
+    (Int16(7) * Int16(3) === Int16(21)) &&
+    (UInt32(7) + UInt32(3) === UInt32(10)) &&
+    (UInt32(7) - UInt32(3) === UInt32(4)) &&
+    (UInt32(7) * UInt32(3) === UInt32(21)) &&
+    (Int32(7) + Int32(3) === Int32(10)) &&
+    (Int32(7) - Int32(3) === Int32(4)) &&
+    (Int32(7) * Int32(3) === Int32(21)) &&
+    (UInt64(7) + UInt64(3) === UInt64(10)) &&
+    (UInt64(7) - UInt64(3) === UInt64(4)) &&
+    (UInt64(7) * UInt64(3) === UInt64(21)) &&
+    (Int64(7) + Int64(3) === Int64(10)) &&
+    (Int64(7) - Int64(3) === Int64(4)) &&
+    (Int64(7) * Int64(3) === Int64(21))

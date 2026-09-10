@@ -1,5 +1,19 @@
 ## 0.2.328-SNAPSHOT
 
+- Close `I032 — Fixed-width numeric arithmetic publication` with I032-D final
+  reconciliation. Retain ordinary-Protos closure evidence for `+`, `-`, `*`,
+  unary negation, `/`, `div`, `mod`, and `%` across all eight fixed-width
+  families, every binary cross-family rejection boundary, the remaining
+  family-level range/negation edges, and representative strict-arity failures.
+  Re-run the native-boundary guard, the central Test Tool corpus, and the
+  repository's top-level publication-validation gate. A-C production behavior
+  remains unchanged; no Protos specification, production/runtime implementation,
+  public API, native boundary, or implementation-version change is introduced.
+  I032's last implementation-bearing version remains `0.2.327-SNAPSHOT`; LM008-D2
+  is released for separate audit reconciliation. Reconcile the historical
+  Developer Makefile work identifier from duplicate `I032` to collision-free
+  `I033` / GitHub #267.
+
 - Close `I026-D6 — remaining exact indexed-value Truffle interop` under ratified PLAT013. Extend the already-approved read-only array-like projection to `Bytes`, `ByteRegion`, and immutable Process-argument snapshots using only their existing exact runtime indexing authorities. Bytes/ByteRegion observations use synchronized `indexedSize`/`indexedAt`; ProcessArguments uses its immutable captured indexed representation. Successful reads return exact guest references, accidental host-only values fail closed, mutation and ordinary member facets remain unavailable, implicit iterator derivation is disabled, and bounded family display avoids host leakage. No guest `at`/`size`/`each` invocation, snapshot copy, wrapper graph, debugger lock, Map/IdentityMap hash interop, Closure execution or Protos specification change is introduced. I026-D remains IN_PROGRESS for the final safe-value/display coverage audit. Implementation version becomes `0.2.328-SNAPSHOT`.
 
 ## 0.2.327-SNAPSHOT
@@ -135,7 +149,7 @@
   only: no Protos specification, runtime semantics, implementation version,
   public API, native boundary, or license terms change.
 
-- Close `I032 — Developer Makefile workflow` with a small self-documenting repository-root developer interface. Keep the existing `build`, `test`, and `dist` command contracts, add `.PHONY`, `help` as the safe default, overridable Maven/Python/shell flags, and focused `toolchain`, `compile`, `check`, `verify`, `clean`, and `dist-validate` targets. The Makefile delegates policy to the existing Maven/toolchain/distribution machinery rather than duplicating CI or PERF007 routing, and does not mask test compilation with `maven.test.skip`. No Protos semantics, public API, implementation version or license terms change.
+- Close `I033 — Developer Makefile workflow` with a small self-documenting repository-root developer interface. Keep the existing `build`, `test`, and `dist` command contracts, add `.PHONY`, `help` as the safe default, overridable Maven/Python/shell flags, and focused `toolchain`, `compile`, `check`, `verify`, `clean`, and `dist-validate` targets. The Makefile delegates policy to the existing Maven/toolchain/distribution machinery rather than duplicating CI or PERF007 routing, and does not mask test compilation with `maven.test.skip`. No Protos semantics, public API, implementation version or license terms change.
 
 - Close `I028-E3D — directional shutdown/close + integrated E3 closure` under the
   existing Closable/ReadShutdown/WriteShutdown contracts and ratified
