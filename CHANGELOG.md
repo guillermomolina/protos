@@ -1,3 +1,15 @@
+## 0.2.315-SNAPSHOT
+
+- Close `I028-E3D — directional shutdown/close + integrated E3 closure` under the
+  existing Closable/ReadShutdown/WriteShutdown contracts and ratified
+  PLAT003/PLAT006/PLAT009. Map logical half-closes to poller-owned
+  `SocketChannel.shutdownInput()` / `shutdownOutput()`, preserve the opposite
+  duplex lane and retain whole-resource close as the stronger physical-custody
+  release. Correct generic ByteIo read admission so whole close dominates a prior
+  local read shutdown, add real loopback half-close/close evidence, close E3 and
+  release E4. Specification, public Protos API, native boundary, poller policy and
+  license terms are unchanged. Implementation version becomes `0.2.315-SNAPSHOT`.
+
 ## 0.2.314-SNAPSHOT
 
 - Make the owning GitHub Issue `family:*` label the single source of truth for formal work-family classification. Treat any custom `Family` field in the `Protos Development` Project as redundant, non-authoritative presentation state that routine agents must not populate or synchronize; Project views that need family visibility should display the standard Issue `Labels` field instead. This does not require agents to inspect or mutate GitHub Projects. Governance only: no Protos specification, executable implementation, implementation version, or license terms change.

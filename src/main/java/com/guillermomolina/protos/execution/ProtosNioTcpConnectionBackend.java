@@ -105,15 +105,92 @@ final class ProtosNioTcpConnectionBackend
     @Override
     public ProtosByteIoFlow.Cancellation shutdownRead(
             ProtosByteIoFlow.ShutdownCompletion completion) {
-        Objects.requireNonNull(completion, "completion").failed();
+        Objects.requireNonNull(completion, "completion");
+        if (physicalClosed.get() || !channel.isOpen()) {
+            reportShutdownFailure(completion);
+            return NO_CANCELLATION;
+        }
+        try {
+            poller.submit(
+                    () -> finishReadShutdownOnPoller(completion),
+                    ignored -> reportShutdownFailure(completion));
+        } catch (RuntimeException unavailablePoller) {
+            reportShutdownFailure(completion);
+        }
         return NO_CANCELLATION;
     }
 
     @Override
     public ProtosByteIoFlow.Cancellation shutdownWrite(
             ProtosByteIoFlow.ShutdownCompletion completion) {
-        Objects.requireNonNull(completion, "completion").failed();
+        Objects.requireNonNull(completion, "completion");
+        if (physicalClosed.get() || !channel.isOpen()) {
+            reportShutdownFailure(completion);
+            return NO_CANCELLATION;
+        }
+        try {
+            poller.submit(
+                    () -> finishWriteShutdownOnPoller(completion),
+                    ignored -> reportShutdownFailure(completion));
+        } catch (RuntimeException unavailablePoller) {
+            reportShutdownFailure(completion);
+        }
         return NO_CANCELLATION;
+    }
+
+
+    private void finishReadShutdownOnPoller(ProtosByteIoFlow.ShutdownCompletion completion) {
+        if (physicalClosed.get() || !channel.isOpen()) {
+            reportShutdownFailure(completion);
+            return;
+        }
+        // ProtosByteIoFlow establishes the logical cutover and submits cancellation first.
+        // Retire any residual physical read defensively before the host half-close.
+        ReadRequest request = pendingRead.get();
+        if (request != null) finishReadFailure(request);
+        disableReadInterestBestEffort();
+        try {
+            channel.shutdownInput();
+            reportShutdownSuccess(completion);
+        } catch (IOException | RuntimeException shutdownFailure) {
+            reportShutdownFailure(completion);
+        }
+    }
+
+    private void finishWriteShutdownOnPoller(ProtosByteIoFlow.ShutdownCompletion completion) {
+        if (physicalClosed.get() || !channel.isOpen()) {
+            reportShutdownFailure(completion);
+            return;
+        }
+        // ByteIoFlow starts physical write shutdown only after preceding output terminates.
+        // A residual request here is an internal invariant failure: never truncate it silently.
+        if (pendingWrite.get() != null) {
+            reportShutdownFailure(completion);
+            return;
+        }
+        disableWriteInterestBestEffort();
+        try {
+            channel.shutdownOutput();
+            reportShutdownSuccess(completion);
+        } catch (IOException | RuntimeException shutdownFailure) {
+            reportShutdownFailure(completion);
+        }
+    }
+
+    private static void reportShutdownSuccess(ProtosByteIoFlow.ShutdownCompletion completion) {
+        try {
+            completion.succeeded();
+        } catch (RuntimeException ignored) {
+            // A defective completion callback cannot create a second backend outcome.
+        }
+    }
+
+    private static void reportShutdownFailure(ProtosByteIoFlow.ShutdownCompletion completion) {
+        try {
+            completion.failed();
+        } catch (RuntimeException ignored) {
+            // A defective completion callback cannot create a second backend outcome.
+        }
     }
 
     @Override

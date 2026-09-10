@@ -62,16 +62,16 @@ READY to implement `connectTcp`; I028-D will consume the same topology for liste
   - **D3 — `accept()` + concurrent pending accepts + cancellation/late custody — CLOSED (`0.2.294-SNAPSHOT` / publication commit):** install one shared `accept` selector; admit each call as an independent operation on the D2 lifecycle, support multiple pending Futures without a semantic FIFO/owner-thread rule, reuse pre-commit/Actor cancellation and close cutover, materialize fresh accepted TcpConnections only from recognized logical endpoint snapshots, and explicitly release late/duplicate/unmaterializable resources. No `listenTcp` or production backend yet; native boundary becomes 134/35.
   - **D4 — `Network.listenTcp(localRequest)` + exact request validation/capture + listener acquisition — CLOSED (`0.2.298-SNAPSHOT` / publication commit):** install the second shared Network acquisition selector; validate/capture exactly local `ipVersion`/`address`/`port` before backend effect, preserve canonical-null address/port request semantics, reuse ordinary Future cancellation/commitment and late-resource custody, and materialize one fresh accept-enabled D1-D3 TcpListener with its acquired non-zero port. No production backend or host wildcard/ephemeral convention is selected; native boundary becomes 135/35.
   - **D5 — integrated D conformance + closure — CLOSED (`0.2.300-SNAPSHOT` / publication commit; implementation version unchanged):** an actual D4-acquired listener retains the ordinary D1 family, D2 observation/close lifecycle, D3 concurrent accept/custody and Actor/P confinement; accepted resources remain the existing C-family TcpConnections. Native-boundary evidence remains 135/35. I028-D is CLOSED.
-- **E — production backend portability/scalability — IN_PROGRESS:** PLAT006/PLAT007/PLAT009 are RATIFIED. E1/E2/E3A/E3B/E3C are CLOSED; E3D is READY. E4/E5 remain dependency-gated.
+- **E — production backend portability/scalability — IN_PROGRESS:** PLAT006/PLAT007/PLAT009 are RATIFIED. E1/E2/E3 are CLOSED; E4 is READY. E5 remains dependency-gated.
   - **E1 — bounded JDK-NIO poller primitive — CLOSED (`0.2.305-SNAPSHOT` / `SAME_COMMIT`):** internal Selector-owning daemon platform thread, concurrent control queue + wakeup, readiness dispatch, poller-thread-only registration/interest mutation, isolated callback failure and idempotent registered-channel release. No TCP operation, Network provisioning, poller-count/sharding policy or native transport.
   - **E2 — NIO endpoint bridge + `connectTcp` acquisition — CLOSED (`0.2.306-SNAPSHOT` / `SAME_COMMIT`):** decode recognized numeric endpoints without DNS, preserve exact IPv4/IPv6 family and Network-owned IPv6 scope, perform non-blocking `SocketChannel` immediate/`OP_CONNECT` acquisition, materialize the actual recognized local endpoint, and hand opaque channel custody through the existing C4 commit/cancel/late-release contract. No duplex byte I/O or production Network wiring yet.
-  - **E3 — production TcpConnection duplex backend — IN_PROGRESS under PLAT009:** E3A/E3B/E3C are CLOSED; E3D is READY for directional shutdown/close plus integrated E3 closure.
+  - **E3 — production TcpConnection duplex backend — CLOSED under PLAT009:** E3A/E3B/E3C/E3D are CLOSED with retained integrated read/write/half-close/whole-close evidence.
     - **E3A — host-neutral first-effect attempt gate — CLOSED (`0.2.309-SNAPSHOT` / `SAME_COMMIT`):** add transient `ATTEMPTING_FIRST_EFFECT` arbitration to `ProtosIoOperation`, preserve first-arrival cancellation-vs-close cutover ordering, and expose it to asynchronous ByteWritable backends through a richer `WriteCompletion` subtype without migrating existing backends. No socket readiness or TCP byte transfer is implemented by this slice.
     - **E3B — NIO read lane + independent readiness — CLOSED (`0.2.313-SNAPSHOT` / `SAME_COMMIT`):** one poller-owned non-blocking read request, immediate `SocketChannel.read`, `OP_READ` continuation, short data, EOF, zero-effect cancellation retirement and whole-close cleanup while preserving non-read interest bits.
     - **E3C — NIO write lane + PLAT009 partial-write arbitration — CLOSED (`0.2.314-SNAPSHOT` / `SAME_COMMIT`):** one poller-owned ordered write request, immediate/`OP_WRITE` partial progress, first-attempt zero/positive arbitration through the E3A gate, hidden contributed-prefix failure accounting, pre-first-byte cancellation retirement and independent preservation of `OP_READ`.
-    - **E3D — directional shutdown/close + integrated E3 closure — READY:** implement physical half-close coordination, retain shared connection close custody and close E3 with integrated duplex evidence.
-  - **E4 — production TcpListener/accept + PLAT007 composite IPv6-only backend — BLOCKED_BY_E3:** implement listener acquisition, concurrent accepts and the ratified all-or-nothing concrete-IPv6 composite listener baseline.
-  - **E5 — production Network provisioning/wiring + integrated E closure — BLOCKED_BY_E2_E3_E4:** provision the production authority target through applicable host entry points, retain backend lifecycle/custody evidence and close E before final I028-F conformance.
+    - **E3D — directional shutdown/close + integrated E3 closure — CLOSED (`0.2.315-SNAPSHOT` / `SAME_COMMIT`):** map the already-standardized directional cutovers to poller-owned `SocketChannel.shutdownInput()` / `shutdownOutput()`, retain whole-resource close as the stronger single physical-custody release, correct generic read admission so whole close dominates a prior local read shutdown, and close E3 with real loopback lifecycle evidence.
+  - **E4 — production TcpListener/accept + PLAT007 composite IPv6-only backend — READY:** implement listener acquisition, concurrent accepts and the ratified all-or-nothing concrete-IPv6 composite listener baseline.
+  - **E5 — production Network provisioning/wiring + integrated E closure — BLOCKED_BY_E4:** provision the production authority target through applicable host entry points, retain backend lifecycle/custody evidence and close E before final I028-F conformance.
 - **F — cross-slice conformance/native-boundary closure:** cancellation races,
   late custody, multiple-accept scale evidence and Actor/P non-transferability.
 
@@ -131,6 +131,35 @@ enumeration caching, candidate-port retry policy, poller sharding/affinity,
 dynamic rebinding and native-backend mechanism remain deliberately deferred. If
 implementation exposes a new substantive durable choice, stop that slice and
 cross the explicit approval gate before proceeding.
+
+## I028-E3D NIO directional lifecycle and E3 closure
+
+Closed at implementation version `0.2.315-SNAPSHOT` under the existing Closable/ReadShutdown/
+WriteShutdown contracts and ratified PLAT003/PLAT006/PLAT009. No new language or
+platform-architecture choice is introduced.
+
+The NIO TcpConnection backend now maps the already-committed logical directional
+cutovers to `SocketChannel.shutdownInput()` and `SocketChannel.shutdownOutput()`
+on the owning poller. Read-shutdown retires residual `OP_READ` custody before the
+physical input half-close. Write-shutdown reaches the backend only after the
+host-neutral output lane has settled every preceding accepted write; a residual
+physical write is therefore treated as an internal failure rather than truncated.
+Neither half-close changes the opposite readiness lane or closes the channel.
+
+Whole-resource `close()` remains the existing stronger one-shot physical release;
+it is not implemented as two half-closes. Integrated evidence also exposed and
+corrects a pre-existing generic ByteIo admission-order defect: after a successful
+local read shutdown followed by whole close, the shared Closable lifecycle now
+wins before the local EOF-like read state, as already required by the normative
+Socket lifecycle contract.
+
+Real loopback evidence covers output half-close with peer EOF while input remains
+usable, input half-close with pending-read local EOF while output remains usable,
+and whole close after read half-close with lifecycle failure for subsequent reads
+and writes. Retained E3B/E3C evidence continues to cover independent readiness,
+short/EOF/cancelled reads, partial writes and first-effect arbitration.
+
+I028-E3 is CLOSED. E4 is READY; E5 remains blocked only by E4.
 
 ## I028-E3C NIO write lane
 

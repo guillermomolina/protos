@@ -162,7 +162,10 @@ public final class ProtosByteIoFlow {
 
     public ProtosFutureValue read(ProtosActivation activation,Object maxBytesValue){
         Objects.requireNonNull(activation);requireDomain(activation);
-        synchronized(this){if(readState!=DirectionState.OPEN)return resolvedNullFuture(activation);}
+        synchronized(this){
+            if(lifecycle.state()!=ProtosIoLifecycle.State.OPEN)return lifecycleFailedFuture(activation);
+            if(readState!=DirectionState.OPEN)return resolvedNullFuture(activation);
+        }
         BigInteger n=integer(maxBytesValue);
         if(n==null||n.signum()<=0||n.compareTo(BigInteger.valueOf(Integer.MAX_VALUE))>0)
             return failedFuture(activation,ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT);
