@@ -109,6 +109,34 @@ Migration follows these rules:
 
 Commit-fixed historical references remain historical evidence; branch/path compatibility and unknown external links must be assessed explicitly when a candidate legacy path is considered for relocation.
 
+<!-- DOC002 CONCURRENT-CUTOVER-RESIDUAL-RECONCILIATION -->
+## Concurrent cutover and residual reconciliation
+
+DOC002-A's 107-file inventory is the audit snapshot that justified the selected
+architecture; it is **not** a frozen migration manifest. Protos development may
+continue concurrently while DOC002 migrates the documentation tree.
+
+Each migration slice must therefore discover and classify its candidates from
+that invocation's execution-time `PUBLICATION_BASE`, rather than assuming that
+the DOC002-A file list is exhaustive. A durable flat record introduced by
+concurrent work during the B-to-C1 propagation window is transitional migration
+debt: preserve its content and history, then absorb it into the appropriate
+bounded migration/reconciliation pass instead of forcing unrelated agents to
+rewrite already-published work.
+
+Publication of DOC002-C1 propagates this contract into `AGENTS.md` as the agent
+cutover. Work created after an agent has observed that policy must follow the
+role-first destination for new durable records. Existing legacy records continue
+to be edited in place until their explicit migration slice owns relocation.
+
+Before DOC002 closure, the current `docs/project/` tree must be re-inventoried.
+Every residual flat legacy/straggler path must be either migrated to its selected
+role or deliberately retained with a concrete compatibility/path-stability
+reason. DOC002-G owns this residual reconciliation as part of the final
+navigation/compatibility audit; if non-trivial moves remain, G may be decomposed
+into a bounded residual-migration sub-slice followed by a closure-audit
+sub-slice. This decomposition does not change the ratified Option A architecture.
+
 ## Staged continuation
 
 The approved sequence remains:

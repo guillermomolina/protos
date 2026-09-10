@@ -131,6 +131,60 @@ implementation, tests, migration, and closure evidence.
 The canonical registry for platform/runtime architecture decisions is
 `docs/project/PLATFORM_ARCHITECTURE_DECISIONS.md`.
 
+<!-- DOC002 ROLE-FIRST-DOCUMENTATION-PATH-POLICY -->
+## Durable project documentation path policy
+
+DOC002-B ratified the role-first information architecture for durable project
+documentation. The canonical non-normative path contract is
+`docs/project/work/DOC002/DOC002_DOCUMENTATION_PATH_CONTRACT.md`.
+
+Agents creating a **new** durable record under `docs/project/` MUST place it in
+the selected role-first destination when the role and owner are unambiguous:
+
+- `docs/project/work/<formal-work-item>/` for records primarily owned by one
+  formally tracked work item;
+- `docs/project/decisions/language/` for durable `Dxxx` decision records;
+- `docs/project/decisions/platform/` for durable `PLATxxx` platform/runtime
+  decision records;
+- `docs/project/architecture/` for cross-cutting implementation architecture;
+- `docs/project/governance/` for repository/project rationale and maintained
+  policy that does not need an invented formal work family;
+- `docs/project/registries/` for durable registries and closure/evidence ledgers;
+- `docs/project/evidence/<formal-work-item>/` for immutable or snapshot-like
+  evidence with a genuine formal owner; and
+- `docs/project/history/` for retired or superseded historical snapshots.
+
+`docs/project/README.md` is the role-first navigation entry point once created by
+DOC002-C. Repository-root policy/legal/community files and the established
+`docs/guide/`, `docs/design/`, and `spec/` authority boundaries are not relocated
+merely for symmetry.
+
+Existing legacy files are different from newly created records. Agents MUST edit
+an existing durable document at its **actual current path** until an explicit
+bounded DOC002 migration slice owns its relocation. Do not opportunistically
+move it, guess its future path, duplicate it under the selected tree, or create a
+compatibility copy merely to satisfy the new layout. References in this file to
+legacy paths such as `docs/project/IMPLEMENTATION_BLOCKERS.md` remain valid until
+the corresponding migration slice changes them coherently.
+
+If a new durable document does not fit one selected role cleanly, do not invent a
+new directory, identifier family, or classification to force symmetry. Resolve
+the classification through DOC002 or the owning tracked work before establishing
+a durable path.
+
+DOC002-A's inventory is a historical audit snapshot, not a closed migration
+manifest. DOC002 migration slices MUST derive their candidate set from their
+execution-time `PUBLICATION_BASE`, so durable files created concurrently during
+the cutover are not missed. Files created on concurrent work before an agent has
+observed this policy are transitional stragglers and are handled by later bounded
+DOC002 migration/reconciliation; they do not authorize bulk moves or unrelated
+cleanup. After this policy is present in the agent instructions, creating a new
+unclassified flat durable record directly under `docs/project/` is non-compliant.
+
+Before DOC002 closes, its final reconciliation MUST scan current `docs/project/`
+again and account for residual legacy/straggler paths as either migrated or
+explicitly retained for a documented compatibility reason.
+
 ## Current project coordinates
 
 The following identifiers are the repository's current operational coordinates.
