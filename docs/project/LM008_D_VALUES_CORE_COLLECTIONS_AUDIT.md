@@ -168,3 +168,46 @@ no weakened expectation and no new semantic or platform choice.
 
 D2 is COMPLETE. `LM008-D` remains `IN_PROGRESS`; D3 is next and audits String,
 while D4 remains the Array/Map/IdentityMap plus final-D reconciliation checkpoint.
+
+## D3 checkpoint
+
+Checkpoint state: COMPLETE
+
+Validation class: `TEST_IMPACT`
+
+Normative authority: `spec/semantics/VALUES_AND_COLLECTIONS.md`.
+
+D3 audits String construction/value identity, equality/hash and the fundamental
+Core String protocol. It introduces no String semantics and allocates no
+implementation owner.
+
+### Evidence matrix
+
+| Surface row | Normative requirement | Retained language-level evidence | Current implementation/mechanism evidence | Classification |
+|---|---|---|---|---|
+| String value/prototype topology | `String` is an immutable value-identity family; the standard prelude `String` object delegates directly to `Object`, and every semantic String value has `String` as immediate parent. Delegation to `String` does not confer String-family membership. | New `string/prototype-topology.protos` proves both parent edges. Existing `string/delegated-size-receiver-error.protos` and `delegated-concat-receiver-error.protos` prove that an ordinary delegator does not become a semantic String. | Core bootstrap installs the String prototype under `Object`; represented String values use that prototype and standard String protocol receiver checks require `ProtosStringValue`. | `COVERED` |
+| Exact String semantic value / identity / equality | String semantic value is the exact finite Unicode-scalar sequence. `===` uses value identity over that exact sequence; default standard `==` agrees for String values. No Unicode normalization, canonical-equivalence folding or locale policy is implicit. | Existing `string/value-identity-and-no-normalization.protos` proves value identity/equality for separately produced equal text and distinguishes precomposed `é` from `e\\u{301}`. | `ProtosIdentity` compares String represented values by exact stored text; default source-backed equality follows semantic identity for built-in String values. | `COVERED` |
+| String `size()` | Zero-argument `size` returns an Integer count of Unicode extended grapheme clusters using the required Unicode data model; bytes/code units/code points are not the indexing unit. Receiver-domain and arity are strict. | Existing `string/grapheme-size.protos`, `size-wrong-arity-error.protos`, and `delegated-size-receiver-error.protos`. | `ProtosStandardStringProtocol` uses ICU grapheme boundaries and requires Unicode 17 data. | `COVERED` |
+| String `at(index)` / bracket read | `at` accepts semantic exact-integer indexes, indexes Unicode grapheme clusters from zero, returns the exact grapheme as a String, and signals Error for negative/out-of-range/non-integer/invalid arity. Indexed syntax remains ordinary `at` dispatch. | Existing `string/grapheme-at-exact.protos`, `at-negative-error.protos`, `at-out-of-range-error.protos`, `at-float-error.protos`, `at-string-error.protos`, and `at-wrong-arity-error.protos`; LM008-B separately owns bracket lowering. | `ProtosStandardStringProtocol` accepts Integer/fixed-width exact-integer represented values, rejects invalid bounds/domain, and slices by ICU grapheme boundaries. | `COVERED` |
+| String binary `+` | Standard `+` requires a semantic String receiver and String operand, concatenates exact scalar sequences without normalization/encoding/locale processing, mutates neither operand and returns String value semantics. | Existing `string/concat-exact.protos`, `concat-integer-error.protos`, `concat-null-error.protos`, `delegated-concat-receiver-error.protos`, plus `value-identity-and-no-normalization.protos`. | `ProtosStandardStringProtocol` validates exact represented String receiver/operand and constructs the concatenated String value. | `COVERED` |
+| Standard String `hash()` | Zero-argument String `hash()` returns an ordinary Integer and is coherent with standard String equality: equal exact String values have equal hashes. A delegator is not accepted as a String-family receiver; arity is strict. Hash does not redefine identity or require unequal Strings to have unequal hashes. | New `string/hash-equality-coherence.protos`, `hash-delegated-receiver-error.protos`, and `hash-wrong-arity-error.protos`. | `ProtosStandardHashSupport.installStringHash` validates a represented `ProtosStringValue`, hashes its exact text and returns `ProtosIntegerValue`. | `COVERED` |
+| String mutability / representation separation | String operations never mutate the receiver; encoded bytes are a distinct semantic domain, and Core String exposes no implicit encoding/decoding, normalization, collation or locale policy through these fundamental operations. | Concatenation/value-identity/grapheme evidence observes pure returned values; existing text/encoding conformance owns explicit Encoding-object conversion. | String represented values are immutable; the String provider exposes only `size`, `at`, and `+`, while hashing is installed separately as the standard value hash. | `COVERED` |
+
+### D3 audit result
+
+No D3 row requires a new Dxxx or PLATxxx decision.
+
+The existing String implementation is guest-visible and consistent with the
+already-normative value model. D3 found no implementation/publication defect.
+The retained corpus already covered grapheme-aware size/indexing, concatenation,
+strict receiver/domain behavior, exact value identity/equality and absence of
+implicit normalization.
+
+D3 adds only the previously indirect guest-visible evidence for:
+
+1. the `String -> Object` and String-value -> `String` prototype topology; and
+2. specialized String `hash()` equality coherence, semantic receiver-domain and
+   exact-arity boundaries.
+
+D3 is COMPLETE. `LM008-D` remains `IN_PROGRESS`; D4 is next and owns Array, Map,
+IdentityMap and the final LM008-D reconciliation.

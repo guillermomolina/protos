@@ -392,6 +392,10 @@ string/grapheme-at-exact.protos	boolean	true
 string/grapheme-size.protos	boolean	true
 string/size-wrong-arity-error.protos	error	-
 string/value-identity-and-no-normalization.protos	boolean	true
+string/prototype-topology.protos	boolean	true
+string/hash-equality-coherence.protos	boolean	true
+string/hash-delegated-receiver-error.protos	error	-
+string/hash-wrong-arity-error.protos	error	-
 path/child-empty-error.protos	error	-
 path/child-dot-error.protos	error	-
 path/child-dotdot-error.protos	error	-
