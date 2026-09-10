@@ -70,7 +70,7 @@ precedent.
 - `docs/project/IMPLEMENTATION_BLOCKERS.md`
 - `docs/project/CORE_NATIVE_BOUNDARY.md`
 - `docs/project/work/LIB001/LIB001_COLLECTIONS_DESIGN.md`
-- `docs/project/LIB002_TEXT_ENCODING_DESIGN.md`
+- `docs/project/work/LIB002/LIB002_TEXT_ENCODING_DESIGN.md`
 - `docs/project/LIB003_JSON_DESIGN.md`
 - package-tool filesystem/staging design and implementation records relevant to
   explicit metadata publication.

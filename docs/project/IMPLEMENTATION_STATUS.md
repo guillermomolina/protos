@@ -647,7 +647,7 @@ Description: Ergonomic text and encoding helpers implemented as ordinary Protos
 library functionality on top of finalized Core Encoding/Text I/O semantics.
 
 Design record:
-- `docs/project/LIB002_TEXT_ENCODING_DESIGN.md` records the completed focused
+- `docs/project/work/LIB002/LIB002_TEXT_ENCODING_DESIGN.md` records the completed focused
   normative, comparative, falsification, and future-proofing audit;
 - the record compares Pharo/Smalltalk, Self, Io, Erlang/Elixir, C#/.NET, Java,
   C++, Python, Ruby, Rust, and Swift against the Protos object, module, I/O,
