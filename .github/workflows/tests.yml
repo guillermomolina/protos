@@ -1,4 +1,4 @@
-name: Tests
+name: CI
 
 on:
   push:
@@ -57,6 +57,14 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Trust checked-out workspace for Git
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git status --porcelain=v1 --untracked-files=all >/dev/null
+          echo "CI_GIT_SAFE_DIRECTORY_CHECK: PASS"
+
       - name: Verify selected toolchain
         shell: bash
         run: |
@@ -108,3 +116,114 @@ jobs:
             --repo . \
             --base "$base_sha" \
             --head "$head_sha"
+
+  # PERF007: the test job is the single owner of repository JUnit validation.
+  # This job consumes that success and validates only the built distribution artifact.
+  distribution:
+    name: Build and validate portable distribution
+    if: ${{ github.event_name != 'pull_request' }}
+    needs: test
+    concurrency:
+      group: distribution-snapshot-${{ github.ref }}
+      cancel-in-progress: true
+    runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/graalvm/graalvm-community:25i3-25.0.4.1-ol8-20260825
+      options: --user 0
+
+    env:
+      PROTOS_PRIMARY_JDK_FEATURE: "25"
+      PROTOS_PRIMARY_JDK_VERSION: "25.0.4.1"
+      PROTOS_MAVEN_VERSION: "3.9.9"
+
+    steps:
+      - name: Provision CI bootstrap tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          microdnf install -y git gzip tar unzip xz python39 findutils diffutils
+          microdnf clean all
+
+          archive="apache-maven-${PROTOS_MAVEN_VERSION}-bin.tar.gz"
+          base="https://archive.apache.org/dist/maven/maven-3/${PROTOS_MAVEN_VERSION}/binaries"
+          curl --fail --location --silent --show-error "$base/$archive" --output "/tmp/$archive"
+          curl --fail --location --silent --show-error "$base/$archive.sha512" --output "/tmp/$archive.sha512"
+          expected_sha512="$(cat "/tmp/$archive.sha512")"
+          test -n "$expected_sha512"
+          test "${#expected_sha512}" -eq 128
+          case "$expected_sha512" in
+            *[!0-9A-Fa-f]*)
+              echo "invalid Maven SHA-512 metadata" >&2
+              exit 1
+              ;;
+          esac
+          actual_sha512="$(sha512sum "/tmp/$archive")"
+          actual_sha512="${actual_sha512%% *}"
+          test "${actual_sha512,,}" = "${expected_sha512,,}"
+          echo "MAVEN_ARCHIVE_SHA512_CHECK: PASS"
+          tar --extract --gzip --file "/tmp/$archive" --directory /opt
+          ln --symbolic "/opt/apache-maven-${PROTOS_MAVEN_VERSION}" /opt/maven
+          echo "/opt/maven/bin" >> "$GITHUB_PATH"
+          echo "MAVEN_HOME=/opt/maven" >> "$GITHUB_ENV"
+
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Trust checked-out workspace for Git
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          git status --porcelain=v1 --untracked-files=all >/dev/null
+          echo "CI_GIT_SAFE_DIRECTORY_CHECK: PASS"
+
+      - name: Verify selected toolchain
+        shell: bash
+        run: |
+          set -euo pipefail
+          properties="$(java -XshowSettings:properties -version 2>&1)"
+          feature="$(sed -n 's/^[[:space:]]*java\.specification\.version = //p' <<<"$properties" | head -n 1)"
+          version="$(sed -n 's/^[[:space:]]*java\.version = //p' <<<"$properties" | head -n 1)"
+          printf '%s\n' "$properties" | grep -Ei 'graalvm|java\.vendor|java\.vm\.name|java\.runtime\.name' | grep -Fqi GraalVM
+          test "$feature" = "$PROTOS_PRIMARY_JDK_FEATURE"
+          test "$version" = "$PROTOS_PRIMARY_JDK_VERSION"
+          test "$(mvn --version | sed -n '1s/^Apache Maven \([^[:space:]]*\).*/\1/p')" = "$PROTOS_MAVEN_VERSION"
+          python3 tools/verify_toolchain.py --mode check
+          echo "CI_PRIMARY_TOOLCHAIN_CHECK: PASS java.version=$version maven=$PROTOS_MAVEN_VERSION"
+
+      - name: Build portable distribution
+        run: python3 dist/build_portable.py
+
+      - name: Run complete extracted-distribution gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          sh dist/validate_portable.sh --require-clean-source
+
+      - name: Prepare snapshot artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          archive="$(find "$GITHUB_WORKSPACE/target/distributions" -maxdepth 1 -type f -name 'protos-*-posix-jvm.zip' | sort | tail -n 1)"
+          test -n "$archive"
+          test -f "$archive"
+          (cd "$(dirname "$archive")" && sha256sum "$(basename "$archive")") > "$archive.sha256"
+          (
+            cd "$(dirname "$archive")"
+            sha256sum -c "$(basename "$archive").sha256"
+          )
+          echo "DIST_ARCHIVE=$archive" >> "$GITHUB_ENV"
+          echo "DIST_ARCHIVE_CHECKSUM=$archive.sha256" >> "$GITHUB_ENV"
+          echo "DIST_ARTIFACT_NAME=protos-snapshot-$GITHUB_SHA" >> "$GITHUB_ENV"
+          echo "CI_SNAPSHOT_CHECKSUM: $(cat "$archive.sha256")"
+
+      - name: Upload development snapshot
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.DIST_ARTIFACT_NAME }}
+          path: |
+            ${{ env.DIST_ARCHIVE }}
+            ${{ env.DIST_ARCHIVE_CHECKSUM }}
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
