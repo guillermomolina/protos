@@ -18,7 +18,9 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
@@ -29,10 +31,10 @@ import java.util.Objects;
 /**
  * Internal Bytecode DSL execution plan for the first Closure migration seam.
  *
- * <p>PERF006-B2C2 supports general required positional parameter binding for
- * Closure bodies whose canonical expressions are already supported by
- * {@link CanonicalToBytecodeLowerer}. Default/rest binding and normal Closure
- * dispatch remain staged for later PERF006-B slices.</p>
+ * <p>PERF006-B2C3A supports general required positional parameters plus a
+ * trailing rest parameter for Closure bodies whose canonical expressions are
+ * already supported by {@link CanonicalToBytecodeLowerer}. Default binding and
+ * normal Closure dispatch remain staged for later PERF006-B slices.</p>
  */
 final class ProtosBytecodeClosureExecutionPlan {
     private final CanonicalClosure definition;
@@ -69,12 +71,14 @@ final class ProtosBytecodeClosureExecutionPlan {
         this.source =
                 Objects.requireNonNull(source, "source");
 
-        for (CanonicalParameter parameter : definition.parameters()) {
-            if (parameter.rest()) {
-                throw new UnsupportedOperationException("PERF006-B2C1 rest parameter binding is deferred");
+        for (int index = 0; index < definition.parameters().size(); index++) {
+            CanonicalParameter parameter = definition.parameters().get(index);
+            if (parameter.rest() && index != definition.parameters().size() - 1) {
+                throw new IllegalArgumentException("rest parameter must be trailing");
             }
             if (parameter.defaultValue().isPresent()) {
-                throw new UnsupportedOperationException("PERF006-B2C1 default parameter binding is deferred");
+                throw new UnsupportedOperationException(
+                        "PERF006-B2C3A default parameter binding is deferred");
             }
         }
 
@@ -114,20 +118,68 @@ final class ProtosBytecodeClosureExecutionPlan {
 
     void bind(ProtosActivation activation) {
         Objects.requireNonNull(activation, "activation");
-        java.util.List<Object> supplied = activation.arguments()
-                .orElseThrow(() -> new IllegalStateException("parameter binding requires an invocation activation"))
-                .indexedSnapshot();
-        if (supplied.size() != definition.parameters().size()) {
-            throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
-        }
-        for (int index = 0; index < definition.parameters().size(); index++) {
-            CanonicalParameter parameter = definition.parameters().get(index);
-            try {
-                activation.context().createLocalSlot(parameter.name(), supplied.get(index));
-            } catch (IllegalStateException invalidCreation) {
-                throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+        java.util.List<Object> supplied =
+                activation.arguments()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "parameter binding requires an invocation activation"))
+                        .indexedSnapshot();
+        ProtosPrelude prelude =
+                activation.prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "parameter binding requires an owning Core prelude"));
+
+        int suppliedIndex = 0;
+        for (CanonicalParameter parameter : definition.parameters()) {
+            if (parameter.rest()) {
+                ProtosArrayValue rest =
+                        prelude.newFrozenArray(
+                                supplied.subList(
+                                        suppliedIndex,
+                                        supplied.size()));
+                createParameterSlot(
+                        activation,
+                        parameter.name(),
+                        rest);
+                suppliedIndex = supplied.size();
+                continue;
             }
+
+            if (suppliedIndex >= supplied.size()) {
+                throw argumentCountError(activation);
+            }
+
+            createParameterSlot(
+                    activation,
+                    parameter.name(),
+                    supplied.get(suppliedIndex));
+            suppliedIndex++;
         }
+
+        if (suppliedIndex < supplied.size()) {
+            throw argumentCountError(activation);
+        }
+    }
+
+    private static void createParameterSlot(
+            ProtosActivation activation,
+            String name,
+            Object value) {
+        try {
+            activation.context().createLocalSlot(name, value);
+        } catch (IllegalStateException invalidCreation) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(activation));
+        }
+    }
+
+    private static ProtosSignalException argumentCountError(
+            ProtosActivation activation) {
+        return new ProtosSignalException(
+                ProtosCoreErrors.newError(activation));
     }
 
     /**

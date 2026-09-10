@@ -17,13 +17,15 @@
 
 package com.guillermomolina.protos.execution;
 
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
+import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.parser.ProtosParser;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
@@ -37,12 +39,12 @@ import java.util.List;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
-final class ProtosPerf006B2C2GeneralPositionalArityTest {
+final class ProtosPerf006B2C3ARestBindingTest {
     private static final LanguageReference<ProtosLanguage> LANGUAGE_REF =
             LanguageReference.create(ProtosLanguage.class);
 
     @Test
-    void generalRequiredParameterBindingPreservesPositionalIdentity()
+    void restCapturesOnlyUnconsumedSuppliedSuffixAsFreshFrozenArray()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -57,19 +59,15 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                         new ProtosObjectValue(ProtosObjectValue.rootObject());
                 ProtosObjectValue third =
                         new ProtosObjectValue(ProtosObjectValue.rootObject());
-                ProtosObjectValue fourth =
-                        new ProtosObjectValue(ProtosObjectValue.rootObject());
 
-                String closureCharacters = "(a, b, c, d) => { c }";
-                Source closureSource =
+                String characters = "(head, ...tail) => { tail }";
+                Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
-                                        closureCharacters,
-                                        "perf006-b2c2-binding.protos")
+                                        characters,
+                                        "perf006-b2c3a-direct-rest.protos")
                                 .build();
-                CanonicalClosure definition =
-                        closureDefinition(closureCharacters);
-
+                CanonicalClosure definition = closureDefinition(characters);
                 ProtosClosureValue semantic =
                         new ProtosClosureValue(
                                 definition,
@@ -82,63 +80,50 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                 ProtosActivation invocation =
                         ProtosActivation.forClosureInvocation(
                                 semantic,
-                                List.of(first, second, third, fourth),
+                                List.of(first, second, third),
                                 module.prelude().orElseThrow(),
                                 module.actorModuleState(),
                                 module.currentModuleKey().orElse(null),
                                 module.executionDomain());
+                ProtosArrayValue supplied =
+                        invocation.arguments().orElseThrow();
 
-                ProtosBytecodeClosureExecutionPlan directPlan =
+                ProtosBytecodeClosureExecutionPlan plan =
                         new ProtosBytecodeClosureExecutionPlan(
                                 definition,
                                 language,
-                                closureSource);
-                directPlan.bind(invocation);
+                                source);
+                plan.bind(invocation);
 
-                assertSame(first, invocation.lookup("a").orElseThrow());
-                assertSame(second, invocation.lookup("b").orElseThrow());
-                assertSame(third, invocation.lookup("c").orElseThrow());
-                assertSame(fourth, invocation.lookup("d").orElseThrow());
+                assertSame(first, invocation.lookup("head").orElseThrow());
+                ProtosArrayValue rest =
+                        assertInstanceOf(
+                                ProtosArrayValue.class,
+                                invocation.lookup("tail").orElseThrow());
+                assertNotSame(supplied, rest);
+                assertSame(
+                        ProtosObjectValue.MutationState.FROZEN,
+                        rest.mutationState());
+                assertEquals(2, rest.indexedSnapshot().size());
+                assertSame(second, rest.indexedSnapshot().get(0));
+                assertSame(third, rest.indexedSnapshot().get(1));
 
-                module.context().createLocalSlot("first", first);
-                module.context().createLocalSlot("second", second);
-                module.context().createLocalSlot("third", third);
-                module.context().createLocalSlot("fourth", fourth);
-
-                ProtosClosureExecutionPlan sourcePlan =
-                        ProtosClosureExecutionPlan.bytecode(
-                                definition,
-                                language,
-                                closureSource);
-                ProtosClosureValue sourceClosure =
-                        semanticClosure(definition, sourcePlan, module);
-                module.context().createLocalSlot("entry", sourceClosure);
-
-                String topCharacters =
-                        "entry(first, second, third, fourth)";
-                Source topSource =
-                        Source.newBuilder(
-                                        ProtosLanguage.ID,
-                                        topCharacters,
-                                        "perf006-b2c2-call.protos")
-                                .build();
-                ProtosBytecodeRootNode topRoot =
-                        new CanonicalToBytecodeLowerer(language, topSource)
-                                .lowerRoot(canonicalize(topCharacters));
-
-                assertSame(third, topRoot.getCallTarget().call(module));
+                assertEquals(3, supplied.indexedSnapshot().size());
+                assertSame(first, supplied.indexedSnapshot().get(0));
+                assertSame(second, supplied.indexedSnapshot().get(1));
+                assertSame(third, supplied.indexedSnapshot().get(2));
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println("PERF006_B2C2_GENERAL_POSITIONAL_BINDING=PASS");
-        System.out.println("PERF006_B2C2_POSITIONAL_IDENTITY_ORDER=PASS");
-        System.out.println("PERF006_B2C2_SOURCE_LEVEL_GENERAL_ARITY=PASS");
+        System.out.println("PERF006_B2C3A_REST_SUFFIX_CAPTURE=PASS");
+        System.out.println("PERF006_B2C3A_REST_ARRAY_FROZEN=PASS");
+        System.out.println("PERF006_B2C3A_ARGS_VECTOR_UNCHANGED=PASS");
     }
 
     @Test
-    void tooFewAndTooManyArgumentsRetainGuestArityError()
+    void sourceLevelRestBindingSupportsNonEmptyAndEmptySuffix()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -147,12 +132,22 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
                 ProtosActivation module = moduleActivation();
 
-                String closureCharacters = "(a, b, c) => { b }";
+                ProtosObjectValue first =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosObjectValue second =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosObjectValue third =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                module.context().createLocalSlot("first", first);
+                module.context().createLocalSlot("second", second);
+                module.context().createLocalSlot("third", third);
+
+                String closureCharacters = "(head, ...tail) => { tail }";
                 Source closureSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
                                         closureCharacters,
-                                        "perf006-b2c2-arity-closure.protos")
+                                        "perf006-b2c3a-source-rest.protos")
                                 .build();
                 CanonicalClosure definition =
                         closureDefinition(closureCharacters);
@@ -166,65 +161,92 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                                         closureSource),
                                 module));
 
-                assertGuestArityError(
-                        language,
-                        module,
-                        "entry(null, null)",
-                        "perf006-b2c2-too-few.protos");
-                assertGuestArityError(
-                        language,
-                        module,
-                        "entry(null, null, null, null)",
-                        "perf006-b2c2-too-many.protos");
+                Object nonEmpty =
+                        lowerCall(
+                                        language,
+                                        "entry(first, second, third)",
+                                        "perf006-b2c3a-rest-nonempty.protos")
+                                .getCallTarget()
+                                .call(module);
+                ProtosArrayValue nonEmptyRest =
+                        assertInstanceOf(ProtosArrayValue.class, nonEmpty);
+                assertSame(
+                        ProtosObjectValue.MutationState.FROZEN,
+                        nonEmptyRest.mutationState());
+                assertEquals(2, nonEmptyRest.indexedSnapshot().size());
+                assertSame(second, nonEmptyRest.indexedSnapshot().get(0));
+                assertSame(third, nonEmptyRest.indexedSnapshot().get(1));
+
+                Object empty =
+                        lowerCall(
+                                        language,
+                                        "entry(first)",
+                                        "perf006-b2c3a-rest-empty.protos")
+                                .getCallTarget()
+                                .call(module);
+                ProtosArrayValue emptyRest =
+                        assertInstanceOf(ProtosArrayValue.class, empty);
+                assertSame(
+                        ProtosObjectValue.MutationState.FROZEN,
+                        emptyRest.mutationState());
+                assertEquals(0, emptyRest.indexedSnapshot().size());
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println("PERF006_B2C2_TOO_FEW_ARITY_ERROR=PASS");
-        System.out.println("PERF006_B2C2_TOO_MANY_ARITY_ERROR=PASS");
+        System.out.println("PERF006_B2C3A_SOURCE_REST_BINDING=PASS");
+        System.out.println("PERF006_B2C3A_EMPTY_REST_CAPTURE=PASS");
     }
 
     @Test
-    void nestedCallArgumentsAndDefaultBindingRemainFailClosed()
+    void requiredPrefixStillRejectsTooFewArgumentsAndDefaultsRemainDeferred()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
+                ProtosActivation module = moduleActivation();
 
-                String nestedCharacters = "entry(child())";
-                Source nestedSource =
+                String restCharacters = "(head, ...tail) => { tail }";
+                Source restSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
-                                        nestedCharacters,
-                                        "perf006-b2c2-nested-argument.protos")
+                                        restCharacters,
+                                        "perf006-b2c3a-required-prefix.protos")
                                 .build();
-                UnsupportedOperationException nested =
-                        assertThrows(
-                                UnsupportedOperationException.class,
-                                () ->
-                                        new CanonicalToBytecodeLowerer(
-                                                        language,
-                                                        nestedSource)
-                                                .lowerRoot(
-                                                        canonicalize(
-                                                                nestedCharacters)));
-                assertTrue(
-                        nested.getMessage()
-                                .contains(
-                                        "argument must be literal or lexical lookup"));
+                CanonicalClosure restDefinition =
+                        closureDefinition(restCharacters);
+                module.context().createLocalSlot(
+                        "entry",
+                        semanticClosure(
+                                restDefinition,
+                                ProtosClosureExecutionPlan.bytecode(
+                                        restDefinition,
+                                        language,
+                                        restSource),
+                                module));
 
-                String defaultCharacters = "(a, b = null) => { b }";
-                CanonicalClosure defaultDefinition =
-                        closureDefinition(defaultCharacters);
+                ProtosBytecodeRootNode missingRequired =
+                        lowerCall(
+                                language,
+                                "entry()",
+                                "perf006-b2c3a-missing-required.protos");
+                assertThrows(
+                        ProtosSignalException.class,
+                        () -> missingRequired.getCallTarget().call(module));
+
+                String defaultCharacters = "(head, fallback = head) => { fallback }";
                 Source defaultSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
                                         defaultCharacters,
-                                        "perf006-b2c2-default.protos")
+                                        "perf006-b2c3a-default-deferred.protos")
                                 .build();
+                CanonicalClosure defaultDefinition =
+                        closureDefinition(defaultCharacters);
+
                 UnsupportedOperationException defaultFailure =
                         assertThrows(
                                 UnsupportedOperationException.class,
@@ -233,24 +255,20 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                                                 defaultDefinition,
                                                 language,
                                                 defaultSource));
-                assertTrue(
+                org.junit.jupiter.api.Assertions.assertTrue(
                         defaultFailure.getMessage()
                                 .contains("default parameter binding is deferred"));
-
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println(
-                "PERF006_B2C2_NESTED_ARGUMENT_COMPOSITION_DEFERRED=PASS");
-        System.out.println(
-                "PERF006_B2C2_DEFAULT_BINDING_DEFERRED=PASS");
+        System.out.println("PERF006_B2C3A_REQUIRED_PREFIX_ARITY=PASS");
+        System.out.println("PERF006_B2C3A_DEFAULT_BINDING_STILL_DEFERRED=PASS");
     }
 
-    private static void assertGuestArityError(
+    private static ProtosBytecodeRootNode lowerCall(
             ProtosLanguage language,
-            ProtosActivation module,
             String characters,
             String sourceName)
             throws Exception {
@@ -260,12 +278,8 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                                 characters,
                                 sourceName)
                         .build();
-        ProtosBytecodeRootNode root =
-                new CanonicalToBytecodeLowerer(language, source)
-                        .lowerRoot(canonicalize(characters));
-        assertThrows(
-                ProtosSignalException.class,
-                () -> root.getCallTarget().call(module));
+        return new CanonicalToBytecodeLowerer(language, source)
+                .lowerRoot(canonicalize(characters));
     }
 
     private static ProtosClosureValue semanticClosure(
