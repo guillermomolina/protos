@@ -1,5 +1,17 @@
 ## 0.2.313-SNAPSHOT
 
+- Stop requiring routine agents to reconcile GitHub Project metadata to reconcile GitHub Project metadata during formal
+  Issue allocation, activation, blocking, review, publication, or closure. Keep
+  GitHub Issues, `family:*` classification, assignee discipline, and Issue work
+  logs as the required agent-facing coordination surfaces when their actions are
+  available. Treat `Protos Development` Project membership and `Status`, `Area`,
+  `Roadmap`, `Priority`, `Owner`, and similar fields as optional scheduling/
+  presentation metadata; agents must not probe for Project capabilities or report
+  their absence as missing coordination unless the project owner explicitly asks
+  for a Project operation and a documented Project-capable action already exists.
+  Governance only: no Protos specification, executable implementation,
+  implementation version, or license terms change.
+
 - Close `PERF005 — Protos test-corpus execution acceleration` / GitHub #244 after the measurement-first A/B/C program. Retain conservative diff-driven impact-aware publication validation: unequivocally Package Tool-local candidates run the complete mapped Package affected set, unequivocally Test Tool-local candidates run the complete Test Tool affected set, and shared/unknown/cross-tool or top-level closure candidates fail closed to the complete Maven suite. Current-baseline B3 evidence measured `107.281 s` FULL, `92.634 s` Package-local median (`13.7%` improvement), and `24.165 s` Test Tool-local median (`77.5%` improvement), with all routed runs green and stable cardinality. Keep `scripts/publication_validation.py` as a temporary host-side execution bridge until the official `protos test` / TOOL002 path demonstrably owns the same publication-validation contract; the deterministic impact-routing policy may outlive that bridge. TOOL002-H remains suspended. No Protos specification, runtime semantics, Maven implementation version, or license terms change in this final reconciliation.
 
 - Ratify `PLAT013 — Truffle debugger/interop value projection architecture` / GitHub #250 after explicit project-owner approval and exhaustive Truffle-language (including Apple Pkl), Bytecode-DSL, identity, large-object-graph and scalability review. Select C′: real Protos runtime values are the authoritative read-only semantic-minimum interop receivers; ordinary object members project local slots only; synthetic scopes/contextual views remain adapters. Defer delegated lookup, Closure execution, debugger mutation and initial Map/IdentityMap hash-entry interop. Release I026-D as READY under PLAT013. Governance/platform-architecture only: no Protos specification, executable implementation or implementation-version change.

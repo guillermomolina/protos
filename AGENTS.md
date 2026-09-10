@@ -448,8 +448,8 @@ They are live coordination state and MUST NOT be mirrored into historical
 repository ledgers.
 
 When an agent starts or resumes work that is directly represented by a formal
-Protos GitHub Issue, the agent MUST reconcile assignee state together with the
-Issue/Project status:
+Protos GitHub Issue, the agent MUST reconcile the Issue assignee state when the
+available GitHub capability can mutate assignees:
 
 - an Issue that the agent is directly working on and keeps or moves to
   `In progress` SHOULD have an active responsible assignee;
@@ -477,15 +477,9 @@ limitation explicitly instead of claiming the Issue was assigned. Lack of
 assignee-mutation capability is not by itself an implementation blocker when the
 work is otherwise authorized and correctly coordinated.
 
-Project `Priority` is different: agents MAY recommend a priority, but MUST NOT
-invent or bulk-assign `P0`/`P1`/`P2`/`P3` merely because work is active. Priority
-reflects project-owner scheduling intent unless the user explicitly delegates
-that prioritization. Priority reconciliation is nevertheless mandatory: before
-finishing allocation, activation, blocking, or closure coordination, inspect
-whether an authoritative priority is already established and set/preserve it
-when it is. When no priority has been established, leave the Project field
-deliberately unset and report that fact; an unset priority must not be the
-accidental result of creating an incomplete Project item.
+GitHub Project fields, including `Priority`, are outside routine agent
+coordination. Agents MUST NOT probe for or attempt Project-field operations merely
+to satisfy repository governance. See **Optional GitHub Project metadata** below.
 
 ## Mandatory pre-implementation audit
 
@@ -710,8 +704,10 @@ The current proportional model is:
 
 - **Discussions** own exploration, questions, early ideas, and pre-decision
   conversation.
-- **Issues + Project** own actionable live coordination, assignment, status,
-  priority, and roadmap.
+- **Issues** own required actionable live coordination, assignment, lifecycle
+  history, and work logs.
+- The **`Protos Development` Project** is an optional scheduling/presentation
+  view, not a routine agent coordination obligation.
 - **External contributions** normally use a branch/fork + Pull Request + CI/review
   before merge.
 - **Maintainer/agent-generated patches** may use the governed isolated
@@ -1073,10 +1069,9 @@ The authority split is:
   is also the canonical live coordination surface. For `Dxxx`, `PLATxxx`, and
   `Bxxx`, Issue state represents coordination/history only and does not replace
   the durable repository authority described above;
-- the `Protos Development` GitHub Project is the canonical live scheduling and
-  prioritization view for actionable Issues deliberately tracked there. Closed
-  retrospective decision/blocker representations do not require Project
-  membership merely to reproduce historical inventory; and
+- the `Protos Development` GitHub Project may provide an optional scheduling and
+  prioritization view for Issues deliberately tracked there, but its membership
+  and fields are not a required routine agent coordination surface; and
 - merged/published repository state, owning project records, tests, changelog
   entries, and Git history retain durable implementation/closure evidence.
 
@@ -1094,14 +1089,15 @@ closure-evidence ledger. Neither file is a live scheduling/status source.
 Agents MUST NOT add new actionable work to `OPEN_TASKS.md`, update it to mirror
 GitHub, or use it to decide what should run next. Agents MUST NOT update
 `IMPLEMENTATION_STATUS.md` merely to mirror `OPEN`, `READY`, `IN_PROGRESS`,
-`BLOCKED`, assignee, priority, or roadmap changes. New actionable work and all
-live scheduling/status belong to GitHub Issues and the `Protos Development`
-Project.
+`BLOCKED`, assignee, priority, or roadmap changes. New actionable work and required agent-facing live coordination belong to
+GitHub Issues. The `Protos Development` Project may mirror scheduling metadata,
+but routine agents are not required to inspect or mutate it.
 
 `IMPLEMENTATION_STATUS.md` may still preserve or add durable historical/closure
 evidence when a repository publication genuinely needs that registry function,
 but a row there never reserves work, releases work, blocks work operationally,
-or overrides the owning Issue/Project's live coordination state. Preserve both
+or overrides the owning Issue's live coordination state. Optional Project
+metadata does not change that authority. Preserve both
 legacy files as historical evidence; do not bulk-delete their retained content.
 
 Before starting actionable implementation/project work, agents MUST:
@@ -1113,11 +1109,12 @@ Before starting actionable implementation/project work, agents MUST:
    and
 4. preserve the authority split above when updating either side.
 
-GitHub live state is coordination data, not proof that code exists. If an Issue
-or Project field conflicts with current published repository state, use the
+GitHub Issue state is coordination data, not proof that code exists. If an Issue
+conflicts with current published repository state, use the
 repository/specification to establish what actually exists and then reconcile
-GitHub; do not rewrite durable semantics or implementation evidence merely to
-match stale coordination metadata.
+the Issue; do not rewrite durable semantics or implementation evidence merely to
+match stale coordination metadata. Optional Project fields are outside routine
+agent reconciliation.
 
 When a bounded implementation slice is successfully published, the publication
 commit MUST still record every durable artifact required by its owning work item
@@ -1126,8 +1123,9 @@ blocker transition, or normative decision evidence where applicable). The patch
 launcher itself MUST NOT require GitHub API credentials and MUST NOT create,
 close, relabel, assign, or move Issues/Project items. Only after publication is
 confirmed as successful may the coordinating agent update the corresponding
-GitHub live state. If the agent cannot perform that GitHub write, it must report
-the exact coordination update still required rather than pretending it happened.
+GitHub Issue live state. If the agent cannot perform a required Issue write, it
+must report the exact Issue coordination update still required rather than
+pretending it happened. Project-field updates are not required by this rule.
 
 <!-- GITHUB001 ISSUE-WORK-LOG-CHANGELOG-DISCIPLINE -->
 #### Issue work log and changelog discipline
@@ -1199,8 +1197,9 @@ change to use a pull request. Use a PR when the contribution workflow, review
 policy, or explicit user request requires one; otherwise follow the publication
 rules in this file.
 
-Live coordination state such as assignee, `In progress`, `Blocked`, or a Project
-column is advisory coordination, not a repository lock. Multiple agents must
+Live Issue coordination state such as assignee, active work, or blocking is
+advisory coordination, not a repository lock. Optional Project fields are also
+advisory but are not required agent state. Multiple agents must
 still re-fetch `origin/main`, inspect overlapping work, and avoid assuming that a
 GitHub assignment grants exclusive ownership of mutable files or semantics.
 
@@ -1247,7 +1246,8 @@ is the identifier prefix. Examples include `family:I`, `family:LIB`,
 A formal sub-issue keeps the same family label as its formal identifier. The
 family label classifies durable project ownership only. Do not encode live
 status, priority, roadmap position, assignee, blocking state, or parent/child
-structure in family labels; those belong to the Issue/Project/native hierarchy.
+structure in family labels; those belong to the Issue/native hierarchy. Optional
+Project metadata may mirror them but is not required agent state.
 Ordinary community Issues that do not have a formal Protos work identifier do not
 need a family label.
 
@@ -1264,64 +1264,30 @@ GitHub's numeric Issue identifier and a Protos formal identifier are independent
 namespaces. For example, GitHub Issue `#73` may own `I031`; agents MUST NOT try to
 make those numbers coincide.
 
-<!-- GITHUB001-A2 PROJECT-METADATA-COMPLETENESS -->
-##### Project metadata completeness
+<!-- GITHUB001-A2 PROJECT-METADATA-NONREQUIREMENT -->
+##### Optional GitHub Project metadata
 
-Creating a formal GitHub Issue is not complete merely because the title and
-`family:<FAMILY>` label exist. The Issue and the `Protos Development` Project
-together are the live coordination record. When the available GitHub capability
-can mutate Project metadata, the coordinating agent MUST add or reconcile the
-formal Issue in that Project as part of allocation and again whenever the Issue
-is actively started/resumed or materially changes coordination state.
+Creating, activating, blocking, reviewing, or closing a formal GitHub Issue does
+not require a matching mutation in the `Protos Development` Project. The owning
+Issue is the required live coordination record for formal work.
 
-For every formal work item, reconcile all applicable live metadata rather than
-updating only the field that prompted the current action:
+Agents MUST NOT inspect, probe for, emulate, or attempt GitHub Project mutations
+solely to satisfy repository governance. Project membership and Project
+`Status`, `Area`, `Roadmap`, `Priority`, `Owner`, or similar fields are not
+required allocation, activation, blocking, review, publication, or closure
+steps.
 
-- the Issue carries exactly one `family:<FAMILY>` label matching its formal
-  identifier;
-- a newly introduced family label is verified as a real stable classification
-  label and SHOULD have a meaningful description of the family boundary rather
-  than relying indefinitely on an accidental blank auto-created label;
-- `Assignee` represents active responsibility under the assignee discipline
-  above; when an agent immediately works the item on behalf of the repository
-  owner and no other human is responsible, assign `guillermomolina`;
-- Project `Status` reflects the real live state. Work being actively executed is
-  `In progress`; independently actionable unclaimed work is normally `Ready`;
-  blocked/decision/review states use the corresponding existing Project option
-  when applicable; `Done` is not set before the repository-defined closure
-  condition is actually satisfied;
-- Project `Area` is set to the closest existing area that owns the work. Infer it
-  from the primary work surface and established Project taxonomy, not merely
-  from the spelling of the formal prefix, and never invent an ad-hoc Project
-  option to make a field non-empty;
-- Project `Roadmap` reflects established scheduling intent. Work that is
-  actually being driven now, or that the project owner explicitly places in the
-  current tranche, belongs in `Now`; creation alone MUST NOT promote queued work
-  into `Now`. Preserve/use `Next`, `Later`, or another existing option when that
-  is the established roadmap position;
-- Project `Priority` is always checked. Set or preserve `P0`/`P1`/`P2`/`P3` only
-  when project-owner intent or an already-established project policy provides
-  that priority. Do not invent urgency from the family prefix, issue number,
-  activity, or agent preference. If no authoritative priority exists, leave the
-  field deliberately unset and report `PRIORITY_UNSET: NO_OWNER_PRIORITY`
-  instead of silently omitting reconciliation; and
-- if the Project exposes a separate `Owner`/responsibility field in addition to
-  GitHub Assignees, reconcile it consistently with the active-responsibility
-  model rather than leaving stale ownership metadata.
+The absence of a Project-capable action is not a coordination limitation, MUST
+NOT be reported as missing work, and never blocks otherwise authorized repository
+work or publication. Do not infer Project capability from generic GitHub Issue
+actions, and do not invent GraphQL, browser, CLI, or manual workarounds merely to
+satisfy this governance file.
 
-An agent MUST NOT claim that formal Issue creation/activation is fully
-reconciled when it updated only the Issue object but omitted Project metadata it
-had the capability and authority to update. If the environment cannot add the
-Issue to the Project or cannot mutate one of the required fields, continue the
-authorized repository work when otherwise safe but report the exact missing
-coordination operation/field. Do not compensate for a missing Project API by
-inventing repository ledger state.
-
-When introducing an entirely new formal family, its first policy publication
-MUST define the family boundary and add it to the `family:<FAMILY>` policy before
-agents treat the prefix as generally available. The first Issue may be allocated
-concurrently with that publication when needed to track the work, but the
-publication must make the classification durable.
+Only when the project owner explicitly requests a Project operation and the
+current environment already exposes a documented Project-capable action may an
+agent inspect or mutate Project metadata. Project metadata remains advisory
+presentation/scheduling state: it cannot ratify design, override repository
+authority, or act as a publication lock.
 
 ##### Collision-safe formal identifier allocation
 
