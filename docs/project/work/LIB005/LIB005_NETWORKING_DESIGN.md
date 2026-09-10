@@ -720,3 +720,42 @@ temporary assertions that IPv6 itself must fail are retired by this slice.
 
 `LIB005-C — endpoint parse/format` is the next dependency-ordered implementation
 slice.
+
+### LIB005-C — implementation CLOSED
+
+Published implementation version: `0.2.337-SNAPSHOT`
+Closure evidence: `SAME_COMMIT`
+Live work item: GitHub Issue `#283`
+
+C publishes the already-approved `std:network/IpEndpoints` module with exactly
+two public selectors: `parse(text)` and `format(endpoint)`.
+
+`parse` first validates the exact semantic String domain. It then separates only
+the endpoint envelope: unbracketed input admits one IPv4-address/port separator,
+while bracketed input captures one IPv6 address followed by `]:`. The address
+payload is not reparsed locally; it is delegated to the already-published
+`std:network/IpAddresses.parse`, after which C enforces the approved envelope
+family (`version == 4` unbracketed, `version == 6` bracketed).
+
+Port parsing accepts only ASCII decimal graphemes, has no sign or whitespace,
+rejects mathematical zero and values above `65535`, and deliberately accepts
+decimal leading zeros as selected by LIB005-0. No extra five-character spelling
+limit is introduced. The parser retains only fixed local counters/integers and
+fails as soon as a nonzero accumulated value exceeds the Core port bound; long
+leading-zero spellings therefore do not create unbounded retained parser state.
+Successful construction delegates to the existing Core
+`IpEndpoint(address, port)` factory.
+
+`format` requires `IpEndpoint.recognizes(endpoint)`, delegates address
+canonicalization to `IpAddresses.format`, emits IPv4 as `address:port` and IPv6
+as `[address]:port`, and emits the already-recognized `1..65535` port through a
+fixed five-position decimal scan with no unnecessary leading zeros.
+
+All behavior remains ordinary Protos and synchronous. C introduces no DNS,
+Resolver, Network authority, Future, host I/O, regex/backtracking engine,
+process-global cache/state, production Java or native Standard Library bridge.
+Focused real-`std:` conformance covers family envelopes, port boundaries,
+leading-zero canonicalization, IPv4/IPv6/mapped forms, semantic round-trip,
+malformed/wrong-domain rejection and the exact two-selector module surface.
+
+`LIB005-D — integrated closure` is the next dependency-ordered slice.

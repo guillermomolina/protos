@@ -1,0 +1,260 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+parse: (text) => {
+    // Strict String-domain validation without conversion.
+    ignoredStringValidation: text + ""
+
+    fail: () => {
+        Error().signal()
+    }
+
+    size: text.size()
+    (size == 0).ifTrue(() => {
+        fail()
+    })
+
+    digitValue: (character) => {
+        result: -1
+
+        (character == "0").ifTrue(() => { result = 0 })
+        (character == "1").ifTrue(() => { result = 1 })
+        (character == "2").ifTrue(() => { result = 2 })
+        (character == "3").ifTrue(() => { result = 3 })
+        (character == "4").ifTrue(() => { result = 4 })
+        (character == "5").ifTrue(() => { result = 5 })
+        (character == "6").ifTrue(() => { result = 6 })
+        (character == "7").ifTrue(() => { result = 7 })
+        (character == "8").ifTrue(() => { result = 8 })
+        (character == "9").ifTrue(() => { result = 9 })
+
+        result
+    }
+
+    parsePortFrom: (start) => {
+        (start >= size).ifTrue(() => {
+            fail()
+        })
+
+        index: start
+        value: 0
+        digitCount: 0
+
+        (() => index < size).while() {
+            digit: digitValue(text.at(index))
+            (digit < 0).ifTrue(() => {
+                fail()
+            })
+
+            digitCount = digitCount + 1
+            value = value * 10 + digit
+
+            // Leading zeros are accepted, but the mathematical port is bounded.
+            (value > 65535).ifTrue(() => {
+                fail()
+            })
+
+            index = index + 1
+        }
+
+        (digitCount == 0).ifTrue(() => {
+            fail()
+        })
+        (value == 0).ifTrue(() => {
+            fail()
+        })
+
+        value
+    }
+
+    IpAddresses: import("std:network/IpAddresses")
+
+    bracketed: text.at(0) == "["
+    addressText: ""
+    portStart: -1
+    address: null
+
+    bracketed.ifTrue(() => {
+        index: 1
+        closed: false
+        addressLength: 0
+
+        (() => {
+            keepScanning: index < size
+            keepScanning.ifTrue(() => {
+                keepScanning = closed == false
+            })
+            keepScanning
+        }).while() {
+            character: text.at(index)
+
+            (character == "]").ifTrue(() => {
+                closed = true
+            })
+
+            (character == "]").ifFalse(() => {
+                addressLength = addressLength + 1
+                // No valid numeric IPv6 address accepted by IpAddresses exceeds
+                // 45 grapheme positions.
+                (addressLength > 45).ifTrue(() => {
+                    fail()
+                })
+                addressText = addressText + character
+            })
+
+            index = index + 1
+        }
+
+        closed.ifFalse(() => {
+            fail()
+        })
+        (index >= size).ifTrue(() => {
+            fail()
+        })
+        (text.at(index) == ":").ifFalse(() => {
+            fail()
+        })
+
+        portStart = index + 1
+        address = IpAddresses.parse(addressText)
+
+        // Brackets are reserved for IPv6 endpoint text.
+        (address.version == 6).ifFalse(() => {
+            fail()
+        })
+    })
+
+    bracketed.ifFalse(() => {
+        separatorIndex: -1
+        index: 0
+        addressLength: 0
+
+        (() => index < size).while() {
+            character: text.at(index)
+            isSeparator: character == ":"
+
+            isSeparator.ifTrue(() => {
+                (separatorIndex >= 0).ifTrue(() => {
+                    fail()
+                })
+                separatorIndex = index
+            })
+
+            isSeparator.ifFalse(() => {
+                (separatorIndex < 0).ifTrue(() => {
+                    addressLength = addressLength + 1
+                    // The unbracketed endpoint grammar admits IPv4 only.
+                    (addressLength > 15).ifTrue(() => {
+                        fail()
+                    })
+                    addressText = addressText + character
+                })
+            })
+
+            index = index + 1
+        }
+
+        (separatorIndex < 0).ifTrue(() => {
+            fail()
+        })
+
+        portStart = separatorIndex + 1
+        address = IpAddresses.parse(addressText)
+
+        // Unbracketed IPv6 endpoint text is intentionally rejected.
+        (address.version == 4).ifFalse(() => {
+            fail()
+        })
+    })
+
+    port: parsePortFrom(portStart)
+    IpEndpoint(address, port)
+}
+
+format: (endpoint) => {
+    fail: () => {
+        Error().signal()
+    }
+
+    IpEndpoint.recognizes(endpoint).ifFalse(() => {
+        fail()
+    })
+
+    IpAddresses: import("std:network/IpAddresses")
+    addressText: IpAddresses.format(endpoint.address)
+
+    digitText: (digit) => {
+        result: null
+
+        (digit == 0).ifTrue(() => { result = "0" })
+        (digit == 1).ifTrue(() => { result = "1" })
+        (digit == 2).ifTrue(() => { result = "2" })
+        (digit == 3).ifTrue(() => { result = "3" })
+        (digit == 4).ifTrue(() => { result = "4" })
+        (digit == 5).ifTrue(() => { result = "5" })
+        (digit == 6).ifTrue(() => { result = "6" })
+        (digit == 7).ifTrue(() => { result = "7" })
+        (digit == 8).ifTrue(() => { result = "8" })
+        (digit == 9).ifTrue(() => { result = "9" })
+
+        (result === null).ifTrue(() => {
+            fail()
+        })
+
+        result
+    }
+
+    // IpEndpoint.recognizes has already established 1..65535, so exactly five
+    // divisor positions are sufficient for canonical decimal emission.
+    portText: ""
+    started: false
+    divisor: 10000
+
+    (() => divisor > 0).while() {
+        digit: endpoint.port.div(divisor).mod(10)
+
+        emit: started
+        emit.ifFalse(() => {
+            (digit > 0).ifTrue(() => {
+                emit = true
+            })
+            (divisor == 1).ifTrue(() => {
+                emit = true
+            })
+        })
+
+        emit.ifTrue(() => {
+            portText = portText + digitText(digit)
+            started = true
+        })
+
+        divisor = divisor.div(10)
+    }
+
+    result: null
+
+    (endpoint.address.version == 4).ifTrue(() => {
+        result = addressText + ":" + portText
+    })
+
+    (endpoint.address.version == 6).ifTrue(() => {
+        result = "[" + addressText + "]:" + portText
+    })
+
+    (result === null).ifTrue(() => {
+        fail()
+    })
+
+    result
+}
