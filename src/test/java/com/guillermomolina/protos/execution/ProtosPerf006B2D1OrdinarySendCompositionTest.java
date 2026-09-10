@@ -190,13 +190,13 @@ final class ProtosPerf006B2D1OrdinarySendCompositionTest {
     }
 
     @Test
-    void composedReceiverRemainsFailClosed() throws Exception {
+    void invocationSpreadRemainsFailClosed() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
-                String characters = "factory().echo(null)";
+                String characters = "factory().echo(...items)";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -217,15 +217,14 @@ final class ProtosPerf006B2D1OrdinarySendCompositionTest {
 
                 assertTrue(
                         failure.getMessage()
-                                .contains(
-                                        "PERF006-B2D1 send receiver must be literal or lexical lookup"));
+                                .contains("CanonicalSpread"));
             } finally {
                 context.leave();
             }
         }
 
         System.out.println(
-                "PERF006_B2D1_COMPOSED_RECEIVER_DEFERRED=PASS");
+                "PERF006_B2D1_INVOCATION_SPREAD_DEFERRED=PASS");
     }
 
     private static ProtosBytecodeRootNode yieldingMethodRoot(

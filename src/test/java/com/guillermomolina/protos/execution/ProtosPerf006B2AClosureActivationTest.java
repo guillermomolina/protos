@@ -284,13 +284,13 @@ final class ProtosPerf006B2AClosureActivationTest {
     }
 
     @Test
-    void composedDefaultReceiverRemainsFailClosedUntilTargetCompositionMigration() throws Exception {
+    void spreadDefaultRemainsFailClosedUntilInvocationSpreadMigration() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
-                String characters = "(x, y = child().pick()) => y";
+                String characters = "(x, y = child(...items)) => y";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -310,13 +310,13 @@ final class ProtosPerf006B2AClosureActivationTest {
                                                 source));
                 assertTrue(
                         failure.getMessage()
-                                .contains("default send receiver must be literal or lexical lookup"));
+                                .contains("CanonicalSpread"));
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println("PERF006_B2A_COMPOSED_DEFAULT_RECEIVER_NOT_SILENTLY_MIGRATED=PASS");
+        System.out.println("PERF006_B2A_INVOCATION_SPREAD_NOT_SILENTLY_MIGRATED=PASS");
     }
 
     private static CanonicalClosure closureDefinition(String characters) {

@@ -186,7 +186,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
     }
 
     @Test
-    void arityFailureAndComposedDefaultReceiverBoundaryRemainFailClosed()
+    void arityFailureAndSpreadDefaultBoundaryRemainFailClosed()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -229,7 +229,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                         () -> missingRoot.getCallTarget().call(module));
 
                 String defaultCharacters =
-                        "(head, fallback = child().pick()) => { fallback }";
+                        "(head, fallback = child(...items)) => { fallback }";
                 Source defaultSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -248,8 +248,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                                                 defaultSource));
                 assertTrue(
                         failure.getMessage()
-                                .contains(
-                                        "default send receiver must be literal or lexical lookup"));
+                                .contains("CanonicalSpread"));
             } finally {
                 context.leave();
             }
@@ -257,7 +256,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
 
         System.out.println("PERF006_B2C3B1_ARITY_ERROR_PRESERVED=PASS");
         System.out.println(
-                "PERF006_B2C3B1_COMPOSED_DEFAULT_RECEIVER_STILL_DEFERRED=PASS");
+                "PERF006_B2C3B1_DEFAULT_INVOCATION_SPREAD_STILL_DEFERRED=PASS");
     }
 
     private static ProtosClosureValue semanticClosure(

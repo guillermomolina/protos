@@ -44,12 +44,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
-final class ProtosPerf006B2D4AComposedCallTargetTest {
+final class ProtosPerf006B2D4BComposedSendReceiverTest {
     private static final LanguageReference<ProtosLanguage> LANGUAGE_REF =
             LanguageReference.create(ProtosLanguage.class);
 
     @Test
-    void callResultCanBecomeTheTargetOfAnotherCall()
+    void callResultCanBecomeMessageReceiver()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -59,29 +59,24 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
                 ProtosActivation module = moduleActivation();
                 ProtosObjectValue marker =
                         new ProtosObjectValue(ProtosObjectValue.rootObject());
-                module.context().createLocalSlot("marker", marker);
+                ProtosObjectValue receiver =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
 
-                ProtosClosureValue target =
-                        sourceClosure(
-                                language,
-                                module,
-                                "() => { marker }",
-                                "perf006-b2d4a-target.protos");
-                module.context().createLocalSlot("target", target);
+                receiver.createLocalSlot(
+                        "pick",
+                        ProtosClosureValue.nativeClosure(
+                                (activation, supplied) -> marker));
                 module.context().createLocalSlot(
-                        "maker",
-                        sourceClosure(
-                                language,
-                                module,
-                                "() => { target }",
-                                "perf006-b2d4a-maker.protos"));
+                        "entry",
+                        ProtosClosureValue.nativeClosure(
+                                (activation, supplied) -> receiver));
 
                 Object result =
                         execute(
                                 language,
                                 module,
-                                "maker()()",
-                                "perf006-b2d4a-call-target.protos");
+                                "entry().pick()",
+                                "perf006-b2d4b-call-derived-receiver.protos");
 
                 assertSame(marker, result);
             } finally {
@@ -89,11 +84,11 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
             }
         }
 
-        System.out.println("PERF006_B2D4A_CALL_TARGET_FROM_CALL=PASS");
+        System.out.println("PERF006_B2D4B_RECEIVER_FROM_CALL=PASS");
     }
 
     @Test
-    void sendResultCanBecomeTheTargetOfAnotherCall()
+    void sendResultCanBecomeMessageReceiver()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -103,28 +98,27 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
                 ProtosActivation module = moduleActivation();
                 ProtosObjectValue marker =
                         new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosObjectValue receiver =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
                 ProtosObjectValue holder =
                         new ProtosObjectValue(ProtosObjectValue.rootObject());
-                ProtosClosureValue target =
-                        sourceClosure(
-                                language,
-                                module,
-                                "() => { marker }",
-                                "perf006-b2d4a-send-target.protos");
 
-                module.context().createLocalSlot("marker", marker);
+                receiver.createLocalSlot(
+                        "pick",
+                        ProtosClosureValue.nativeClosure(
+                                (activation, supplied) -> marker));
                 holder.createLocalSlot(
                         "make",
                         ProtosClosureValue.nativeClosure(
-                                (activation, supplied) -> target));
+                                (activation, supplied) -> receiver));
                 module.context().createLocalSlot("holder", holder);
 
                 Object result =
                         execute(
                                 language,
                                 module,
-                                "holder.make()()",
-                                "perf006-b2d4a-send-derived-target.protos");
+                                "holder.make().pick()",
+                                "perf006-b2d4b-send-derived-receiver.protos");
 
                 assertSame(marker, result);
             } finally {
@@ -132,11 +126,11 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
             }
         }
 
-        System.out.println("PERF006_B2D4A_CALL_TARGET_FROM_SEND=PASS");
+        System.out.println("PERF006_B2D4B_RECEIVER_FROM_SEND=PASS");
     }
 
     @Test
-    void targetEvaluatesBeforeArgumentsStrictlyOnce()
+    void receiverEvaluatesBeforeArgumentsStrictlyOnce()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -146,20 +140,23 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
                 ProtosActivation module = moduleActivation();
                 ProtosObjectValue marker =
                         new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosObjectValue receiver =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
                 List<String> order = new ArrayList<>();
 
-                ProtosClosureValue target =
+                receiver.createLocalSlot(
+                        "capture",
                         ProtosClosureValue.nativeClosure(
                                 (activation, supplied) -> {
                                     order.add("invoke");
                                     return supplied.get(0);
-                                });
+                                }));
                 module.context().createLocalSlot(
-                        "maker",
+                        "entry",
                         ProtosClosureValue.nativeClosure(
                                 (activation, supplied) -> {
-                                    order.add("target");
-                                    return target;
+                                    order.add("receiver");
+                                    return receiver;
                                 }));
                 module.context().createLocalSlot(
                         "argument",
@@ -173,24 +170,24 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
                         execute(
                                 language,
                                 module,
-                                "maker()(argument())",
-                                "perf006-b2d4a-order.protos");
+                                "entry().capture(argument())",
+                                "perf006-b2d4b-order.protos");
 
                 assertSame(marker, result);
                 assertEquals(
-                        List.of("target", "argument", "invoke"),
+                        List.of("receiver", "argument", "invoke"),
                         order);
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println("PERF006_B2D4A_TARGET_BEFORE_ARGUMENTS=PASS");
-        System.out.println("PERF006_B2D4A_TARGET_ARGUMENTS_EXACTLY_ONCE=PASS");
+        System.out.println("PERF006_B2D4B_RECEIVER_BEFORE_ARGUMENTS=PASS");
+        System.out.println("PERF006_B2D4B_RECEIVER_ARGUMENTS_EXACTLY_ONCE=PASS");
     }
 
     @Test
-    void laterArgumentSuspensionDoesNotReplayCompletedTarget()
+    void laterArgumentSuspensionDoesNotReplayCompletedReceiver()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -200,21 +197,24 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
                 ProtosActivation module = moduleActivation();
                 ProtosObjectValue marker =
                         new ProtosObjectValue(ProtosObjectValue.rootObject());
-                AtomicInteger makerCount = new AtomicInteger();
-                AtomicInteger targetCount = new AtomicInteger();
+                ProtosObjectValue receiver =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                AtomicInteger receiverCount = new AtomicInteger();
+                AtomicInteger methodCount = new AtomicInteger();
 
-                ProtosClosureValue target =
+                receiver.createLocalSlot(
+                        "capture",
                         ProtosClosureValue.nativeClosure(
                                 (activation, supplied) -> {
-                                    targetCount.incrementAndGet();
+                                    methodCount.incrementAndGet();
                                     return supplied.get(0);
-                                });
+                                }));
                 module.context().createLocalSlot(
-                        "maker",
+                        "entry",
                         ProtosClosureValue.nativeClosure(
                                 (activation, supplied) -> {
-                                    makerCount.incrementAndGet();
-                                    return target;
+                                    receiverCount.incrementAndGet();
+                                    return receiver;
                                 }));
                 module.context().createLocalSlot(
                         "argument",
@@ -222,39 +222,40 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
                                 language,
                                 module,
                                 marker,
-                                "perf006-b2d4a-suspending-argument.protos"));
+                                "perf006-b2d4b-suspending-argument.protos",
+                                1));
 
                 Object first =
                         execute(
                                 language,
                                 module,
-                                "maker()(argument())",
-                                "perf006-b2d4a-no-replay.protos");
+                                "entry().capture(argument())",
+                                "perf006-b2d4b-no-replay.protos");
 
                 ContinuationResult continuation =
                         assertInstanceOf(
                                 ContinuationResult.class,
                                 first);
-                assertEquals(1, makerCount.get());
-                assertEquals(0, targetCount.get());
+                assertEquals(1, receiverCount.get());
+                assertEquals(0, methodCount.get());
 
                 Object completed =
                         continuation.continueWith(
                                 ProtosNullValue.INSTANCE);
 
                 assertSame(marker, completed);
-                assertEquals(1, makerCount.get());
-                assertEquals(1, targetCount.get());
+                assertEquals(1, receiverCount.get());
+                assertEquals(1, methodCount.get());
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println("PERF006_B2D4A_TARGET_NO_REPLAY_ACROSS_ARGUMENT_SUSPENSION=PASS");
+        System.out.println("PERF006_B2D4B_RECEIVER_NO_REPLAY_ACROSS_ARGUMENT_SUSPENSION=PASS");
     }
 
     @Test
-    void repeatedTargetSuspensionKeepsTheSameTargetInvocationActivation()
+    void repeatedReceiverSuspensionKeepsSameReceiverActivation()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -264,37 +265,38 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
                 ProtosActivation module = moduleActivation();
                 ProtosObjectValue marker =
                         new ProtosObjectValue(ProtosObjectValue.rootObject());
-                ProtosClosureValue target =
-                        sourceClosure(
-                                language,
-                                module,
-                                "() => { marker }",
-                                "perf006-b2d4a-after-target-suspension.protos");
-                module.context().createLocalSlot("marker", marker);
+                ProtosObjectValue receiver =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+
+                receiver.createLocalSlot(
+                        "pick",
+                        ProtosClosureValue.nativeClosure(
+                                (activation, supplied) -> marker));
                 module.context().createLocalSlot(
-                        "maker",
-                        twiceYieldingClosure(
+                        "entry",
+                        yieldingClosure(
                                 language,
                                 module,
-                                target,
-                                "perf006-b2d4a-yielding-maker.protos"));
+                                receiver,
+                                "perf006-b2d4b-yielding-receiver.protos",
+                                2));
 
                 Object first =
                         execute(
                                 language,
                                 module,
-                                "maker()()",
-                                "perf006-b2d4a-repeated-target-suspension.protos");
+                                "entry().pick()",
+                                "perf006-b2d4b-receiver-suspension.protos");
                 ContinuationResult outer1 =
                         assertInstanceOf(
                                 ContinuationResult.class,
                                 first);
-                ContinuationResult maker1 =
+                ContinuationResult receiver1 =
                         assertInstanceOf(
                                 ContinuationResult.class,
                                 outer1.getResult());
-                ProtosActivation makerActivation =
-                        activationOf(maker1);
+                ProtosActivation activation =
+                        activationOf(receiver1);
 
                 Object second =
                         outer1.continueWith(
@@ -303,14 +305,14 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
                         assertInstanceOf(
                                 ContinuationResult.class,
                                 second);
-                ContinuationResult maker2 =
+                ContinuationResult receiver2 =
                         assertInstanceOf(
                                 ContinuationResult.class,
                                 outer2.getResult());
 
                 assertSame(
-                        makerActivation,
-                        activationOf(maker2));
+                        activation,
+                        activationOf(receiver2));
 
                 Object completed =
                         outer2.continueWith(
@@ -322,12 +324,12 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
             }
         }
 
-        System.out.println("PERF006_B2D4A_TARGET_SUSPENSION_COMPOSED=PASS");
-        System.out.println("PERF006_B2D4A_TARGET_ACTIVATION_IDENTITY_NO_REPLAY=PASS");
+        System.out.println("PERF006_B2D4B_RECEIVER_SUSPENSION_COMPOSED=PASS");
+        System.out.println("PERF006_B2D4B_RECEIVER_ACTIVATION_IDENTITY_NO_REPLAY=PASS");
     }
 
     @Test
-    void defaultCanUseAComposedCallTarget()
+    void defaultCanUseComposedMessageReceiver()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -337,22 +339,25 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
                 ProtosActivation module = moduleActivation();
                 ProtosObjectValue marker =
                         new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosObjectValue receiver =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
 
-                ProtosClosureValue target =
+                receiver.createLocalSlot(
+                        "pick",
                         ProtosClosureValue.nativeClosure(
-                                (activation, supplied) -> marker);
+                                (activation, supplied) -> marker));
                 module.context().createLocalSlot(
-                        "maker",
+                        "entry",
                         ProtosClosureValue.nativeClosure(
-                                (activation, supplied) -> target));
+                                (activation, supplied) -> receiver));
 
                 String characters =
-                        "(value = maker()()) => { value }";
+                        "(value = entry().pick()) => { value }";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
                                         characters,
-                                        "perf006-b2d4a-default.protos")
+                                        "perf006-b2d4b-default.protos")
                                 .build();
                 CanonicalClosure definition =
                         closureDefinition(characters);
@@ -389,68 +394,46 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
             }
         }
 
-        System.out.println("PERF006_B2D4A_DEFAULT_COMPOSED_CALL_TARGET=PASS");
+        System.out.println("PERF006_B2D4B_DEFAULT_COMPOSED_SEND_RECEIVER=PASS");
     }
 
     @Test
-    void sendAndCallSpreadRemainDeferred()
+    void spreadRemainsDeferred()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
-
-                String sendCharacters = "entry().pick(...items)";
-                Source sendSource =
-                        Source.newBuilder(
-                                        ProtosLanguage.ID,
-                                        sendCharacters,
-                                        "perf006-b2d4a-send-receiver-deferred.protos")
-                                .build();
-                UnsupportedOperationException sendFailure =
-                        assertThrows(
-                                UnsupportedOperationException.class,
-                                () ->
-                                        new CanonicalToBytecodeLowerer(
-                                                        language,
-                                                        sendSource)
-                                                .lowerRoot(
-                                                        canonicalize(
-                                                                sendCharacters)));
-                assertTrue(
-                        sendFailure
-                                .getMessage()
-                                .contains("CanonicalSpread"));
-
-                String spreadCharacters = "entry(...items)";
-                Source spreadSource =
-                        Source.newBuilder(
-                                        ProtosLanguage.ID,
-                                        spreadCharacters,
-                                        "perf006-b2d4a-spread-deferred.protos")
-                                .build();
-                UnsupportedOperationException spreadFailure =
-                        assertThrows(
-                                UnsupportedOperationException.class,
-                                () ->
-                                        new CanonicalToBytecodeLowerer(
-                                                        language,
-                                                        spreadSource)
-                                                .lowerRoot(
-                                                        canonicalize(
-                                                                spreadCharacters)));
-                assertTrue(
-                        spreadFailure
-                                .getMessage()
-                                .contains("CanonicalSpread"));
+                for (String characters :
+                        List.of(
+                                "entry(...items)",
+                                "holder.capture(...items)")) {
+                    Source source =
+                            Source.newBuilder(
+                                            ProtosLanguage.ID,
+                                            characters,
+                                            "perf006-b2d4b-spread-deferred.protos")
+                                    .build();
+                    UnsupportedOperationException failure =
+                            assertThrows(
+                                    UnsupportedOperationException.class,
+                                    () ->
+                                            new CanonicalToBytecodeLowerer(
+                                                            language,
+                                                            source)
+                                                    .lowerRoot(
+                                                            canonicalize(
+                                                                    characters)));
+                    assertTrue(
+                            failure.getMessage().contains("CanonicalSpread"));
+                }
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println("PERF006_B2D4A_SEND_SPREAD_DEFERRED=PASS");
-        System.out.println("PERF006_B2D4A_CALL_SPREAD_DEFERRED=PASS");
+        System.out.println("PERF006_B2D4B_INVOCATION_SPREAD_DEFERRED=PASS");
     }
 
     private static Object execute(
@@ -471,57 +454,6 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
                 .lowerRoot(canonicalize(characters))
                 .getCallTarget()
                 .call(module);
-    }
-
-    private static ProtosClosureValue sourceClosure(
-            ProtosLanguage language,
-            ProtosActivation creator,
-            String characters,
-            String sourceName)
-            throws Exception {
-        Source source =
-                Source.newBuilder(
-                                ProtosLanguage.ID,
-                                characters,
-                                sourceName)
-                        .build();
-        CanonicalClosure definition =
-                closureDefinition(characters);
-        return semanticClosure(
-                definition,
-                ProtosClosureExecutionPlan.bytecode(
-                        definition,
-                        language,
-                        source),
-                creator);
-    }
-
-    private static ProtosClosureValue yieldingClosure(
-            ProtosLanguage language,
-            ProtosActivation creator,
-            Object finalValue,
-            String sourceName)
-            throws Exception {
-        return yieldingClosure(
-                language,
-                creator,
-                finalValue,
-                sourceName,
-                1);
-    }
-
-    private static ProtosClosureValue twiceYieldingClosure(
-            ProtosLanguage language,
-            ProtosActivation creator,
-            Object finalValue,
-            String sourceName)
-            throws Exception {
-        return yieldingClosure(
-                language,
-                creator,
-                finalValue,
-                sourceName,
-                2);
     }
 
     private static ProtosClosureValue yieldingClosure(

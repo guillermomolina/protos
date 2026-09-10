@@ -186,7 +186,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
     }
 
     @Test
-    void composedReceiversRemainFailClosedInBodyAndDefaults()
+    void invocationSpreadRemainsFailClosedInBodyAndDefaults()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -194,7 +194,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
 
-                String nestedCharacters = "entry().pick()";
+                String nestedCharacters = "entry(...items)";
                 Source nestedSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -213,10 +213,9 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                                                                 nestedCharacters)));
                 assertTrue(
                         nested.getMessage()
-                                .contains(
-                                        "PERF006-B2D1 send receiver must be literal or lexical lookup"));
+                                .contains("CanonicalSpread"));
 
-                String defaultCharacters = "(a, b = child().pick()) => { b }";
+                String defaultCharacters = "(a, b = child(...items)) => { b }";
                 CanonicalClosure defaultDefinition =
                         closureDefinition(defaultCharacters);
                 Source defaultSource =
@@ -235,7 +234,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                                                 defaultSource));
                 assertTrue(
                         defaultFailure.getMessage()
-                                .contains("default send receiver must be literal or lexical lookup"));
+                                .contains("CanonicalSpread"));
 
             } finally {
                 context.leave();
@@ -243,9 +242,9 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
         }
 
         System.out.println(
-                "PERF006_B2C2_COMPOSED_RECEIVER_DEFERRED=PASS");
+                "PERF006_B2C2_BODY_INVOCATION_SPREAD_DEFERRED=PASS");
         System.out.println(
-                "PERF006_B2C2_COMPOSED_DEFAULT_RECEIVER_DEFERRED=PASS");
+                "PERF006_B2C2_DEFAULT_INVOCATION_SPREAD_DEFERRED=PASS");
     }
 
     private static void assertGuestArityError(
