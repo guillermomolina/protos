@@ -24,11 +24,11 @@ third: null
 
 byName: Map()
 metadata: IdentityMap()
-byName.atPut("primary", first)
-byName.atPut("secondary", second)
-metadata.atPut(first, 1)
-metadata.atPut(alias, 2)
-metadata.atPut(second, 3)
+byName["primary"] = first
+byName["secondary"] = second
+metadata[first] = 1
+metadata[alias] = 2
+metadata[second] = 3
 
 flags: 0
 (first === alias).ifTrue(() => { flags = flags + 1 })
@@ -36,7 +36,7 @@ flags: 0
 (metadata.size() == 2).ifTrue(() => { flags = flags + 1 })
 
 invokeNamed: (name) => {
-    callable: byName.at(name)
+    callable: byName[name]
     callable()
 }
 
@@ -48,8 +48,8 @@ rounds: Array(
     () => { invokeNamed("secondary") },
     () => {
         third = worker.read
-        byName.atPut("primary", third)
-        metadata.atPut(third, 4)
+        byName["primary"] = third
+        metadata[third] = 4
         worker.value = 30
         invokeNamed("primary")
     },
@@ -72,7 +72,7 @@ byName.containsKey("primary").ifTrue(() => { flags = flags + 1 })
 
 aliasRead: alias()
 primaryRead: invokeNamed("primary")
-metaSum: metadata.at(first) + metadata.at(third)
+metaSum: metadata[first] + metadata[third]
 
 // Ordinary aliasing preserves one extracted Closure identity, while an
 // independent extraction is a distinct Closure. Map routes logical names to

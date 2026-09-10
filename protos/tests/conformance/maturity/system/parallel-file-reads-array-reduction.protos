@@ -28,7 +28,7 @@ writer.writeText(joined).value()
 writer.close().value()
 
 (texts.size() == 2) &&
-    (texts.at(0) == "left") &&
-    (texts.at(1) == "right") &&
+    (texts[0] == "left") &&
+    (texts[1] == "right") &&
     (joined == "left+right") &&
     (Encoding.UTF8.decode(stderrCapture) == "left+right")

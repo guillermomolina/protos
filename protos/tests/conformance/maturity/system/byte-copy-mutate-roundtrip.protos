@@ -19,7 +19,7 @@ ProcessStreams: import("std:io/ProcessStreams")
 source: Path.relative().child("raw.bin")
 original: Files.readAllBytes(filesystem, source).value()
 copy: Encoding.Latin1.encode(Encoding.Latin1.decode(original))
-copy.atPut(1, 90)
+copy[1] = 90
 
 target: Path.relative().child("copy.bin")
 Files.writeAllBytes(filesystem, target, copy).value()

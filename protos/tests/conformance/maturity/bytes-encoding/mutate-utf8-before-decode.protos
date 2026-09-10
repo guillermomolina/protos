@@ -16,6 +16,6 @@
  */
 
 bytes: Encoding.UTF8.encode("cat")
-bytes.atPut(1, 117)
+bytes[1] = 117
 
 Encoding.UTF8.decode(bytes) == "cut"

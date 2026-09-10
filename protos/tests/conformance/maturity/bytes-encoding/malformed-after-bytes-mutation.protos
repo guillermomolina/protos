@@ -16,6 +16,6 @@
  */
 
 bytes: Encoding.UTF8.encode("A\u{e9}")
-bytes.atPut(2, 65)
+bytes[2] = 65
 
 Encoding.UTF8.decode(bytes)

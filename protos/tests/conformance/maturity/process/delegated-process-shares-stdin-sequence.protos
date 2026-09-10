@@ -16,5 +16,5 @@ first: process.stdin().read(1).value()
 second: delegatedProcess.stdin().read(1).value()
 (first.size() == 1) &&
     (second.size() == 1) &&
-    (first.at(0) == 65) &&
-    (second.at(0) == 66)
+    (first[0] == 65) &&
+    (second[0] == 66)

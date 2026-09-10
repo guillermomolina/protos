@@ -47,12 +47,12 @@ other: entity {
 
 logical: Map()
 exact: IdentityMap()
-logical.atPut(left, left.makeReader())
-exact.atPut(left, left.makeReader())
-logical.atPut(peer, peer.makeReader())
-exact.atPut(peer, peer.makeReader())
-logical.atPut(other, other.makeReader())
-exact.atPut(other, other.makeReader())
+logical[left] = left.makeReader()
+exact[left] = left.makeReader()
+logical[peer] = peer.makeReader()
+exact[peer] = peer.makeReader()
+logical[other] = other.makeReader()
+exact[other] = other.makeReader()
 
 flags: 0
 (logical.size() == 2).ifTrue(() => { flags = flags + 1 })
@@ -69,7 +69,7 @@ mutationResults: Arrays.map(mutations, (mutation) => { mutation() })
 mutationTotal: Arrays.reduce(mutationResults, (sum, value) => { sum + value }, 0)
 
 invokeFrom: (registry, key) => {
-    reader: registry.at(key)
+    reader: registry[key]
     reader()
 }
 
@@ -84,7 +84,7 @@ initialExactSum:
 
 // id is the complete equality/hash key and remains stable while stored; only
 // unrelated live receiver state changes below.
-logical.atPut(left, left.makeReader())
+logical[left] = left.makeReader()
 left.bump(4)
 peer.bump(5)
 midLogicalPeer: invokeFrom(logical, peer)
@@ -96,7 +96,7 @@ logical.containsKey(peer).ifFalse(() => { flags = flags + 1 })
 exact.containsKey(left).ifTrue(() => { flags = flags + 1 })
 exact.containsKey(peer).ifTrue(() => { flags = flags + 1 })
 
-logical.atPut(peer, peer.makeReader())
+logical[peer] = peer.makeReader()
 peer.bump(1)
 (logical.size() == 2).ifTrue(() => { flags = flags + 1 })
 (exact.size() == 3).ifTrue(() => { flags = flags + 1 })

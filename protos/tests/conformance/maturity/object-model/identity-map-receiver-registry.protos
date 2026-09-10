@@ -21,15 +21,15 @@ b: sensor { value: 2 }
 c: sensor { value: 3 }
 
 registry: IdentityMap()
-registry.atPut(a, a.makeReader())
-registry.atPut(b, b.makeReader())
-registry.atPut(c, c.makeReader())
+registry[a] = a.makeReader()
+registry[b] = b.makeReader()
+registry[c] = c.makeReader()
 
 a.value = 7
 b.value = 8
 c.value = 10
 
-readers: Array(registry.at(a), registry.at(b), registry.at(c))
+readers: Array(registry[a], registry[b], registry[c])
 values: Arrays.map(readers, (reader) => { reader() })
 sum: Arrays.reduce(values, (total, value) => { total + value }, 0)
 

@@ -17,9 +17,9 @@
 
 first: Encoding.UTF8.encode("cat")
 second: Encoding.UTF8.encode("cat")
-first.atPut(1, 117)
+first[1] = 117
 
 (first !== second) &&
     (Encoding.UTF8.decode(first) == "cut") &&
     (Encoding.UTF8.decode(second) == "cat") &&
-    (second.at(1) == 97)
+    (second[1] == 97)
