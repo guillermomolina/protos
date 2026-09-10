@@ -26,4 +26,6 @@ Cancelled.handle(
  null }
 )
 actual: Files.readAllBytes(filesystem, path).value()
-sameCancelResult.and() { cancelled.and() { actual.size() == 0 } }
+sameCancelResult &&
+    cancelled &&
+    (actual.size() == 0)
