@@ -136,7 +136,7 @@ listed in one table.
 | AUD003-B1 | CLOSED | Lazy Boolean spelling audit closed: B1a migrated ordinary explicit parameterless-Closure `and`/`or` spellings while retaining direct Boolean-protocol evidence; B1b migrated the reviewed ordinary trailing-Closure population, retained protocol-teaching exceptions, and closed on a fail-closed executable/guide rescan. |
 | AUD003-B2 | CLOSED | Unary spelling audit closed: ordinary `negated()` uses, including concurrent I032-A general fixed-width arithmetic coverage, migrated to unary `-`; no ordinary `.not()` debt remained; direct protocol/lowering/error/slot-visibility evidence and protocol-teaching documentation remain explicit by purpose. |
 | AUD003-C | CLOSED | Conformance-corpus exception classification closed by C17 global survivor reconciliation: all ordinary indexing debt migrated; remaining explicit forms are deliberate protocol/lowering/result-contract evidence. |
-| AUD003-D | OPEN | Prevention gate: add a bounded source-style guard that understands path/purpose exceptions or an explicit allowlist; a repository-wide dumb grep that bans canonical forms is not acceptable. |
+| AUD003-D | CLOSED | Differential prevention gate integrated into publication validation/CI; increases in confirmed canonical-form families fail unless admitted by an exact path/family/count/reason exception, while existing debt may stay flat or shrink. |
 | AUD003-E | OPEN | Final repository rescan, exception review, documentation reconciliation, and closure evidence. |
 
 ### AUD003-A1 retained evidence
@@ -403,6 +403,37 @@ complete Programming Guide and requires the remaining explicit unary protocol
 spellings to equal exactly those classified exceptions. No Protos specification,
 public API, native boundary, or license-term change. Because B2b changes
 distributable Test Tool source, normal implementation versioning applies.
+
+### AUD003-D retained evidence
+
+GitHub coordination: Issue `#117` (`AUD003-D`).
+
+The prevention mechanism is `scripts/source_style_guard.py`, invoked
+unconditionally by `scripts/publication_validation.py` before Maven validation.
+The existing GitHub Actions test workflow already sends push, pull-request and
+manual-dispatch base/head revisions through that publication-validation entry
+point, so the policy has one implementation for local publication and CI.
+
+The guard covers changed `protos/**/*.protos` source plus Protos/JS fenced
+examples in `docs/guide/**/*.md` and root `README.md`. It strips Protos comments
+and string contents before counting the already-confirmed indexing, lazy
+Boolean, `not`, and `negated` families.
+
+For each changed guarded path/family the candidate may keep or reduce the base
+count without an exception; an increase fails closed. A deliberate increase
+requires an exact `scripts/source_style_exceptions.json` entry with path,
+family, current-head count and reason. The count is verified against the
+candidate, so an exception cannot pre-authorize later growth.
+
+Focused tests cover regression rejection, flat historical debt, monotonic
+cleanup, exact exception admission, preauthorization rejection, lexical
+comment/string exclusion, Boolean/unary detection, Markdown fenced-source
+handling, rename preservation, and publication-validation fail-closed behavior.
+
+AUD003-D therefore closes with a bounded differential prevention gate rather
+than a repository-wide dumb grep. AUD003 remains `IN_PROGRESS`; AUD003-E owns
+the final whole-repository rescan, residual documentation reconciliation, and
+integrated closure evidence.
 
 ## Migration discipline
 

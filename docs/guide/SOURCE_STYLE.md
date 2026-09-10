@@ -87,6 +87,31 @@ exceptions. It does not strengthen this policy into a language-wide ban on
 canonical forms and does not authorize syntactic equivalences that the
 specification has not defined.
 
+## Repository prevention gate
+
+Repository publication validation runs `scripts/source_style_guard.py` before
+the selected executable test set. GitHub CI already routes its base/head pair
+through the same `scripts/publication_validation.py` entry point, so the same
+guard applies to publication launchers, pushes and pull requests.
+
+The guard is deliberately differential, not a repository-wide ban. It examines
+changed hand-written Protos source under `protos/`, plus Protos/JS fenced source
+examples in the Programming Guide and root README. For the equivalence families
+already confirmed by AUD003 it rejects an *increase* in explicit canonical
+spellings: indexed `at`/`atPut`, expanded lazy Boolean `and`/`or`, parameterless
+`not`, and parameterless `negated`.
+
+Existing occurrences at the publication base are grandfathered, not newly
+approved. Keeping or reducing their count is allowed, which lets bounded audits
+such as AUD003-E continue removing historical debt.
+
+A genuinely deliberate new canonical occurrence requires an exact entry in
+`scripts/source_style_exceptions.json`: one guarded path, one family, the exact
+candidate-head occurrence count, and a meaningful reason. The declared count
+must equal the actual candidate count, so an exception cannot pre-authorize
+future growth. Exception entries record source-style intent only; they cannot
+approve new syntax, semantic equivalence, or an architectural decision.
+
 ## Rationale
 
 The specification answers **what a Protos program means**. Idiomatic source style
