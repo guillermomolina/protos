@@ -21,18 +21,24 @@ import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.source.SourceSpan;
 import com.oracle.truffle.api.CompilerDirectives;
+import com.oracle.truffle.api.frame.Frame;
 import com.oracle.truffle.api.frame.VirtualFrame;
 import com.oracle.truffle.api.instrumentation.GenerateWrapper;
 import com.oracle.truffle.api.instrumentation.InstrumentableNode;
 import com.oracle.truffle.api.instrumentation.ProbeNode;
 import com.oracle.truffle.api.instrumentation.StandardTags;
 import com.oracle.truffle.api.instrumentation.Tag;
+import com.oracle.truffle.api.interop.NodeLibrary;
+import com.oracle.truffle.api.interop.UnsupportedMessageException;
+import com.oracle.truffle.api.library.ExportLibrary;
+import com.oracle.truffle.api.library.ExportMessage;
 import com.oracle.truffle.api.nodes.Node;
 import com.oracle.truffle.api.nodes.RootNode;
 import com.oracle.truffle.api.source.SourceSection;
 import java.util.Objects;
 
 @GenerateWrapper
+@ExportLibrary(NodeLibrary.class)
 public abstract class ProtosExpressionNode extends Node implements InstrumentableNode {
     private static final byte TAG_STATEMENT = 1;
     private static final byte TAG_CALL = 1 << 1;
@@ -124,6 +130,22 @@ public abstract class ProtosExpressionNode extends Node implements Instrumentabl
             current = expression;
         }
         return (ProtosExpressionNode) current;
+    }
+
+    @ExportMessage
+    final boolean hasScope(Frame frame) {
+        return ProtosFrameArguments.hasActivation(frame);
+    }
+
+    @ExportMessage
+    final Object getScope(
+            Frame frame,
+            @SuppressWarnings("unused") boolean nodeEnter)
+            throws UnsupportedMessageException {
+        if (!hasScope(frame)) {
+            throw UnsupportedMessageException.create();
+        }
+        return new ProtosDebuggerScope(ProtosFrameArguments.activation(frame));
     }
 
     @Override

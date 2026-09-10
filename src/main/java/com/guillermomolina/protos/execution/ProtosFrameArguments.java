@@ -18,17 +18,24 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
-import com.oracle.truffle.api.frame.VirtualFrame;
+import com.oracle.truffle.api.frame.Frame;
 
 final class ProtosFrameArguments {
     private ProtosFrameArguments() {}
 
-    static ProtosActivation activation(VirtualFrame frame) {
+    static boolean hasActivation(Frame frame) {
+        if (frame == null) {
+            return false;
+        }
         Object[] arguments = frame.getArguments();
-        if (arguments.length == 0 || !(arguments[0] instanceof ProtosActivation activation)) {
+        return arguments.length > 0 && arguments[0] instanceof ProtosActivation;
+    }
+
+    static ProtosActivation activation(Frame frame) {
+        if (!hasActivation(frame)) {
             throw new IllegalStateException(
                     "Execution node requires a Protos activation as frame argument 0");
         }
-        return activation;
+        return (ProtosActivation) frame.getArguments()[0];
     }
 }

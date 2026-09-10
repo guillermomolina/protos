@@ -86,7 +86,9 @@ see `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md`.
 | I026-D5 | CLOSED | `0.2.326-SNAPSHOT` | I026-D4 + PLAT013 | Expose the real ProtosArrayValue receiver-owned dense indexed state directly as read-only Truffle array elements: O(1) size/read from current storage, exact guest references/cycles, no snapshots or conversion, host-only accidental elements fail closed, object members remain excluded, implicit Truffle iterator projection is explicitly disabled, and display is bounded host-opaque `Array`. |
 | I026-D6 | CLOSED | `0.2.328-SNAPSHOT` | I026-D5 + PLAT013 | Expose the existing exact indexed representations of Bytes, ByteRegion and ProcessArguments as read-only Truffle array elements. Bytes/ByteRegion use their synchronized runtime size/read authorities; ProcessArguments uses its immutable captured snapshot. Reads return exact guest references, host-only accidents fail closed, mutation/member/iterator facets stay disabled, and no guest protocol dispatch, snapshot copy, wrapper graph or debugger lock is introduced. |
 | I026-D7 | CLOSED | `0.2.329-SNAPSHOT` | I026-D6 + PLAT013 | Close the remaining direct represented-value coverage gap: Path, Encoding, Environment, ActorRef, GroupRef, Process capability, Network capability and Process standard-stream views explicitly export only bounded host-opaque `Object` display. The closure guard proves every current direct ProtosRepresentedValue owns explicit InteropLibrary/display coverage; all richer facets remain fail-closed. Closes I026-D and releases I026-E. |
-| I026-E | READY | — | I026-C + I026-D + PLAT015 | Implement the ratified activation-native synthetic debugger scope: exact suspended `ProtosActivation` authority, flattened read-only visible-name projection in ordinary lookup precedence, reads through `ProtosActivation.lookup`, no artificial language top scope/named receiver/scope-parent fiction/global registry, and retained AST/Bytecode-DSL-independent evidence. |
+| I026-E | IN_PROGRESS | `0.2.330-SNAPSHOT` | I026-C + I026-D + PLAT015 | E1 publishes the activation-native synthetic local-scope core and AST NodeLibrary bridge under ratified PLAT015. E2 remains the real DebuggerSession integration, same-Process-Context concurrent suspension evidence and final E closure. |
+| I026-E1 | CLOSED | `0.2.330-SNAPSHOT` | I026-C + I026-D + PLAT015 | Project the exact ProtosActivation carried in Truffle frame argument 0 through one synthetic read-only scope. Enumerate flattened current-context, captured-lexical and receiver/delegation names nearest-first without guest execution; resolve reads through ProtosActivation.lookup; expose no top scope, named receiver, parent-scope fiction, debugger mutation or global registry. Generated instrumentation wrappers inherit the same NodeLibrary bridge. |
+| I026-E2 | READY | — | I026-E1 + PLAT015 | Exercise the published scope bridge through a real Truffle DebuggerSession/instrumentation suspension, prove independent concurrent activation observations inside one Process-scoped Context, reconcile backend-independence/no-global-state evidence, and close I026-E if all PLAT015 exit conditions hold. |
 | I026-F | BLOCKED_BY_DEPENDENCIES | — | I026-C + I026-E | Run a real GraalVM DAP smoke gate over Protos source: source breakpoint, stepping, stack frames, scopes and representative values. Only successful evidence permits a Protos DAP-support claim. |
 | I026-G | BLOCKED_BY_DEPENDENCIES | — | I026-C + I026-E | Run a GraalVM dynamic-LSP smoke gate and record exactly which useful runtime-derived capabilities work for Protos. Do not treat this as a replacement for static Protos language intelligence. |
 
@@ -304,6 +306,37 @@ I026-D is therefore CLOSED and I026-E is READY. Map/IdentityMap hash-entry
 interop, Closure execution, debugger mutation/evaluation, rich pretty-printing
 and other surfaces explicitly deferred by PLAT013 remain future additive work,
 not hidden prerequisites of this closure.
+
+### I026-E1 activation-native local scope core
+
+`I026-E1` closes in `0.2.330-SNAPSHOT`. The current AST backend now exports `NodeLibrary` from
+`ProtosExpressionNode`, but the node remains only a bridge: `hasScope/getScope`
+accept scope access only when the Truffle frame carries the existing exact
+`ProtosActivation` in frame argument 0. A null/static frame or a non-Protos frame
+fails closed.
+
+The synthetic `ProtosDebuggerScope` retains only that activation for the
+tooling-request lifetime. `getMembers` constructs an on-demand ordered name
+snapshot from current-context local slots, captured lexical-context local slots
+in order, then the receiver/delegation chain. It preserves duplicate names so
+shadowing remains visible nearest-first. Enumeration uses only runtime-owned
+local-slot snapshots and `ProtosValueLookup.delegationParent`; it sends no Protos
+message and executes no Closure.
+
+`readMember` delegates value resolution to `ProtosActivation.lookup` and returns
+only a valid interop value. `isMemberReadable` checks the same precedence without
+materializing a bound method merely for a predicate. Accidental host-only stored
+values therefore remain unreadable and cannot leave the scope.
+
+The adapter is `isScope=true` and read-only. It exports no scope parent, no named
+receiver, no write/insert/remove authority and no language top scope. No scope
+object, activation registry, Context-global current/last activation field or
+debugger lock is allocated on ordinary execution paths. Generated
+instrumentation wrappers inherit the same NodeLibrary bridge.
+
+`I026-E` remains IN_PROGRESS. `I026-E2` owns real DebuggerSession suspension
+evidence, concurrent independent observations in one Process-scoped Truffle
+Context, and final closure. No DAP/LSP support claim is made by E1.
 
 ## Deferred ownership
 
