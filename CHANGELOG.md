@@ -1,3 +1,7 @@
+## 0.2.326-SNAPSHOT
+
+- Close `I026-D5 — Array read-only indexed Truffle interop` under ratified PLAT013. Re-export `InteropLibrary` on the real `ProtosArrayValue` and project only its receiver-owned dense indexed storage: O(1) current size/read, exact stored guest references and cycles, no detached snapshot/wrapper graph, no guest `at`/`size`/`each` dispatch, and fail-closed handling for accidental host-only elements. Preserve D1's no-object-member boundary for Array, keep all interop element mutation unsupported even when the guest Array itself is mutable, explicitly suppress Truffle's default iterator derivation so D5 adds only the authorized indexed facet, and use bounded host-opaque `Array` display. No Protos Array identity, indexed-access, mutation, iteration, lookup or concurrency semantics change. I026-D remains IN_PROGRESS for remaining safe runtime-family facets; Map/IdentityMap hash interop, Closure execution, debugger mutation and scopes remain excluded. No Protos specification change. Implementation version becomes `0.2.326-SNAPSHOT`.
+
 ## 0.2.325-SNAPSHOT
 
 - Advance `I032 — Fixed-width numeric arithmetic publication` with bounded slice
