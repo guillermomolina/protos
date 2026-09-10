@@ -81,3 +81,85 @@ No production implementation owner is allocated by D1. `LM008-D` remains
 `IN_PROGRESS`; D2 is next and audits the complete normative numeric surface
 without treating D1's general identity/hash rows as a substitute for
 numeric-family-specific rules.
+
+## D2 checkpoint
+
+Checkpoint state: BLOCKED_BY_DEPENDENCIES (`I032`)
+
+Audit state: COMPLETE pending implementation-gap reconciliation
+
+Implementation dependency: `I032 — Fixed-width numeric arithmetic publication`
+(GitHub Issue `#265`)
+
+Validation class: `TEST_IMPACT`
+
+Normative authority: `spec/semantics/VALUES_AND_COLLECTIONS.md`.
+
+D2 audits the complete already-normative Core numeric surface. It introduces no
+numeric semantics. Grammar/operator lowering was already reconciled by LM008-B;
+D2 concerns the guest-visible value/protocol behavior selected by those forms.
+
+### Evidence matrix
+
+| Surface row | Normative requirement | Retained language-level evidence | Current implementation/mechanism evidence | Classification / owner |
+|---|---|---|---|---|
+| Numeric prototype topology | `Number` delegates to `Object`; `Integer` and `Float` delegate to `Number`; all eight fixed-width prototypes delegate to `Integer`; delegation does not itself confer numeric-family membership. | New `number/prototype-hierarchy.protos` proves the complete standard prototype chain. Existing `integer/numeric-parent-does-not-confer-membership.protos` and `numeric-value-parent-continues-family-lookup.protos` cover the membership/delegation distinction. | Core bootstrap validates the same topology. | `COVERED` |
+| Integer construction/conversion | Exact `Integer` factory accepts Integer/fixed-width/integral finite Float, preserves mathematical value, rejects fractional/non-finite/non-number input and invalid arity/receiver. | Existing `numeric-conversion/integer-*`, `fixed-width/integer-from-uint8.protos`, and copied/inherited factory receiver-error cases. | `ProtosStandardNumericConversionProtocol`. | `COVERED` |
+| Float construction/conversion | Exact `Float` factory accepts numeric values, preserves Float semantic value, correctly rounds exact integers to binary64 and preserves the required zero/infinity/NaN behavior. | Existing `numeric-conversion/float-*` cases include exact, rounded-large, overflow, signed-zero, infinity, NaN, arity and domain evidence. | `ProtosStandardNumericConversionProtocol` plus exact binary64 conversion helper. | `COVERED` |
+| Fixed-width construction/conversion | Each of `UInt8`/`Int8`/`UInt16`/`Int16`/`UInt32`/`Int32`/`UInt64`/`Int64` is an exact factory; successful conversion preserves the target family and range; invalid arity/domain/range/non-integral Float signals Error. | Existing `fixed-width/*` corpus covers all eight family boundaries plus cross-family, Float, non-finite, object, arity and inherited-receiver cases. | `ProtosStandardNumericConversionProtocol` installs one family-parameterized exact factory per prototype. | `COVERED` |
+| Integer `+` / `-` / `*` | Integer-only operands, arbitrary-precision exact Integer result; no implicit fixed/Float coercion. | Existing `integer/add-*`, `subtract-*`, `multiply-*`, big-value and mixed-family error cases plus receiver-domain regressions. | `ProtosStandardIntegerProtocol`. | `COVERED` |
+| Integer `/` | Integer/Integer only; exact rational is rounded to binary64 round-to-nearest ties-to-even, including overflow, subnormal boundaries and signed zero; zero divisor signals Error. | Existing `integer/division-*` cases cover half/third, huge exact one, overflow, tie-even up/down, min-subnormal ties, negative zero and zero/mixed errors. | `ProtosStandardIntegerProtocol` + `ProtosBinary64Rounding`. | `COVERED` |
+| Integer `div` / `mod` / `%` | Integer-only quotient truncates toward zero; remainder has dividend sign; `%` is the same standard remainder contract; zero divisor signals Error. | Existing `integer/div-*`, `mod-*`, `remainder-*`, big/negative/both-negative and zero/mixed cases. | `ProtosStandardIntegerProtocol`; source-backed `%` delegates to `mod`. | `COVERED` |
+| Integer unary `negated` | Exact Integer negation, with strict semantic Integer receiver membership. | Existing `integer/negated.protos`, `double-negated.protos`, extracted/inherited method evidence and delegated non-Integer receiver error. | Source-backed `Integer.negated` plus standard Integer arithmetic. | `COVERED` |
+| Float `+` / `-` / `*` / `/` | Same-family Float operands only; IEEE binary64 arithmetic with NaN, infinities, signed zero, overflow and underflow preserved; no implicit Integer/fixed coercion. | Existing `float/*` arithmetic corpus covers ordinary results, signed zero, infinities, NaN, overflow/underflow and mixed-Integer errors. | `ProtosStandardFloatProtocol`. | `COVERED` |
+| Float unary `negated` | Same-family Float result with sign-bit semantics, including signed zero; strict Float receiver membership. | Existing `float/negated-zero.protos`, `double-negated-zero.protos`, `negated-normal.protos`, extracted-method and delegated-receiver error evidence. | Source-backed `Float.negated` plus standard Float arithmetic. | `COVERED` |
+| Fixed-width `+` / `-` / `*` | Same fixed family only; result remains that family; overflow/underflow signals Error; no wrap, saturation, promotion or implicit widening. | No passing positive guest evidence is possible on the audited implementation. | Fixed prototypes delegate to `Integer`, but inherited `Integer` arithmetic requires a `ProtosIntegerValue` receiver/argument; semantic fixed-width values are `ProtosFixedIntegerValue`. | `TRACKED_IMPLEMENTATION_GAP` — `I032` |
+| Fixed-width unary `negated` | Preserve the exact fixed family; signal Error when mathematical negation is out of range, including unsigned nonzero and signed minimum. | No passing positive guest evidence is possible on the audited implementation. | Fixed prototypes inherit source-backed `Integer.negated`, whose `0 - this` reaches Integer arithmetic that rejects the fixed receiver/argument domain. | `TRACKED_IMPLEMENTATION_GAP` — `I032` |
+| Fixed-width `/` | Same fixed family only; result is Float using the same exact-rational binary64 rounding contract as Integer division; zero divisor signals Error. | No passing positive guest evidence is possible on the audited implementation. | Fixed prototypes inherit `Integer./`, which rejects `ProtosFixedIntegerValue`. | `TRACKED_IMPLEMENTATION_GAP` — `I032` |
+| Fixed-width `div` / `mod` / `%` | Same fixed family only; successful result stays in family; quotient/remainder sign rules are exact; zero divisor signals Error; mixed families fail. | No passing positive guest evidence is possible on the audited implementation. | Fixed prototypes inherit Integer `div`/`mod`/`%`; the native receiver/argument checks reject fixed represented values before the normative fixed-family operation can occur. | `TRACKED_IMPLEMENTATION_GAP` — `I032` |
+| Numeric ordering | Standard `< <= > >=` accept semantic Number-family values, compare exact mathematical values across families, treat signed zeros as equal and NaN as unordered; invalid receiver/argument/arity fails as specified. | Existing `number/ordering-cross-family-exact.protos`, `ordering-integer-selectors.protos`, `ordering-signed-zero-infinity-nan.protos` and receiver/argument error cases. | `ProtosStandardNumberOrderingProtocol`. | `COVERED` |
+| Numeric semantic equality | `==` compares exact mathematical numeric values across Integer/fixed/Float families; NaN equals nothing; signed zeros are equal; non-number argument returns false; invalid receiver/arity signals Error. | Existing `numeric-equality/*` and newer `equality/numeric-*` cases cover exact cross-family equality, float exactness, NaN/signed zero, infinity, non-number argument and receiver-domain behavior. | `ProtosStandardNumberEqualityProtocol`. | `COVERED` |
+| Numeric semantic identity | Numeric values use value identity with family included: equal same-family values identify; cross-family equal values do not; Float identity distinguishes signed zero while all semantic NaNs share one Float identity. | Existing `equality/nonidentity-same-number.protos` / `nonidentity-cross-family.protos` plus new `equality/numeric-value-identity-specials.protos` for fixed same/cross-family identity, fixed-vs-Integer identity, Float signed zero and NaN identity. | `ProtosIdentity` implements Integer value identity, fixed family+value identity and Float raw-bit identity with canonical NaN identity. | `COVERED` |
+| Standard numeric `hash()` equality coherence | Zero-argument Number-family `hash()` returns ordinary Integer; any numeric values equal under standard `==` must have equal hashes across families; signed zeros hash together; all NaNs use one standard hash class; receiver/domain/arity is strict. | New `number/hash-equality-coherence.protos` proves cross-family Integer/Float/fixed coherence, signed-zero coherence, NaN-class coherence and Integer result family. New receiver/arity error probes cover strict invocation boundaries. | `ProtosStandardHashSupport.installNumberHash`. | `COVERED` |
+| Numeric `identityHash()` separation | Primitive identity hashing remains coherent with numeric `===`, but ordinary numeric `hash()` is equality-oriented and is not defined by identity hashing. | D1 retains ordinary inherited `identityHash()` evidence; D2's identity and equality/hash probes jointly distinguish cross-family identity from cross-family equality/hash. | `ProtosIdentity.identityHash` tags numeric identity families; Number `hash` uses equality classes instead. | `COVERED` |
+
+### Confirmed I032 implementation gap
+
+The fixed-width defect is a publication/implementation mismatch against already
+settled semantics, not a design question.
+
+For example, the normative operation:
+
+```protos
+UInt8(1) + UInt8(2)
+```
+
+must produce `UInt8(3)`. Current lookup reaches the inherited `Integer.+`
+Closure, but that Closure rejects the `ProtosFixedIntegerValue` receiver before
+performing arithmetic. The same representation/domain mismatch affects the
+already-normative fixed-width `-`, `*`, `negated`, `/`, `div`, `mod`, and `%`
+surfaces.
+
+LM008-D2 deliberately does not add a manifest expectation that accepts this
+failure. Doing so would encode the defect as conformance. I032 owns the
+production repair and the positive/negative ordinary-Protos fixed-arithmetic
+regressions.
+
+### D2 audit result and resumption
+
+No D2 row requires a new Dxxx or PLATxxx decision.
+
+The non-fixed numeric surface is fully classified. Three previously indirect
+positive evidence areas are made explicit in the central corpus:
+
+1. the complete standard numeric prototype hierarchy;
+2. fixed/Float special-case numeric value identity; and
+3. standard Number `hash()` equality coherence plus its receiver/arity boundary.
+
+D2 remains `BLOCKED_BY_DEPENDENCIES` only for the fixed-width arithmetic rows
+owned by I032 / GitHub #265. After I032 publishes the fixed arithmetic behavior
+and retained conformance, D2 must reclassify those rows to `COVERED` before its
+checkpoint can close.
+
+`LM008-D` remains `IN_PROGRESS`. D3 and D4 are not semantically dependent on
+I032, but the normal continuation should repair I032 before claiming D2 closed.

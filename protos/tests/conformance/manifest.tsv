@@ -293,6 +293,11 @@ equality/numeric-exact-float-equality.protos	boolean	true
 equality/numeric-nan-signed-zero-equality.protos	boolean	true
 equality/numeric-non-number-equality-false.protos	boolean	true
 equality/numeric-non-number-receiver-error.protos	error	-
+number/prototype-hierarchy.protos	boolean	true
+equality/numeric-value-identity-specials.protos	boolean	true
+number/hash-equality-coherence.protos	boolean	true
+number/hash-non-number-receiver-error.protos	error	-
+number/hash-wrong-arity-error.protos	error	-
 integer/copied-standard-plus-noninteger-receiver-error.protos	error	-
 integer/div-both-negative.protos	integer	2
 integer/division-negative-divisor.protos	float-bits	bfe0000000000000

@@ -1,0 +1,11 @@
+(Number.parent() === Object) &&
+    (Integer.parent() === Number) &&
+    (Float.parent() === Number) &&
+    (UInt8.parent() === Integer) &&
+    (Int8.parent() === Integer) &&
+    (UInt16.parent() === Integer) &&
+    (Int16.parent() === Integer) &&
+    (UInt32.parent() === Integer) &&
+    (Int32.parent() === Integer) &&
+    (UInt64.parent() === Integer) &&
+    (Int64.parent() === Integer)

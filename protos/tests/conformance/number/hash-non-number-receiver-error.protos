@@ -1,0 +1,2 @@
+notNumber: Number {}
+notNumber.hash()
