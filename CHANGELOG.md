@@ -1,3 +1,7 @@
+## 0.2.340-SNAPSHOT
+
+- Advance `LM009-B — Language association + syntax highlighting` with the first executable editor-assets tranche. Establish the approved `editors/vscode/` subtree with a non-normative TextMate grammar, representative valid `.protos` lexical fixture, editor-local structural validation and development notes. Highlight only the exact seven Core v0.1 reserved spellings as language-special tokens, keep reserved spellings after `.` ordinary, cover comments, String/escape forms, numeric literal families, ellipsis, delimiters and symbolic operators, and do not invent JavaScript/Python-style keywords. No installable `package.json`, `engines.vscode` support floor, language association, language configuration, Run action, DAP/LSP client, Marketplace policy, specification or runtime semantic change is selected in this tranche. Maven implementation version becomes `0.2.340-SNAPSHOT`.
+
 ## 0.2.339-SNAPSHOT
 
 - Migrate DOC002-G2 residual DOC001 owner batch into `docs/project/work/DOC001/`, preserving its IN_PROGRESS/non-normative content and all slice/dependency/closure evidence while rebasing only relative Markdown links and reconciling maintained active references. Historical publication-time path spellings remain unchanged. No specification, observable semantics, DOC001 work/slice state, blocker/dependency state, implementation/runtime behavior, version, API, platform architecture, registry meaning, or license term changes.

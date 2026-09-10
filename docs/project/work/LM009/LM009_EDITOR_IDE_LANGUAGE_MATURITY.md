@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B TOPOLOGY APPROVED / IMPLEMENTATION READY**
+Current published slice after this record: **LM009-A CLOSED; LM009-B LEXICAL ASSETS PUBLISHED / MANIFEST DECISION PENDING**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -309,3 +309,42 @@ highlighting, representative fixtures/validation, and development/install-use
 instructions. Run integration remains LM009-C; DAP remains LM009-D/E; static
 language intelligence remains LM009-F/G/H; public packaging/Marketplace closure
 remains LM009-I.
+
+## LM009-B lexical-assets tranche
+
+Status: **LEXICAL ASSETS PUBLISHED; INSTALLABLE MANIFEST DECISION PENDING**
+
+This tranche establishes the reusable lexical/editor asset substrate under the
+approved `editors/vscode/` topology without yet creating an installable VS Code
+extension.
+
+Published assets:
+
+- `editors/vscode/syntaxes/protos.tmLanguage.json` — non-normative TextMate
+  grammar following the current Core v0.1 lexical surface;
+- `editors/vscode/test/fixtures/lexical.protos` — representative valid-source
+  fixture covering comments, String forms/escapes, numeric families, exact
+  reserved spellings, member-name reserved spellings, Closures, contextual
+  ellipsis and standard/custom operators;
+- `editors/vscode/test/validate_grammar.py` — editor-local structural guard; and
+- `editors/vscode/README.md` — authority boundary and development status.
+
+The TextMate asset intentionally highlights only the seven exact Core v0.1
+reserved spellings (`this`, `context`, `args`, `super`, `true`, `false`,
+`null`) as language-special tokens. Familiar spellings such as `if`, `else`,
+`while`, `class`, `function`, `try`, `catch`, `async`, `await`, `var`, `let`,
+`const`, `import`, and `export` are not promoted into a fake keyword set.
+
+Reserved spellings immediately following member-access `.` are deliberately not
+highlighted as language-special tokens because the normative grammar permits
+them there as ordinary structural member names.
+
+This tranche does not publish `package.json`, `language-configuration.json`,
+runtime discovery, Run Current File, DAP, LSP, Marketplace metadata, or any
+TypeScript semantic implementation. Therefore it does not yet satisfy LM009
+scenario S1 end-to-end and does not close LM009-B.
+
+The next LM009-B checkpoint is the already-exposed installable-manifest
+compatibility decision: select the bounded `engines.vscode` support/development
+floor before adding the manifest, `.protos` language association and basic
+language configuration. That choice remains unselected by this publication.
