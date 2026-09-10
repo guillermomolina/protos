@@ -1,3 +1,29 @@
+## I032-C — fixed-width quotient and remainder
+
+I032-C publishes same-family fixed-width `div`, `mod`, and `%` under the already
+normative exact-integer contract. `div` uses exact mathematical integer quotient
+truncated toward zero; `mod` uses the corresponding remainder whose sign follows
+the dividend. Both validate an actual represented receiver and argument of the
+same fixed-width family, reject zero before host arithmetic, and range-check the
+mathematical result before rematerializing that same family. In particular, the
+signed minimum divided by `-1` signals `Error` rather than widening, wrapping,
+saturating, or leaking a host arithmetic exception.
+
+The primitive `div` and `mod` selectors reuse the existing single
+family-parameterized native Closure construction site in
+`ProtosStandardFixedIntegerProtocol`. `%` remains derived distributable Core
+behavior: each fixed-width prototype supplies `_coreFixedPercent`, defined as
+same-family zero plus `this` followed by `mod(argument)`. Bootstrap moves that
+source-backed Closure to `%` after validating it. The initial same-family
+addition rejects an ordinary delegator before any overridden `mod` behavior can
+run, matching the receiver-domain discipline already used by ordinary Integer
+`%`.
+
+The native selector surface therefore expands by `div` and `mod`, while the
+audited construction-site/provider cardinality remains **136 sites /
+36 providers**. I032-D remains as the final cross-family/edge
+reconciliation and closure audit; this slice does not close I032 or LM008-D2.
+
 ## I032-B — fixed-width exact-rational division
 
 I032-B publishes same-family fixed-width `/` without creating another native
@@ -274,7 +300,7 @@ the standard native boundary.
 | `ProtosStandardNumberEqualityProtocol.java` | 1 | representation bridge | Exact cross-family Number equality needs Integer/fixed/binary64 representation knowledge, including NaN and exact-integral Float handling. |
 | `ProtosStandardNumberOrderingProtocol.java` | 1 | representation bridge | Exact cross-family ordering and unordered NaN behavior require representation-aware comparison. |
 | `ProtosStandardIntegerProtocol.java` | 3 | representation bridge | `+`, `-`, `*`, `/`, `div`, and `mod` are exact numeric representation primitives; derived `negated` and `%` are already source-backed. |
-| `ProtosStandardFixedIntegerProtocol.java` | 1 | representation bridge | Checked same-family fixed-width `+`, `-`, and `*` require exact represented family membership, compute in exact mathematical-integer space, fail before materialization when a fixed-width result is outside the normative family range, and return the same semantic fixed-width family. Same-family `/` reuses exact mathematical operands and the standard exact-rational binary64 rounding helper to return Float without first converting either operand. Derived `negated` remains source-backed on each fixed prototype. |
+| `ProtosStandardFixedIntegerProtocol.java` | 1 | representation bridge | Checked same-family fixed-width `+`, `-`, and `*` compute in exact mathematical-integer space and range-check before returning the same fixed family; `/` applies the shared exact-rational binary64 rounding helper and returns Float; `div` truncates the exact quotient toward zero and `mod` returns the exact dividend-sign remainder, with zero rejection and same-family range checking before rematerialization. Derived `negated` and `%` remain source-backed on each fixed prototype. |
 | `ProtosStandardFloatProtocol.java` | 1 | representation bridge | Binary64 arithmetic is the primitive represented-value boundary; derived `negated` is already source-backed. |
 | `ProtosStandardNumericConversionProtocol.java` | 1 | representation bridge | Numeric factory conversion performs exact family/range/binary64 conversion over host representations. |
 | `ProtosStandardStringProtocol.java` | 3 | representation bridge | String size/indexing use required Unicode grapheme segmentation and `+` constructs semantic String representation values. |

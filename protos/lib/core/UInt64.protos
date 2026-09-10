@@ -17,4 +17,8 @@ UInt64: Integer {
     negated: () => {
         UInt64(0) - this
     }
+
+    _coreFixedPercent: argument => {
+        (UInt64(0) + this).mod(argument)
+    }
 }

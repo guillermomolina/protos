@@ -13,12 +13,9 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
-UInt16: Integer {
-    negated: () => {
-        UInt16(0) - this
-    }
-
-    _coreFixedPercent: argument => {
-        (UInt16(0) + this).mod(argument)
-    }
-}
+(Int16(7).div(Int16(-3)) === Int16(-2)) &&
+    (Int16(7).mod(Int16(-3)) === Int16(1)) &&
+    (Int16(7) % Int16(-3) === Int16(1)) &&
+    (Int16(-7).div(Int16(-3)) === Int16(2)) &&
+    (Int16(-7).mod(Int16(-3)) === Int16(-1)) &&
+    (Int16(-7) % Int16(-3) === Int16(-1))

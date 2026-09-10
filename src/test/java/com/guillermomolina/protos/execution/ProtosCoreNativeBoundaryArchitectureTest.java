@@ -194,8 +194,9 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
             assertNativeSelectors(
                     family.prototypeName(),
                     prototype,
-                    Set.of("call", "+", "-", "*", "/"));
+                    Set.of("call", "+", "-", "*", "/", "div", "mod"));
             assertSourceBacked(prototype, "negated");
+            assertSourceBacked(prototype, "%");
         }
 
         assertNativeSelectors("Context", prelude.contextPrototype(), Set.of());

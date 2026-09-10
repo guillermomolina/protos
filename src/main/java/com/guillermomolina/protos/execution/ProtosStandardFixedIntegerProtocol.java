@@ -31,8 +31,8 @@ import java.util.function.BiFunction;
  * Representation bridge for the Core fixed-width exact-integer arithmetic primitives.
  *
  * <p>Each installed closure is family-specific even though one Java construction site is reused
- * across all eight fixed-width prototypes and the four primitive binary selectors. Derived unary
- * negation remains source-backed on the individual Core prototypes.
+ * across all eight fixed-width prototypes and the six primitive binary selectors. Derived unary
+ * negation and `%` remain source-backed on the individual Core prototypes.
  */
 public final class ProtosStandardFixedIntegerProtocol {
     private ProtosStandardFixedIntegerProtocol() {}
@@ -58,6 +58,12 @@ public final class ProtosStandardFixedIntegerProtocol {
                     return new ProtosFloatValue(
                             ProtosBinary64Rounding.divideExactIntegers(left, right));
                 });
+        installFixedQuotientRemainder(
+                prototype, family, "div", BigInteger::divide);
+        installFixedQuotientRemainder(
+                prototype, family, "mod", BigInteger::remainder);
+        installSourceBackedSelector(
+                prototype, "_coreFixedPercent", "%");
     }
 
     private static void installFixedResultBinary(
@@ -74,6 +80,40 @@ public final class ProtosStandardFixedIntegerProtocol {
                                 activation,
                                 family,
                                 operation.apply(left, right)));
+    }
+
+    private static void installFixedQuotientRemainder(
+            ProtosObjectValue prototype,
+            ProtosFixedIntegerValue.Family family,
+            String selector,
+            BiFunction<BigInteger, BigInteger, BigInteger> operation) {
+        installOperation(
+                prototype,
+                family,
+                selector,
+                (activation, left, right) -> {
+                    if (right.signum() == 0) {
+                        throw error(activation);
+                    }
+                    return checkedFixedResult(
+                            activation,
+                            family,
+                            operation.apply(left, right));
+                });
+    }
+
+    private static void installSourceBackedSelector(
+            ProtosObjectValue prototype,
+            String sourceName,
+            String selector) {
+        if (prototype.hasLocalSlot(selector)) {
+            throw new IllegalStateException(
+                    "Core fixed-width already defines a local " + selector + " slot");
+        }
+        ProtosClosureValue closure =
+                requireSourceBackedClosure(prototype, sourceName);
+        prototype.removeLocalSlot(sourceName);
+        prototype.createLocalSlot(selector, closure);
     }
 
     private static void installOperation(

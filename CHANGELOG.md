@@ -1,3 +1,21 @@
+## 0.2.327-SNAPSHOT
+
+- Advance `I032 — Fixed-width numeric arithmetic publication` with bounded slice
+  I032-C. Publish same-family fixed-width `div` and `mod` through the existing
+  family-parameterized representation-bridge construction site: exact quotient
+  truncates toward zero, remainder follows the dividend sign, zero divisor is
+  rejected before host arithmetic, and every fixed result is range-checked
+  before same-family rematerialization. Publish `%` as derived source-backed Core
+  behavior on each fixed-width prototype using same-family zero plus `this`
+  before `mod`, preserving strict receiver-domain rejection even when an ordinary
+  delegator overrides `mod`. Add ordinary-Protos evidence across all eight
+  families, signed divisor cases, signed-minimum quotient overflow, zero,
+  mixed-family/Integer/Float and delegated receiver/argument boundaries.
+  Specification and public syntax are unchanged; native selector surface expands
+  by `div`/`mod` while native construction-site/provider cardinality is unchanged.
+  I032-D remains the final edge/cross-family reconciliation. Implementation
+  version becomes `0.2.327-SNAPSHOT`.
+
 ## 0.2.326-SNAPSHOT
 
 - Close `I028-F — cross-slice conformance/native-boundary closure` and parent `I028` without changing the implementation version. Add retained production-path evidence that composes explicit Network provisioning, pre-commit accept cancellation, eight independently pending accepts/connects, Actor/P rejection of live Network/listener/connection authority, simultaneous full-duplex progress, listener-close cutover of a pending accept and deterministic resource teardown. Re-run the retained networking focal surface plus the current Core native-boundary architecture guard and the canonical top-level publication-validation gate. I028-A through I028-F are CLOSED and `LIB005-0` is released for a separate ordinary-Protos Standard-Library design; no DNS/UDP/TLS/HTTP, ambient Network grant, production/runtime, specification, public API or native-boundary change is introduced.
