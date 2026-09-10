@@ -463,6 +463,9 @@ collections/identity-map-no-key-callbacks.protos	boolean	true
 collections/identity-map-each-order-return.protos	boolean	true
 collections/identity-map-each-noninvokable-error.protos	error	-
 collections/identity-map-each-wrong-arity-error.protos	error	-
+collections/map-each-association-snapshot-mutation.protos	boolean	true
+collections/identity-map-each-association-snapshot-mutation.protos	boolean	true
+collections/map-each-nested-independent-snapshot.protos	boolean	true
 collections/array-bracket-read.protos	integer	20
 collections/array-copied-factory-receiver-error.protos	error	-
 collections/array-delegated-at-receiver-error.protos	error	-

@@ -8,7 +8,7 @@ public final class ProtosMapValue extends ProtosObjectValue {
  }
  private final List<Entry> entries=new ArrayList<>(); private int comparisonDepth;
  public ProtosMapValue(Object parent){super(parent);} public int keyedSize(){return entries.size();}
- public List<Entry> keyedSnapshot(){return List.copyOf(entries);} public boolean comparisonActive(){return comparisonDepth!=0;}
+ public List<Entry> keyedSnapshot(){return List.copyOf(entries);} public List<Map.Entry<Object,Object>> associationSnapshot(){return entries.stream().map(e->Map.entry(e.key(),e.value())).toList();} public boolean comparisonActive(){return comparisonDepth!=0;}
  public void enterComparison(){comparisonDepth++;} public void leaveComparison(){if(comparisonDepth<=0)throw new IllegalStateException("unbalanced Map comparison scope");comparisonDepth--;}
  public void append(Object k,BigInteger h,Object v){entries.add(new Entry(k,h,v));} public void replaceValue(Entry e,Object v){e.value(v);}
  public Object remove(Entry e){if(!entries.remove(e))throw new IllegalStateException("foreign Map entry");return e.value();}

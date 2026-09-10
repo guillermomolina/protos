@@ -11,7 +11,7 @@ public final class ProtosStandardIdentityMapProtocol {
   p.createLocalSlot("atPut",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,2);if(m.isFrozen())throw err(a);Object k=x.get(0),v=x.get(1);var e=find(m,k);if(e!=null){m.replaceValue(e,v);return v;}if(!m.isOpen())throw err(a);m.append(k,ProtosIdentity.identityHash(k),v);return v;}));
   p.createLocalSlot("remove",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,1);if(!m.isOpen())throw err(a);var e=find(m,x.get(0));if(e==null)throw err(a);return m.remove(e);}));
   p.createLocalSlot("size",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,0);return new ProtosIntegerValue(BigInteger.valueOf(m.keyedSize()));}));
-  p.createLocalSlot("each",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,1);Object b=x.get(0);invokable(b,a);for(var e:m.keyedSnapshot())ProtosInvocation.invoke(b,List.of(e.key(),e.value()),a);return m;}));
+  p.createLocalSlot("each",ProtosClosureValue.nativeClosure((a,x)->{var m=map(a);arity(a,x,1);Object b=x.get(0);invokable(b,a);for(var e:m.associationSnapshot())ProtosInvocation.invoke(b,List.of(e.getKey(),e.getValue()),a);return m;}));
  }
  private static ProtosIdentityMapValue.Entry find(ProtosIdentityMapValue m,Object k){BigInteger h=ProtosIdentity.identityHash(k);for(var e:m.keyedSnapshot())if(e.recordedIdentityHash().equals(h)&&ProtosIdentity.identical(k,e.key()))return e;return null;}
  private static ProtosIdentityMapValue map(ProtosActivation a){if(!(a.receiver() instanceof ProtosIdentityMapValue m))throw err(a);return m;} private static void arity(ProtosActivation a,List<?> x,int n){if(x.size()!=n)throw err(a);}
