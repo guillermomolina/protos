@@ -3,9 +3,11 @@
 This is a human-facing, non-normative view of project direction.
 
 It is intentionally directional rather than an exact live status view.
-Current scheduling, readiness and priority live in the
+Current work state/readiness lives in the repository's
+[GitHub Issues](https://github.com/guillermomolina/protos/issues); the
 [`Protos Development` Project](https://github.com/users/guillermomolina/projects/1)
-and the repository's [GitHub Issues](https://github.com/guillermomolina/protos/issues).
+is the automatically derived dashboard/scheduling view. Priority and roadmap
+placement remain advisory planning metadata in that Project.
 This roadmap does not promise dates, compatibility, or that every item will be
 implemented exactly as described here.
 
@@ -23,7 +25,7 @@ than as unrelated external systems.
 
 See the [README](README.md) for the current build/run path, the
 [`Protos Development` Project](https://github.com/users/guillermomolina/projects/1)
-for live scheduling/status, and the
+for the derived live scheduling/status dashboard, and the
 [implementation registry](docs/project/registries/IMPLEMENTATION_STATUS.md) for durable
 historical/closure evidence.
 

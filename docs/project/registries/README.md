@@ -1,8 +1,9 @@
 # Durable registries
 
 `registries/` contains durable project registries and closure/evidence ledgers.
-A registry is not a live scheduling or assignment surface: GitHub Issues and the
-Protos Development Project own live work state.
+A registry is not a live scheduling or assignment surface: GitHub Issues own
+canonical live work state and the Protos Development Project displays its
+derived scheduling/status projection.
 
 DOC002-F5 migrates the legacy high-value registries in bounded sub-slices so
 reference radius and authority can be checked independently:

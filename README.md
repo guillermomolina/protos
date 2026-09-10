@@ -476,7 +476,7 @@ durable implementation and closure history remains recorded in
 -   [Design philosophy](docs/design/PROTOS_DESIGN_PHILOSOPHY.md) — the
     non-normative principles behind language and architecture choices.
 -   [Protos Development Project](https://github.com/users/guillermomolina/projects/1) —
-    live scheduling, status, priority, and roadmap position.
+    derived live status/scheduling dashboard; priority and roadmap are advisory planning metadata.
 -   [Implementation registry](docs/project/registries/IMPLEMENTATION_STATUS.md) — durable
     implementation inventory and closure evidence.
 

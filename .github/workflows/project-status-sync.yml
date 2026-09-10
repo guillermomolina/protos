@@ -1,0 +1,65 @@
+name: Project status sync
+
+on:
+  issues:
+    types:
+      - opened
+      - reopened
+      - closed
+      - labeled
+      - unlabeled
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: project-status-sync-${{ github.event.issue.number || 'reconcile-all' }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    if: ${{ github.repository == 'guillermomolina/protos' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PROTOS_PROJECT_TOKEN: ${{ secrets.PROTOS_PROJECT_TOKEN }}
+      GITHUB_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Verify synchronization helper
+        run: python3 scripts/project_status_sync.py --self-test
+
+      - name: Synchronize changed Issue
+        if: ${{ github.event_name == 'issues' }}
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          EVENT_ACTION: ${{ github.event.action }}
+          EVENT_LABEL: ${{ github.event.label.name }}
+        run: |
+          set -euo pipefail
+          args=(
+            --repository "$GITHUB_REPOSITORY"
+            --project-owner guillermomolina
+            --project-number 1
+            --issue-number "$ISSUE_NUMBER"
+            --event-action "$EVENT_ACTION"
+          )
+          if [[ -n "${EVENT_LABEL:-}" ]]; then
+            args+=(--event-label "$EVENT_LABEL")
+          fi
+          python3 scripts/project_status_sync.py "${args[@]}"
+
+      - name: Reconcile Project and all open Issues
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          set -euo pipefail
+          python3 scripts/project_status_sync.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --project-owner guillermomolina \
+            --project-number 1 \
+            --reconcile-all

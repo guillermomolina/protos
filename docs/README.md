@@ -47,9 +47,9 @@ The original 107-file inventory and alternatives remain in the historical
 DOC002-G9 completed the staged migration/final rescan; GitHub Issue #156
 preserves the live coordination and closure history.
 
-Durable project records are organized by role. GitHub Issues remain the live
-work-coordination surface and the `Protos Development` Project remains the live
-scheduling/status surface.
+Durable project records are organized by role. GitHub Issues are the canonical
+live work-state/coordination surface; the `Protos Development` Project is the
+automatically derived scheduling/status dashboard.
 
 - `project/work/<formal-work-item>/` contains records primarily owned by one
   formal work item.

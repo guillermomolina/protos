@@ -7,10 +7,10 @@ This file preserves durable implementation inventory, historical publication
 state, and closure evidence. It is **not** the live repository-level status,
 scheduling, readiness, priority, assignment, or blocking view.
 
-Live actionable coordination belongs to
-[GitHub Issues](https://github.com/guillermomolina/protos/issues), and live
-scheduling/status belongs to the
-[`Protos Development` Project](https://github.com/users/guillermomolina/projects/1).
+Live actionable coordination and canonical current work status belong to
+[GitHub Issues](https://github.com/guillermomolina/protos/issues); the
+[`Protos Development` Project](https://github.com/users/guillermomolina/projects/1)
+is the automatically derived scheduling/status dashboard.
 Normative language authority remains under `spec/`; durable `Bxxx` unblock
 conditions remain in `IMPLEMENTATION_BLOCKERS.md`.
 
