@@ -80,7 +80,7 @@ public final class ProtosStandardBufferedByteIoProtocol {
     private static Object construct(ProtosActivation a,List<?> args,ProtosObjectValue bp,boolean reader,boolean owning) {
         if(args.size()!=1 || !(args.get(0) instanceof ProtosObjectValue target) ||
                 target.lookupSlot(reader?"read":"write").isEmpty() ||
-                (owning && target.lookupSlot("close").isEmpty()))
+                (owning && !hasResourceCloseCapability(target, a)))
             throw new ProtosSignalException(ProtosCoreErrors.newOccurrence(a,ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT));
         ProtosObjectValue wrapper=new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosBufferedByteIo io=reader?ProtosBufferedByteIo.reader(wrapper,target,bp,a,owning):ProtosBufferedByteIo.writer(wrapper,target,bp,a,owning);
@@ -92,6 +92,16 @@ public final class ProtosStandardBufferedByteIoProtocol {
         wrapper.createLocalSlot("close",ProtosClosureValue.nativeClosure((x,xs)->xs.isEmpty()&&x.receiver()==wrapper?io.close(x):invalid(x)));
         return wrapper;
     }
+    private static boolean hasResourceCloseCapability(
+            ProtosObjectValue target, ProtosActivation activation) {
+        return ProtosValueLookup.lookup(
+                        target,
+                        "close",
+                        activation.prelude().orElseThrow())
+                .filter(result -> result.home() != ProtosObjectValue.rootObject())
+                .isPresent();
+    }
+
     private static Object invalid(ProtosActivation a){
         ProtosFutureValue f=new ProtosFutureValue(a.prelude().orElseThrow().futurePrototype(),a.executionDomain());
         f.fail(ProtosCoreErrors.newOccurrence(a,ProtosCoreErrors.StandardError.INVALID_I_O_ARGUMENT)); return f;

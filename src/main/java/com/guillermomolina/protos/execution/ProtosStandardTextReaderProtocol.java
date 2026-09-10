@@ -70,7 +70,7 @@ public final class ProtosStandardTextReaderProtocol {
         Object encodingValue = supplied.get(1);
         if (!(encodingValue instanceof ProtosEncodingValue encoding)
                 || !hasCallableCapability(source, "read", activation)
-                || (owning && !hasCallableCapability(source, "close", activation))) {
+                || (owning && !hasCallableResourceCloseCapability(source, activation))) {
             throw invalidConstruction(activation);
         }
 
@@ -150,6 +150,21 @@ public final class ProtosStandardTextReaderProtocol {
                             receiver,
                             selector,
                             activation.prelude().orElseThrow())
+                    .filter(result -> result.value() instanceof ProtosClosureValue)
+                    .isPresent();
+        } catch (UnsupportedOperationException unsupported) {
+            return false;
+        }
+    }
+
+    private static boolean hasCallableResourceCloseCapability(
+            Object receiver, ProtosActivation activation) {
+        try {
+            return ProtosValueLookup.lookup(
+                            receiver,
+                            "close",
+                            activation.prelude().orElseThrow())
+                    .filter(result -> result.home() != ProtosObjectValue.rootObject())
                     .filter(result -> result.value() instanceof ProtosClosureValue)
                     .isPresent();
         } catch (UnsupportedOperationException unsupported) {

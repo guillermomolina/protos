@@ -1,3 +1,37 @@
+## I031-C — standard structural `Object.close()` publication
+
+I031-C publishes the already-normative inherited structural `Object.close()` operation through the
+existing standard Object representation bridge. The bridge validates zero positional arguments,
+requires the existing state-bearing ordinary-object representation, and delegates the transition to
+`ProtosObjectValue.close()`. That primitive remains the single owner of the structural mutation
+state: OPEN becomes CLOSED, CLOSED remains CLOSED, and FROZEN remains FROZEN. Every successful
+call returns the exact original receiver and closing remains shallow.
+
+The guest-visible consequences are retained directly: a closed ordinary object rejects new local
+slot creation and local removal, continues to permit assignment to an existing local slot while it
+is not frozen, and does not close/freeze objects reachable through its slots. Calling structural
+`close()` on the already-frozen standard root remains idempotent and does not thaw it. A closed
+Array continues to permit replacement of an existing indexed element because structural close is
+not freeze; the existing `ProtosArrayValue` runtime test remains the representation-level owner of
+that distinction.
+
+This requires exactly one new reviewed native Closure construction site in the existing
+`ProtosStandardObjectProtocol` provider. The audited Core boundary advances from **138 sites /
+36 providers** to **139 sites / 36 providers**, with `ProtosStandardObjectProtocol.java`
+advancing from 11 to 12 sites. No specification, syntax, source-style exception, new runtime
+family, resource-lifecycle rule or second structural-state model is introduced. I/O-family
+`Closable.close()` remains a nearer protocol where defined and retains its independent Future-returning
+resource lifecycle semantics.
+
+Publishing the root selector also exposes and closes BUG004: the existing owning `TextReader`,
+`TextWriter`, `BufferedReader`, and `BufferedWriter` capability guards previously treated any
+resolved selector named `close` as resource-lifecycle authority. They now use the already-existing
+ordinary lookup result home to reject only the root `Object.close()` definition while preserving a
+nearer local or inherited resource `close`. Text reader/writer guards retain their pre-existing
+callability requirement; buffered byte I/O retains its pre-existing capability-shape requirement.
+This is an implementation correction to the already-normative Object-vs-Closable distinction, not a
+new capability rule, native site, tag, host interface, or identity-based resource registry.
+
 ## I031-B — standard `Object.removeSlot(name)` structural mutation publication
 
 I031-B publishes the already-normative inherited `Object.removeSlot(name)` surface through the
@@ -336,7 +370,7 @@ the standard native boundary.
 
 | Provider | Native Closure sites | Classification | Audited reason for remaining native |
 |---|---:|---|---|
-| `ProtosStandardObjectProtocol.java` | 11 | host-irreducible / representation bridge | Generic polymorphic `call` performs Closure invocation or ordinary instance construction; `identityHash` exposes semantic identity without dynamic-dispatch substitution; inherited `hasSlot` validates one semantic String and projects exact receiver-local slot presence; inherited `slotValue` validates one semantic String, reads only an ordinary receiver local binding and returns the exact stored value or signals Error when absent; inherited `slotNames` snapshots only receiver-local ordinary-object slot names, orders them by Unicode scalar sequence, and materializes a fresh standard Array without delegated lookup; inherited `removeSlot` validates one semantic String, removes only receiver-local ordinary-object structure under the existing OPEN/CLOSED/FROZEN state rules, and returns the exact removed value without delegated lookup; inherited `without` / `alias` validate semantic String names, inspect only receiver-local ordinary-object structure, and construct fresh Object-parented shallow views; `ensure` establishes the D043 Closure-only protected dynamic extent and executes unwind cleanup before normal/return/Error propagation; inherited `parent` projects the exact immutable semantic delegation parent across ordinary and opaque represented values and signals for the unique root because no structural parent exists; `while` establishes the D044 Closure-only iterative control boundary while reusing ordinary Closure invocation, replay, suspension, cancellation and task ownership machinery. |
+| `ProtosStandardObjectProtocol.java` | 12 | host-irreducible / representation bridge | Generic polymorphic `call` performs Closure invocation or ordinary instance construction; `identityHash` exposes semantic identity without dynamic-dispatch substitution; inherited `hasSlot` validates one semantic String and projects exact receiver-local slot presence; inherited `slotValue` validates one semantic String, reads only an ordinary receiver local binding and returns the exact stored value or signals Error when absent; inherited `slotNames` snapshots only receiver-local ordinary-object slot names, orders them by Unicode scalar sequence, and materializes a fresh standard Array without delegated lookup; inherited `removeSlot` validates one semantic String, removes only receiver-local ordinary-object structure under the existing OPEN/CLOSED/FROZEN state rules, and returns the exact removed value without delegated lookup; inherited structural `close` validates zero arguments and applies the existing shallow OPEN-to-CLOSED/idempotent state transition to ordinary state-bearing receivers while returning the exact receiver; inherited `without` / `alias` validate semantic String names, inspect only receiver-local ordinary-object structure, and construct fresh Object-parented shallow views; `ensure` establishes the D043 Closure-only protected dynamic extent and executes unwind cleanup before normal/return/Error propagation; inherited `parent` projects the exact immutable semantic delegation parent across ordinary and opaque represented values and signals for the unique root because no structural parent exists; `while` establishes the D044 Closure-only iterative control boundary while reusing ordinary Closure invocation, replay, suspension, cancellation and task ownership machinery. |
 | `ProtosStandardBooleanProtocol.java` | 1 | host-irreducible | `not`/`ifTrue`/`ifFalse`/`ifTrueIfFalse`/`and`/`or` are the primitive Boolean/control surface, including canonical negation and path-sensitive callback selection/validation. |
 | `ProtosStandardHashSupport.java` | 3 | representation bridge | Object identity hashing and Number/String hashing depend on semantic identity or exact represented values and must not be redefined through overrideable message sends. |
 | `ProtosStandardNumberEqualityProtocol.java` | 1 | representation bridge | Exact cross-family Number equality needs Integer/fixed/binary64 representation knowledge, including NaN and exact-integral Float handling. |

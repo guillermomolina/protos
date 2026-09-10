@@ -238,6 +238,55 @@ class ProtosStandardBufferedByteIoProtocolTest {
     }
 
     @Test
+    void owningFactoriesRejectStructuralObjectCloseAsResourceCapability()
+            throws Exception {
+        ProtosPrelude prelude = core();
+        ProtosActivation activation = prelude.newModuleActivation();
+
+        ProtosObjectValue readOnly =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        readOnly.createLocalSlot(
+                "read",
+                ProtosClosureValue.nativeClosure(
+                        (x, args) -> ProtosNullValue.INSTANCE));
+        ProtosObjectValue writeOnly =
+                new ProtosObjectValue(ProtosObjectValue.rootObject());
+        writeOnly.createLocalSlot(
+                "write",
+                ProtosClosureValue.nativeClosure(
+                        (x, args) -> ProtosNullValue.INSTANCE));
+
+        assertSame(
+                ProtosObjectValue.rootObject(),
+                ProtosValueLookup.lookup(readOnly, "close", prelude)
+                        .orElseThrow()
+                        .home());
+        assertSame(
+                ProtosObjectValue.rootObject(),
+                ProtosValueLookup.lookup(writeOnly, "close", prelude)
+                        .orElseThrow()
+                        .home());
+
+        ProtosObjectValue readerFactory =
+                (ProtosObjectValue)
+                        prelude.bindings()
+                                .readLocalSlot("BufferedReader")
+                                .orElseThrow();
+        ProtosObjectValue writerFactory =
+                (ProtosObjectValue)
+                        prelude.bindings()
+                                .readLocalSlot("BufferedWriter")
+                                .orElseThrow();
+
+        assertThrows(
+                ProtosSignalException.class,
+                () -> call(readerFactory, "owning", List.of(readOnly), activation));
+        assertThrows(
+                ProtosSignalException.class,
+                () -> call(writerFactory, "owning", List.of(writeOnly), activation));
+    }
+
+    @Test
     void invalidArgumentsUseFailedFutureAfterDispatch() throws Exception {
         ProtosPrelude prelude = core();
         ProtosActivation activation = prelude.newModuleActivation();

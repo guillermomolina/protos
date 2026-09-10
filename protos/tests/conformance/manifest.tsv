@@ -765,6 +765,14 @@ reflection/remove-slot-frozen-root-preserves-local.protos	boolean	true
 reflection/remove-slot-represented-receiver-error.protos	error	-
 reflection/remove-slot-zero-arity-error.protos	error	-
 reflection/remove-slot-two-arity-error.protos	error	-
+reflection/close-exact-receiver-idempotent.protos	boolean	true
+reflection/close-rejects-slot-creation.protos	boolean	true
+reflection/close-rejects-remove-preserves-local.protos	boolean	true
+reflection/close-allows-existing-assignment.protos	boolean	true
+reflection/close-is-shallow.protos	boolean	true
+reflection/close-frozen-root-idempotent.protos	boolean	true
+reflection/close-array-indexed-replacement-remains-allowed.protos	boolean	true
+reflection/close-arity.protos	error	-
 reflection/slot-value-exact-local-identity.protos	boolean	true
 reflection/slot-value-does-not-delegate.protos	error	-
 reflection/slot-value-invalid-name.protos	error	-
