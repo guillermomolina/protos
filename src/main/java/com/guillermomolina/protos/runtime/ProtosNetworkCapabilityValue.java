@@ -16,6 +16,10 @@
  */
 package com.guillermomolina.protos.runtime;
 
+
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.library.ExportLibrary;
+import com.oracle.truffle.api.library.ExportMessage;
 import java.util.Objects;
 
 /**
@@ -31,6 +35,7 @@ import java.util.Objects;
  * that opaque target through its host-neutral connect/listen acquisition contracts; the concrete
  * production backend remains outside this value and outside Protos semantics.
  */
+@ExportLibrary(InteropLibrary.class)
 public final class ProtosNetworkCapabilityValue implements ProtosRepresentedValue {
     private final ProtosObjectValue prototype;
     private final Object authorityTarget;
@@ -50,4 +55,11 @@ public final class ProtosNetworkCapabilityValue implements ProtosRepresentedValu
     public Object representedDelegationParent(ProtosPrelude ignored) {
         return prototype;
     }
+
+
+    @ExportMessage
+    String toDisplayString(@SuppressWarnings("unused") boolean allowSideEffects) {
+        return "Object";
+    }
+
 }

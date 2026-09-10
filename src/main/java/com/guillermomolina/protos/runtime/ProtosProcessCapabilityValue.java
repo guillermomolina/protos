@@ -16,6 +16,10 @@
  */
 package com.guillermomolina.protos.runtime;
 
+
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.library.ExportLibrary;
+import com.oracle.truffle.api.library.ExportMessage;
 import java.util.Objects;
 
 /**
@@ -26,6 +30,7 @@ import java.util.Objects;
  * mutable alias to the source wrapper and no authority amplification. The standard Process
  * protocol and RootActor bootstrap provisioning are installed later by I017.
  */
+@ExportLibrary(InteropLibrary.class)
 public final class ProtosProcessCapabilityValue implements ProtosRepresentedValue {
     private final ProtosObjectValue prototype;
     private final ProtosProcessRuntime processRuntime;
@@ -55,4 +60,11 @@ public final class ProtosProcessCapabilityValue implements ProtosRepresentedValu
     public Object representedDelegationParent(ProtosPrelude ignored) {
         return prototype;
     }
+
+
+    @ExportMessage
+    String toDisplayString(@SuppressWarnings("unused") boolean allowSideEffects) {
+        return "Object";
+    }
+
 }

@@ -17,9 +17,14 @@
 
 package com.guillermomolina.protos.runtime;
 
+
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.library.ExportLibrary;
+import com.oracle.truffle.api.library.ExportMessage;
 import java.util.Objects;
 
 /** Actor-local proxy/view for one Process-local standard byte-stream binding. */
+@ExportLibrary(InteropLibrary.class)
 public final class ProtosProcessStandardStreamValue implements ProtosRepresentedValue {
     private final ProtosObjectValue prototype;
     private final ProtosProcessStandardStreamBinding binding;
@@ -64,4 +69,11 @@ public final class ProtosProcessStandardStreamValue implements ProtosRepresented
     public Object representedDelegationParent(ProtosPrelude ignored) {
         return prototype;
     }
+
+
+    @ExportMessage
+    String toDisplayString(@SuppressWarnings("unused") boolean allowSideEffects) {
+        return "Object";
+    }
+
 }

@@ -16,6 +16,10 @@
  */
 package com.guillermomolina.protos.runtime;
 
+
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.library.ExportLibrary;
+import com.oracle.truffle.api.library.ExportMessage;
 import java.util.Objects;
 
 /**
@@ -25,6 +29,7 @@ import java.util.Objects;
  * boundary rematerialization creates a fresh wrapper while preserving the same incarnation
  * identity and communication target. The mutable Actor itself is never exposed as Protos state.
  */
+@ExportLibrary(InteropLibrary.class)
 public final class ProtosActorRefValue implements ProtosRepresentedValue {
     private final ProtosObjectValue prototype;
     private final Target target;
@@ -128,4 +133,11 @@ public final class ProtosActorRefValue implements ProtosRepresentedValue {
             this.communicationRoute = communicationRoute;
         }
     }
+
+
+    @ExportMessage
+    String toDisplayString(@SuppressWarnings("unused") boolean allowSideEffects) {
+        return "Object";
+    }
+
 }

@@ -17,6 +17,10 @@
 
 package com.guillermomolina.protos.runtime;
 
+
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.library.ExportLibrary;
+import com.oracle.truffle.api.library.ExportMessage;
 import java.nio.ByteBuffer;
 import java.nio.CharBuffer;
 import java.nio.charset.CharacterCodingException;
@@ -30,6 +34,7 @@ import java.util.List;
 import java.util.Objects;
 
 /** Immutable semantic Encoding descriptor; carries no I/O authority or mutable shared codec state. */
+@ExportLibrary(InteropLibrary.class)
 public final class ProtosEncodingValue implements ProtosRepresentedValue {
     public enum PortableKind { UTF8, UTF16LE, UTF16BE, LATIN1 }
     public enum DecodingErrorPolicy { STRICT, REPLACE }
@@ -543,4 +548,11 @@ public final class ProtosEncodingValue implements ProtosRepresentedValue {
 
     private static int unsigned(byte value) { return value & 0xff; }
     private static boolean continuation(int value) { return value >= 0x80 && value <= 0xbf; }
+
+
+    @ExportMessage
+    String toDisplayString(@SuppressWarnings("unused") boolean allowSideEffects) {
+        return "Object";
+    }
+
 }

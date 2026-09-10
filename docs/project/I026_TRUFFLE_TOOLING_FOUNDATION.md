@@ -76,7 +76,7 @@ see `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md`.
 | I026-A4B3 | CLOSED | `0.2.301-SNAPSHOT` | I026-A4B2 | CLI/REPL, bundled tools, exact/fresh/captured/workspace, ordinary modules, RootActor initial modules and the remaining production Process creator all use Process-scoped public-parse hosting; the final architecture guard prevents direct compiler entry from returning in Process creators. EXCLUSIVE retained; REUSE/SHARED deferred. |
 | I026-B | CLOSED | `0.2.303-SNAPSHOT` | I026-A4 + PLAT004 | Map the existing exact `SourceSpan` ranges to valid Truffle `SourceSection` values on roots/execution nodes under ratified PLAT004 root-owned Source / node-local range / on-demand projection, with focused Java-side integration evidence. |
 | I026-C | CLOSED | `0.2.311-SNAPSHOT` | I026-B + PLAT005 + PLAT008 | Implement common `InstrumentableNode` wrappers, exact `StatementTag`/`CallTag` canonical-role tagging and PLAT008 logical replay-site normalization; prove wrapper-transparent replay identity and compact no-source/no-token node metadata without changing Protos semantics. |
-| I026-D | IN_PROGRESS | `0.2.328-SNAPSHOT` | I026-A1 + PLAT013 | D1 publishes ordinary Object local-member interop; D2-D4 publish exact scalar/numeric facets; D5 publishes Array indexed interop; D6 completes the other already-backed read-only indexed families (Bytes, ByteRegion, ProcessArguments). Remaining safe value/display audit stays in D. |
+| I026-D | CLOSED | `0.2.329-SNAPSHOT` | I026-A1 + PLAT013 | Read-only semantic-minimum Truffle value interop is complete: D1 ordinary Object local reflection, D2-D4 exact scalar/numeric facets, D5-D6 exact indexed families, and D7 exhaustive safe display coverage for the remaining direct represented values. Rich Map/IdentityMap hash interop, Closure execution, debugger mutation/evaluation and richer pretty-printing remain explicitly deferred by PLAT013 rather than D blockers. |
 | I026-D1 | CLOSED | `0.2.316-SNAPSHOT` | I026-D + PLAT013 | Direct InteropLibrary receiver support on real ProtosObjectValue instances plus the implementation-only ProtosRepresentedValue marker as opaque TruffleObject; exact-class ordinary Objects enumerate/read only local slots through an immutable member-name array adapter, reject writes/delegated lookup, preserve cycles as the same guest value and keep inherited runtime families out of this tranche. |
 | I026-D2 | CLOSED | `0.2.317-SNAPSHOT` | I026-D1 + PLAT013 | Expose direct exact read-only Truffle scalar facets on real ProtosStringValue, ProtosBooleanValue and ProtosNullValue through isString/asString, isBoolean/asBoolean and isNull, with no wrapper/conversion, no numeric/array/member/execution facet and focused D1 member-read composition evidence. |
 | I026-D2A | CLOSED | `0.2.319-SNAPSHOT` | I026-D2 + PLAT013 | Replace Truffle's host-class/identity-hash default display on D2 scalar guest values with direct side-effect-free guest display: existing String payload, canonical Boolean text and canonical null text; no lookup, invocation, graph traversal, host reflection or new scalar facet. |
@@ -84,7 +84,8 @@ see `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md`.
 | I026-D4 | CLOSED | `0.2.324-SNAPSHOT` | I026-D3 + PLAT013 | Expose real ProtosFloatValue binary64 values as read-only Truffle numbers with Double-compatible exact fits/as semantics, preserving signed zero through float/double projection, rejecting sign-losing integral conversion of -0.0, keeping NaN/infinities floating-only, avoiding Long.MAX_VALUE cast saturation, and providing bounded host-opaque value display. |
 | I026-D5 | CLOSED | `0.2.326-SNAPSHOT` | I026-D4 + PLAT013 | Expose the real ProtosArrayValue receiver-owned dense indexed state directly as read-only Truffle array elements: O(1) size/read from current storage, exact guest references/cycles, no snapshots or conversion, host-only accidental elements fail closed, object members remain excluded, implicit Truffle iterator projection is explicitly disabled, and display is bounded host-opaque `Array`. |
 | I026-D6 | CLOSED | `0.2.328-SNAPSHOT` | I026-D5 + PLAT013 | Expose the existing exact indexed representations of Bytes, ByteRegion and ProcessArguments as read-only Truffle array elements. Bytes/ByteRegion use their synchronized runtime size/read authorities; ProcessArguments uses its immutable captured snapshot. Reads return exact guest references, host-only accidents fail closed, mutation/member/iterator facets stay disabled, and no guest protocol dispatch, snapshot copy, wrapper graph or debugger lock is introduced. |
-| I026-E | BLOCKED_BY_DEPENDENCIES | — | I026-C + I026-D | Bridge top/local debugger scopes from the existing Protos activation/context model and prove visible names/values match Protos lookup boundaries. |
+| I026-D7 | CLOSED | `0.2.329-SNAPSHOT` | I026-D6 + PLAT013 | Close the remaining direct represented-value coverage gap: Path, Encoding, Environment, ActorRef, GroupRef, Process capability, Network capability and Process standard-stream views explicitly export only bounded host-opaque `Object` display. The closure guard proves every current direct ProtosRepresentedValue owns explicit InteropLibrary/display coverage; all richer facets remain fail-closed. Closes I026-D and releases I026-E. |
+| I026-E | READY | — | I026-C + I026-D | Bridge top/local debugger scopes from the existing Protos activation/context model and prove visible names/values match Protos lookup boundaries. |
 | I026-F | BLOCKED_BY_DEPENDENCIES | — | I026-C + I026-E | Run a real GraalVM DAP smoke gate over Protos source: source breakpoint, stepping, stack frames, scopes and representative values. Only successful evidence permits a Protos DAP-support claim. |
 | I026-G | BLOCKED_BY_DEPENDENCIES | — | I026-C + I026-E | Run a GraalVM dynamic-LSP smoke gate and record exactly which useful runtime-derived capabilities work for Protos. Do not treat this as a replacement for static Protos language intelligence. |
 
@@ -264,6 +265,44 @@ synchronization, transfer, identity or lookup semantics change. I026-D remains
 IN_PROGRESS only for the final safe-value/display coverage audit; Map/IdentityMap
 hash-entry interop, Closure execution, debugger mutation and I026-E scope
 topology remain deferred exactly as PLAT013 requires.
+
+### I026-D7 opaque represented-value display closure
+
+`I026-D7` closes in `0.2.329-SNAPSHOT` and completes the ratified PLAT013 read-only value
+projection baseline.
+
+The final audit enumerates every direct implementation of
+`ProtosRepresentedValue` from the publication candidate. String, Boolean, null,
+Integer, fixed-width Integer, Float and ProcessArguments already own their
+D2-D6 exports. D7 gives the remaining direct values -- Path, Encoding,
+Environment, ActorRef, GroupRef, Process capability, Network capability and
+Process standard-stream views -- one explicit `InteropLibrary` export containing
+only a bounded `toDisplayString` that returns the host-opaque label `Object`.
+
+This intentionally does not pretty-print paths, encoding kinds, environment
+contents, Actor/Group identities, Process/Network authority, stream direction,
+host handles or lifecycle state. Doing so would cross into richer display or
+capability-specific tooling policy that PLAT013 explicitly leaves additive and
+deferred. D7 performs no guest lookup, invocation, graph traversal, allocation,
+identity projection or synchronization.
+
+A permanent source-level architecture guard now requires every direct runtime
+implementation of `ProtosRepresentedValue` to own an explicit InteropLibrary
+export and an explicit display, preventing a future direct guest-value family
+from silently falling back to Truffle's host-class/identity display. Focused
+runtime evidence also verifies representative opaque direct values expose the
+constant display and acquire no member, array, executable, String, numeric,
+Boolean or null facets.
+
+`ProtosObjectValue` subclasses need no parallel repair: D1's inherited export
+continues to provide bounded `Object` display while the exact-class member gate
+keeps subclass object-member projection disabled unless a family explicitly
+re-exports a faithful facet.
+
+I026-D is therefore CLOSED and I026-E is READY. Map/IdentityMap hash-entry
+interop, Closure execution, debugger mutation/evaluation, rich pretty-printing
+and other surfaces explicitly deferred by PLAT013 remain future additive work,
+not hidden prerequisites of this closure.
 
 ## Deferred ownership
 

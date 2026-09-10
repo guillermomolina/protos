@@ -16,6 +16,10 @@
  */
 package com.guillermomolina.protos.runtime;
 
+
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.library.ExportLibrary;
+import com.oracle.truffle.api.library.ExportMessage;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -35,6 +39,7 @@ import java.util.UUID;
  * membership, routing, send/request delivery, uncertainty, and distributed transport are layered
  * later and must not infer broader authority from possession of this capability.
  */
+@ExportLibrary(InteropLibrary.class)
 public final class ProtosGroupRefValue implements ProtosRepresentedValue {
     private final ProtosObjectValue prototype;
     private final Descriptor descriptor;
@@ -159,4 +164,11 @@ public final class ProtosGroupRefValue implements ProtosRepresentedValue {
             this.localGroup = localGroup;
         }
     }
+
+
+    @ExportMessage
+    String toDisplayString(@SuppressWarnings("unused") boolean allowSideEffects) {
+        return "Object";
+    }
+
 }

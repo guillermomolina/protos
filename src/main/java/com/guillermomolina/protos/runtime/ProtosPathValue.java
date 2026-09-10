@@ -1,6 +1,11 @@
 /* APL-1.0 licensed work; see LICENSE.TXT. */
 package com.guillermomolina.protos.runtime;
+
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.library.ExportLibrary;
+import com.oracle.truffle.api.library.ExportMessage;
 import java.util.*;
+@ExportLibrary(InteropLibrary.class)
 public final class ProtosPathValue implements ProtosRepresentedValue {
  public sealed interface Component permits Normal,Parent {}
  public record Normal(String name) implements Component { public Normal{Objects.requireNonNull(name,"name");} }
@@ -13,4 +18,11 @@ public final class ProtosPathValue implements ProtosRepresentedValue {
  public boolean structurallyEquals(ProtosPathValue o){return o!=null&&rooted==o.rooted&&components.equals(o.components);}
  public int structuralHash(){return 31*Boolean.hashCode(rooted)+components.hashCode();}
  @Override public Object representedDelegationParent(ProtosPrelude p){return prototype;}
+
+
+    @ExportMessage
+    String toDisplayString(@SuppressWarnings("unused") boolean allowSideEffects) {
+        return "Object";
+    }
+
 }

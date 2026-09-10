@@ -17,6 +17,10 @@
 
 package com.guillermomolina.protos.runtime;
 
+
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.library.ExportLibrary;
+import com.oracle.truffle.api.library.ExportMessage;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -35,6 +39,7 @@ import java.util.Optional;
  * side-effect-free with respect to Protos semantics, thread-safe, and stable for the lifetime of
  * the snapshot. They invoke no Protos code.
  */
+@ExportLibrary(InteropLibrary.class)
 public final class ProtosEnvironmentValue implements ProtosRepresentedValue {
     public record NativeEntry(String name, String value) {
         public NativeEntry {
@@ -244,4 +249,11 @@ public final class ProtosEnvironmentValue implements ProtosRepresentedValue {
         }
         return true;
     }
+
+
+    @ExportMessage
+    String toDisplayString(@SuppressWarnings("unused") boolean allowSideEffects) {
+        return "Object";
+    }
+
 }

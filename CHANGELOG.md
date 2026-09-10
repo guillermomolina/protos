@@ -1,3 +1,7 @@
+## 0.2.329-SNAPSHOT
+
+- Close `I026-D7` and parent `I026-D` under ratified PLAT013. The final exhaustive direct-represented-value audit gives Path, Encoding, Environment, ActorRef, GroupRef, Process capability, Network capability and Process standard-stream views an explicit InteropLibrary export containing only bounded host-opaque `Object` display, eliminating the remaining Truffle default host-class/identity display path without exposing IDs, paths, environment contents, authority targets, stream state or other host/runtime internals. A permanent architecture guard requires every direct runtime `ProtosRepresentedValue` to own explicit interop/display coverage; representative runtime evidence proves no accidental member, array, executable or primitive facets. Existing ProtosObjectValue subclasses retain D1's inherited bounded display and exact-class member gate. I026-E becomes READY. Map/IdentityMap hash-entry interop, Closure execution, debugger mutation/evaluation and richer pretty-printing remain explicitly deferred. No Protos specification or observable language semantics change. Implementation version becomes `0.2.329-SNAPSHOT`.
+
 ## 0.2.328-SNAPSHOT
 
 - Close `I032 — Fixed-width numeric arithmetic publication` with I032-D final
