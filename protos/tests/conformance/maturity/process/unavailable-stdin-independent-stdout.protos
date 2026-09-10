@@ -26,6 +26,5 @@ Error.handle(
 )
 writer: ProcessStreams.stdoutWriter(process)
 writer.writeText("O").value()
-stdinFailed.and() {
-    process.stdoutEncoding().decode(stdoutCapture) == "O"
-}
+stdinFailed &&
+    (process.stdoutEncoding().decode(stdoutCapture) == "O")
