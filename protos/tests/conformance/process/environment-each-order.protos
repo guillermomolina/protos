@@ -15,7 +15,7 @@ index: 0
 
 callback: {
     call: (name, value) => {
-        seen.atPut(index, name)
+        seen[index] = name
         index = index + 1
         null
     }
@@ -24,6 +24,6 @@ callback: {
 result: environment.each(callback)
 
 (result === environment) &&
-    (seen.at(0) == "A") &&
-    (seen.at(1) == "\u{e000}") &&
-    (seen.at(2) == "\u{10000}")
+    (seen[0] == "A") &&
+    (seen[1] == "\u{e000}") &&
+    (seen[2] == "\u{10000}")

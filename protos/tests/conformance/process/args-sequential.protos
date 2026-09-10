@@ -15,7 +15,7 @@ index: 0
 
 callback: {
     call: (value) => {
-        seen.atPut(index, value)
+        seen[index] = value
         index = index + 1
         null
     }
@@ -24,10 +24,10 @@ callback: {
 result: snapshot.each(callback)
 
 (snapshot.size() == 3) &&
-    (snapshot.at(0) == "alpha") &&
-    (snapshot.at(1) == "\u{3b2}") &&
-    (snapshot.at(2) == "\u{1f600}") &&
+    (snapshot[0] == "alpha") &&
+    (snapshot[1] == "\u{3b2}") &&
+    (snapshot[2] == "\u{1f600}") &&
     (result === snapshot) &&
-    (seen.at(0) == "alpha") &&
-    (seen.at(1) == "\u{3b2}") &&
-    (seen.at(2) == "\u{1f600}")
+    (seen[0] == "alpha") &&
+    (seen[1] == "\u{3b2}") &&
+    (seen[2] == "\u{1f600}")
