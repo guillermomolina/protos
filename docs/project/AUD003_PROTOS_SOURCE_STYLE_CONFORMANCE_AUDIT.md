@@ -133,7 +133,7 @@ listed in one table.
 | AUD003-A2 | CLOSED | Standard Library indexing audit/migration: ordinary indexing debt migrated across six reviewed modules; no current stdlib result-sensitive/direct-protocol/bootstrap exception remained; validated under `0.2.293-SNAPSHOT`. |
 | AUD003-A3 | CLOSED | Bundled-tool indexing audit/migration: ordinary indexing debt migrated across 16 execution-time Package/Test Tool modules; no result-sensitive/protocol/bootstrap exception was rewritten; validated under `0.2.295-SNAPSHOT`. |
 | AUD003-A4 | CLOSED | Benchmarks and remaining ordinary-program indexing audit/migration: the final reviewed debt across two benchmark workloads and one user-facing tutorial was migrated; the complete benchmarks/examples/tutorials executable-source rescan is clean. |
-| AUD003-B1 | IN_PROGRESS | Lazy Boolean spelling audit: B1a closed the reviewed explicit `and(() => ...)` / `or(() => ...)` ordinary tranche while retaining direct Boolean-protocol cases; B1b still owns the separately classified trailing-Closure `.and() { ... }` population. |
+| AUD003-B1 | CLOSED | Lazy Boolean spelling audit closed: B1a migrated ordinary explicit parameterless-Closure `and`/`or` spellings while retaining direct Boolean-protocol evidence; B1b migrated the reviewed ordinary trailing-Closure population, retained protocol-teaching exceptions, and closed on a fail-closed executable/guide rescan. |
 | AUD003-B2 | OPEN | Ordinary unary spelling audit for explicit `not`/`negated`, retaining protocol/lowering tests. |
 | AUD003-C | OPEN | Conformance-corpus exception classification: make deliberate canonical/protocol cases explicit and migrate ordinary-code cases. |
 | AUD003-D | OPEN | Prevention gate: add a bounded source-style guard that understands path/purpose exceptions or an explicit allowlist; a repository-wide dumb grep that bans canonical forms is not acceptable. |
@@ -322,6 +322,38 @@ Boolean protocol tests, or unrelated canonical spellings.
 B1 remains `IN_PROGRESS` after B1b1. Subsequent B1b tranches continue classifying
 the remaining ordinary trailing-Closure population. No implementation-version
 change. Execution-time version: `0.2.302-SNAPSHOT`.
+
+### AUD003-B1b closure retained evidence
+
+GitHub coordination: Issue `#114` (`AUD003-B1`).
+
+B1b continued as bounded source-style microtranches recorded in the Issue work
+log. Each executable tranche rewrote only reviewed trailing `.and() { ... }` /
+`.or() { ... }` uses whose parameterless RHS Closure represented the ordinary
+single-expression lazy Boolean operand, preserving left-to-right evaluation,
+short-circuiting, callback laziness, result semantics, and the subject of each
+conformance test.
+
+The closure reconciliation classifies the remaining user-facing documentation
+cases by purpose:
+
+- `docs/guide/05-values-identity-equality-and-collections.md` is ordinary example
+  source in a section about custom `==`; its final `.and() { ... }` spelling is
+  therefore migrated to idiomatic `&&`;
+- `docs/guide/04-control-flow-through-protocols.md` deliberately retains explicit
+  `and` / `or` trailing-Closure spellings because that chapter is directly
+  explaining those lazy protocol operations, Closure invocation, and their
+  observable short-circuit behavior.
+
+The B1b closure gate rescans every current `*.protos` source and fails on any
+remaining trailing Boolean spelling outside the direct Boolean-protocol
+conformance root. It separately rescans the complete Programming Guide and
+requires the only retained trailing spellings there to be the three classified
+protocol-teaching examples in chapter 04.
+
+With B1a already closed, B1b closure also closes `AUD003-B1`. No language
+specification, runtime behavior, implementation version, public API, native
+boundary, or license terms change.
 
 ## Migration discipline
 

@@ -4,6 +4,16 @@
 
 ## 0.2.315-SNAPSHOT
 
+- Close `AUD003-B1 — lazy Boolean spelling audit` / GitHub #114. Complete the
+  B1a/B1b migration of ordinary explicit parameterless-Closure and trailing-
+  Closure `and`/`or` spellings to idiomatic `&&`/`||`, preserve direct Boolean-
+  protocol conformance evidence, and retain the chapter-04 explicit forms that
+  intentionally teach lazy Boolean protocol/Closure behavior. Normalize the
+  final ordinary equality example in chapter 05 and close B1 on fail-closed
+  executable-source and Programming Guide rescans. Documentation/source-style
+  only: no Protos specification, runtime semantics, implementation version,
+  public API, native boundary, or license terms change.
+
 - Close `I032 — Developer Makefile workflow` with a small self-documenting repository-root developer interface. Keep the existing `build`, `test`, and `dist` command contracts, add `.PHONY`, `help` as the safe default, overridable Maven/Python/shell flags, and focused `toolchain`, `compile`, `check`, `verify`, `clean`, and `dist-validate` targets. The Makefile delegates policy to the existing Maven/toolchain/distribution machinery rather than duplicating CI or PERF007 routing, and does not mask test compilation with `maven.test.skip`. No Protos semantics, public API, implementation version or license terms change.
 
 - Close `I028-E3D — directional shutdown/close + integrated E3 closure` under the

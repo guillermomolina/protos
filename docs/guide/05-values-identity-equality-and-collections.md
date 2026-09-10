@@ -247,9 +247,8 @@ A type-like prototype may define equality in terms of application state:
 ```protos
 Point: {
     ==: (other) => {
-        (x == other.x).and() {
-            y == other.y
-        }
+        (x == other.x) &&
+            (y == other.y)
     }
 }
 ```
