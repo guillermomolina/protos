@@ -18,6 +18,7 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNetworkConnectFlow;
+import com.guillermomolina.protos.runtime.ProtosNetworkListenFlow;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import java.io.IOException;
 import java.math.BigInteger;
@@ -27,32 +28,62 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.StandardProtocolFamily;
 import java.nio.channels.SelectionKey;
+import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /** I028-E2 production NIO implementation of the existing host-neutral connect contract. */
-final class ProtosNioNetworkBackend implements ProtosNetworkConnectFlow.Backend {
+final class ProtosNioNetworkBackend
+        implements ProtosNetworkConnectFlow.Backend, ProtosNetworkListenFlow.Backend {
     @FunctionalInterface
     interface Ipv6ScopeResolver {
         Inet6Address resolve(byte[] addressBytes) throws IOException;
     }
 
+    @FunctionalInterface
+    interface Ipv6ListenAddressProvider {
+        List<Inet6Address> authorizedAddresses() throws IOException;
+    }
+
     private static final Set<String> ENDPOINT_SLOTS = Set.of("address", "port");
     private static final Set<String> ADDRESS_SLOTS = Set.of("version", "bits");
     private static final ProtosNetworkConnectFlow.Cancellation NO_CANCELLATION = () -> {};
+    private static final ProtosNetworkListenFlow.Cancellation NO_LISTEN_CANCELLATION = () -> {};
 
     private final ProtosNioHostIoPoller poller;
     private final Ipv6ScopeResolver ipv6ScopeResolver;
+    private final ProtosObjectValue listenAddressPrototype;
+    private final ProtosObjectValue listenEndpointPrototype;
+    private final Ipv6ListenAddressProvider ipv6ListenAddressProvider;
 
     ProtosNioNetworkBackend(
             ProtosNioHostIoPoller poller, Ipv6ScopeResolver ipv6ScopeResolver) {
+        this(poller, ipv6ScopeResolver, null, null, () -> List.of());
+    }
+
+    ProtosNioNetworkBackend(
+            ProtosNioHostIoPoller poller,
+            Ipv6ScopeResolver ipv6ScopeResolver,
+            ProtosObjectValue listenAddressPrototype,
+            ProtosObjectValue listenEndpointPrototype,
+            Ipv6ListenAddressProvider ipv6ListenAddressProvider) {
         this.poller = Objects.requireNonNull(poller, "poller");
         this.ipv6ScopeResolver =
                 Objects.requireNonNull(ipv6ScopeResolver, "ipv6ScopeResolver");
+        if ((listenAddressPrototype == null) != (listenEndpointPrototype == null)) {
+            throw new IllegalArgumentException(
+                    "listener address/endpoint prototypes must be supplied together");
+        }
+        this.listenAddressPrototype = listenAddressPrototype;
+        this.listenEndpointPrototype = listenEndpointPrototype;
+        this.ipv6ListenAddressProvider =
+                Objects.requireNonNull(ipv6ListenAddressProvider, "ipv6ListenAddressProvider");
     }
 
     @Override
@@ -78,6 +109,253 @@ final class ProtosNioNetworkBackend implements ProtosNetworkConnectFlow.Backend 
         }
         return attempt::cancel;
     }
+
+    @Override
+    public ProtosNetworkListenFlow.Cancellation listen(
+            ProtosNetworkListenFlow.ListenRequest request,
+            ProtosNetworkListenFlow.ListenCompletion completion) {
+        Objects.requireNonNull(request, "request");
+        Objects.requireNonNull(completion, "completion");
+        if (listenAddressPrototype == null || listenEndpointPrototype == null) {
+            reportListenFailure(completion);
+            return NO_LISTEN_CANCELLATION;
+        }
+        ListenAttempt attempt = new ListenAttempt(request, completion);
+        try {
+            poller.submit(attempt::startOnPoller, attempt::commandFailed);
+        } catch (RuntimeException unavailablePoller) {
+            attempt.commandFailed(unavailablePoller);
+        }
+        return attempt::cancel;
+    }
+
+    private final class ListenAttempt {
+        private static final int ACQUIRING = 0;
+        private static final int CANCELLED = 1;
+        private static final int HANDED_OFF = 2;
+        private static final int FAILED = 3;
+
+        private final ProtosNetworkListenFlow.ListenRequest request;
+        private final ProtosNetworkListenFlow.ListenCompletion completion;
+        private final AtomicInteger gate = new AtomicInteger(ACQUIRING);
+        private final ArrayList<ServerSocketChannel> channels = new ArrayList<>();
+        private volatile ProtosNioTcpListenerBackend listenerBackend;
+
+        private ListenAttempt(
+                ProtosNetworkListenFlow.ListenRequest request,
+                ProtosNetworkListenFlow.ListenCompletion completion) {
+            this.request = request;
+            this.completion = completion;
+        }
+
+        private void startOnPoller() {
+            if (gate.get() != ACQUIRING) return;
+            try {
+                ListenPlan plan = decodeListenRequest(request);
+                if (gate.get() != ACQUIRING) return;
+
+                int localPort = plan.requestedPort();
+                for (InetAddress address : plan.addresses()) {
+                    if (gate.get() != ACQUIRING) {
+                        closePartialChannels();
+                        return;
+                    }
+                    ServerSocketChannel channel = ServerSocketChannel.open(plan.protocolFamily());
+                    channel.configureBlocking(false);
+                    channels.add(channel);
+                    channel.bind(new InetSocketAddress(address, localPort));
+                    Object local = channel.getLocalAddress();
+                    if (!(local instanceof InetSocketAddress localSocket)
+                            || localSocket.getPort() <= 0) {
+                        throw new IOException("listener component has invalid local port");
+                    }
+                    if (localPort == 0) localPort = localSocket.getPort();
+                    else if (localSocket.getPort() != localPort) {
+                        throw new IOException("listener components acquired different ports");
+                    }
+                }
+                if (localPort <= 0 || channels.isEmpty()) {
+                    throw new IOException("listener acquisition produced no usable component");
+                }
+
+                ProtosNioTcpListenerBackend acquired =
+                        new ProtosNioTcpListenerBackend(
+                                poller,
+                                plan.ipVersion(),
+                                channels,
+                                listenAddressPrototype,
+                                listenEndpointPrototype);
+                listenerBackend = acquired;
+                for (ServerSocketChannel channel : channels) {
+                    SelectionKey key = poller.register(channel, 0, acquired);
+                    acquired.attachKey(key);
+                }
+
+                if (!gate.compareAndSet(ACQUIRING, HANDED_OFF)) {
+                    acquired.releaseIfUntransferred();
+                    return;
+                }
+                try {
+                    completion.succeeded(
+                            acquired,
+                            BigInteger.valueOf(localPort),
+                            acquired,
+                            acquired::releaseIfUntransferred);
+                } catch (RuntimeException completionFailure) {
+                    acquired.releaseIfUntransferred();
+                }
+            } catch (IOException | RuntimeException failure) {
+                fail(failure);
+            }
+        }
+
+        private void cancel() {
+            if (!gate.compareAndSet(ACQUIRING, CANCELLED)) return;
+            try {
+                poller.submit(
+                        this::releaseCancelledOnPoller,
+                        ignored -> releaseCancelledFallback());
+            } catch (RuntimeException unavailablePoller) {
+                releaseCancelledFallback();
+            }
+        }
+
+        private void commandFailed(RuntimeException failure) {
+            fail(failure);
+        }
+
+        private void fail(Exception failure) {
+            if (gate.compareAndSet(ACQUIRING, FAILED)) {
+                releaseCurrent();
+                reportListenFailure(completion);
+            } else if (gate.get() == CANCELLED) {
+                releaseCurrent();
+            }
+        }
+
+        private void releaseCancelledOnPoller() {
+            releaseCurrent();
+        }
+
+        private void releaseCancelledFallback() {
+            releaseCurrent();
+        }
+
+        private void releaseCurrent() {
+            ProtosNioTcpListenerBackend acquired = listenerBackend;
+            if (acquired != null) {
+                acquired.releaseIfUntransferred();
+                return;
+            }
+            closePartialChannels();
+        }
+
+        private void closePartialChannels() {
+            for (ServerSocketChannel channel : List.copyOf(channels)) {
+                try {
+                    channel.close();
+                } catch (IOException ignored) {
+                    // Partial acquisition cleanup cannot create a portable result.
+                }
+            }
+        }
+    }
+
+    private ListenPlan decodeListenRequest(ProtosNetworkListenFlow.ListenRequest request)
+            throws IOException {
+        int version = request.ipVersion();
+        StandardProtocolFamily family =
+                version == 4 ? StandardProtocolFamily.INET : StandardProtocolFamily.INET6;
+        int requestedPort =
+                request.portConstraint() == null ? 0 : request.portConstraint().intValueExact();
+
+        if (request.addressConstraint() != null) {
+            InetAddress exact = decodeListenAddress(request.addressConstraint(), version);
+            if (version == 6 && !isSafeConcreteIpv6(exact)) {
+                throw new IOException(
+                        "public-JDK backend cannot prove IPv6-only semantics for explicit address");
+            }
+            return new ListenPlan(version, family, List.of(exact), requestedPort);
+        }
+
+        if (version == 4) {
+            InetAddress wildcard = InetAddress.getByAddress(new byte[4]);
+            if (!(wildcard instanceof Inet4Address)) {
+                throw new IOException("IPv4 wildcard did not materialize as IPv4");
+            }
+            return new ListenPlan(version, family, List.of(wildcard), requestedPort);
+        }
+
+        List<Inet6Address> supplied =
+                Objects.requireNonNull(
+                        ipv6ListenAddressProvider.authorizedAddresses(),
+                        "authorized IPv6 listener address snapshot");
+        if (supplied.isEmpty()) {
+            throw new IOException("Network authority exposes no concrete IPv6 listener address");
+        }
+        ArrayList<InetAddress> concrete = new ArrayList<>(supplied.size());
+        for (Inet6Address address : supplied) {
+            Inet6Address candidate = Objects.requireNonNull(address, "authorized IPv6 address");
+            if (!isSafeConcreteIpv6(candidate)) {
+                throw new IOException("authorized IPv6 listener set contains non-concrete address");
+            }
+            concrete.add(candidate);
+        }
+        return new ListenPlan(version, family, List.copyOf(concrete), requestedPort);
+    }
+
+    private InetAddress decodeListenAddress(ProtosObjectValue address, int expectedVersion)
+            throws IOException {
+        if (!ProtosStandardIpAddressProtocol.recognizesValue(address, listenAddressPrototype)) {
+            throw new IOException("listen address is not a recognized IpAddress");
+        }
+        Map<String, Object> slots = address.localSlotsSnapshot();
+        if (!(slots.get("version") instanceof ProtosIntegerValue versionValue)
+                || !(slots.get("bits") instanceof ProtosIntegerValue bitsValue)
+                || versionValue.value().intValueExact() != expectedVersion) {
+            throw new IOException("listen address changed request IP version");
+        }
+        if (expectedVersion == 4) {
+            byte[] bytes = HostEndpoint.unsignedBytes(bitsValue.value(), 4);
+            InetAddress result = InetAddress.getByAddress(bytes);
+            if (!(result instanceof Inet4Address)) {
+                throw new IOException("IPv4 listen address did not materialize as IPv4");
+            }
+            return result;
+        }
+
+        byte[] bytes = HostEndpoint.unsignedBytes(bitsValue.value(), 16);
+        Inet6Address resolved =
+                Objects.requireNonNull(
+                        ipv6ScopeResolver.resolve(bytes.clone()),
+                        "IPv6 scope resolver result");
+        if (!Arrays.equals(bytes, resolved.getAddress())) {
+            throw new IOException("Network scope interpretation changed IPv6 address bits");
+        }
+        if (resolved.isLinkLocalAddress()
+                && resolved.getScopeId() == 0
+                && resolved.getScopedInterface() == null) {
+            throw new IOException("link-local IPv6 requires explicit Network scope");
+        }
+        return resolved;
+    }
+
+    private static boolean isSafeConcreteIpv6(InetAddress address) {
+        if (!(address instanceof Inet6Address ipv6) || ipv6.isAnyLocalAddress()) return false;
+        return !isIpv4Mapped(ipv6.getAddress());
+    }
+
+    private static boolean isIpv4Mapped(byte[] bytes) {
+        if (bytes.length != 16) return false;
+        for (int i = 0; i < 10; i++) if (bytes[i] != 0) return false;
+        return (bytes[10] & 0xff) == 0xff && (bytes[11] & 0xff) == 0xff;
+    }
+
+    private record ListenPlan(
+            int ipVersion,
+            StandardProtocolFamily protocolFamily,
+            List<InetAddress> addresses,
+            int requestedPort) {}
 
     private final class ConnectAttempt implements ProtosNioHostIoPoller.SelectionHandler {
         private static final int ACQUIRING = 0;
@@ -372,6 +650,15 @@ final class ProtosNioNetworkBackend implements ProtosNetworkConnectFlow.Backend 
             byte[] result = new byte[width];
             System.arraycopy(raw, offset, result, width - length, length);
             return result;
+        }
+    }
+
+    private static void reportListenFailure(
+            ProtosNetworkListenFlow.ListenCompletion completion) {
+        try {
+            completion.failed();
+        } catch (RuntimeException ignored) {
+            // A callback bug cannot create a second backend outcome.
         }
     }
 

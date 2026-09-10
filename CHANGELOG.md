@@ -1,3 +1,18 @@
+## 0.2.318-SNAPSHOT
+
+- Close `I028-E4 — production TcpListener/accept + PLAT007 IPv6-only backend` under
+  D047/D052 and ratified PLAT003/PLAT006/PLAT007. Extend the existing NIO Network
+  authority target with asynchronous `listenTcp` acquisition, IPv4-only `INET`
+  listening, exact-address IPv6 listening only where public-JDK family semantics
+  can be preserved, and the PLAT007 `address: null` IPv6 composite over concrete
+  Network-authorized IPv6 addresses sharing one acquired port. Add one logical
+  poller-owned listener backend with multiple independently pending accepts,
+  accepted TcpConnection E3 backend handoff, explicit cancellation/late-resource
+  custody, all-or-nothing composite construction and whole-listener close.
+  Specification, public Protos API, native boundary, endpoint identity and
+  poller-count/sharding policy are unchanged. Implementation version becomes
+  `0.2.318-SNAPSHOT` and E5 is released.
+
 ## 0.2.317-SNAPSHOT
 
 - Close `I026-D2 — String/Boolean/null read-only Truffle scalar interop` under ratified PLAT013 C′. Keep the existing real `ProtosStringValue`, `ProtosBooleanValue` and `ProtosNullValue` as the interop receivers and export only their exact side-effect-free scalar facets (`isString/asString`, `isBoolean/asBoolean`, `isNull`), with no wrapper graph or host-value conversion. Add focused evidence for facet exclusivity and composition with D1 local-member reads while leaving numeric, Array, Map/IdentityMap hash, Closure execution, debugger mutation and scope topology outside the slice. I026-D remains IN_PROGRESS and I026-E remains dependency-gated. No Protos specification, identity/equality/hash, lookup, mutation or concurrency semantics change. Implementation version becomes `0.2.317-SNAPSHOT`.
