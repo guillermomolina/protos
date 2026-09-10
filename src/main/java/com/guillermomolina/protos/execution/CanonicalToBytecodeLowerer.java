@@ -41,13 +41,13 @@ import java.util.Objects;
 /**
  * Parallel canonical-to-Bytecode lowering seam for the PERF006-B migration.
  *
- * <p>PERF006-B2D2 keeps the B2C parameter/default activation contract and
- * composes nested call/send argument expressions through the same Bytecode
- * continuation machinery used by top-level calls and sends. When composition is
- * required, receiver and argument values are staged in Bytecode locals strictly
- * in source evaluation order before the outer invocation is prepared. Composed
- * call targets and send receivers remain deliberately fail-closed for the later
- * polymorphic invocation tranche.
+ * <p>PERF006-B2D4A keeps the B2C parameter/default activation contract and
+ * composes nested call/send argument expressions plus parenthesized-call target
+ * expressions through the same Bytecode continuation machinery used by top-level
+ * calls and sends. A composed call target is staged exactly once before any
+ * explicit argument, and arguments are then staged strictly left-to-right before
+ * the outer invocation is prepared. Composed message-send receivers remain
+ * deliberately fail-closed for B2D4B; call spread remains deferred.
  * The ordinary {@link ProtosSourceCompiler} remains
  * on the established AST lowerer
  * until later PERF006-B slices have migrated calls, suspension and control
@@ -227,10 +227,6 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalCall call) {
-            if (!(call.receiver() instanceof CanonicalLookup)) {
-                throw new UnsupportedOperationException(
-                        "PERF006-B2C3B3 default call requires a lexical lookup receiver");
-            }
             validateSupportedDefaultExpression(call.receiver());
             for (CanonicalExpression argument : call.arguments()) {
                 validateSupportedDefaultExpression(argument);
@@ -454,8 +450,12 @@ final class CanonicalToBytecodeLowerer {
             BytecodeLocal childResult,
             BytecodeLocal resumeValue) {
         requireDefaultScratch(result, preparedCall, childResult, resumeValue);
-        CanonicalLookup receiver = (CanonicalLookup) call.receiver();
+        CanonicalExpression receiver = call.receiver();
+        boolean stageReceiver =
+                receiver instanceof CanonicalCall
+                        || receiver instanceof CanonicalSend;
         boolean stageArguments = hasComposedArgument(call.arguments());
+        boolean stageInputs = stageReceiver || stageArguments;
         BytecodeLocal receiverValue = null;
         java.util.List<BytecodeLocal> argumentValues = java.util.List.of();
 
@@ -463,11 +463,21 @@ final class CanonicalToBytecodeLowerer {
         builder.beginTag(StandardTags.CallTag.class);
         builder.beginBlock();
 
-        if (stageArguments) {
+        if (stageInputs) {
             receiverValue = builder.createLocal("defaultCallReceiver", null);
-            builder.beginStoreLocal(receiverValue);
-            emitLookup(builder, receiver);
-            builder.endStoreLocal();
+            if (stageReceiver) {
+                emitDefaultExpressionToLocal(
+                        builder,
+                        receiver,
+                        receiverValue,
+                        preparedCall,
+                        childResult,
+                        resumeValue);
+            } else {
+                builder.beginStoreLocal(receiverValue);
+                emitExpression(builder, receiver);
+                builder.endStoreLocal();
+            }
 
             argumentValues = new java.util.ArrayList<>(call.arguments().size());
             for (CanonicalExpression argument : call.arguments()) {
@@ -486,13 +496,13 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginStoreLocal(preparedCall);
         builder.beginPrepareDefaultClosureCallArguments();
-        if (stageArguments) {
+        if (stageInputs) {
             builder.emitLoadLocal(receiverValue);
         } else {
-            emitLookup(builder, receiver);
+            emitExpression(builder, receiver);
         }
         builder.emitLoadArgument(0);
-        if (stageArguments) {
+        if (stageInputs) {
             for (BytecodeLocal argumentValue : argumentValues) {
                 builder.emitLoadLocal(argumentValue);
             }
@@ -657,10 +667,6 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalCall call) {
-            if (!(call.receiver() instanceof CanonicalLookup)) {
-                throw new UnsupportedOperationException(
-                        "PERF006-B2C2 Bytecode Closure dispatch requires a lexical lookup receiver");
-            }
             validateSupportedExpression(call.receiver());
             for (CanonicalExpression argument : call.arguments()) {
                 validateSupportedExpression(argument);
@@ -842,21 +848,33 @@ final class CanonicalToBytecodeLowerer {
                     "Bytecode call result/scratch locals were not allocated");
         }
 
-        CanonicalLookup receiver =
-                (CanonicalLookup) call.receiver();
-
+        CanonicalExpression receiver = call.receiver();
+        boolean stageReceiver =
+                receiver instanceof CanonicalCall
+                        || receiver instanceof CanonicalSend;
         boolean stageArguments = hasComposedArgument(call.arguments());
+        boolean stageInputs = stageReceiver || stageArguments;
         BytecodeLocal receiverValue = null;
         java.util.List<BytecodeLocal> argumentValues = java.util.List.of();
 
         builder.beginTag(StandardTags.CallTag.class);
         builder.beginBlock();
 
-        if (stageArguments) {
+        if (stageInputs) {
             receiverValue = builder.createLocal("callReceiver", null);
-            builder.beginStoreLocal(receiverValue);
-            emitLookup(builder, receiver);
-            builder.endStoreLocal();
+            if (stageReceiver) {
+                emitBodyExpressionToLocal(
+                        builder,
+                        receiver,
+                        receiverValue,
+                        preparedCall,
+                        childResult,
+                        resumeValue);
+            } else {
+                builder.beginStoreLocal(receiverValue);
+                emitExpression(builder, receiver);
+                builder.endStoreLocal();
+            }
 
             argumentValues = new java.util.ArrayList<>(call.arguments().size());
             for (CanonicalExpression argument : call.arguments()) {
@@ -876,18 +894,22 @@ final class CanonicalToBytecodeLowerer {
         builder.beginStoreLocal(preparedCall);
         if (call.arguments().isEmpty()) {
             builder.beginPrepareClosureCall();
-            emitLookup(builder, receiver);
+            if (stageInputs) {
+                builder.emitLoadLocal(receiverValue);
+            } else {
+                emitExpression(builder, receiver);
+            }
             builder.emitLoadArgument(0);
             builder.endPrepareClosureCall();
         } else {
             builder.beginPrepareClosureCallArguments();
-            if (stageArguments) {
+            if (stageInputs) {
                 builder.emitLoadLocal(receiverValue);
             } else {
-                emitLookup(builder, receiver);
+                emitExpression(builder, receiver);
             }
             builder.emitLoadArgument(0);
-            if (stageArguments) {
+            if (stageInputs) {
                 for (BytecodeLocal argumentValue : argumentValues) {
                     builder.emitLoadLocal(argumentValue);
                 }
