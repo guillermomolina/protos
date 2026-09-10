@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B MANIFEST WIRING PUBLISHED / S1 LIVE EVIDENCE PENDING**
+Current published slice after this record: **LM009-A CLOSED; LM009-B CLOSED (S1 PASS)**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -411,3 +411,37 @@ as Protos and applies the published grammar/configuration.
 No Protos runtime source, specification, Maven implementation version, public
 DAP contract, static language-service architecture or Marketplace release is
 changed by this tranche.
+
+## LM009-B S1 live evidence and closure
+
+Status: **CLOSED**
+
+Live evidence was completed by the project owner on 2026-09-10 using a real
+Visual Studio Code Extension Development Host against the published
+LM009-B manifest surface from `e9ca30d61cb53645a66542710182db5e5b39db91`.
+
+Observed S1 behavior:
+
+- an ordinary `.protos` file was recognized as language mode **Protos**;
+- the published `source.protos` TextMate grammar was visibly active over the
+  representative lexical fixture;
+- the editor's line/block comment actions used the configured `//` and
+  `/* ... */` forms; and
+- typing `(`, `[` and `{` produced the configured closing delimiters.
+
+This completes scenario S1 together with the repository-side lexical and
+manifest structural validators. LM009-B therefore satisfies its closure rule:
+the approved reference-editor topology is present, `.protos` association and
+useful non-normative highlighting are implemented, basic comment/bracket
+configuration follows the grammar, representative fixture/validation and
+development/use instructions are present, and no Protos semantic authority is
+duplicated in the extension.
+
+LM009 remains **IN_PROGRESS**. Run-current-file integration belongs to LM009-C;
+public DAP launch policy and VS Code debugging remain LM009-D/E; static language
+intelligence remains LM009-F/G/H; and public packaging/clean end-to-end closure
+remains LM009-I.
+
+This closure changes no Protos specification, runtime implementation, Maven
+implementation version, public DAP contract, static-language-service
+architecture, Marketplace release state, or Node/npm dependency boundary.

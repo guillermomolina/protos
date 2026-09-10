@@ -65,9 +65,11 @@ In that VS Code window, open `test/fixtures/lexical.protos` and verify:
 3. `//` and `/* ... */` are recognized as the configured comment forms; and
 4. `()`, `[]`, and `{}` use the structural bracket configuration.
 
-That live editor observation is the remaining LM009-B S1 closure evidence after
-this manifest-wiring tranche publishes. The repository-side validator proves the
-declarative wiring but does not claim to substitute for an actual VS Code host.
+LM009-B S1 was completed by the project owner on 2026-09-10 in a real VS Code
+Extension Development Host: `.protos` was recognized as **Protos**, highlighting
+was active, the configured line/block comment actions worked, and structural
+delimiter auto-closing worked. The steps above remain the reproducible live
+editor check; the repository-side validators complement rather than replace it.
 
 No VSIX/Marketplace release is performed by LM009-B, and no Run action, DAP/LSP
 client, runtime-discovery policy, formatter, parser, or TypeScript semantic model
