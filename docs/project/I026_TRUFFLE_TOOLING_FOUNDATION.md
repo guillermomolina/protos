@@ -92,7 +92,9 @@ see `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md`.
 | I026-F | CLOSED | — | I026-C + I026-E | Bounded real-protocol GraalVM DAP compatibility is evidenced against 25.3.4.1: verified Protos source breakpoint/hit, threads and stackTrace, exactly one activation-native local scope with no artificial top/parent/receiver scope, representative scalar and indexed Array values, real `next` to the following Protos source line, continue to normal completion and clean disconnect. This is not a public CLI/port/hosting or complete-DAP-feature claim. |
 | I026-F1 | CLOSED | — | I026-E | Test-only GraalVM `org.graalvm.polyglot:dap` POM supplies the real DAP instrument without entering the production/shaded dependency surface. A raw socket client proves Content-Length transport plus initialize -> initialized -> attach -> configurationDone -> disconnect against a loopback ephemeral test-selected port. No public Protos CLI/port/server lifecycle is selected and no DAP support claim is made yet. |
 | I026-F2 | CLOSED | — | I026-F1 + I026-D + I026-E | Real raw-socket DAP behavior gate against GraalVM 25.3.4.1 proves a verified file-backed Protos breakpoint, stopped carrier/thread, top stack frame/source location, one PLAT015 activation scope, String/Boolean/Integer values, expandable two-element Array values, one real `next` transition from line 1 to line 2, continue/completion and disconnect. No production or specification change. |
-| I026-G | READY | — | I026-C + I026-E | Run a GraalVM dynamic-LSP smoke gate and record exactly which useful runtime-derived capabilities work for Protos. Do not treat this as a replacement for static Protos language intelligence. |
+| I026-G | IN_PROGRESS | — | I026-C + I026-E | G1 supplies the real GraalVM LSP instrument only on the test/evidence classpath and proves loopback TCP JSON-RPC initialize/initialized/shutdown/exit lifecycle. G2 owns real Protos document capability evidence and the only bounded dynamic-LSP compatibility claim. |
+| I026-G1 | CLOSED | — | I026-C + I026-E | Test-only `org.graalvm.polyglot:lsp` POM supplies the real GraalVM `lsp` instrument without entering Protos production/shaded dependencies. A raw Content-Length JSON-RPC client proves loopback server startup plus `initialize -> initialized -> shutdown -> exit`; the test-created Context explicitly opts into GraalVM experimental options because `lsp` is experimental. No Protos LSP capability, public CLI, port/lifecycle, production experimental-option policy, delegate-server, IDE packaging or static-language-server claim is made. |
+| I026-G2 | READY | — | I026-G1 + I026-C + I026-E | Open a real file-backed Protos document through the real GraalVM LSP, record the exact advertised capability matrix, and exercise only the runtime-derived subset that produces faithful useful Protos evidence. Record unsupported/empty behavior explicitly. Close G only with a bounded dynamic-LSP statement that remains distinct from static Protos language intelligence. |
 
 After I026-A3, top-level Polyglot parsing and resolver-loaded modules both retain
 real Truffle Source identity instead of collapsing source units to anonymous
@@ -425,6 +427,38 @@ port/server lifecycle, IDE packaging contract, debugger mutation/evaluation
 support, every DAP capability, or compatibility with untested GraalVM versions.
 Those remain outside I026-F. I026-G remains independently READY for dynamic-LSP
 evidence.
+
+### I026-G1 real GraalVM LSP transport/lifecycle evidence
+
+`I026-G1` is an evidence-only availability/transport slice against GraalVM
+`25.3.4.1`. It adds the official `org.graalvm.polyglot:lsp` tool POM with Maven
+test scope only. It does not add the LSP tool to Protos production/shaded
+dependencies and does not select any public editor/server distribution policy.
+
+The retained test explicitly enables GraalVM experimental options on its
+test-created Polyglot Context because GraalVM 25.3.4.1 classifies the `lsp`
+instrument option as experimental. That opt-in is confined to this test host;
+it is not a production Protos setting or compatibility promise.
+
+The test starts the real registered GraalVM `lsp` Truffle instrument on
+loopback at an ephemeral test-selected port. It connects through the actual TCP
+transport with a small raw LSP JSON-RPC client using standard `Content-Length`
+framing, sends `initialize`, observes a correlated successful response carrying
+a capability object, sends the `initialized` notification, then performs the
+standard `shutdown` request and `exit` notification before closing the transport
+and Polyglot Context.
+
+G1 deliberately treats the returned capabilities as opaque transport evidence.
+It does not claim completion, hover, highlight, signature help, coverage or any
+other language-intelligence behavior. Those are owned by G2, which must
+distinguish runtime-derived dynamic information from static Protos analysis and
+must record empty/unsupported behavior rather than infer support from an
+advertised capability.
+
+No Protos semantics, production runtime, implementation version, public
+`--lsp` option, public port/server lifecycle, production experimental-option
+policy, delegate-server policy, IDE packaging decision or static-language-server
+architecture changes in G1.
 
 ## Deferred ownership
 
