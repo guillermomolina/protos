@@ -86,11 +86,11 @@ see `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md`.
 | I026-D5 | CLOSED | `0.2.326-SNAPSHOT` | I026-D4 + PLAT013 | Expose the real ProtosArrayValue receiver-owned dense indexed state directly as read-only Truffle array elements: O(1) size/read from current storage, exact guest references/cycles, no snapshots or conversion, host-only accidental elements fail closed, object members remain excluded, implicit Truffle iterator projection is explicitly disabled, and display is bounded host-opaque `Array`. |
 | I026-D6 | CLOSED | `0.2.328-SNAPSHOT` | I026-D5 + PLAT013 | Expose the existing exact indexed representations of Bytes, ByteRegion and ProcessArguments as read-only Truffle array elements. Bytes/ByteRegion use their synchronized runtime size/read authorities; ProcessArguments uses its immutable captured snapshot. Reads return exact guest references, host-only accidents fail closed, mutation/member/iterator facets stay disabled, and no guest protocol dispatch, snapshot copy, wrapper graph or debugger lock is introduced. |
 | I026-D7 | CLOSED | `0.2.329-SNAPSHOT` | I026-D6 + PLAT013 | Close the remaining direct represented-value coverage gap: Path, Encoding, Environment, ActorRef, GroupRef, Process capability, Network capability and Process standard-stream views explicitly export only bounded host-opaque `Object` display. The closure guard proves every current direct ProtosRepresentedValue owns explicit InteropLibrary/display coverage; all richer facets remain fail-closed. Closes I026-D and releases I026-E. |
-| I026-E | IN_PROGRESS | `0.2.330-SNAPSHOT` | I026-C + I026-D + PLAT015 | E1 publishes the activation-native synthetic local-scope core and AST NodeLibrary bridge under ratified PLAT015. E2 remains the real DebuggerSession integration, same-Process-Context concurrent suspension evidence and final E closure. |
-| I026-E1 | CLOSED | `0.2.330-SNAPSHOT` | I026-C + I026-D + PLAT015 | Project the exact ProtosActivation carried in Truffle frame argument 0 through one synthetic read-only scope. Enumerate flattened current-context, captured-lexical and receiver/delegation names nearest-first without guest execution; resolve reads through ProtosActivation.lookup; expose no top scope, named receiver, parent-scope fiction, debugger mutation or global registry. Generated instrumentation wrappers inherit the same NodeLibrary bridge. |
-| I026-E2 | READY | — | I026-E1 + PLAT015 | Exercise the published scope bridge through a real Truffle DebuggerSession/instrumentation suspension, prove independent concurrent activation observations inside one Process-scoped Context, reconcile backend-independence/no-global-state evidence, and close I026-E if all PLAT015 exit conditions hold. |
-| I026-F | BLOCKED_BY_DEPENDENCIES | — | I026-C + I026-E | Run a real GraalVM DAP smoke gate over Protos source: source breakpoint, stepping, stack frames, scopes and representative values. Only successful evidence permits a Protos DAP-support claim. |
-| I026-G | BLOCKED_BY_DEPENDENCIES | — | I026-C + I026-E | Run a GraalVM dynamic-LSP smoke gate and record exactly which useful runtime-derived capabilities work for Protos. Do not treat this as a replacement for static Protos language intelligence. |
+| I026-E | CLOSED | `0.2.330-SNAPSHOT` | I026-C + I026-D + PLAT015 | Activation-native debugger scope bridge complete. E1 publishes the read-only NodeLibrary/synthetic-scope implementation; E2 proves that a real GraalVM DebuggerSession consumes it at source breakpoints and that two same-Process-Context carrier threads can be suspended concurrently while observing independent activation-local values. No production change is required by E2. |
+| I026-E1 | CLOSED | `0.2.330-SNAPSHOT` | I026-C + I026-D + PLAT015 | Project the exact ProtosActivation carried in Truffle frame argument 0 through one synthetic read-only scope. Enumerate flattened current-context, captured-lexical and receiver/delegation names nearest-first without guest execution; resolve reads through ProtosActivation.lookup; expose no top scope, named receiver, parent-scope fiction, debugger mutation or global registry. Truffle wrapper nodes remain non-instrumentable by contract; their wrapped guest/delegate retains the NodeLibrary bridge. |
+| I026-E2 | CLOSED | `0.2.330-SNAPSHOT` | I026-E1 + PLAT015 | Real DebuggerSession evidence: source breakpoint -> DebugStackFrame -> activation-native DebugScope; no top scope/receiver/parent fiction; two overlapping guest carriers in one exact ProtosLanguageContext reach the same breakpoint concurrently, both suspension callbacks overlap, and each scope returns its own activation-local marker. Production/runtime code and implementation version remain unchanged. |
+| I026-F | READY | — | I026-C + I026-E | Run a real GraalVM DAP smoke gate over Protos source: source breakpoint, stepping, stack frames, scopes and representative values. Only successful evidence permits a Protos DAP-support claim. |
+| I026-G | READY | — | I026-C + I026-E | Run a GraalVM dynamic-LSP smoke gate and record exactly which useful runtime-derived capabilities work for Protos. Do not treat this as a replacement for static Protos language intelligence. |
 
 After I026-A3, top-level Polyglot parsing and resolver-loaded modules both retain
 real Truffle Source identity instead of collapsing source units to anonymous
@@ -337,6 +337,40 @@ instrumentation wrappers inherit the same NodeLibrary bridge.
 `I026-E` remains IN_PROGRESS. `I026-E2` owns real DebuggerSession suspension
 evidence, concurrent independent observations in one Process-scoped Truffle
 Context, and final closure. No DAP/LSP support claim is made by E1.
+
+### I026-E2 real debugger integration and E closure
+
+`I026-E2` closes the parent `I026-E` against the already-published
+`0.2.330-SNAPSHOT` implementation. E2 adds retained evidence only; it changes no
+production/runtime source and does not bump the implementation version.
+
+The first evidence case opens the ordinary `ProtosPolyglotExecutionContext`,
+discovers the registered GraalVM `debugger` instrument from that exact Engine,
+starts a real `DebuggerSession`, installs a source breakpoint on an
+instrumentable Protos statement and executes through the ordinary Process-context
+entry path. The resulting `SuspendedEvent -> DebugStackFrame -> DebugScope`
+exposes the activation-local marker through E1, reports no parent scope or named
+receiver, and an explicitly entered `DebuggerSession.getTopScope("protos")` probe remains absent.
+
+The concurrency case composes the existing PLAT001 hosting evidence with
+PLAT015. Two distinct carrier threads execute one exact Protos Source through one
+`ProtosPolyglotExecutionContext`. A native test gate first proves both guest
+executions overlap in the same `ProtosLanguageContext`; both then hit the same
+line breakpoint. The debugger's synchronous suspension callbacks rendezvous
+before either is allowed to continue, proving two simultaneous suspensions rather
+than two serialized observations. Each callback reads `marker` from its own
+activation-native scope and the retained values must be exactly `first` and
+`second`, while both callbacks observe the same Process-scoped
+`ProtosLanguageContext`.
+
+This evidence introduces no global activation/scope registry, Context-per-Actor
+state, debugger GIL, top scope, receiver alias, scope-parent hierarchy, mutation,
+expression evaluation, Closure execution or alternate lookup implementation.
+The debugger remains an observer of the existing activation authority.
+
+`I026-E` is therefore CLOSED. `I026-F` (real DAP smoke) and `I026-G`
+(dynamic-LSP smoke) are released as separate evidence gates; E2 itself makes no
+DAP/LSP compatibility claim.
 
 ## Deferred ownership
 
