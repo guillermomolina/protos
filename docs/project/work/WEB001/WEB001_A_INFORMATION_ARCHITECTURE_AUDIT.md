@@ -4,7 +4,7 @@ GitHub coordination: Issue
 [#280](https://github.com/guillermomolina/protos/issues/280), child of
 WEB001 / [#278](https://github.com/guillermomolina/protos/issues/278).
 
-Status: **AUDIT COMPLETE — RECOMMENDATION PENDING EXPLICIT PROJECT-OWNER APPROVAL**
+Status: **RATIFIED — OPTION B SELECTED**
 
 ## Scope
 
@@ -223,9 +223,9 @@ Problems:
 
 Assessment: viable for a very small site, but **less future-proof than Option B**.
 
-## Proposed public route contract
+## Ratified public route contract
 
-If Option B is approved, the intended top-level contract is:
+The selected top-level contract is:
 
 ```text
 /
@@ -286,10 +286,10 @@ This produces a coherent public site without waiting for package tooling,
 complete Standard Library reference generation, downloads automation, benchmark
 integration, or a playground.
 
-## Recommendation pending approval
+## Ratified information architecture
 
-**Recommend Option B — visitor-journey navigation**, with the source-authority
-contract above.
+**Option B — visitor-journey navigation** is selected, together with the
+source-authority contract above.
 
 The important design property is not the exact label spelling; it is the stable
 separation of:
@@ -305,14 +305,18 @@ This structure is scalable, keeps authority boundaries visible, and matches the
 way mature language projects separate user intents without forcing Protos to
 copy any one project's information architecture.
 
-### Explicit approval gate
+### Ratification record
 
-This recommendation remains **PROPOSED / NEEDS_USER_DECISION**.
+On 2026-09-10, the project owner explicitly approved Option B and its
+source-authority contract. WEB001-A is therefore **RATIFIED / CLOSED**.
 
-Publishing WEB001-A records the audit and recommendation only. It does not make
-Option B, the route tree, or the source-authority contract selected project
-architecture.
+The ratified website information architecture separates project proposition
+(`Home`), learning (`Learn`), exact/normative lookup (`Reference`), rationale
+(`Design`), participation (`Community`), and canonical development (`GitHub`).
+Public source-backed material is rendered or curated from its canonical owner
+rather than copied into an independently drifting content fork.
 
-If the project owner explicitly approves this recommendation, a separate bounded
-ratification publication should mark WEB001-A selected/closed and release the
-technology/deployment comparison as the next architecture checkpoint.
+This ratification does **not** select repository topology, website framework,
+hosting provider, deployment pipeline, DNS implementation, visual design system,
+or playground architecture. Those remain downstream WEB001 architecture
+questions. The next checkpoint is the repository/technology/deployment comparison.
