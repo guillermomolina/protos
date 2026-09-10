@@ -1504,7 +1504,7 @@ only in prompts or chat history.
 
 The first tracked documentation initiative is `DOC001 — Protos Programming
 Documentation`, owned by
-`docs/project/DOC001_PROGRAMMING_DOCUMENTATION.md`.
+`docs/project/work/DOC001/DOC001_PROGRAMMING_DOCUMENTATION.md`.
 
 ### Toolchain tool work
 

@@ -11,6 +11,9 @@ migration moves them; new unambiguous records use `work/<formal-work-item>/`.
 
 Current role-first DOC002 records:
 
+- [`DOC001/DOC001_PROGRAMMING_DOCUMENTATION.md`](DOC001/DOC001_PROGRAMMING_DOCUMENTATION.md)
+  — canonical non-normative DOC001 programming-documentation work record.
+
 - [`DOC002/DOC002_DOCUMENTATION_PATH_CONTRACT.md`](DOC002/DOC002_DOCUMENTATION_PATH_CONTRACT.md)
   — ratified role-first path and compatibility contract.
 - [`DOC002/DOC002_DOCUMENTATION_ARCHITECTURE_AUDIT.md`](DOC002/DOC002_DOCUMENTATION_ARCHITECTURE_AUDIT.md)

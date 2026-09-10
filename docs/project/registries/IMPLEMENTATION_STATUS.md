@@ -1063,7 +1063,7 @@ documentation tooling.
 
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
-| DOC001 | Protos Programming Documentation | IN_PROGRESS | `docs/project/DOC001_PROGRAMMING_DOCUMENTATION.md` | A/B/C/D/E/F/G/H/I/J/K/L CLOSED; I023/B007 CLOSED; M toolchain-gated; N final closure. |
+| DOC001 | Protos Programming Documentation | IN_PROGRESS | `docs/project/work/DOC001/DOC001_PROGRAMMING_DOCUMENTATION.md` | A/B/C/D/E/F/G/H/I/J/K/L CLOSED; I023/B007 CLOSED; M toolchain-gated; N final closure. |
 
 ### DOC001 — Protos Programming Documentation
 
@@ -1087,7 +1087,7 @@ Status: IN_PROGRESS
 | DOC001-N | BLOCKED_BY_DEPENDENCIES | — | Final navigation, stale-status/link audit, cross-document consistency, and DOC001 closure after E-M. |
 
 Owning record:
-`docs/project/DOC001_PROGRAMMING_DOCUMENTATION.md`.
+`docs/project/work/DOC001/DOC001_PROGRAMMING_DOCUMENTATION.md`.
 
 DOC001 remains IN_PROGRESS as a whole. I023-D/B007 and DOC001-E are CLOSED.
 DOC001-M remains BLOCKED_BY_DEPENDENCIES until TOOL001 and TOOL002 close;

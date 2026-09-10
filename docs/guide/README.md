@@ -41,7 +41,7 @@ the code.
 ## Tracked documentation work
 
 The Programming Guide is part of
-[`DOC001 — Protos Programming Documentation`](../project/DOC001_PROGRAMMING_DOCUMENTATION.md).
+[`DOC001 — Protos Programming Documentation`](../project/work/DOC001/DOC001_PROGRAMMING_DOCUMENTATION.md).
 
 DOC001 tracks this guide as one documentation initiative with independently
 auditable slices. A blocker on one chapter does not automatically block unrelated
