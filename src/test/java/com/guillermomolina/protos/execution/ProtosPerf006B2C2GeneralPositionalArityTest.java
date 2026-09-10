@@ -186,7 +186,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
     }
 
     @Test
-    void sendSpreadInBodyAndCallSpreadInDefaultsRemainFailClosed()
+    void callSpreadInDefaultsRemainsFailClosed()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -194,28 +194,8 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
 
-                String nestedCharacters = "entry.pick(...items)";
-                Source nestedSource =
-                        Source.newBuilder(
-                                        ProtosLanguage.ID,
-                                        nestedCharacters,
-                                        "perf006-b2c2-nested-argument.protos")
-                                .build();
-                UnsupportedOperationException nested =
-                        assertThrows(
-                                UnsupportedOperationException.class,
-                                () ->
-                                        new CanonicalToBytecodeLowerer(
-                                                        language,
-                                                        nestedSource)
-                                                .lowerRoot(
-                                                        canonicalize(
-                                                                nestedCharacters)));
-                assertTrue(
-                        nested.getMessage()
-                                .contains("CanonicalSpread"));
-
-                String defaultCharacters = "(a, b = child(...items)) => { b }";
+                String defaultCharacters =
+                        "(a, b = child(...items)) => { b }";
                 CanonicalClosure defaultDefinition =
                         closureDefinition(defaultCharacters);
                 Source defaultSource =
@@ -235,14 +215,11 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                 assertTrue(
                         defaultFailure.getMessage()
                                 .contains("CanonicalSpread"));
-
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println(
-                "PERF006_B2C2_BODY_SEND_SPREAD_DEFERRED=PASS");
         System.out.println(
                 "PERF006_B2C2_DEFAULT_INVOCATION_SPREAD_DEFERRED=PASS");
     }

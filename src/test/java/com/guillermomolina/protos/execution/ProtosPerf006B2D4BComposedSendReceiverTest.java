@@ -398,38 +398,42 @@ final class ProtosPerf006B2D4BComposedSendReceiverTest {
     }
 
     @Test
-    void sendSpreadRemainsDeferred()
+    void defaultSendSpreadRemainsDeferred()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
-                String characters = "holder.capture(...items)";
+                String characters =
+                        "(value = holder.capture(...items)) => { value }";
+                CanonicalClosure definition =
+                        closureDefinition(characters);
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
                                         characters,
-                                        "perf006-b2d4b-send-spread-deferred.protos")
+                                        "perf006-b2d4b-default-send-spread-deferred.protos")
                                 .build();
+
                 UnsupportedOperationException failure =
                         assertThrows(
                                 UnsupportedOperationException.class,
                                 () ->
-                                        new CanonicalToBytecodeLowerer(
-                                                        language,
-                                                        source)
-                                                .lowerRoot(
-                                                        canonicalize(
-                                                                characters)));
+                                        new ProtosBytecodeClosureExecutionPlan(
+                                                definition,
+                                                language,
+                                                source));
                 assertTrue(
-                        failure.getMessage().contains("CanonicalSpread"));
+                        failure.getMessage()
+                                .contains("CanonicalSpread"));
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println("PERF006_B2D4B_SEND_SPREAD_DEFERRED=PASS");
+        System.out.println(
+                "PERF006_B2D4B_DEFAULT_SEND_SPREAD_DEFERRED=PASS");
     }
 
     private static Object execute(

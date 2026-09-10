@@ -258,31 +258,32 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
     }
 
     @Test
-    void sendSpreadRemainsFailClosedUntilSendSpreadMigration()
+    void defaultSpreadRemainsFailClosedUntilDefaultSpreadMigration()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
-                String characters = "entry.pick(...items)";
+                String characters =
+                        "(value = entry(...items)) => { value }";
+                CanonicalClosure definition =
+                        closureDefinition(characters);
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
                                         characters,
-                                        "perf006-b2b-args.protos")
+                                        "perf006-b2b-default-spread-deferred.protos")
                                 .build();
-                CanonicalSequence canonical =
-                        canonicalize(characters);
 
                 UnsupportedOperationException failure =
                         assertThrows(
                                 UnsupportedOperationException.class,
                                 () ->
-                                        new CanonicalToBytecodeLowerer(
-                                                        language,
-                                                        source)
-                                                .lowerRoot(canonical));
+                                        new ProtosBytecodeClosureExecutionPlan(
+                                                definition,
+                                                language,
+                                                source));
                 assertTrue(
                         failure.getMessage()
                                 .contains("CanonicalSpread"));
@@ -291,7 +292,8 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
             }
         }
 
-        System.out.println("PERF006_B2B_SEND_SPREAD_NOT_SILENTLY_MIGRATED=PASS");
+        System.out.println(
+                "PERF006_B2B_DEFAULT_SPREAD_NOT_SILENTLY_MIGRATED=PASS");
     }
 
     private static ProtosBytecodeRootNode yieldingLeafRoot(

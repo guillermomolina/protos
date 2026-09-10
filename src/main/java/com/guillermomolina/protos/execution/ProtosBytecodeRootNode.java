@@ -459,21 +459,67 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     public static final class PrepareSendArguments {
         @Specialization
         public static PreparedClosureCall perform(
-                Object receiver, String selector, ProtosActivation caller, @Variadic Object[] supplied) {
-            ProtosPrelude prelude = caller.prelude().orElse(null);
-            ProtosSlotLookupResult selected;
-            try {
-                selected = ProtosValueLookup.lookup(receiver, selector, prelude)
-                        .orElseThrow(() -> new ProtosSignalException(ProtosCoreErrors.newSlotNotFound(caller)));
-            } catch (UnsupportedOperationException unsupportedRepresentation) {
-                throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
-            }
-            if (!(selected.value() instanceof ProtosClosureValue closure)) {
-                throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
-            }
-            return prepareImmediateMethodCall(
-                    closure, receiver, selected.home(), List.of(supplied), caller);
+                Object receiver,
+                String selector,
+                ProtosActivation caller,
+                @Variadic Object[] supplied) {
+            return prepareSend(
+                    receiver,
+                    selector,
+                    caller,
+                    List.of(supplied));
         }
+    }
+
+    @Operation
+    public static final class PrepareSendVector {
+        @Specialization
+        public static PreparedClosureCall perform(
+                Object receiver,
+                String selector,
+                ProtosActivation caller,
+                PreparedArgumentVector supplied) {
+            return prepareSend(
+                    receiver,
+                    selector,
+                    caller,
+                    supplied.snapshot());
+        }
+    }
+
+    private static PreparedClosureCall prepareSend(
+            Object receiver,
+            String selector,
+            ProtosActivation caller,
+            List<?> supplied) {
+        ProtosPrelude prelude =
+                caller.prelude().orElse(null);
+        ProtosSlotLookupResult selected;
+        try {
+            selected =
+                    ProtosValueLookup.lookup(
+                                    receiver,
+                                    selector,
+                                    prelude)
+                            .orElseThrow(
+                                    () ->
+                                            new ProtosSignalException(
+                                                    ProtosCoreErrors.newSlotNotFound(
+                                                            caller)));
+        } catch (UnsupportedOperationException unsupportedRepresentation) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(caller));
+        }
+        if (!(selected.value() instanceof ProtosClosureValue closure)) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(caller));
+        }
+        return prepareImmediateMethodCall(
+                closure,
+                receiver,
+                selected.home(),
+                supplied,
+                caller);
     }
 
     private static PreparedClosureCall prepareImmediateMethodCall(

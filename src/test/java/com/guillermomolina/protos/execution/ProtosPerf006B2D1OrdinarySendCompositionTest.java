@@ -190,31 +190,31 @@ final class ProtosPerf006B2D1OrdinarySendCompositionTest {
     }
 
     @Test
-    void invocationSpreadRemainsFailClosed() throws Exception {
+    void defaultSendSpreadRemainsFailClosed() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
-                String characters = "factory().echo(...items)";
+                String characters =
+                        "(value = factory().echo(...items)) => { value }";
+                CanonicalClosure definition =
+                        closureDefinition(characters);
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
                                         characters,
-                                        "perf006-b2d1-composed-receiver.protos")
+                                        "perf006-b2d1-default-send-spread-deferred.protos")
                                 .build();
 
                 UnsupportedOperationException failure =
                         assertThrows(
                                 UnsupportedOperationException.class,
                                 () ->
-                                        new CanonicalToBytecodeLowerer(
-                                                        language,
-                                                        source)
-                                                .lowerRoot(
-                                                        canonicalize(
-                                                                characters)));
-
+                                        new ProtosBytecodeClosureExecutionPlan(
+                                                definition,
+                                                language,
+                                                source));
                 assertTrue(
                         failure.getMessage()
                                 .contains("CanonicalSpread"));
@@ -224,7 +224,7 @@ final class ProtosPerf006B2D1OrdinarySendCompositionTest {
         }
 
         System.out.println(
-                "PERF006_B2D1_INVOCATION_SPREAD_DEFERRED=PASS");
+                "PERF006_B2D1_DEFAULT_SEND_SPREAD_DEFERRED=PASS");
     }
 
     private static ProtosBytecodeRootNode yieldingMethodRoot(

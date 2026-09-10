@@ -425,7 +425,7 @@ final class ProtosPerf006B2D5ABodyCallSpreadTest {
     }
 
     @Test
-    void sendAndDefaultSpreadRemainFailClosed()
+    void defaultCallAndSendSpreadRemainFailClosed()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -433,55 +433,39 @@ final class ProtosPerf006B2D5ABodyCallSpreadTest {
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
 
-                String sendCharacters = "receiver.capture(...items)";
-                Source sendSource =
-                        Source.newBuilder(
-                                        ProtosLanguage.ID,
-                                        sendCharacters,
-                                        "perf006-b2d5a-send-deferred.protos")
-                                .build();
-                UnsupportedOperationException sendFailure =
-                        assertThrows(
-                                UnsupportedOperationException.class,
-                                () ->
-                                        new CanonicalToBytecodeLowerer(
-                                                        language,
-                                                        sendSource)
-                                                .lowerRoot(
-                                                        canonicalize(
-                                                                sendCharacters)));
-                assertEquals(
-                        "PERF006-B2B Bytecode lowerer does not yet support CanonicalSpread",
-                        sendFailure.getMessage());
-
-                String defaultCharacters =
-                        "(value = target(...items)) => { value }";
-                CanonicalClosure definition =
-                        closureDefinition(defaultCharacters);
-                Source defaultSource =
-                        Source.newBuilder(
-                                        ProtosLanguage.ID,
-                                        defaultCharacters,
-                                        "perf006-b2d5a-default-deferred.protos")
-                                .build();
-                UnsupportedOperationException defaultFailure =
-                        assertThrows(
-                                UnsupportedOperationException.class,
-                                () ->
-                                        new ProtosBytecodeClosureExecutionPlan(
-                                                definition,
-                                                language,
-                                                defaultSource));
-                assertEquals(
-                        "PERF006-B2C3B3 default expression is not migrated: CanonicalSpread",
-                        defaultFailure.getMessage());
+                for (String characters :
+                        List.of(
+                                "(value = target(...items)) => { value }",
+                                "(value = receiver.capture(...items)) => { value }")) {
+                    CanonicalClosure definition =
+                            closureDefinition(characters);
+                    Source source =
+                            Source.newBuilder(
+                                            ProtosLanguage.ID,
+                                            characters,
+                                            "perf006-b2d5a-default-spread-deferred.protos")
+                                    .build();
+                    UnsupportedOperationException failure =
+                            assertThrows(
+                                    UnsupportedOperationException.class,
+                                    () ->
+                                            new ProtosBytecodeClosureExecutionPlan(
+                                                    definition,
+                                                    language,
+                                                    source));
+                    assertEquals(
+                            "PERF006-B2C3B3 default expression is not migrated: CanonicalSpread",
+                            failure.getMessage());
+                }
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println("PERF006_B2D5A_SEND_SPREAD_DEFERRED=PASS");
-        System.out.println("PERF006_B2D5A_DEFAULT_SPREAD_DEFERRED=PASS");
+        System.out.println(
+                "PERF006_B2D5A_DEFAULT_CALL_SPREAD_DEFERRED=PASS");
+        System.out.println(
+                "PERF006_B2D5A_DEFAULT_SEND_SPREAD_DEFERRED=PASS");
     }
 
     private static Object execute(
