@@ -39,6 +39,8 @@ owner under `spec/`.
 
 The current repository-documentation information-architecture audit is [`DOC002-A`](project/DOC002_DOCUMENTATION_ARCHITECTURE_AUDIT.md). It is a non-normative audit artifact; GitHub Issue #156 remains the live coordination surface for DOC002.
 
+The selected destination architecture is the ratified [`DOC002-B role-first path contract`](project/work/DOC002/DOC002_DOCUMENTATION_PATH_CONTRACT.md). New unambiguous durable project records use that role-first model; existing flat paths remain compatibility locations until bounded migration slices move them.
+
 Durable project records, historical implementation evidence, blockers, and
 non-normative design records tied to formally tracked work items. Live actionable
 coordination is GitHub-native: Issues own the work item and the `Protos
