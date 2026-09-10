@@ -131,7 +131,7 @@ not be repaired or tested as though they were one operation.
 | `LM008-A` | CLOSED | Establish normative-owner inventory, audit classifications, evidence rules, decomposition and seed findings from current repository state. Documentation/governance only. |
 | `LM008-B` | CLOSED | Grammar/evaluation/binding/callable surface audit complete through B1-B4: lexical/literal/separator grammar; binding/writes/lowering/evaluation/object composition; Closure/invocation/parameter/default/rest/spread/trailing-Closure surface; receiver binding/extraction, `super`, non-local return and final B reconciliation. No new semantic decision or production implementation gap was found; retained Protos evidence is recorded in `LM008_B_GRAMMAR_EVALUATION_BINDING_CALLABLE_AUDIT.md`. |
 | `LM008-C` | BLOCKED_BY_DEPENDENCIES | Object structural/reflection/mutation audit has confirmed four already-normative guest-publication gaps: `Object.slotNames()`, `removeSlot(name)`, structural `close()` and `freeze()`. They are tracked by I031 / GitHub #242 as separate A-D implementation slices; all other audited C rows are covered by retained Protos evidence. C resumes after I031 closure for positive regression reconciliation. |
-| `LM008-D` | IN_PROGRESS | D1 is complete. D2 numeric audit is complete except for already-normative fixed-width arithmetic, now owned by I032 / GitHub #265; all other D2 rows are covered with retained guest-visible evidence. D3-D4 remain. |
+| `LM008-D` | IN_PROGRESS | D1-D2 are complete. I032 / GitHub #265 has closed the fixed-width arithmetic publication gap with retained ordinary-Protos A-D evidence, so every D2 numeric row is now `COVERED`. D3-D4 remain. |
 | `LM008-E` | READY | Audit control/errors/modules/prelude surface: `while`, `ensure`, Error signaling/handling, module contexts/import/cache-visible rules, and required/forbidden Core prelude bindings. |
 | `LM008-F` | BLOCKED_BY_DEPENDENCIES | Final reconciliation: cross-check retained LM005/LM006 advanced-domain evidence, require every matrix row to have an explained state, require all discovered implementation gaps to have owners/regressions, rerun the complete retained surface corpus and close LM008 without inventing semantics. |
 
@@ -161,11 +161,10 @@ regressions; no new Dxxx/PLATxxx decision is required by this checkpoint.
 
 The bounded values/Core-collections audit matrix lives in
 `docs/project/LM008_D_VALUES_CORE_COLLECTIONS_AUDIT.md`.
-LM008-D is `IN_PROGRESS`: D1 is complete. D2 has classified the complete
-numeric surface and confirmed one already-normative fixed-width arithmetic
-implementation gap, owned by I032 / GitHub #265; all other D2 rows are covered
-with retained guest-visible evidence. D2 awaits I032 reconciliation, while D3-D4
-remain.
+LM008-D is `IN_PROGRESS`: D1 and D2 are complete. I032 / GitHub #265
+closed the fixed-width arithmetic publication gap through slices A-D; the four
+formerly tracked fixed-width arithmetic rows now have retained ordinary-Protos
+success/error evidence and are `COVERED`. D3-D4 remain.
 
 ## Interaction with implementation findings
 
