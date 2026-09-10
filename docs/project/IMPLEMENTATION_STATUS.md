@@ -586,7 +586,7 @@ ordinary Protos library modules on top of the existing Core collection and
 module facilities.
 
 Design record:
-- `docs/project/LIB001_COLLECTIONS_DESIGN.md` records the completed comparative
+- `docs/project/work/LIB001/LIB001_COLLECTIONS_DESIGN.md` records the completed comparative
   architecture audit and the focused Set/IdentitySet API audit;
 - the record is non-normative: it constrains Standard Library implementation but
   does not redefine Core semantics; CLI004 introduced the `std:` host/distribution boundary and CLI005 closes

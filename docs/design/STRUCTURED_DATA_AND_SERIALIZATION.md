@@ -326,7 +326,7 @@ contract should be recorded separately under `docs/project/`, following the
 precedent of:
 
 ```text
-docs/project/LIB001_COLLECTIONS_DESIGN.md
+docs/project/work/LIB001/LIB001_COLLECTIONS_DESIGN.md
 ```
 
 A work-item design record may reference this document, choose among alternatives
