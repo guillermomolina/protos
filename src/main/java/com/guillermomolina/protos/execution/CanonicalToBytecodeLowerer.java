@@ -22,6 +22,7 @@ import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosNumberLiteral;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.semantic.ast.CanonicalCall;
+import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
@@ -63,6 +64,18 @@ final class CanonicalToBytecodeLowerer {
     }
 
     ProtosBytecodeRootNode lowerRoot(CanonicalSequence sequence) {
+        return lowerRoot(sequence, null);
+    }
+
+    ProtosBytecodeRootNode lowerClosureActivationRoot(
+            CanonicalClosure definition) {
+        Objects.requireNonNull(definition, "definition");
+        return lowerRoot(definition.body(), definition);
+    }
+
+    private ProtosBytecodeRootNode lowerRoot(
+            CanonicalSequence sequence,
+            CanonicalClosure activationDefinition) {
         Objects.requireNonNull(sequence, "sequence");
         validateSupported(sequence);
         validateSpan(sequence.span());
@@ -84,6 +97,13 @@ final class CanonicalToBytecodeLowerer {
                                     rootSpan.startOffset(),
                                     rootSpan.length());
                             builder.beginRoot();
+
+                            if (activationDefinition != null) {
+                                builder.beginBindClosureParameters();
+                                builder.emitLoadArgument(0);
+                                builder.emitLoadConstant(activationDefinition);
+                                builder.endBindClosureParameters();
+                            }
 
                             if (sequence.expressions().isEmpty()) {
                                 builder.beginReturn();

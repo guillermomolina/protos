@@ -87,7 +87,7 @@ final class ProtosPerf006B2AClosureActivationTest {
                         new ProtosBytecodeClosureExecutionPlan(
                                 definition, language, source);
 
-                Object result = plan.executeBody(invocation);
+                Object result = plan.executeActivation(invocation);
 
                 assertSame(captured, result);
                 assertSame(
@@ -164,7 +164,7 @@ final class ProtosPerf006B2AClosureActivationTest {
                                         definition,
                                         language,
                                         source)
-                                .executeBody(bytecodeActivation);
+                                .executeActivation(bytecodeActivation);
 
                 assertSame(captured, astResult);
                 assertSame(astResult, bytecodeResult);
@@ -222,7 +222,7 @@ final class ProtosPerf006B2AClosureActivationTest {
                                         definition,
                                         language,
                                         source)
-                                .executeBody(invocation);
+                                .executeActivation(invocation);
 
                 assertSame(
                         com.guillermomolina.protos.runtime.ProtosNullValue.INSTANCE,
@@ -266,7 +266,7 @@ final class ProtosPerf006B2AClosureActivationTest {
                                 definition, language, source);
 
                 SourceSection section =
-                        plan.bodyRootForTesting().ensureSourceSection();
+                        plan.activationRootForTesting().ensureSourceSection();
 
                 assertSame(source, section.getSource());
                 assertEquals(

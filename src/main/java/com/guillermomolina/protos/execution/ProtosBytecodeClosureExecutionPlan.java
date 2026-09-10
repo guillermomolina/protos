@@ -31,17 +31,18 @@ import java.util.Objects;
 /**
  * Internal Bytecode DSL execution plan for the first Closure migration seam.
  *
- * <p>PERF006-B2C3A supports general required positional parameters plus a
- * trailing rest parameter for Closure bodies whose canonical expressions are
- * already supported by {@link CanonicalToBytecodeLowerer}. Default binding and
- * normal Closure dispatch remain staged for later PERF006-B slices.</p>
+ * <p>PERF006-B2C3B1 makes the Bytecode root the complete Closure activation
+ * seam for the already-migrated required/rest subset: binding now executes as
+ * the first operation of the same root that executes the body. Default binding
+ * remains fail-closed for later B2C3B slices, and normal Closure dispatch remains
+ * staged for later PERF006-B work.</p>
  */
 final class ProtosBytecodeClosureExecutionPlan {
     private final CanonicalClosure definition;
     private final ProtosLanguage language;
     private final Source source;
-    private final ProtosBytecodeRootNode bodyRoot;
-    private final RootCallTarget bodyTarget;
+    private final ProtosBytecodeRootNode activationRoot;
+    private final RootCallTarget activationTarget;
 
     ProtosBytecodeClosureExecutionPlan(
             CanonicalClosure definition,
@@ -54,16 +55,17 @@ final class ProtosBytecodeClosureExecutionPlan {
                 new CanonicalToBytecodeLowerer(
                                 Objects.requireNonNull(language, "language"),
                                 Objects.requireNonNull(source, "source"))
-                        .lowerRoot(
-                                Objects.requireNonNull(definition, "definition")
-                                        .body()));
+                        .lowerClosureActivationRoot(
+                                Objects.requireNonNull(
+                                        definition,
+                                        "definition")));
     }
 
     ProtosBytecodeClosureExecutionPlan(
             CanonicalClosure definition,
             ProtosLanguage language,
             Source source,
-            ProtosBytecodeRootNode bodyRoot) {
+            ProtosBytecodeRootNode activationRoot) {
         this.definition =
                 Objects.requireNonNull(definition, "definition");
         this.language =
@@ -82,9 +84,11 @@ final class ProtosBytecodeClosureExecutionPlan {
             }
         }
 
-        this.bodyRoot =
-                Objects.requireNonNull(bodyRoot, "bodyRoot");
-        this.bodyTarget = bodyRoot.getCallTarget();
+        this.activationRoot =
+                Objects.requireNonNull(
+                        activationRoot,
+                        "activationRoot");
+        this.activationTarget = activationRoot.getCallTarget();
     }
 
     CanonicalClosure definition() {
@@ -108,15 +112,22 @@ final class ProtosBytecodeClosureExecutionPlan {
                 source);
     }
 
-    ProtosBytecodeRootNode bodyRootForTesting() {
-        return bodyRoot;
+    ProtosBytecodeRootNode activationRootForTesting() {
+        return activationRoot;
     }
 
-    RootCallTarget bodyTargetForComposition() {
-        return bodyTarget;
+    RootCallTarget activationTargetForComposition() {
+        return activationTarget;
     }
 
     void bind(ProtosActivation activation) {
+        bindParameters(definition, activation);
+    }
+
+    static void bindParameters(
+            CanonicalClosure definition,
+            ProtosActivation activation) {
+        Objects.requireNonNull(definition, "definition");
         Objects.requireNonNull(activation, "activation");
         java.util.List<Object> supplied =
                 activation.arguments()
@@ -186,8 +197,8 @@ final class ProtosBytecodeClosureExecutionPlan {
      * Execute with the same activation calling convention as every existing
      * Protos AST root: frame argument 0 is the exact invocation activation.
      */
-    Object executeBody(ProtosActivation activation) {
-        bind(activation);
-        return bodyTarget.call(activation);
+    Object executeActivation(ProtosActivation activation) {
+        Objects.requireNonNull(activation, "activation");
+        return activationTarget.call(activation);
     }
 }

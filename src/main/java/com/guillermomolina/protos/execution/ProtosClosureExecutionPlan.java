@@ -88,12 +88,12 @@ public final class ProtosClosureExecutionPlan {
         return bytecodePlan != null;
     }
 
-    RootCallTarget bytecodeBodyTargetForComposition() {
+    RootCallTarget bytecodeActivationTargetForComposition() {
         if (bytecodePlan == null) {
             throw new IllegalStateException(
                     "Closure execution plan is not Bytecode-backed");
         }
-        return bytecodePlan.bodyTargetForComposition();
+        return bytecodePlan.activationTargetForComposition();
     }
 
     ProtosClosureExecutionPlan rebuild(CanonicalClosure definition) {
@@ -142,7 +142,7 @@ public final class ProtosClosureExecutionPlan {
 
     CallTarget bodyTargetForTesting() {
         return bytecodePlan != null
-                ? bytecodePlan.bodyTargetForComposition()
+                ? bytecodePlan.activationTargetForComposition()
                 : bodyTarget.get();
     }
 
@@ -158,7 +158,7 @@ public final class ProtosClosureExecutionPlan {
     public Object executeBody(ProtosActivation activation) {
         Objects.requireNonNull(activation, "activation");
         return bytecodePlan != null
-                ? bytecodePlan.executeBody(activation)
+                ? bytecodePlan.executeActivation(activation)
                 : bodyTarget.get().call(activation);
     }
 }

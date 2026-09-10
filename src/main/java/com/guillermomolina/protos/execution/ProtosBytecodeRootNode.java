@@ -23,6 +23,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.ContinuationResult;
 import com.oracle.truffle.api.bytecode.ContinuationRootNode;
@@ -63,6 +64,18 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
      * <p>The activation is loaded from frame argument 0 by the lowerer, preserving
      * the established Protos root calling convention.</p>
      */
+    @Operation
+    public static final class BindClosureParameters {
+        @Specialization
+        public static void perform(
+                ProtosActivation activation,
+                CanonicalClosure definition) {
+            ProtosBytecodeClosureExecutionPlan.bindParameters(
+                    definition,
+                    activation);
+        }
+    }
+
     @Operation
     public static final class Lookup {
         @Specialization
@@ -172,9 +185,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                             caller.currentModuleKey().orElse(null),
                             caller.executionDomain());
             activation.inheritDynamicControlState(caller);
-            plan.bind(activation);
             return new PreparedClosureCall(
-                    plan.bytecodeBodyTargetForComposition(),
+                    plan.bytecodeActivationTargetForComposition(),
                     activation);
     }
 
