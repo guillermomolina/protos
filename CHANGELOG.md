@@ -1,5 +1,7 @@
 ## 0.2.338-SNAPSHOT
 
+- Migrate DOC002-F5B implementation blocker registry to `docs/project/registries/IMPLEMENTATION_BLOCKERS.md`, reconcile active Markdown references including implementation-agent governance, and retire the root AGENTS legacy-path transition example. Preserve the exact Bxxx inventory, blocker states, unblock conditions and non-normative authority. No specification, observable semantics, blocker state, implementation/runtime behavior, implementation version, public API, platform decision, or license term changes.
+
 - Migrate DOC002-F5A platform architecture registry into `docs/project/registries/`, reconcile active Markdown path references, and align the registry/AGENTS Dxxx-role wording with already-ratified DOC002-F0 Option C. Preserve all PLAT001–PLAT015 rows and decision outcomes. No specification, observable semantics, platform architecture, implementation/runtime behavior, blocker state, implementation version, public API, or license term changes.
 
 - Migrate DOC002-F4 cross-cutting Core architecture records `CORE_BOOTSTRAP_ARCHITECTURE.md` and `CORE_NATIVE_BOUNDARY.md` into `docs/project/architecture/`, reconcile active Markdown path references including repository-root/Core-library navigation where present, and preserve historical path spellings. Preserve both records' existing non-normative implementation-architecture/maintenance authority. No specification, observable semantics, Core architecture/native-boundary meaning or count, implementation/runtime behavior, implementation version, public API, or license term changes.

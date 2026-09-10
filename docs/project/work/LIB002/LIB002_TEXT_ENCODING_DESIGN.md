@@ -39,7 +39,7 @@ choosing an API.
 - `docs/design/PROTOS_DESIGN_PHILOSOPHY.md`
 - `docs/design/STANDARD_LIBRARY_IDEAS.md`
 - `docs/project/IMPLEMENTATION_STATUS.md`
-- `docs/project/IMPLEMENTATION_BLOCKERS.md`
+- `docs/project/registries/IMPLEMENTATION_BLOCKERS.md`
 - `docs/project/governance/STANDARD_LIBRARY_NAMING.md`
 - `docs/project/architecture/CORE_NATIVE_BOUNDARY.md`
 - `docs/project/work/LIB001/LIB001_COLLECTIONS_DESIGN.md`

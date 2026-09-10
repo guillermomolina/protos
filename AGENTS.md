@@ -169,9 +169,9 @@ Existing legacy files are different from newly created records. Agents MUST edit
 an existing durable document at its **actual current path** until an explicit
 bounded DOC002 migration slice owns its relocation. Do not opportunistically
 move it, guess its future path, duplicate it under the selected tree, or create a
-compatibility copy merely to satisfy the new layout. References in this file to
-legacy paths such as `docs/project/IMPLEMENTATION_BLOCKERS.md` remain valid until
-the corresponding migration slice changes them coherently.
+compatibility copy merely to satisfy the new layout. References in this file to migrated registry paths must use their canonical
+locations. After DOC002-F5B, the durable Bxxx unblock-condition ledger is
+`docs/project/registries/IMPLEMENTATION_BLOCKERS.md`.
 
 If a new durable document does not fit one selected role cleanly, do not invent a
 new directory, identifier family, or classification to force symmetry. Resolve
@@ -1122,7 +1122,7 @@ The authority split is:
 - normative Protos semantics remain owned by the applicable files under `spec/`;
 - ratified `Dxxx` and `PLATxxx` decisions remain durable repository records and
   are not redefined by an Issue, Discussion, reaction, vote, or Project field;
-- `docs/project/IMPLEMENTATION_BLOCKERS.md` remains the durable repository ledger
+- `docs/project/registries/IMPLEMENTATION_BLOCKERS.md` remains the durable repository ledger
   for `Bxxx` normative unblock conditions;
 - GitHub Discussions is the preferred public surface for questions, ideas,
   investigation, and pre-decision design discussion;
@@ -1576,7 +1576,7 @@ normal implementation versioning, changelog, validation, and publication rules.
 
 ## Implementation blockers
 
-`docs/project/IMPLEMENTATION_BLOCKERS.md` is the repository-wide ledger for
+`docs/project/registries/IMPLEMENTATION_BLOCKERS.md` is the repository-wide ledger for
 implementation work that cannot proceed without unresolved normative semantics.
 It records implementation state only; it is not part of the Protos specification.
 
@@ -1585,7 +1585,7 @@ closed or otherwise precise enough to implement without guessing:
 
 - do not invent the missing semantics;
 - do not block unrelated implementation work;
-- add or update a blocker in `docs/project/IMPLEMENTATION_BLOCKERS.md`;
+- add or update a blocker in `docs/project/registries/IMPLEMENTATION_BLOCKERS.md`;
 - give the blocker a stable identifier;
 - identify the blocked implementation area;
 - state the exact normative dependency;
@@ -1598,7 +1598,7 @@ commit SHA, implementation strategy, agent-specific memory, or expected wording
 of a future specification change.
 
 Before beginning implementation work, inspect
-`docs/project/IMPLEMENTATION_BLOCKERS.md`. Re-check every relevant `BLOCKED` or `READY`
+`docs/project/registries/IMPLEMENTATION_BLOCKERS.md`. Re-check every relevant `BLOCKED` or `READY`
 entry against the current normative specification on the current `main` branch.
 Never rely on the specification state that existed when the blocker was
 recorded.

@@ -809,10 +809,10 @@ Dependencies:
 - I016 Filesystem / File — CLOSED;
 - I017 Process I/O / bootstrap — CLOSED;
 - I022 Dynamic Error handlers / unwind-safe cleanup — CLOSED;
-- no relevant entry in `docs/project/IMPLEMENTATION_BLOCKERS.md` may be
+- no relevant entry in `docs/project/registries/IMPLEMENTATION_BLOCKERS.md` may be
   unresolved for this bounded LIB004 surface.
  cleanup — CLOSED;
-- no relevant entry in `docs/project/IMPLEMENTATION_BLOCKERS.md` may be
+- no relevant entry in `docs/project/registries/IMPLEMENTATION_BLOCKERS.md` may be
   unresolved for this bounded LIB004 surface.
 
 ### LIB005 — Networking
@@ -1496,15 +1496,15 @@ Identifier shape alone is insufficient: incidental IDs from design ideas, tests,
 
 | Item | Title | Status | What it records / establishes | Owning source(s) |
 |---|---|---|---|---|
-| B001 | Empty Sequence execution | CLOSED | Implementation area: Truffle lowering / execution of a `CanonicalSequence` containing zero expressions. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
-| B002 | Delegation parent of `without` / `alias` result objects | CLOSED | Implementation area: Standard `Object.without(name)` and `Object.alias(sourceName, aliasName)` message behavior and any runtime helper that constructs their result objects. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
-| B003 | Delegation parent / lookup chain of canonical Boolean values | CLOSED | Implementation area: Standard prototype/delegation bridge for the canonical `true` and `false` runtime representations, including ordinary member lookup and polymorphic invocation through their delegation chains. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
-| B004 | Public Group/GroupRef acquisition and discovery API | CLOSED | D039 defines and I011-21 implements the exact Core v0.1 `Actor.group(...) -> GroupRef` acquisition surface; portable service discovery remains outside Core v0.1. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
-| B005 | `super` without a physical methodHome | CLOSED | D040 defines missing-`methodHome` `InvalidSuper` semantics and I020-D implements them. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
-| B006 | Atomic package metadata replacement | CLOSED | D042 + closed I021 provide the general semantics/backend; package-tool Filesystem Slice 2B provisions confined staging-write/mutation authority and publishes metadata through standard File/Filesystem operations. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
-| B007 | Standard `while` protocol semantics | CLOSED | D044 / spec `0.1.381` plus I023-A/B/C/D implement and validate the complete standard Closure `while` protocol. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
-| B008 | Structured ownership when a task-backed Future escapes an activation | CLOSED | D045 / spec `0.1.382` fixes task-scoped structured ownership; I023-B2D2 closes the implementation/conformance dependency. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
-| B009 | Portable Filesystem tree observation for immutable package verification | CLOSED | D046 / spec `0.1.384` plus I024-D close portable tree observation/capture; TOOL001-F2E2 subsequently closes verified same-capture package custody. | `docs/project/IMPLEMENTATION_BLOCKERS.md` |
+| B001 | Empty Sequence execution | CLOSED | Implementation area: Truffle lowering / execution of a `CanonicalSequence` containing zero expressions. | `docs/project/registries/IMPLEMENTATION_BLOCKERS.md` |
+| B002 | Delegation parent of `without` / `alias` result objects | CLOSED | Implementation area: Standard `Object.without(name)` and `Object.alias(sourceName, aliasName)` message behavior and any runtime helper that constructs their result objects. | `docs/project/registries/IMPLEMENTATION_BLOCKERS.md` |
+| B003 | Delegation parent / lookup chain of canonical Boolean values | CLOSED | Implementation area: Standard prototype/delegation bridge for the canonical `true` and `false` runtime representations, including ordinary member lookup and polymorphic invocation through their delegation chains. | `docs/project/registries/IMPLEMENTATION_BLOCKERS.md` |
+| B004 | Public Group/GroupRef acquisition and discovery API | CLOSED | D039 defines and I011-21 implements the exact Core v0.1 `Actor.group(...) -> GroupRef` acquisition surface; portable service discovery remains outside Core v0.1. | `docs/project/registries/IMPLEMENTATION_BLOCKERS.md` |
+| B005 | `super` without a physical methodHome | CLOSED | D040 defines missing-`methodHome` `InvalidSuper` semantics and I020-D implements them. | `docs/project/registries/IMPLEMENTATION_BLOCKERS.md` |
+| B006 | Atomic package metadata replacement | CLOSED | D042 + closed I021 provide the general semantics/backend; package-tool Filesystem Slice 2B provisions confined staging-write/mutation authority and publishes metadata through standard File/Filesystem operations. | `docs/project/registries/IMPLEMENTATION_BLOCKERS.md` |
+| B007 | Standard `while` protocol semantics | CLOSED | D044 / spec `0.1.381` plus I023-A/B/C/D implement and validate the complete standard Closure `while` protocol. | `docs/project/registries/IMPLEMENTATION_BLOCKERS.md` |
+| B008 | Structured ownership when a task-backed Future escapes an activation | CLOSED | D045 / spec `0.1.382` fixes task-scoped structured ownership; I023-B2D2 closes the implementation/conformance dependency. | `docs/project/registries/IMPLEMENTATION_BLOCKERS.md` |
+| B009 | Portable Filesystem tree observation for immutable package verification | CLOSED | D046 / spec `0.1.384` plus I024-D close portable tree observation/capture; TOOL001-F2E2 subsequently closes verified same-capture package custody. | `docs/project/registries/IMPLEMENTATION_BLOCKERS.md` |
 
 ### D family
 
@@ -1587,7 +1587,7 @@ closure.
   live actionable-work coordination.
 - [`Protos Development` Project](https://github.com/users/guillermomolina/projects/1)
   — canonical live scheduling/status/priority/roadmap view.
-- `docs/project/IMPLEMENTATION_BLOCKERS.md` — durable normative implementation
+- `docs/project/registries/IMPLEMENTATION_BLOCKERS.md` — durable normative implementation
   blockers and unblock conditions.
 - `docs/project/history/OPEN_TASKS.md` — retired historical backlog snapshot.
 - `docs/project/IMPLEMENTATION_STATUS.md` — this durable implementation registry
