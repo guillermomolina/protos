@@ -1,6 +1,6 @@
 # I028 — Core Networking Foundation
 
-Status: **IN_PROGRESS**
+Status: **CLOSED**
 Normative dependencies: D047 / specification revision `0.1.388` — RATIFIED; D048 / specification revision `0.1.391` — RATIFIED
 Additional C/D topology dependency: D052 / specification revision `0.1.393` — RATIFIED
 Platform architecture dependencies: PLAT002 — RATIFIED; PLAT003 — RATIFIED; PLAT006 — RATIFIED; PLAT007 — RATIFIED; PLAT009 — RATIFIED
@@ -72,8 +72,7 @@ READY to implement `connectTcp`; I028-D will consume the same topology for liste
     - **E3D — directional shutdown/close + integrated E3 closure — CLOSED (`0.2.315-SNAPSHOT` / `SAME_COMMIT`):** map the already-standardized directional cutovers to poller-owned `SocketChannel.shutdownInput()` / `shutdownOutput()`, retain whole-resource close as the stronger single physical-custody release, correct generic read admission so whole close dominates a prior local read shutdown, and close E3 with real loopback lifecycle evidence.
   - **E4 — production TcpListener/accept + PLAT007 composite IPv6-only backend — CLOSED (`0.2.318-SNAPSHOT` / `SAME_COMMIT`):** implement asynchronous NIO listener acquisition, multiple independently pending accepts, accepted E3 TcpConnection handoff, exact IPv4/IPv6 family preservation, whole-listener close and the ratified all-or-nothing concrete-authorized-address IPv6 composite baseline.
   - **E5 — production Network provisioning/wiring + integrated E closure — CLOSED (`0.2.323-SNAPSHOT` / `SAME_COMMIT`):** add lazy RuntimeHost-owned NIO Network provisioning behind the existing explicit B3 host-grant boundary, retain host-side IPv6 scope/address authority, integrated listen/connect/accept/duplex and RuntimeHost teardown evidence, close E and release F without selecting an automatic CLI grant policy.
-- **F — cross-slice conformance/native-boundary closure — READY:** cancellation races,
-  late custody, multiple-accept scale evidence and Actor/P non-transferability.
+- **F — cross-slice conformance/native-boundary closure — CLOSED (`0.2.326-SNAPSHOT` / `SAME_COMMIT`; implementation version unchanged):** final production-path conformance composes cancellation/late custody, bounded multiple-accept progress, full duplex, listener-close cutover and Actor/P authority confinement; the current Core native-boundary architecture guard remains unchanged. I028 is CLOSED and LIB005-0 is released for its separate Standard-Library design step.
 
 ## I028-E production-backend checkpoint — RELEASED by PLAT006
 
@@ -131,6 +130,31 @@ enumeration caching, candidate-port retry policy, poller sharding/affinity,
 dynamic rebinding and native-backend mechanism remain deliberately deferred. If
 implementation exposes a new substantive durable choice, stop that slice and
 cross the explicit approval gate before proceeding.
+
+## I028-F / I028 final networking closure
+
+Closed at the existing implementation version `0.2.326-SNAPSHOT` with no production, specification,
+public-Protos-API or native-boundary change. F adds retained final conformance rather than another
+networking mechanism.
+
+The final production-path evidence starts from one explicitly host-provisioned Network capability,
+uses the RuntimeHost-owned NIO plane, and composes the already-published A-E contracts under load:
+a cancelled pre-commit accept remains cancelled, eight independently pending accepts can progress
+against eight concurrent connects without a thread/selector per operation, live Network/listener/
+connection authority remains rejected by Actor and P transfer, and a separate connected pair proves
+simultaneous read/write progress in both directions. Closing a listener with a pending accept leaves
+the close successful while the pending operation fails through the existing I/O lifecycle cutover.
+All acquired connection/listener custody is explicitly closed before RuntimeHost teardown.
+
+F also executes the retained networking acquisition/lifecycle/backend/confinement focal suites and
+the current Core native-boundary architecture guard, then uses the canonical top-level publication
+validation gate. Under the current PERF007 quarantine this means the broad non-Tool suite for a
+non-Tool-only closure candidate; quarantined Tool suites are not silently reintroduced by I028.
+
+I028-A through I028-F are therefore CLOSED. `LIB005` is unblocked only to begin its separate
+`LIB005-0` ordinary-Protos convenience-surface design; this closure does not select a library API,
+DNS, UDP, TLS, HTTP, socket configuration, ambient/default Network authority, or a new native
+networking backend.
 
 ## I028-E5 production Network provisioning and E closure
 
