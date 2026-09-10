@@ -1,6 +1,6 @@
 # LIB005 — Networking Standard Library design
 
-Status: **LIB005-0 DESIGN CLOSED — bounded initial surface approved**
+Status: **LIB005 CLOSED — bounded initial surface implemented and integrated**
 
 Owning work item: GitHub Issue `#54` — `LIB005 — Networking`
 
@@ -759,3 +759,42 @@ leading-zero canonicalization, IPv4/IPv6/mapped forms, semantic round-trip,
 malformed/wrong-domain rejection and the exact two-selector module surface.
 
 `LIB005-D — integrated closure` is the next dependency-ordered slice.
+
+### LIB005-D — integrated closure CLOSED
+
+Integrated closure version context: `0.2.337-SNAPSHOT` (**unchanged by D**)
+Publication base: `63a38a0817e0661b196d922e2bd5068be2b2cc6e`
+Closure evidence: `SAME_COMMIT`
+Live work item: GitHub Issue `#286`
+Parent work item: GitHub Issue `#54`
+
+D re-runs the complete bounded LIB005 surface as one integrated conformance gate
+after A1, A2, B and C are all published. The gate executes
+`ProtosNetworkingIpAddressesModuleTest`,
+`ProtosNetworkingIpEndpointsModuleTest`,
+`ProtosStandardLibraryModuleResolverTest`, and
+`ProtosCoreNativeBoundaryArchitectureTest` together.
+
+The distributed initial networking library contains exactly
+`protos/lib/network/IpAddresses.protos` and
+`protos/lib/network/IpEndpoints.protos`. Their exact public surfaces remain,
+respectively, `{v4,v6,parse,format}` and `{parse,format}`. Resolver validation
+continues to enforce canonical `std:` identity, exact distributed case,
+case-fold-collision rejection, and the absence of case-fold-equivalent siblings.
+
+Historical changed-path verification over the published A1/A2/B/C commits
+confirms that none of those implementation slices changed `spec/**` or
+`src/main/**`. The integrated native-boundary architecture guard also passes.
+Executable inspection of the two ordinary-Protos modules confirms that they do
+not introduce `Network`, TCP connect/listen, Future, Resolver/DNS, socket or live
+resource authority. Address and endpoint text conversion therefore remains the
+approved authority-free representation convenience layer over existing Core
+data.
+
+LIB005-D changes no Protos source, Java source/test, normative specification,
+native boundary, Standard Library API or implementation version. It records
+only the successful integrated verification and final project-work closure.
+
+The bounded initial `LIB005 — Networking` work item is **CLOSED**. Features
+explicitly deferred by LIB005-0 remain deferred and are not implied by this
+closure.
