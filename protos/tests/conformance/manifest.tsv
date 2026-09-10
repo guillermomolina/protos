@@ -147,6 +147,9 @@ regression/closure-captured-mutable-binding.protos	integer	2
 regression/delegated-shadowing.protos	integer	2
 collections/array-construction-and-indexing.protos	boolean	true
 collections/array-replacement-keeps-size.protos	boolean	true
+collections/array-fixed-width-indexing.protos	boolean	true
+collections/array-fixed-width-negative-index-error.protos	error	-
+collections/array-fixed-width-large-index-error.protos	error	-
 regression/rest-arguments-preserve-supplied-vector.protos	integer	360
 regression/closure-parameter-ordering-valid.protos	integer	42
 regression/default-reads-earlier-parameter.protos	integer	42

@@ -20,11 +20,13 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosSlotLookupResult;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
+import java.math.BigInteger;
 import java.util.Objects;
 
 public final class ProtosStandardArrayProtocol {
@@ -56,13 +58,11 @@ public final class ProtosStandardArrayProtocol {
                         (activation, supplied) -> {
                             ProtosArrayValue array =
                                     requireArrayReceiver(activation);
-                            if (supplied.size() != 1
-                                    || !(supplied.get(0)
-                                            instanceof com.guillermomolina.protos.runtime.ProtosIntegerValue index)) {
+                            if (supplied.size() != 1) {
                                 throw new ProtosSignalException(
                                         ProtosCoreErrors.newError(activation));
                             }
-                            java.math.BigInteger value = index.value();
+                            BigInteger value = requireInteger(activation, supplied.get(0));
                             if (value.signum() < 0
                                     || value.compareTo(array.indexedSize()) >= 0) {
                                 throw new ProtosSignalException(
@@ -81,13 +81,11 @@ public final class ProtosStandardArrayProtocol {
                                 throw new ProtosSignalException(
                                         ProtosCoreErrors.newError(activation));
                             }
-                            if (supplied.size() != 2
-                                    || !(supplied.get(0)
-                                            instanceof com.guillermomolina.protos.runtime.ProtosIntegerValue index)) {
+                            if (supplied.size() != 2) {
                                 throw new ProtosSignalException(
                                         ProtosCoreErrors.newError(activation));
                             }
-                            java.math.BigInteger value = index.value();
+                            BigInteger value = requireInteger(activation, supplied.get(0));
                             if (value.signum() < 0
                                     || value.compareTo(array.indexedSize()) >= 0) {
                                 throw new ProtosSignalException(
@@ -153,6 +151,18 @@ public final class ProtosStandardArrayProtocol {
         if (!(selected.value() instanceof ProtosClosureValue)) {
             throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
         }
+    }
+
+    private static BigInteger requireInteger(
+            com.guillermomolina.protos.runtime.ProtosActivation activation,
+            Object value) {
+        if (value instanceof ProtosIntegerValue integer) {
+            return integer.value();
+        }
+        if (value instanceof ProtosFixedIntegerValue integer) {
+            return integer.value();
+        }
+        throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
     }
 
     private static ProtosArrayValue requireArrayReceiver(

@@ -1,3 +1,7 @@
+## 0.2.331-SNAPSHOT
+
+- Close `I034 — Array semantic-Integer indexing publication`. Standard Array `at` / `atPut` now accept every semantic Integer family by exact mathematical value, reusing the existing ordinary/fixed represented-value bridge without Float/String conversion, truncation, wrapping or host-width coercion. Preserve receiver-domain, dense bounds, frozen-first mutation validation, exact element/RHS identity, and ordinary bracket lowering. Retain Protos conformance for signed/unsigned fixed-width read/write/bracket success plus negative and UInt64-maximum out-of-range failures. No specification or native-boundary change; implementation version becomes `0.2.331-SNAPSHOT`.
+
 ## 0.2.330-SNAPSHOT
 
 - Migrate DOC002-D1 governance records into the ratified role-first `docs/project/governance/` location. Move `LICENSING_RATIONALE.md` and `STANDARD_LIBRARY_NAMING.md` with Git-history-preserving rename detection, reconcile current repository documentation references and relative links from the execution-time publication base, retain the DOC002-A inventory as a historical pre-migration snapshot, and make no specification, implementation/runtime, public API, license-term, or implementation-version change.
