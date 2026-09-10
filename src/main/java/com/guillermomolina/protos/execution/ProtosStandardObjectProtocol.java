@@ -30,6 +30,7 @@ import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.runtime.ProtosTask;
 import com.guillermomolina.protos.runtime.ProtosValueLookup;
+import java.util.ArrayList;
 import java.util.List;
 
 public final class ProtosStandardObjectProtocol {
@@ -72,6 +73,12 @@ public final class ProtosStandardObjectProtocol {
                     "slotValue",
                     ProtosClosureValue.nativeClosure(
                             ProtosStandardObjectProtocol::slotValue));
+        }
+        if (!object.hasLocalSlot("slotNames")) {
+            object.createLocalSlot(
+                    "slotNames",
+                    ProtosClosureValue.nativeClosure(
+                            ProtosStandardObjectProtocol::slotNames));
         }
         if (!object.hasLocalSlot("without")) {
             object.createLocalSlot(
@@ -131,6 +138,47 @@ public final class ProtosStandardObjectProtocol {
             return ProtosBooleanValue.of(ordinary.hasLocalSlot(name.value()));
         }
         return ProtosBooleanValue.FALSE;
+    }
+
+    private static Object slotNames(ProtosActivation activation, List<?> supplied) {
+        if (!supplied.isEmpty()) {
+            throw invalid(activation);
+        }
+
+        List<String> names = new ArrayList<>();
+        Object receiver = activation.receiver();
+        if (receiver instanceof ProtosObjectValue ordinary) {
+            names.addAll(ordinary.localSlotsSnapshot().keySet());
+            names.sort(ProtosStandardObjectProtocol::compareUnicodeScalarStrings);
+        }
+
+        List<ProtosStringValue> values = new ArrayList<>(names.size());
+        for (String name : names) {
+            values.add(new ProtosStringValue(name));
+        }
+        return activation
+                .prelude()
+                .orElseThrow(
+                        () -> new IllegalStateException("Object.slotNames requires Core prelude"))
+                .newArray(values);
+    }
+
+    private static int compareUnicodeScalarStrings(String left, String right) {
+        int leftOffset = 0;
+        int rightOffset = 0;
+        while (leftOffset < left.length() && rightOffset < right.length()) {
+            int leftCodePoint = left.codePointAt(leftOffset);
+            int rightCodePoint = right.codePointAt(rightOffset);
+            if (leftCodePoint != rightCodePoint) {
+                return Integer.compare(leftCodePoint, rightCodePoint);
+            }
+            leftOffset += Character.charCount(leftCodePoint);
+            rightOffset += Character.charCount(rightCodePoint);
+        }
+        if (leftOffset == left.length()) {
+            return rightOffset == right.length() ? 0 : -1;
+        }
+        return 1;
     }
 
     private static Object slotValue(ProtosActivation activation, List<?> supplied) {

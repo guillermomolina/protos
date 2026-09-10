@@ -752,6 +752,12 @@ reflection/has-slot-local-only.protos	boolean	true
 reflection/has-slot-represented-values.protos	boolean	true
 reflection/has-slot-invalid-name.protos	error	-
 reflection/has-slot-arity.protos	error	-
+reflection/slot-names-local-order.protos	boolean	true
+reflection/slot-names-unicode-scalar-order.protos	boolean	true
+reflection/slot-names-fresh-independent-snapshot.protos	boolean	true
+reflection/slot-names-empty-fresh-standard-array.protos	boolean	true
+reflection/slot-names-represented-values.protos	boolean	true
+reflection/slot-names-arity.protos	error	-
 reflection/slot-value-exact-local-identity.protos	boolean	true
 reflection/slot-value-does-not-delegate.protos	error	-
 reflection/slot-value-invalid-name.protos	error	-
