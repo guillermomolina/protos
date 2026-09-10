@@ -695,7 +695,7 @@ Description: Strict JSON structured-data facilities implemented through an
 explicit JSON-specific data model made from ordinary Protos values and modules.
 
 Design record:
-- `docs/project/LIB003_JSON_DESIGN.md` records the completed comparative
+- `docs/project/work/LIB003/LIB003_JSON_DESIGN.md` records the completed comparative
   JSON/YAML/XML/object-persistence audit and initial JSON data-model/codec
   decisions;
 - `docs/design/STRUCTURED_DATA_AND_SERIALIZATION.md` remains the broader

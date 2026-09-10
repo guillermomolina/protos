@@ -1,5 +1,7 @@
 ## 0.2.335-SNAPSHOT
 
+- Migrate DOC002-E5 closed LIB003 JSON work record into `docs/project/work/LIB003/` under the ratified role-first information architecture. Reconcile active Markdown references from the execution-time publication base, preserve historical path spellings in chronology/migration snapshots, and make no specification, JSON semantics, implementation/runtime, public API, license-term, or implementation-version change.
+
 - Migrate DOC002-E4 closed LIB002 Text / Encoding work record into `docs/project/work/LIB002/` under the ratified role-first information architecture. Reconcile active Markdown references from the execution-time publication base, preserve historical path spellings in chronology/migration snapshots, and make no specification, Encoding/Text I/O semantics, implementation/runtime, public API, license-term, or implementation-version change.
 
 - Migrate DOC002-E3 completed LIB001 Collections work record into `docs/project/work/LIB001/` under the ratified role-first information architecture. Reconcile active Markdown references from the execution-time publication base, preserve historical path spellings in chronology/migration snapshots, and make no specification, collection semantics, implementation/runtime, public API, license-term, or implementation-version change.
