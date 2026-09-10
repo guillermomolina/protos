@@ -1336,7 +1336,7 @@ Originating baseline:
 | PERF003-A | CLOSED | `0.2.180-SNAPSHOT` | A4 closure evidence through `guillermomolina/protos-benchmarks@433ebb8075148493d4eae8da701803b21ab50c09` | Final A4 evidence exhausted the justified local production hypotheses; the residual compiler-threshold limitation is characterized and accepted without a broad production Truffle boundary. |
 | PERF003-B | CLOSED | — | `guillermomolina/protos-benchmarks@433ebb8075148493d4eae8da701803b21ab50c09` | Companion correctness, control, retained A4 diagnostics and separate no-trace timing evidence are published; PERF003 is CLOSED. |
 
-Project record: `docs/project/PERF003_COLLECTION_COMPILABILITY.md`.
+Project record: `docs/project/work/PERF003/PERF003_COLLECTION_COMPILABILITY.md`.
 
 ### PERF002 — Truffle compilability and dispatch optimization
 
