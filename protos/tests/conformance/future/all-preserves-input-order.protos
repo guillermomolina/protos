@@ -12,5 +12,5 @@
 first: (() => { 4 }).future()
 second: (() => { 2 }).future()
 Future.all(first, second).then((values) => {
-    values.at(0) * 10 + values.at(1)
+    values[0] * 10 + values[1]
 })
