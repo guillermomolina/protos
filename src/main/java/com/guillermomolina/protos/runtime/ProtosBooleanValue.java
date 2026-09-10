@@ -17,6 +17,11 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.library.ExportLibrary;
+import com.oracle.truffle.api.library.ExportMessage;
+
+@ExportLibrary(InteropLibrary.class)
 public final class ProtosBooleanValue implements ProtosRepresentedValue {
     public static final ProtosBooleanValue TRUE = new ProtosBooleanValue(true);
     public static final ProtosBooleanValue FALSE = new ProtosBooleanValue(false);
@@ -38,6 +43,17 @@ public final class ProtosBooleanValue implements ProtosRepresentedValue {
     @Override
     public Object representedDelegationParent(ProtosPrelude prelude) {
         return ProtosObjectValue.rootObject();
+    }
+
+
+    @ExportMessage
+    boolean isBoolean() {
+        return true;
+    }
+
+    @ExportMessage
+    boolean asBoolean() {
+        return value;
     }
 
 }

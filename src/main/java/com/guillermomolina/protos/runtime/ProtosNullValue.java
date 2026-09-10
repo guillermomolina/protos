@@ -17,6 +17,11 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.library.ExportLibrary;
+import com.oracle.truffle.api.library.ExportMessage;
+
+@ExportLibrary(InteropLibrary.class)
 public final class ProtosNullValue implements ProtosRepresentedValue {
     public static final ProtosNullValue INSTANCE = new ProtosNullValue();
 
@@ -25,6 +30,12 @@ public final class ProtosNullValue implements ProtosRepresentedValue {
     @Override
     public Object representedDelegationParent(ProtosPrelude prelude) {
         return ProtosObjectValue.rootObject();
+    }
+
+
+    @ExportMessage
+    boolean isNull() {
+        return true;
     }
 
 }

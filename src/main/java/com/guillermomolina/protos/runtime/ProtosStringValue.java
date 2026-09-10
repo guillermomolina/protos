@@ -17,8 +17,13 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.library.ExportLibrary;
+import com.oracle.truffle.api.library.ExportMessage;
+
 import java.util.Objects;
 
+@ExportLibrary(InteropLibrary.class)
 public final class ProtosStringValue implements ProtosRepresentedValue {
     private final String value;
 
@@ -34,4 +39,15 @@ public final class ProtosStringValue implements ProtosRepresentedValue {
     public Object representedDelegationParent(ProtosPrelude prelude) {
         return ProtosRepresentedValue.requirePrelude(prelude, "String").stringPrototype();
     }
+
+    @ExportMessage
+    boolean isString() {
+        return true;
+    }
+
+    @ExportMessage
+    String asString() {
+        return value;
+    }
+
 }
