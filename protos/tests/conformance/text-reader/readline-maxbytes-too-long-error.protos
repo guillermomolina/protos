@@ -37,7 +37,7 @@ makeSource: (steps) => {
 
             value: null
             (current < steps.size()).ifTrue(() => {
-                value = steps.at(current)
+                value = steps[current]
             })
 
             (() => { value }).future()
