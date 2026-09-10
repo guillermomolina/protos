@@ -339,7 +339,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
-    public static final class PrepareDefaultSendArguments {
+    public static final class PrepareSendArguments {
         @Specialization
         public static PreparedClosureCall perform(
                 Object receiver, String selector, ProtosActivation caller, @Variadic Object[] supplied) {
@@ -354,48 +354,48 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             if (!(selected.value() instanceof ProtosClosureValue closure)) {
                 throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
             }
-            return prepareDefaultImmediateMethodCall(
+            return prepareImmediateMethodCall(
                     closure, receiver, selected.home(), List.of(supplied), caller);
         }
     }
 
     private static PreparedClosureCall prepareDefaultLexicalCall(
             ProtosClosureValue closure, List<?> supplied, ProtosActivation caller) {
-        rejectDefaultTaskOrProjection(closure, caller);
+        rejectComposedInvocationTaskOrProjection(closure, caller);
         ProtosActivation activation = ProtosActivation.forClosureInvocation(
                 closure, supplied, caller.prelude().orElse(null), caller.actorModuleState(),
                 caller.currentModuleKey().orElse(null), caller.executionDomain());
         activation.inheritDynamicControlState(caller);
-        return finishPreparingDefaultCall(closure, supplied, activation);
+        return finishPreparingComposedCall(closure, supplied, activation);
     }
 
-    private static PreparedClosureCall prepareDefaultImmediateMethodCall(
+    private static PreparedClosureCall prepareImmediateMethodCall(
             ProtosClosureValue closure,
             Object receiver,
             ProtosObjectValue methodHome,
             List<?> supplied,
             ProtosActivation caller) {
-        rejectDefaultTaskOrProjection(closure, caller);
+        rejectComposedInvocationTaskOrProjection(closure, caller);
         ProtosActivation activation = ProtosActivation.forImmediateMethodInvocation(
                 closure, supplied, receiver, methodHome, caller.prelude().orElse(null),
                 caller.actorModuleState(), caller.currentModuleKey().orElse(null), caller.executionDomain());
         activation.inheritDynamicControlState(caller);
-        return finishPreparingDefaultCall(closure, supplied, activation);
+        return finishPreparingComposedCall(closure, supplied, activation);
     }
 
-    private static void rejectDefaultTaskOrProjection(
+    private static void rejectComposedInvocationTaskOrProjection(
             ProtosClosureValue closure, ProtosActivation caller) {
         if (caller.task().isPresent()) {
             throw new UnsupportedOperationException(
-                    "PERF006-B2C3B3 Task/Future continuation ownership belongs to PERF006-B3");
+                    "PERF006-B2 Task/Future continuation ownership belongs to PERF006-B3");
         }
         if (closure.requiresContextLocalExecutionProjectionForRuntime()) {
             throw new UnsupportedOperationException(
-                    "PERF006-B2C3B3 shared-Context Closure projection is not migrated yet");
+                    "PERF006-B2 shared-Context Closure projection is not migrated yet");
         }
     }
 
-    private static PreparedClosureCall finishPreparingDefaultCall(
+    private static PreparedClosureCall finishPreparingComposedCall(
             ProtosClosureValue closure, List<?> supplied, ProtosActivation activation) {
         if (closure.nativeBody().isPresent()) {
             return PreparedClosureCall.nativeCall(closure.nativeBody().orElseThrow(), supplied, activation);
@@ -403,7 +403,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         ProtosClosureExecutionPlan plan = closure.executionPlanForRuntimeInvocation();
         if (!plan.isBytecodeBackendForRuntime()) {
             throw new UnsupportedOperationException(
-                    "PERF006-B2C3B3 default invocation receiver still has an AST execution plan");
+                    "PERF006-B2 composed invocation receiver still has an AST execution plan");
         }
         return new PreparedClosureCall(plan.bytecodeActivationTargetForComposition(), activation);
     }
