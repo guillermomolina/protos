@@ -29,15 +29,15 @@ plan: Manifest.frozenTuple(
 run: Runner.runSimple(plan, filesystem, execution)
 results: Runner.runCaseResults(run)
 
-firstEvaluation: Runner.caseRunEvaluation(results.at(0))
-secondEvaluation: Runner.caseRunEvaluation(results.at(1))
+firstEvaluation: Runner.caseRunEvaluation(results[0])
+secondEvaluation: Runner.caseRunEvaluation(results[1])
 
 (Runner.runSelectedCount(run) == 2) &&
 (Runner.runPassedCount(run) == 2) &&
 (Runner.runSkippedCount(run) == 1) &&
 Runner.runAllPassed(run) &&
 (results.size() == 2) &&
-(Manifest.caseId(Runner.caseRunSpec(results.at(0))) == "one.protos") &&
-(Manifest.caseId(Runner.caseRunSpec(results.at(1))) == "error.protos") &&
+(Manifest.caseId(Runner.caseRunSpec(results[0])) == "one.protos") &&
+(Manifest.caseId(Runner.caseRunSpec(results[1])) == "error.protos") &&
 (Runner.resultObservation(firstEvaluation).state === "completed") &&
 (Runner.resultObservation(secondEvaluation).state === "failed")

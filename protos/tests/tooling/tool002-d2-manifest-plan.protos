@@ -17,7 +17,7 @@
 Manifest: import("self:Manifest")
 plan: Manifest.load(filesystem)
 cases: Manifest.planCases(plan)
-first: cases.at(0)
+first: cases[0]
 firstPath: Manifest.casePath(first)
 
 sourceFile: filesystem.open(Manifest.pathValue(firstPath)).value()

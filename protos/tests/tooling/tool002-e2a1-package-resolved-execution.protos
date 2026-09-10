@@ -18,7 +18,7 @@ Runner: import("self:Runner")
 
 plan: Manifest.loadPackageToml(packageTomlFilesystem)
 cases: Manifest.planCases(plan)
-spec: cases.at(0)
+spec: cases[0]
 
 source: Runner.readSource(spec, packageTomlFilesystem)
 observation: packageExecution(source)

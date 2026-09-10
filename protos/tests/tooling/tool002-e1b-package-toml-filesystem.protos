@@ -20,8 +20,8 @@ packageTomlCases: Manifest.planCases(
     Manifest.loadPackageToml(packageTomlFilesystem)
 )
 
-conformanceFirst: conformanceCases.at(0)
-packageTomlFirst: packageTomlCases.at(0)
+conformanceFirst: conformanceCases[0]
+packageTomlFirst: packageTomlCases[0]
 
 passed: conformanceCases.size() > 0
 passed = passed && (packageTomlCases.size() > 0)

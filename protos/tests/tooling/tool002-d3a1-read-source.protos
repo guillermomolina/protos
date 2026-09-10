@@ -20,12 +20,12 @@ case: Manifest.parseLine("large.protos\tinteger\t0")
 source: Encoding.UTF8.encode(Runner.readSource(case, filesystem))
 
 (source.size() == 1100007) &&
-(source.at(0) == 97) &&
-(source.at(1099999) == 97) &&
-(source.at(1100000) == 207) &&
-(source.at(1100001) == 128) &&
-(source.at(1100002) == 240) &&
-(source.at(1100003) == 159) &&
-(source.at(1100004) == 153) &&
-(source.at(1100005) == 130) &&
-(source.at(1100006) == 10)
+(source[0] == 97) &&
+(source[1099999] == 97) &&
+(source[1100000] == 207) &&
+(source[1100001] == 128) &&
+(source[1100002] == 240) &&
+(source[1100003] == 159) &&
+(source[1100004] == 153) &&
+(source[1100005] == 130) &&
+(source[1100006] == 10)

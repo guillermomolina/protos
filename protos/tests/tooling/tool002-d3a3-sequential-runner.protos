@@ -54,9 +54,9 @@ smallOk:
     (loadCount == 3) &&
     (executeCount == 3) &&
     (smallResults.size() == 3) &&
-    (Manifest.caseId(Runner.caseRunSpec(smallResults.at(0))) == "synthetic/first.protos") &&
-    (Manifest.caseId(Runner.caseRunSpec(smallResults.at(1))) == "synthetic/second.protos") &&
-    (Manifest.caseId(Runner.caseRunSpec(smallResults.at(2))) == "synthetic/third.protos")
+    (Manifest.caseId(Runner.caseRunSpec(smallResults[0])) == "synthetic/first.protos") &&
+    (Manifest.caseId(Runner.caseRunSpec(smallResults[1])) == "synthetic/second.protos") &&
+    (Manifest.caseId(Runner.caseRunSpec(smallResults[2])) == "synthetic/third.protos")
 
 repeatSpec: Manifest.parseLine("synthetic/repeated.protos\tboolean\ttrue")
 manyCases: Array(repeatSpec)

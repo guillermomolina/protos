@@ -16,7 +16,7 @@
 stdout: TextWriter(process.stdout(), process.stdoutEncoding())
 stderr: TextWriter(process.stderr(), process.stderrEncoding())
 
-stdout.writeLine(process.args().at(0)).value()
-stderr.writeLine(process.args().at(1)).value()
+stdout.writeLine(process.args()[0]).value()
+stderr.writeLine(process.args()[1]).value()
 
 42
