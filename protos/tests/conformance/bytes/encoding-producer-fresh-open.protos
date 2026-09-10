@@ -26,7 +26,7 @@ ok: true
 a.add(7)
 
 (a.size() == 1).ifFalse(() => { ok = false })
-(a.at(0) == 7).ifFalse(() => { ok = false })
+(a[0] == 7).ifFalse(() => { ok = false })
 (b.size() == 0).ifFalse(() => { ok = false })
 
 ok

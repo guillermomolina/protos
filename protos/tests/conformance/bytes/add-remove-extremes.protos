@@ -31,6 +31,6 @@ ok: true
 (addedHigh === high).ifFalse(() => { ok = false })
 (removed === mid).ifFalse(() => { ok = false })
 (bytes.size() == 2).ifFalse(() => { ok = false })
-(bytes.at(0) === low).ifFalse(() => { ok = false })
-(bytes.at(1) === high).ifFalse(() => { ok = false })
+(bytes[0] === low).ifFalse(() => { ok = false })
+(bytes[1] === high).ifFalse(() => { ok = false })
 ok

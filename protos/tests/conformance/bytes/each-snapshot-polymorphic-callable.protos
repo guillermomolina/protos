@@ -26,7 +26,7 @@ callback: (octet) => {
     seen = seen * 10 + octet
 
     first.ifTrue(() => {
-        bytes.atPut(1, 99)
+        bytes[1] = 99
         bytes.removeAt(2)
         bytes.add(4)
     })
@@ -42,6 +42,6 @@ result: bytes.each(callable)
 (result === bytes) &&
     (seen == 123) &&
     (bytes.size() == 3) &&
-    (bytes.at(0) == 1) &&
-    (bytes.at(1) == 99) &&
-    (bytes.at(2) == 4)
+    (bytes[0] == 1) &&
+    (bytes[1] == 99) &&
+    (bytes[2] == 4)
