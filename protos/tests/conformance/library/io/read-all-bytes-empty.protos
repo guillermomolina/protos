@@ -29,4 +29,4 @@ freshFutures &&
 freshBytes &&
 (first.size() == 1) &&
 (second.size() == 0) &&
-(first.at(0) == 7)
+(first[0] == 7)

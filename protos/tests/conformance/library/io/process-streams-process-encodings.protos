@@ -21,7 +21,7 @@ stdout.writeText("A").value()
 stderr.writeText("é").value()
 (text == "é") &&
     (stdoutCapture.size() == 2) &&
-    (stdoutCapture.at(0) == 0) &&
-    (stdoutCapture.at(1) == 65) &&
+    (stdoutCapture[0] == 0) &&
+    (stdoutCapture[1] == 65) &&
     (stderrCapture.size() == 1) &&
-    (stderrCapture.at(0) == 233)
+    (stderrCapture[0] == 233)

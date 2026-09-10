@@ -21,7 +21,7 @@ actual: Files.readAllBytes(filesystem, path).value()
 
 sameFilesystem &&
     (actual.size() == 131089) &&
-    (actual.at(0) == 7) &&
-    (actual.at(65535) == 232) &&
-    (actual.at(65536) == 7) &&
-    (actual.at(131088) == 247)
+    (actual[0] == 7) &&
+    (actual[65535] == 232) &&
+    (actual[65536] == 7) &&
+    (actual[131088] == 247)

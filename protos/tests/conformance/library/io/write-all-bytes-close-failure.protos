@@ -33,5 +33,5 @@ IOError.handle(
 actual: Files.readAllBytes(filesystem, path).value()
 failed &&
     (actual.size() == 5) &&
-    (actual.at(0) == 99) &&
-    (actual.at(4) == 101)
+    (actual[0] == 99) &&
+    (actual[4] == 101)

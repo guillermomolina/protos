@@ -33,6 +33,6 @@ IOError.handle(
 actual: Files.readAllBytes(filesystem, path).value()
 failed &&
     (actual.size() == 3) &&
-    (actual.at(0) == 97) &&
-    (actual.at(1) == 98) &&
-    (actual.at(2) == 99)
+    (actual[0] == 97) &&
+    (actual[1] == 98) &&
+    (actual[2] == 99)

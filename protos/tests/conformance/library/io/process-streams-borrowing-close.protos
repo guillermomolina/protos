@@ -23,5 +23,5 @@ writer2: ProcessStreams.stdoutWriter(process)
 writer2.writeText("B").value()
 (text == "é") &&
     (stdoutCapture.size() == 2) &&
-    (stdoutCapture.at(0) == 0) &&
-    (stdoutCapture.at(1) == 66)
+    (stdoutCapture[0] == 0) &&
+    (stdoutCapture[1] == 66)

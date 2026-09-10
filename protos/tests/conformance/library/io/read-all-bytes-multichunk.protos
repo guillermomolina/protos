@@ -17,9 +17,9 @@ path: Path.relative().child("multi.bin")
 bytes: Files.readAllBytes(filesystem, path).value()
 
 (bytes.size() == 131089) &&
-(bytes.at(0) == 65) &&
-(bytes.at(65535) == 65) &&
-(bytes.at(65536) == 66) &&
-(bytes.at(131071) == 66) &&
-(bytes.at(131072) == 67) &&
-(bytes.at(131088) == 67)
+(bytes[0] == 65) &&
+(bytes[65535] == 65) &&
+(bytes[65536] == 66) &&
+(bytes[131071] == 66) &&
+(bytes[131072] == 67) &&
+(bytes[131088] == 67)

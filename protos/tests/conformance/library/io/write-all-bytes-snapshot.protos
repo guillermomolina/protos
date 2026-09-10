@@ -19,13 +19,13 @@ payload: Encoding.Latin1.encode("ABC")
 future: Files.writeAllBytes(filesystem, path, payload)
 
 // Mutation after invocation must not alter the already-captured private payload.
-payload.atPut(0, 90)
+payload[0] = 90
 
 sameFilesystem: future.value() === filesystem
 actual: Files.readAllBytes(filesystem, path).value()
 
 sameFilesystem &&
     (actual.size() == 3) &&
-    (actual.at(0) == 65) &&
-    (actual.at(1) == 66) &&
-    (actual.at(2) == 67)
+    (actual[0] == 65) &&
+    (actual[1] == 66) &&
+    (actual[2] == 67)
