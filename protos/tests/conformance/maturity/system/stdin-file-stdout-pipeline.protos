@@ -28,6 +28,5 @@ writer: ProcessStreams.stdoutWriter(process)
 writer.writeText(stored).value()
 writer.close().value()
 
-(stored == "stream-data").and() {
-    Encoding.UTF8.decode(stdoutCapture) == "stream-data"
-}
+(stored == "stream-data") &&
+    (Encoding.UTF8.decode(stdoutCapture) == "stream-data")

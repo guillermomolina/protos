@@ -30,6 +30,5 @@ writer: ProcessStreams.stdoutWriter(process)
 writer.writeText(text).value()
 writer.close().value()
 
-(text == "AZC").and() {
-    Encoding.UTF8.decode(stdoutCapture) == "AZC"
-}
+(text == "AZC") &&
+    (Encoding.UTF8.decode(stdoutCapture) == "AZC")

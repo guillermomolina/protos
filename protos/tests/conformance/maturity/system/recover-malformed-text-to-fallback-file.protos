@@ -34,8 +34,6 @@ writer: ProcessStreams.stdoutWriter(process)
 writer.writeText(roundTrip).value()
 writer.close().value()
 
-handled.and() {
-    (roundTrip == "safe").and() {
-        Encoding.UTF8.decode(stdoutCapture) == "safe"
-    }
-}
+handled &&
+    (roundTrip == "safe") &&
+    (Encoding.UTF8.decode(stdoutCapture) == "safe")

@@ -27,12 +27,8 @@ writer: ProcessStreams.stderrWriter(process)
 writer.writeText(joined).value()
 writer.close().value()
 
-(texts.size() == 2).and() {
-    (texts.at(0) == "left").and() {
-        (texts.at(1) == "right").and() {
-            (joined == "left+right").and() {
-                Encoding.UTF8.decode(stderrCapture) == "left+right"
-            }
-        }
-    }
-}
+(texts.size() == 2) &&
+    (texts.at(0) == "left") &&
+    (texts.at(1) == "right") &&
+    (joined == "left+right") &&
+    (Encoding.UTF8.decode(stderrCapture) == "left+right")

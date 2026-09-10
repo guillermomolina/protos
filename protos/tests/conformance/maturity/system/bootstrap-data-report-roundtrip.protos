@@ -28,6 +28,5 @@ writer: ProcessStreams.stdoutWriter(process)
 writer.writeText(loaded).value()
 writer.close().value()
 
-(loaded == "alpha:beta").and() {
-    Encoding.UTF8.decode(stdoutCapture) == "alpha:beta"
-}
+(loaded == "alpha:beta") &&
+    (Encoding.UTF8.decode(stdoutCapture) == "alpha:beta")

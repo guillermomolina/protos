@@ -34,6 +34,5 @@ result: (() => {
     file.close().value()
 })
 
-(result == "manual:alpha").and() {
-    Encoding.UTF8.decode(stdoutCapture) == "manual:alpha"
-}
+(result == "manual:alpha") &&
+    (Encoding.UTF8.decode(stdoutCapture) == "manual:alpha")
