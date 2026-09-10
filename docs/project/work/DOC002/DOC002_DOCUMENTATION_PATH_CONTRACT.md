@@ -21,6 +21,7 @@ docs/project/
     <formal-work-item>/
   decisions/
     language/
+    tooling/
     platform/
   architecture/
   governance/
@@ -44,7 +45,25 @@ The selected architecture constrains the parent-path responsibility, not a new f
 
 ### `docs/project/decisions/language/`
 
-Non-normative durable `Dxxx` decision records belong here as records of language/specification decisions. Their location does not make them normative; observable semantic authority remains in the applicable ratified material under `spec/`.
+Non-normative durable `Dxxx` records belong here when the decision domain is
+observable language or specification semantics. The `Dxxx` identifier alone does
+not imply this role. Their location does not make them normative; observable
+semantic authority remains in the applicable ratified material under `spec/`.
+
+### `docs/project/decisions/tooling/`
+
+Non-normative durable decision records belong here when they define
+implementation-independent tooling, package-system, Package Tool, Test Tool, or
+similar project-tool contracts without changing observable Protos
+language/Standard-Library semantics and without selecting a host/runtime
+implementation architecture. Such records may retain an existing `Dxxx`
+identifier: identifier family and documentation role remain orthogonal.
+
+If a decision mixes observable Protos semantics with tooling policy, the
+semantic part must remain owned by the applicable normative `spec/` material and
+the durable record must be classified by its primary decision role rather than
+by filename prefix alone. Ambiguous new cases stop for DOC002 classification
+instead of being placed by identifier convention.
 
 ### `docs/project/decisions/platform/`
 
@@ -145,8 +164,29 @@ The approved sequence remains:
 2. **DOC002-C — navigation foundation:** create `docs/project/README.md` and role navigation/index structure without moving high-cost legacy files.
 3. **DOC002-D — low-risk governance/history/evidence separation:** bounded low/medium-cost migrations with link validation.
 4. **DOC002-E — formal work-item records:** migrate owner batches incrementally.
-5. **DOC002-F — decisions and cross-cutting architecture:** move `Dxxx`, `PLATxxx`, `CORE_*`, and registries only after durable-reference review and authority-wording verification.
+5. **DOC002-F — decisions and cross-cutting architecture:** migrate language-domain `Dxxx`, tooling-domain decision records, `PLATxxx`, `CORE_*`, and registries only after durable-reference review, role classification, and authority-wording verification.
 6. **DOC002-G — final navigation/compatibility audit:** repository-wide link/stale-path review and closure evidence.
+
+
+<!-- DOC002-F0 DECISION-DOMAIN-TAXONOMY-RATIFICATION -->
+## DOC002-F0 decision-domain refinement
+
+On **2026-09-10**, the project owner explicitly approved DOC002-F0 **Option C**:
+add `docs/project/decisions/tooling/` as the role-first home for durable,
+implementation-independent tooling/package-system decision records that are
+neither language/specification decisions nor platform/runtime architecture.
+
+The approval refines the original Option A decision subtree; it does not reopen
+the role-first architecture. The current migration classification is:
+
+- D047, D048, D049, D051 and D052: `decisions/language/`;
+- D053, D055, D056 and D057: `decisions/tooling/`;
+- `PLATxxx`: `decisions/platform/`.
+
+DOC002-F0 changes documentation classification only. It does not change any
+decision outcome, specification, Package Tool/Test Tool contract, platform
+architecture, implementation, or identifier. The bounded F1/F2 migration slices
+own relocation and any required authority-wording reconciliation.
 
 ## Intentionally deferred
 

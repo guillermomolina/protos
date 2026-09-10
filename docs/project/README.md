@@ -14,7 +14,8 @@ separate ownership axis and is not invented merely to make the tree symmetrical.
 - [`work/`](work/README.md) — durable records primarily owned by one formal work
   item, grouped by the individual identifier.
 - [`decisions/`](decisions/README.md) — durable non-normative decision records,
-  split into [language](decisions/language/README.md) and
+  split into [language](decisions/language/README.md),
+  [tooling](decisions/tooling/README.md), and
   [platform](decisions/platform/README.md) roles.
 - [`architecture/`](architecture/README.md) — cross-cutting implementation
   architecture not primarily owned by one ordinary work item.

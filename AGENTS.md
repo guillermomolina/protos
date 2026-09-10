@@ -143,7 +143,12 @@ the selected role-first destination when the role and owner are unambiguous:
 
 - `docs/project/work/<formal-work-item>/` for records primarily owned by one
   formally tracked work item;
-- `docs/project/decisions/language/` for durable `Dxxx` decision records;
+- `docs/project/decisions/language/` for durable decision records whose
+  primary domain is observable language/specification semantics; `Dxxx` is not
+  by itself a language-role classifier;
+- `docs/project/decisions/tooling/` for durable implementation-independent
+  tooling/package-system/Package Tool/Test Tool decisions that neither change
+  observable Protos semantics nor select host/runtime architecture;
 - `docs/project/decisions/platform/` for durable `PLATxxx` platform/runtime
   decision records;
 - `docs/project/architecture/` for cross-cutting implementation architecture;
@@ -170,7 +175,9 @@ the corresponding migration slice changes them coherently.
 If a new durable document does not fit one selected role cleanly, do not invent a
 new directory, identifier family, or classification to force symmetry. Resolve
 the classification through DOC002 or the owning tracked work before establishing
-a durable path.
+a durable path. For decision records specifically, classify by the decision's
+primary domain (language/specification, tooling/package-system, or
+platform/runtime), never solely by an existing identifier prefix.
 
 DOC002-A's inventory is a historical audit snapshot, not a closed migration
 manifest. DOC002 migration slices MUST derive their candidate set from their
