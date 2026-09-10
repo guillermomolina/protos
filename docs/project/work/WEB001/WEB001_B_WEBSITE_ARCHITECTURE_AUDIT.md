@@ -488,7 +488,7 @@ Assessment: defer.
 ### Hosting recommendation
 
 **Recommend GitHub Pages via GitHub Actions for the initial site**, with
-`protos.guillermolina.com` as the custom domain.
+`protos.guillermomolina.com` as the custom domain.
 
 Do not make Pages a permanent product dependency: the build artifact must remain
 ordinary static output so a later move to Cloudflare Pages or another static
@@ -513,7 +513,7 @@ guillermomolina/protos-website
                 | static build
                 v
 GitHub Pages
-    protos.guillermolina.com
+    protos.guillermomolina.com
 ```
 
 Security consequences:
@@ -601,7 +601,7 @@ before preview/edge requirements justify it.
 - framework: Astro + Starlight;
 - output: static site;
 - hosting: GitHub Pages via GitHub Actions;
-- domain: `protos.guillermolina.com`;
+- domain: `protos.guillermomolina.com`;
 - provenance: retain both website revision and exact consumed Protos revision;
 - future playground: separate execution/security boundary.
 
@@ -656,7 +656,7 @@ The selected website architecture is therefore:
 - **framework:** Astro + Starlight;
 - **output:** ordinary static site output;
 - **initial hosting:** GitHub Pages via GitHub Actions;
-- **public domain:** `protos.guillermolina.com`;
+- **public domain:** `protos.guillermomolina.com`;
 - **provenance:** retained website revision plus exact consumed Protos revision;
 - **security boundary:** the static website requires no write authority over
   `guillermomolina/protos`; and

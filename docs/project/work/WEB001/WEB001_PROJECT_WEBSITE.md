@@ -5,7 +5,7 @@ GitHub coordination: Issue [#278](https://github.com/guillermomolina/protos/issu
 ## Purpose
 
 `WEB001` establishes the official public-facing Protos project website at
-`protos.guillermolina.com` as the entry point for people who want to understand,
+`protos.guillermomolina.com` as the entry point for people who want to understand,
 learn, use, follow, or contribute to Protos.
 
 The website and GitHub have deliberately different jobs:
@@ -63,7 +63,7 @@ The intended public outcome is a website that:
    authority;
 4. directs contributors and interested users to the appropriate GitHub community
    and coordination surfaces;
-5. can publish automatically to `protos.guillermolina.com`; and
+5. can publish automatically to `protos.guillermomolina.com`; and
 6. remains simple enough to maintain without creating an unnecessary second
    software product around the language project.
 
@@ -142,7 +142,7 @@ website/Protos revision provenance; and an independently secured future
 playground execution boundary.
 
 WEB001-B originally selected GitHub Pages for the initial
-`protos.guillermolina.com` deployment. That **hosting component only** is
+`protos.guillermomolina.com` deployment. That **hosting component only** is
 superseded by the later WEB001-F production-hosting ratification below. The
 repository topology, source-authority, exact-SHA acquisition, local execution,
 framework, static-output, provenance and playground-boundary decisions remain
@@ -184,7 +184,7 @@ reverse proxy
     TLS termination
             |
             v
-protos.guillermolina.com
+protos.guillermomolina.com
 ```
 
 The public website repository owns only portable website/build behavior. All

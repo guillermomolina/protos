@@ -92,7 +92,7 @@ reverse proxy
         |
         | TLS termination
         v
-protos.guillermolina.com
+protos.guillermomolina.com
 ```
 
 The final production image must contain the static serving runtime and built site
