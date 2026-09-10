@@ -352,7 +352,7 @@ def build(args: argparse.Namespace) -> Path:
                 f"java_distribution=GraalVM Community Edition {SUPPORTED_GRAALVM_RELEASE} for JDK {SUPPORTED_JAVA_VERSION}",
                 f"truffle_runtime_version={EXPECTED_TRUFFLE_VERSION}",
                 f"optimizing_runtime={EXPECTED_OPTIMIZING_RUNTIME}",
-                "runtime_evidence=docs/project/DIST002_TOOLCHAIN_ALIGNMENT.md",
+                "runtime_evidence=docs/project/work/DIST002/DIST002_TOOLCHAIN_ALIGNMENT.md",
                 "unsupported_runtime_override=PROTOS_ALLOW_UNSUPPORTED_RUNTIME=1",
             ]
         ),
