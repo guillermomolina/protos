@@ -37,34 +37,47 @@ owner under `spec/`.
 
 ## `project/`
 
-Start with the [project documentation index](project/README.md) for the ratified role-first navigation and legacy-path transition rules.
+Start with the [project documentation index](project/README.md) for the
+role-first durable project tree.
 
-The current repository-documentation information-architecture audit is [`DOC002-A`](project/work/DOC002/DOC002_DOCUMENTATION_ARCHITECTURE_AUDIT.md). It is a non-normative audit artifact; GitHub Issue #156 remains the live coordination surface for DOC002.
+The ratified destination architecture is the
+[`DOC002-B role-first path contract`](project/work/DOC002/DOC002_DOCUMENTATION_PATH_CONTRACT.md).
+The original 107-file inventory and alternatives remain in the historical
+[`DOC002-A audit`](project/work/DOC002/DOC002_DOCUMENTATION_ARCHITECTURE_AUDIT.md).
+DOC002-G9 completed the staged migration/final rescan; GitHub Issue #156
+preserves the live coordination and closure history.
 
-The selected destination architecture is the ratified [`DOC002-B role-first path contract`](project/work/DOC002/DOC002_DOCUMENTATION_PATH_CONTRACT.md). New unambiguous durable project records use that role-first model; existing flat paths remain compatibility locations until bounded migration slices move them.
+Durable project records are organized by role. GitHub Issues remain the live
+work-coordination surface and the `Protos Development` Project remains the live
+scheduling/status surface.
 
-Durable project records, historical implementation evidence, blockers, and
-non-normative design records tied to formally tracked work items. Live actionable
-coordination is GitHub-native: Issues own the work item and the `Protos
-Development` Project owns scheduling/status.
+- `project/work/<formal-work-item>/` contains records primarily owned by one
+  formal work item.
+- `project/decisions/` contains non-normative durable decision records split by
+  language, tooling, and platform role.
+- `project/architecture/` contains cross-cutting implementation architecture.
+- `project/governance/` contains maintained project/repository rationale and policy.
+- `project/registries/IMPLEMENTATION_STATUS.md` is the durable implementation
+  registry and closure-evidence ledger, not a live progress tracker.
+- `project/registries/IMPLEMENTATION_BLOCKERS.md` is the durable blocker and
+  unblock-condition ledger.
+- `project/registries/PLATFORM_ARCHITECTURE_DECISIONS.md` is the durable
+  platform-decision registry.
+- `project/evidence/` contains immutable/snapshot evidence grouped by genuine
+  formal owner where one exists.
+- `project/history/OPEN_TASKS.md` is the retired historical backlog snapshot.
+- `project/architecture/CORE_BOOTSTRAP_ARCHITECTURE.md` records the non-normative
+  bootstrap/Core implementation boundary.
 
-- `project/history/OPEN_TASKS.md` is a retired historical backlog snapshot. Do not add new work
-  or mirror GitHub state into it.
-- `IMPLEMENTATION_STATUS.md` is a durable implementation registry and
-  closure-evidence ledger, not a live progress tracker.
-- `IMPLEMENTATION_BLOCKERS.md` records durable normative implementation blockers
-  and their unblock conditions.
-- `CORE_BOOTSTRAP_ARCHITECTURE.md` defines the non-normative boundary between
-  irreducible host bootstrap machinery and Core behavior implemented in Protos.
-- Work-item-specific `*_DESIGN.md` records capture investigated alternatives,
-  adopted implementation contracts, dependencies, and rejected approaches for a
-  formally tracked item without becoming normative language semantics. Existing
-  `LIB001_COLLECTIONS_DESIGN.md` is the precedent for Standard Library work.
+Work-item-specific design and lifecycle records belong below their owner
+directory, for example
+`project/work/LIB001/LIB001_COLLECTIONS_DESIGN.md`. They may capture alternatives,
+adopted implementation contracts, dependencies, and rejected approaches without
+becoming normative language semantics.
 
 The repository intentionally has no parallel root `TODO.md`. Exploratory work
 belongs in GitHub Discussions; bounded actionable work belongs in GitHub Issues
-and the `Protos Development` Project instead of an unstructured catch-all list or
-a second repository backlog.
+and the `Protos Development` Project.
 
 ## Adding documentation
 

@@ -160,38 +160,42 @@ the selected role-first destination when the role and owner are unambiguous:
   evidence with a genuine formal owner; and
 - `docs/project/history/` for retired or superseded historical snapshots.
 
-`docs/project/README.md` is the role-first navigation entry point once created by
-DOC002-C. Repository-root policy/legal/community files and the established
-`docs/guide/`, `docs/design/`, and `spec/` authority boundaries are not relocated
-merely for symmetry.
+`docs/project/README.md` is the role-first navigation entry point.
+Repository-root policy/legal/community files and the established `docs/guide/`,
+`docs/design/`, and `spec/` authority boundaries are not relocated merely for
+symmetry.
 
-Existing legacy files are different from newly created records. Agents MUST edit
-an existing durable document at its **actual current path** until an explicit
-bounded DOC002 migration slice owns its relocation. Do not opportunistically
-move it, guess its future path, duplicate it under the selected tree, or create a
-compatibility copy merely to satisfy the new layout. References in this file to migrated registry paths must use their canonical
-locations. After DOC002-F5B, the durable Bxxx unblock-condition ledger is
-`docs/project/registries/IMPLEMENTATION_BLOCKERS.md`.
+The DOC002 migration is complete. A new durable record MUST use its canonical
+role-first destination when role and owner are unambiguous; creating a new
+unclassified flat durable record directly under `docs/project/` is
+non-compliant.
 
-If a new durable document does not fit one selected role cleanly, do not invent a
-new directory, identifier family, or classification to force symmetry. Resolve
-the classification through DOC002 or the owning tracked work before establishing
-a durable path. For decision records specifically, classify by the decision's
-primary domain (language/specification, tooling/package-system, or
-platform/runtime), never solely by an existing identifier prefix.
+If an unexpected legacy or unclassified durable path is discovered later, edit
+it only as necessary at its actual path until an explicit bounded
+classification/migration change owns relocation. Do not opportunistically move
+it, guess a destination, duplicate it under the role-first tree, or create a
+compatibility copy merely for symmetry. Historical records may retain old path
+spellings when changing them would falsify the repository state they document.
 
-DOC002-A's inventory is a historical audit snapshot, not a closed migration
-manifest. DOC002 migration slices MUST derive their candidate set from their
-execution-time `PUBLICATION_BASE`, so durable files created concurrently during
-the cutover are not missed. Files created on concurrent work before an agent has
-observed this policy are transitional stragglers and are handled by later bounded
-DOC002 migration/reconciliation; they do not authorize bulk moves or unrelated
-cleanup. After this policy is present in the agent instructions, creating a new
-unclassified flat durable record directly under `docs/project/` is non-compliant.
+References to current registries, decisions, architecture and work records MUST
+use their canonical paths. In particular, the blocker/unblock-condition ledger
+is `docs/project/registries/IMPLEMENTATION_BLOCKERS.md`, the implementation/
+closure ledger is `docs/project/registries/IMPLEMENTATION_STATUS.md`, and the
+platform decision registry is
+`docs/project/registries/PLATFORM_ARCHITECTURE_DECISIONS.md`.
 
-Before DOC002 closes, its final reconciliation MUST scan current `docs/project/`
-again and account for residual legacy/straggler paths as either migrated or
-explicitly retained for a documented compatibility reason.
+If a new durable document does not fit one selected role cleanly, do not invent
+a new directory, identifier family, or classification to force symmetry.
+Resolve the classification through the owning tracked work or an explicit
+documentation-governance decision before establishing a durable path. For
+decision records specifically, classify by the decision's primary domain
+(language/specification, tooling/package-system, or platform/runtime), never
+solely by identifier prefix.
+
+DOC002-A remains a historical audit snapshot, not a permanent placement manifest.
+The durable rule is structural: current repository state must keep
+`docs/project/` role-first, and later work that discovers a real classification
+ambiguity must resolve it explicitly rather than silently weakening the layout.
 
 ## Current project coordinates
 

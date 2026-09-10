@@ -37,20 +37,18 @@ at [`DOC002_DOCUMENTATION_ARCHITECTURE_AUDIT.md`](work/DOC002/DOC002_DOCUMENTATI
 The navigation-foundation closure record is
 [`work/DOC002/DOC002_NAVIGATION_FOUNDATION.md`](work/DOC002/DOC002_NAVIGATION_FOUNDATION.md).
 
-## Transitional legacy paths
+## Steady-state placement
 
-Many durable records still live directly under `docs/project/`. Those paths are
-intentional compatibility locations during staged migration, not examples for new
-document placement. Existing legacy documents are edited at their actual current
-paths until a bounded DOC002 migration owns their relocation. Do not duplicate,
-opportunistically move, or guess the future path of a legacy record.
+DOC002-G9 completed the staged role-first migration and final execution-time
+rescan. Direct durable records under `docs/project/` are no longer a supported
+placement pattern; this `README.md` is the directory entry point and durable
+records belong under one of the role directories above.
 
-DOC002 migration slices discover candidates from their execution-time
-`PUBLICATION_BASE`. Before DOC002 closes, current `docs/project/` is re-inventoried
-and every residual flat legacy/straggler path is either migrated or explicitly
-retained for a documented compatibility reason.
+New unambiguous records use their canonical role immediately. If an unexpected
+legacy/unclassified path is discovered later, do not duplicate or opportunistically
+move it while performing unrelated work: classify it against the ratified path
+contract and migrate it in an explicit bounded change with reference/link review.
 
-DOC002-F6 closes the decisions/architecture/registries migration phase after an
-execution-time audit of those roles. Remaining direct children of `docs/project/`
-are not implicitly approved in place: DOC002-G owns their final owner/classification,
-migration-or-retention decision, navigation reconciliation, and closing rescan.
+The historical DOC002-A inventory and the DOC002 migration records preserve the
+repository state they documented. Their old path spellings are evidence, not
+current placement instructions.

@@ -5,11 +5,12 @@ tracked work item. Records are grouped by the **individual identifier**, for
 example `I026/`, `LIB001/`, `TOOL001/`, or `DOC002/`, rather than by broad family
 buckets.
 
-A formal identifier is not created merely to classify documentation. Existing
-flat work-item records remain at their current paths until a bounded DOC002
-migration moves them; new unambiguous records use `work/<formal-work-item>/`.
+A formal identifier is not created merely to classify documentation. New
+unambiguous owner-specific records use `work/<formal-work-item>/`. If an
+unexpected legacy/unclassified owner record is discovered later, classify and
+migrate it explicitly rather than duplicating or moving it opportunistically.
 
-Current role-first DOC002 records:
+Current role-first work records:
 
 - [`TOOL002/TOOL002_TEST_TOOL.md`](TOOL002/TOOL002_TEST_TOOL.md)
   — canonical non-normative TOOL002 Test Tool lifecycle and implementation record.
