@@ -80,6 +80,12 @@ public final class ProtosStandardObjectProtocol {
                     ProtosClosureValue.nativeClosure(
                             ProtosStandardObjectProtocol::slotNames));
         }
+        if (!object.hasLocalSlot("removeSlot")) {
+            object.createLocalSlot(
+                    "removeSlot",
+                    ProtosClosureValue.nativeClosure(
+                            ProtosStandardObjectProtocol::removeSlot));
+        }
         if (!object.hasLocalSlot("without")) {
             object.createLocalSlot(
                     "without",
@@ -197,6 +203,22 @@ public final class ProtosStandardObjectProtocol {
             throw invalid(activation);
         }
         return value.orElseThrow();
+    }
+
+    private static Object removeSlot(ProtosActivation activation, List<?> supplied) {
+        if (supplied.size() != 1
+                || !(supplied.get(0) instanceof ProtosStringValue name)) {
+            throw invalid(activation);
+        }
+        if (!(activation.receiver() instanceof ProtosObjectValue receiver)) {
+            throw invalid(activation);
+        }
+
+        try {
+            return receiver.removeLocalSlot(name.value());
+        } catch (IllegalStateException invalidRemoval) {
+            throw invalid(activation);
+        }
     }
 
     private static Object without(ProtosActivation activation, List<?> supplied) {

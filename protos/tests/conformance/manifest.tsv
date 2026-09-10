@@ -758,6 +758,13 @@ reflection/slot-names-fresh-independent-snapshot.protos	boolean	true
 reflection/slot-names-empty-fresh-standard-array.protos	boolean	true
 reflection/slot-names-represented-values.protos	boolean	true
 reflection/slot-names-arity.protos	error	-
+reflection/remove-slot-exact-local-result.protos	boolean	true
+reflection/remove-slot-missing-local-does-not-delegate.protos	error	-
+reflection/remove-slot-invalid-name-preserves-local.protos	boolean	true
+reflection/remove-slot-frozen-root-preserves-local.protos	boolean	true
+reflection/remove-slot-represented-receiver-error.protos	error	-
+reflection/remove-slot-zero-arity-error.protos	error	-
+reflection/remove-slot-two-arity-error.protos	error	-
 reflection/slot-value-exact-local-identity.protos	boolean	true
 reflection/slot-value-does-not-delegate.protos	error	-
 reflection/slot-value-invalid-name.protos	error	-

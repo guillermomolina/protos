@@ -71,7 +71,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardProcessProtocol.java", 1),
                     Map.entry("execution/ProtosStandardBytesProtocol.java", 7),
                     Map.entry("execution/ProtosStandardByteIoProtocol.java", 12),
-                    Map.entry("execution/ProtosStandardObjectProtocol.java", 10),
+                    Map.entry("execution/ProtosStandardObjectProtocol.java", 11),
                     Map.entry("execution/ProtosStandardActorProtocol.java", 9),
                     Map.entry("execution/ProtosStandardIdentityMapProtocol.java", 7),
                     Map.entry("execution/ProtosStandardStringProtocol.java", 3),
@@ -121,11 +121,11 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
         assertEquals(36, actualCore.size());
-        assertEquals(137, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(138, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
         String inventory =
-                Files.readString(Path.of("docs", "project", "CORE_NATIVE_BOUNDARY.md"));
+                Files.readString(Path.of("docs", "project", "architecture", "CORE_NATIVE_BOUNDARY.md"));
         for (String provider : EXPECTED_NATIVE_PROVIDERS.keySet()) {
             String simpleName = provider.substring(provider.lastIndexOf('/') + 1);
             assertTrue(
@@ -154,6 +154,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                         "hasSlot",
                         "slotValue",
                         "slotNames",
+                        "removeSlot",
                         "without",
                         "alias",
                         "not",
