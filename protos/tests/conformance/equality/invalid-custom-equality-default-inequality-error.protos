@@ -1,0 +1,9 @@
+source: {
+    equals: (other) => { 1 }
+}
+
+view: source.alias("equals", "==")
+left: view {}
+right: view {}
+
+left != right
