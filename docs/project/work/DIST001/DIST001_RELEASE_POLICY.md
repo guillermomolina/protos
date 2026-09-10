@@ -153,7 +153,7 @@ expected runtime:     HotSpotTruffleRuntime
 project bytecode:     Java 21 target
 ```
 
-`docs/project/PERF002_TRUFFLE_COMPILABILITY.md` records successful optimizing
+`docs/project/work/PERF002/PERF002_TRUFFLE_COMPILABILITY.md` records successful optimizing
 validation for that GraalVM/JDK + external Truffle-runtime combination.
 
 The external optimizing runtime is a **distribution dependency**, not a new

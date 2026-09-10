@@ -1363,7 +1363,7 @@ PERF002-A invariants:
 - Protos remains independently buildable/testable/publishable with no Docker,
   GraalVM or `protos-benchmarks` dependency.
 
-Project record: `docs/project/PERF002_TRUFFLE_COMPILABILITY.md`.
+Project record: `docs/project/work/PERF002/PERF002_TRUFFLE_COMPILABILITY.md`.
 
 Closure evidence:
 - PERF002-A implementation commit: `3c93912a5579326374782a43527fbb51046f8f91`;
