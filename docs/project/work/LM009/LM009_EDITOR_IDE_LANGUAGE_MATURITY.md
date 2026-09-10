@@ -610,3 +610,35 @@ This closure changes no Protos specification, runtime implementation, Maven
 implementation version, public DAP contract, static-language-service
 architecture, Marketplace release state, or ordinary Maven/Node dependency
 boundary.
+
+## LM009-D public debugger decision release
+
+Decision status: **PLAT018 C-prime RATIFIED; D060 B-prime RATIFIED; IMPLEMENTATION PENDING**
+
+The platform/runtime debugger-hosting boundary is fixed by
+[`../../decisions/platform/PLAT018_DAP_DEBUG_SESSION_HOSTING.md`](../../decisions/platform/PLAT018_DAP_DEBUG_SESSION_HOSTING.md),
+and the implementation-independent launcher/readiness contract is fixed by
+[`../../decisions/tooling/D060_PUBLIC_DEBUGGER_LAUNCHER_READINESS.md`](../../decisions/tooling/D060_PUBLIC_DEBUGGER_LAUNCHER_READINESS.md).
+
+The released LM009-D implementation contract is intentionally narrow:
+
+```text
+protos debug <file> [application-args...]
+```
+
+starts one PLAT018 debug invocation and emits one versioned
+`PROTOS_DEBUG_READY {json}` success record on stdout after the loopback DAP
+endpoint is bound and before guest execution. Stderr remains launcher/runtime
+diagnostics, while guest stdout/stderr is carried by the real GraalVM DAP once
+the session runs.
+
+D060's readiness-file alternative was audited rather than dismissed: it is a
+valid future fit for no-config/manual-terminal discovery when the editor is not
+the process parent, but it is not imposed on ordinary F5 where the workspace
+extension host already owns the launcher's process pipes.
+
+LM009-D may now implement this approved platform + public-tooling boundary.
+LM009-E remains the owner of the actual VS Code F5/debug integration and S3 live
+editor evidence. Any new substantive CLI, remote-network, attach, stop-on-entry,
+termination, distribution or editor-configuration choice still crosses its own
+approval gate.
