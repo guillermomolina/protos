@@ -38,8 +38,8 @@ roundTripped: JSON.parse(output)
 ok: true
 (output == encoded).ifFalse(() => { ok = false })
 (roundTripped.kind == "object").ifFalse(() => { ok = false })
-(roundTripped.value.at("n").kind == "number").ifFalse(() => { ok = false })
-(roundTripped.value.at("n").value.coefficient == 12345678901234567890).ifFalse(() => { ok = false })
-(roundTripped.value.at("n").value.exponent == -7).ifFalse(() => { ok = false })
-(roundTripped.value.at("a").value.size() == 2).ifFalse(() => { ok = false })
+(roundTripped.value["n"].kind == "number").ifFalse(() => { ok = false })
+(roundTripped.value["n"].value.coefficient == 12345678901234567890).ifFalse(() => { ok = false })
+(roundTripped.value["n"].value.exponent == -7).ifFalse(() => { ok = false })
+(roundTripped.value["a"].value.size() == 2).ifFalse(() => { ok = false })
 ok

@@ -28,24 +28,24 @@ objectNode: JSON.object(
 seen: Map()
 index: 0
 objectNode.value.each((key, node) => {
-    seen.atPut(index, key)
+    seen[index] = key
     index = index + 1
 })
 
-objectNode.value.atPut("fourth", JSON.nullValue())
+objectNode.value["fourth"] = JSON.nullValue()
 
 ok: true
 (arrayNode.kind == "array").ifFalse(() => { ok = false })
 (arrayNode.value.size() == 3).ifFalse(() => { ok = false })
-(arrayNode.value.at(0) === one).ifFalse(() => { ok = false })
-(arrayNode.value.at(1).kind == "string").ifFalse(() => { ok = false })
-(arrayNode.value.at(2).kind == "null").ifFalse(() => { ok = false })
+(arrayNode.value[0] === one).ifFalse(() => { ok = false })
+(arrayNode.value[1].kind == "string").ifFalse(() => { ok = false })
+(arrayNode.value[2].kind == "null").ifFalse(() => { ok = false })
 (objectNode.kind == "object").ifFalse(() => { ok = false })
 (index == 3).ifFalse(() => { ok = false })
-(seen.at(0) == "first").ifFalse(() => { ok = false })
-(seen.at(1) == "second").ifFalse(() => { ok = false })
-(seen.at(2) == "third").ifFalse(() => { ok = false })
-(objectNode.value.at("first") === one).ifFalse(() => { ok = false })
-(objectNode.value.at("second") === arrayNode).ifFalse(() => { ok = false })
+(seen[0] == "first").ifFalse(() => { ok = false })
+(seen[1] == "second").ifFalse(() => { ok = false })
+(seen[2] == "third").ifFalse(() => { ok = false })
+(objectNode.value["first"] === one).ifFalse(() => { ok = false })
+(objectNode.value["second"] === arrayNode).ifFalse(() => { ok = false })
 (objectNode.value.containsKey("fourth")).ifFalse(() => { ok = false })
 ok

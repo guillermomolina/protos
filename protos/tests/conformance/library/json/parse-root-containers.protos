@@ -22,18 +22,18 @@ objectNode: JSON.parse("{\"a\":1}")
 
 arrayNode.probe: true
 objectNode.probe: true
-objectNode.value.atPut("b", JSON.boolean(true))
+objectNode.value["b"] = JSON.boolean(true)
 
 ok: true
 (arrayNode.kind == "array").ifFalse(() => { ok = false })
 (arrayNode.value.size() == 1).ifFalse(() => { ok = false })
-(arrayNode.value.at(0).kind == "number").ifFalse(() => { ok = false })
-(arrayNode.value.at(0).value.coefficient == 1).ifFalse(() => { ok = false })
-(arrayNode.value.at(0).value.exponent == 0).ifFalse(() => { ok = false })
+(arrayNode.value[0].kind == "number").ifFalse(() => { ok = false })
+(arrayNode.value[0].value.coefficient == 1).ifFalse(() => { ok = false })
+(arrayNode.value[0].value.exponent == 0).ifFalse(() => { ok = false })
 (objectNode.kind == "object").ifFalse(() => { ok = false })
-(objectNode.value.at("a").kind == "number").ifFalse(() => { ok = false })
-(objectNode.value.at("a").value.coefficient == 1).ifFalse(() => { ok = false })
-(objectNode.value.at("b").value === true).ifFalse(() => { ok = false })
+(objectNode.value["a"].kind == "number").ifFalse(() => { ok = false })
+(objectNode.value["a"].value.coefficient == 1).ifFalse(() => { ok = false })
+(objectNode.value["b"].value === true).ifFalse(() => { ok = false })
 (arrayNode.probe === true).ifFalse(() => { ok = false })
 (objectNode.probe === true).ifFalse(() => { ok = false })
 ok

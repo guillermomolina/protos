@@ -17,5 +17,5 @@
 JSON: import("std:json/JSON")
 
 tree: JSON.object()
-tree.value.atPut("self", tree)
+tree.value["self"] = tree
 JSON.encode(tree)

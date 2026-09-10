@@ -22,24 +22,24 @@ root: JSON.parse("{\"a\":[1,true,null,\"x\"],\"b\":{\"c\":2}}")
 seen: Map()
 index: 0
 root.value.each((key, node) => {
-    seen.atPut(index, key)
+    seen[index] = key
     index = index + 1
 })
 
-arrayNode: root.value.at("a")
-nested: root.value.at("b")
+arrayNode: root.value["a"]
+nested: root.value["b"]
 
 ok: true
 (root.kind == "object").ifFalse(() => { ok = false })
 (index == 2).ifFalse(() => { ok = false })
-(seen.at(0) == "a").ifFalse(() => { ok = false })
-(seen.at(1) == "b").ifFalse(() => { ok = false })
+(seen[0] == "a").ifFalse(() => { ok = false })
+(seen[1] == "b").ifFalse(() => { ok = false })
 (arrayNode.kind == "array").ifFalse(() => { ok = false })
 (arrayNode.value.size() == 4).ifFalse(() => { ok = false })
-(arrayNode.value.at(0).value.coefficient == 1).ifFalse(() => { ok = false })
-(arrayNode.value.at(1).value === true).ifFalse(() => { ok = false })
-(arrayNode.value.at(2).value === null).ifFalse(() => { ok = false })
-(arrayNode.value.at(3).value == "x").ifFalse(() => { ok = false })
+(arrayNode.value[0].value.coefficient == 1).ifFalse(() => { ok = false })
+(arrayNode.value[1].value === true).ifFalse(() => { ok = false })
+(arrayNode.value[2].value === null).ifFalse(() => { ok = false })
+(arrayNode.value[3].value == "x").ifFalse(() => { ok = false })
 (nested.kind == "object").ifFalse(() => { ok = false })
-(nested.value.at("c").value.coefficient == 2).ifFalse(() => { ok = false })
+(nested.value["c"].value.coefficient == 2).ifFalse(() => { ok = false })
 ok
