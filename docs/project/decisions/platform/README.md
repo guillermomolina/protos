@@ -4,6 +4,24 @@ This role contains durable `PLATxxx` records for non-normative implementation
 architecture tied to a concrete runtime, VM, operating system, or host substrate.
 They must not be used as an alternate source of observable Protos semantics.
 
-New unambiguous `PLATxxx` records use this directory. Existing flat `PLATxxx`
-records and their registry remain at their current paths until the bounded
-DOC002 platform/architecture migration owns their relocation.
+New unambiguous `PLATxxx` records use this directory. DOC002-F3 migrated the residual legacy flat platform-decision records here; `PLATFORM_ARCHITECTURE_DECISIONS.md` remains at its current registry path until the bounded registry migration owns that separate relocation.
+
+## Current platform decision records
+
+- [`PLAT001_TRUFFLE_RUNTIME_HOSTING.md`](PLAT001_TRUFFLE_RUNTIME_HOSTING.md)
+- [`PLAT002_NETWORK_CAPABILITY_REPRESENTATION.md`](PLAT002_NETWORK_CAPABILITY_REPRESENTATION.md)
+- [`PLAT003_TCP_LIVE_RESOURCE_ARCHITECTURE.md`](PLAT003_TCP_LIVE_RESOURCE_ARCHITECTURE.md)
+- [`PLAT004_TRUFFLE_SOURCE_SECTION_OWNERSHIP.md`](PLAT004_TRUFFLE_SOURCE_SECTION_OWNERSHIP.md)
+- [`PLAT005_TRUFFLE_INSTRUMENTATION_ARCHITECTURE.md`](PLAT005_TRUFFLE_INSTRUMENTATION_ARCHITECTURE.md)
+- [`PLAT006_TCP_HOST_IO_OPERATION_ENGINE.md`](PLAT006_TCP_HOST_IO_OPERATION_ENGINE.md)
+- [`PLAT007_IPV6_ONLY_TCP_LISTENER_ENFORCEMENT.md`](PLAT007_IPV6_ONLY_TCP_LISTENER_ENFORCEMENT.md)
+- [`PLAT008_TRUFFLE_REPLAY_SITE_IDENTITY.md`](PLAT008_TRUFFLE_REPLAY_SITE_IDENTITY.md)
+- [`PLAT009_BYTEWRITABLE_FIRST_EFFECT_GATE.md`](PLAT009_BYTEWRITABLE_FIRST_EFFECT_GATE.md)
+- [`PLAT010_ACTOR_PLATFORM_CARRIERS.md`](PLAT010_ACTOR_PLATFORM_CARRIERS.md)
+- [`PLAT011_RUNTIMEHOST_CARRIER_SUBSTRATE.md`](PLAT011_RUNTIMEHOST_CARRIER_SUBSTRATE.md)
+- [`PLAT012_VERIFIED_EXTERNAL_PACKAGE_CUSTODY_SOURCE_RESOLUTION.md`](PLAT012_VERIFIED_EXTERNAL_PACKAGE_CUSTODY_SOURCE_RESOLUTION.md)
+- [`PLAT013_TRUFFLE_DEBUGGER_INTEROP_VALUE_PROJECTION.md`](PLAT013_TRUFFLE_DEBUGGER_INTEROP_VALUE_PROJECTION.md)
+- [`PLAT014_TRUFFLE_COOPERATIVE_CONTINUATIONS.md`](PLAT014_TRUFFLE_COOPERATIVE_CONTINUATIONS.md)
+- [`PLAT015_TRUFFLE_DEBUGGER_SCOPE_PROJECTION.md`](PLAT015_TRUFFLE_DEBUGGER_SCOPE_PROJECTION.md)
+
+PLAT014 was created directly at the canonical role-first path before F3; F3 preserves it in place. Identifier gaps or future additions do not imply missing migration work by themselves. This list records the post-F3 execution-time set and is not a closed manifest for future platform decisions.

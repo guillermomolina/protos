@@ -1,5 +1,7 @@
 ## 0.2.338-SNAPSHOT
 
+- Migrate DOC002-F3 residual legacy platform decision records PLAT001–PLAT013 and PLAT015 into `docs/project/decisions/platform/`, preserving already-canonical PLAT014 in place. Preserve the existing non-normative authority wording and decision content, reconcile active Markdown path references, and leave the platform registry for its later registry slice. No specification, observable semantics, platform decision outcome, runtime/tooling architecture, implementation, implementation version, identifier, or license term changes.
+
 - Advance `I031-A — Object.slotNames()` (GitHub #242). Publish the already-normative inherited zero-argument reflection operation through the existing Object representation bridge: snapshot receiver-local ordinary-object slot names only, sort them by Unicode scalar-value sequence, and return a fresh open standard Array of semantic Strings on every call, including empty observations of opaque represented Core values. Add retained ordinary-Protos conformance for local-only behavior, prefix/BMP-vs-astral ordering, fresh independent mutable snapshots, empty/represented-value results and arity rejection, using idiomatic bracket indexing required by the repository source-style policy. The Core native boundary advances by exactly one construction site in the existing Object provider; no specification, language syntax, new runtime family, delegated reflection model, or source-style exception is introduced. Implementation version becomes `0.2.338-SNAPSHOT`.
 
 ## 0.2.337-SNAPSHOT

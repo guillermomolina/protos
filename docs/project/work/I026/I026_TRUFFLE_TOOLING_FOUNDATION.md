@@ -55,7 +55,7 @@ retire it as a separate primary runtime entry path rather than institutionalize 
 permanent compatibility layer.
 
 The production hosting topology exposed during A4B is owned by ratified `PLAT001`;
-see `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md`.
+see `docs/project/decisions/platform/PLAT001_TRUFFLE_RUNTIME_HOSTING.md`.
 
 | Slice | Status | Version | Dependencies | Scope / exit condition |
 |---|---|---|---|---|

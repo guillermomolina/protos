@@ -48,39 +48,39 @@ process remains authoritative first.
 | PLAT014 | Truffle cooperative suspension continuation/compilation boundary | RATIFIED | Explicit project-owner approval, 2026-09-10 after deep Truffle-language/runtime review and complete A1/A2a/A2b/A2c/A2d feasibility evidence | PERF006, I026 continuation/backend work and future JVM/Truffle Task/Future execution |
 | PLAT015 | Truffle debugger scope projection topology | RATIFIED | Explicit project-owner approval, 2026-09-10 after deep Truffle implementation audit including Apple Pkl, GraalPy Bytecode DSL, SimpleLanguage, TruffleRuby, GraalJS, FastR, Sulong and Espresso; future/scalability/Protos-fit review | I026-E/F/G |
 
-See `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md` for the selected topology,
+See `docs/project/decisions/platform/PLAT001_TRUFFLE_RUNTIME_HOSTING.md` for the selected topology,
 its non-semantic boundary, alternatives, scaling rationale, invariants, and
 explicitly deferred choices.
 
-See `docs/project/PLAT002_NETWORK_CAPABILITY_REPRESENTATION.md` for the selected
+See `docs/project/decisions/platform/PLAT002_NETWORK_CAPABILITY_REPRESENTATION.md` for the selected
 Network represented-capability boundary, rejected alternatives, scalability rationale and
 backend choices deliberately deferred to later I028 slices.
 
-See `docs/project/PLAT003_TCP_LIVE_RESOURCE_ARCHITECTURE.md` for the selected JVM TCP
+See `docs/project/decisions/platform/PLAT003_TCP_LIVE_RESOURCE_ARCHITECTURE.md` for the selected JVM TCP
 ordinary-resource representation, host-neutral acquisition custody and independent duplex-I/O
 progress architecture; D052 remains authoritative for every observable TCP object-topology rule.
 
-See `docs/project/PLAT004_TRUFFLE_SOURCE_SECTION_OWNERSHIP.md` for the selected root-owned exact Source + node-local compact range + on-demand SourceSection projection, its cross-language rationale, scaling invariants and deliberately deferred instrumentation/tooling choices.
+See `docs/project/decisions/platform/PLAT004_TRUFFLE_SOURCE_SECTION_OWNERSHIP.md` for the selected root-owned exact Source + node-local compact range + on-demand SourceSection projection, its cross-language rationale, scaling invariants and deliberately deferred instrumentation/tooling choices.
 
-See `docs/project/PLAT005_TRUFFLE_INSTRUMENTATION_ARCHITECTURE.md` for the selected layered semantic-minimum instrumentation architecture: common source-node mechanism, explicit Statement/Call baseline tags, replay-aware wrapper placement, deferred root/expression/value/yield surfaces, and scaling rationale.
+See `docs/project/decisions/platform/PLAT005_TRUFFLE_INSTRUMENTATION_ARCHITECTURE.md` for the selected layered semantic-minimum instrumentation architecture: common source-node mechanism, explicit Statement/Call baseline tags, replay-aware wrapper placement, deferred root/expression/value/yield surfaces, and scaling rationale.
 
-See `docs/project/PLAT006_TCP_HOST_IO_OPERATION_ENGINE.md` for the selected host-neutral I/O operation-engine boundary, initial bounded JDK NIO readiness backend, cross-runtime/scalability rationale, future completion/native-backend compatibility constraints, and deliberately deferred tuning choices.
+See `docs/project/decisions/platform/PLAT006_TCP_HOST_IO_OPERATION_ENGINE.md` for the selected host-neutral I/O operation-engine boundary, initial bounded JDK NIO readiness backend, cross-runtime/scalability rationale, future completion/native-backend compatibility constraints, and deliberately deferred tuning choices.
 
-See `docs/project/PLAT007_IPV6_ONLY_TCP_LISTENER_ENFORCEMENT.md` for the public-JDK composite IPv6-only listener baseline, authority/scope and all-or-nothing port invariants, cross-runtime/Truffle rationale, known high-address-cardinality cost and preserved native O(1)-socket future path.
+See `docs/project/decisions/platform/PLAT007_IPV6_ONLY_TCP_LISTENER_ENFORCEMENT.md` for the public-JDK composite IPv6-only listener baseline, authority/scope and all-or-nothing port invariants, cross-runtime/Truffle rationale, known high-address-cardinality cost and preserved native O(1)-socket future path.
 
-See `docs/project/PLAT008_TRUFFLE_REPLAY_SITE_IDENTITY.md` for the selected logical replay-site identity contract, zero-allocation delegate-backed AST representation, wrapper transparency, live-replacement preservation rule and Bytecode-DSL-compatible future representation boundary.
+See `docs/project/decisions/platform/PLAT008_TRUFFLE_REPLAY_SITE_IDENTITY.md` for the selected logical replay-site identity contract, zero-allocation delegate-backed AST representation, wrapper transparency, live-replacement preservation rule and Bytecode-DSL-compatible future representation boundary.
 
-See `docs/project/PLAT009_BYTEWRITABLE_FIRST_EFFECT_GATE.md` for the host-neutral transient first-effect-attempt gate preserving existing ByteWritable cancellation/commitment semantics across readiness and future completion/native/WASI/brokered backends.
+See `docs/project/decisions/platform/PLAT009_BYTEWRITABLE_FIRST_EFFECT_GATE.md` for the host-neutral transient first-effect-attempt gate preserving existing ByteWritable cancellation/commitment semantics across readiness and future completion/native/WASI/brokered backends.
 
-See `docs/project/PLAT010_ACTOR_PLATFORM_CARRIERS.md` for the selected bounded reusable platform-carrier primitive for normal Actor guest execution, the rejection of virtual-thread carriers as the default CPU/guest substrate, and the required repeated 1/2/4/8 production-path evidence before PERF001-F #239 may close.
+See `docs/project/decisions/platform/PLAT010_ACTOR_PLATFORM_CARRIERS.md` for the selected bounded reusable platform-carrier primitive for normal Actor guest execution, the rejection of virtual-thread carriers as the default CPU/guest substrate, and the required repeated 1/2/4/8 production-path evidence before PERF001-F #239 may close.
 
-See `docs/project/PLAT011_RUNTIMEHOST_CARRIER_SUBSTRATE.md` for the selected RuntimeHost-owned bounded carrier-capacity topology across multiple local Processes, its O(runtime CPU capacity) physical-thread scaling target, separate blocking/offload lane boundary, and preserved future work-stealing/NUMA/resource-governance evolution path.
+See `docs/project/decisions/platform/PLAT011_RUNTIMEHOST_CARRIER_SUBSTRATE.md` for the selected RuntimeHost-owned bounded carrier-capacity topology across multiple local Processes, its O(runtime CPU capacity) physical-thread scaling target, separate blocking/offload lane boundary, and preserved future work-stealing/NUMA/resource-governance evolution path.
 
 
-See `docs/project/PLAT012_VERIFIED_EXTERNAL_PACKAGE_CUSTODY_SOURCE_RESOLUTION.md` for the run-owned exact immutable package-resource scope, lazy host-neutral verified-resource reader, canonical no-path external ModuleKey boundary and future CAS/distributed backing evolution.
+See `docs/project/decisions/platform/PLAT012_VERIFIED_EXTERNAL_PACKAGE_CUSTODY_SOURCE_RESOLUTION.md` for the run-owned exact immutable package-resource scope, lazy host-neutral verified-resource reader, canonical no-path external ModuleKey boundary and future CAS/distributed backing evolution.
 
-See `docs/project/PLAT013_TRUFFLE_DEBUGGER_INTEROP_VALUE_PROJECTION.md` for the selected semantic-value-native read-only interop baseline, local-slot-only object projection, synthetic scope/view adapter boundary, identity/side-effect constraints and future Bytecode DSL / non-JVM evolution path.
+See `docs/project/decisions/platform/PLAT013_TRUFFLE_DEBUGGER_INTEROP_VALUE_PROJECTION.md` for the selected semantic-value-native read-only interop baseline, local-slot-only object projection, synthetic scope/view adapter boundary, identity/side-effect constraints and future Bytecode DSL / non-JVM evolution path.
 
 See `docs/project/decisions/platform/PLAT014_TRUFFLE_COOPERATIVE_CONTINUATIONS.md` for the selected C-prime stackful continuation composition over Truffle Bytecode DSL, its suspension-only cost boundary, semantic-preservation constraints, cross-runtime evidence, scalability invariants and deliberately deferred implementation choices.
 
-See `docs/project/PLAT015_TRUFFLE_DEBUGGER_SCOPE_PROJECTION.md` for the selected activation-native debugger-scope projection, absence of an artificial language top scope or named receiver, one-runtime-lookup authority, suspension-bounded lifetime and AST/Bytecode-DSL-independent tooling boundary.
+See `docs/project/decisions/platform/PLAT015_TRUFFLE_DEBUGGER_SCOPE_PROJECTION.md` for the selected activation-native debugger-scope projection, absence of an artificial language top scope or named receiver, one-runtime-lookup authority, suspension-bounded lifetime and AST/Bytecode-DSL-independent tooling boundary.
