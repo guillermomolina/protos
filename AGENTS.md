@@ -1818,6 +1818,46 @@ delta after synchronizing with the current `origin/main`:
   document or ledger, run that focused guard only unless the delta also has
   executable impact.
 
+<!-- PERF007 TEMPORARY-TOOLS-TEST-ISOLATION -->
+### Temporary Tools-test isolation override
+
+Until PERF007 is explicitly retired, Tool-owned Maven test families run **only**
+when the definitive validation delta touches an explicitly mapped Tool ownership
+surface. This temporary owner-approved policy supersedes any PERF005-B2 wording
+below that would otherwise make shared/unknown changes or top-level closure alone
+reintroduce Tool-owned suites.
+
+Under this override:
+
+1. `TOOL_LOCAL:PACKAGE` and `TOOL_LOCAL:TEST` retain their deterministic affected
+   sets.
+2. A shared, unknown, unmapped, empty, or otherwise non-Tool delta selects
+   `FULL:NON_TOOL`: broad Maven validation with the explicit Tool-owned Surefire
+   families excluded.
+3. If the same definitive delta touches any mapped Tool ownership surface,
+   shared/unknown/cross-tool escalation selects `FULL` and executes the complete
+   Maven suite.
+4. `--top-level-closure` preserves the same distinction: closure with a Tool
+   change is `FULL`; closure without a Tool change is `FULL:NON_TOOL`.
+5. Plain developer-invoked `mvn test` remains the complete Maven suite. The
+   temporary exclusion belongs to the repository validation runner/CI routing
+   and MUST NOT silently redefine Maven's default meaning.
+6. GitHub CI MUST consume the repository-maintained selector/runner over its
+   definitive event delta rather than running an independent unconditional
+   `mvn test`.
+7. Reports MUST make temporary Tool-suite omission explicit. Never report
+   excluded Tool suites as passed.
+
+The initial Tool ownership/exclusion boundary is the one already encoded by the
+PERF005 selector: Package-owned `ProtosPackage*Test`,
+`ProtosExternalPackage*Test`, `ProtosWorkspace*Test`, and Test-Tool-owned
+`ProtosTestTool*Test`. `ProtosCliTest` remains ordinary shared CLI smoke and is
+not excluded from `FULL:NON_TOOL`.
+
+Retire this override only through an explicit follow-up after the Tool-test
+performance problem is demonstrably solved or the project owner requests
+restoration of unconditional Tool coverage.
+
 <!-- PERF005-B2 IMPACT-AWARE-TOOL-VALIDATION -->
 ### Impact-aware tool-local publication validation
 
@@ -1844,8 +1884,10 @@ not make a formal Issue identifier authoritative for ordinary impact routing.
 The validation runner MUST inspect exactly
 `PUBLICATION_BASE..CANDIDATE_SHA`. It verifies that the isolated worktree `HEAD`
 is that candidate and has no later tracked changes, invokes
-`scripts/validation_impact.py`, and executes either the selector's complete
-tool-local Maven test set or the complete Maven suite. Missing/malformed selector
+`scripts/validation_impact.py`, and executes the selector's complete tool-local Maven test set,
+the PERF007 `FULL:NON_TOOL` broad suite with Tool-owned families explicitly
+excluded, or the complete Maven suite when the definitive delta touches Tools.
+Missing/malformed selector
 state, unsupported output, candidate mismatch, dirty tracked state, or failed
 selected tests is a fail-closed publication error.
 

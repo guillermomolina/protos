@@ -54,6 +54,8 @@ jobs:
 
       - name: Check out repository
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Verify selected toolchain
         shell: bash
@@ -69,5 +71,40 @@ jobs:
           python3 tools/verify_toolchain.py --mode check --scope development
           echo "CI_PRIMARY_TOOLCHAIN_CHECK: PASS java.version=$version maven=$PROTOS_MAVEN_VERSION"
 
-      - name: Run tests
-        run: mvn --batch-mode --no-transfer-progress test
+      - name: Run impact-aware tests
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PUSH_BEFORE_SHA: ${{ github.event.before }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+
+          head_sha="$(git rev-parse HEAD)"
+          case "$EVENT_NAME" in
+            pull_request)
+              base_sha="$PR_BASE_SHA"
+              ;;
+            push)
+              base_sha="$PUSH_BEFORE_SHA"
+              if [[ -z "$base_sha" || "$base_sha" =~ ^0+$ ]]; then
+                base_sha="$(git rev-parse HEAD^ 2>/dev/null || printf '%s' "$head_sha")"
+              fi
+              ;;
+            workflow_dispatch)
+              base_sha="$(git rev-parse HEAD^ 2>/dev/null || printf '%s' "$head_sha")"
+              ;;
+            *)
+              echo "unsupported CI event for validation routing: $EVENT_NAME" >&2
+              exit 2
+              ;;
+          esac
+
+          git cat-file -e "${base_sha}^{commit}"
+          echo "CI_VALIDATION_BASE=$base_sha"
+          echo "CI_VALIDATION_HEAD=$head_sha"
+
+          python3 scripts/publication_validation.py \
+            --repo . \
+            --base "$base_sha" \
+            --head "$head_sha"

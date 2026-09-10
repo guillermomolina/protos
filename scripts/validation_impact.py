@@ -115,54 +115,75 @@ def classify_paths(paths, top_level_closure=False):
         if path and path not in normalized:
             normalized.append(path)
 
-    if top_level_closure:
-        return Selection(
-            "FULL", "ALL",
-            "top-level executable closure/reconciliation requires complete Maven validation",
-            False,
-        )
-
     if not normalized:
         return Selection(
-            "FULL", "ALL",
-            "empty definitive delta is not eligible for reduced validation",
-            False,
+            "FULL:NON_TOOL", "NON_TOOL",
+            "empty definitive delta receives broad non-Tool validation under the temporary PERF007 quarantine",
+            True,
         )
 
-    kinds = []
+    tool_kinds = []
+    first_full_path = None
+
     for path in normalized:
         kind = _kind(path)
-        if kind == "FULL":
+        if kind in ("PACKAGE", "TEST") and kind not in tool_kinds:
+            tool_kinds.append(kind)
+        if kind == "FULL" and first_full_path is None:
+            first_full_path = path
+
+    tools_touched = bool(tool_kinds)
+
+    if top_level_closure:
+        if tools_touched:
             return Selection(
                 "FULL", "ALL",
-                "shared, unknown, or unmapped path requires complete validation: " + path,
+                "top-level executable closure touches a Tool-owned surface and requires complete Maven validation",
                 False,
             )
-        if kind != "NEUTRAL" and kind not in kinds:
-            kinds.append(kind)
+        return Selection(
+            "FULL:NON_TOOL", "NON_TOOL",
+            "top-level executable closure has no Tool-owned delta; PERF007 temporarily excludes Tool-owned suites",
+            True,
+        )
 
-    if not kinds:
+    if first_full_path is not None:
+        if tools_touched:
+            return Selection(
+                "FULL", "ALL",
+                "shared, unknown, or unmapped path plus a Tool-owned delta requires complete validation: "
+                + first_full_path,
+                False,
+            )
+        return Selection(
+            "FULL:NON_TOOL", "NON_TOOL",
+            "shared, unknown, or unmapped delta receives broad non-Tool validation under PERF007: "
+            + first_full_path,
+            True,
+        )
+
+    if not tool_kinds:
+        return Selection(
+            "FULL:NON_TOOL", "NON_TOOL",
+            "no Tool-owned executable/test-impact path was present; PERF007 temporarily excludes Tool-owned suites",
+            True,
+        )
+
+    if len(tool_kinds) != 1:
         return Selection(
             "FULL", "ALL",
-            "no executable/test-impact tool-local path was present; adaptive validation must classify this delta",
+            "cross-tool delta touches multiple Tool-owned surfaces and requires complete Maven validation",
             False,
         )
 
-    if len(kinds) != 1:
-        return Selection(
-            "FULL", "ALL",
-            "cross-tool delta requires complete Maven validation",
-            False,
-        )
-
-    if kinds[0] == "PACKAGE":
+    if tool_kinds[0] == "PACKAGE":
         return Selection(
             "TOOL_LOCAL:PACKAGE", PACKAGE_TEST_SET,
             "all executable/test-impact paths are explicitly mapped Package Tool-local",
             True,
         )
 
-    if kinds[0] == "TEST":
+    if tool_kinds[0] == "TEST":
         return Selection(
             "TOOL_LOCAL:TEST", TEST_TOOL_TEST_SET,
             "all executable/test-impact paths are explicitly mapped Test Tool-local",
@@ -170,7 +191,6 @@ def classify_paths(paths, top_level_closure=False):
         )
 
     return Selection("FULL", "ALL", "unreachable fail-closed classification", False)
-
 
 def parse_name_status_z(data):
     """Parse `git diff --name-status -z`, retaining both paths for R/C."""
