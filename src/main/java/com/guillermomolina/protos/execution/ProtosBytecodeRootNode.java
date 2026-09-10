@@ -287,54 +287,114 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         }
     }
 
-    private static PreparedClosureCall prepareClosureCall(Object receiver, List<?> supplied, ProtosActivation caller) {
-            if (!(receiver instanceof ProtosClosureValue closure)) {
-                throw new ProtosSignalException(
-                        ProtosCoreErrors.newError(caller));
-            }
-            if (closure.nativeBody().isPresent()) {
-                throw new UnsupportedOperationException(
-                        "PERF006-B2B Bytecode dispatch supports source-backed Closures only");
-            }
-            if (caller.task().isPresent()) {
-                throw new UnsupportedOperationException(
-                        "PERF006-B2B Task/Future continuation ownership belongs to PERF006-B3");
-            }
-            if (closure.requiresContextLocalExecutionProjectionForRuntime()) {
-                throw new UnsupportedOperationException(
-                        "PERF006-B2B shared-Context Closure projection is not migrated yet");
-            }
+    private static PreparedClosureCall prepareClosureCall(
+            Object receiver,
+            List<?> supplied,
+            ProtosActivation caller) {
+        if (!(receiver instanceof ProtosClosureValue closure)) {
+            return prepareOrdinaryObjectCall(
+                    receiver,
+                    supplied,
+                    caller);
+        }
 
-            ProtosClosureExecutionPlan plan =
-                    closure.executionPlanForRuntimeInvocation();
-            if (!plan.isBytecodeBackendForRuntime()) {
-                throw new UnsupportedOperationException(
-                        "PERF006-B2B Bytecode call receiver still has an AST execution plan");
-            }
+        /*
+         * B2D3A intentionally retains the B2B direct-Closure shortcut. The
+         * D013 Object.call -> Closure Bytecode bridge is the next bounded
+         * convergence slice; ordinary non-Closure targets already use the
+         * normative structural call protocol below.
+         */
+        if (closure.nativeBody().isPresent()) {
+            throw new UnsupportedOperationException(
+                    "PERF006-B2B Bytecode dispatch supports source-backed Closures only");
+        }
+        if (caller.task().isPresent()) {
+            throw new UnsupportedOperationException(
+                    "PERF006-B2B Task/Future continuation ownership belongs to PERF006-B3");
+        }
+        if (closure.requiresContextLocalExecutionProjectionForRuntime()) {
+            throw new UnsupportedOperationException(
+                    "PERF006-B2B shared-Context Closure projection is not migrated yet");
+        }
 
-            ProtosActivation activation =
-                    ProtosActivation.forClosureInvocation(
-                            closure,
-                            supplied,
-                            caller.prelude().orElse(null),
-                            caller.actorModuleState(),
-                            caller.currentModuleKey().orElse(null),
-                            caller.executionDomain());
-            activation.inheritDynamicControlState(caller);
-            return new PreparedClosureCall(
-                    plan.bytecodeActivationTargetForComposition(),
-                    activation);
+        ProtosClosureExecutionPlan plan =
+                closure.executionPlanForRuntimeInvocation();
+        if (!plan.isBytecodeBackendForRuntime()) {
+            throw new UnsupportedOperationException(
+                    "PERF006-B2B Bytecode call receiver still has an AST execution plan");
+        }
+
+        ProtosActivation activation =
+                ProtosActivation.forClosureInvocation(
+                        closure,
+                        supplied,
+                        caller.prelude().orElse(null),
+                        caller.actorModuleState(),
+                        caller.currentModuleKey().orElse(null),
+                        caller.executionDomain());
+        activation.inheritDynamicControlState(caller);
+        return new PreparedClosureCall(
+                plan.bytecodeActivationTargetForComposition(),
+                activation);
+    }
+
+    private static PreparedClosureCall prepareOrdinaryObjectCall(
+            Object receiver,
+            List<?> supplied,
+            ProtosActivation caller) {
+        ProtosPrelude prelude =
+                caller.prelude()
+                        .orElseThrow(
+                                () ->
+                                        new IllegalStateException(
+                                                "polymorphic invocation requires an owning Core prelude"));
+        ProtosSlotLookupResult selected;
+        try {
+            selected =
+                    ProtosValueLookup.lookup(
+                                    receiver,
+                                    "call",
+                                    prelude)
+                            .orElseThrow(
+                                    () ->
+                                            new ProtosSignalException(
+                                                    ProtosCoreErrors.newError(caller)));
+        } catch (UnsupportedOperationException unsupportedRepresentation) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(caller));
+        }
+
+        if (!(selected.value() instanceof ProtosClosureValue callBehavior)) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(caller));
+        }
+
+        return prepareImmediateMethodCall(
+                callBehavior,
+                receiver,
+                selected.home(),
+                supplied,
+                caller);
     }
 
     @Operation
     public static final class PrepareDefaultClosureCallArguments {
         @Specialization
         public static PreparedClosureCall perform(
-                Object receiver, ProtosActivation caller, @Variadic Object[] supplied) {
-            if (!(receiver instanceof ProtosClosureValue closure)) {
-                throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
+                Object receiver,
+                ProtosActivation caller,
+                @Variadic Object[] supplied) {
+            List<?> arguments = List.of(supplied);
+            if (receiver instanceof ProtosClosureValue closure) {
+                return prepareDefaultLexicalCall(
+                        closure,
+                        arguments,
+                        caller);
             }
-            return prepareDefaultLexicalCall(closure, List.of(supplied), caller);
+            return prepareOrdinaryObjectCall(
+                    receiver,
+                    arguments,
+                    caller);
         }
     }
 
