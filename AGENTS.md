@@ -813,20 +813,62 @@ generated launcher MUST:
 9. stage only explicit patch-owned paths and run the adaptive local validation
    required by the definitive delta;
 10. create the candidate commit entirely inside the isolated worktree;
-11. fetch `origin/main` again immediately before publication and require it still
-    equals `PUBLICATION_BASE` for this invocation;
-12. publish only by a non-force fast-forward push of the exact candidate commit
-    to `refs/heads/main`;
-13. never rebase/merge/retry onto a newer `main` inside the same invocation; if
-    `origin/main` moved during the publication window, abort and let the user
-    rerun the same ZIP so it rematerializes from the new execution-time base; and
-14. remove the launcher-owned temporary worktree and local branch on success or
-    failure without modifying the caller checkout.
+<!-- GITHUB003 CONCURRENT-PUBLICATION-POLICY -->
+11. fetch `origin/main` again immediately before publication;
+12. when it still equals the candidate's `PUBLICATION_BASE`, publish only by a
+    non-force fast-forward push of the exact validated candidate commit to
+    `refs/heads/main`;
+13. when `origin/main` moved, abort unless the launcher declared in advance a
+    bounded validation-reuse proof appropriate to that slice;
+14. a validation-reuse proof MUST declare both the patch-owned paths and the
+    complete conservative dependency closure whose movement could invalidate the
+    expensive validation result; checking only for direct path overlap is not
+    sufficient;
+15. reuse is permitted only when every intervening changed path is outside both
+    sets and the relevant semantic/governance preconditions still hold;
+16. for eligible unrelated movement, rematerialize the same bounded delta from
+    the newer `origin/main` in launcher-owned local state without rebasing or
+    merging the old candidate, and require the resulting patch-owned final bytes
+    to match the already validated result exactly unless the approved proof
+    defines a stronger equivalent invariant;
+17. after rematerialization, rerun cheap source/style/static/postcondition gates
+    against the new base and rerun any expensive validation whose declared
+    dependency closure changed; an expensive result may be reused only while its
+    complete declared closure is unchanged; and
+18. any automatic rematerialization/retry MUST be finitely bounded. Exhausting
+    that bound, encountering relevant movement, losing byte/invariant
+    equivalence, or observing another unsafe publication race is a hard abort;
+    never force-push, auto-resolve a semantic conflict, or modify the caller
+    checkout.
 
 The direct-to-`main` path is not permission to bypass validation. Local adaptive
 validation is the merge gate for this governed maintainer path. Documentation or
 governance-only changes should not start unrelated heavyweight runtime/test
 containers merely to imitate an external PR pipeline.
+
+### Focal validation for mechanical reconciliation children
+
+Already-ratified, semantics-preserving mechanical reconciliation work SHOULD pay
+only for the validation needed to prove the bounded child delta. In particular,
+AUD003 source-style reconciliation children may use a declared focal validation
+profile instead of a broad Tool-family or repository-wide Maven suite when all of
+the following are true:
+
+- the child changes only already-classified source spellings whose semantic
+  equivalence is already authoritative;
+- the launcher proves the complete scoped inventory before modification and the
+  required clean/postcondition inventory afterwards;
+- `scripts/source_style_guard.py` passes for the candidate;
+- any executable corpus directly affected by the changed source is exercised by
+  the smallest deterministic retained runner/test entry that covers that corpus;
+- the child does not change specification, public API, runtime implementation,
+  implementation version, or a semantic/platform decision; and
+- the owning top-level executable/audit closure retains responsibility for the
+  broader integrated validation required before final closure.
+
+This is not a generic skip-tests mechanism. Each focal profile MUST name its
+retained executable evidence and its validation-dependency closure. If a slice
+cannot establish those facts, it falls back to the ordinary adaptive selector.
 
 If a maintainer deliberately chooses a Pull Request for a change, the normal PR
 rules still apply:
