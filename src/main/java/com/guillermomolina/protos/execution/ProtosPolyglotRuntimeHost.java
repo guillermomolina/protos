@@ -39,6 +39,7 @@ import org.graalvm.polyglot.Engine;
  */
 public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     private final Engine engine;
+    private final ProtosGraalDapReadinessAdapter debugReadiness;
     private final int actorCarrierParallelism;
     private final AtomicInteger activeProcessContexts = new AtomicInteger();
     private final AtomicInteger actorCarrierThreadSequence = new AtomicInteger();
@@ -48,14 +49,65 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     private ProtosNioNetworkHost networkHost;
     private boolean closed;
 
-    private ProtosPolyglotRuntimeHost(Engine engine) {
+    private ProtosPolyglotRuntimeHost(
+            Engine engine, ProtosGraalDapReadinessAdapter debugReadiness) {
         this.engine = Objects.requireNonNull(engine, "engine");
+        this.debugReadiness = debugReadiness;
         this.actorCarrierParallelism =
                 Math.max(1, Runtime.getRuntime().availableProcessors());
     }
 
     public static ProtosPolyglotRuntimeHost open() {
-        return new ProtosPolyglotRuntimeHost(Engine.create(ProtosLanguage.ID));
+        return new ProtosPolyglotRuntimeHost(Engine.create(ProtosLanguage.ID), null);
+    }
+
+    /**
+     * Opens one PLAT018 debug invocation using the real GraalVM DAP instrument.
+     *
+     * <p>The debugger binds only IPv4 loopback and asks the operating system for an ephemeral
+     * port. Graal-specific startup text is captured by a version-bounded adapter rather than
+     * becoming public launcher protocol. Normal {@link #open()} hosts do not enable DAP.
+     */
+    public static ProtosPolyglotRuntimeHost openDebug(OutputStream diagnostics) {
+        Objects.requireNonNull(diagnostics, "diagnostics");
+        ProtosGraalDapReadinessAdapter readiness =
+                new ProtosGraalDapReadinessAdapter(diagnostics);
+        Engine engine =
+                Engine.newBuilder(ProtosLanguage.ID)
+                        .option("dap", "127.0.0.1:0")
+                        .option("dap.Suspend", "false")
+                        .option("dap.WaitAttached", "true")
+                        .out(readiness)
+                        .err(diagnostics)
+                        .build();
+        return new ProtosPolyglotRuntimeHost(engine, readiness);
+    }
+
+    /**
+     * Returns the real bound endpoint for this debug RuntimeHost.
+     *
+     * <p>GraalVM 25.3.4.1 publishes the endpoint while the DAP instrument is initialized during
+     * Engine startup. Failing rather than guessing here protects D060 from an incompatible future
+     * Graal readiness format.
+     */
+    public DebugEndpoint debugEndpoint() {
+        if (debugReadiness == null) {
+            throw new IllegalStateException("Polyglot runtime host is not debug-enabled");
+        }
+        return debugReadiness.requireEndpoint();
+    }
+
+    /** Stable implementation-neutral endpoint value consumed by later D060 launcher wiring. */
+    public record DebugEndpoint(String host, int port) {
+        public DebugEndpoint {
+            host = Objects.requireNonNull(host, "host");
+            if (host.isBlank()) {
+                throw new IllegalArgumentException("debug endpoint host must not be blank");
+            }
+            if (port <= 0 || port > 65535) {
+                throw new IllegalArgumentException("debug endpoint port is outside the TCP range");
+            }
+        }
     }
 
     public ProtosPolyglotProcessContext hostProcess(

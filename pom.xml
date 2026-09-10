@@ -5,7 +5,7 @@
 
     <groupId>com.guillermomolina</groupId>
     <artifactId>protos</artifactId>
-    <version>0.2.343-SNAPSHOT</version>
+    <version>0.2.344-SNAPSHOT</version>
     <packaging>jar</packaging>
 
     <name>Protos</name>
@@ -52,13 +52,13 @@
             <artifactId>truffle-api</artifactId>
             <version>${graalvm.version}</version>
         </dependency>
-        <!-- I026-F evidence only: real GraalVM DAP instrument on the test classpath. -->
+        <!-- LM009-D: real GraalVM DAP instrument, activated only by a debug RuntimeHost. -->
         <dependency>
             <groupId>org.graalvm.polyglot</groupId>
             <artifactId>dap</artifactId>
             <version>${graalvm.version}</version>
             <type>pom</type>
-            <scope>test</scope>
+            <scope>runtime</scope>
         </dependency>
         <!-- I026-G evidence only: real GraalVM LSP instrument on the test classpath. -->
         <dependency>
