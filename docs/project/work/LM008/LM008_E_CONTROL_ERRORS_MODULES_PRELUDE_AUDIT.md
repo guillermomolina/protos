@@ -75,3 +75,39 @@ conformance program and does not duplicate I022/I023 regression families.
 `LM008-E` remains `IN_PROGRESS`. E2 is next and audits `Error.signal`,
 `Error.handle`, standard failure identity, dynamic task-local handler behavior and
 the complete mandatory Core Error-prototype taxonomy.
+
+## E2 checkpoint — Error
+
+Checkpoint state: COMPLETE
+
+Validation class: `TEST_IMPACT`
+
+Normative authority: `spec/semantics/ERRORS.md`, with control-transfer and
+Future/task composition delegated to their existing normative owners.
+
+E2 audits the existing Error surface only. It introduces no new Error category,
+matching rule, resumability mechanism, payload, syntax or implementation owner.
+
+### Evidence matrix
+
+| Surface row | Normative requirement | Retained language-level evidence | Current implementation/mechanism evidence | Classification |
+|---|---|---|---|---|
+| Standard `signal` / `handle` placement and receiver domain | `Error` provides ordinary inherited `signal()` and `handle(body, handler)`; their standard behavior accepts only `Error` itself or values whose delegation chain contains `Error`. Copying/extracting either implementation does not make a non-Error receiver signalable/handle-capable. | `error/copied-signal-nonerror-receiver.protos`, `error/copied-handle-nonerror-receiver.protos`, plus inherited use throughout the Error corpus. | `ProtosStandardErrorProtocol` installs both local selectors on the standard Error prototype and validates the receiver with `ProtosCoreErrors.isError`. | `COVERED` |
+| Signaling identity, arity and non-resumability | `error.signal()` takes zero arguments, transfers the exact receiver object without cloning/wrapping, and never resumes the abandoned signaling continuation. | `error/signal-instance.protos`, `signal-prototype.protos`, `signal-invalid-return-instance.protos`, `signal-deep-io-prototype.protos`, `signal-wrong-arity.protos`, `handle-exact-error-identity.protos`, `handle-nonresumable-body.protos`. | `ProtosStandardErrorProtocol.signal` delegates to `ProtosCoreErrors.signal` with the exact validated receiver; the host transfer carries that same Error object. | `COVERED` |
+| Handler argument validation and normal result | `matchPrototype.handle(body, handler)` requires exactly two semantic Closures, validates both before installing the frame or running body, and returns the exact normal body result without invoking the handler when no Error escapes. | `error/handle-body-invokable-not-closure.protos`, `handle-handler-invokable-not-closure.protos`, `handle-invalid-body.protos`, `handle-invalid-handler-before-body.protos`, `handle-wrong-arity.protos`, `handle-normal-result.protos`. | `ProtosStandardErrorProtocol.handle` validates receiver/count/body/handler before `enterHandlerFrame`, invokes body with zero supplied arguments and returns its normal result after leaving the frame. | `COVERED` |
+| Delegation matching, dynamic innermost selection and selected-frame inactivity | Matching follows the signaled Error object's ordinary delegation chain; exact-instance matching is allowed; the dynamically innermost matching frame wins, a nonmatching frame propagates, and the selected frame is inactive while its handler executes. | `error/handle-error-ancestor-match.protos`, `handle-exact-instance-match.protos`, `handle-exact-prototype-match.protos`, `handle-innermost-matching.protos`, `handle-nonmatching-propagates.protos`, `handle-selected-inactive.protos`, plus E1 ensure/selected-handler interaction probes. | `ProtosDynamicControlState` selects the matching handler frame before unwind and `ProtosStandardErrorProtocol.handle` removes its selected frame before invoking the handler Closure. | `COVERED` |
+| Standard failure freshness and recorded Error identity | A new standard failure occurrence has fresh identity; when semantics already names an Error object, re-signaling preserves that exact object; one recorded failed-Future outcome re-signals its recorded Error rather than manufacturing another occurrence. | `error/ordinary-error-construction-fresh.protos`, `regression/super-without-method-home-fresh-invalid-super.protos`, `future/failed-value-original-error-identity.protos`, `future/failed-value-repeated-error-identity.protos`, `future/failed-value-resignals-recorded-error.protos`, `future/cancelled-value-fresh-error.protos`. | `ProtosCoreErrors.newOccurrence` constructs a fresh ordinary child of the selected prototype while `signal` carries an already-existing Error unchanged; Future failure storage retains the recorded outcome under its own owner. | `COVERED` |
+| Dynamic handler task locality / asynchronous boundary | Handler state belongs to the current task continuation, is not inherited by a distinct child Future/task, and a later observation of a failed Future re-signals into the consumer's then-current handler context. | `error/handle-parent-task-does-not-flow-into-child-future.protos`, `future/failed-value-resignals-recorded-error.protos`, together with retained I022 suspension/ensure interaction evidence. | I022's replay-stable `ProtosDynamicControlState` is task-local; separate tasks do not copy the handler stack, while later Future observation performs ordinary Error signaling in the observing activation. | `COVERED` |
+| Mandatory Core Error taxonomy and direct parent topology | Core requires `Error -> Object`; all named non-I/O standard categories are direct `Error` children; `IOError -> Error`; and `InvalidIOArgument`, `IOLifecycleError`, `IOCapacityExhausted`, `EncodingError`, `LineTooLong` are direct `IOError` children. | Expanded `reflection/parent-error-taxonomy.protos` now checks all 21 mandatory direct-parent relations from ordinary Protos; the bindings are also exercised individually by domain-specific Error expectations across the corpus. | `error_taxonomy.protos` constructs the specified hierarchy; `InvalidReturn.protos` supplies its direct Error child; `prelude.protos` publishes every mandatory prototype; `ProtosCoreErrors.StandardError` retains the closed runtime construction map. | `COVERED` |
+
+### E2 audit result
+
+No E2 row exposes a new semantic/platform decision or production implementation
+mismatch. Existing signaling, handler-selection and failure-identity conformance
+already covers the behavioral contract. E2 strengthens only the previously
+partial guest-visible taxonomy evidence by expanding the existing
+`reflection/parent-error-taxonomy.protos` fixture to all mandatory direct-parent
+relations.
+
+`LM008-E` remains `IN_PROGRESS`. E3 is next and audits module context, import,
+module identity/cache and isolation-visible module surface.

@@ -13,5 +13,24 @@
 // WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
 // the specific language governing rights and limitations under the License.
 
+(Error.parent() === Object) &&
+(InvalidReturn.parent() === Error) &&
 (SlotNotFound.parent() === Error) &&
-(InvalidIOArgument.parent() === IOError)
+(InvalidSuper.parent() === Error) &&
+(Cancelled.parent() === Error) &&
+(FutureResolutionCycle.parent() === Error) &&
+(RequestOutcomeUncertain.parent() === Error) &&
+(NonTransferableValue.parent() === Error) &&
+(NonParallelValue.parent() === Error) &&
+(InvalidPredicateResult.parent() === Error) &&
+(InvalidComparatorResult.parent() === Error) &&
+(InvalidComparatorOrder.parent() === Error) &&
+(ParallelRegionOverlap.parent() === Error) &&
+(ParallelRegionInUse.parent() === Error) &&
+(ParallelRegionOutsideP.parent() === Error) &&
+(IOError.parent() === Error) &&
+(InvalidIOArgument.parent() === IOError) &&
+(IOLifecycleError.parent() === IOError) &&
+(IOCapacityExhausted.parent() === IOError) &&
+(EncodingError.parent() === IOError) &&
+(LineTooLong.parent() === IOError)
