@@ -3,7 +3,7 @@
 Status: **RATIFIED**
 Specification revision: **`0.1.393`**
 Explicit project-owner approval: **2026-09-09**
-Nature: normative Core v0.1 TCP live-resource object/delegation decision
+Nature: non-normative decision record; rationale for normative Core v0.1 TCP live-resource object/delegation semantics
 Primary normative owner: `spec/io/NETWORK.md`
 Implementation consumers: `I028-C` / `I028-D`
 

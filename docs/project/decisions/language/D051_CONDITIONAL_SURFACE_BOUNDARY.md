@@ -3,7 +3,7 @@
 Status: **RATIFIED**
 Specification revision: **`0.1.392`**
 Explicit project-owner approval: **2026-09-09**
-Nature: normative Core v0.1 syntax/compatibility decision
+Nature: non-normative decision record; rationale for normative Core v0.1 syntax/compatibility semantics
 Primary normative owner: `spec/PROTOS_GRAMMAR.md`
 Implementation consumer: **none required**
 

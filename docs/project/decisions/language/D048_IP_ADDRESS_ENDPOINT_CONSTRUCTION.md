@@ -3,7 +3,8 @@
 Status: **RATIFIED**
 Specification revision: **`0.1.391`**
 Explicit project-owner approval: **2026-09-09**
-Nature: bounded normative networking-data construction/recognition decision
+Nature: non-normative decision record; rationale for normative networking-data construction/recognition semantics
+Normative authority: applicable ratified material under `spec/` at revision `0.1.391`
 Dependency: D047 / specification revision `0.1.388`
 Primary implementation consumer: `I028-A`
 

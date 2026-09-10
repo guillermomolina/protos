@@ -3,7 +3,8 @@
 Status: **RATIFIED**
 Specification revision: **`0.1.389`**
 Explicit project-owner approval: **2026-09-09**
-Nature: normative object/isolation design decision resolving `B010`
+Nature: non-normative decision record; rationale for normative object/isolation semantics resolving `B010`
+Normative authority: applicable ratified material under `spec/` at revision `0.1.389`
 Primary implementation consumer: `I026-A4B2B3`
 
 ## Decision
@@ -35,4 +36,4 @@ D049 introduces no deep-freeze operation, Realm/isolate object model, owner-Acto
 
 ## Implementation handoff
 
-D049 is fully implemented by I026-A4B2B3 in `0.2.280-SNAPSHOT`. Slice A publishes the frozen Core/standard graph before guest observation; slice B keeps the shared semantic root Closures while projecting sharing-layer-bound executable plans into the entered `ProtosLanguageContext` with distinct CallTargets across Process Contexts and no global guest lock. B010, A4B2B3, A4B2B and A4B2 are CLOSED; A4B3 is READY. The ratified normative decision and specification revision remain unchanged.
+D049 is fully implemented by I026-A4B2B3 in `0.2.280-SNAPSHOT`. Slice A publishes the frozen Core/standard graph before guest observation; slice B keeps the shared semantic root Closures while projecting sharing-layer-bound executable plans into the entered `ProtosLanguageContext` with distinct CallTargets across Process Contexts and no global guest lock. B010, A4B2B3, A4B2B and A4B2 are CLOSED; A4B3 is READY. The ratified decision and its normative specification revision remain unchanged.

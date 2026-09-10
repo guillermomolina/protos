@@ -3,7 +3,8 @@
 Status: **RATIFIED**
 Specification revision: **`0.1.388`**
 Explicit project-owner approval: **2026-09-09**
-Nature: normative networking design decision; rationale for `spec/io/NETWORK.md`
+Nature: non-normative decision record; rationale for normative networking semantics
+Normative authority: `spec/io/NETWORK.md`
 
 ## Decision
 
