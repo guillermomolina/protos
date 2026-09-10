@@ -1,4 +1,4 @@
-# Protos
+<p align="center">\n  <img src="docs/assets/branding/protos-logo.png" alt="Protos" width="520">\n</p>\n\n# Protos
 
 > **Core language:** v0.1 draft specification\
 > **Reference implementation:** active development
