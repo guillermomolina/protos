@@ -41,7 +41,7 @@ choosing an API.
 - `docs/project/IMPLEMENTATION_STATUS.md`
 - `docs/project/IMPLEMENTATION_BLOCKERS.md`
 - `docs/project/governance/STANDARD_LIBRARY_NAMING.md`
-- `docs/project/CORE_NATIVE_BOUNDARY.md`
+- `docs/project/architecture/CORE_NATIVE_BOUNDARY.md`
 - `docs/project/work/LIB001/LIB001_COLLECTIONS_DESIGN.md`
 
 The important project-level constraints are:

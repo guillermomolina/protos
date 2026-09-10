@@ -614,7 +614,7 @@ results, and scheduler-independent logical failure selection.
 The architecture ledger classifies this machinery as a concurrency/runtime
 boundary rather than ordinary source-expressible library behavior:
 
-- [`../project/CORE_NATIVE_BOUNDARY.md`](../project/CORE_NATIVE_BOUNDARY.md).
+- [`../project/CORE_NATIVE_BOUNDARY.md`](../project/architecture/CORE_NATIVE_BOUNDARY.md).
 
 These are current implementation evidence. The normative specification remains
 authoritative.

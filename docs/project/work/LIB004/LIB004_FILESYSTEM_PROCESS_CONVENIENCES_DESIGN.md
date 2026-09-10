@@ -68,7 +68,7 @@ precedent.
 - `docs/design/STANDARD_LIBRARY_IDEAS.md`
 - `docs/project/IMPLEMENTATION_STATUS.md`
 - `docs/project/IMPLEMENTATION_BLOCKERS.md`
-- `docs/project/CORE_NATIVE_BOUNDARY.md`
+- `docs/project/architecture/CORE_NATIVE_BOUNDARY.md`
 - `docs/project/work/LIB001/LIB001_COLLECTIONS_DESIGN.md`
 - `docs/project/work/LIB002/LIB002_TEXT_ENCODING_DESIGN.md`
 - `docs/project/work/LIB003/LIB003_JSON_DESIGN.md`

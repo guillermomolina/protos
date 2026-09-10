@@ -1727,7 +1727,7 @@ or behavior can be constructed or installed faithfully through ordinary Protos
 mechanisms.
 
 The detailed non-normative bootstrap architecture is documented in
-`docs/project/CORE_BOOTSTRAP_ARCHITECTURE.md`. Source for distributable Core
+`docs/project/architecture/CORE_BOOTSTRAP_ARCHITECTURE.md`. Source for distributable Core
 behavior that can be expressed in Protos belongs under `protos/lib/core/`.
 Host-native primitives should be exposed through the ordinary object/protocol
 model wherever that model can represent them.

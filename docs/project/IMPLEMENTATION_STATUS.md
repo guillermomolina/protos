@@ -502,7 +502,7 @@ Status: CLOSED
 Description: Reduce Java-side Core bootstrap to irreducible host/runtime machinery and narrow representation/selector bridges, moving faithfully expressible distributable Core behavior to `protos/lib/core/` without changing observable Protos semantics.
 
 Architecture owner:
-- `docs/project/CORE_BOOTSTRAP_ARCHITECTURE.md`
+- `docs/project/architecture/CORE_BOOTSTRAP_ARCHITECTURE.md`
 
 Normative constraints:
 - applicable normative semantic owners remain authoritative;
@@ -527,7 +527,7 @@ Published slices:
 | I018-L | CLOSED | `0.2.106-SNAPSHOT` | `SAME_COMMIT` | Final I018 closure: exhaustive inventory of all remaining Java native-Closure providers classifies every retained boundary as host-irreducible, representation-backed, concurrency/runtime-backed, or resource/capability-backed; no source-expressible standard slot remains. A regression guard fixes the exact 22-provider/90-construction-site native boundary, verifies helper-backed runtime selector surfaces and migrated source provenance, and prevents silent Java-only Core growth. I018 is CLOSED and the I016-D coordination pause is lifted. |\n
 Closure result:
 - exhaustive audit found no remaining source-expressible standard slot implemented only in Java;
-- every retained Java-native standard Closure is recorded in `docs/project/CORE_NATIVE_BOUNDARY.md` as an irreducible host, representation, concurrency/runtime, or resource/capability bridge;
+- every retained Java-native standard Closure is recorded in `docs/project/architecture/CORE_NATIVE_BOUNDARY.md` as an irreducible host, representation, concurrency/runtime, or resource/capability bridge;
 - `ProtosCoreNativeBoundaryArchitectureTest` guards the exact provider/construction-site boundary, helper-backed standard selector surfaces, source-backed provenance, and Core-bootstrap allocation boundary;
 - I018 is complete. The temporary coordination pause after published I016-C is lifted; I016 may resume from I016-D after re-auditing the then-current `origin/main`.
 

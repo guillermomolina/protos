@@ -148,7 +148,7 @@ checked against the normative owner before implementation.
 ## Native-boundary closure record
 
 I018's final audited Java-backed standard boundary is recorded in
-`docs/project/CORE_NATIVE_BOUNDARY.md` and enforced by
+`docs/project/architecture/CORE_NATIVE_BOUNDARY.md` and enforced by
 `ProtosCoreNativeBoundaryArchitectureTest`.
 
 That inventory is an implementation-maintenance constraint, not a new source of
