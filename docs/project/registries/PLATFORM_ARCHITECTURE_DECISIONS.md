@@ -51,7 +51,7 @@ process remains authoritative first.
 | PLAT013 | Truffle debugger/interop value projection architecture | RATIFIED | Explicit project-owner approval, 2026-09-09 after exhaustive Truffle-language (including Apple Pkl), Bytecode-DSL, identity, large-graph and scalability review | I026-D/E/F/G |
 | PLAT014 | Truffle cooperative suspension continuation/compilation boundary | RATIFIED | Explicit project-owner approval, 2026-09-10 after deep Truffle-language/runtime review and complete A1/A2a/A2b/A2c/A2d feasibility evidence | PERF006, I026 continuation/backend work and future JVM/Truffle Task/Future execution |
 | PLAT015 | Truffle debugger scope projection topology | RATIFIED | Explicit project-owner approval, 2026-09-10 after deep Truffle implementation audit including Apple Pkl, GraalPy Bytecode DSL, SimpleLanguage, TruffleRuby, GraalJS, FastR, Sulong and Espresso; future/scalability/Protos-fit review | I026-E/F/G |
-
+| PLAT016 | Bytecode Closure default-parameter execution topology | RATIFIED | Explicit project-owner approval, 2026-09-10 after exhaustive maintained-Truffle implementation review including Apple Pkl plus future/scalability/Protos-fit scoring | PERF006-B2C3B and later Bytecode Closure activation/default execution |\n
 See `docs/project/decisions/platform/PLAT001_TRUFFLE_RUNTIME_HOSTING.md` for the selected topology,
 its non-semantic boundary, alternatives, scaling rationale, invariants, and
 explicitly deferred choices.
@@ -87,4 +87,4 @@ See `docs/project/decisions/platform/PLAT013_TRUFFLE_DEBUGGER_INTEROP_VALUE_PROJ
 
 See `docs/project/decisions/platform/PLAT014_TRUFFLE_COOPERATIVE_CONTINUATIONS.md` for the selected C-prime stackful continuation composition over Truffle Bytecode DSL, its suspension-only cost boundary, semantic-preservation constraints, cross-runtime evidence, scalability invariants and deliberately deferred implementation choices.
 
-See `docs/project/decisions/platform/PLAT015_TRUFFLE_DEBUGGER_SCOPE_PROJECTION.md` for the selected activation-native debugger-scope projection, absence of an artificial language top scope or named receiver, one-runtime-lookup authority, suspension-bounded lifetime and AST/Bytecode-DSL-independent tooling boundary.
+See `docs/project/decisions/platform/PLAT015_TRUFFLE_DEBUGGER_SCOPE_PROJECTION.md` for the selected activation-native debugger-scope projection, absence of an artificial language top scope or named receiver, one-runtime-lookup authority, suspension-bounded lifetime and AST/Bytecode-DSL-independent tooling boundary.\nSee `docs/project/decisions/platform/PLAT016_BYTECODE_CLOSURE_DEFAULT_EXECUTION_TOPOLOGY.md` for the selected single Bytecode Closure activation-root topology, default-expression execution and continuation constraints, cross-language evidence, scalability rationale and semantically invisible internal-outlining freedom.\n
