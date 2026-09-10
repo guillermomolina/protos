@@ -76,9 +76,10 @@ see `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md`.
 | I026-A4B3 | CLOSED | `0.2.301-SNAPSHOT` | I026-A4B2 | CLI/REPL, bundled tools, exact/fresh/captured/workspace, ordinary modules, RootActor initial modules and the remaining production Process creator all use Process-scoped public-parse hosting; the final architecture guard prevents direct compiler entry from returning in Process creators. EXCLUSIVE retained; REUSE/SHARED deferred. |
 | I026-B | CLOSED | `0.2.303-SNAPSHOT` | I026-A4 + PLAT004 | Map the existing exact `SourceSpan` ranges to valid Truffle `SourceSection` values on roots/execution nodes under ratified PLAT004 root-owned Source / node-local range / on-demand projection, with focused Java-side integration evidence. |
 | I026-C | CLOSED | `0.2.311-SNAPSHOT` | I026-B + PLAT005 + PLAT008 | Implement common `InstrumentableNode` wrappers, exact `StatementTag`/`CallTag` canonical-role tagging and PLAT008 logical replay-site normalization; prove wrapper-transparent replay identity and compact no-source/no-token node metadata without changing Protos semantics. |
-| I026-D | IN_PROGRESS | `0.2.317-SNAPSHOT` | I026-A1 + PLAT013 | D1 publishes ordinary Object local-member interop and D2 publishes exact String/Boolean/null scalar facets; numeric, Array and remaining safe runtime-family facets stay in D. |
+| I026-D | IN_PROGRESS | `0.2.319-SNAPSHOT` | I026-A1 + PLAT013 | D1 publishes ordinary Object local-member interop; D2 publishes exact String/Boolean/null scalar facets; D2A closes their PLAT013 host-opaque display obligation. Numeric, Array and remaining safe runtime-family facets stay in D. |
 | I026-D1 | CLOSED | `0.2.316-SNAPSHOT` | I026-D + PLAT013 | Direct InteropLibrary receiver support on real ProtosObjectValue instances plus the implementation-only ProtosRepresentedValue marker as opaque TruffleObject; exact-class ordinary Objects enumerate/read only local slots through an immutable member-name array adapter, reject writes/delegated lookup, preserve cycles as the same guest value and keep inherited runtime families out of this tranche. |
 | I026-D2 | CLOSED | `0.2.317-SNAPSHOT` | I026-D1 + PLAT013 | Expose direct exact read-only Truffle scalar facets on real ProtosStringValue, ProtosBooleanValue and ProtosNullValue through isString/asString, isBoolean/asBoolean and isNull, with no wrapper/conversion, no numeric/array/member/execution facet and focused D1 member-read composition evidence. |
+| I026-D2A | CLOSED | `0.2.319-SNAPSHOT` | I026-D2 + PLAT013 | Replace Truffle's host-class/identity-hash default display on D2 scalar guest values with direct side-effect-free guest display: existing String payload, canonical Boolean text and canonical null text; no lookup, invocation, graph traversal, host reflection or new scalar facet. |
 | I026-E | BLOCKED_BY_DEPENDENCIES | — | I026-C + I026-D | Bridge top/local debugger scopes from the existing Protos activation/context model and prove visible names/values match Protos lookup boundaries. |
 | I026-F | BLOCKED_BY_DEPENDENCIES | — | I026-C + I026-E | Run a real GraalVM DAP smoke gate over Protos source: source breakpoint, stepping, stack frames, scopes and representative values. Only successful evidence permits a Protos DAP-support claim. |
 | I026-G | BLOCKED_BY_DEPENDENCIES | — | I026-C + I026-E | Run a GraalVM dynamic-LSP smoke gate and record exactly which useful runtime-derived capabilities work for Protos. Do not treat this as a replacement for static Protos language intelligence. |
@@ -142,6 +143,21 @@ scope facet. Integer/fixed-integer/Float projection, Array indexed projection,
 Map/IdentityMap hash interop, Closure execution and I026-E scope topology remain
 outside this slice. No Protos specification or observable language semantics
 change.
+
+### I026-D2A scalar display correction
+
+`I026-D2A` closes in `0.2.319-SNAPSHOT` after the post-D2 contract audit identified that
+Truffle's default guest-object display would expose implementation class identity.
+The three D2 scalar receivers now own their display directly: String returns its
+already-existing payload, Boolean returns canonical `true`/`false`, and null
+returns `null`. These operations are side-effect-free, allocate no wrapper graph,
+perform no guest lookup or invocation, and expose no Java class/identity-hash
+details.
+
+This corrective slice does not add a semantic Protos stringification protocol and
+does not change D2's scalar facets. Numeric, Array, Map/IdentityMap hash, Closure
+execution, debugger mutation and I026-E scope topology remain outside D2A. No
+Protos specification or observable language semantics change.
 
 ## Deferred ownership
 

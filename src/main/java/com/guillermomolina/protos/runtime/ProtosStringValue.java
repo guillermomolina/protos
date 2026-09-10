@@ -50,4 +50,10 @@ public final class ProtosStringValue implements ProtosRepresentedValue {
         return value;
     }
 
+
+    @ExportMessage
+    String toDisplayString(@SuppressWarnings("unused") boolean allowSideEffects) {
+        return value;
+    }
+
 }

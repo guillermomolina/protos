@@ -56,4 +56,10 @@ public final class ProtosBooleanValue implements ProtosRepresentedValue {
         return value;
     }
 
+
+    @ExportMessage
+    String toDisplayString(@SuppressWarnings("unused") boolean allowSideEffects) {
+        return value ? "true" : "false";
+    }
+
 }

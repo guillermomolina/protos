@@ -1,3 +1,7 @@
+## 0.2.319-SNAPSHOT
+
+- Close corrective `I026-D2A — simple scalar bounded display` under ratified PLAT013 after the post-D2 audit found that Truffle's default guest-object `toDisplayString` exposes receiver class name plus identity hash. Give the already-published real String/Boolean/null receivers direct side-effect-free host-opaque display: String returns its existing payload, Boolean canonical `true`/`false`, and null canonical `null`. Add focused no-host-leakage evidence while preserving D2 scalar facets and introducing no guest lookup, invocation, wrapper graph, numeric/Array/Map/Closure capability or debugger mutation. I026-D remains IN_PROGRESS; numeric projection is next. No Protos specification or observable language semantics change. Implementation version becomes `0.2.319-SNAPSHOT`.
+
 ## 0.2.318-SNAPSHOT
 
 - Close `I028-E4 — production TcpListener/accept + PLAT007 IPv6-only backend` under

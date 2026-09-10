@@ -38,4 +38,10 @@ public final class ProtosNullValue implements ProtosRepresentedValue {
         return true;
     }
 
+
+    @ExportMessage
+    String toDisplayString(@SuppressWarnings("unused") boolean allowSideEffects) {
+        return "null";
+    }
+
 }
