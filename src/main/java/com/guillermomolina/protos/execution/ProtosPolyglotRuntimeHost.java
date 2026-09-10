@@ -16,6 +16,7 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosActorScheduler;
 import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
@@ -23,6 +24,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Objects;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import org.graalvm.polyglot.Engine;
@@ -36,13 +39,19 @@ import org.graalvm.polyglot.Engine;
  */
 public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     private final Engine engine;
+    private final int actorCarrierParallelism;
     private final AtomicInteger activeProcessContexts = new AtomicInteger();
+    private final AtomicInteger actorCarrierThreadSequence = new AtomicInteger();
     private final AtomicReference<Throwable> contextCloseFailure = new AtomicReference<>();
+    private ExecutorService actorCarrierExecutor;
+    private ProtosActorScheduler actorScheduler;
     private ProtosNioNetworkHost networkHost;
     private boolean closed;
 
     private ProtosPolyglotRuntimeHost(Engine engine) {
         this.engine = Objects.requireNonNull(engine, "engine");
+        this.actorCarrierParallelism =
+                Math.max(1, Runtime.getRuntime().availableProcessors());
     }
 
     public static ProtosPolyglotRuntimeHost open() {
@@ -94,6 +103,46 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     }
 
     /**
+     * Returns the one normal-Actor scheduler owned by this RuntimeHost.
+     *
+     * <p>The fixed executor is created lazily so a host that never schedules a child Actor pays no
+     * Actor-carrier thread cost. Its platform threads are shared across every local Process Context
+     * hosted here; Process termination never owns this executor's lifetime.
+     */
+    synchronized ProtosActorScheduler actorSchedulerForRuntime() {
+        if (closed) {
+            throw new IllegalStateException("Polyglot runtime host is closed");
+        }
+        if (actorScheduler == null) {
+            actorCarrierExecutor =
+                    Executors.newFixedThreadPool(
+                            actorCarrierParallelism,
+                            command -> {
+                                Thread carrier =
+                                        new Thread(
+                                                command,
+                                                "protos-actor-carrier-"
+                                                        + actorCarrierThreadSequence.incrementAndGet());
+                                carrier.setDaemon(true);
+                                return carrier;
+                            });
+            actorScheduler =
+                    new ProtosActorScheduler(actorCarrierExecutor, actorCarrierParallelism);
+        }
+        return actorScheduler;
+    }
+
+    boolean actorCarrierSubstrateInitializedForTesting() {
+        synchronized (this) {
+            return actorScheduler != null;
+        }
+    }
+
+    int actorCarrierParallelismForTesting() {
+        return actorCarrierParallelism;
+    }
+
+    /**
      * Explicitly provisions one host Network capability for the supplied Prelude.
      *
      * <p>This operation does not install the capability into a Process or module. The caller owns
@@ -140,6 +189,9 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
                     "Polyglot runtime host cannot close while Process Contexts are active");
         }
         Throwable failure = contextCloseFailure.get();
+        if (actorCarrierExecutor != null) {
+            actorCarrierExecutor.close();
+        }
         if (networkHost != null) {
             networkHost.close();
         }

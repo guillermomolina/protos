@@ -110,6 +110,112 @@ final class ProtosActorPolyglotContextRoutingTest {
         }
     }
 
+    @Test
+    void runtimeHostOwnsOnePlatformActorSchedulerAcrossHostedProcesses() throws Exception {
+        ProtosObjectValue actorRefPrototype =
+                new ProtosObjectValue(ProtosObjectValue.rootObject()).freeze();
+        ProtosProcessRuntime firstProcess = new ProtosProcessRuntime(actorRefPrototype);
+        ProtosProcessRuntime secondProcess = new ProtosProcessRuntime(actorRefPrototype);
+
+        try (ProtosPolyglotRuntimeHost host = ProtosPolyglotRuntimeHost.open()) {
+            assertFalse(
+                    host.actorCarrierSubstrateInitializedForTesting(),
+                    "RuntimeHost must not allocate Actor carrier capacity before it is used");
+
+            ProtosPolyglotProcessContext firstHosted =
+                    host.hostProcess(
+                            firstProcess,
+                            InputStream.nullInputStream(),
+                            OutputStream.nullOutputStream(),
+                            OutputStream.nullOutputStream());
+            ProtosPolyglotProcessContext secondHosted =
+                    host.hostProcess(
+                            secondProcess,
+                            InputStream.nullInputStream(),
+                            OutputStream.nullOutputStream(),
+                            OutputStream.nullOutputStream());
+
+            assertFalse(
+                    host.actorCarrierSubstrateInitializedForTesting(),
+                    "hosting Processes alone must not allocate Actor carrier threads");
+
+            ProtosActorScheduler firstScheduler =
+                    firstHosted.actorSchedulerForRuntime().orElseThrow();
+            ProtosActorScheduler secondScheduler =
+                    secondHosted.actorSchedulerForRuntime().orElseThrow();
+
+            assertSame(
+                    firstScheduler,
+                    secondScheduler,
+                    "Processes on one RuntimeHost must share one Actor scheduler");
+            assertTrue(host.actorCarrierSubstrateInitializedForTesting());
+            assertEquals(
+                    Math.max(1, Runtime.getRuntime().availableProcessors()),
+                    host.actorCarrierParallelismForTesting());
+
+            ProtosLanguageContext expectedFirst =
+                    firstHosted.currentLanguageContextForTesting();
+            ProtosLanguageContext expectedSecond =
+                    secondHosted.currentLanguageContextForTesting();
+            assertNotSame(
+                    expectedFirst,
+                    expectedSecond,
+                    "shared carriers must not collapse distinct Process Contexts");
+
+            ProtosActor firstActor = firstProcess.rootActorForRuntime();
+            ProtosActor secondActor = secondProcess.rootActorForRuntime();
+            firstScheduler.attach(firstActor);
+            firstScheduler.attach(secondActor);
+
+            CountDownLatch completed = new CountDownLatch(2);
+            AtomicReference<ProtosLanguageContext> observedFirst = new AtomicReference<>();
+            AtomicReference<ProtosLanguageContext> observedSecond = new AtomicReference<>();
+            AtomicReference<Thread> firstCarrier = new AtomicReference<>();
+            AtomicReference<Thread> secondCarrier = new AtomicReference<>();
+
+            firstScheduler.submitControl(
+                    firstActor,
+                    () -> {
+                        observedFirst.set(ProtosLanguageContext.current());
+                        firstCarrier.set(Thread.currentThread());
+                        completed.countDown();
+                    });
+            firstScheduler.submitControl(
+                    secondActor,
+                    () -> {
+                        observedSecond.set(ProtosLanguageContext.current());
+                        secondCarrier.set(Thread.currentThread());
+                        completed.countDown();
+                    });
+
+            assertTrue(
+                    completed.await(5, TimeUnit.SECONDS),
+                    "both hosted Processes must make progress on shared Actor capacity");
+            assertSame(expectedFirst, observedFirst.get());
+            assertSame(expectedSecond, observedSecond.get());
+            assertNotNull(firstCarrier.get());
+            assertNotNull(secondCarrier.get());
+            assertFalse(firstCarrier.get().isVirtual(), "Actor carrier must be a platform thread");
+            assertFalse(secondCarrier.get().isVirtual(), "Actor carrier must be a platform thread");
+            assertTrue(firstCarrier.get().getName().startsWith("protos-actor-carrier-"));
+            assertTrue(secondCarrier.get().getName().startsWith("protos-actor-carrier-"));
+
+            firstScheduler.detach(firstActor);
+            firstScheduler.detach(secondActor);
+
+            assertTrue(firstProcess.requestTerminationForRuntime());
+            assertTrue(secondProcess.requestTerminationForRuntime());
+            assertEquals(
+                    ProtosProcessRuntime.LifecycleState.TERMINATED,
+                    firstProcess.lifecycleState());
+            assertEquals(
+                    ProtosProcessRuntime.LifecycleState.TERMINATED,
+                    secondProcess.lifecycleState());
+            assertTrue(firstHosted.isClosedForTesting());
+            assertTrue(secondHosted.isClosedForTesting());
+        }
+    }
+
     private static Runnable capture(
             AtomicReference<ProtosLanguageContext> context,
             AtomicLong thread,

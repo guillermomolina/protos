@@ -51,8 +51,21 @@ public final class ProtosActorScheduler {
     private final IdentityHashMap<ProtosActor, State> states = new IdentityHashMap<>();
     private int activeWorkers;
 
+    /**
+     * Staged fallback for unhosted or explicitly host-neutral execution.
+     *
+     * <p>Each scheduler worker uses one ordinary platform thread and may execute multiple Actor
+     * segments before the ready queue drains. Hosted production Processes obtain the shared
+     * RuntimeHost-owned reusable carrier substrate through their execution host instead.
+     */
     public ProtosActorScheduler() {
-        this(command -> Thread.startVirtualThread(command), DEFAULT_PARALLELISM);
+        this(ProtosActorScheduler::startFallbackPlatformWorker, DEFAULT_PARALLELISM);
+    }
+
+    private static void startFallbackPlatformWorker(Runnable command) {
+        Thread carrier = new Thread(command, "protos-actor-fallback");
+        carrier.setDaemon(true);
+        carrier.start();
     }
 
     public ProtosActorScheduler(Executor carrierExecutor, int parallelism) {

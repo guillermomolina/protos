@@ -17,6 +17,7 @@
 package com.guillermomolina.protos.runtime;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Supplier;
 
 /**
@@ -37,6 +38,16 @@ public interface ProtosProcessExecutionHost {
                     action.run();
                     return null;
                 });
+    }
+
+    /**
+     * Returns the host-owned normal Actor scheduler when this placement provides one.
+     *
+     * <p>Execution hosts without Actor carrier ownership return empty so staged unhosted and
+     * deterministic test paths may retain their explicitly supplied scheduler.
+     */
+    default Optional<ProtosActorScheduler> actorSchedulerForRuntime() {
+        return Optional.empty();
     }
 
     /** Platform lifecycle notification after semantic Process termination is already complete. */

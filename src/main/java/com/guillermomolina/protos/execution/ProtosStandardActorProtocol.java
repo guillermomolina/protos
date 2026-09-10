@@ -233,16 +233,27 @@ public final class ProtosStandardActorProtocol {
                         terminateAfterCutover(actor);
                     }
                 };
+        ProtosActorScheduler scheduler = schedulerFor(actor);
         try {
-            actorScheduler.attach(actor);
-            actorScheduler.submitControl(actor, bootstrap);
+            scheduler.attach(actor);
+            scheduler.submitControl(actor, bootstrap);
         } catch (RuntimeException admissionFailure) {
             // Scheduler/carrier failure is after the semantic creation cutover and therefore cannot
             // retroactively fail spawn. Preserve the fixed incarnation and make it terminal.
-            actorScheduler.detach(actor);
+            scheduler.detach(actor);
             terminateAfterCutover(actor);
         }
         return reference;
+    }
+
+    private ProtosActorScheduler schedulerFor(ProtosActor actor) {
+        ProtosProcessRuntime process = actor.processForRuntime().orElse(null);
+        if (process == null) {
+            return actorScheduler;
+        }
+        return process.executionHostForRuntime()
+                .flatMap(host -> host.actorSchedulerForRuntime())
+                .orElse(actorScheduler);
     }
 
     private Object group(ProtosActivation activation, List<?> supplied) {

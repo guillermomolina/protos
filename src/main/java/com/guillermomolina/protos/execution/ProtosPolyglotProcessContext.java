@@ -17,10 +17,12 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosActorScheduler;
 import com.guillermomolina.protos.runtime.ProtosProcessExecutionHost;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
 import com.oracle.truffle.api.source.Source;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.function.Supplier;
 import org.graalvm.polyglot.Engine;
 
@@ -74,6 +76,11 @@ public final class ProtosPolyglotProcessContext implements ProtosProcessExecutio
     @Override
     public <T> T callForRuntime(Supplier<T> action) {
         return context.callEntered(Objects.requireNonNull(action, "action"));
+    }
+
+    @Override
+    public Optional<ProtosActorScheduler> actorSchedulerForRuntime() {
+        return Optional.of(runtimeHost.actorSchedulerForRuntime());
     }
 
     @Override
