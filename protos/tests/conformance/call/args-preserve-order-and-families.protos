@@ -15,7 +15,7 @@ f: (a, b, c, d) => args
 snapshot: f(7, "x", true, objectValue)
 
 (snapshot.size() == 4) &&
-    (snapshot.at(0) == 7) &&
-    (snapshot.at(1) == "x") &&
-    (snapshot.at(2) === true) &&
-    (snapshot.at(3) === objectValue)
+    (snapshot[0] == 7) &&
+    (snapshot[1] == "x") &&
+    (snapshot[2] === true) &&
+    (snapshot[3] === objectValue)

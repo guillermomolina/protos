@@ -20,4 +20,4 @@ make: (value) => {
 snapshot: make(13)
 
 (snapshot.size() == 1) &&
-    (snapshot.at(0) == 13)
+    (snapshot[0] == 13)

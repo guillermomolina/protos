@@ -15,4 +15,4 @@ holder: {
 
 snapshot: holder.echo(9)
 
-(snapshot.size() == 1) && (snapshot.at(0) == 9)
+(snapshot.size() == 1) && (snapshot[0] == 9)

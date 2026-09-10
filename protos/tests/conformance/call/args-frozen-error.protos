@@ -12,4 +12,4 @@
 f: (value) => args
 
 snapshot: f(1)
-snapshot.atPut(0, 2)
+snapshot[0] = 2

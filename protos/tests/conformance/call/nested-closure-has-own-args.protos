@@ -13,7 +13,7 @@ outer: (outerValue) => {
     inner: (innerValue) => args
     snapshot: inner(99)
 
-    (snapshot.size() == 1) && (snapshot.at(0) == 99)
+    (snapshot.size() == 1) && (snapshot[0] == 99)
 }
 
 outer(42)

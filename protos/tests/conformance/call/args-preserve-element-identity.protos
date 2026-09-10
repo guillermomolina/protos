@@ -15,4 +15,4 @@ f: (item) => args
 snapshot: f(value)
 
 (snapshot.size() == 1) &&
-    (snapshot.at(0) === value)
+    (snapshot[0] === value)
