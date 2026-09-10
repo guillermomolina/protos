@@ -11,14 +11,13 @@ Status: **RATIFIED / CLOSED — CANDIDATE B SELECTED**
 WEB001-B selected GitHub Pages as the initial hosting mechanism while explicitly
 keeping the generated website as ordinary portable static output. After the
 website bootstrap and public landing were implemented, the project owner
-identified an existing private Docker/Traefik production environment already
-used for other `*.guillermomolina.com` services and asked whether the Protos site
-should use that environment instead.
+identified an existing private self-hosted container environment and asked
+whether the Protos site should use that deployment environment instead.
 
 `protos-website/AGENTS.md` treats a change to durable hosting/deployment
 architecture as an explicit-approval checkpoint. WEB001-F therefore stopped
 implementation and compared the alternatives before any production Docker stage,
-Traefik stack, DNS change or Pages activation was published.
+private deployment stack, DNS change or Pages activation was published.
 
 ## Constraints retained from WEB001-B
 
@@ -46,12 +45,12 @@ Keep the originally ratified Pages deployment.
 This minimizes operations and provides managed static hosting, but introduces a
 separate production control plane from the owner's existing infrastructure.
 
-### Candidate B — self-hosted Docker + Traefik only
+### Candidate B — self-hosted container + private reverse proxy only
 
 Keep the public website repository infrastructure-neutral, add a generic
 multi-stage production image that contains only built static output in its final
-runtime, and keep real routing/TLS/network deployment configuration in private
-`guillermomolina/docker-home`.
+runtime, while keeping environment-specific routing, TLS, network and deployment
+configuration private and outside the public repositories.
 
 This creates one production authority, matches the existing operating model,
 keeps private topology private, permits exact image/revision identification and
@@ -61,12 +60,14 @@ rollback, and avoids production source bind mounts.
 
 Operate Pages and self-hosting as concurrent production-capable mechanisms.
 
-Rejected because it creates two deployment authorities, drift and DNS/validation
-complexity without a current requirement for active-active hosting.
+Rejected because it creates two deployment authorities, drift risk and
+DNS/validation complexity without a current requirement for active-active
+hosting.
 
 ### Candidate D — Pages primary with self-hosted standby
 
-Keep Pages canonical and maintain Docker as a dormant fallback.
+Keep Pages as canonical and maintain the private deployment as a dormant
+fallback.
 
 Rejected because the mostly unused path can silently rot while still imposing a
 second deployment contract.
@@ -85,11 +86,11 @@ protos-website revision
         v
 immutable production image
         |
-        | private Compose deployment
+        | private deployment
         v
-Traefik `proxy` network
+reverse proxy
         |
-        | TLS / Let's Encrypt
+        | TLS termination
         v
 protos.guillermolina.com
 ```
@@ -98,9 +99,9 @@ The final production image must contain the static serving runtime and built sit
 only; Node/build dependencies do not belong in the serving layer. The running
 container must not depend on a bind-mounted source checkout.
 
-Traefik-specific labels, network conventions, host paths and operational
-configuration belong to private `guillermomolina/docker-home`, not to the public
-website repository.
+Environment-specific reverse-proxy labels, network names, host paths,
+credentials and operational configuration remain private and do not belong in
+the public website repository.
 
 GitHub Pages is **superseded** as the WEB001 production host. The existing
 unactivated/manual Pages workflow is not retained as standby; a later bounded
@@ -114,8 +115,8 @@ Implementation proceeds in separate bounded steps:
 1. add and validate the generic production Docker target in
    `guillermomolina/protos-website`, updating website-local governance to reflect
    the ratified hosting model and retiring the dormant Pages workflow;
-2. add `protos.guillermolina.com/` privately to `guillermomolina/docker-home`
-   following its existing Compose/Makefile/Traefik conventions; and
+2. add the environment-specific production stack to the private deployment
+   configuration; and
 3. perform DNS binding and actual public activation only as an explicit final
    operational action.
 
@@ -132,6 +133,7 @@ This ratification:
 - changes no website code or production container yet;
 - activates no GitHub Pages environment;
 - changes no DNS;
-- publishes no private infrastructure details into the public website repo;
+- publishes no private deployment-repository, network, routing or credential
+  details into the public website repositories;
 - introduces no playground runtime; and
 - changes no implementation version or license terms.

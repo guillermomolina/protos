@@ -11,9 +11,8 @@ Status: **RATIFIED — CANDIDATE C SELECTED**
 > exact-SHA source acquisition, local execution, Astro + Starlight, static
 > output, provenance, and future playground isolation. Its GitHub Pages hosting
 > component was later superseded by the explicitly approved WEB001-F Candidate
-> B: self-hosted immutable static Docker image behind the owner's private
-> Traefik infrastructure. GitHub Pages is no longer an active or standby
-> production path.
+> B: self-hosted immutable static image behind a private reverse-proxy
+> environment. GitHub Pages is no longer an active or standby production path.
 
 ## Scope
 

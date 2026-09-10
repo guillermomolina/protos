@@ -5,7 +5,7 @@ GitHub coordination: Issue [#278](https://github.com/guillermomolina/protos/issu
 ## Purpose
 
 `WEB001` establishes the official public-facing Protos project website at
-`protos.guillermomolina.com` as the entry point for people who want to understand,
+`protos.guillermolina.com` as the entry point for people who want to understand,
 learn, use, follow, or contribute to Protos.
 
 The website and GitHub have deliberately different jobs:
@@ -63,7 +63,7 @@ The intended public outcome is a website that:
    authority;
 4. directs contributors and interested users to the appropriate GitHub community
    and coordination surfaces;
-5. can publish automatically to `protos.guillermomolina.com`; and
+5. can publish automatically to `protos.guillermolina.com`; and
 6. remains simple enough to maintain without creating an unnecessary second
    software product around the language project.
 
@@ -160,8 +160,8 @@ the production-hosting architecture checkpoint.
 
 After the initial website was bootstrapped and reviewed, the project owner
 explicitly approved WEB001-F Candidate B on 2026-09-10: the official static site
-will be self-hosted through the owner's existing Docker + Traefik infrastructure
-rather than GitHub Pages.
+will be self-hosted through a private container/reverse-proxy environment rather
+than GitHub Pages.
 
 The ratified production boundary is:
 
@@ -176,26 +176,26 @@ guillermomolina/protos-website
             |
             | immutable static build/image
             v
-private deployment configuration
-    guillermomolina/docker-home
+private deployment environment
             |
-            | Docker network `proxy`
+            | environment-specific routing
             v
-Traefik
-    TLS termination + Let's Encrypt
+reverse proxy
+    TLS termination
             |
             v
 protos.guillermolina.com
 ```
 
-The public website repository owns only portable website/build behavior. The
-environment-specific Compose file, Traefik labels, Docker-network details and
-operational deployment configuration remain private infrastructure concerns.
+The public website repository owns only portable website/build behavior. All
+environment-specific orchestration, routing, network names, host paths,
+credentials and operational deployment configuration remain private
+infrastructure concerns.
 
 Production must not bind-mount the website source tree into the running
 container. A deployment builds an immutable image from an identified website
 revision, copies only the generated static site into a minimal HTTP-serving
-runtime, and lets Traefik terminate TLS externally.
+runtime, and lets the private reverse proxy terminate TLS externally.
 
 GitHub Pages is no longer an active or standby production path for WEB001. The
 existing dormant/manual Pages workflow is to be retired by the bounded website
@@ -208,5 +208,5 @@ boundary required by any future code-executing playground.
 
 WEB001-F is **RATIFIED / CLOSED** at the design level. Its implementation is
 downstream: first provide the generic public production Docker target, then add
-the private `protos.guillermolina.com` stack, and finally perform DNS/production
-activation as an explicit operational step.
+the environment-specific private production stack, and finally perform
+DNS/production activation as an explicit operational step.
