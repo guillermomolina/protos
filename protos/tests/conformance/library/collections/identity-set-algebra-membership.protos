@@ -15,16 +15,16 @@ difference: IdentitySet.difference(left, right)
 order: Map()
 index: 0
 IdentitySet.each(union, (element) => {
-    order.atPut(index, element)
+    order[index] = element
     index = index + 1
 })
 
 ok: true
 (IdentitySet.size(union) == 4).ifFalse(() => { ok = false })
-(order.at(0) === 1).ifFalse(() => { ok = false })
-(order.at(1) === 2).ifFalse(() => { ok = false })
-(order.at(2) === 1.0).ifFalse(() => { ok = false })
-(order.at(3) === 3).ifFalse(() => { ok = false })
+(order[0] === 1).ifFalse(() => { ok = false })
+(order[1] === 2).ifFalse(() => { ok = false })
+(order[2] === 1.0).ifFalse(() => { ok = false })
+(order[3] === 3).ifFalse(() => { ok = false })
 (IdentitySet.size(intersection) == 1).ifFalse(() => { ok = false })
 IdentitySet.contains(intersection, 2).ifFalse(() => { ok = false })
 IdentitySet.contains(intersection, 1).ifTrue(() => { ok = false })

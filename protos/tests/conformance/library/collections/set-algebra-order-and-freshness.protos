@@ -15,21 +15,21 @@ difference: Set.difference(left, right)
 unionOrder: Map()
 unionIndex: 0
 Set.each(union, (element) => {
-    unionOrder.atPut(unionIndex, element)
+    unionOrder[unionIndex] = element
     unionIndex = unionIndex + 1
 })
 
 intersectionOrder: Map()
 intersectionIndex: 0
 Set.each(intersection, (element) => {
-    intersectionOrder.atPut(intersectionIndex, element)
+    intersectionOrder[intersectionIndex] = element
     intersectionIndex = intersectionIndex + 1
 })
 
 differenceOrder: Map()
 differenceIndex: 0
 Set.each(difference, (element) => {
-    differenceOrder.atPut(differenceIndex, element)
+    differenceOrder[differenceIndex] = element
     differenceIndex = differenceIndex + 1
 })
 
@@ -43,15 +43,15 @@ ok: true
 (Set.size(left) == 3).ifFalse(() => { ok = false })
 (Set.size(right) == 3).ifFalse(() => { ok = false })
 (unionIndex == 4).ifFalse(() => { ok = false })
-(unionOrder.at(0) === 1).ifFalse(() => { ok = false })
-(unionOrder.at(1) === 2).ifFalse(() => { ok = false })
-(unionOrder.at(2) === 3).ifFalse(() => { ok = false })
-(unionOrder.at(3) === 4).ifFalse(() => { ok = false })
+(unionOrder[0] === 1).ifFalse(() => { ok = false })
+(unionOrder[1] === 2).ifFalse(() => { ok = false })
+(unionOrder[2] === 3).ifFalse(() => { ok = false })
+(unionOrder[3] === 4).ifFalse(() => { ok = false })
 (intersectionIndex == 2).ifFalse(() => { ok = false })
-(intersectionOrder.at(0) === 1).ifFalse(() => { ok = false })
-(intersectionOrder.at(1) === 2).ifFalse(() => { ok = false })
+(intersectionOrder[0] === 1).ifFalse(() => { ok = false })
+(intersectionOrder[1] === 2).ifFalse(() => { ok = false })
 (differenceIndex == 1).ifFalse(() => { ok = false })
-(differenceOrder.at(0) === 3).ifFalse(() => { ok = false })
+(differenceOrder[0] === 3).ifFalse(() => { ok = false })
 (added === union).ifFalse(() => { ok = false })
 Set.contains(union, 5).ifFalse(() => { ok = false })
 (union.at(1) === true).ifFalse(() => { ok = false })

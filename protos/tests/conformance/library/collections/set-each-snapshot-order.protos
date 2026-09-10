@@ -11,7 +11,7 @@ values: Set(1, 2)
 visited: Map()
 index: 0
 same: Set.each(values, (element) => {
-    visited.atPut(index, element)
+    visited[index] = element
     (index == 0).ifTrue(() => {
         Set.add(values, 3)
         Set.remove(values, 2)
@@ -23,7 +23,7 @@ identities: IdentitySet(1, 2)
 identityVisited: Map()
 identityIndex: 0
 sameIdentity: IdentitySet.each(identities, (element) => {
-    identityVisited.atPut(identityIndex, element)
+    identityVisited[identityIndex] = element
     (identityIndex == 0).ifTrue(() => {
         IdentitySet.add(identities, 3)
         IdentitySet.remove(identities, 2)
@@ -34,16 +34,16 @@ sameIdentity: IdentitySet.each(identities, (element) => {
 ok: true
 (same === values).ifFalse(() => { ok = false })
 (index == 2).ifFalse(() => { ok = false })
-(visited.at(0) === 1).ifFalse(() => { ok = false })
-(visited.at(1) === 2).ifFalse(() => { ok = false })
+(visited[0] === 1).ifFalse(() => { ok = false })
+(visited[1] === 2).ifFalse(() => { ok = false })
 (Set.size(values) == 2).ifFalse(() => { ok = false })
 Set.contains(values, 2).ifTrue(() => { ok = false })
 Set.contains(values, 3).ifFalse(() => { ok = false })
 
 (sameIdentity === identities).ifFalse(() => { ok = false })
 (identityIndex == 2).ifFalse(() => { ok = false })
-(identityVisited.at(0) === 1).ifFalse(() => { ok = false })
-(identityVisited.at(1) === 2).ifFalse(() => { ok = false })
+(identityVisited[0] === 1).ifFalse(() => { ok = false })
+(identityVisited[1] === 2).ifFalse(() => { ok = false })
 (IdentitySet.size(identities) == 2).ifFalse(() => { ok = false })
 IdentitySet.contains(identities, 2).ifTrue(() => { ok = false })
 IdentitySet.contains(identities, 3).ifFalse(() => { ok = false })
