@@ -72,3 +72,189 @@ v6: (a, b, c, d, e, f, g, h) => {
 
     IpAddress(6, bits)
 }
+
+parse: (text) => {
+    // Exercise the strict String receiver domain without changing the value.
+    ignoredStringValidation: text + ""
+
+    fail: () => {
+        Error().signal()
+    }
+
+    size: text.size()
+    (size < 7).ifTrue(() => {
+        fail()
+    })
+    (size > 15).ifTrue(() => {
+        fail()
+    })
+
+    digitValue: (character) => {
+        result: -1
+
+        (character == "0").ifTrue(() => { result = 0 })
+        (character == "1").ifTrue(() => { result = 1 })
+        (character == "2").ifTrue(() => { result = 2 })
+        (character == "3").ifTrue(() => { result = 3 })
+        (character == "4").ifTrue(() => { result = 4 })
+        (character == "5").ifTrue(() => { result = 5 })
+        (character == "6").ifTrue(() => { result = 6 })
+        (character == "7").ifTrue(() => { result = 7 })
+        (character == "8").ifTrue(() => { result = 8 })
+        (character == "9").ifTrue(() => { result = 9 })
+
+        result
+    }
+
+    index: 0
+    octetIndex: 0
+    current: 0
+    digitCount: 0
+    leadingZero: false
+
+    a: null
+    b: null
+    c: null
+    d: null
+
+    finishOctet: () => {
+        (digitCount == 0).ifTrue(() => {
+            fail()
+        })
+        (current > 255).ifTrue(() => {
+            fail()
+        })
+
+        (octetIndex == 0).ifTrue(() => { a = current })
+        (octetIndex == 1).ifTrue(() => { b = current })
+        (octetIndex == 2).ifTrue(() => { c = current })
+        (octetIndex == 3).ifTrue(() => { d = current })
+
+        octetIndex = octetIndex + 1
+        current = 0
+        digitCount = 0
+        leadingZero = false
+    }
+
+    (() => index < size).while() {
+        character: text.at(index)
+        isSeparator: character == "."
+
+        isSeparator.ifTrue(() => {
+            (octetIndex >= 3).ifTrue(() => {
+                fail()
+            })
+            finishOctet()
+        })
+
+        isSeparator.ifFalse(() => {
+            digit: digitValue(character)
+            (digit < 0).ifTrue(() => {
+                fail()
+            })
+
+            (digitCount == 0).ifTrue(() => {
+                (digit == 0).ifTrue(() => {
+                    leadingZero = true
+                })
+            })
+
+            (digitCount > 0).ifTrue(() => {
+                leadingZero.ifTrue(() => {
+                    fail()
+                })
+            })
+
+            digitCount = digitCount + 1
+            (digitCount > 3).ifTrue(() => {
+                fail()
+            })
+
+            current = current * 10 + digit
+            (current > 255).ifTrue(() => {
+                fail()
+            })
+        })
+
+        index = index + 1
+    }
+
+    finishOctet()
+
+    (octetIndex == 4).ifFalse(() => {
+        fail()
+    })
+
+    v4(a, b, c, d)
+}
+
+format: (address) => {
+    fail: () => {
+        Error().signal()
+    }
+
+    IpAddress.recognizes(address).ifFalse(() => {
+        fail()
+    })
+    (address.version == 4).ifFalse(() => {
+        fail()
+    })
+
+    digitText: (digit) => {
+        result: null
+
+        (digit == 0).ifTrue(() => { result = "0" })
+        (digit == 1).ifTrue(() => { result = "1" })
+        (digit == 2).ifTrue(() => { result = "2" })
+        (digit == 3).ifTrue(() => { result = "3" })
+        (digit == 4).ifTrue(() => { result = "4" })
+        (digit == 5).ifTrue(() => { result = "5" })
+        (digit == 6).ifTrue(() => { result = "6" })
+        (digit == 7).ifTrue(() => { result = "7" })
+        (digit == 8).ifTrue(() => { result = "8" })
+        (digit == 9).ifTrue(() => { result = "9" })
+
+        (result === null).ifTrue(() => {
+            fail()
+        })
+
+        result
+    }
+
+    octetText: (value) => {
+        hundreds: value.div(100)
+        rest: value.mod(100)
+        tens: rest.div(10)
+        ones: rest.mod(10)
+
+        result: ""
+
+        (hundreds > 0).ifTrue(() => {
+            result = digitText(hundreds) + digitText(tens) + digitText(ones)
+        })
+
+        (hundreds > 0).ifFalse(() => {
+            (tens > 0).ifTrue(() => {
+                result = digitText(tens) + digitText(ones)
+            })
+            (tens > 0).ifFalse(() => {
+                result = digitText(ones)
+            })
+        })
+
+        result
+    }
+
+    bits: address.bits
+
+    a: bits.div(16777216)
+    remainder: bits.mod(16777216)
+
+    b: remainder.div(65536)
+    remainder = remainder.mod(65536)
+
+    c: remainder.div(256)
+    d: remainder.mod(256)
+
+    octetText(a) + "." + octetText(b) + "." + octetText(c) + "." + octetText(d)
+}

@@ -646,3 +646,38 @@ because slot-name enumeration is not currently guest-visible; that harness does
 not implement or compute networking behavior. The current adaptive publication
 gate validates the complete executable delta. `LIB005-A2 — strict IPv4 parse/format` is the
 next dependency-ordered implementation slice.
+
+### LIB005-A2 — implementation CLOSED
+
+Published implementation version: `0.2.335-SNAPSHOT`
+Closure evidence: `SAME_COMMIT`
+Live work item: GitHub Issue `#277`
+
+A2 extends the existing ordinary-Protos `std:network/IpAddresses` module with
+the approved IPv4 `parse(text)` and `format(address)` selectors while leaving
+the A1 `v4` / `v6` constructors unchanged.
+
+Parsing exercises the strict String receiver domain, rejects accepted-shape
+lengths outside `7..15`, scans the semantic String directly, classifies only
+ASCII `0` through `9` plus the literal `.` separator, accumulates each component
+with exact ordinary Integer arithmetic, rejects empty/extra components,
+leading-zero ambiguity, components above `255`, signs, whitespace, Unicode
+digits, legacy spellings, hostnames and IPv6 text, then delegates successful
+construction to the already-published `v4(a,b,c,d)` helper.
+
+Formatting first requires `IpAddress.recognizes(address)` and version `4`.
+It decomposes the canonical Core `bits` value into four octets with ordinary
+`div` / `mod`, emits ASCII decimal digits without unnecessary leading zeros and
+joins the components with `.`. A2 intentionally rejects version-6 addresses;
+the already-approved LIB005-B slice owns adding IPv6 parse/format behavior.
+
+All parser state is call-local. The implementation uses no regex/backtracking
+engine, cache, global mutable state, Encoding/Bytes staging, DNS, Resolver,
+Network authority, Future, host I/O or production Java/native bridge. Focused
+real-`std:` conformance covers positive boundaries, canonical output, semantic
+round-trip, malformed input and wrong-domain rejection. The Java harness remains
+test-only and observes the exact local module surface because guest slot-name
+enumeration is not currently available.
+
+`LIB005-B — IPv6 parse/format` is the next dependency-ordered implementation
+slice.

@@ -1,0 +1,72 @@
+// THE LICENSED WORK IS PROVIDED UNDER THE TERMS OF THE ADAPTIVE PUBLIC LICENSE
+// ("LICENSE") AS FIRST COMPLETED BY: Guillermo Adrián Molina. ANY USE, PUBLIC
+// DISPLAY, PUBLIC PERFORMANCE, REPRODUCTION OR DISTRIBUTION OF, OR PREPARATION OF
+// DERIVATIVE WORKS BASED ON, THE LICENSED WORK CONSTITUTES RECIPIENT'S ACCEPTANCE
+// OF THIS LICENSE AND ITS TERMS, WHETHER OR NOT SUCH RECIPIENT READS THE TERMS OF
+// THE LICENSE. "LICENSED WORK" AND "RECIPIENT" ARE DEFINED IN THE LICENSE. A COPY
+// OF THE LICENSE IS LOCATED IN THE TEXT FILE ENTITLED "LICENSE.TXT" ACCOMPANYING
+// THE CONTENTS OF THIS FILE. IF A COPY OF THE LICENSE DOES NOT ACCOMPANY THIS
+// FILE, A COPY OF THE LICENSE MAY ALSO BE OBTAINED AT THE FOLLOWING WEB SITE:
+// https://github.com/guillermomolina/protos
+//
+// Software distributed under the License is distributed on an "AS IS" basis,
+// WITHOUT WARRANTY OF ANY KIND, either express or implied. See the License for
+// the specific language governing rights and limitations under the License.
+IpAddresses: import("std:network/IpAddresses")
+
+require: (condition) => {
+    condition.ifFalse(() => {
+        Error().signal()
+    })
+}
+
+reject: (body) => {
+    Error.handle(
+        () => {
+            body()
+            false
+        },
+        (error) => {
+            true
+        }
+    )
+}
+
+// Shape/cardinality.
+require(reject(() => { IpAddresses.parse("") }))
+require(reject(() => { IpAddresses.parse("1.2.3") }))
+require(reject(() => { IpAddresses.parse("127.1") }))
+require(reject(() => { IpAddresses.parse("1.2.3.4.5") }))
+require(reject(() => { IpAddresses.parse(".1.2.3") }))
+require(reject(() => { IpAddresses.parse("1..2.3") }))
+require(reject(() => { IpAddresses.parse("1.2.3.") }))
+
+// Strict decimal spelling and range.
+require(reject(() => { IpAddresses.parse("01.2.3.4") }))
+require(reject(() => { IpAddresses.parse("1.02.3.4") }))
+require(reject(() => { IpAddresses.parse("1.2.003.4") }))
+require(reject(() => { IpAddresses.parse("256.0.0.1") }))
+require(reject(() => { IpAddresses.parse("1.2.3.999") }))
+require(reject(() => { IpAddresses.parse("-1.2.3.4") }))
+require(reject(() => { IpAddresses.parse("+1.2.3.4") }))
+require(reject(() => { IpAddresses.parse("0x7f.0.0.1") }))
+require(reject(() => { IpAddresses.parse("0300.0.0.1") }))
+
+// No whitespace, Unicode-digit substitution, hostname, or IPv6 interpretation.
+require(reject(() => { IpAddresses.parse(" 1.2.3.4") }))
+require(reject(() => { IpAddresses.parse("1.2.3.4 ") }))
+require(reject(() => { IpAddresses.parse("١.2.3.4") }))
+require(reject(() => { IpAddresses.parse("example.com") }))
+require(reject(() => { IpAddresses.parse("2001:db8::1") }))
+
+// Exact String receiver domain.
+require(reject(() => { IpAddresses.parse(1234) }))
+require(reject(() => { IpAddresses.parse({}) }))
+require(reject(() => { IpAddresses.parse(null) }))
+
+// A2 formatting is deliberately IPv4-only; LIB005-B owns IPv6 formatting.
+require(reject(() => { IpAddresses.format(IpAddress(6, 1)) }))
+require(reject(() => { IpAddresses.format({}) }))
+require(reject(() => { IpAddresses.format(1234) }))
+
+true

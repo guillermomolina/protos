@@ -31,9 +31,9 @@ import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 /**
- * LIB005-A1 harness. Protos fixtures own observable constructor behavior. Java
- * additionally inspects the imported module's exact local-slot surface because
- * slot-name enumeration is not currently guest-visible.
+ * LIB005 IpAddresses harness. Protos fixtures own observable constructor and
+ * textual IPv4 behavior. Java only supplies real Core/std bootstrap plus exact
+ * local export-surface observation while guest slot-name enumeration is absent.
  */
 final class ProtosNetworkingIpAddressesModuleTest {
     private static final Path CORE = Path.of("protos", "lib", "core");
@@ -42,7 +42,7 @@ final class ProtosNetworkingIpAddressesModuleTest {
             Path.of("protos", "tests", "library", "network", "ip-addresses");
 
     @Test
-    void importedModuleExportsExactlyApprovedA1Surface() throws Exception {
+    void importedModuleExportsExactlyApprovedA2Surface() throws Exception {
         ProtosStandardLibraryModuleResolver resolver =
                 new ProtosStandardLibraryModuleResolver(STANDARD_LIBRARY);
         ProtosPrelude prelude = new ProtosCoreBootstrap().bootstrap(CORE, resolver);
@@ -53,7 +53,9 @@ final class ProtosNetworkingIpAddressesModuleTest {
                         .call(prelude.newModuleActivation());
         ProtosObjectValue module = assertInstanceOf(ProtosObjectValue.class, imported);
 
-        assertEquals(Set.of("v4", "v6"), module.localSlotsSnapshot().keySet());
+        assertEquals(
+                Set.of("v4", "v6", "parse", "format"),
+                module.localSlotsSnapshot().keySet());
     }
 
     @Test
@@ -74,6 +76,16 @@ final class ProtosNetworkingIpAddressesModuleTest {
     @Test
     void constructorArityFailsClosed() throws Exception {
         assertFixture("arity-rejection.protos");
+    }
+
+    @Test
+    void strictIpv4ParsingFormattingAndRoundTripConform() throws Exception {
+        assertFixture("ipv4-parse-format.protos");
+    }
+
+    @Test
+    void malformedIpv4AndWrongDomainsFailClosed() throws Exception {
+        assertFixture("ipv4-invalid.protos");
     }
 
     private static void assertFixture(String fixture) throws Exception {
