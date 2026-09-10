@@ -1,5 +1,15 @@
 ## 0.2.348-SNAPSHOT
 
+- Close `PERF001 — Core v0.1 baseline benchmark suite` after PERF001-F retained
+  Future/P/Actor reference evidence and PERF001-G final reproducibility/reporting.
+  Record F evidence `guillermomolina/protos-benchmarks@f34e37da11f209aa9f9ea84465822c3362fc4da0` from H3 harness
+  `b8a9eeca85c241f544512a02a6fa29d935f240ef` and G2 evidence `guillermomolina/protos-benchmarks@45493b49872860f5d29ad3d3a624e0af040c743b` from exact
+  G1 harness `2fad6741b429c3e8d69683806e3aadc64f0812cf`. The final bounded exact-pin replay passes D 44/44, E 18/18
+  and F 12/12 non-retained 2/2/2 while preserving D/E/F retained timing evidence
+  as the sole timing authority; no timing-drift threshold, replacement timing
+  corpus, specification, runtime, implementation version, public API, license
+  term or semantic/platform decision changes.
+
 - Close `GITHUB008 — Release milestone governance` (GitHub #320) with a narrow
   release-only Milestone contract. Reserve GitHub Milestones for concrete
   project-owner-selected release targets rather than families, implementation
