@@ -63,6 +63,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class ProtosI026FDapBehaviorTest {
     private static final Duration TIMEOUT = Duration.ofSeconds(8);
+    private static final String DAP_CLIENT_CONNECTION_THREAD_NAME =
+            "DAP client connection thread";
     private static final String SOURCE_TEXT = "text\nnumber\nflag\n";
 
     @Test
@@ -76,6 +78,8 @@ final class ProtosI026FDapBehaviorTest {
         Context context = null;
         DapClient client = null;
         boolean disconnected = false;
+        Set<Thread> dapClientConnectionThreadsBefore = dapClientConnectionThreads();
+        Thread dapClientConnectionThread = null;
 
         try {
             context =
@@ -88,6 +92,8 @@ final class ProtosI026FDapBehaviorTest {
 
             client = DapClient.connect(port, TIMEOUT);
             initializeAndAttach(client);
+            dapClientConnectionThread =
+                    newDapClientConnectionThread(dapClientConnectionThreadsBefore);
 
             Source source =
                     Source.newBuilder(
@@ -290,6 +296,9 @@ final class ProtosI026FDapBehaviorTest {
             if (guestFuture != null && !guestFuture.isDone()) {
                 guestFuture.cancel(true);
             }
+            if (dapClientConnectionThread != null) {
+                awaitDapClientConnectionThreadTermination(dapClientConnectionThread);
+            }
             if (context != null) {
                 context.close();
             }
@@ -299,6 +308,33 @@ final class ProtosI026FDapBehaviorTest {
                     "DAP behavior test executor must terminate");
             Files.deleteIfExists(sourceFile);
         }
+    }
+
+    private static Set<Thread> dapClientConnectionThreads() {
+        return Thread.getAllStackTraces().keySet().stream()
+                .filter(Thread::isAlive)
+                .filter(thread -> DAP_CLIENT_CONNECTION_THREAD_NAME.equals(thread.getName()))
+                .collect(Collectors.toSet());
+    }
+
+    private static Thread newDapClientConnectionThread(Set<Thread> threadsBefore) {
+        List<Thread> candidates =
+                dapClientConnectionThreads().stream()
+                        .filter(thread -> !threadsBefore.contains(thread))
+                        .collect(Collectors.toList());
+        assertEquals(
+                1,
+                candidates.size(),
+                "exactly one new GraalVM DAP client connection thread must belong to this test");
+        return candidates.get(0);
+    }
+
+    private static void awaitDapClientConnectionThreadTermination(Thread thread)
+            throws InterruptedException {
+        thread.join(TIMEOUT.toMillis());
+        assertFalse(
+                thread.isAlive(),
+                "GraalVM DAP client connection thread must terminate before Context.close()");
     }
 
     private static void initializeAndAttach(DapClient client) throws IOException {
