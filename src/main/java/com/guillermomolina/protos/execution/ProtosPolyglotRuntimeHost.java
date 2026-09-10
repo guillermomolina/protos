@@ -16,7 +16,10 @@
  */
 package com.guillermomolina.protos.execution;
 
+import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosProcessRuntime;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Objects;
@@ -35,6 +38,7 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
     private final Engine engine;
     private final AtomicInteger activeProcessContexts = new AtomicInteger();
     private final AtomicReference<Throwable> contextCloseFailure = new AtomicReference<>();
+    private ProtosNioNetworkHost networkHost;
     private boolean closed;
 
     private ProtosPolyglotRuntimeHost(Engine engine) {
@@ -89,6 +93,31 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
         }
     }
 
+    /**
+     * Explicitly provisions one host Network capability for the supplied Prelude.
+     *
+     * <p>This operation does not install the capability into a Process or module. The caller owns
+     * the existing B3 grant decision. The underlying NIO plane is lazy and shared by every
+     * capability explicitly provisioned from this RuntimeHost.
+     */
+    public synchronized ProtosNetworkCapabilityValue provisionHostNetwork(ProtosPrelude prelude)
+            throws IOException {
+        Objects.requireNonNull(prelude, "prelude");
+        if (closed) {
+            throw new IllegalStateException("Polyglot runtime host is closed");
+        }
+        if (networkHost == null) {
+            networkHost = new ProtosNioNetworkHost();
+        }
+        return networkHost.provision(prelude);
+    }
+
+    boolean networkHostInitializedForTesting() {
+        synchronized (this) {
+            return networkHost != null;
+        }
+    }
+
     void recordContextCloseFailure(Throwable failure) {
         contextCloseFailure.compareAndSet(null, Objects.requireNonNull(failure, "failure"));
     }
@@ -111,6 +140,9 @@ public final class ProtosPolyglotRuntimeHost implements AutoCloseable {
                     "Polyglot runtime host cannot close while Process Contexts are active");
         }
         Throwable failure = contextCloseFailure.get();
+        if (networkHost != null) {
+            networkHost.close();
+        }
         if (failure != null) {
             throw new IllegalStateException("A Process Context failed to close", failure);
         }

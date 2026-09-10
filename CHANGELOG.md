@@ -1,3 +1,18 @@
+## 0.2.323-SNAPSHOT
+
+- Close `I028-E5 — production Network provisioning/wiring + integrated E closure`
+  under D047/D052 and ratified PLAT002/PLAT003/PLAT006/PLAT007/PLAT009. Add one
+  lazy RuntimeHost-owned NIO Network plane and an explicit host provisioning
+  operation that returns the existing B3 represented Network capability without
+  automatically granting Network to any CLI, Process or tool entry. Resolve IPv6
+  scope and capture PLAT007 listen addresses inside host Network authority, share
+  the bounded NIO substrate across explicitly provisioned capabilities, and release
+  all registered network resources when the RuntimeHost closes. Add integrated
+  production-path listen/connect/accept/duplex and teardown evidence, close E and
+  release I028-F. Specification, public Protos API, native boundary, CLI grant
+  policy and poller cardinality/sharding semantics are unchanged. Implementation
+  version becomes `0.2.323-SNAPSHOT`.
+
 ## 0.2.322-SNAPSHOT
 
 - Close `AUD003-B2 — unary spelling audit` / GitHub #115. Complete the

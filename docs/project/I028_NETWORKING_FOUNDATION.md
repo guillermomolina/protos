@@ -62,7 +62,7 @@ READY to implement `connectTcp`; I028-D will consume the same topology for liste
   - **D3 — `accept()` + concurrent pending accepts + cancellation/late custody — CLOSED (`0.2.294-SNAPSHOT` / publication commit):** install one shared `accept` selector; admit each call as an independent operation on the D2 lifecycle, support multiple pending Futures without a semantic FIFO/owner-thread rule, reuse pre-commit/Actor cancellation and close cutover, materialize fresh accepted TcpConnections only from recognized logical endpoint snapshots, and explicitly release late/duplicate/unmaterializable resources. No `listenTcp` or production backend yet; native boundary becomes 134/35.
   - **D4 — `Network.listenTcp(localRequest)` + exact request validation/capture + listener acquisition — CLOSED (`0.2.298-SNAPSHOT` / publication commit):** install the second shared Network acquisition selector; validate/capture exactly local `ipVersion`/`address`/`port` before backend effect, preserve canonical-null address/port request semantics, reuse ordinary Future cancellation/commitment and late-resource custody, and materialize one fresh accept-enabled D1-D3 TcpListener with its acquired non-zero port. No production backend or host wildcard/ephemeral convention is selected; native boundary becomes 135/35.
   - **D5 — integrated D conformance + closure — CLOSED (`0.2.300-SNAPSHOT` / publication commit; implementation version unchanged):** an actual D4-acquired listener retains the ordinary D1 family, D2 observation/close lifecycle, D3 concurrent accept/custody and Actor/P confinement; accepted resources remain the existing C-family TcpConnections. Native-boundary evidence remains 135/35. I028-D is CLOSED.
-- **E — production backend portability/scalability — IN_PROGRESS:** PLAT006/PLAT007/PLAT009 are RATIFIED. E1/E2/E3/E4 are CLOSED; E5 is READY.
+- **E — production backend portability/scalability — CLOSED:** PLAT006/PLAT007/PLAT009 are RATIFIED and E1-E5 are CLOSED; I028-F is READY.
   - **E1 — bounded JDK-NIO poller primitive — CLOSED (`0.2.305-SNAPSHOT` / `SAME_COMMIT`):** internal Selector-owning daemon platform thread, concurrent control queue + wakeup, readiness dispatch, poller-thread-only registration/interest mutation, isolated callback failure and idempotent registered-channel release. No TCP operation, Network provisioning, poller-count/sharding policy or native transport.
   - **E2 — NIO endpoint bridge + `connectTcp` acquisition — CLOSED (`0.2.306-SNAPSHOT` / `SAME_COMMIT`):** decode recognized numeric endpoints without DNS, preserve exact IPv4/IPv6 family and Network-owned IPv6 scope, perform non-blocking `SocketChannel` immediate/`OP_CONNECT` acquisition, materialize the actual recognized local endpoint, and hand opaque channel custody through the existing C4 commit/cancel/late-release contract. No duplex byte I/O or production Network wiring yet.
   - **E3 — production TcpConnection duplex backend — CLOSED under PLAT009:** E3A/E3B/E3C/E3D are CLOSED with retained integrated read/write/half-close/whole-close evidence.
@@ -71,8 +71,8 @@ READY to implement `connectTcp`; I028-D will consume the same topology for liste
     - **E3C — NIO write lane + PLAT009 partial-write arbitration — CLOSED (`0.2.314-SNAPSHOT` / `SAME_COMMIT`):** one poller-owned ordered write request, immediate/`OP_WRITE` partial progress, first-attempt zero/positive arbitration through the E3A gate, hidden contributed-prefix failure accounting, pre-first-byte cancellation retirement and independent preservation of `OP_READ`.
     - **E3D — directional shutdown/close + integrated E3 closure — CLOSED (`0.2.315-SNAPSHOT` / `SAME_COMMIT`):** map the already-standardized directional cutovers to poller-owned `SocketChannel.shutdownInput()` / `shutdownOutput()`, retain whole-resource close as the stronger single physical-custody release, correct generic read admission so whole close dominates a prior local read shutdown, and close E3 with real loopback lifecycle evidence.
   - **E4 — production TcpListener/accept + PLAT007 composite IPv6-only backend — CLOSED (`0.2.318-SNAPSHOT` / `SAME_COMMIT`):** implement asynchronous NIO listener acquisition, multiple independently pending accepts, accepted E3 TcpConnection handoff, exact IPv4/IPv6 family preservation, whole-listener close and the ratified all-or-nothing concrete-authorized-address IPv6 composite baseline.
-  - **E5 — production Network provisioning/wiring + integrated E closure — READY:** provision the production authority target through applicable host entry points, retain backend lifecycle/custody evidence and close E before final I028-F conformance.
-- **F — cross-slice conformance/native-boundary closure:** cancellation races,
+  - **E5 — production Network provisioning/wiring + integrated E closure — CLOSED (`0.2.323-SNAPSHOT` / `SAME_COMMIT`):** add lazy RuntimeHost-owned NIO Network provisioning behind the existing explicit B3 host-grant boundary, retain host-side IPv6 scope/address authority, integrated listen/connect/accept/duplex and RuntimeHost teardown evidence, close E and release F without selecting an automatic CLI grant policy.
+- **F — cross-slice conformance/native-boundary closure — READY:** cancellation races,
   late custody, multiple-accept scale evidence and Actor/P non-transferability.
 
 ## I028-E production-backend checkpoint — RELEASED by PLAT006
@@ -131,6 +131,46 @@ enumeration caching, candidate-port retry policy, poller sharding/affinity,
 dynamic rebinding and native-backend mechanism remain deliberately deferred. If
 implementation exposes a new substantive durable choice, stop that slice and
 cross the explicit approval gate before proceeding.
+
+## I028-E5 production Network provisioning and E closure
+
+Closed at implementation version `0.2.323-SNAPSHOT` under D047/D052 and ratified
+PLAT002/PLAT003/PLAT006/PLAT007/PLAT009. No new language semantics, Network grant
+policy or durable backend architecture is selected.
+
+`ProtosPolyglotRuntimeHost` now owns a lazy production NIO Network plane. The
+plane is created only when an embedding explicitly calls host Network provisioning;
+ordinary RuntimeHosts that never request Network create no networking poller or
+network authority. Each provision call returns the existing represented
+`ProtosNetworkCapabilityValue` for the supplied Prelude and reuses the same host
+I/O plane. B3 remains authoritative for whether that already-provisioned
+capability is actually granted to a RootActor/standalone initial activation.
+This slice therefore does not auto-grant Network to REPL, `-e`, file execution,
+`run`, bundled tools, imported modules or child Actors.
+
+The current host plane contains one NIO poller as the initial operational
+cardinality, not a Protos identity or permanent sharding decision. PLAT006 still
+permits a bounded poller group, sharding, affinity/migration or a different
+readiness/completion/native backend later without changing the provisioning
+contract. RuntimeHost close stops that plane and releases every registered
+connection/listener channel through the existing E1-E4 cleanup callbacks.
+
+IPv6 host interpretation also remains below the Network authority boundary.
+Global/non-link-local numeric addresses preserve their exact 128 bits without an
+invented interface identity. Link-local scope is accepted only when an exact
+assigned scoped address is unique or exactly one active IPv6-link-local interface
+can supply the scope; ambiguity fails closed. For PLAT007 `address: null`
+listeners, the provider captures the concrete non-wildcard, non-multicast IPv6
+addresses on active host interfaces at acquisition time. No interface cache,
+dynamic rebinding or portable interface identity is introduced.
+
+Integrated production-path evidence starts with the explicit RuntimeHost
+provisioner, passes that exact B3 capability through standalone bootstrap, acquires
+an IPv4-null listener, composes concurrent `accept()` with `connectTcp`, transfers
+bytes over the resulting E3 connections, closes the logical resources, and proves
+RuntimeHost teardown also closes an otherwise-unclosed listener backend. Existing
+E1-E4 tests retain cancellation, late-custody, partial-write, half-close,
+multi-accept and IPv6-composite evidence. I028-E is CLOSED and I028-F is READY.
 
 ## I028-E4 production TcpListener/accept backend
 
@@ -196,7 +236,7 @@ and whole close after read half-close with lifecycle failure for subsequent read
 and writes. Retained E3B/E3C evidence continues to cover independent readiness,
 short/EOF/cancelled reads, partial writes and first-effect arbitration.
 
-I028-E3 is CLOSED. E4 is READY; E5 remains blocked only by E4.
+I028-E3 is CLOSED. E4 subsequently closed; E5 now closes E and releases F.
 
 ## I028-E3C NIO write lane
 
