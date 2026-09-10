@@ -22,10 +22,7 @@ multiline: """
       world
     """
 
-(single == double).and() {
-    (double == triple).and() {
-        (emptyTriple == "").and() {
-            multiline == "hello\n  world"
-        }
-    }
-}
+(single == double) &&
+    (double == triple) &&
+    (emptyTriple == "") &&
+    (multiline == "hello\n  world")
