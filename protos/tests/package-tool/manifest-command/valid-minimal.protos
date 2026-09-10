@@ -16,11 +16,11 @@
 Command: import("self:ManifestCommand")
 makeWriter: () => {
     state: Map()
-    state.atPut("lines", Array())
+    state["lines"] = Array()
     {
         state: state
         writeLine: (text) => {
-            state.atPut("lines", Array(...state.at("lines"), text))
+            state["lines"] = Array(...state["lines"], text)
             { value: () => null }
         }
     }
@@ -29,12 +29,12 @@ outWriter: makeWriter()
 errWriter: makeWriter()
 
 model: Command.run(filesystem, outWriter, errWriter)
-outLines: outWriter.state.at("lines")
-errLines: errWriter.state.at("lines")
+outLines: outWriter.state["lines"]
+errLines: errWriter.state["lines"]
 ok: model.package.id == "pkg"
 (model.package.version == "1.0.0").ifFalse(() => { ok = false })
 (model.dependencies.size() == 0).ifFalse(() => { ok = false })
 (outLines.size() == 1).ifFalse(() => { ok = false })
-(outLines.at(0) == "protos.toml: valid schema v1").ifFalse(() => { ok = false })
+(outLines[0] == "protos.toml: valid schema v1").ifFalse(() => { ok = false })
 (errLines.size() == 0).ifFalse(() => { ok = false })
 ok

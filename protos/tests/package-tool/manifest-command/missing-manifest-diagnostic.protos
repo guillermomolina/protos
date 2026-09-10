@@ -16,11 +16,11 @@
 Command: import("self:ManifestCommand")
 makeWriter: () => {
     state: Map()
-    state.atPut("lines", Array())
+    state["lines"] = Array()
     {
         state: state
         writeLine: (text) => {
-            state.atPut("lines", Array(...state.at("lines"), text))
+            state["lines"] = Array(...state["lines"], text)
             { value: () => null }
         }
     }
@@ -32,12 +32,12 @@ Error.handle(() => {
     Command.run(filesystem, outWriter, errWriter)
     false
 }, (error) => {
-    outLines: outWriter.state.at("lines")
-    errLines: errWriter.state.at("lines")
+    outLines: outWriter.state["lines"]
+    errLines: errWriter.state["lines"]
     ok: outLines.size() == 0
     (errLines.size() == 1).ifFalse(() => { ok = false })
     (errLines.size() == 1).ifTrue(() => {
-        (errLines.at(0) == "protos.toml: cannot read as UTF-8").ifFalse(() => { ok = false })
+        (errLines[0] == "protos.toml: cannot read as UTF-8").ifFalse(() => { ok = false })
     })
     ok
 })
