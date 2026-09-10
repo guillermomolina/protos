@@ -147,6 +147,49 @@ def workflow_container_image(path):
     )
 
 
+def workflow_job_text(path, job_id):
+    # type: (Path, str) -> str
+    text = read_text(path)
+    lines = text.splitlines()
+    target = "  %s:" % job_id
+    start = None
+    for index, line in enumerate(lines):
+        if line == target:
+            start = index + 1
+            break
+    if start is None:
+        return ""
+
+    body = []
+    for line in lines[start:]:
+        if re.match(r"^  [A-Za-z0-9_-]+:[ \t]*(?:#.*)?$", line):
+            break
+        body.append(line)
+    if not body:
+        return ""
+    return "\n".join(body) + "\n"
+
+
+def workflow_job_scalar(path, job_id, key):
+    # type: (Path, str, str) -> str
+    text = workflow_job_text(path, job_id)
+    return first_match(
+        text,
+        r"^[ \t]*%s:[ \t]*[\"']?([^\"'\n#]+)" % re.escape(key),
+        "%s.%s" % (job_id, key),
+    )
+
+
+def workflow_job_container_image(path, job_id):
+    # type: (Path, str) -> str
+    text = workflow_job_text(path, job_id)
+    return first_match(
+        text,
+        r"^[ \t]*image:[ \t]*[\"']?([^\"'\n#]+)",
+        "%s.container image" % job_id,
+    )
+
+
 def audit_bindings(root, contract):
     # type: (Path, Dict[str, object]) -> List[Tuple[str, str, str]]
     graal = contract["graalvm"]
@@ -179,17 +222,16 @@ def audit_bindings(root, contract):
         first_match(docker, r"^ARG[ \t]+MAVEN_VERSION=([^ \t\n]+)", "MAVEN_VERSION"),
     ))
 
-    tests_workflow = root / ".github" / "workflows" / "tests.yml"
-    rows.append(("ci.tests.image", str(graal["container_image"]), workflow_container_image(tests_workflow)))
-    rows.append(("ci.tests.java_feature", feature, workflow_scalar(tests_workflow, "PROTOS_PRIMARY_JDK_FEATURE")))
-    rows.append(("ci.tests.java_version", jdk_version, workflow_scalar(tests_workflow, "PROTOS_PRIMARY_JDK_VERSION")))
-    rows.append(("ci.tests.maven", maven, workflow_scalar(tests_workflow, "PROTOS_MAVEN_VERSION")))
+    ci_workflow = root / ".github" / "workflows" / "tests.yml"
+    rows.append(("ci.tests.image", str(graal["container_image"]), workflow_job_container_image(ci_workflow, "test")))
+    rows.append(("ci.tests.java_feature", feature, workflow_job_scalar(ci_workflow, "test", "PROTOS_PRIMARY_JDK_FEATURE")))
+    rows.append(("ci.tests.java_version", jdk_version, workflow_job_scalar(ci_workflow, "test", "PROTOS_PRIMARY_JDK_VERSION")))
+    rows.append(("ci.tests.maven", maven, workflow_job_scalar(ci_workflow, "test", "PROTOS_MAVEN_VERSION")))
 
-    distribution_workflow = root / ".github" / "workflows" / "distribution.yml"
-    rows.append(("ci.distribution.image", str(graal["container_image"]), workflow_container_image(distribution_workflow)))
-    rows.append(("ci.distribution.java_feature", feature, workflow_scalar(distribution_workflow, "PROTOS_PRIMARY_JDK_FEATURE")))
-    rows.append(("ci.distribution.java_version", jdk_version, workflow_scalar(distribution_workflow, "PROTOS_PRIMARY_JDK_VERSION")))
-    rows.append(("ci.distribution.maven", maven, workflow_scalar(distribution_workflow, "PROTOS_MAVEN_VERSION")))
+    rows.append(("ci.distribution.image", str(graal["container_image"]), workflow_job_container_image(ci_workflow, "distribution")))
+    rows.append(("ci.distribution.java_feature", feature, workflow_job_scalar(ci_workflow, "distribution", "PROTOS_PRIMARY_JDK_FEATURE")))
+    rows.append(("ci.distribution.java_version", jdk_version, workflow_job_scalar(ci_workflow, "distribution", "PROTOS_PRIMARY_JDK_VERSION")))
+    rows.append(("ci.distribution.maven", maven, workflow_job_scalar(ci_workflow, "distribution", "PROTOS_MAVEN_VERSION")))
 
     rows.append((
         "dist.runtime_pom.graal_components",
