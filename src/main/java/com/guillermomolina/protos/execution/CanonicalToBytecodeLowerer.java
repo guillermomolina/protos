@@ -21,6 +21,7 @@ import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosNumberLiteral;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
+import com.guillermomolina.protos.semantic.ast.CanonicalCall;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
@@ -37,9 +38,11 @@ import java.util.Objects;
 /**
  * Parallel canonical-to-Bytecode lowering seam for the PERF006-B migration.
  *
- * <p>PERF006-B2A extends the B1 subset from literals to lexical
- * {@link CanonicalLookup} while retaining top-level/body
- * {@link CanonicalSequence}. The ordinary {@link ProtosSourceCompiler} remains
+ * <p>PERF006-B2B extends the B2A subset with zero-argument
+ * source-level {@link CanonicalCall} whose receiver is a lexical
+ * {@link CanonicalLookup}. Calls compose child Bytecode continuations through
+ * their caller rather than treating a child continuation as a guest value.
+ * The ordinary {@link ProtosSourceCompiler} remains
  * on the established AST lowerer
  * until later PERF006-B slices have migrated calls, suspension and control
  * semantics coherently.</p>
@@ -87,6 +90,27 @@ final class CanonicalToBytecodeLowerer {
                             } else {
                                 BytecodeLocal result =
                                         builder.createLocal("sequenceResult", null);
+                                boolean hasCall =
+                                        sequence.expressions().stream()
+                                                .anyMatch(CanonicalCall.class::isInstance);
+                                BytecodeLocal preparedCall =
+                                        hasCall
+                                                ? builder.createLocal(
+                                                        "preparedClosureCall",
+                                                        null)
+                                                : null;
+                                BytecodeLocal childResult =
+                                        hasCall
+                                                ? builder.createLocal(
+                                                        "childResult",
+                                                        null)
+                                                : null;
+                                BytecodeLocal resumeValue =
+                                        hasCall
+                                                ? builder.createLocal(
+                                                        "resumeValue",
+                                                        null)
+                                                : null;
 
                                 for (CanonicalExpression expression :
                                         sequence.expressions()) {
@@ -98,9 +122,19 @@ final class CanonicalToBytecodeLowerer {
                                     builder.beginTag(
                                             StandardTags.StatementTag.class);
 
-                                    builder.beginStoreLocal(result);
-                                    emitExpression(builder, expression);
-                                    builder.endStoreLocal();
+                                    if (expression instanceof CanonicalCall call) {
+                                        emitComposedCall(
+                                                builder,
+                                                call,
+                                                result,
+                                                preparedCall,
+                                                childResult,
+                                                resumeValue);
+                                    } else {
+                                        builder.beginStoreLocal(result);
+                                        emitExpression(builder, expression);
+                                        builder.endStoreLocal();
+                                    }
 
                                     builder.endTag(
                                             StandardTags.StatementTag.class);
@@ -122,14 +156,32 @@ final class CanonicalToBytecodeLowerer {
 
     private void validateSupported(CanonicalSequence sequence) {
         for (CanonicalExpression expression : sequence.expressions()) {
-            if (!(expression instanceof CanonicalLiteral)
-                    && !(expression instanceof CanonicalLookup)) {
-                throw new UnsupportedOperationException(
-                        "PERF006-B2A Bytecode lowerer does not yet support "
-                                + expression.getClass().getSimpleName());
-            }
-            validateSpan(expression.span());
+            validateSupportedExpression(expression);
         }
+    }
+
+    private void validateSupportedExpression(
+            CanonicalExpression expression) {
+        validateSpan(expression.span());
+        if (expression instanceof CanonicalLiteral
+                || expression instanceof CanonicalLookup) {
+            return;
+        }
+        if (expression instanceof CanonicalCall call) {
+            if (!call.arguments().isEmpty()) {
+                throw new UnsupportedOperationException(
+                        "PERF006-B2B Bytecode Closure dispatch supports only zero-argument calls");
+            }
+            if (!(call.receiver() instanceof CanonicalLookup)) {
+                throw new UnsupportedOperationException(
+                        "PERF006-B2B Bytecode Closure dispatch requires a lexical lookup receiver");
+            }
+            validateSupportedExpression(call.receiver());
+            return;
+        }
+        throw new UnsupportedOperationException(
+                "PERF006-B2B Bytecode lowerer does not yet support "
+                        + expression.getClass().getSimpleName());
     }
 
     private void validateSpan(SourceSpan span) {
@@ -153,15 +205,94 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalLookup lookup) {
-            builder.beginLookup();
-            builder.emitLoadArgument(0);
-            builder.emitLoadConstant(lookup.name());
-            builder.endLookup();
+            emitLookup(builder, lookup);
             return;
         }
         throw new AssertionError(
-                "validated Bytecode expression became unsupported: "
+                "validated value-shaped Bytecode expression became unsupported: "
                         + expression.getClass().getSimpleName());
+    }
+
+    private static void emitLookup(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalLookup lookup) {
+        builder.beginLookup();
+        builder.emitLoadArgument(0);
+        builder.emitLoadConstant(lookup.name());
+        builder.endLookup();
+    }
+
+    private static void emitComposedCall(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalCall call,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        if (result == null
+                || preparedCall == null
+                || childResult == null
+                || resumeValue == null) {
+            throw new AssertionError(
+                    "Bytecode call result/scratch locals were not allocated");
+        }
+
+        CanonicalLookup receiver =
+                (CanonicalLookup) call.receiver();
+
+        builder.beginTag(StandardTags.CallTag.class);
+
+        builder.beginStoreLocal(preparedCall);
+        builder.beginPrepareClosureCall();
+        emitLookup(builder, receiver);
+        builder.emitLoadArgument(0);
+        builder.endPrepareClosureCall();
+        builder.endStoreLocal();
+
+        builder.beginStoreLocal(childResult);
+        builder.beginEnterClosureCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endEnterClosureCall();
+        builder.endStoreLocal();
+
+        builder.beginWhile();
+
+        builder.beginIsContinuation();
+        builder.emitLoadLocal(childResult);
+        builder.endIsContinuation();
+
+        builder.beginBlock();
+
+        builder.beginStoreLocal(resumeValue);
+        builder.beginYield();
+        builder.emitLoadLocal(childResult);
+        builder.endYield();
+        builder.endStoreLocal();
+
+        builder.beginStoreLocal(childResult);
+        builder.beginResumeContinuation();
+        builder.emitLoadLocal(childResult);
+        builder.emitLoadLocal(resumeValue);
+        builder.endResumeContinuation();
+        builder.endStoreLocal();
+
+        builder.endBlock();
+        builder.endWhile();
+
+        /*
+         * A composed call is statement-shaped in the Bytecode builder: prepare,
+         * enter, yield/resume and finish are sibling operations. Only the final
+         * FinishClosureCall is value-producing, so only that operation occupies
+         * the StoreLocal child slot.
+         */
+        builder.beginStoreLocal(result);
+        builder.beginFinishClosureCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.emitLoadLocal(childResult);
+        builder.endFinishClosureCall();
+        builder.endStoreLocal();
+
+        builder.endTag(StandardTags.CallTag.class);
     }
 
     private static Object materialize(CanonicalLiteral literal) {

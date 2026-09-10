@@ -152,6 +152,11 @@ public final class ProtosClosureInvoker {
                             ? ProtosLanguageContext.current()
                                     .executionPlanForEnteredClosure(closure, template)
                             : template;
+            if (plan.isBytecodeBackendForRuntime()) {
+                throw new IllegalStateException(
+                        "Bytecode Closure plan requires composed Bytecode invocation "
+                                + "until PERF006-B2 normal dispatch cutover");
+            }
             plan.bind(activation);
             return plan.executeBody(activation);
         } catch (ProtosSignalException transfer) {

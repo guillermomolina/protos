@@ -19,7 +19,7 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
-import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.source.Source;
 import java.util.Objects;
 
@@ -33,16 +33,38 @@ import java.util.Objects;
  */
 final class ProtosBytecodeClosureExecutionPlan {
     private final CanonicalClosure definition;
+    private final ProtosLanguage language;
+    private final Source source;
     private final ProtosBytecodeRootNode bodyRoot;
-    private final CallTarget bodyTarget;
+    private final RootCallTarget bodyTarget;
 
     ProtosBytecodeClosureExecutionPlan(
             CanonicalClosure definition,
             ProtosLanguage language,
             Source source) {
-        this.definition = Objects.requireNonNull(definition, "definition");
-        Objects.requireNonNull(language, "language");
-        Objects.requireNonNull(source, "source");
+        this(
+                definition,
+                language,
+                source,
+                new CanonicalToBytecodeLowerer(
+                                Objects.requireNonNull(language, "language"),
+                                Objects.requireNonNull(source, "source"))
+                        .lowerRoot(
+                                Objects.requireNonNull(definition, "definition")
+                                        .body()));
+    }
+
+    ProtosBytecodeClosureExecutionPlan(
+            CanonicalClosure definition,
+            ProtosLanguage language,
+            Source source,
+            ProtosBytecodeRootNode bodyRoot) {
+        this.definition =
+                Objects.requireNonNull(definition, "definition");
+        this.language =
+                Objects.requireNonNull(language, "language");
+        this.source =
+                Objects.requireNonNull(source, "source");
 
         if (!definition.parameters().isEmpty()) {
             throw new UnsupportedOperationException(
@@ -50,8 +72,7 @@ final class ProtosBytecodeClosureExecutionPlan {
         }
 
         this.bodyRoot =
-                new CanonicalToBytecodeLowerer(language, source)
-                        .lowerRoot(definition.body());
+                Objects.requireNonNull(bodyRoot, "bodyRoot");
         this.bodyTarget = bodyRoot.getCallTarget();
     }
 
@@ -59,8 +80,38 @@ final class ProtosBytecodeClosureExecutionPlan {
         return definition;
     }
 
+    ProtosLanguage language() {
+        return language;
+    }
+
+    Source source() {
+        return source;
+    }
+
+    ProtosBytecodeClosureExecutionPlan rebuildForLanguage(
+            CanonicalClosure newDefinition,
+            ProtosLanguage newLanguage) {
+        return new ProtosBytecodeClosureExecutionPlan(
+                Objects.requireNonNull(newDefinition, "newDefinition"),
+                Objects.requireNonNull(newLanguage, "newLanguage"),
+                source);
+    }
+
     ProtosBytecodeRootNode bodyRootForTesting() {
         return bodyRoot;
+    }
+
+    RootCallTarget bodyTargetForComposition() {
+        return bodyTarget;
+    }
+
+    void bind(ProtosActivation activation) {
+        Objects.requireNonNull(activation, "activation");
+        if (activation.arguments().isEmpty()
+                || !activation.arguments().orElseThrow().indexedSnapshot().isEmpty()) {
+            throw new UnsupportedOperationException(
+                    "PERF006-B2B Bytecode Closure dispatch supports only zero arguments");
+        }
     }
 
     /**
@@ -68,7 +119,7 @@ final class ProtosBytecodeClosureExecutionPlan {
      * Protos AST root: frame argument 0 is the exact invocation activation.
      */
     Object executeBody(ProtosActivation activation) {
-        return bodyTarget.call(
-                Objects.requireNonNull(activation, "activation"));
+        bind(activation);
+        return bodyTarget.call(activation);
     }
 }

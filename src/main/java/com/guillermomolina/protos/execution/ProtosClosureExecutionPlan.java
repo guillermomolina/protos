@@ -20,6 +20,7 @@ package com.guillermomolina.protos.execution;
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.oracle.truffle.api.CallTarget;
+import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.source.Source;
 import java.util.Objects;
 import java.util.Optional;
@@ -28,6 +29,7 @@ public final class ProtosClosureExecutionPlan {
     private final ProtosRootFactory rootFactory;
     private final ProtosRootFactory.LazyCallTarget parameterBindingTarget;
     private final ProtosRootFactory.LazyCallTarget bodyTarget;
+    private final ProtosBytecodeClosureExecutionPlan bytecodePlan;
 
     public ProtosClosureExecutionPlan(
             ProtosParameterBindingNode parameterBinding,
@@ -46,43 +48,117 @@ public final class ProtosClosureExecutionPlan {
         this.bodyTarget =
                 rootFactory.createLazyCallTarget(
                         Objects.requireNonNull(body, "body"));
+        this.bytecodePlan = null;
+    }
+
+    private ProtosClosureExecutionPlan(
+            ProtosBytecodeClosureExecutionPlan bytecodePlan) {
+        this.rootFactory = null;
+        this.parameterBindingTarget = null;
+        this.bodyTarget = null;
+        this.bytecodePlan =
+                Objects.requireNonNull(bytecodePlan, "bytecodePlan");
+    }
+
+    static ProtosClosureExecutionPlan bytecode(
+            CanonicalClosure definition,
+            ProtosLanguage language,
+            Source source) {
+        return new ProtosClosureExecutionPlan(
+                new ProtosBytecodeClosureExecutionPlan(
+                        definition,
+                        language,
+                        source));
+    }
+
+    static ProtosClosureExecutionPlan bytecode(
+            CanonicalClosure definition,
+            ProtosLanguage language,
+            Source source,
+            ProtosBytecodeRootNode bodyRoot) {
+        return new ProtosClosureExecutionPlan(
+                new ProtosBytecodeClosureExecutionPlan(
+                        definition,
+                        language,
+                        source,
+                        bodyRoot));
+    }
+
+    boolean isBytecodeBackendForRuntime() {
+        return bytecodePlan != null;
+    }
+
+    RootCallTarget bytecodeBodyTargetForComposition() {
+        if (bytecodePlan == null) {
+            throw new IllegalStateException(
+                    "Closure execution plan is not Bytecode-backed");
+        }
+        return bytecodePlan.bodyTargetForComposition();
     }
 
     ProtosClosureExecutionPlan rebuild(CanonicalClosure definition) {
+        Objects.requireNonNull(definition, "definition");
+        if (bytecodePlan != null) {
+            throw new UnsupportedOperationException(
+                    "Bytecode Closure rematerialization requires an explicit destination "
+                            + "language until PERF006-B2 context/parallel cutover");
+        }
         return new CanonicalToTruffleLowerer(rootFactory)
-                .lowerClosurePlan(Objects.requireNonNull(definition, "definition"));
+                .lowerClosurePlan(definition);
     }
 
     ProtosClosureExecutionPlan rebuildForLanguage(
             CanonicalClosure definition, ProtosLanguage language) {
+        Objects.requireNonNull(definition, "definition");
+        Objects.requireNonNull(language, "language");
+        if (bytecodePlan != null) {
+            return new ProtosClosureExecutionPlan(
+                    bytecodePlan.rebuildForLanguage(definition, language));
+        }
         return new CanonicalToTruffleLowerer(
-                        rootFactory.withLanguage(Objects.requireNonNull(language, "language")))
-                .lowerClosurePlan(Objects.requireNonNull(definition, "definition"));
+                        rootFactory.withLanguage(language))
+                .lowerClosurePlan(definition);
     }
 
     Optional<ProtosLanguage> language() {
-        return rootFactory.language();
+        return bytecodePlan != null
+                ? Optional.of(bytecodePlan.language())
+                : rootFactory.language();
     }
 
     Optional<Source> source() {
-        return rootFactory.source();
+        return bytecodePlan != null
+                ? Optional.of(bytecodePlan.source())
+                : rootFactory.source();
     }
 
     CallTarget parameterBindingTargetForTesting() {
+        if (bytecodePlan != null) {
+            throw new UnsupportedOperationException(
+                    "Bytecode parameter binding is not migrated in PERF006-B2B");
+        }
         return parameterBindingTarget.get();
     }
 
     CallTarget bodyTargetForTesting() {
-        return bodyTarget.get();
+        return bytecodePlan != null
+                ? bytecodePlan.bodyTargetForComposition()
+                : bodyTarget.get();
     }
 
     public void bind(ProtosActivation activation) {
-        parameterBindingTarget.get().call(
-                Objects.requireNonNull(activation, "activation"));
+        Objects.requireNonNull(activation, "activation");
+        if (bytecodePlan != null) {
+            bytecodePlan.bind(activation);
+            return;
+        }
+        parameterBindingTarget.get().call(activation);
     }
 
     public Object executeBody(ProtosActivation activation) {
-        return bodyTarget.get().call(
-                Objects.requireNonNull(activation, "activation"));
+        Objects.requireNonNull(activation, "activation");
+        return bytecodePlan != null
+                ? bytecodePlan.executeBody(activation)
+                : bodyTarget.get().call(activation);
     }
 }

@@ -19,13 +19,22 @@ package com.guillermomolina.protos.execution;
 
 import com.oracle.truffle.api.bytecode.BytecodeRootNode;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.oracle.truffle.api.RootCallTarget;
+import com.oracle.truffle.api.bytecode.ContinuationResult;
+import com.oracle.truffle.api.bytecode.ContinuationRootNode;
 import com.oracle.truffle.api.bytecode.GenerateBytecode;
 import com.oracle.truffle.api.bytecode.Operation;
+import com.oracle.truffle.api.dsl.Cached;
 import com.oracle.truffle.api.dsl.Specialization;
 import com.oracle.truffle.api.frame.FrameDescriptor;
+import com.oracle.truffle.api.nodes.DirectCallNode;
+import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.nodes.RootNode;
+import java.util.List;
 
 /**
  * Internal Bytecode DSL root substrate selected by PLAT014.
@@ -63,6 +72,163 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                                     new ProtosSignalException(
                                             ProtosCoreErrors.newUnqualifiedLookupError(
                                                     activation)));
+        }
+    }
+
+    static final class PreparedClosureCall {
+        private final RootCallTarget bodyTarget;
+        private final ProtosActivation activation;
+        private final ProtosReturnHome returnHome;
+        private final boolean ownsReturnHome;
+
+        PreparedClosureCall(
+                RootCallTarget bodyTarget,
+                ProtosActivation activation) {
+            this.bodyTarget =
+                    java.util.Objects.requireNonNull(
+                            bodyTarget, "bodyTarget");
+            this.activation =
+                    java.util.Objects.requireNonNull(
+                            activation, "activation");
+            this.returnHome =
+                    activation.returnHome()
+                            .orElseThrow(
+                                    () ->
+                                            new IllegalStateException(
+                                                    "Closure invocation requires a return home"));
+            this.ownsReturnHome = activation.ownsReturnHome();
+        }
+
+        RootCallTarget bodyTarget() {
+            return bodyTarget;
+        }
+
+        ProtosActivation activation() {
+            return activation;
+        }
+
+        Object finish(Object result) {
+            if (ownsReturnHome && returnHome.isActive()) {
+                returnHome.complete();
+            }
+            return result;
+        }
+    }
+
+    @Operation
+    public static final class PrepareClosureCall {
+        @Specialization
+        public static PreparedClosureCall perform(
+                Object receiver,
+                ProtosActivation caller) {
+            if (!(receiver instanceof ProtosClosureValue closure)) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newError(caller));
+            }
+            if (closure.nativeBody().isPresent()) {
+                throw new UnsupportedOperationException(
+                        "PERF006-B2B Bytecode dispatch supports source-backed Closures only");
+            }
+            if (caller.task().isPresent()) {
+                throw new UnsupportedOperationException(
+                        "PERF006-B2B Task/Future continuation ownership belongs to PERF006-B3");
+            }
+            if (closure.requiresContextLocalExecutionProjectionForRuntime()) {
+                throw new UnsupportedOperationException(
+                        "PERF006-B2B shared-Context Closure projection is not migrated yet");
+            }
+
+            ProtosClosureExecutionPlan plan =
+                    closure.executionPlanForRuntimeInvocation();
+            if (!plan.isBytecodeBackendForRuntime()) {
+                throw new UnsupportedOperationException(
+                        "PERF006-B2B Bytecode call receiver still has an AST execution plan");
+            }
+
+            ProtosActivation activation =
+                    ProtosActivation.forClosureInvocation(
+                            closure,
+                            List.of(),
+                            caller.prelude().orElse(null),
+                            caller.actorModuleState(),
+                            caller.currentModuleKey().orElse(null),
+                            caller.executionDomain());
+            activation.inheritDynamicControlState(caller);
+            plan.bind(activation);
+            return new PreparedClosureCall(
+                    plan.bytecodeBodyTargetForComposition(),
+                    activation);
+        }
+    }
+
+    @Operation
+    public static final class EnterClosureCall {
+        @Specialization(
+                guards = "prepared.bodyTarget() == cachedTarget",
+                limit = "3")
+        public static Object direct(
+                PreparedClosureCall prepared,
+                @Cached("prepared.bodyTarget()")
+                        RootCallTarget cachedTarget,
+                @Cached("create(cachedTarget)")
+                        DirectCallNode node) {
+            return node.call(prepared.activation());
+        }
+
+        @Specialization(replaces = "direct")
+        public static Object indirect(
+                PreparedClosureCall prepared,
+                @Cached IndirectCallNode node) {
+            return node.call(
+                    prepared.bodyTarget(),
+                    prepared.activation());
+        }
+    }
+
+    @Operation
+    public static final class IsContinuation {
+        @Specialization
+        public static boolean perform(Object value) {
+            return value instanceof ContinuationResult;
+        }
+    }
+
+    @Operation
+    public static final class ResumeContinuation {
+        @Specialization(
+                guards = "result.getContinuationRootNode() == cachedRoot",
+                limit = "3")
+        public static Object direct(
+                ContinuationResult result,
+                Object resumeValue,
+                @Cached("result.getContinuationRootNode()")
+                        ContinuationRootNode cachedRoot,
+                @Cached("create(cachedRoot.getCallTarget())")
+                        DirectCallNode node) {
+            return node.call(
+                    result.getFrame(),
+                    resumeValue);
+        }
+
+        @Specialization(replaces = "direct")
+        public static Object indirect(
+                ContinuationResult result,
+                Object resumeValue,
+                @Cached IndirectCallNode node) {
+            return node.call(
+                    result.getContinuationCallTarget(),
+                    result.getFrame(),
+                    resumeValue);
+        }
+    }
+
+    @Operation
+    public static final class FinishClosureCall {
+        @Specialization
+        public static Object perform(
+                PreparedClosureCall prepared,
+                Object result) {
+            return prepared.finish(result);
         }
     }
 }
