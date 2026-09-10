@@ -186,7 +186,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
     }
 
     @Test
-    void invocationSpreadRemainsFailClosedInBodyAndDefaults()
+    void sendSpreadInBodyAndCallSpreadInDefaultsRemainFailClosed()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -194,7 +194,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
 
-                String nestedCharacters = "entry(...items)";
+                String nestedCharacters = "entry.pick(...items)";
                 Source nestedSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -242,7 +242,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
         }
 
         System.out.println(
-                "PERF006_B2C2_BODY_INVOCATION_SPREAD_DEFERRED=PASS");
+                "PERF006_B2C2_BODY_SEND_SPREAD_DEFERRED=PASS");
         System.out.println(
                 "PERF006_B2C2_DEFAULT_INVOCATION_SPREAD_DEFERRED=PASS");
     }

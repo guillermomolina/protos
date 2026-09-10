@@ -393,7 +393,7 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
     }
 
     @Test
-    void sendAndCallSpreadRemainDeferred()
+    void sendSpreadWithComposedAndSimpleReceiversRemainsDeferred()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -423,7 +423,7 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
                                 .getMessage()
                                 .contains("CanonicalSpread"));
 
-                String spreadCharacters = "entry(...items)";
+                String spreadCharacters = "entry.pick(...items)";
                 Source spreadSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -450,7 +450,7 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
         }
 
         System.out.println("PERF006_B2D4A_SEND_SPREAD_DEFERRED=PASS");
-        System.out.println("PERF006_B2D4A_CALL_SPREAD_DEFERRED=PASS");
+        System.out.println("PERF006_B2D4A_SIMPLE_RECEIVER_SEND_SPREAD_DEFERRED=PASS");
     }
 
     private static Object execute(

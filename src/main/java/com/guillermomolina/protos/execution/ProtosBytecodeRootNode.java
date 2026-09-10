@@ -43,6 +43,7 @@ import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.nodes.RootNode;
 import java.math.BigInteger;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -262,6 +263,80 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
         Object finish(Object result) {
             if (ownsReturnHome && returnHome.isActive()) returnHome.complete();
             return result;
+        }
+    }
+
+    static final class PreparedArgumentVector {
+        private final ArrayList<Object> values = new ArrayList<>();
+
+        void append(Object value) {
+            values.add(
+                    java.util.Objects.requireNonNull(
+                            value,
+                            "supplied argument"));
+        }
+
+        void appendSpread(
+                Object value,
+                ProtosActivation caller) {
+            if (!(value instanceof ProtosArrayValue array)) {
+                throw new ProtosSignalException(
+                        ProtosCoreErrors.newError(caller));
+            }
+
+            /*
+             * CALLABLES requires the shallow Array snapshot at the spread
+             * item's own left-to-right evaluation position, before any later
+             * argument expression can mutate the source Array.
+             */
+            values.addAll(array.indexedSnapshot());
+        }
+
+        List<Object> snapshot() {
+            return List.copyOf(values);
+        }
+    }
+
+    @Operation
+    public static final class CreateSuppliedArgumentVector {
+        @Specialization
+        public static PreparedArgumentVector perform() {
+            return new PreparedArgumentVector();
+        }
+    }
+
+    @Operation
+    public static final class AppendSuppliedArgument {
+        @Specialization
+        public static void perform(
+                PreparedArgumentVector vector,
+                Object value) {
+            vector.append(value);
+        }
+    }
+
+    @Operation
+    public static final class AppendSpreadSuppliedArgument {
+        @Specialization
+        public static void perform(
+                PreparedArgumentVector vector,
+                Object value,
+                ProtosActivation caller) {
+            vector.appendSpread(value, caller);
+        }
+    }
+
+    @Operation
+    public static final class PrepareClosureCallVector {
+        @Specialization
+        public static PreparedClosureCall perform(
+                Object receiver,
+                ProtosActivation caller,
+                PreparedArgumentVector supplied) {
+            return prepareClosureCall(
+                    receiver,
+                    supplied.snapshot(),
+                    caller);
         }
     }
 

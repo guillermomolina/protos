@@ -258,14 +258,14 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
     }
 
     @Test
-    void callSpreadRemainsFailClosedUntilInvocationSpreadMigration()
+    void sendSpreadRemainsFailClosedUntilSendSpreadMigration()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
-                String characters = "entry(...items)";
+                String characters = "entry.pick(...items)";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -291,7 +291,7 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
             }
         }
 
-        System.out.println("PERF006_B2B_INVOCATION_SPREAD_NOT_SILENTLY_MIGRATED=PASS");
+        System.out.println("PERF006_B2B_SEND_SPREAD_NOT_SILENTLY_MIGRATED=PASS");
     }
 
     private static ProtosBytecodeRootNode yieldingLeafRoot(
