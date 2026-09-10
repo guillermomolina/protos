@@ -168,15 +168,23 @@ final class CanonicalToBytecodeLowerer {
             return;
         }
         if (expression instanceof CanonicalCall call) {
-            if (!call.arguments().isEmpty()) {
+            if (call.arguments().size() > 1) {
                 throw new UnsupportedOperationException(
-                        "PERF006-B2B Bytecode Closure dispatch supports only zero-argument calls");
+                        "PERF006-B2C1 Bytecode Closure dispatch supports at most one argument");
             }
             if (!(call.receiver() instanceof CanonicalLookup)) {
                 throw new UnsupportedOperationException(
                         "PERF006-B2B Bytecode Closure dispatch requires a lexical lookup receiver");
             }
             validateSupportedExpression(call.receiver());
+            if (!call.arguments().isEmpty()) {
+                CanonicalExpression argument = call.arguments().get(0);
+                if (!(argument instanceof CanonicalLiteral) && !(argument instanceof CanonicalLookup)) {
+                    throw new UnsupportedOperationException(
+                            "PERF006-B2C1 call argument must be literal or lexical lookup");
+                }
+                validateSupportedExpression(argument);
+            }
             return;
         }
         throw new UnsupportedOperationException(
@@ -243,10 +251,18 @@ final class CanonicalToBytecodeLowerer {
         builder.beginTag(StandardTags.CallTag.class);
 
         builder.beginStoreLocal(preparedCall);
-        builder.beginPrepareClosureCall();
-        emitLookup(builder, receiver);
-        builder.emitLoadArgument(0);
-        builder.endPrepareClosureCall();
+        if (call.arguments().isEmpty()) {
+            builder.beginPrepareClosureCall();
+            emitLookup(builder, receiver);
+            builder.emitLoadArgument(0);
+            builder.endPrepareClosureCall();
+        } else {
+            builder.beginPrepareClosureCallOneArgument();
+            emitLookup(builder, receiver);
+            emitExpression(builder, call.arguments().get(0));
+            builder.emitLoadArgument(0);
+            builder.endPrepareClosureCallOneArgument();
+        }
         builder.endStoreLocal();
 
         builder.beginStoreLocal(childResult);

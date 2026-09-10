@@ -118,9 +118,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     @Operation
     public static final class PrepareClosureCall {
         @Specialization
-        public static PreparedClosureCall perform(
-                Object receiver,
-                ProtosActivation caller) {
+        public static PreparedClosureCall perform(Object receiver, ProtosActivation caller) {
+            return prepareClosureCall(receiver, List.of(), caller);
+        }
+    }
+
+    @Operation
+    public static final class PrepareClosureCallOneArgument {
+        @Specialization
+        public static PreparedClosureCall perform(Object receiver, Object argument, ProtosActivation caller) {
+            return prepareClosureCall(receiver, List.of(argument), caller);
+        }
+    }
+
+    private static PreparedClosureCall prepareClosureCall(Object receiver, List<?> supplied, ProtosActivation caller) {
             if (!(receiver instanceof ProtosClosureValue closure)) {
                 throw new ProtosSignalException(
                         ProtosCoreErrors.newError(caller));
@@ -148,7 +159,7 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             ProtosActivation activation =
                     ProtosActivation.forClosureInvocation(
                             closure,
-                            List.of(),
+                            supplied,
                             caller.prelude().orElse(null),
                             caller.actorModuleState(),
                             caller.currentModuleKey().orElse(null),
@@ -158,7 +169,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return new PreparedClosureCall(
                     plan.bytecodeBodyTargetForComposition(),
                     activation);
-        }
     }
 
     @Operation

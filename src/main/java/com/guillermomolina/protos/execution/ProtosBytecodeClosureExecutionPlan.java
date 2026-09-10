@@ -18,7 +18,10 @@
 package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
+import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.source.Source;
 import java.util.Objects;
@@ -66,9 +69,17 @@ final class ProtosBytecodeClosureExecutionPlan {
         this.source =
                 Objects.requireNonNull(source, "source");
 
-        if (!definition.parameters().isEmpty()) {
+        if (definition.parameters().size() > 1) {
             throw new UnsupportedOperationException(
-                    "PERF006-B2A Bytecode Closure plan supports only zero parameters");
+                    "PERF006-B2C1 Bytecode Closure plan supports at most one parameter");
+        }
+        for (CanonicalParameter parameter : definition.parameters()) {
+            if (parameter.rest()) {
+                throw new UnsupportedOperationException("PERF006-B2C1 rest parameter binding is deferred");
+            }
+            if (parameter.defaultValue().isPresent()) {
+                throw new UnsupportedOperationException("PERF006-B2C1 default parameter binding is deferred");
+            }
         }
 
         this.bodyRoot =
@@ -107,10 +118,19 @@ final class ProtosBytecodeClosureExecutionPlan {
 
     void bind(ProtosActivation activation) {
         Objects.requireNonNull(activation, "activation");
-        if (activation.arguments().isEmpty()
-                || !activation.arguments().orElseThrow().indexedSnapshot().isEmpty()) {
-            throw new UnsupportedOperationException(
-                    "PERF006-B2B Bytecode Closure dispatch supports only zero arguments");
+        java.util.List<Object> supplied = activation.arguments()
+                .orElseThrow(() -> new IllegalStateException("parameter binding requires an invocation activation"))
+                .indexedSnapshot();
+        if (supplied.size() != definition.parameters().size()) {
+            throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+        }
+        for (int index = 0; index < definition.parameters().size(); index++) {
+            CanonicalParameter parameter = definition.parameters().get(index);
+            try {
+                activation.context().createLocalSlot(parameter.name(), supplied.get(index));
+            } catch (IllegalStateException invalidCreation) {
+                throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
+            }
         }
     }
 
