@@ -138,6 +138,7 @@ final class ProtosPerf006B2C3B3CallSendDefaultBindingTest {
     }
 
     private static ProtosActivation moduleActivation() {
+        ProtosStandardObjectProtocol.install();
         ProtosObjectValue contextPrototype = new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosObjectValue bindings = new ProtosObjectValue(contextPrototype);
         bindings.createLocalSlot("Context", contextPrototype);

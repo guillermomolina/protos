@@ -291,57 +291,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             Object receiver,
             List<?> supplied,
             ProtosActivation caller) {
-        if (!(receiver instanceof ProtosClosureValue closure)) {
-            return prepareOrdinaryObjectCall(
-                    receiver,
-                    supplied,
-                    caller);
-        }
-
-        /*
-         * B2D3A intentionally retains the B2B direct-Closure shortcut. The
-         * D013 Object.call -> Closure Bytecode bridge is the next bounded
-         * convergence slice; ordinary non-Closure targets already use the
-         * normative structural call protocol below.
-         */
-        if (closure.nativeBody().isPresent()) {
-            throw new UnsupportedOperationException(
-                    "PERF006-B2B Bytecode dispatch supports source-backed Closures only");
-        }
-        if (caller.task().isPresent()) {
-            throw new UnsupportedOperationException(
-                    "PERF006-B2B Task/Future continuation ownership belongs to PERF006-B3");
-        }
-        if (closure.requiresContextLocalExecutionProjectionForRuntime()) {
-            throw new UnsupportedOperationException(
-                    "PERF006-B2B shared-Context Closure projection is not migrated yet");
-        }
-
-        ProtosClosureExecutionPlan plan =
-                closure.executionPlanForRuntimeInvocation();
-        if (!plan.isBytecodeBackendForRuntime()) {
-            throw new UnsupportedOperationException(
-                    "PERF006-B2B Bytecode call receiver still has an AST execution plan");
-        }
-
-        ProtosActivation activation =
-                ProtosActivation.forClosureInvocation(
-                        closure,
-                        supplied,
-                        caller.prelude().orElse(null),
-                        caller.actorModuleState(),
-                        caller.currentModuleKey().orElse(null),
-                        caller.executionDomain());
-        activation.inheritDynamicControlState(caller);
-        return new PreparedClosureCall(
-                plan.bytecodeActivationTargetForComposition(),
-                activation);
-    }
-
-    private static PreparedClosureCall prepareOrdinaryObjectCall(
-            Object receiver,
-            List<?> supplied,
-            ProtosActivation caller) {
         ProtosPrelude prelude =
                 caller.prelude()
                         .orElseThrow(
@@ -369,12 +318,52 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     ProtosCoreErrors.newError(caller));
         }
 
+        /*
+         * PLAT017-A: D013 lookup has already selected one ordinary `call`
+         * behavior. Only the exact canonical root Object.call implementation
+         * may elide its native bridge for a Closure target. A nearer override,
+         * including an alias of the standard behavior at another home, remains
+         * an ordinary method invocation.
+         */
+        if (receiver instanceof ProtosClosureValue targetClosure
+                && ProtosStandardObjectProtocol
+                        .isCanonicalStandardCallSelection(
+                                callBehavior,
+                                selected.home())) {
+            return prepareStandardClosureCallIntrinsic(
+                    targetClosure,
+                    supplied,
+                    caller);
+        }
+
         return prepareImmediateMethodCall(
                 callBehavior,
                 receiver,
                 selected.home(),
                 supplied,
                 caller);
+    }
+
+    private static PreparedClosureCall prepareStandardClosureCallIntrinsic(
+            ProtosClosureValue targetClosure,
+            List<?> supplied,
+            ProtosActivation caller) {
+        rejectComposedInvocationTaskOrProjection(
+                targetClosure,
+                caller);
+        ProtosActivation activation =
+                ProtosActivation.forClosureInvocation(
+                        targetClosure,
+                        supplied,
+                        caller.prelude().orElse(null),
+                        caller.actorModuleState(),
+                        caller.currentModuleKey().orElse(null),
+                        caller.executionDomain());
+        activation.inheritDynamicControlState(caller);
+        return finishPreparingComposedCall(
+                targetClosure,
+                supplied,
+                activation);
     }
 
     @Operation
@@ -384,16 +373,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                 Object receiver,
                 ProtosActivation caller,
                 @Variadic Object[] supplied) {
-            List<?> arguments = List.of(supplied);
-            if (receiver instanceof ProtosClosureValue closure) {
-                return prepareDefaultLexicalCall(
-                        closure,
-                        arguments,
-                        caller);
-            }
-            return prepareOrdinaryObjectCall(
+            return prepareClosureCall(
                     receiver,
-                    arguments,
+                    List.of(supplied),
                     caller);
         }
     }
@@ -417,16 +399,6 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             return prepareImmediateMethodCall(
                     closure, receiver, selected.home(), List.of(supplied), caller);
         }
-    }
-
-    private static PreparedClosureCall prepareDefaultLexicalCall(
-            ProtosClosureValue closure, List<?> supplied, ProtosActivation caller) {
-        rejectComposedInvocationTaskOrProjection(closure, caller);
-        ProtosActivation activation = ProtosActivation.forClosureInvocation(
-                closure, supplied, caller.prelude().orElse(null), caller.actorModuleState(),
-                caller.currentModuleKey().orElse(null), caller.executionDomain());
-        activation.inheritDynamicControlState(caller);
-        return finishPreparingComposedCall(closure, supplied, activation);
     }
 
     private static PreparedClosureCall prepareImmediateMethodCall(

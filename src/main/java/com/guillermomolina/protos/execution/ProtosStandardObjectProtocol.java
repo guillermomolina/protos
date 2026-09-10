@@ -34,7 +34,18 @@ import java.util.ArrayList;
 import java.util.List;
 
 public final class ProtosStandardObjectProtocol {
+    private static final ProtosClosureValue STANDARD_CALL =
+            ProtosClosureValue.nativeClosure(
+                    ProtosStandardObjectProtocol::call);
+
     private ProtosStandardObjectProtocol() {}
+
+    static boolean isCanonicalStandardCallSelection(
+            Object behavior,
+            ProtosObjectValue home) {
+        return behavior == STANDARD_CALL
+                && home.isRootObject();
+    }
 
     public static void install() {
         ProtosObjectValue object = ProtosObjectValue.rootObject();
@@ -42,19 +53,7 @@ public final class ProtosStandardObjectProtocol {
         if (!object.hasLocalSlot("call")) {
             object.createLocalSlot(
                     "call",
-                    ProtosClosureValue.nativeClosure(
-                            (activation, supplied) -> {
-                                Object receiver = activation.receiver();
-                                if (receiver instanceof ProtosClosureValue closure) {
-                                    return ProtosClosureInvoker.invoke(closure, supplied, activation);
-                                }
-                                if (!(receiver instanceof ProtosObjectValue prototype)) {
-                                    throw new ProtosSignalException(ProtosCoreErrors.newError(activation));
-                                }
-                                ProtosObjectValue instance = new ProtosObjectValue(prototype);
-                                ProtosInvocation.invokeMessage(instance, "init", supplied, activation);
-                                return instance;
-                            }));
+                    STANDARD_CALL);
         }
         if (!object.hasLocalSlot("identityHash")) {
             object.createLocalSlot("identityHash", ProtosClosureValue.nativeClosure((activation, supplied) -> {
@@ -143,6 +142,30 @@ public final class ProtosStandardObjectProtocol {
                     "while",
                     ProtosClosureValue.nativeClosure(ProtosStandardObjectProtocol::whileLoop));
         }
+    }
+
+    private static Object call(
+            ProtosActivation activation,
+            List<?> supplied) {
+        Object receiver = activation.receiver();
+        if (receiver instanceof ProtosClosureValue closure) {
+            return ProtosClosureInvoker.invoke(
+                    closure,
+                    supplied,
+                    activation);
+        }
+        if (!(receiver instanceof ProtosObjectValue prototype)) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(activation));
+        }
+        ProtosObjectValue instance =
+                new ProtosObjectValue(prototype);
+        ProtosInvocation.invokeMessage(
+                instance,
+                "init",
+                supplied,
+                activation);
+        return instance;
     }
 
     private static Object hasSlot(ProtosActivation activation, List<?> supplied) {

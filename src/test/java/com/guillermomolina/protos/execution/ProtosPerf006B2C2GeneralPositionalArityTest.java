@@ -297,6 +297,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
     }
 
     private static ProtosActivation moduleActivation() {
+        ProtosStandardObjectProtocol.install();
         ProtosObjectValue contextPrototype =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosObjectValue bindings =

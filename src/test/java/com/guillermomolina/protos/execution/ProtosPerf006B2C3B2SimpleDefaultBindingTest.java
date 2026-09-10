@@ -364,6 +364,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
     }
 
     private static ProtosActivation moduleActivation() {
+        ProtosStandardObjectProtocol.install();
         ProtosObjectValue contextPrototype =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosObjectValue bindings =

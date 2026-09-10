@@ -166,6 +166,7 @@ final class CanonicalToBytecodeLowerer {
                                             span.length());
                                     builder.beginTag(
                                             StandardTags.StatementTag.class);
+                                    builder.beginBlock();
 
                                     if (expression instanceof CanonicalCall call) {
                                         emitComposedCall(
@@ -189,6 +190,7 @@ final class CanonicalToBytecodeLowerer {
                                         builder.endStoreLocal();
                                     }
 
+                                    builder.endBlock();
                                     builder.endTag(
                                             StandardTags.StatementTag.class);
                                     builder.endSourceSection();
@@ -459,6 +461,7 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginSourceSection(call.span().startOffset(), call.span().length());
         builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
 
         if (stageArguments) {
             receiverValue = builder.createLocal("defaultCallReceiver", null);
@@ -506,6 +509,7 @@ final class CanonicalToBytecodeLowerer {
                 preparedCall,
                 childResult,
                 resumeValue);
+        builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
         builder.endSourceSection();
     }
@@ -524,6 +528,7 @@ final class CanonicalToBytecodeLowerer {
 
         builder.beginSourceSection(send.span().startOffset(), send.span().length());
         builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
 
         if (stageArguments) {
             receiverValue = builder.createLocal("defaultSendReceiver", null);
@@ -572,6 +577,7 @@ final class CanonicalToBytecodeLowerer {
                 preparedCall,
                 childResult,
                 resumeValue);
+        builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
         builder.endSourceSection();
     }
@@ -736,6 +742,7 @@ final class CanonicalToBytecodeLowerer {
         java.util.List<BytecodeLocal> argumentValues = java.util.List.of();
 
         builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
 
         if (stageArguments) {
             receiverValue = builder.createLocal("sendReceiver", null);
@@ -816,6 +823,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endFinishClosureCall();
         builder.endStoreLocal();
 
+        builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
     }
 
@@ -842,6 +850,7 @@ final class CanonicalToBytecodeLowerer {
         java.util.List<BytecodeLocal> argumentValues = java.util.List.of();
 
         builder.beginTag(StandardTags.CallTag.class);
+        builder.beginBlock();
 
         if (stageArguments) {
             receiverValue = builder.createLocal("callReceiver", null);
@@ -934,6 +943,7 @@ final class CanonicalToBytecodeLowerer {
         builder.endFinishClosureCall();
         builder.endStoreLocal();
 
+        builder.endBlock();
         builder.endTag(StandardTags.CallTag.class);
     }
 

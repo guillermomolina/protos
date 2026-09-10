@@ -78,6 +78,7 @@ final class ProtosPerf006B2C1SinglePositionalBindingTest {
     private static CanonicalClosure closureDefinition(String s) { return assertInstanceOf(CanonicalClosure.class, canonicalize(s).expressions().get(0)); }
     private static CanonicalSequence canonicalize(String s) { return (CanonicalSequence)new Canonicalizer().canonicalize(new ProtosParser(s).parseProgram()); }
     private static ProtosActivation moduleActivation() {
+        ProtosStandardObjectProtocol.install();
         ProtosObjectValue cp = new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosObjectValue b = new ProtosObjectValue(cp);
         b.createLocalSlot("Context", cp);

@@ -401,6 +401,7 @@ final class ProtosPerf006B2D2NestedArgumentCompositionTest {
     }
 
     private static ProtosActivation moduleActivation() {
+        ProtosStandardObjectProtocol.install();
         ProtosObjectValue contextPrototype =
                 new ProtosObjectValue(ProtosObjectValue.rootObject());
         ProtosObjectValue bindings =
