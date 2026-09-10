@@ -97,13 +97,14 @@ advance dependent new design work until the user approves the resulting choice.
 
 ## Project decision families
 
-Formal decision identifiers distinguish normative language design from durable
-platform-specific implementation architecture:
+Formal decision identifiers are orthogonal to the documentation role selected by
+DOC002-F0 and to normative specification authority:
 
-- `Dxxx` records language/specification design decisions whose authority is or
-  may become normative for observable Protos behavior. A `Dxxx` resolution is
-  implementation-independent even when a particular implementation exposed the
-  question.
+- `Dxxx` identifies implementation-independent decisions. A Dxxx record may have
+  a language/specification role under `docs/project/decisions/language/` or a
+  tooling/package-system role under `docs/project/decisions/tooling/`; the prefix
+  alone does not select the role. Observable Protos semantics are normative only
+  through the applicable ratified material under `spec/`.
 - `PLATxxx` records durable, non-normative implementation architecture decisions
   that depend on a concrete host platform/runtime/VM/OS/native substrate,
   materially constrain later implementation work, and are intended to remain
@@ -129,7 +130,7 @@ record owns the durable platform architecture; the consuming work item owns its
 implementation, tests, migration, and closure evidence.
 
 The canonical registry for platform/runtime architecture decisions is
-`docs/project/PLATFORM_ARCHITECTURE_DECISIONS.md`.
+`docs/project/registries/PLATFORM_ARCHITECTURE_DECISIONS.md`.
 
 <!-- DOC002 ROLE-FIRST-DOCUMENTATION-PATH-POLICY -->
 ## Durable project documentation path policy

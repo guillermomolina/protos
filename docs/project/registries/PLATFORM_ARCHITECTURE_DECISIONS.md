@@ -4,10 +4,14 @@ This registry records durable, non-normative architecture decisions that depend
 on a concrete implementation platform, host runtime, VM, operating system,
 native backend, or equivalent execution substrate.
 
-`PLATxxx` is deliberately distinct from normative language design:
+`PLATxxx` is deliberately distinct from implementation-independent decision
+records and from normative semantic authority:
 
-- `Dxxx` owns language/specification design decisions that define or constrain
-  observable Protos behavior;
+- `Dxxx` is an implementation-independent decision identifier family whose
+  documentation role is classified separately by primary domain. Language/
+  specification decisions live under `decisions/language/`; tooling/package-
+  system decisions live under `decisions/tooling/`. Observable Protos semantics
+  remain authoritative only in the applicable ratified material under `spec/`;
 - `PLATxxx` owns durable platform/runtime architecture choices that materially
   constrain an implementation while remaining semantically invisible to Protos;
 - `Ixxx`, `CLIxxx`, `TOOLxxx`, `PERFxxx`, `DISTxxx`, and similar work families
