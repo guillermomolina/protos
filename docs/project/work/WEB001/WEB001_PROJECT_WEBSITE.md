@@ -131,12 +131,16 @@ the independently reviewable WEB001-B architecture audit.
 canonical-source acquisition, local execution, static-site frameworks, hosting,
 deployment/security boundaries, and future playground isolation.
 
-The audit recommends, pending explicit project-owner approval, an independent
-`guillermomolina/protos-website` companion repository using exact-SHA canonical
-Protos source acquisition, dual native-Node/Docker-Compose local execution,
-Astro + Starlight static generation, and GitHub Pages deployment for
-`protos.guillermolina.com`.
+The project owner explicitly approved WEB001-B Candidate C on 2026-09-10.
+The website architecture is **RATIFIED** and WEB001-B is **CLOSED**.
 
-The recommendation remains **NEEDS_USER_DECISION**. No repository topology,
-source-consumption mechanism, framework, hosting provider, deployment contract,
-or playground architecture is selected by publication of the audit.
+The selected architecture uses independent companion repository
+`guillermomolina/protos-website`; read-only exact-SHA acquisition of canonical
+Protos sources from `guillermomolina/protos`; equivalent native-Node and
+Docker-Compose local execution; Astro + Starlight static generation; GitHub Pages
+for the initial `protos.guillermolina.com` deployment; explicit website/Protos
+revision provenance; and an independently secured future playground execution
+boundary.
+
+No website bootstrap, dependency pin, Pages configuration, DNS change, logo
+publication, or playground implementation is included in this ratification.

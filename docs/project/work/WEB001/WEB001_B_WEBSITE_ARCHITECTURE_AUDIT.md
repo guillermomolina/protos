@@ -4,7 +4,7 @@ GitHub coordination: Issue
 [#282](https://github.com/guillermomolina/protos/issues/282), child of
 WEB001 / [#278](https://github.com/guillermomolina/protos/issues/278).
 
-Status: **AUDIT COMPLETE — RECOMMENDATION PENDING EXPLICIT PROJECT-OWNER APPROVAL**
+Status: **RATIFIED — CANDIDATE C SELECTED**
 
 ## Scope
 
@@ -580,9 +580,9 @@ Mature but pays for React/versioning/search complexity before Protos needs it.
 Technically strong and gives excellent previews, but adds a second control plane
 before preview/edge requirements justify it.
 
-## Recommended architecture pending approval
+## Selected architecture
 
-Recommend **Candidate C**, with these components selected together:
+**Candidate C** is selected, with these components ratified together:
 
 - repository: `guillermomolina/protos-website` as independent companion repo;
 - authority: canonical Protos sources remain in `guillermomolina/protos`;
@@ -628,14 +628,38 @@ Even if this architecture is approved, WEB001-B does not yet decide:
 
 Those are implementation details or later substantive checkpoints as applicable.
 
-## Explicit approval gate
+## Ratification record
 
-This recommendation remains **PROPOSED / NEEDS_USER_DECISION**.
+On 2026-09-10, the project owner explicitly approved WEB001-B Candidate C.
 
-Publication of this audit must not create files in
-`guillermomolina/protos-website`, configure GitHub Pages, bind DNS, select the
-framework in project status, or otherwise treat Candidate C as ratified.
+The selected website architecture is therefore:
 
-If the project owner explicitly approves Candidate C, a bounded WEB001-B
-ratification publication should record the selected architecture before the first
-website implementation slice is created.
+- **repository topology:** independent public companion repository
+  `guillermomolina/protos-website`;
+- **canonical-source authority:** `guillermomolina/protos` remains authoritative
+  for Protos language, specification, maintained documentation, tutorials and
+  examples;
+- **source consumption:** the website records an exact 40-character Protos Git
+  revision and materializes canonical source input read-only from that exact
+  revision; production builds do not silently consume a moving branch;
+- **local execution:** the website supports both native Node execution and
+  `docker compose up --build`, with both paths using the same underlying source
+  and build contracts;
+- **framework:** Astro + Starlight;
+- **output:** ordinary static site output;
+- **initial hosting:** GitHub Pages via GitHub Actions;
+- **public domain:** `protos.guillermolina.com`;
+- **provenance:** retained website revision plus exact consumed Protos revision;
+- **security boundary:** the static website requires no write authority over
+  `guillermomolina/protos`; and
+- **future playground:** any service that executes untrusted Protos code remains
+  an independently secured execution/deployment boundary rather than ordinary
+  website runtime functionality.
+
+WEB001-B is **RATIFIED / CLOSED**.
+
+This ratification selects the durable architecture above but does not bootstrap
+`guillermomolina/protos-website`, select exact dependency versions or container
+digests, configure GitHub Pages, bind DNS, publish the selected logo, or
+implement a playground. Those remain downstream implementation or later
+architecture checkpoints as applicable.
