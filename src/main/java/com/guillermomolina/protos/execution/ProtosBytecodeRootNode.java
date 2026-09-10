@@ -423,9 +423,8 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             ProtosClosureValue targetClosure,
             List<?> supplied,
             ProtosActivation caller) {
-        rejectComposedInvocationTaskOrProjection(
-                targetClosure,
-                caller);
+        rejectComposedInvocationProjection(
+                targetClosure);
         ProtosActivation activation =
                 ProtosActivation.forClosureInvocation(
                         targetClosure,
@@ -434,7 +433,9 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                         caller.actorModuleState(),
                         caller.currentModuleKey().orElse(null),
                         caller.executionDomain());
-        activation.inheritDynamicControlState(caller);
+        attachTaskOrInheritDynamicControlState(
+                activation,
+                caller);
         return finishPreparingComposedCall(
                 targetClosure,
                 supplied,
@@ -528,20 +529,29 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
             ProtosObjectValue methodHome,
             List<?> supplied,
             ProtosActivation caller) {
-        rejectComposedInvocationTaskOrProjection(closure, caller);
+        rejectComposedInvocationProjection(closure);
         ProtosActivation activation = ProtosActivation.forImmediateMethodInvocation(
                 closure, supplied, receiver, methodHome, caller.prelude().orElse(null),
                 caller.actorModuleState(), caller.currentModuleKey().orElse(null), caller.executionDomain());
-        activation.inheritDynamicControlState(caller);
+        attachTaskOrInheritDynamicControlState(
+                activation,
+                caller);
         return finishPreparingComposedCall(closure, supplied, activation);
     }
 
-    private static void rejectComposedInvocationTaskOrProjection(
-            ProtosClosureValue closure, ProtosActivation caller) {
+    private static void attachTaskOrInheritDynamicControlState(
+            ProtosActivation activation,
+            ProtosActivation caller) {
         if (caller.task().isPresent()) {
-            throw new UnsupportedOperationException(
-                    "PERF006-B2 Task/Future continuation ownership belongs to PERF006-B3");
+            activation.attachTask(
+                    caller.task().orElseThrow());
+        } else {
+            activation.inheritDynamicControlState(caller);
         }
+    }
+
+    private static void rejectComposedInvocationProjection(
+            ProtosClosureValue closure) {
         if (closure.requiresContextLocalExecutionProjectionForRuntime()) {
             throw new UnsupportedOperationException(
                     "PERF006-B2 shared-Context Closure projection is not migrated yet");
@@ -551,7 +561,20 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     private static PreparedClosureCall finishPreparingComposedCall(
             ProtosClosureValue closure, List<?> supplied, ProtosActivation activation) {
         if (closure.nativeBody().isPresent()) {
-            return PreparedClosureCall.nativeCall(closure.nativeBody().orElseThrow(), supplied, activation);
+            if (activation.task().isPresent()) {
+                /*
+                 * B3B enables Task identity only for source-backed C-prime
+                 * composition. Until the explicit PLAT019 native capability
+                 * bridge lands, Task-backed native execution stays fail-closed
+                 * rather than entering the replay suspension path.
+                 */
+                throw new UnsupportedOperationException(
+                        "PERF006-B3 native suspension capability bridge is not migrated yet");
+            }
+            return PreparedClosureCall.nativeCall(
+                    closure.nativeBody().orElseThrow(),
+                    supplied,
+                    activation);
         }
         ProtosClosureExecutionPlan plan = closure.executionPlanForRuntimeInvocation();
         if (!plan.isBytecodeBackendForRuntime()) {
