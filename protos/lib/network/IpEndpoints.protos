@@ -52,7 +52,7 @@ parse: (text) => {
         digitCount: 0
 
         (() => index < size).while() {
-            digit: digitValue(text.at(index))
+            digit: digitValue(text[index])
             (digit < 0).ifTrue(() => {
                 fail()
             })
@@ -80,7 +80,7 @@ parse: (text) => {
 
     IpAddresses: import("std:network/IpAddresses")
 
-    bracketed: text.at(0) == "["
+    bracketed: text[0] == "["
     addressText: ""
     portStart: -1
     address: null
@@ -97,7 +97,7 @@ parse: (text) => {
             })
             keepScanning
         }).while() {
-            character: text.at(index)
+            character: text[index]
 
             (character == "]").ifTrue(() => {
                 closed = true
@@ -122,7 +122,7 @@ parse: (text) => {
         (index >= size).ifTrue(() => {
             fail()
         })
-        (text.at(index) == ":").ifFalse(() => {
+        (text[index] == ":").ifFalse(() => {
             fail()
         })
 
@@ -141,7 +141,7 @@ parse: (text) => {
         addressLength: 0
 
         (() => index < size).while() {
-            character: text.at(index)
+            character: text[index]
             isSeparator: character == ":"
 
             isSeparator.ifTrue(() => {

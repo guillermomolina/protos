@@ -143,7 +143,7 @@ parse: (text) => {
         }
 
         (() => index < size).while() {
-            character: source.at(index)
+            character: source[index]
             isSeparator: character == "."
 
             isSeparator.ifTrue(() => {
@@ -246,11 +246,11 @@ parse: (text) => {
             hextetCount = hextetCount + 1
         }
 
-        (source.at(0) == ":").ifTrue(() => {
+        (source[0] == ":").ifTrue(() => {
             (size < 2).ifTrue(() => {
                 fail()
             })
-            (source.at(1) == ":").ifFalse(() => {
+            (source[1] == ":").ifFalse(() => {
                 fail()
             })
             compressionIndex = 0
@@ -270,7 +270,7 @@ parse: (text) => {
             value: 0
 
             (() => tokenIndex < tokenSize).while() {
-                digit: hexDigitValue(token.at(tokenIndex))
+                digit: hexDigitValue(token[tokenIndex])
                 (digit < 0).ifTrue(() => {
                     fail()
                 })
@@ -288,11 +288,11 @@ parse: (text) => {
             (() => {
                 stillInside: index < size
                 stillInside.ifTrue(() => {
-                    stillInside = source.at(index) != ":"
+                    stillInside = source[index] != ":"
                 })
                 stillInside
             }).while() {
-                character: source.at(index)
+                character: source[index]
                 (character == ".").ifTrue(() => {
                     containsDot = true
                 })
@@ -329,7 +329,7 @@ parse: (text) => {
                     fail()
                 })
 
-                (source.at(index) == ":").ifTrue(() => {
+                (source[index] == ":").ifTrue(() => {
                     (compressionIndex >= 0).ifTrue(() => {
                         fail()
                     })
@@ -413,7 +413,7 @@ parse: (text) => {
     containsColon: false
     scanIndex: 0
     (() => scanIndex < totalSize).while() {
-        (text.at(scanIndex) == ":").ifTrue(() => {
+        (text[scanIndex] == ":").ifTrue(() => {
             containsColon = true
         })
         scanIndex = scanIndex + 1
