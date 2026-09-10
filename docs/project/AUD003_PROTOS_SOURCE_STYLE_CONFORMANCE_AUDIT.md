@@ -134,7 +134,7 @@ listed in one table.
 | AUD003-A3 | CLOSED | Bundled-tool indexing audit/migration: ordinary indexing debt migrated across 16 execution-time Package/Test Tool modules; no result-sensitive/protocol/bootstrap exception was rewritten; validated under `0.2.295-SNAPSHOT`. |
 | AUD003-A4 | CLOSED | Benchmarks and remaining ordinary-program indexing audit/migration: the final reviewed debt across two benchmark workloads and one user-facing tutorial was migrated; the complete benchmarks/examples/tutorials executable-source rescan is clean. |
 | AUD003-B1 | CLOSED | Lazy Boolean spelling audit closed: B1a migrated ordinary explicit parameterless-Closure `and`/`or` spellings while retaining direct Boolean-protocol evidence; B1b migrated the reviewed ordinary trailing-Closure population, retained protocol-teaching exceptions, and closed on a fail-closed executable/guide rescan. |
-| AUD003-B2 | OPEN | Ordinary unary spelling audit for explicit `not`/`negated`, retaining protocol/lowering tests. |
+| AUD003-B2 | CLOSED | Unary spelling audit closed: ordinary `negated()` uses, including concurrent I032-A general fixed-width arithmetic coverage, migrated to unary `-`; no ordinary `.not()` debt remained; direct protocol/lowering/error/slot-visibility evidence and protocol-teaching documentation remain explicit by purpose. |
 | AUD003-C | OPEN | Conformance-corpus exception classification: make deliberate canonical/protocol cases explicit and migrate ordinary-code cases. |
 | AUD003-D | OPEN | Prevention gate: add a bounded source-style guard that understands path/purpose exceptions or an explicit allowlist; a repository-wide dumb grep that bans canonical forms is not acceptable. |
 | AUD003-E | OPEN | Final repository rescan, exception review, documentation reconciliation, and closure evidence. |
@@ -354,6 +354,55 @@ protocol-teaching examples in chapter 04.
 With B1a already closed, B1b closure also closes `AUD003-B1`. No language
 specification, runtime behavior, implementation version, public API, native
 boundary, or license terms change.
+
+### AUD003-B2 retained evidence
+
+GitHub coordination: Issue `#115` (`AUD003-B2`).
+
+B2 audited the specified unary surface spellings `!value -> value.not()` and
+`-value -> value.negated()` across current hand-written Protos source.
+
+The execution-time inventory found no ordinary `.not()` migration target. The
+three retained executable `.not()` occurrences are direct Boolean protocol
+conformance cases: true, false, and invalid non-Boolean receiver behavior.
+
+For `.negated()`, B2a migrated incidental negative-value construction in three
+Test Tool test sources. While B2 remained open, I032-A published source-backed
+fixed-width `negated` behavior and added six further explicit selector uses.
+B2 classifies its three uses in
+`fixed-width/arithmetic-a-positive.protos` as ordinary general-arithmetic source
+and migrates them to unary `-`. The three I032-A files whose own purpose is
+`negated` receiver/failure behavior remain explicit canonical evidence.
+
+B2b also migrates the remaining ordinary distributable Test Tool occurrence in
+`protos/tools/test/Runner.protos` from `result.negated()` to `-result`; the
+operator is the already-specified surface lowering to the same ordinary
+`negated` dispatch, so Float sign/negative-zero behavior and Test Tool
+observation semantics are unchanged.
+
+The retained executable `.negated()` occurrences are deliberate evidence:
+
+- `protos/tests/conformance/integer/prototype-local-slot-visible.protos` directly
+  proves the source-backed Integer prototype slot is visible;
+- the Integer and Float `negated-delegated-non*-receiver-error.protos` cases
+  directly exercise receiver-family enforcement through the selector;
+- fixed-width `arithmetic-a-negated-delegated-receiver-error.protos`,
+  `arithmetic-a-signed-min-negated-error.protos`, and
+  `arithmetic-a-unsigned-positive-negated-error.protos` directly exercise the
+  newly published fixed-width `negated` selector's receiver and checked-range
+  failure contracts.
+
+The Programming Guide retains four explicit `.not()` occurrences in chapter 04
+because that chapter directly teaches Boolean `not`, its exact true/false
+results, the mandatory `!` lowering, and the canonical/surface equivalence
+example. `docs/guide/SOURCE_STYLE.md` retains one further canonical spelling
+specifically to explain the idiomatic-source policy itself.
+
+The B2 closure gate rescans every current `protos/**/*.protos` file plus the
+complete Programming Guide and requires the remaining explicit unary protocol
+spellings to equal exactly those classified exceptions. No Protos specification,
+public API, native boundary, or license-term change. Because B2b changes
+distributable Test Tool source, normal implementation versioning applies.
 
 ## Migration discipline
 

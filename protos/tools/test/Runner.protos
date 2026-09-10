@@ -471,7 +471,7 @@ floatFromExpectedBits: (rawBits) => {
     })
 
     negative.ifTrue(() => {
-        result = result.negated()
+        result = -result
     })
 
     result
