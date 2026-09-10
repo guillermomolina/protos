@@ -1,5 +1,19 @@
 ## 0.2.347-SNAPSHOT
 
+- Add `GITHUB007 — Issue intake and creation governance` (GitHub #319) to keep
+  newly created Issues coherent with GITHUB004–GITHUB006 without reintroducing a
+  second Project authority. Add distinct tracked-work, bug, documentation and
+  community-request intake forms; give form-created Issues neutral
+  `status:inbox` with Priority intentionally unset; keep community reports free
+  of formal `family:*` classification until maintainer promotion; and add a
+  repository-local intake workflow/helper that derives formal family from an
+  authorized identifier, repairs one unambiguous missing native parent, rejects
+  parent conflicts, and refuses to promote untrusted identifier-shaped
+  submissions. Keep the existing Project status/priority synchronizer as the
+  sole Status/Priority projection path. No specification, Protos semantics,
+  runtime implementation, implementation version, public API, release artifact,
+  license term or design decision changes.
+
 - Begin `LM009-E — VS Code debugging integration` with the explicitly owner-approved Candidate B-prime E1 wiring. Contribute Protos source breakpoints and a launch-only `protos` debugger surface; derive F5 active-file configuration without requiring `launch.json`; retain `program` plus optional string `args` as the persisted launch surface; reuse `protos.runtime.executable`; and have one `DebugAdapterDescriptorFactory` launcher child per session start `protos debug <absolute-file> [args...]` without a shell, consume only D060 version-1 `PROTOS_DEBUG_READY` stdout framing, validate numeric loopback endpoint data, and return `DebugAdapterServer` so VS Code talks directly to the real GraalVM DAP. Add deterministic Node/Python coverage for local/Remote active-file configuration, argument/runtime handling, readiness validation, failure cleanup and concurrent-session isolation. Keep attach, remote listen, readiness files, stop-on-entry, DAP proxying and stronger `terminateDebuggee` behavior out of the baseline. S3 live VS Code evidence remains required before LM009-E closure. No Protos specification/runtime, Maven implementation-version, static language service or Marketplace release change.
 
 - Advance `CLI008-B — value inspection / pretty rendering implementation` with bounded

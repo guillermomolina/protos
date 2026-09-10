@@ -543,6 +543,58 @@ unavailable at migration time does not require bulk rewriting after the native
 relationship has been established. Preserve historical wording unless a bounded
 Issue-content reconciliation explicitly owns that cleanup.
 
+## GitHub Issue intake and creation
+<!-- GITHUB007 ISSUE-INTAKE-GOVERNANCE -->
+
+GitHub Issue forms are **intake surfaces**, not authority over Protos semantics,
+design approval, work-family allocation, lifecycle state after intake, or
+scheduling priority.
+
+The repository distinguishes:
+
+- **tracked project work** — maintainer-allocated formal identifiers;
+- **bug reports** — community defect intake, not automatically `BUGxxx`;
+- **documentation problems** — community documentation intake; and
+- **community requests** — concrete adoption/example/tooling/packaging/ecosystem
+  requests. Open-ended questions and language/design proposals belong in
+  Discussions.
+
+Form-created Issues start with `status:inbox`. No Issue form assigns
+`priority:*`; GITHUB005's explicit-unset priority rule remains authoritative.
+
+For a maintainer-authorized formal Issue, `scripts/issue_intake.py` may
+mechanically reconcile only facts already determined by the formal identifier
+and explicit hierarchy declaration:
+
+- derive the one `family:<FAMILY>` label from the identifier prefix;
+- preserve unrelated labels;
+- verify the GITHUB006 native parent relation; and
+- when no native parent exists, consume one unambiguous explicit `Parent: #N`,
+  `Parent work item: #N`, or tracked-work `Parent issue` response only as
+  bootstrap input to establish the native relation.
+
+The helper MUST NOT infer a parent from dependencies, `Triggered by` prose,
+similar names, family membership, or Project grouping. It MUST NOT replace a
+conflicting existing native parent automatically.
+
+A contributor cannot allocate formal Protos work merely by typing an
+identifier-shaped title or selecting the tracked-work form. Automatic formal
+reconciliation requires a maintainer-trusted author association (OWNER, MEMBER
+or COLLABORATOR) or an already-applied `family:*` label that demonstrates
+maintainer adoption. Untrusted formal-looking submissions remain ordinary
+triage.
+
+The intake helper does not infer `Ready`, `In progress`, `Needs decision`,
+`Blocked`, `Paused`, `Review`, assignee, or Priority from Issue prose. Existing
+GITHUB004/GITHUB005 status/priority synchronization remains the sole automated
+Project projection path.
+
+Agents creating formal Issues directly through GitHub APIs/CLI MUST still create
+them correctly in the first place: apply the matching family label, the proper
+live status/assignee when known, and the native parent in the same coordination
+step when the Issue is a formal child. The intake workflow is a convergence
+safety net, not permission to omit those obligations.
+
 ## Live GitHub assignee discipline
 <!-- LIVE-GITHUB-ASSIGNEE-DISCIPLINE -->
 
