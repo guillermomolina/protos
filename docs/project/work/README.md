@@ -11,6 +11,9 @@ migration moves them; new unambiguous records use `work/<formal-work-item>/`.
 
 Current role-first DOC002 records:
 
+- [`PERF004/PERF004_RUNTIME_PERFORMANCE_CHARACTERIZATION.md`](PERF004/PERF004_RUNTIME_PERFORMANCE_CHARACTERIZATION.md)
+  — canonical non-normative PERF004 cross-language runtime-performance characterization record.
+
 - [`PERF001/PERF001_BENCHMARKING.md`](PERF001/PERF001_BENCHMARKING.md)
   — PERF001 non-normative benchmark ownership, reproducibility and evidence plan.
   - [`PERF001-F concurrency methodology`](PERF001/PERF001_F_CONCURRENCY_METHODOLOGY.md)
