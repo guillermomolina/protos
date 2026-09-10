@@ -23,6 +23,9 @@ import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
+import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
+import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
+import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.source.Source;
@@ -31,11 +34,10 @@ import java.util.Objects;
 /**
  * Internal Bytecode DSL execution plan for the first Closure migration seam.
  *
- * <p>PERF006-B2C3B1 makes the Bytecode root the complete Closure activation
- * seam for the already-migrated required/rest subset: binding now executes as
- * the first operation of the same root that executes the body. Default binding
- * remains fail-closed for later B2C3B slices, and normal Closure dispatch remains
- * staged for later PERF006-B work.</p>
+ * <p>PERF006-B2C3B2 keeps one Bytecode Closure activation root and adds
+ * literal/lookup defaults to its ordered parameter-binding prologue. Supplied
+ * arguments suppress defaults, lookup defaults see earlier bound parameters,
+ * and call/send defaults remain fail-closed for B2C3B3.</p>
  */
 final class ProtosBytecodeClosureExecutionPlan {
     private final CanonicalClosure definition;
@@ -79,8 +81,13 @@ final class ProtosBytecodeClosureExecutionPlan {
                 throw new IllegalArgumentException("rest parameter must be trailing");
             }
             if (parameter.defaultValue().isPresent()) {
-                throw new UnsupportedOperationException(
-                        "PERF006-B2C3A default parameter binding is deferred");
+                CanonicalExpression defaultExpression =
+                        parameter.defaultValue().orElseThrow();
+                if (!(defaultExpression instanceof CanonicalLiteral)
+                        && !(defaultExpression instanceof CanonicalLookup)) {
+                    throw new UnsupportedOperationException(
+                            "PERF006-B2C3B2 default expression must be literal or lexical lookup");
+                }
             }
         }
 
@@ -129,6 +136,12 @@ final class ProtosBytecodeClosureExecutionPlan {
             ProtosActivation activation) {
         Objects.requireNonNull(definition, "definition");
         Objects.requireNonNull(activation, "activation");
+        for (CanonicalParameter parameter : definition.parameters()) {
+            if (parameter.defaultValue().isPresent()) {
+                throw new UnsupportedOperationException(
+                        "PERF006-B2C3B2 direct Java bind helper does not execute default expressions");
+            }
+        }
         java.util.List<Object> supplied =
                 activation.arguments()
                         .orElseThrow(

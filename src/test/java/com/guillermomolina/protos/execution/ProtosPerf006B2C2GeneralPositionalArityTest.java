@@ -186,7 +186,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
     }
 
     @Test
-    void nestedCallArgumentsAndDefaultBindingRemainFailClosed()
+    void nestedCallArgumentsAndCallDefaultsRemainFailClosed()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -216,7 +216,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                                 .contains(
                                         "argument must be literal or lexical lookup"));
 
-                String defaultCharacters = "(a, b = null) => { b }";
+                String defaultCharacters = "(a, b = child()) => { b }";
                 CanonicalClosure defaultDefinition =
                         closureDefinition(defaultCharacters);
                 Source defaultSource =
@@ -235,7 +235,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                                                 defaultSource));
                 assertTrue(
                         defaultFailure.getMessage()
-                                .contains("default parameter binding is deferred"));
+                                .contains("default expression must be literal or lexical lookup"));
 
             } finally {
                 context.leave();
@@ -245,7 +245,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
         System.out.println(
                 "PERF006_B2C2_NESTED_ARGUMENT_COMPOSITION_DEFERRED=PASS");
         System.out.println(
-                "PERF006_B2C2_DEFAULT_BINDING_DEFERRED=PASS");
+                "PERF006_B2C2_CALL_DEFAULT_BINDING_DEFERRED=PASS");
     }
 
     private static void assertGuestArityError(

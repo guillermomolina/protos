@@ -200,7 +200,7 @@ final class ProtosPerf006B2C3ARestBindingTest {
     }
 
     @Test
-    void requiredPrefixStillRejectsTooFewArgumentsAndDefaultsRemainDeferred()
+    void requiredPrefixStillRejectsTooFewArgumentsAndCallDefaultsRemainDeferred()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -237,7 +237,7 @@ final class ProtosPerf006B2C3ARestBindingTest {
                         ProtosSignalException.class,
                         () -> missingRequired.getCallTarget().call(module));
 
-                String defaultCharacters = "(head, fallback = head) => { fallback }";
+                String defaultCharacters = "(head, fallback = child()) => { fallback }";
                 Source defaultSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -257,14 +257,14 @@ final class ProtosPerf006B2C3ARestBindingTest {
                                                 defaultSource));
                 org.junit.jupiter.api.Assertions.assertTrue(
                         defaultFailure.getMessage()
-                                .contains("default parameter binding is deferred"));
+                                .contains("default expression must be literal or lexical lookup"));
             } finally {
                 context.leave();
             }
         }
 
         System.out.println("PERF006_B2C3A_REQUIRED_PREFIX_ARITY=PASS");
-        System.out.println("PERF006_B2C3A_DEFAULT_BINDING_STILL_DEFERRED=PASS");
+        System.out.println("PERF006_B2C3A_CALL_DEFAULT_BINDING_STILL_DEFERRED=PASS");
     }
 
     private static ProtosBytecodeRootNode lowerCall(

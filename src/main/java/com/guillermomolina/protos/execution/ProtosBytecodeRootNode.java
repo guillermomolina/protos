@@ -19,8 +19,10 @@ package com.guillermomolina.protos.execution;
 
 import com.oracle.truffle.api.bytecode.BytecodeRootNode;
 import com.guillermomolina.protos.runtime.ProtosActivation;
+import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosCoreErrors;
+import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
@@ -36,6 +38,7 @@ import com.oracle.truffle.api.frame.FrameDescriptor;
 import com.oracle.truffle.api.nodes.DirectCallNode;
 import com.oracle.truffle.api.nodes.IndirectCallNode;
 import com.oracle.truffle.api.nodes.RootNode;
+import java.math.BigInteger;
 import java.util.List;
 
 /**
@@ -74,6 +77,129 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
                     definition,
                     activation);
         }
+    }
+
+    @Operation
+    public static final class HasClosureArgument {
+        @Specialization
+        public static boolean perform(
+                ProtosActivation activation,
+                int positionalIndex) {
+            ProtosArrayValue arguments =
+                    closureArguments(activation);
+            return arguments.indexedSize()
+                            .compareTo(
+                                    BigInteger.valueOf(
+                                            positionalIndex))
+                    > 0;
+        }
+    }
+
+    @Operation
+    public static final class LoadClosureArgument {
+        @Specialization
+        public static Object perform(
+                ProtosActivation activation,
+                int positionalIndex) {
+            ProtosArrayValue arguments =
+                    closureArguments(activation);
+            BigInteger index =
+                    BigInteger.valueOf(positionalIndex);
+            if (arguments.indexedSize().compareTo(index) <= 0) {
+                throw closureArgumentCountError(activation);
+            }
+            return arguments.indexedAt(index);
+        }
+    }
+
+    @Operation
+    public static final class BindClosureParameter {
+        @Specialization
+        public static void perform(
+                ProtosActivation activation,
+                String name,
+                Object value) {
+            createClosureParameterSlot(
+                    activation,
+                    name,
+                    value);
+        }
+    }
+
+    @Operation
+    public static final class BindClosureRest {
+        @Specialization
+        public static void perform(
+                ProtosActivation activation,
+                String name,
+                int positionalParametersBeforeRest) {
+            ProtosArrayValue arguments =
+                    closureArguments(activation);
+            List<Object> supplied =
+                    arguments.indexedSnapshot();
+            int restStart =
+                    Math.min(
+                            positionalParametersBeforeRest,
+                            supplied.size());
+            ProtosPrelude prelude =
+                    activation.prelude()
+                            .orElseThrow(
+                                    () ->
+                                            new IllegalStateException(
+                                                    "parameter binding requires an owning Core prelude"));
+            createClosureParameterSlot(
+                    activation,
+                    name,
+                    prelude.newFrozenArray(
+                            supplied.subList(
+                                    restStart,
+                                    supplied.size())));
+        }
+    }
+
+    @Operation
+    public static final class CheckClosureArgumentUpperBound {
+        @Specialization
+        public static void perform(
+                ProtosActivation activation,
+                int maximumPositionalArguments) {
+            if (closureArguments(activation)
+                            .indexedSize()
+                            .compareTo(
+                                    BigInteger.valueOf(
+                                            maximumPositionalArguments))
+                    > 0) {
+                throw closureArgumentCountError(activation);
+            }
+        }
+    }
+
+    private static ProtosArrayValue closureArguments(
+            ProtosActivation activation) {
+        return activation.arguments()
+                .orElseThrow(
+                        () ->
+                                new IllegalStateException(
+                                        "parameter binding requires an invocation activation"));
+    }
+
+    private static void createClosureParameterSlot(
+            ProtosActivation activation,
+            String name,
+            Object value) {
+        try {
+            activation.context()
+                    .createLocalSlot(name, value);
+        } catch (IllegalStateException invalidCreation) {
+            throw new ProtosSignalException(
+                    ProtosCoreErrors.newError(activation));
+        }
+    }
+
+    private static ProtosSignalException closureArgumentCountError(
+            ProtosActivation activation) {
+        return new ProtosSignalException(
+                ProtosCoreErrors.newError(activation));
     }
 
     @Operation

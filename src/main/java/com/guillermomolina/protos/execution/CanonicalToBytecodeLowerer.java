@@ -26,6 +26,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalExpression;
 import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
+import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
 import com.guillermomolina.protos.source.SourceSpan;
 import com.oracle.truffle.api.CallTarget;
@@ -39,12 +40,11 @@ import java.util.Objects;
 /**
  * Parallel canonical-to-Bytecode lowering seam for the PERF006-B migration.
  *
- * <p>PERF006-B2C2 supports general positional arity for source-level
- * {@link CanonicalCall} whose receiver is a lexical {@link CanonicalLookup}.
- * Arguments are evaluated left-to-right after the receiver and are collected by
- * the Bytecode DSL variadic operand mechanism. Calls compose child Bytecode
- * continuations through their caller rather than treating a child continuation
- * as a guest value.
+ * <p>PERF006-B2C3B2 lowers the Closure activation prologue as ordinary
+ * Bytecode operations. Required positional binding, literal/lookup defaults,
+ * and trailing rest binding therefore execute in declaration order inside the
+ * same activation root as the body. Calls compose child Bytecode continuations
+ * through their caller rather than treating a child continuation as a guest value.
  * The ordinary {@link ProtosSourceCompiler} remains
  * on the established AST lowerer
  * until later PERF006-B slices have migrated calls, suspension and control
@@ -70,6 +70,7 @@ final class CanonicalToBytecodeLowerer {
     ProtosBytecodeRootNode lowerClosureActivationRoot(
             CanonicalClosure definition) {
         Objects.requireNonNull(definition, "definition");
+        validateSupportedDefaults(definition);
         return lowerRoot(definition.body(), definition);
     }
 
@@ -99,10 +100,9 @@ final class CanonicalToBytecodeLowerer {
                             builder.beginRoot();
 
                             if (activationDefinition != null) {
-                                builder.beginBindClosureParameters();
-                                builder.emitLoadArgument(0);
-                                builder.emitLoadConstant(activationDefinition);
-                                builder.endBindClosureParameters();
+                                emitClosureParameterBindings(
+                                        builder,
+                                        activationDefinition);
                             }
 
                             if (sequence.expressions().isEmpty()) {
@@ -174,6 +174,103 @@ final class CanonicalToBytecodeLowerer {
                         });
 
         return roots.getNode(0);
+    }
+
+    private void validateSupportedDefaults(
+            CanonicalClosure definition) {
+        for (CanonicalParameter parameter : definition.parameters()) {
+            if (parameter.defaultValue().isEmpty()) {
+                continue;
+            }
+            CanonicalExpression defaultExpression =
+                    parameter.defaultValue().orElseThrow();
+            validateSpan(defaultExpression.span());
+            if (!(defaultExpression instanceof CanonicalLiteral)
+                    && !(defaultExpression instanceof CanonicalLookup)) {
+                throw new UnsupportedOperationException(
+                        "PERF006-B2C3B2 default expression must be literal or lexical lookup");
+            }
+        }
+    }
+
+    private static void emitClosureParameterBindings(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalClosure definition) {
+        int positionalIndex = 0;
+        boolean hasRest = false;
+
+        for (CanonicalParameter parameter : definition.parameters()) {
+            if (parameter.rest()) {
+                builder.beginBindClosureRest();
+                builder.emitLoadArgument(0);
+                builder.emitLoadConstant(parameter.name());
+                builder.emitLoadConstant(positionalIndex);
+                builder.endBindClosureRest();
+                hasRest = true;
+                continue;
+            }
+
+            if (parameter.defaultValue().isPresent()) {
+                CanonicalExpression defaultExpression =
+                        parameter.defaultValue().orElseThrow();
+
+                builder.beginIfThenElse();
+
+                builder.beginHasClosureArgument();
+                builder.emitLoadArgument(0);
+                builder.emitLoadConstant(positionalIndex);
+                builder.endHasClosureArgument();
+
+                builder.beginBlock();
+                emitBindSuppliedClosureParameter(
+                        builder,
+                        parameter,
+                        positionalIndex);
+                builder.endBlock();
+
+                builder.beginBlock();
+                builder.beginBindClosureParameter();
+                builder.emitLoadArgument(0);
+                builder.emitLoadConstant(parameter.name());
+                builder.beginSourceSection(
+                        defaultExpression.span().startOffset(),
+                        defaultExpression.span().length());
+                emitExpression(builder, defaultExpression);
+                builder.endSourceSection();
+                builder.endBindClosureParameter();
+                builder.endBlock();
+
+                builder.endIfThenElse();
+            } else {
+                emitBindSuppliedClosureParameter(
+                        builder,
+                        parameter,
+                        positionalIndex);
+            }
+
+            positionalIndex++;
+        }
+
+        if (!hasRest) {
+            builder.beginCheckClosureArgumentUpperBound();
+            builder.emitLoadArgument(0);
+            builder.emitLoadConstant(positionalIndex);
+            builder.endCheckClosureArgumentUpperBound();
+        }
+    }
+
+    private static void emitBindSuppliedClosureParameter(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalParameter parameter,
+            int positionalIndex) {
+        builder.beginBindClosureParameter();
+        builder.emitLoadArgument(0);
+        builder.emitLoadConstant(parameter.name());
+        builder.beginLoadClosureArgument();
+        builder.emitLoadArgument(0);
+        builder.emitLoadConstant(positionalIndex);
+        builder.endLoadClosureArgument();
+        builder.endBindClosureParameter();
     }
 
     private void validateSupported(CanonicalSequence sequence) {

@@ -19,7 +19,6 @@ package com.guillermomolina.protos.execution;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
-import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -31,6 +30,7 @@ import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosStringValue;
 import com.guillermomolina.protos.semantic.Canonicalizer;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
@@ -40,12 +40,145 @@ import java.util.List;
 import org.graalvm.polyglot.Context;
 import org.junit.jupiter.api.Test;
 
-final class ProtosPerf006B2C3B1ActivationRootSeamTest {
+final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
     private static final LanguageReference<ProtosLanguage> LANGUAGE_REF =
             LanguageReference.create(ProtosLanguage.class);
 
     @Test
-    void requiredAndRestBindingExecuteInsideOneActivationRoot()
+    void omittedLiteralAndLookupDefaultsExecuteInTheActivationRoot()
+            throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosLanguage language = LANGUAGE_REF.get(null);
+                ProtosActivation module = moduleActivation();
+                ProtosObjectValue head =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+
+                String characters =
+                        "(head, literalDefault = \"fallback\", inherited = head) => { inherited }";
+                Source source =
+                        Source.newBuilder(
+                                        ProtosLanguage.ID,
+                                        characters,
+                                        "perf006-b2c3b2-simple-defaults.protos")
+                                .build();
+                CanonicalClosure definition = closureDefinition(characters);
+                ProtosClosureValue semantic =
+                        new ProtosClosureValue(
+                                definition,
+                                module.lexicalContextsForClosureCapture(),
+                                module.receiver(),
+                                module.methodHome().orElse(null),
+                                module.returnHome().orElse(null),
+                                module.prelude().orElseThrow());
+
+                ProtosActivation invocation =
+                        ProtosActivation.forClosureInvocation(
+                                semantic,
+                                List.of(head),
+                                module.prelude().orElseThrow(),
+                                module.actorModuleState(),
+                                module.currentModuleKey().orElse(null),
+                                module.executionDomain());
+
+                Object result =
+                        new ProtosBytecodeClosureExecutionPlan(
+                                        definition,
+                                        language,
+                                        source)
+                                .executeActivation(invocation);
+
+                assertSame(head, result);
+                ProtosStringValue literal =
+                        assertInstanceOf(
+                                ProtosStringValue.class,
+                                invocation.lookup("literalDefault").orElseThrow());
+                assertEquals("fallback", literal.value());
+                assertSame(
+                        head,
+                        invocation.lookup("inherited").orElseThrow());
+
+                ProtosArrayValue args =
+                        invocation.arguments().orElseThrow();
+                assertEquals(1, args.indexedSnapshot().size());
+                assertSame(head, args.indexedSnapshot().get(0));
+            } finally {
+                context.leave();
+            }
+        }
+
+        System.out.println("PERF006_B2C3B2_LITERAL_DEFAULT=PASS");
+        System.out.println("PERF006_B2C3B2_LOOKUP_DEFAULT=PASS");
+        System.out.println("PERF006_B2C3B2_EARLIER_PARAMETER_VISIBILITY=PASS");
+        System.out.println("PERF006_B2C3B2_ARGS_VECTOR_UNCHANGED=PASS");
+    }
+
+    @Test
+    void suppliedArgumentsSuppressTheirDefaultsCompletely()
+            throws Exception {
+        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
+            context.initialize(ProtosLanguage.ID);
+            context.enter();
+            try {
+                ProtosLanguage language = LANGUAGE_REF.get(null);
+                ProtosActivation module = moduleActivation();
+
+                ProtosObjectValue first =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosObjectValue second =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                ProtosObjectValue third =
+                        new ProtosObjectValue(ProtosObjectValue.rootObject());
+                module.context().createLocalSlot("first", first);
+                module.context().createLocalSlot("second", second);
+                module.context().createLocalSlot("third", third);
+
+                String closureCharacters =
+                        "(head, fallback = missingDefault, finalValue = missingFinal) => { finalValue }";
+                Source closureSource =
+                        Source.newBuilder(
+                                        ProtosLanguage.ID,
+                                        closureCharacters,
+                                        "perf006-b2c3b2-suppression-closure.protos")
+                                .build();
+                CanonicalClosure definition =
+                        closureDefinition(closureCharacters);
+                module.context().createLocalSlot(
+                        "entry",
+                        semanticClosure(
+                                definition,
+                                ProtosClosureExecutionPlan.bytecode(
+                                        definition,
+                                        language,
+                                        closureSource),
+                                module));
+
+                String callCharacters =
+                        "entry(first, second, third)";
+                Source callSource =
+                        Source.newBuilder(
+                                        ProtosLanguage.ID,
+                                        callCharacters,
+                                        "perf006-b2c3b2-suppression-call.protos")
+                                .build();
+                ProtosBytecodeRootNode caller =
+                        new CanonicalToBytecodeLowerer(language, callSource)
+                                .lowerRoot(canonicalize(callCharacters));
+
+                assertSame(third, caller.getCallTarget().call(module));
+            } finally {
+                context.leave();
+            }
+        }
+
+        System.out.println("PERF006_B2C3B2_SUPPLIED_ARGUMENT_SUPPRESSES_DEFAULT=PASS");
+        System.out.println("PERF006_B2C3B2_SOURCE_LEVEL_SIMPLE_DEFAULT_CALL=PASS");
+    }
+
+    @Test
+    void defaultBeforeRestCapturesOnlyActuallyUnconsumedArguments()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -61,12 +194,13 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                 ProtosObjectValue third =
                         new ProtosObjectValue(ProtosObjectValue.rootObject());
 
-                String characters = "(head, ...tail) => { tail }";
+                String characters =
+                        "(head, fallback = head, ...tail) => { tail }";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
                                         characters,
-                                        "perf006-b2c3b1-activation-root.protos")
+                                        "perf006-b2c3b2-default-rest.protos")
                                 .build();
                 CanonicalClosure definition = closureDefinition(characters);
                 ProtosClosureValue semantic =
@@ -77,8 +211,28 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                                 module.methodHome().orElse(null),
                                 module.returnHome().orElse(null),
                                 module.prelude().orElseThrow());
+                ProtosBytecodeClosureExecutionPlan plan =
+                        new ProtosBytecodeClosureExecutionPlan(
+                                definition,
+                                language,
+                                source);
 
-                ProtosActivation invocation =
+                ProtosActivation omitted =
+                        ProtosActivation.forClosureInvocation(
+                                semantic,
+                                List.of(first),
+                                module.prelude().orElseThrow(),
+                                module.actorModuleState(),
+                                module.currentModuleKey().orElse(null),
+                                module.executionDomain());
+                ProtosArrayValue omittedRest =
+                        assertInstanceOf(
+                                ProtosArrayValue.class,
+                                plan.executeActivation(omitted));
+                assertSame(first, omitted.lookup("fallback").orElseThrow());
+                assertEquals(0, omittedRest.indexedSnapshot().size());
+
+                ProtosActivation supplied =
                         ProtosActivation.forClosureInvocation(
                                 semantic,
                                 List.of(first, second, third),
@@ -86,49 +240,27 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                                 module.actorModuleState(),
                                 module.currentModuleKey().orElse(null),
                                 module.executionDomain());
-                ProtosArrayValue supplied =
-                        invocation.arguments().orElseThrow();
-
-                ProtosBytecodeClosureExecutionPlan plan =
-                        new ProtosBytecodeClosureExecutionPlan(
-                                definition,
-                                language,
-                                source);
-
-                /*
-                 * B2C3B1 intentionally does NOT call plan.bind(...).
-                 * Binding must happen at the beginning of the same Bytecode
-                 * activation root that executes the body.
-                 */
-                Object result = plan.executeActivation(invocation);
-
-                assertSame(first, invocation.lookup("head").orElseThrow());
-                ProtosArrayValue rest =
-                        assertInstanceOf(ProtosArrayValue.class, result);
-                assertSame(rest, invocation.lookup("tail").orElseThrow());
-                assertNotSame(supplied, rest);
+                ProtosArrayValue suppliedRest =
+                        assertInstanceOf(
+                                ProtosArrayValue.class,
+                                plan.executeActivation(supplied));
+                assertSame(second, supplied.lookup("fallback").orElseThrow());
+                assertEquals(1, suppliedRest.indexedSnapshot().size());
+                assertSame(third, suppliedRest.indexedSnapshot().get(0));
                 assertSame(
                         ProtosObjectValue.MutationState.FROZEN,
-                        rest.mutationState());
-                assertEquals(2, rest.indexedSnapshot().size());
-                assertSame(second, rest.indexedSnapshot().get(0));
-                assertSame(third, rest.indexedSnapshot().get(1));
-                assertEquals(3, supplied.indexedSnapshot().size());
+                        suppliedRest.mutationState());
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println(
-                "PERF006_B2C3B1_BINDING_INSIDE_ACTIVATION_ROOT=PASS");
-        System.out.println(
-                "PERF006_B2C3B1_REQUIRED_REST_EQUIVALENCE=PASS");
-        System.out.println(
-                "PERF006_B2C3B1_ARGS_VECTOR_PRESERVED=PASS");
+        System.out.println("PERF006_B2C3B2_DEFAULT_BEFORE_REST=PASS");
+        System.out.println("PERF006_B2C3B2_REST_CONSUMED_PREFIX=PASS");
     }
 
     @Test
-    void composedClosureCallEntersActivationTargetWithoutCallerPrebind()
+    void requiredArityAndComplexDefaultBoundaryRemainFailClosed()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -137,115 +269,59 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
                 ProtosActivation module = moduleActivation();
 
-                ProtosObjectValue first =
-                        new ProtosObjectValue(ProtosObjectValue.rootObject());
-                ProtosObjectValue second =
-                        new ProtosObjectValue(ProtosObjectValue.rootObject());
-                module.context().createLocalSlot("first", first);
-                module.context().createLocalSlot("second", second);
-
-                String closureCharacters = "(head, ...tail) => { head }";
-                Source closureSource =
-                        Source.newBuilder(
-                                        ProtosLanguage.ID,
-                                        closureCharacters,
-                                        "perf006-b2c3b1-composed-closure.protos")
-                                .build();
-                CanonicalClosure definition =
-                        closureDefinition(closureCharacters);
-                ProtosClosureExecutionPlan plan =
-                        ProtosClosureExecutionPlan.bytecode(
-                                definition,
-                                language,
-                                closureSource);
-                module.context().createLocalSlot(
-                        "entry",
-                        semanticClosure(definition, plan, module));
-
-                String callCharacters = "entry(first, second)";
-                Source callSource =
-                        Source.newBuilder(
-                                        ProtosLanguage.ID,
-                                        callCharacters,
-                                        "perf006-b2c3b1-composed-call.protos")
-                                .build();
-                ProtosBytecodeRootNode callerRoot =
-                        new CanonicalToBytecodeLowerer(language, callSource)
-                                .lowerRoot(canonicalize(callCharacters));
-
-                assertSame(first, callerRoot.getCallTarget().call(module));
-            } finally {
-                context.leave();
-            }
-        }
-
-        System.out.println(
-                "PERF006_B2C3B1_COMPOSED_CALL_ACTIVATION_TARGET=PASS");
-        System.out.println(
-                "PERF006_B2C3B1_CALLER_PREBIND_REQUIRED=NO");
-    }
-
-    @Test
-    void arityFailureAndCallDefaultBoundaryRemainUnchanged()
-            throws Exception {
-        try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
-            context.initialize(ProtosLanguage.ID);
-            context.enter();
-            try {
-                ProtosLanguage language = LANGUAGE_REF.get(null);
-                ProtosActivation module = moduleActivation();
-
-                String requiredCharacters = "(first, second) => { first }";
+                String requiredCharacters =
+                        "(head, fallback = head) => { fallback }";
                 Source requiredSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
                                         requiredCharacters,
-                                        "perf006-b2c3b1-required.protos")
+                                        "perf006-b2c3b2-required.protos")
                                 .build();
                 CanonicalClosure requiredDefinition =
                         closureDefinition(requiredCharacters);
-                module.context().createLocalSlot(
-                        "entry",
-                        semanticClosure(
+                ProtosClosureValue semantic =
+                        new ProtosClosureValue(
                                 requiredDefinition,
-                                ProtosClosureExecutionPlan.bytecode(
-                                        requiredDefinition,
-                                        language,
-                                        requiredSource),
-                                module));
-
-                String missingCharacters = "entry(null)";
-                Source missingSource =
-                        Source.newBuilder(
-                                        ProtosLanguage.ID,
-                                        missingCharacters,
-                                        "perf006-b2c3b1-missing.protos")
-                                .build();
-                ProtosBytecodeRootNode missingRoot =
-                        new CanonicalToBytecodeLowerer(language, missingSource)
-                                .lowerRoot(canonicalize(missingCharacters));
+                                module.lexicalContextsForClosureCapture(),
+                                module.receiver(),
+                                module.methodHome().orElse(null),
+                                module.returnHome().orElse(null),
+                                module.prelude().orElseThrow());
+                ProtosActivation missing =
+                        ProtosActivation.forClosureInvocation(
+                                semantic,
+                                List.of(),
+                                module.prelude().orElseThrow(),
+                                module.actorModuleState(),
+                                module.currentModuleKey().orElse(null),
+                                module.executionDomain());
+                ProtosBytecodeClosureExecutionPlan requiredPlan =
+                        new ProtosBytecodeClosureExecutionPlan(
+                                requiredDefinition,
+                                language,
+                                requiredSource);
                 assertThrows(
                         ProtosSignalException.class,
-                        () -> missingRoot.getCallTarget().call(module));
+                        () -> requiredPlan.executeActivation(missing));
 
-                String defaultCharacters =
+                String complexCharacters =
                         "(head, fallback = child()) => { fallback }";
-                Source defaultSource =
+                Source complexSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
-                                        defaultCharacters,
-                                        "perf006-b2c3b1-default-deferred.protos")
+                                        complexCharacters,
+                                        "perf006-b2c3b2-call-default-deferred.protos")
                                 .build();
-                CanonicalClosure defaultDefinition =
-                        closureDefinition(defaultCharacters);
+                CanonicalClosure complexDefinition =
+                        closureDefinition(complexCharacters);
                 UnsupportedOperationException failure =
                         assertThrows(
                                 UnsupportedOperationException.class,
                                 () ->
                                         new ProtosBytecodeClosureExecutionPlan(
-                                                defaultDefinition,
+                                                complexDefinition,
                                                 language,
-                                                defaultSource));
+                                                complexSource));
                 assertTrue(
                         failure.getMessage()
                                 .contains(
@@ -255,9 +331,8 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
             }
         }
 
-        System.out.println("PERF006_B2C3B1_ARITY_ERROR_PRESERVED=PASS");
-        System.out.println(
-                "PERF006_B2C3B1_CALL_DEFAULT_BINDING_STILL_DEFERRED=PASS");
+        System.out.println("PERF006_B2C3B2_REQUIRED_ARITY_ERROR=PASS");
+        System.out.println("PERF006_B2C3B2_CALL_DEFAULT_STILL_DEFERRED=PASS");
     }
 
     private static ProtosClosureValue semanticClosure(

@@ -284,13 +284,13 @@ final class ProtosPerf006B2AClosureActivationTest {
     }
 
     @Test
-    void defaultParametersRemainFailClosedUntilDefaultBindingMigration() throws Exception {
+    void callDefaultsRemainFailClosedUntilCallDefaultMigration() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
-                String characters = "(x, y = null) => y";
+                String characters = "(x, y = child()) => y";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -310,13 +310,13 @@ final class ProtosPerf006B2AClosureActivationTest {
                                                 source));
                 assertTrue(
                         failure.getMessage()
-                                .contains("default parameter binding is deferred"));
+                                .contains("default expression must be literal or lexical lookup"));
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println("PERF006_B2A_DEFAULT_PARAMETER_BINDING_NOT_SILENTLY_MIGRATED=PASS");
+        System.out.println("PERF006_B2A_CALL_DEFAULT_BINDING_NOT_SILENTLY_MIGRATED=PASS");
     }
 
     private static CanonicalClosure closureDefinition(String characters) {
