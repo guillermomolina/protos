@@ -19,3 +19,5 @@ not part of this evidence directory.
 - `DIST001_E4_RELEASE_CLAIMS.txt`
 - `DIST001_E4_RELEASE_ENVELOPE.txt`
 - `DIST001_FIRST_PRERELEASE_PUBLICATION.txt`
+
+Maintained DIST001 work records live under [`../../work/DIST001/`](../../work/DIST001/README.md).

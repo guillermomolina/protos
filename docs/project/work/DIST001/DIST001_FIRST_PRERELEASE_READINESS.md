@@ -142,7 +142,7 @@ as a pre-release.
 Release preparation uses a candidate commit derived from the explicitly selected
 development baseline rather than converting active `main` to a non-SNAPSHOT
 version. The exact mechanical contract and immutability rules are recorded in
-`docs/project/DIST001_PRERELEASE_VERSION_CONTRACT.md`.
+`docs/project/work/DIST001/DIST001_PRERELEASE_VERSION_CONTRACT.md`.
 
 The candidate/version state remains:
 

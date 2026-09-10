@@ -2292,7 +2292,7 @@ checksums. It MUST NOT automatically turn every successful `main` revision or
 implementation-version bump into a public release.
 
 The complete non-normative release policy and DIST001 slice boundaries are in
-`docs/project/DIST001_RELEASE_POLICY.md`.
+`docs/project/work/DIST001/DIST001_RELEASE_POLICY.md`.
 
 Task completion
 

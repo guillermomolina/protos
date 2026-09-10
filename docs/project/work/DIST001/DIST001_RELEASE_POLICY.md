@@ -397,10 +397,10 @@ to later `main` documentation/implementation work. Those later changes remain
 independent development after the 0.2.236 candidate.
 
 The detailed E1 readiness envelope is recorded in
-`docs/project/DIST001_FIRST_PRERELEASE_READINESS.md`.
+`docs/project/work/DIST001/DIST001_FIRST_PRERELEASE_READINESS.md`.
 
 The E2 public-version and candidate-commit contract is recorded in
-`docs/project/DIST001_PRERELEASE_VERSION_CONTRACT.md`.
+`docs/project/work/DIST001/DIST001_PRERELEASE_VERSION_CONTRACT.md`.
 
 No E1-E3 result authorizes release publication. A candidate must remain
 explicitly unselected until the user makes the exact-candidate decision required

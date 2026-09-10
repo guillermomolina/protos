@@ -45,8 +45,8 @@ Operational release-tool/test paths rewritten:
 Current reference-bearing Markdown files rewritten:
 
 - `dist/README.md`
-- `docs/project/DIST001_PRERELEASE_VERSION_CONTRACT.md`
-- `docs/project/DIST001_RELEASE_POLICY.md`
+- `docs/project/work/DIST001/DIST001_PRERELEASE_VERSION_CONTRACT.md`
+- `docs/project/work/DIST001/DIST001_RELEASE_POLICY.md`
 - `docs/project/IMPLEMENTATION_STATUS.md`
 
 The maintained DIST001 `.md` policy/readiness/version-contract records are not

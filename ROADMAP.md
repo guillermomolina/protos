@@ -62,7 +62,7 @@ These are directional priorities, not a promise that they will land in this
 exact order.
 
 The selected snapshot-versus-release and publication policy is documented in
-[`docs/project/DIST001_RELEASE_POLICY.md`](docs/project/DIST001_RELEASE_POLICY.md).
+[`docs/project/work/DIST001/DIST001_RELEASE_POLICY.md`](docs/project/work/DIST001/DIST001_RELEASE_POLICY.md).
 
 ## Later
 
