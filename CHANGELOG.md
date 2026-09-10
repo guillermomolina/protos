@@ -1,3 +1,25 @@
+## 0.2.349-SNAPSHOT
+
+- Begin `TOOL003 — Documentation model and source extractor` (GitHub #322) with
+  bounded `TOOL003-A` under ratified D061/D062/D064. Add a reusable
+  implementation-neutral documentation model with structural Standard Library
+  and package module lineage, stable `(module lineage, top-level slot)` symbol
+  identity, separate exact artifact scopes/occurrence keys, normalized
+  repository-relative source provenance, optional mechanical callable facts and
+  Markdown payload, plus deterministic UTF-8 JSON v1 serialization. Reject
+  duplicate semantic identities, absent-module symbol references,
+  non-normalized/absolute source paths and invented `std:core` identity; keep
+  source coordinates, callable shape, revision/release/content data, UUIDs and
+  hashes out of semantic identity. Emit empty article/relationship collections
+  until their deferred vocabularies are separately ratified. Add focused tests
+  for identity/occurrence separation, source moves, callable evolution,
+  duplicate rejection, privacy/path constraints, canonical ordering, Unicode,
+  LF normalization and exact final-newline output. Source extraction,
+  Standard-Library traversal/artifact generation, API coverage/stability,
+  doctests and website rendering remain outside A. No Protos specification,
+  observable runtime semantics, Standard Library semantics, package format or
+  website change. Implementation version becomes `0.2.349-SNAPSHOT`.
+
 ## 0.2.348-SNAPSHOT
 
 - Ratify `GITHUB009 — Native Issue dependency governance and reconciliation`
