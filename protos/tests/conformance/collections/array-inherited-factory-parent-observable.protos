@@ -15,6 +15,6 @@ MyArray: Array {
 xs: MyArray(10, 20)
 
 (xs.size() == 2) &&
-    (xs.at(0) == 10) &&
-    (xs.at(1) == 20) &&
+    (xs[0] == 10) &&
+    (xs[1] == 20) &&
     (xs.label == 9)

@@ -16,7 +16,7 @@ singleton: Array(3)
 
 (first !== second) &&
     (first.size() == 2) &&
-    (first.at(0) == 1) &&
-    (first.at(1) === marker) &&
+    (first[0] == 1) &&
+    (first[1] === marker) &&
     (singleton.size() == 1) &&
-    (singleton.at(0) == 3)
+    (singleton[0] == 3)
