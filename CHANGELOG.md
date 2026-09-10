@@ -1,3 +1,21 @@
+## 0.2.347-SNAPSHOT
+
+- Advance `CLI008-B — value inspection / pretty rendering implementation` with bounded
+  `CLI008-B2A` specialized-family inspection coverage under ratified D063. Keep content-backed,
+  authority-free sequence values inspectable from already-materialized semantic snapshots:
+  `Bytes[...]`, `ByteRegion[...]`, and `ProcessArguments[...]`. Give the current specialized
+  capability/reference/resource families stable CLI-only opaque labels instead of `<value>`,
+  including ActorRef, GroupRef, send operations, Encoding, Environment, Path, Process,
+  Process streams, Filesystem/File, Network, TcpConnection, and TcpListener. Do not expose
+  Actor/Group identities, host authority targets, environment contents, native handles,
+  transport/resource state, endpoint internals, Java class names, or host `toString()`.
+  Preserve the existing diagnostic depth/item/String/output bounds and non-evaluating behavior.
+  Add focused evidence for byte-sequence content, resource opacity, Path/Encoding opacity, and
+  the REPL `process.args()` snapshot. `CLI008-B` remains `IN_PROGRESS`; `CLI008-B2B` owns the
+  remaining compact/multiline pretty-layout reconciliation, while `CLI008-C` remains blocked on
+  PERF006-B4/B5. No specification, serialization API, Error-object, stack-capture, `print(...)`,
+  Actor/Process semantics, or runtime resource behavior changes.
+
 ## 0.2.346-SNAPSHOT
 
 - Begin `CLI008-B — value inspection / pretty rendering implementation` with bounded `CLI008-B1` after ratified D063 Candidate B + S3. Add a dedicated non-evaluating CLI diagnostic inspector while leaving `ProtosValueRenderer` and the standalone `print(...)` path unchanged; route REPL result and existing Error-value presentation through the diagnostic path; render source-like scalars/quoted escaped Strings, bounded Array/Map/IdentityMap values, and ordinary Objects from local slots only; detect cycles; bound depth, item count, String length and total output; and keep Closure/Future values opaque behind stable diagnostic family labels without Java/Truffle names. Add focused unit and REPL evidence that diagnostic Strings remain quoted, ordinary Object inspection shows local state, cycles/truncation are bounded, and `print("hello")`/`print(object)` retain their prior program-output behavior. CLI008-B remains IN_PROGRESS for specialized opaque-family coverage and richer compact/multiline pretty presentation; CLI008-C remains blocked on PERF006-B4/B5. No specification, serialization API, Error-object, stack-capture, Actor/Process semantics or public guest protocol change.

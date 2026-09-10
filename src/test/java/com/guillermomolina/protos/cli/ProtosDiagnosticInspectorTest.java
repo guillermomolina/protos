@@ -21,10 +21,18 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
+import com.guillermomolina.protos.runtime.ProtosByteRegionValue;
+import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosEncodingValue;
+import com.guillermomolina.protos.runtime.ProtosFileValue;
+import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
+import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosPathValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
+import java.math.BigInteger;
 import java.util.ArrayList;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -91,4 +99,40 @@ final class ProtosDiagnosticInspectorTest {
 
         assertEquals("<closure>", inspector.render(closure));
     }
+    @Test
+    void byteSequencesExposeOnlyBoundedSemanticContent() {
+        ProtosBytesValue bytes = new ProtosBytesValue(ProtosObjectValue.rootObject());
+        bytes.indexedAdd(uint8(65));
+        bytes.indexedAdd(uint8(255));
+        ProtosByteRegionValue region =
+                new ProtosByteRegionValue(List.of(uint8(1), uint8(2)));
+
+        assertEquals("Bytes[65, 255]", inspector.render(bytes));
+        assertEquals("ByteRegion[1, 2]", inspector.render(region));
+    }
+
+    @Test
+    void authorityAndDisplayDeferredFamiliesRemainOpaque() {
+        assertEquals("<filesystem>", inspector.render(new ProtosFilesystemValue()));
+        assertEquals("<file>", inspector.render(new ProtosFileValue()));
+        assertEquals(
+                "<encoding>",
+                inspector.render(
+                        ProtosEncodingValue.portableForRuntime(
+                                ProtosObjectValue.rootObject(),
+                                ProtosEncodingValue.PortableKind.UTF8)));
+        assertEquals(
+                "<path>",
+                inspector.render(
+                        new ProtosPathValue(
+                                ProtosObjectValue.rootObject(),
+                                false,
+                                List.of(new ProtosPathValue.Normal("component")))));
+    }
+
+    private static ProtosFixedIntegerValue uint8(int value) {
+        return new ProtosFixedIntegerValue(
+                ProtosFixedIntegerValue.Family.UINT8, BigInteger.valueOf(value));
+    }
+
 }

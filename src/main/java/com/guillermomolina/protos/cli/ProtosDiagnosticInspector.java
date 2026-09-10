@@ -16,17 +16,34 @@
  */
 package com.guillermomolina.protos.cli;
 
+import com.guillermomolina.protos.runtime.ProtosActorRefValue;
+import com.guillermomolina.protos.runtime.ProtosByteRegionValue;
+import com.guillermomolina.protos.runtime.ProtosBytesValue;
 import com.guillermomolina.protos.runtime.ProtosArrayValue;
 import com.guillermomolina.protos.runtime.ProtosBooleanValue;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
 import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosFloatValue;
 import com.guillermomolina.protos.runtime.ProtosFutureValue;
+import com.guillermomolina.protos.runtime.ProtosEncodingValue;
+import com.guillermomolina.protos.runtime.ProtosEnvironmentValue;
+import com.guillermomolina.protos.runtime.ProtosFileValue;
+import com.guillermomolina.protos.runtime.ProtosFilesystemValue;
+import com.guillermomolina.protos.runtime.ProtosGroupRefValue;
+import com.guillermomolina.protos.runtime.ProtosGroupSendOperationValue;
 import com.guillermomolina.protos.runtime.ProtosIdentityMapValue;
 import com.guillermomolina.protos.runtime.ProtosIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosMapValue;
+import com.guillermomolina.protos.runtime.ProtosNetworkCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosPathValue;
+import com.guillermomolina.protos.runtime.ProtosProcessArgumentsValue;
+import com.guillermomolina.protos.runtime.ProtosProcessCapabilityValue;
+import com.guillermomolina.protos.runtime.ProtosProcessStandardStreamValue;
 import com.guillermomolina.protos.runtime.ProtosNullValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosSendOperationValue;
+import com.guillermomolina.protos.runtime.ProtosTcpConnectionValue;
+import com.guillermomolina.protos.runtime.ProtosTcpListenerValue;
 import com.guillermomolina.protos.runtime.ProtosStringValue;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -95,6 +112,62 @@ final class ProtosDiagnosticInspector {
             state.append("<future>");
             return;
         }
+        if (value instanceof ProtosActorRefValue) {
+            state.append("<actor-ref>");
+            return;
+        }
+        if (value instanceof ProtosGroupRefValue) {
+            state.append("<group-ref>");
+            return;
+        }
+        if (value instanceof ProtosSendOperationValue) {
+            state.append("<send-operation>");
+            return;
+        }
+        if (value instanceof ProtosGroupSendOperationValue) {
+            state.append("<group-send-operation>");
+            return;
+        }
+        if (value instanceof ProtosEncodingValue) {
+            state.append("<encoding>");
+            return;
+        }
+        if (value instanceof ProtosEnvironmentValue) {
+            state.append("<environment>");
+            return;
+        }
+        if (value instanceof ProtosPathValue) {
+            state.append("<path>");
+            return;
+        }
+        if (value instanceof ProtosProcessCapabilityValue) {
+            state.append("<process>");
+            return;
+        }
+        if (value instanceof ProtosProcessStandardStreamValue) {
+            state.append("<process-stream>");
+            return;
+        }
+        if (value instanceof ProtosFilesystemValue) {
+            state.append("<filesystem>");
+            return;
+        }
+        if (value instanceof ProtosFileValue) {
+            state.append("<file>");
+            return;
+        }
+        if (value instanceof ProtosNetworkCapabilityValue) {
+            state.append("<network>");
+            return;
+        }
+        if (value instanceof ProtosTcpConnectionValue) {
+            state.append("<tcp-connection>");
+            return;
+        }
+        if (value instanceof ProtosTcpListenerValue) {
+            state.append("<tcp-listener>");
+            return;
+        }
 
         if (depth >= MAX_DEPTH) {
             state.append("...");
@@ -107,6 +180,19 @@ final class ProtosDiagnosticInspector {
         }
 
         try {
+            if (value instanceof ProtosBytesValue bytes) {
+                appendNamedSequence("Bytes", bytes.indexedSnapshot(), state, path, depth);
+                return;
+            }
+            if (value instanceof ProtosByteRegionValue bytes) {
+                appendNamedSequence("ByteRegion", bytes.indexedSnapshot(), state, path, depth);
+                return;
+            }
+            if (value instanceof ProtosProcessArgumentsValue arguments) {
+                appendNamedSequence(
+                        "ProcessArguments", arguments.valuesForRuntime(), state, path, depth);
+                return;
+            }
             if (value instanceof ProtosArrayValue array) {
                 appendArray(array.indexedSnapshot(), state, path, depth);
                 return;
@@ -156,9 +242,8 @@ final class ProtosDiagnosticInspector {
             }
 
             /*
-             * Specialized/capability-backed object families stay opaque until their safe
-             * diagnostic-family projection is implemented in the next bounded CLI008-B slice.
-             * Never fall back to Java class names or host toString().
+             * Unknown host-represented families remain opaque rather than falling back to Java
+             * class names, host toString(), or implementation-specific identity.
              */
             state.append("<value>");
         } finally {
@@ -171,6 +256,26 @@ final class ProtosDiagnosticInspector {
             RenderState state,
             IdentityHashMap<Object, Boolean> path,
             int depth) {
+        state.append("[");
+        int limit = Math.min(elements.size(), MAX_ITEMS);
+        for (int i = 0; i < limit && !state.full(); i++) {
+            if (i > 0) state.append(", ");
+            appendValue(elements.get(i), state, path, depth + 1);
+        }
+        if (elements.size() > MAX_ITEMS && !state.full()) {
+            if (limit > 0) state.append(", ");
+            state.append("...");
+        }
+        state.append("]");
+    }
+
+    private void appendNamedSequence(
+            String family,
+            List<?> elements,
+            RenderState state,
+            IdentityHashMap<Object, Boolean> path,
+            int depth) {
+        state.append(family);
         state.append("[");
         int limit = Math.min(elements.size(), MAX_ITEMS);
         for (int i = 0; i < limit && !state.full(); i++) {

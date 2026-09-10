@@ -241,7 +241,15 @@ final class ProtosReplTest {
         assertTrue(r.o.contains("Object {name: \"Alice\", age: 42}"), r.o);
         assertTrue(r.o.contains("protos> <object>\nnull\nprotos> "), r.o);
         assertTrue(r.e.isBlank(), r.e);
-    }    private static void terminateSession(Object session) throws Exception {
+    }    @Test
+    void processArgumentsUseBoundedContentDiagnosticProjection() {
+        R r = repl("process.args()\n:quit\n");
+        assertEquals(0, r.c);
+        assertTrue(r.o.contains("protos> ProcessArguments[]\nprotos> "), r.o);
+        assertTrue(r.e.isBlank(), r.e);
+    }
+
+    private static void terminateSession(Object session) throws Exception {
         Method terminate = session.getClass().getDeclaredMethod("terminate");
         terminate.setAccessible(true);
         terminate.invoke(session);
