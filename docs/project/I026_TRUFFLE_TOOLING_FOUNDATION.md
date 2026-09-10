@@ -1,6 +1,6 @@
 # I026 — Truffle tooling foundation
 
-Status: **IN_PROGRESS**
+Status: **CLOSED**
 
 Nature: non-normative runtime/compiler tooling implementation
 
@@ -92,9 +92,9 @@ see `docs/project/PLAT001_TRUFFLE_RUNTIME_HOSTING.md`.
 | I026-F | CLOSED | — | I026-C + I026-E | Bounded real-protocol GraalVM DAP compatibility is evidenced against 25.3.4.1: verified Protos source breakpoint/hit, threads and stackTrace, exactly one activation-native local scope with no artificial top/parent/receiver scope, representative scalar and indexed Array values, real `next` to the following Protos source line, continue to normal completion and clean disconnect. This is not a public CLI/port/hosting or complete-DAP-feature claim. |
 | I026-F1 | CLOSED | — | I026-E | Test-only GraalVM `org.graalvm.polyglot:dap` POM supplies the real DAP instrument without entering the production/shaded dependency surface. A raw socket client proves Content-Length transport plus initialize -> initialized -> attach -> configurationDone -> disconnect against a loopback ephemeral test-selected port. No public Protos CLI/port/server lifecycle is selected and no DAP support claim is made yet. |
 | I026-F2 | CLOSED | — | I026-F1 + I026-D + I026-E | Real raw-socket DAP behavior gate against GraalVM 25.3.4.1 proves a verified file-backed Protos breakpoint, stopped carrier/thread, top stack frame/source location, one PLAT015 activation scope, String/Boolean/Integer values, expandable two-element Array values, one real `next` transition from line 1 to line 2, continue/completion and disconnect. No production or specification change. |
-| I026-G | IN_PROGRESS | — | I026-C + I026-E | G1 supplies the real GraalVM LSP instrument only on the test/evidence classpath and proves loopback TCP JSON-RPC initialize/initialized/shutdown/exit lifecycle. G2 owns real Protos document capability evidence and the only bounded dynamic-LSP compatibility claim. |
+| I026-G | CLOSED | — | I026-C + I026-E | Real GraalVM 25.3.4.1 LSP evidence is bounded: G1 proves the experimental test-only server/transport lifecycle; G2 proves file-backed Protos document synchronization/parse, the exact generic capability matrix, positive StatementTag structural `get_coverage`, and faithful empty results for completion/hover/signatureHelp/documentHighlight/codeAction/codeLens under the current no-top-scope, activation-required, Statement/Call-tag-only foundation. No generic dynamic runtime-value intelligence or static-language-server replacement is claimed. |
 | I026-G1 | CLOSED | — | I026-C + I026-E | Test-only `org.graalvm.polyglot:lsp` POM supplies the real GraalVM `lsp` instrument without entering Protos production/shaded dependencies. A raw Content-Length JSON-RPC client proves loopback server startup plus `initialize -> initialized -> shutdown -> exit`; the test-created Context explicitly opts into GraalVM experimental options because `lsp` is experimental. No Protos LSP capability, public CLI, port/lifecycle, production experimental-option policy, delegate-server, IDE packaging or static-language-server claim is made. |
-| I026-G2 | READY | — | I026-G1 + I026-C + I026-E | Open a real file-backed Protos document through the real GraalVM LSP, record the exact advertised capability matrix, and exercise only the runtime-derived subset that produces faithful useful Protos evidence. Record unsupported/empty behavior explicitly. Close G only with a bounded dynamic-LSP statement that remains distinct from static Protos language intelligence. |
+| I026-G2 | CLOSED | — | I026-G1 + I026-C + I026-E | File-backed Protos `didOpen` parses cleanly; initialize advertises incremental sync plus hover/completion/signatureHelp/documentHighlight/codeAction/codeLens/executeCommand while definition/references/documentSymbol/workspaceSymbol are false. `get_coverage` returns real uncovered StatementTag ranges without execution. Current completion/hover/signatureHelp/highlight/codeAction/codeLens responses are empty, which is retained as the faithful boundary rather than manufacturing a global scope, Read/WriteVariable tags or tool-owned activation. |
 
 After I026-A3, top-level Polyglot parsing and resolver-loaded modules both retain
 real Truffle Source identity instead of collapsing source units to anonymous
@@ -459,6 +459,58 @@ No Protos semantics, production runtime, implementation version, public
 `--lsp` option, public port/server lifecycle, production experimental-option
 policy, delegate-server policy, IDE packaging decision or static-language-server
 architecture changes in G1.
+
+### I026-G2 real Protos LSP capability boundary and I026 closure
+
+`I026-G2` closes the final I026 compatibility-evidence gate against GraalVM
+`25.3.4.1` without adding a Protos-specific language server or adapting GraalVM's
+tool-owned execution model.
+
+The retained raw JSON-RPC test opens one real file-backed Protos document with
+`textDocument/didOpen` and waits for an empty `publishDiagnostics` notification,
+which proves the generic LSP has synchronized and successfully parsed the Protos
+source. It records the server's exact generic capability boundary: incremental
+text synchronization plus advertised hover, completion, signature help,
+document highlight, code action, code lens and execute-command providers;
+definition, references, document symbols and workspace symbols are explicitly
+not advertised.
+
+The positive tooling result that needs no invented guest execution authority is
+the generic `get_coverage` command. Against the parsed Protos document it returns
+real uncovered source ranges from the already-ratified StatementTag
+instrumentation while `covered` remains empty because G2 has not executed guest
+code. This demonstrates that the generic LSP can consume Protos source identity
+and instrumentation structure faithfully.
+
+The same test records current empty results for completion, hover, signature
+help, document highlight, code action and code lens. Those empty results are
+intentional evidence, not failures to be hidden: PLAT015 provides no artificial
+language top scope; activation-native locals require a real ProtosActivation
+frame; I026-C deliberately provides StatementTag and CallTag rather than
+ReadVariableTag/WriteVariableTag; and G2 performs no coverage execution from
+which hover/completion could obtain a runtime frame.
+
+G2 deliberately does not make GraalVM's `dry_run` execute Protos by manufacturing
+a tool-owned activation. GraalVM's generic LSP evaluation/coverage machinery may
+invoke parsed CallTargets using its own execution convention, while Protos
+runtime execution keeps semantic authority in the explicit activation-bearing
+execution path. Selecting any future bridge that creates, borrows or owns a
+ProtosActivation for tool-driven execution would be separate durable
+platform/tooling architecture and is not silently selected by I026.
+
+Therefore the bounded conclusion is: GraalVM's generic LSP is a usable
+experimental transport, document-synchronization, parsing and instrumentation
+substrate for Protos at `25.3.4.1`, but the current generic server does not yet
+provide useful Protos runtime-value language intelligence. It does not replace
+future Protos-specific static language intelligence and establishes no public
+`--lsp` command, server lifecycle/port policy, delegate-server policy, IDE
+packaging contract or production experimental-option policy.
+
+With A through G complete, `I026 — Truffle tooling foundation` is CLOSED. The
+published foundation proves the actual reusable boundary: source identity,
+standard Truffle instrumentation, read-only debugger interop/scopes, bounded
+real DAP source debugging, and bounded generic LSP substrate behavior. Richer
+editor tooling is follow-up work rather than an unfinished I026 requirement.
 
 ## Deferred ownership
 
