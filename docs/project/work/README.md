@@ -16,6 +16,8 @@ Current role-first DOC002 records:
 - [`DOC002/DOC002_NAVIGATION_FOUNDATION.md`](DOC002/DOC002_NAVIGATION_FOUNDATION.md)
   — DOC002-C2 navigation-foundation closure record.
 
-- [`DOC003/DOC003_DOCUMENTATION_BRANDING.md`](DOC003/DOC003_DOCUMENTATION_BRANDING.md)\n  — approved Protos logo identity and documentation-integration closure.\n
+- [`DOC003/DOC003_DOCUMENTATION_BRANDING.md`](DOC003/DOC003_DOCUMENTATION_BRANDING.md)
+  — approved Protos logo identity and documentation-integration closure.
+
 Live status, priority, assignment, and execution discussion remain in GitHub
 Issues and the Protos Development Project.

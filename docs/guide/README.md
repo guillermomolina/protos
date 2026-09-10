@@ -1,4 +1,8 @@
-<p align="center">\n  <img src="../assets/branding/protos-logo.png" alt="Protos" width="360">\n</p>\n\n# Protos Programming Guide
+<p align="center">
+  <img src="../assets/branding/protos-logo.png" alt="Protos" width="280">
+</p>
+
+# Protos Programming Guide
 
 This directory contains the non-normative programming guide for Protos.
 
