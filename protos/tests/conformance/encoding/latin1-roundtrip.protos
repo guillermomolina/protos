@@ -13,7 +13,7 @@ text: "\u{0}\u{80}\u{ff}"
 bytes: Encoding.Latin1.encode(text)
 
 (bytes.size() == 3) &&
-    (bytes.at(0) == 0) &&
-    (bytes.at(1) == 128) &&
-    (bytes.at(2) == 255) &&
+    (bytes[0] == 0) &&
+    (bytes[1] == 128) &&
+    (bytes[2] == 255) &&
     (Encoding.Latin1.decode(bytes) == text)

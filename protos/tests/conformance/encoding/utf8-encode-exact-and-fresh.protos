@@ -14,8 +14,8 @@ second: Encoding.UTF8.encode("A\u{1f600}")
 
 (first !== second) &&
     (first.size() == 5) &&
-    (first.at(0) == 65) &&
-    (first.at(1) == 240) &&
-    (first.at(2) == 159) &&
-    (first.at(3) == 152) &&
-    (first.at(4) == 128)
+    (first[0] == 65) &&
+    (first[1] == 240) &&
+    (first[2] == 159) &&
+    (first[3] == 152) &&
+    (first[4] == 128)

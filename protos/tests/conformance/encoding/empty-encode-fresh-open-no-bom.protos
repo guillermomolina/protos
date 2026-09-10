@@ -16,5 +16,5 @@ first.add(7)
 
 (first !== second) &&
     (first.size() == 1) &&
-    (first.at(0) == 7) &&
+    (first[0] == 7) &&
     (second.size() == 0)
