@@ -521,7 +521,7 @@ release_version=0.2.236
 specification_revision=0.1.382
 archive_name=protos-0.2.236-posix-jvm.zip
 archive_sha256=b1a58ba445d082156bd4eb637ee6df70c046abdee600d468c0fac29be065e296
-claims_record=docs/project/DIST001_E4_RELEASE_CLAIMS.txt
+claims_record=docs/project/evidence/DIST001/DIST001_E4_RELEASE_CLAIMS.txt
 known_blockers_review=PASS
 release_publication_authorized=false
 ```
@@ -571,7 +571,7 @@ asset upload, or release-publication authorization is created here.
 ## E4C5 candidate-audit checkpoint
 
 The explicit E3C3 candidate audit is now materialized byte-identically in
-`docs/project/DIST001_E4_CANDIDATE_AUDIT.txt` and in separate candidate-local release-preparation state as
+`docs/project/evidence/DIST001/DIST001_E4_CANDIDATE_AUDIT.txt` and in separate candidate-local release-preparation state as
 `target/release-candidate-audit-0.2.236/RELEASE_CANDIDATE_AUDIT.txt`:
 
 ```text
@@ -627,7 +627,7 @@ The independent D1 verifier cross-checks the selection, artifact, claims,
 envelope and audit schemas against that frozen identity, then verifies the exact
 candidate-local archive/envelope/audit bytes and the byte-identical main/local
 candidate audit. It also requires the candidate worktree to remain clean and
-detached. The result is persisted in `DIST001_E4_VALIDATION.txt`.
+detached. The result is persisted in `docs/project/evidence/DIST001/DIST001_E4_VALIDATION.txt`.
 
 E4D2 is now READY and owns the extracted release-aware B5 candidate gate.
 

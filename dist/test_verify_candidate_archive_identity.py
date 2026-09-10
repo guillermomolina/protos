@@ -76,7 +76,7 @@ class CandidateArchiveIdentityVerifierTest(unittest.TestCase):
         self.candidate_worktree = self.top / "candidate"
         self.repo.mkdir()
         (self.repo / "dist").mkdir()
-        (self.repo / "docs/project").mkdir(parents=True)
+        (self.repo / "docs/project/evidence/DIST001").mkdir(parents=True, exist_ok=True)
 
         source = Path(__file__).resolve().parents[1] / "dist/verify_candidate_archive_identity.py"
         shutil.copy2(source, self.repo / "dist/verify_candidate_archive_identity.py")
@@ -117,8 +117,8 @@ class CandidateArchiveIdentityVerifierTest(unittest.TestCase):
         git(self.candidate_worktree, "commit", "-q", "-m", "candidate")
         self.candidate = git(self.candidate_worktree, "rev-parse", "HEAD")
 
-        self.selection = self.repo / "docs/project/DIST001_E4_SELECTION.txt"
-        self.artifact_record = self.repo / "docs/project/DIST001_E4_CANDIDATE_ARTIFACT.txt"
+        self.selection = self.repo / "docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt"
+        self.artifact_record = self.repo / "docs/project/evidence/DIST001/DIST001_E4_CANDIDATE_ARTIFACT.txt"
         self.archive = (
             self.candidate_worktree
             / "target"

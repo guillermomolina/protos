@@ -63,7 +63,7 @@ class ReleaseCandidateLineageVerificationTest(unittest.TestCase):
         self.candidate_worktree = self.top / "candidate"
         self.repo.mkdir()
         (self.repo / "dist").mkdir()
-        (self.repo / "docs/project").mkdir(parents=True)
+        (self.repo / "docs/project/evidence/DIST001").mkdir(parents=True, exist_ok=True)
 
         source = Path(__file__).resolve().parents[1] / "dist/verify_release_candidate_lineage.py"
         shutil.copy2(source, self.repo / "dist/verify_release_candidate_lineage.py")
@@ -104,7 +104,7 @@ class ReleaseCandidateLineageVerificationTest(unittest.TestCase):
         git(self.repo, "commit", "-q", "-m", "later main")
         git(self.repo, "push", "-q", "-u", "origin", "HEAD:main")
 
-        self.selection = self.repo / "docs/project/DIST001_E4_SELECTION.txt"
+        self.selection = self.repo / "docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt"
         self.write_selection()
 
     def tearDown(self) -> None:

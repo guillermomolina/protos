@@ -295,7 +295,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--selection",
-        default="docs/project/DIST001_E4_SELECTION.txt",
+        default="docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt",
         help="E4A exact selection record",
     )
     parser.add_argument(

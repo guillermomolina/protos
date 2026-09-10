@@ -482,7 +482,7 @@ for the selected first-pre-release baseline:
 
 ```sh
 python3 dist/prepare_release_candidate_worktree.py \
-    --selection docs/project/DIST001_E4_SELECTION.txt \
+    --selection docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt \
     --destination /absolute/path/outside/the/main/checkout
 ```
 
@@ -514,7 +514,7 @@ created an exact clean detached worktree at the selected baseline.
 Generic use:
 
 ```sh
-python3 dist/transition_release_candidate_version.py     --selection docs/project/DIST001_E4_SELECTION.txt     --candidate /path/to/detached-candidate-worktree
+python3 dist/transition_release_candidate_version.py     --selection docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt     --candidate /path/to/detached-candidate-worktree
 ```
 
 The helper requires the candidate to remain a registered detached worktree whose
@@ -541,7 +541,7 @@ by E4B3B to materialize the real selected candidate.
 Generic use after E4B1 + E4B2:
 
 ```sh
-python3 dist/commit_release_candidate.py     --selection docs/project/DIST001_E4_SELECTION.txt     --candidate /path/to/detached-candidate-worktree
+python3 dist/commit_release_candidate.py     --selection docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt     --candidate /path/to/detached-candidate-worktree
 ```
 
 The helper requires exactly one unstaged `pom.xml` change whose bytes equal the
@@ -571,7 +571,7 @@ E4B3B owns the first real candidate commit and exact SHA capture.
 mechanisms into one fail-closed local candidate materializer:
 
 ```sh
-python3 dist/materialize_release_candidate.py     --selection docs/project/DIST001_E4_SELECTION.txt     --candidate /path/to/detached-candidate-worktree
+python3 dist/materialize_release_candidate.py     --selection docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt     --candidate /path/to/detached-candidate-worktree
 ```
 
 The helper still requires the E4A selection record to say
@@ -605,7 +605,7 @@ subsequent persistence of that exact candidate SHA.
 E4B3B2. It does not call the B1/B2/B3A/B3B1 materialization helpers.
 
 ```sh
-python3 dist/verify_release_candidate_lineage.py     --selection docs/project/DIST001_E4_SELECTION.txt
+python3 dist/verify_release_candidate_lineage.py     --selection docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt
 ```
 
 For the frozen candidate `957b1e16793a682de1d6406e37b5734c44d32d19`, the verifier reconstructs the proof from
@@ -628,7 +628,7 @@ created here.
 E4C1. It does not rebuild or mutate the archive:
 
 ```sh
-python3 dist/verify_candidate_archive_identity.py   --repository-root .   --selection docs/project/DIST001_E4_SELECTION.txt   --artifact-record docs/project/DIST001_E4_CANDIDATE_ARTIFACT.txt   --expect-verification-state true
+python3 dist/verify_candidate_archive_identity.py   --repository-root .   --selection docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt   --artifact-record docs/project/evidence/DIST001/DIST001_E4_CANDIDATE_ARTIFACT.txt   --expect-verification-state true
 ```
 
 For `protos-0.2.236-posix-jvm.zip` / `b1a58ba445d082156bd4eb637ee6df70c046abdee600d468c0fac29be065e296`, the verifier requires the exact external

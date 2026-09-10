@@ -57,7 +57,7 @@ class PrepareReleaseCandidateWorktreeTest(unittest.TestCase):
         self.remote = self.top / "origin.git"
         self.repo.mkdir()
         (self.repo / "dist").mkdir()
-        (self.repo / "docs/project").mkdir(parents=True)
+        (self.repo / "docs/project/evidence/DIST001").mkdir(parents=True, exist_ok=True)
 
         source_root = Path(__file__).resolve().parents[1]
         shutil.copy2(
@@ -82,7 +82,7 @@ class PrepareReleaseCandidateWorktreeTest(unittest.TestCase):
         git(self.repo, "push", "-q", "-u", "origin", "HEAD:main")
         git(self.repo, "fetch", "-q", "origin", "main")
 
-        self.selection = self.repo / "docs/project/DIST001_E4_SELECTION.txt"
+        self.selection = self.repo / "docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt"
         self.write_selection()
 
     def tearDown(self) -> None:

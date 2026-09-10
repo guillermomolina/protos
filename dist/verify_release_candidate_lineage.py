@@ -373,7 +373,7 @@ def main() -> int:
     )
     parser.add_argument(
         "--selection",
-        default="docs/project/DIST001_E4_SELECTION.txt",
+        default="docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt",
     )
     parser.add_argument(
         "--repository-root",

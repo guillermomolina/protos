@@ -67,7 +67,7 @@ class ReleaseCandidateVersionTransitionTest(unittest.TestCase):
         self.candidate = self.top / "candidate"
         self.repo.mkdir()
         (self.repo / "dist").mkdir()
-        (self.repo / "docs/project").mkdir(parents=True)
+        (self.repo / "docs/project/evidence/DIST001").mkdir(parents=True, exist_ok=True)
 
         source_root = Path(__file__).resolve().parents[1]
         for name in [
@@ -95,7 +95,7 @@ class ReleaseCandidateVersionTransitionTest(unittest.TestCase):
         git(self.repo, "commit", "-q", "-m", "later main")
         git(self.repo, "push", "-q", "-u", "origin", "HEAD:main")
 
-        self.selection = self.repo / "docs/project/DIST001_E4_SELECTION.txt"
+        self.selection = self.repo / "docs/project/evidence/DIST001/DIST001_E4_SELECTION.txt"
         self.write_selection()
 
         self.prepare_candidate()
