@@ -773,6 +773,16 @@ reflection/close-is-shallow.protos	boolean	true
 reflection/close-frozen-root-idempotent.protos	boolean	true
 reflection/close-array-indexed-replacement-remains-allowed.protos	boolean	true
 reflection/close-arity.protos	error	-
+reflection/freeze-exact-receiver-idempotent.protos	boolean	true
+reflection/freeze-from-closed-rejects-existing-assignment.protos	boolean	true
+reflection/freeze-rejects-slot-creation.protos	boolean	true
+reflection/freeze-rejects-existing-assignment.protos	boolean	true
+reflection/freeze-rejects-remove-preserves-local.protos	boolean	true
+reflection/freeze-is-shallow.protos	boolean	true
+reflection/freeze-frozen-root-idempotent.protos	boolean	true
+reflection/freeze-array-indexed-replacement-rejected.protos	boolean	true
+reflection/freeze-map-keyed-replacement-rejected.protos	boolean	true
+reflection/freeze-arity.protos	error	-
 reflection/slot-value-exact-local-identity.protos	boolean	true
 reflection/slot-value-does-not-delegate.protos	error	-
 reflection/slot-value-invalid-name.protos	error	-

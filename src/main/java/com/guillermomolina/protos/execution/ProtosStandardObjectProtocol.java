@@ -92,6 +92,12 @@ public final class ProtosStandardObjectProtocol {
                     ProtosClosureValue.nativeClosure(
                             ProtosStandardObjectProtocol::close));
         }
+        if (!object.hasLocalSlot("freeze")) {
+            object.createLocalSlot(
+                    "freeze",
+                    ProtosClosureValue.nativeClosure(
+                            ProtosStandardObjectProtocol::freeze));
+        }
         if (!object.hasLocalSlot("without")) {
             object.createLocalSlot(
                     "without",
@@ -235,6 +241,16 @@ public final class ProtosStandardObjectProtocol {
             throw invalid(activation);
         }
         return receiver.close();
+    }
+
+    private static Object freeze(ProtosActivation activation, List<?> supplied) {
+        if (!supplied.isEmpty()) {
+            throw invalid(activation);
+        }
+        if (!(activation.receiver() instanceof ProtosObjectValue receiver)) {
+            throw invalid(activation);
+        }
+        return receiver.freeze();
     }
 
     private static Object without(ProtosActivation activation, List<?> supplied) {
