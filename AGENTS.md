@@ -543,9 +543,11 @@ limitation explicitly instead of claiming the Issue was assigned. Lack of
 assignee-mutation capability is not by itself an implementation blocker when the
 work is otherwise authorized and correctly coordinated.
 
-GitHub Project fields, including `Priority`, are outside routine agent
-coordination. Agents MUST NOT probe for or attempt Project-field operations merely
-to satisfy repository governance. See **Optional GitHub Project metadata** below.
+Direct GitHub Project-field mutation remains outside routine agent
+coordination. Agents maintain Issue-owned `status:*` and, when explicitly
+prioritized, `priority:*` labels; repository automation projects those values into
+the Project. Agents MUST NOT probe for or mutate Project fields merely to mirror
+Issue coordination. See **Optional GitHub Project metadata** below.
 
 ## Mandatory pre-implementation audit
 
@@ -1180,8 +1182,9 @@ The authority split is:
   `Bxxx`, Issue state represents coordination/history only and does not replace
   the durable repository authority described above;
 - the `Protos Development` GitHub Project is the derived scheduling/dashboard
-  projection for live Issues tracked there: Issue-owned status is projected
-  automatically while planning-only Project metadata remains advisory; and
+  projection for live Issues tracked there: Issue-owned status and explicit
+  scheduling priority are projected automatically while other planning-only
+  Project metadata remains advisory; and
 - merged/published repository state, owning project records, tests, changelog
   entries, and Git history retain durable implementation/closure evidence.
 
@@ -1201,8 +1204,10 @@ GitHub, or use it to decide what should run next. Agents MUST NOT update
 `IMPLEMENTATION_STATUS.md` merely to mirror `OPEN`, `READY`, `IN_PROGRESS`,
 `BLOCKED`, assignee, priority, or roadmap changes. New actionable work and required agent-facing live coordination belong to
 GitHub Issues. Open Issue state is machine-readable through the GITHUB004
-`status:*` vocabulary and is automatically projected into `Protos Development`;
-routine agents do not need direct Project mutation capability.
+`status:*` vocabulary; explicit scheduling priority is machine-readable through
+the GITHUB005 `priority:*` vocabulary. Both are automatically projected into
+`Protos Development`; routine agents do not need direct Project mutation
+capability.
 
 `IMPLEMENTATION_STATUS.md` may still preserve or add durable historical/closure
 evidence when a repository publication genuinely needs that registry function,
@@ -1225,7 +1230,9 @@ conflicts with current published repository state, use the
 repository/specification to establish what actually exists and then reconcile
 the Issue; do not rewrite durable semantics or implementation evidence merely to
 match stale coordination metadata. Reconcile the Issue's `status:*` label when
-its live state changes; Project Status follows automatically.
+its live state changes; Project Status follows automatically. When scheduling
+priority is explicitly established or changed, reconcile the Issue's
+`priority:*` label; Project Priority follows automatically.
 
 When a bounded implementation slice is successfully published, the publication
 commit MUST still record every durable artifact required by its owning work item
@@ -1308,10 +1315,12 @@ change to use a pull request. Use a PR when the contribution workflow, review
 policy, or explicit user request requires one; otherwise follow the publication
 rules in this file.
 
-Live Issue coordination state such as assignee, active work, or blocking is
-advisory coordination, not a repository lock. The Issue's `status:*` label is
-required live-state metadata for tracked open work; derived Project Status and
-planning-only Project fields remain advisory and are not repository locks. Multiple agents must
+Live Issue coordination state such as assignee, active work, blocking, or
+priority is advisory coordination, not a repository lock. The Issue's `status:*`
+label is required live-state metadata for tracked open work; `priority:*` is
+optional explicit scheduling metadata. Derived Project Status/Priority and other
+planning-only Project fields remain advisory and are not repository locks.
+Multiple agents must
 still re-fetch `origin/main`, inspect overlapping work, and avoid assuming that a
 GitHub assignment grants exclusive ownership of mutable files or semantics.
 
@@ -1424,15 +1433,51 @@ Paused / Review / Done. `Family` is intentionally not duplicated into Project
 metadata: the owning Issue's `family:<FAMILY>` label remains the single family
 classifier.
 
-Project `Priority`, `Area`, `Roadmap`, `Owner`, and similar planning fields remain
-advisory Project-only metadata unless a later explicit policy owns their mapping.
-GITHUB004 does not infer those fields from Issue status and does not make them
-publication, semantic, blocker, or design authority.
+Project `Priority` is governed separately by GITHUB005: zero or one
+Issue-owned `priority:*` label is projected automatically to P0 / P1 / P2 / P3,
+and absence means Priority is unset for an open Issue. `Area`, `Roadmap`, `Owner`,
+and similar planning fields remain advisory Project-only metadata unless a later
+explicit policy owns their mapping. Neither GITHUB004 nor GITHUB005 makes Project
+metadata publication, semantic, blocker, or design authority.
 
 The absence of direct Project mutation capability is not a repository-work
 blocker. If Issue mutation itself is unavailable when a required live-state
 transition occurs, report the exact Issue update still required rather than
 fabricating Project state.
+
+<!-- GITHUB005 ISSUE-OWNED-PROJECT-PRIORITY -->
+##### Issue-owned priority and derived GitHub Project projection
+
+Scheduling priority is explicit, optional Issue-owned live coordination metadata.
+An Issue may carry at most one current priority label:
+
+- `priority:p0` — immediate/critical attention; exceptional;
+- `priority:p1` — next/high-priority work;
+- `priority:p2` — normal planned work; or
+- `priority:p3` — opportunistic/later work.
+
+No `priority:*` label is valid and means Project Priority is unset for an open
+Issue. Do not silently default unprioritized work to P2.
+
+Priority is orthogonal to Status. Do not infer P0 merely from `Needs decision`,
+P1 merely from `In progress`, or P2 merely from `Ready`. A project-owner priority
+instruction overrides agent heuristics. If current coordination evidence does not
+justify changing priority, preserve the existing priority rather than churn it.
+
+When an agent with Issue-write capability deliberately changes priority, it MUST
+replace the Issue's `priority:*` label coherently. A newly-added priority label
+wins over an older one; repository automation removes the stale label and projects
+the canonical priority into `Protos Development`. Removing the only priority label
+clears Project Priority for an open Issue.
+
+Closed Issues may retain their last `priority:*` label as historical scheduling
+context while Project Status becomes `Done`. Reopening reuses a retained priority.
+Priority never approves design, clears a blocker, reserves files, or acts as a
+publication lock.
+
+Repository automation owns Project `Priority` projection. Agents do not need
+Project API capability and SHOULD NOT directly mutate Project Priority merely to
+mirror an Issue transition.
 
 ##### Collision-safe formal identifier allocation
 

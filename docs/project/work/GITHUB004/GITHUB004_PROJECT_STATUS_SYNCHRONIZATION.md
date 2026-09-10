@@ -1,6 +1,6 @@
 # GITHUB004 — Automatic Project status synchronization
 
-Status: **IN_PROGRESS**
+Status: **CLOSED**
 
 Owning live Issue: GitHub #307.
 
@@ -56,9 +56,10 @@ Done
 `family:<FAMILY>` remains the sole formal-family classifier. Do not create or
 maintain a Project `Family` duplicate.
 
-`Priority`, `Area`, and `Roadmap` remain optional planning metadata. GITHUB004
-does not infer them from status labels and does not make them semantic or
-repository authority.
+GITHUB004 does not infer Priority from status labels. GITHUB005 subsequently
+owns the separate optional Issue-priority projection. `Area` and `Roadmap` remain
+optional planning metadata and none of these fields become semantic or repository
+authority.
 
 ## Automatic convergence
 
@@ -137,6 +138,24 @@ Project field. The automatic workflow projects the Issue-owned state.
 
 When Issue mutation is unavailable, report the missing Issue-state update
 explicitly. Do not fabricate a Project update instead.
+
+## Activation and closure evidence
+
+Activated on 2026-09-10 after publication of the GITHUB004 machinery.
+
+- repository secret `PROTOS_PROJECT_TOKEN` was configured with Project-capable
+  credentials;
+- Project Status already contained `Paused`;
+- manual workflow run `34503871085` completed successfully and reconciled 32
+  tracked closed Issues plus 41 open Issues;
+- incremental label replacement projected GitHub #307 to `Review` while removing
+  the older `status:in-progress`;
+- closing #307 projected `Done`;
+- reopening #307 retained `status:review` and projected `Review`; and
+- final closure projected `Done` again.
+
+GitHub #307 is CLOSED. These live activation results satisfy GITHUB004's closure
+gate without making the Project an independent authority.
 
 ## Closure evidence required
 
