@@ -1,6 +1,6 @@
 # GITHUB007 — Issue intake and creation governance
 
-Status: **IN_PROGRESS — PENDING LIVE ACTIVATION**
+Status: **CLOSED / ACTIVE**
 
 Owning live Issue: GitHub #319.
 
@@ -97,19 +97,47 @@ has an unresolved hierarchy conflict.
 
 ## Activation evidence
 
-At authoring time, LM009-E / GitHub #318 is a real post-GITHUB006 drift case:
-its body declares `Parent: #288`, while the GitHub native parent endpoint reports
-no parent. The first full GITHUB007 reconciliation is expected to establish
-#288 as its native parent and verify the relation.
+Live activation completed successfully on 2026-09-10 through GitHub Actions
+workflow run `34521196152`, executing the published GITHUB007 helper from commit
+`8c8f98b13108ccbd73d2298159cd988f7910ff98`.
+
+The workflow's network-free helper self-test passed, and the full live
+reconciliation reported:
+
+```text
+OPEN_ISSUES_SCANNED=35
+FORMAL_ISSUES_RECONCILED=24
+COMMUNITY_ISSUES_OBSERVED=11
+UNTRUSTED_FORMAL_CANDIDATES=0
+FAMILY_RECONCILIATIONS=0
+NATIVE_PARENTS_ADDED=1
+UNRESOLVED_INTAKE_ERRORS=0
+ISSUE_INTAKE_RECONCILIATION: PASS
+```
+
+The intended post-GITHUB006 drift case was repaired by the workflow itself:
+
+```text
+NATIVE_PARENT_ADDED: child=#318 parent=#288
+```
+
+A subsequent GitHub native-parent lookup confirmed that LM009-E / #318 resolves
+to LM009 / #288. This proves the missing-parent convergence path against live
+repository state rather than only the mock/self-test path.
 
 ## Closure
 
-GITHUB007 closes only after:
+All GITHUB007 activation conditions are satisfied:
 
-- this policy, forms, helper and workflow are published;
-- helper self-tests pass in GitHub Actions;
-- a full live reconciliation completes without unresolved errors;
-- #318 is repaired and verified as a native child of #288 (or equivalent
-  post-GITHUB006 missing-parent evidence is reconciled if live state changes
-  before activation); and
-- Issue-form content is visible on `main` with neutral Inbox/no-priority intake.
+- policy, forms, helper and workflow are published on `main`;
+- helper self-tests passed in GitHub Actions;
+- the first full live reconciliation completed with zero unresolved intake
+  errors;
+- LM009-E / #318 was repaired and independently verified as a native child of
+  LM009 / #288; and
+- Issue-form content is published with neutral `status:inbox` intake and no
+  automatic scheduling priority.
+
+GITHUB007 is therefore closed as an implementation/governance work item. The
+published intake workflow and helper remain active steady-state repository
+coordination infrastructure.
