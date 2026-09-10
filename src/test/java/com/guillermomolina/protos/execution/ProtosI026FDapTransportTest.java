@@ -34,66 +34,118 @@ import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.Iterator;
+import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 final class ProtosI026FDapTransportTest {
     private static final Duration TIMEOUT = Duration.ofSeconds(8);
+    private static final String DAP_CLIENT_CONNECTION_THREAD_NAME =
+            "DAP client connection thread";
 
     @Test
     void realGraalVmDapInstrumentCompletesTcpHandshake() throws Exception {
         int port = reserveEphemeralPort();
+        Set<Thread> dapClientConnectionThreadsBefore = dapClientConnectionThreads();
+        Context context = null;
+        DapClient client = null;
+        Thread dapClientConnectionThread = null;
 
-        try (Context context =
-                Context.newBuilder(ProtosLanguage.ID)
-                        .option("dap", "127.0.0.1:" + port)
-                        .option("dap.Suspend", "false")
-                        .option("dap.WaitAttached", "false")
-                        .build()) {
+        try {
+            context =
+                    Context.newBuilder(ProtosLanguage.ID)
+                            .option("dap", "127.0.0.1:" + port)
+                            .option("dap.Suspend", "false")
+                            .option("dap.WaitAttached", "false")
+                            .build();
             context.initialize(ProtosLanguage.ID);
 
-            try (DapClient client = DapClient.connect(port, TIMEOUT)) {
-                int initialize =
-                        client.request(
-                                "initialize",
-                                "{\"adapterID\":\"protos\","
-                                        + "\"clientID\":\"protos-i026-f1\","
-                                        + "\"clientName\":\"Protos I026-F1\","
-                                        + "\"linesStartAt1\":true,"
-                                        + "\"columnsStartAt1\":true,"
-                                        + "\"pathFormat\":\"path\"}");
-                String initializeResponse = client.awaitResponse(initialize, TIMEOUT);
-                assertSuccessfulResponse(initializeResponse, initialize, "initialize");
-                assertTrue(
-                        booleanField(initializeResponse, "supportsConfigurationDoneRequest"),
-                        "real GraalVM DAP must advertise configurationDone");
+            client = DapClient.connect(port, TIMEOUT);
 
-                String initialized = client.awaitEvent("initialized", TIMEOUT);
-                assertJsonStringField(initialized, "event", "initialized");
+            int initialize =
+                    client.request(
+                            "initialize",
+                            "{\"adapterID\":\"protos\","
+                                    + "\"clientID\":\"protos-i026-f1\","
+                                    + "\"clientName\":\"Protos I026-F1\","
+                                    + "\"linesStartAt1\":true,"
+                                    + "\"columnsStartAt1\":true,"
+                                    + "\"pathFormat\":\"path\"}");
+            String initializeResponse = client.awaitResponse(initialize, TIMEOUT);
+            assertSuccessfulResponse(initializeResponse, initialize, "initialize");
+            assertTrue(
+                    booleanField(initializeResponse, "supportsConfigurationDoneRequest"),
+                    "real GraalVM DAP must advertise configurationDone");
 
-                int attach = client.request("attach", "{}");
-                assertSuccessfulResponse(
-                        client.awaitResponse(attach, TIMEOUT), attach, "attach");
+            String initialized = client.awaitEvent("initialized", TIMEOUT);
+            assertJsonStringField(initialized, "event", "initialized");
 
-                int configurationDone = client.request("configurationDone", "{}");
-                assertSuccessfulResponse(
-                        client.awaitResponse(configurationDone, TIMEOUT),
-                        configurationDone,
-                        "configurationDone");
+            int attach = client.request("attach", "{}");
+            assertSuccessfulResponse(
+                    client.awaitResponse(attach, TIMEOUT), attach, "attach");
 
-                int disconnect =
-                        client.request(
-                                "disconnect",
-                                "{\"restart\":false,\"terminateDebuggee\":false}");
-                assertSuccessfulResponse(
-                        client.awaitResponse(disconnect, TIMEOUT),
-                        disconnect,
-                        "disconnect");
+            dapClientConnectionThread =
+                    newDapClientConnectionThread(dapClientConnectionThreadsBefore);
+
+            int configurationDone = client.request("configurationDone", "{}");
+            assertSuccessfulResponse(
+                    client.awaitResponse(configurationDone, TIMEOUT),
+                    configurationDone,
+                    "configurationDone");
+
+            int disconnect =
+                    client.request(
+                            "disconnect",
+                            "{\"restart\":false,\"terminateDebuggee\":false}");
+            assertSuccessfulResponse(
+                    client.awaitResponse(disconnect, TIMEOUT),
+                    disconnect,
+                    "disconnect");
+        } finally {
+            if (client != null) {
+                client.close();
+            }
+            if (dapClientConnectionThread != null) {
+                awaitDapClientConnectionThreadTermination(dapClientConnectionThread);
+            }
+            if (context != null) {
+                context.close();
             }
         }
+    }
+
+
+    private static Set<Thread> dapClientConnectionThreads() {
+        return Thread.getAllStackTraces().keySet().stream()
+                .filter(Thread::isAlive)
+                .filter(thread -> DAP_CLIENT_CONNECTION_THREAD_NAME.equals(thread.getName()))
+                .collect(Collectors.toSet());
+    }
+
+    private static Thread newDapClientConnectionThread(Set<Thread> threadsBefore) {
+        List<Thread> candidates =
+                dapClientConnectionThreads().stream()
+                        .filter(thread -> !threadsBefore.contains(thread))
+                        .collect(Collectors.toList());
+        assertEquals(
+                1,
+                candidates.size(),
+                "exactly one new GraalVM DAP client connection thread must belong to this test");
+        return candidates.get(0);
+    }
+
+    private static void awaitDapClientConnectionThreadTermination(Thread thread)
+            throws InterruptedException {
+        thread.join(TIMEOUT.toMillis());
+        assertFalse(
+                thread.isAlive(),
+                "GraalVM DAP client connection thread must terminate before Context.close()");
     }
 
     private static int reserveEphemeralPort() throws IOException {
