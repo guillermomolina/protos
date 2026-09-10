@@ -186,7 +186,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
     }
 
     @Test
-    void arityFailureAndSpreadDefaultBoundaryRemainFailClosed()
+    void arityFailureAndSpreadDefaultLoweringCoexist()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -238,17 +238,10 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                                 .build();
                 CanonicalClosure defaultDefinition =
                         closureDefinition(defaultCharacters);
-                UnsupportedOperationException failure =
-                        assertThrows(
-                                UnsupportedOperationException.class,
-                                () ->
-                                        new ProtosBytecodeClosureExecutionPlan(
+                new ProtosBytecodeClosureExecutionPlan(
                                                 defaultDefinition,
                                                 language,
-                                                defaultSource));
-                assertTrue(
-                        failure.getMessage()
-                                .contains("CanonicalSpread"));
+                                                defaultSource);
             } finally {
                 context.leave();
             }
@@ -256,7 +249,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
 
         System.out.println("PERF006_B2C3B1_ARITY_ERROR_PRESERVED=PASS");
         System.out.println(
-                "PERF006_B2C3B1_DEFAULT_INVOCATION_SPREAD_STILL_DEFERRED=PASS");
+                "PERF006_B2C3B1_DEFAULT_INVOCATION_SPREAD_LOWERING=PASS");
     }
 
     private static ProtosClosureValue semanticClosure(

@@ -260,7 +260,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
     }
 
     @Test
-    void requiredArityAndSpreadDefaultBoundaryRemainFailClosed()
+    void requiredArityAndSpreadDefaultLoweringCoexist()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -314,24 +314,17 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                                 .build();
                 CanonicalClosure complexDefinition =
                         closureDefinition(complexCharacters);
-                UnsupportedOperationException failure =
-                        assertThrows(
-                                UnsupportedOperationException.class,
-                                () ->
-                                        new ProtosBytecodeClosureExecutionPlan(
+                new ProtosBytecodeClosureExecutionPlan(
                                                 complexDefinition,
                                                 language,
-                                                complexSource));
-                assertTrue(
-                        failure.getMessage()
-                                .contains("CanonicalSpread"));
+                                                complexSource);
             } finally {
                 context.leave();
             }
         }
 
         System.out.println("PERF006_B2C3B2_REQUIRED_ARITY_ERROR=PASS");
-        System.out.println("PERF006_B2C3B2_DEFAULT_INVOCATION_SPREAD_STILL_DEFERRED=PASS");
+        System.out.println("PERF006_B2C3B2_DEFAULT_INVOCATION_SPREAD_LOWERING=PASS");
     }
 
     private static ProtosClosureValue semanticClosure(

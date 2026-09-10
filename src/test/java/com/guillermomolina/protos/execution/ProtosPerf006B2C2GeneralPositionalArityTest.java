@@ -186,7 +186,7 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
     }
 
     @Test
-    void callSpreadInDefaultsRemainsFailClosed()
+    void callSpreadInDefaultsLowersAfterMigration()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -204,24 +204,17 @@ final class ProtosPerf006B2C2GeneralPositionalArityTest {
                                         defaultCharacters,
                                         "perf006-b2c2-default.protos")
                                 .build();
-                UnsupportedOperationException defaultFailure =
-                        assertThrows(
-                                UnsupportedOperationException.class,
-                                () ->
-                                        new ProtosBytecodeClosureExecutionPlan(
+                new ProtosBytecodeClosureExecutionPlan(
                                                 defaultDefinition,
                                                 language,
-                                                defaultSource));
-                assertTrue(
-                        defaultFailure.getMessage()
-                                .contains("CanonicalSpread"));
+                                                defaultSource);
             } finally {
                 context.leave();
             }
         }
 
         System.out.println(
-                "PERF006_B2C2_DEFAULT_INVOCATION_SPREAD_DEFERRED=PASS");
+                "PERF006_B2C2_DEFAULT_INVOCATION_SPREAD_LOWERING=PASS");
     }
 
     private static void assertGuestArityError(

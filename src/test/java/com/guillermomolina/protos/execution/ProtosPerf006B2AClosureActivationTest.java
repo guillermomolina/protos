@@ -284,7 +284,7 @@ final class ProtosPerf006B2AClosureActivationTest {
     }
 
     @Test
-    void spreadDefaultRemainsFailClosedUntilInvocationSpreadMigration() throws Exception {
+    void spreadDefaultLowersAfterInvocationSpreadMigration() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
@@ -300,23 +300,16 @@ final class ProtosPerf006B2AClosureActivationTest {
 
                 CanonicalClosure definition = closureDefinition(characters);
 
-                UnsupportedOperationException failure =
-                        assertThrows(
-                                UnsupportedOperationException.class,
-                                () ->
-                                        new ProtosBytecodeClosureExecutionPlan(
+                new ProtosBytecodeClosureExecutionPlan(
                                                 definition,
                                                 language,
-                                                source));
-                assertTrue(
-                        failure.getMessage()
-                                .contains("CanonicalSpread"));
+                                                source);
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println("PERF006_B2A_INVOCATION_SPREAD_NOT_SILENTLY_MIGRATED=PASS");
+        System.out.println("PERF006_B2A_DEFAULT_SPREAD_LOWERING=PASS");
     }
 
     private static CanonicalClosure closureDefinition(String characters) {

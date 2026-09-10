@@ -393,7 +393,7 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
     }
 
     @Test
-    void defaultSendSpreadWithComposedAndSimpleReceiversRemainsDeferred()
+    void defaultSendSpreadWithComposedAndSimpleReceiversLowers()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -413,17 +413,10 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
                                             characters,
                                             "perf006-b2d4a-default-send-spread-deferred.protos")
                                     .build();
-                    UnsupportedOperationException failure =
-                            assertThrows(
-                                    UnsupportedOperationException.class,
-                                    () ->
-                                            new ProtosBytecodeClosureExecutionPlan(
+                    new ProtosBytecodeClosureExecutionPlan(
                                                     definition,
                                                     language,
-                                                    source));
-                    assertTrue(
-                            failure.getMessage()
-                                    .contains("CanonicalSpread"));
+                                                    source);
                 }
             } finally {
                 context.leave();
@@ -431,7 +424,7 @@ final class ProtosPerf006B2D4AComposedCallTargetTest {
         }
 
         System.out.println(
-                "PERF006_B2D4A_DEFAULT_SEND_SPREAD_DEFERRED=PASS");
+                "PERF006_B2D4A_DEFAULT_SEND_SPREAD_LOWERING=PASS");
     }
 
     private static Object execute(

@@ -190,7 +190,7 @@ final class ProtosPerf006B2D1OrdinarySendCompositionTest {
     }
 
     @Test
-    void defaultSendSpreadRemainsFailClosed() throws Exception {
+    void defaultSendSpreadLowersAfterMigration() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
@@ -207,24 +207,17 @@ final class ProtosPerf006B2D1OrdinarySendCompositionTest {
                                         "perf006-b2d1-default-send-spread-deferred.protos")
                                 .build();
 
-                UnsupportedOperationException failure =
-                        assertThrows(
-                                UnsupportedOperationException.class,
-                                () ->
-                                        new ProtosBytecodeClosureExecutionPlan(
+                new ProtosBytecodeClosureExecutionPlan(
                                                 definition,
                                                 language,
-                                                source));
-                assertTrue(
-                        failure.getMessage()
-                                .contains("CanonicalSpread"));
+                                                source);
             } finally {
                 context.leave();
             }
         }
 
         System.out.println(
-                "PERF006_B2D1_DEFAULT_SEND_SPREAD_DEFERRED=PASS");
+                "PERF006_B2D1_DEFAULT_SEND_SPREAD_LOWERING=PASS");
     }
 
     private static ProtosBytecodeRootNode yieldingMethodRoot(

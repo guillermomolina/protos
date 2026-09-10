@@ -258,7 +258,7 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
     }
 
     @Test
-    void defaultSpreadRemainsFailClosedUntilDefaultSpreadMigration()
+    void defaultSpreadLowersAfterDefaultSpreadMigration()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -276,24 +276,17 @@ final class ProtosPerf006B2BClosureContinuationCompositionTest {
                                         "perf006-b2b-default-spread-deferred.protos")
                                 .build();
 
-                UnsupportedOperationException failure =
-                        assertThrows(
-                                UnsupportedOperationException.class,
-                                () ->
-                                        new ProtosBytecodeClosureExecutionPlan(
+                new ProtosBytecodeClosureExecutionPlan(
                                                 definition,
                                                 language,
-                                                source));
-                assertTrue(
-                        failure.getMessage()
-                                .contains("CanonicalSpread"));
+                                                source);
             } finally {
                 context.leave();
             }
         }
 
         System.out.println(
-                "PERF006_B2B_DEFAULT_SPREAD_NOT_SILENTLY_MIGRATED=PASS");
+                "PERF006_B2B_DEFAULT_SPREAD_LOWERING=PASS");
     }
 
     private static ProtosBytecodeRootNode yieldingLeafRoot(

@@ -200,7 +200,7 @@ final class ProtosPerf006B2C3ARestBindingTest {
     }
 
     @Test
-    void requiredPrefixStillRejectsTooFewArgumentsAndSpreadDefaultRemainsDeferred()
+    void requiredPrefixStillRejectsTooFewArgumentsAndSpreadDefaultLowers()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -247,24 +247,17 @@ final class ProtosPerf006B2C3ARestBindingTest {
                 CanonicalClosure defaultDefinition =
                         closureDefinition(defaultCharacters);
 
-                UnsupportedOperationException defaultFailure =
-                        assertThrows(
-                                UnsupportedOperationException.class,
-                                () ->
-                                        new ProtosBytecodeClosureExecutionPlan(
+                new ProtosBytecodeClosureExecutionPlan(
                                                 defaultDefinition,
                                                 language,
-                                                defaultSource));
-                org.junit.jupiter.api.Assertions.assertTrue(
-                        defaultFailure.getMessage()
-                                .contains("CanonicalSpread"));
+                                                defaultSource);
             } finally {
                 context.leave();
             }
         }
 
         System.out.println("PERF006_B2C3A_REQUIRED_PREFIX_ARITY=PASS");
-        System.out.println("PERF006_B2C3A_DEFAULT_INVOCATION_SPREAD_STILL_DEFERRED=PASS");
+        System.out.println("PERF006_B2C3A_DEFAULT_INVOCATION_SPREAD_LOWERING=PASS");
     }
 
     private static ProtosBytecodeRootNode lowerCall(

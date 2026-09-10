@@ -450,7 +450,7 @@ final class ProtosPerf006B2D5BBodySendSpreadTest {
     }
 
     @Test
-    void defaultSpreadRemainsFailClosed()
+    void defaultSpreadLowersAfterMigration()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -469,24 +469,17 @@ final class ProtosPerf006B2D5BBodySendSpreadTest {
                                             characters,
                                             "perf006-b2d5b-default-deferred.protos")
                                     .build();
-                    UnsupportedOperationException failure =
-                            assertThrows(
-                                    UnsupportedOperationException.class,
-                                    () ->
-                                            new ProtosBytecodeClosureExecutionPlan(
+                    new ProtosBytecodeClosureExecutionPlan(
                                                     definition,
                                                     language,
-                                                    source));
-                    assertEquals(
-                            "PERF006-B2C3B3 default expression is not migrated: CanonicalSpread",
-                            failure.getMessage());
+                                                    source);
                 }
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println("PERF006_B2D5B_DEFAULT_SPREAD_DEFERRED=PASS");
+        System.out.println("PERF006_B2D5B_DEFAULT_SPREAD_LOWERING=PASS");
     }
 
     private static Object execute(
