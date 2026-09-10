@@ -43,6 +43,7 @@ public final class ProtosCli {
             Set.of("protos.toml", "protos.lock", ".protos.toml.stage", ".protos.lock.stage");
 
     private final ProtosValueRenderer renderer = new ProtosValueRenderer();
+    private final ProtosDiagnosticInspector diagnosticInspector = new ProtosDiagnosticInspector();
 
     public static void main(String[] args) {
         int code = new ProtosCli().run(args, System.in, System.out, System.err);
@@ -211,7 +212,7 @@ public final class ProtosCli {
             return switch (outcome.state()) {
                 case COMPLETED -> 0;
                 case FAILED -> {
-                    err.println("Error: " + renderer.render(outcome.error()));
+                    err.println("Error: " + diagnosticInspector.render(outcome.error()));
                     yield 1;
                 }
                 case CANCELLED -> {
@@ -432,7 +433,7 @@ public final class ProtosCli {
             err.println(diagnosticName + " tool syntax error: " + e.getMessage());
             return 1;
         } catch (ProtosSignalException e) {
-            err.println(diagnosticName + " tool error: " + renderer.render(e.error()));
+            err.println(diagnosticName + " tool error: " + diagnosticInspector.render(e.error()));
             return 1;
         } catch (RuntimeException e) {
             err.println(diagnosticName + " tool runtime error: " + e.getMessage());
@@ -594,7 +595,7 @@ public final class ProtosCli {
         }
         try {
             out.println(
-                    renderer.render(
+                    diagnosticInspector.render(
                             s.evaluatePersistent(sourceFromCharacters(input, "<repl>"))));
             return ReplInputResult.COMPLETE;
         } catch (ParseError e) {
@@ -604,7 +605,7 @@ public final class ProtosCli {
             err.println("Syntax error: " + e.getMessage());
             return ReplInputResult.COMPLETE;
         } catch (ProtosSignalException e) {
-            err.println("Error: " + renderer.render(e.error()));
+            err.println("Error: " + diagnosticInspector.render(e.error()));
             return ReplInputResult.COMPLETE;
         } catch (RuntimeException e) {
             err.println("Runtime error: " + e.getMessage());
@@ -961,7 +962,7 @@ public final class ProtosCli {
             err.println("Syntax error: " + e.getMessage());
             return 1;
         } catch (ProtosSignalException e) {
-            err.println("Error: " + renderer.render(e.error()));
+            err.println("Error: " + diagnosticInspector.render(e.error()));
             return 1;
         } catch (RuntimeException e) {
             err.println("Runtime error: " + e.getMessage());
