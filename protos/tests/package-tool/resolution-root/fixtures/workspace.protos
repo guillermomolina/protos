@@ -20,19 +20,19 @@ model: Root.assemble(projectTreeFilesystem)
 ok: model.root.packageId == "root"
 (model.members.size() == 2).ifFalse(() => { ok = false })
 
-a: model.members.at(1)
-b: model.members.at(0)
+a: model.members[1]
+b: model.members[0]
 
 (b.location == "libs/b").ifFalse(() => { ok = false })
 (b.packageId == "b-pkg").ifFalse(() => { ok = false })
 (b.manifest.compatibility == "0.1").ifFalse(() => { ok = false })
-(b.manifest.dependencies.at(0).targetLocation == "libs/a").ifFalse(() => { ok = false })
-(b.manifest.dependencies.at(0).targetPackageId == "a-pkg").ifFalse(() => { ok = false })
+(b.manifest.dependencies[0].targetLocation == "libs/a").ifFalse(() => { ok = false })
+(b.manifest.dependencies[0].targetPackageId == "a-pkg").ifFalse(() => { ok = false })
 
 (a.location == "libs/a").ifFalse(() => { ok = false })
 (a.packageId == "a-pkg").ifFalse(() => { ok = false })
-(a.manifest.dependencies.at(0).targetLocation == "").ifFalse(() => { ok = false })
-(a.manifest.dependencies.at(0).targetPackageId == "root").ifFalse(() => { ok = false })
+(a.manifest.dependencies[0].targetLocation == "").ifFalse(() => { ok = false })
+(a.manifest.dependencies[0].targetPackageId == "root").ifFalse(() => { ok = false })
 
 // Member-local workspace declaration is inactive in the enclosing root.
 // Successful digest construction proves it was not recursively expanded.
