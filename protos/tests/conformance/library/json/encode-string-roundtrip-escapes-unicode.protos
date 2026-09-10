@@ -20,6 +20,5 @@ text: "quote:\" slash:\\ tab:\t newline:\n noncharacter:\u{FDD0} face:\u{1F600}"
 encoded: JSON.encode(JSON.string(text))
 decoded: JSON.parse(encoded)
 
-(decoded.kind == "string").and() {
-    decoded.value == text
-}
+(decoded.kind == "string") &&
+    (decoded.value == text)

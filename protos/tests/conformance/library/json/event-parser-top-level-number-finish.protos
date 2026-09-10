@@ -29,10 +29,7 @@ parser.feed("+3")
 parser.finish()
 
 event: events.at(0)
-(count == 1).and() {
-    (event.kind == "number").and() {
-        (event.value.coefficient == -125).and() {
-            event.value.exponent == 2
-        }
-    }
-}
+(count == 1) &&
+    (event.kind == "number") &&
+    (event.value.coefficient == -125) &&
+    (event.value.exponent == 2)

@@ -30,8 +30,6 @@ parser.finish()
 writer.finish()
 
 node: JSON.parse(output)
-(node.value.at("z").value.at(1).value == "A\u{1F600}").and() {
-    (node.value.at("n").value.coefficient == 1230).and() {
-        node.value.at("n").value.exponent == -4
-    }
-}
+(node.value.at("z").value.at(1).value == "A\u{1F600}") &&
+    (node.value.at("n").value.coefficient == 1230) &&
+    (node.value.at("n").value.exponent == -4)
