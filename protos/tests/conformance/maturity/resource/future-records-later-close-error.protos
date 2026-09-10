@@ -56,8 +56,6 @@ IOError.handle(
         null
     }
 )
-(encodingHandlerRan == false).and() {
-    (recordedFirst !== null).and() {
-        recordedFirst === recordedSecond
-    }
-}
+(encodingHandlerRan == false) &&
+    (recordedFirst !== null) &&
+    (recordedFirst === recordedSecond)

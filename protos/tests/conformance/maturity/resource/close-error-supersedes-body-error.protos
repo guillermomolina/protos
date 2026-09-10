@@ -40,6 +40,5 @@ IOError.handle(
         null
     }
 )
-(originalHandlerRan == false).and() {
-    cleanupError !== null
-}
+(originalHandlerRan == false) &&
+    (cleanupError !== null)
