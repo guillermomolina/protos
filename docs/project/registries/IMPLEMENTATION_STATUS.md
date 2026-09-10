@@ -1377,7 +1377,7 @@ Closure evidence:
 Status: IN_PROGRESS
 
 Project-side benchmark methodology and repository ownership are recorded in
-`docs/project/PERF001_BENCHMARKING.md`. The canonical Protos workload corpus
+`docs/project/work/PERF001/PERF001_BENCHMARKING.md`. The canonical Protos workload corpus
 remains under `protos/benchmarks/`; the future companion benchmark repository
 owns execution infrastructure and cross-language evidence rather than PERF
 lifecycle state.

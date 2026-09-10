@@ -227,7 +227,7 @@ alter the PERF001-E baseline.
 ### PERF001-F focused concurrency methodology audit
 
 The project owner approved the focused PERF001-F methodology on 2026-09-09. The
-durable contract is `docs/project/PERF001_F_CONCURRENCY_METHODOLOGY.md`. It
+durable contract is `docs/project/work/PERF001/PERF001_F_CONCURRENCY_METHODOLOGY.md`. It
 selects a Protos-native fixed-cost + scalability model rather than manufactured
 cross-language concurrency analogues and reserves six canonical workload
 identifiers under `protos/benchmarks/concurrency/`:

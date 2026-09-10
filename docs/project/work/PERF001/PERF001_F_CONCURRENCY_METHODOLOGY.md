@@ -17,7 +17,7 @@ The applicable normative owners remain:
 - `spec/concurrency/PARALLEL_EXECUTION.md` for isolated P semantics; and
 - `spec/concurrency/ACTORS.md` for Actor semantics.
 
-`docs/project/PERF001_BENCHMARKING.md` remains the parent PERF001 methodology
+`docs/project/work/PERF001/PERF001_BENCHMARKING.md` remains the parent PERF001 methodology
 record. This document refines only the concurrency workload family selected for
 PERF001-F.
 

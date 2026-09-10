@@ -5,7 +5,7 @@ Workloads belong here only when they can be expressed without adding assumptions
 
 `PERF001-F` owns the first canonical concurrency workload family. Its approved
 methodology is documented in
-`docs/project/PERF001_F_CONCURRENCY_METHODOLOGY.md`.
+`docs/project/work/PERF001/PERF001_F_CONCURRENCY_METHODOLOGY.md`.
 
 The six canonical workload identifiers are materialized by these sources:
 

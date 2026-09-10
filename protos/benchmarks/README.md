@@ -65,4 +65,4 @@ creation/start latency is outside the Protos language-startup measurement unless
 a separately labelled container-start metric is intentionally being measured.
 
 The complete PERF001 methodology and cross-repository publication contract are
-recorded in `docs/project/PERF001_BENCHMARKING.md`.
+recorded in `docs/project/work/PERF001/PERF001_BENCHMARKING.md`.

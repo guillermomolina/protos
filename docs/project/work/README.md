@@ -11,6 +11,10 @@ migration moves them; new unambiguous records use `work/<formal-work-item>/`.
 
 Current role-first DOC002 records:
 
+- [`PERF001/PERF001_BENCHMARKING.md`](PERF001/PERF001_BENCHMARKING.md)
+  — PERF001 non-normative benchmark ownership, reproducibility and evidence plan.
+  - [`PERF001-F concurrency methodology`](PERF001/PERF001_F_CONCURRENCY_METHODOLOGY.md)
+
 - [`LM008/LM008_CORE_LANGUAGE_SURFACE_COMPLETENESS.md`](LM008/LM008_CORE_LANGUAGE_SURFACE_COMPLETENESS.md)
   — LM008 Core-language surface completeness parent record.
   - [`LM008-B`](LM008/LM008_B_GRAMMAR_EVALUATION_BINDING_CALLABLE_AUDIT.md)
