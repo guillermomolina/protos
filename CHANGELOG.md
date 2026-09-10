@@ -1,5 +1,20 @@
 ## 0.2.345-SNAPSHOT
 
+- Activate `GITHUB006 — Native Issue hierarchy authority and migration closure`
+  (GitHub #316) after the project-owner-approved native hierarchy reconciliation
+  reports 106 declared parent relationships, 68 already native, 38 added, zero
+  conflicts and maximum depth 4. Make native GitHub parent/sub-issue linkage the
+  canonical live parent/child coordination structure for formal work; require
+  newly created formal child Issues to establish that native relationship at
+  creation or immediately afterward; retain textual `Parent:` prose only as
+  explanatory/historical context rather than hierarchy authority; and expose
+  `Parent issue` plus `Sub-issues progress` as derived Project presentation.
+  Preserve the existing durable-granularity rule so mechanical implementation
+  phases do not become Issues merely from decomposition. No specification,
+  Protos semantics, runtime implementation, implementation version, public API,
+  release artifact, license term, status/priority authority, or design decision
+  changes.
+
 - Implement `LM009-D2` public debugger launcher/readiness wiring under the ratified D060 B-prime contract. Add `protos debug <file> [args...]` to the ordinary CLI; read/validate the explicit source before debugger startup; preserve ordinary application-argument exclusion of the command/source identity; create the D1 PLAT018 debug RuntimeHost; emit exactly one compact `PROTOS_DEBUG_READY {json}` v1 record on stdout after the OS-allocated loopback endpoint is bound and before the Process Context can execute; retain launch diagnostics on stderr; and route guest stdout/stderr through the currently entered Truffle `Env.out()` / `Env.err()` channels so the real GraalVM DAP output consumer observes them, while null Context sinks prevent duplication onto D060 control pipes. Refactor only the shared standalone bootstrap/binding mechanics needed to keep normal and debug execution on the same Process setup. Add a real-DAP public-CLI launch integration test plus CLI help/failure coverage. VS Code F5 remains LM009-E; no attach/remote-listen/readiness-file/stop-on-entry surface is added. No Protos specification or observable language-semantics change. Implementation version becomes `0.2.345-SNAPSHOT`.
 
 ## 0.2.344-SNAPSHOT

@@ -506,6 +506,43 @@ In particular:
 More specific instructions may add or refine rules for their scope, but they do
 not silently discard repository-wide requirements.
 
+## Native GitHub Issue hierarchy
+<!-- GITHUB006 NATIVE-ISSUE-HIERARCHY-AUTHORITY -->
+
+GitHub's native Issue parent/sub-issue relationship is the canonical **live
+parent/child coordination structure** for formal Protos work items. Project
+`Parent issue` and `Sub-issues progress` are derived presentation surfaces, not
+independent hierarchy authorities.
+
+When a formal child Issue has durable project identity under the granularity rule
+below:
+
+- establish its native parent relationship in the same coordination step as Issue
+  creation when the available interface supports it, or link it immediately
+  afterward before treating the child as fully reconciled;
+- a textual `Parent: #N`, `Parent work item: #N`, checklist entry, title prefix,
+  family label, Project field, or repository document is not a substitute for
+  the native parent relationship;
+- textual parent prose may remain when it is useful explanatory or historical
+  context, especially on retrospectively migrated Issues, but live hierarchy
+  queries MUST use the native relation;
+- if textual parent prose and the native relationship disagree, stop and
+  reconcile the conflict explicitly rather than silently choosing either source;
+- if the current environment cannot create or mutate native sub-issue
+  relationships, report that coordination limitation explicitly and leave the
+  native-link step visibly pending; do not claim the hierarchy is reconciled
+  merely because parent text was written;
+- `family:<FAMILY>` remains orthogonal and continues to classify formal work
+  ownership only; it MUST NOT encode parent/child structure; and
+- changing a native parent relationship does not by itself change Status,
+  Priority, assignee, design authority, specification authority, or publication
+  state.
+
+Existing historical Issue prose that says native sub-issue mutation was
+unavailable at migration time does not require bulk rewriting after the native
+relationship has been established. Preserve historical wording unless a bounded
+Issue-content reconciliation explicitly owns that cleanup.
+
 ## Live GitHub assignee discipline
 <!-- LIVE-GITHUB-ASSIGNEE-DISCIPLINE -->
 
@@ -667,6 +704,10 @@ inside the parent Issue/checklist, local plan, or publication report. When an
 already-formal family uses slice suffixes (for example `Ixxx-A` or `LIBxxx-B`),
 preserve that identifier in the owning durable record and GitHub tracking only
 when the slice meets this independent-identity criterion.
+
+When such an independently tracked child Issue is created, its native GitHub
+parent relationship MUST also be established under the **Native GitHub Issue
+hierarchy** rule above; a textual parent note alone is not sufficient.
 
 Before starting each subsequent slice, re-fetch and inspect the current
 `origin/main` and re-check the assumptions that slice depends on. A previously
