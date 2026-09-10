@@ -309,6 +309,15 @@ float/copied-standard-plus-nonfloat-receiver-error.protos	error	-
 float/negated-delegated-nonfloat-receiver-error.protos	error	-
 float/negated-normal.protos	float-bits	bff8000000000000
 fixed-width/inherited-uint8-factory-receiver-error.protos	error	-
+fixed-width/arithmetic-a-positive.protos	boolean	true
+fixed-width/arithmetic-a-add-overflow-error.protos	error	-
+fixed-width/arithmetic-a-subtract-underflow-error.protos	error	-
+fixed-width/arithmetic-a-multiply-overflow-error.protos	error	-
+fixed-width/arithmetic-a-signed-min-negated-error.protos	error	-
+fixed-width/arithmetic-a-unsigned-positive-negated-error.protos	error	-
+fixed-width/arithmetic-a-mixed-family-error.protos	error	-
+fixed-width/arithmetic-a-delegated-receiver-error.protos	error	-
+fixed-width/arithmetic-a-negated-delegated-receiver-error.protos	error	-
 fixed-width/int64-overflow-error.protos	error	-
 fixed-width/int8-float-min.protos	fixed-integer	Int8:-128
 fixed-width/int8-float-overflow-error.protos	error	-

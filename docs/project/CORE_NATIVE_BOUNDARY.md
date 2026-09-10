@@ -1,3 +1,30 @@
+## I032-A — fixed-width checked arithmetic and source-backed negation
+
+I032-A publishes the first bounded repair for the already-normative fixed-width
+numeric arithmetic gap found by LM008-D2. One family-parameterized
+`ProtosStandardFixedIntegerProtocol` representation bridge installs checked
+same-family `+`, `-`, and `*` on all eight fixed-width prototypes. The bridge
+requires the original receiver and argument to be represented values of the
+exact selected semantic family, computes in exact `BigInteger` space, validates
+the mathematical result against that family's normative range, and materializes
+the same fixed-width family only after the range check succeeds. No widening,
+promotion, wraparound, saturation, host-width arithmetic, callback, or hidden
+suspension is introduced.
+
+Unary `negated` remains derived distributable Core behavior instead of consuming
+another native construction site. Each fixed-width source prototype defines it
+as same-family zero minus `this`, so unsigned positive negation and signed-minimum
+negation fail through the same checked subtraction boundary. An ordinary object
+that merely delegates to a fixed-width prototype is still rejected: the genuine
+family-zero receiver sees that ordinary child as an invalid fixed-family
+argument.
+
+The audited Core boundary advances from **135 sites / 35
+providers** to **136 sites / 36 providers**. The single new
+construction site is a representation bridge shared by all three primitive
+binary selectors and all eight fixed-width prototypes. Fixed-width `/`,
+`div`, `mod`, and `%` remain outside this slice for I032-B/C.
+
 ## I028-D4 — Network.listenTcp acquisition
 
 I028-D4 adds exactly one shared native `listenTcp` Closure to the existing Network protocol provider. The bridge validates and snapshots the exact three local request fields before authority exercise, then uses one host-neutral `ProtosNetworkListenFlow` operation with ordinary Future commitment/cancellation and explicit late-resource custody. Successful descriptors materialize the already-standardized accept-enabled TcpListener family and reject an invalid/non-zero or fixed-port-mismatched backend result before transfer. No wildcard/ephemeral host convention, socket/channel/reactor identity or production backend becomes Core semantics. The audited Core boundary advances from **134 sites / 35 providers** to **135 sites / 35 providers**.
@@ -219,6 +246,7 @@ the standard native boundary.
 | `ProtosStandardNumberEqualityProtocol.java` | 1 | representation bridge | Exact cross-family Number equality needs Integer/fixed/binary64 representation knowledge, including NaN and exact-integral Float handling. |
 | `ProtosStandardNumberOrderingProtocol.java` | 1 | representation bridge | Exact cross-family ordering and unordered NaN behavior require representation-aware comparison. |
 | `ProtosStandardIntegerProtocol.java` | 3 | representation bridge | `+`, `-`, `*`, `/`, `div`, and `mod` are exact numeric representation primitives; derived `negated` and `%` are already source-backed. |
+| `ProtosStandardFixedIntegerProtocol.java` | 1 | representation bridge | Checked same-family fixed-width `+`, `-`, and `*` require exact represented family membership, compute in exact mathematical-integer space, fail before materialization when the result is outside the normative family range, and return the same semantic fixed-width family. Derived `negated` remains source-backed on each fixed prototype. |
 | `ProtosStandardFloatProtocol.java` | 1 | representation bridge | Binary64 arithmetic is the primitive represented-value boundary; derived `negated` is already source-backed. |
 | `ProtosStandardNumericConversionProtocol.java` | 1 | representation bridge | Numeric factory conversion performs exact family/range/binary64 conversion over host representations. |
 | `ProtosStandardStringProtocol.java` | 3 | representation bridge | String size/indexing use required Unicode grapheme segmentation and `+` constructs semantic String representation values. |

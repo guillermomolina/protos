@@ -1,0 +1,2 @@
+fake: UInt8 {}
+fake + UInt8(1)

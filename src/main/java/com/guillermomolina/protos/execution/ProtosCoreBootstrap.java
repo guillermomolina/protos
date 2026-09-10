@@ -19,6 +19,7 @@ package com.guillermomolina.protos.execution;
 
 import com.guillermomolina.protos.runtime.ProtosActivation;
 import com.guillermomolina.protos.runtime.ProtosClosureValue;
+import com.guillermomolina.protos.runtime.ProtosFixedIntegerValue;
 import com.guillermomolina.protos.runtime.ProtosObjectValue;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import java.io.IOException;
@@ -211,6 +212,22 @@ public final class ProtosCoreBootstrap {
         ProtosStandardHashSupport.installNumberHash(numberPrototype);
         ProtosStandardIntegerProtocol.install(integerPrototype);
         ProtosStandardFloatProtocol.install(floatPrototype);
+        ProtosStandardFixedIntegerProtocol.install(
+                uInt8Prototype, ProtosFixedIntegerValue.Family.UINT8);
+        ProtosStandardFixedIntegerProtocol.install(
+                int8Prototype, ProtosFixedIntegerValue.Family.INT8);
+        ProtosStandardFixedIntegerProtocol.install(
+                uInt16Prototype, ProtosFixedIntegerValue.Family.UINT16);
+        ProtosStandardFixedIntegerProtocol.install(
+                int16Prototype, ProtosFixedIntegerValue.Family.INT16);
+        ProtosStandardFixedIntegerProtocol.install(
+                uInt32Prototype, ProtosFixedIntegerValue.Family.UINT32);
+        ProtosStandardFixedIntegerProtocol.install(
+                int32Prototype, ProtosFixedIntegerValue.Family.INT32);
+        ProtosStandardFixedIntegerProtocol.install(
+                uInt64Prototype, ProtosFixedIntegerValue.Family.UINT64);
+        ProtosStandardFixedIntegerProtocol.install(
+                int64Prototype, ProtosFixedIntegerValue.Family.INT64);
         ProtosStandardNumericConversionProtocol.install(integerPrototype, floatPrototype, uInt8Prototype, int8Prototype, uInt16Prototype, int16Prototype, uInt32Prototype, int32Prototype, uInt64Prototype, int64Prototype);
 
         Object errorBinding =

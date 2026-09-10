@@ -79,6 +79,7 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
                     Map.entry("execution/ProtosStandardErrorProtocol.java", 2),
                     Map.entry("execution/ProtosStandardImportProtocol.java", 1),
                     Map.entry("execution/ProtosStandardIntegerProtocol.java", 3),
+                    Map.entry("execution/ProtosStandardFixedIntegerProtocol.java", 1),
                     Map.entry("execution/ProtosStandardFutureProtocol.java", 2),
                     Map.entry("execution/ProtosStandardFloatProtocol.java", 1),
                     Map.entry("execution/ProtosStandardBooleanProtocol.java", 1),
@@ -119,8 +120,8 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         }
 
         assertEquals(EXPECTED_NATIVE_PROVIDERS, actualCore);
-        assertEquals(35, actualCore.size());
-        assertEquals(135, actualCore.values().stream().mapToInt(Integer::intValue).sum());
+        assertEquals(36, actualCore.size());
+        assertEquals(136, actualCore.values().stream().mapToInt(Integer::intValue).sum());
         assertEquals(EXPECTED_NON_CORE_NATIVE_PROVIDERS, actualNonCore);
 
         String inventory =
@@ -189,10 +190,12 @@ final class ProtosCoreNativeBoundaryArchitectureTest {
         assertSourceBacked(prelude.floatPrototype(), "negated");
 
         for (ProtosFixedIntegerValue.Family family : ProtosFixedIntegerValue.Family.values()) {
+            ProtosObjectValue prototype = prelude.fixedIntegerPrototype(family);
             assertNativeSelectors(
                     family.prototypeName(),
-                    prelude.fixedIntegerPrototype(family),
-                    Set.of("call"));
+                    prototype,
+                    Set.of("call", "+", "-", "*"));
+            assertSourceBacked(prototype, "negated");
         }
 
         assertNativeSelectors("Context", prelude.contextPrototype(), Set.of());

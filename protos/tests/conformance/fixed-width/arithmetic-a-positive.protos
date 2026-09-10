@@ -1,0 +1,9 @@
+(UInt8(1) + UInt8(2) === UInt8(3)) &&
+    (Int8(5) - Int8(7) === Int8(-2)) &&
+    (UInt16(3) * UInt16(4) === UInt16(12)) &&
+    (Int16(-7).negated() === Int16(7)) &&
+    (UInt32(10) + UInt32(20) === UInt32(30)) &&
+    (Int32(20) - Int32(50) === Int32(-30)) &&
+    (UInt64(3) * UInt64(5) === UInt64(15)) &&
+    (Int64(-9).negated() === Int64(9)) &&
+    (UInt8(0).negated() === UInt8(0))
