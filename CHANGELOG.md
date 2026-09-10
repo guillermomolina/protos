@@ -1,3 +1,7 @@
+## 0.2.332-SNAPSHOT
+
+- Close `I035 — Map single-hash insertion publication`. Standard Map `atPut` now obtains the query key's current `hash` exactly once, uses that exact mathematical Integer for the insertion search, and reuses the same value as the absent entry's recorded insertion-time hash. Preserve fixed-width hash acceptance, query-to-stored equality direction, representative-key retention, insertion order, open/closed/frozen ordering, same-Map comparison reentrancy and all other keyed operations. Add a guest-visible regression whose hash changes per invocation so callback count and recorded-hash reuse are both observable. No specification or native-boundary change; implementation version becomes `0.2.332-SNAPSHOT`.
+
 ## 0.2.331-SNAPSHOT
 
 - Migrate DOC002-D2 retired historical backlog snapshot `OPEN_TASKS.md` into `docs/project/history/` under the ratified role-first documentation architecture. Preserve the frozen snapshot byte-for-byte, reconcile current active documentation references from the execution-time publication base, retain DOC002-A and earlier changelog path spellings as historical evidence, and make no specification, implementation/runtime, public API, scheduling-state, or implementation-version change.

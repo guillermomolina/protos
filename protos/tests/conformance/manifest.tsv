@@ -452,6 +452,7 @@ collections/keyed-map-default-identity-equality.protos	boolean	true
 collections/map-fixed-width-hash-result.protos	boolean	true
 collections/map-query-equality-direction-representative.protos	boolean	true
 collections/map-recorded-hash-no-identity-shortcut.protos	boolean	true
+collections/map-single-hash-absent-insertion.protos	boolean	true
 collections/map-invalid-hash-result-error.protos	error	-
 collections/map-invalid-equality-result-error.protos	error	-
 collections/map-reentrant-mutation-from-hash-error.protos	error	-
