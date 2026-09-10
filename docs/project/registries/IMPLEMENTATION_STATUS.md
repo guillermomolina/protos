@@ -1105,7 +1105,7 @@ record distributable Standard Library functionality.
 | Item | Description | Status | Closure evidence | Dependencies / notes |
 |---|---|---|---|---|
 | TOOL001 | Package Tool | IN_PROGRESS | `docs/project/work/TOOL001/TOOL001_PACKAGE_TOOL.md` | D/E/F1 and F2D are CLOSED; F2E2 is CLOSED and F2E3 is READY for the active external immutable-package execution continuation. |
-| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/TOOL002_TEST_TOOL.md` | A/B/C/D/E/F/G CLOSED; H1 concurrent fresh-Process substrate proof is CLOSED; D055 async exact-execution contract is RATIFIED; TOOL002-H2 READY; I-J remain dependency-ordered. |
+| TOOL002 | Test Tool | IN_PROGRESS | `docs/project/work/TOOL002/TOOL002_TEST_TOOL.md` | A/B/C/D/E/F/G CLOSED; H1 concurrent fresh-Process substrate proof is CLOSED; D055 async exact-execution contract is RATIFIED; TOOL002-H2 READY; I-J remain dependency-ordered. |
 
 ### TOOL001 — Package Tool
 
@@ -1286,7 +1286,7 @@ the initial TOOL002 closure.
 | TOOL002-J | BLOCKED_BY_DEPENDENCIES | TOOL002-I; CI/launcher integration: Java implementation tests first, then the Protos test tool for the Protos corpus. |
 
 Detailed scope and architecture references live in
-`docs/project/TOOL002_TEST_TOOL.md`.
+`docs/project/work/TOOL002/TOOL002_TEST_TOOL.md`.
 
 ## Performance
 

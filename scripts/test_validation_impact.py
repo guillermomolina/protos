@@ -159,12 +159,12 @@ class ValidationImpactTest(unittest.TestCase):
     def test_normal_name_status_parser(self):
         payload = (
             b"M\0protos/tools/test/Runner.protos\0"
-            b"A\0docs/project/TOOL002_TEST_TOOL.md\0"
+            b"A\0docs/project/work/TOOL002/TOOL002_TEST_TOOL.md\0"
         )
         self.assertEqual(
             [
                 "protos/tools/test/Runner.protos",
-                "docs/project/TOOL002_TEST_TOOL.md",
+                "docs/project/work/TOOL002/TOOL002_TEST_TOOL.md",
             ],
             IMPACT.parse_name_status_z(payload),
         )

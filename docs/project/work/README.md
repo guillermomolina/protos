@@ -11,6 +11,9 @@ migration moves them; new unambiguous records use `work/<formal-work-item>/`.
 
 Current role-first DOC002 records:
 
+- [`TOOL002/TOOL002_TEST_TOOL.md`](TOOL002/TOOL002_TEST_TOOL.md)
+  — canonical non-normative TOOL002 Test Tool lifecycle and implementation record.
+
 - [`TOOL001/TOOL001_PACKAGE_TOOL.md`](TOOL001/TOOL001_PACKAGE_TOOL.md)
   — canonical non-normative TOOL001 Package Tool lifecycle record.
   - [`TOOL001-F2D workspace execution preflight`](TOOL001/TOOL001_F2D_EXECUTION_PREFLIGHT.md)
