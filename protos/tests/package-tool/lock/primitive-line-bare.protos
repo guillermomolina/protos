@@ -16,8 +16,8 @@
 Syntax: import("self:LockSyntax")
 tokens: Syntax.lineTokens("lock-format 1")
 ok: tokens.size() == 2
-(tokens.at(0).text == "lock-format").ifFalse(() => { ok = false })
-(tokens.at(1).text == "1").ifFalse(() => { ok = false })
-tokens.at(0).quoted.ifTrue(() => { ok = false })
-tokens.at(1).quoted.ifTrue(() => { ok = false })
+(tokens[0].text == "lock-format").ifFalse(() => { ok = false })
+(tokens[1].text == "1").ifFalse(() => { ok = false })
+tokens[0].quoted.ifTrue(() => { ok = false })
+tokens[1].quoted.ifTrue(() => { ok = false })
 ok

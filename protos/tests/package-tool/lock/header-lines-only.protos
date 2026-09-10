@@ -20,8 +20,8 @@ text:
     "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef\n\n"
 lines: Syntax.headerLines(text)
 ok: lines.size() == 4
-(lines.at(0) == "lock-format 1").ifFalse(() => { ok = false })
-(lines.at(1) == "resolver-version 1").ifFalse(() => { ok = false })
-(lines.at(2) == "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef").ifFalse(() => { ok = false })
-(lines.at(3) == "").ifFalse(() => { ok = false })
+(lines[0] == "lock-format 1").ifFalse(() => { ok = false })
+(lines[1] == "resolver-version 1").ifFalse(() => { ok = false })
+(lines[2] == "resolution-input protos-resolution-input-v1 sha256:0123456789abcdef").ifFalse(() => { ok = false })
+(lines[3] == "").ifFalse(() => { ok = false })
 ok

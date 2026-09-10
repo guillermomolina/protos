@@ -14,5 +14,5 @@
 // the specific language governing rights and limitations under the License.
 
 Syntax: import("self:LockSyntax")
-token: Syntax.lineTokens("protos-resolution-input-v1").at(0)
+token: Syntax.lineTokens("protos-resolution-input-v1")[0]
 Syntax.parseMethodToken(token) == "protos-resolution-input-v1"

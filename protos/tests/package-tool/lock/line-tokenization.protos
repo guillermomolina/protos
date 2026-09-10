@@ -16,10 +16,10 @@
 Syntax: import("self:LockSyntax")
 tokens: Syntax.lineTokens("dependency workspace \"root package\" alias \"json api\" target git \"pkg\" \"abc123\"")
 ok: tokens.size() == 9
-(tokens.at(0).text == "dependency").ifFalse(() => { ok = false })
-tokens.at(0).quoted.ifTrue(() => { ok = false })
-tokens.at(2).quoted.ifFalse(() => { ok = false })
-(tokens.at(2).text == "root package").ifFalse(() => { ok = false })
-(tokens.at(4).text == "json api").ifFalse(() => { ok = false })
-(tokens.at(8).text == "abc123").ifFalse(() => { ok = false })
+(tokens[0].text == "dependency").ifFalse(() => { ok = false })
+tokens[0].quoted.ifTrue(() => { ok = false })
+tokens[2].quoted.ifFalse(() => { ok = false })
+(tokens[2].text == "root package").ifFalse(() => { ok = false })
+(tokens[4].text == "json api").ifFalse(() => { ok = false })
+(tokens[8].text == "abc123").ifFalse(() => { ok = false })
 ok

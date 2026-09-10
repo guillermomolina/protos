@@ -14,7 +14,7 @@
 // the specific language governing rights and limitations under the License.
 
 Syntax: import("self:LockSyntax")
-token: Syntax.lineTokens("sha256:0123456789abcdef").at(0)
+token: Syntax.lineTokens("sha256:0123456789abcdef")[0]
 parsed: Syntax.parseDigestToken(token)
 ok: parsed.algorithm == "sha256"
 (parsed.hex == "0123456789abcdef").ifFalse(() => { ok = false })

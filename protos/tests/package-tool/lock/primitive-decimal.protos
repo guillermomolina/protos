@@ -14,7 +14,7 @@
 // the specific language governing rights and limitations under the License.
 
 Syntax: import("self:LockSyntax")
-token: Syntax.lineTokens("123").at(0)
+token: Syntax.lineTokens("123")[0]
 parsed: Syntax.parseDecimalToken(token)
 ok: parsed.value == 123
 (parsed.text == "123").ifFalse(() => { ok = false })
