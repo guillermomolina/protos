@@ -714,7 +714,7 @@ silently added to Array.
 
 ## Import and distribution convention
 
-The general naming contract is recorded in `docs/project/STANDARD_LIBRARY_NAMING.md`.
+The general naming contract is recorded in `docs/project/governance/STANDARD_LIBRARY_NAMING.md`.
 CLI004 introduced standard-distribution resolution; CLI005 closes exact-case
 portable naming before further LIB001 surface accumulates.
 

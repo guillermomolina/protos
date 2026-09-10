@@ -3,7 +3,7 @@
 > **Non-normative licensing rationale.** This document explains the project goals
 > and trade-offs that led to choosing the Adaptive Public License 1.0 (APL-1.0).
 > It does not change or interpret the license. The authoritative terms are in
-> [`LICENSE.TXT`](../../LICENSE.TXT).
+> [`LICENSE.TXT`](../../../LICENSE.TXT).
 
 ## The short version
 
@@ -159,5 +159,5 @@ that the license grants to its recipients.
 
 Because real products can have complex boundaries, anyone making a legal
 licensing decision should read the complete Protos-specific APL-1.0, including
-its Exhibit A, in [`LICENSE.TXT`](../../LICENSE.TXT). This rationale records why
+its Exhibit A, in [`LICENSE.TXT`](../../../LICENSE.TXT). This rationale records why
 the project chose that license; it is not legal advice.

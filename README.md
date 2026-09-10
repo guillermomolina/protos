@@ -524,7 +524,7 @@ Independent modules or plugins may use separate licenses when they
 qualify as Independent Modules or Larger Work components under the APL.
 
 For the project goals and alternatives considered when choosing the license, see
-[Why Protos uses APL-1.0](docs/project/LICENSING_RATIONALE.md). This explanation
+[Why Protos uses APL-1.0](docs/project/governance/LICENSING_RATIONALE.md). This explanation
 is non-normative; `LICENSE.TXT` remains the authoritative license text.
 
 ## Specification Status
