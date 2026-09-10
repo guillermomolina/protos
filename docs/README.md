@@ -48,7 +48,7 @@ non-normative design records tied to formally tracked work items. Live actionabl
 coordination is GitHub-native: Issues own the work item and the `Protos
 Development` Project owns scheduling/status.
 
-- `OPEN_TASKS.md` is a retired historical backlog snapshot. Do not add new work
+- `project/history/OPEN_TASKS.md` is a retired historical backlog snapshot. Do not add new work
   or mirror GitHub state into it.
 - `IMPLEMENTATION_STATUS.md` is a durable implementation registry and
   closure-evidence ledger, not a live progress tracker.

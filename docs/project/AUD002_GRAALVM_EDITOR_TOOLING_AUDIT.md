@@ -28,7 +28,7 @@ Project/governance material:
 - `ROADMAP.md`
 - `docs/design/TOOLCHAIN_TOOL_ARCHITECTURE.md`
 - `docs/project/IMPLEMENTATION_STATUS.md`
-- `docs/project/OPEN_TASKS.md`
+- `docs/project/history/OPEN_TASKS.md`
 
 Implementation material:
 

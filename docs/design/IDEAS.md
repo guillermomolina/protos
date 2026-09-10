@@ -7,7 +7,7 @@ requirement, a live work item, or an open normative design decision.
 New exploratory questions, use cases and proposals should start in GitHub
 Discussions. Once work becomes bounded and actionable, create or use the
 appropriate GitHub Issue instead of adding it to this file or to
-`../project/OPEN_TASKS.md`. A substantive language/design choice still follows
+`../project/history/OPEN_TASKS.md`. A substantive language/design choice still follows
 the applicable specification/design process and explicit approval gate.
 
 ## I001 — Concurrency Model Advisor (C/P/A)

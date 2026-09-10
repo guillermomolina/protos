@@ -1136,7 +1136,7 @@ substantive design decision. Apply the design-authority rules above exactly as
 before.
 
 <!-- GITHUB001-F LEGACY-LIVE-LEDGER-RETIREMENT -->
-`docs/project/OPEN_TASKS.md` is a retired historical backlog snapshot.
+`docs/project/history/OPEN_TASKS.md` is a retired historical backlog snapshot.
 `docs/project/IMPLEMENTATION_STATUS.md` is a durable implementation registry and
 closure-evidence ledger. Neither file is a live scheduling/status source.
 
