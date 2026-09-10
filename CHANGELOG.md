@@ -1,3 +1,7 @@
+## 0.2.321-SNAPSHOT
+
+- Close `I026-D3 — Integer/fixed-width exact numeric Truffle interop` under ratified PLAT013. Keep the real arbitrary-precision `ProtosIntegerValue` and all eight `ProtosFixedIntegerValue` families as the interop receivers; export `isNumber` plus exact `fitsIn*/as*` contracts for byte/short/int/long/BigInteger/float/double. Floating host widths are advertised only when binary conversion preserves the exact mathematical integer, so no tooling-side rounding or implicit coercion is introduced. Add one shared implementation-only exact integral projection helper, value-based host-opaque display and focused boundary/precision/family/D1-composition evidence; reconcile D1's intentionally historical `isNumber == false` assertion now that D3 is the authorized numeric tranche. Float remains separately pending for signed-zero/NaN/infinity handling; Array, Map/IdentityMap hash, Closure execution, debugger mutation and scopes remain excluded. No Protos specification, numeric family, identity/equality/hash, arithmetic or coercion semantics change. Implementation version becomes `0.2.321-SNAPSHOT`.
+
 ## 0.2.320-SNAPSHOT
 
 - Advance `I032 — Fixed-width numeric arithmetic publication` with bounded slice

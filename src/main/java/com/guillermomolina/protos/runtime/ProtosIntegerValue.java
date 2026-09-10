@@ -17,9 +17,15 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.interop.UnsupportedMessageException;
+import com.oracle.truffle.api.library.ExportLibrary;
+import com.oracle.truffle.api.library.ExportMessage;
+
 import java.math.BigInteger;
 import java.util.Objects;
 
+@ExportLibrary(InteropLibrary.class)
 public final class ProtosIntegerValue implements ProtosRepresentedValue {
     private final BigInteger value;
 
@@ -34,6 +40,87 @@ public final class ProtosIntegerValue implements ProtosRepresentedValue {
     @Override
     public Object representedDelegationParent(ProtosPrelude prelude) {
         return ProtosRepresentedValue.requirePrelude(prelude, "Integer").integerPrototype();
+    }
+
+
+    @ExportMessage
+    boolean isNumber() {
+        return true;
+    }
+
+    @ExportMessage
+    boolean fitsInByte() {
+        return ProtosIntegralInteropSupport.fitsInByte(value);
+    }
+
+    @ExportMessage
+    boolean fitsInShort() {
+        return ProtosIntegralInteropSupport.fitsInShort(value);
+    }
+
+    @ExportMessage
+    boolean fitsInInt() {
+        return ProtosIntegralInteropSupport.fitsInInt(value);
+    }
+
+    @ExportMessage
+    boolean fitsInLong() {
+        return ProtosIntegralInteropSupport.fitsInLong(value);
+    }
+
+    @ExportMessage
+    boolean fitsInBigInteger() {
+        return true;
+    }
+
+    @ExportMessage
+    boolean fitsInFloat() {
+        return ProtosIntegralInteropSupport.fitsInFloat(value);
+    }
+
+    @ExportMessage
+    boolean fitsInDouble() {
+        return ProtosIntegralInteropSupport.fitsInDouble(value);
+    }
+
+    @ExportMessage
+    byte asByte() throws UnsupportedMessageException {
+        return ProtosIntegralInteropSupport.asByte(value);
+    }
+
+    @ExportMessage
+    short asShort() throws UnsupportedMessageException {
+        return ProtosIntegralInteropSupport.asShort(value);
+    }
+
+    @ExportMessage
+    int asInt() throws UnsupportedMessageException {
+        return ProtosIntegralInteropSupport.asInt(value);
+    }
+
+    @ExportMessage
+    long asLong() throws UnsupportedMessageException {
+        return ProtosIntegralInteropSupport.asLong(value);
+    }
+
+    @ExportMessage
+    BigInteger asBigInteger() {
+        return value;
+    }
+
+    @ExportMessage
+    float asFloat() throws UnsupportedMessageException {
+        return ProtosIntegralInteropSupport.asFloat(value);
+    }
+
+    @ExportMessage
+    double asDouble() throws UnsupportedMessageException {
+        return ProtosIntegralInteropSupport.asDouble(value);
+    }
+
+    @ExportMessage
+    String toDisplayString(@SuppressWarnings("unused") boolean allowSideEffects) {
+        return value.toString();
     }
 
 }

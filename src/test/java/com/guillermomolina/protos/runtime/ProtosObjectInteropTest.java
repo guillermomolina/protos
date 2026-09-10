@@ -58,7 +58,8 @@ final class ProtosObjectInteropTest {
         Object firstRead = interop.readMember(value, "first");
         assertSame(first, firstRead);
         assertTrue(InteropLibrary.isValidValue(firstRead));
-        assertFalse(interop.isNumber(firstRead));
+        assertTrue(interop.isNumber(firstRead));
+        assertEquals(BigInteger.ONE, interop.asBigInteger(firstRead));
         assertSame(value, interop.readMember(value, "self"));
         assertThrows(
                 UnknownIdentifierException.class,
