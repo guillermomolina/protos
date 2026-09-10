@@ -21,7 +21,7 @@ expected: Array(159, 67, 144, 248, 211, 12, 45, 217, 46, 201, 240, 149, 182, 94,
 ok: digest.size() == 32
 index: 0
 expected.each((octet) => {
-    (digest.at(index) == octet).ifFalse(() => {
+    (digest[index] == octet).ifFalse(() => {
         ok = false
     })
     index = index + 1

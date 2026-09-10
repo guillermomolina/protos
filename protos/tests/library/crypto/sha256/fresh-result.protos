@@ -25,7 +25,7 @@ ok: first !== second
 
 index: 0
 first.each((octet) => {
-    (second.at(index) == octet).ifFalse(() => {
+    (second[index] == octet).ifFalse(() => {
         ok = false
     })
     index = index + 1

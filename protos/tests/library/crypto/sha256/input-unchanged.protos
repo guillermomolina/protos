@@ -26,7 +26,7 @@ expected: Array(0, 255, 1, 254)
 ok: input.size() == expected.size()
 index: 0
 expected.each((octet) => {
-    (input.at(index) == octet).ifFalse(() => {
+    (input[index] == octet).ifFalse(() => {
         ok = false
     })
     index = index + 1
