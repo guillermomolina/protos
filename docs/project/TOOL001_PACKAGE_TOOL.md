@@ -18,7 +18,7 @@ Live coordination:
 
 Durable historical/closure summary:
 
-- `docs/project/IMPLEMENTATION_STATUS.md`
+- `docs/project/registries/IMPLEMENTATION_STATUS.md`
 
 ## Purpose
 

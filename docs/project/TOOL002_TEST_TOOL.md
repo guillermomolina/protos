@@ -21,7 +21,7 @@ Normative dependencies inspected by the architecture include:
 
 Canonical summary:
 
-- `docs/project/IMPLEMENTATION_STATUS.md`
+- `docs/project/registries/IMPLEMENTATION_STATUS.md`
 
 ## Purpose
 

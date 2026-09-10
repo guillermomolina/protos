@@ -96,7 +96,7 @@ project identity under the repository governance rules.
 - `spec/` remains the normative language authority.
 - `docs/project/history/OPEN_TASKS.md` remains historical and is not updated by
   WEB001.
-- `docs/project/IMPLEMENTATION_STATUS.md` is not a live status mirror and is not
+- `docs/project/registries/IMPLEMENTATION_STATUS.md` is not a live status mirror and is not
   updated merely to open WEB001.
 - Opening WEB001 changes no Protos implementation version, runtime behavior,
   public language API, or specification semantics.

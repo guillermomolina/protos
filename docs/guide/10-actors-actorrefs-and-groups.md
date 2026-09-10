@@ -1031,14 +1031,14 @@ Actor Groups:
    — independent Group/GroupRef identities.
 
 The current language-maturity corpus also retains Actor/Group conformance
-coverage under [`LM005`](../project/IMPLEMENTATION_STATUS.md#lm005--concurrent-language-maturity).
+coverage under [`LM005`](../project/registries/IMPLEMENTATION_STATUS.md#lm005--concurrent-language-maturity).
 
 ## Representative implementation evidence
 
 The current implementation ledger records `I011 — Actors` CLOSED through its
 complete incremental runtime/conformance sequence:
 
-- [`I011 — Actors`](../project/IMPLEMENTATION_STATUS.md#i011--actors).
+- [`I011 — Actors`](../project/registries/IMPLEMENTATION_STATUS.md#i011--actors).
 
 That closure covers Actor incarnation identity, ActorRef transfer, module-backed
 bootstrap, value transfer, bounded mailboxes, send/request, lifecycle, GroupRef

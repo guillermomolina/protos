@@ -13,7 +13,7 @@ implementation planning inside I026-A4B3; they are not new durable work-item ide
 sub-Issues unless a later phase independently satisfies the repository's durable-granularity rule.
 
 `docs/project/history/OPEN_TASKS.md` is a retired historical backlog snapshot and
-`docs/project/IMPLEMENTATION_STATUS.md` is a durable implementation/closure-evidence registry under
+`docs/project/registries/IMPLEMENTATION_STATUS.md` is a durable implementation/closure-evidence registry under
 GITHUB001-F. Neither is live scheduling/status authority, and neither is modified by this cutover.
 
 ## Published phase — ordinary CLI and REPL entry

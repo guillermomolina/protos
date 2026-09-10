@@ -790,7 +790,7 @@ No unresolved Set question above is a blocker for `LIB001-A`.
 
 LIB001 is partitioned into bounded slices so source, conformance evidence, and
 publication remain reviewable. Live slice coordination/status belongs to the
-owning GitHub Issue/Project; `docs/project/IMPLEMENTATION_STATUS.md` preserves
+owning GitHub Issue/Project; `docs/project/registries/IMPLEMENTATION_STATUS.md` preserves
 durable historical/closure evidence.
 
 Recommended execution order is:

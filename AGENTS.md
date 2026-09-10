@@ -1145,7 +1145,7 @@ before.
 
 <!-- GITHUB001-F LEGACY-LIVE-LEDGER-RETIREMENT -->
 `docs/project/history/OPEN_TASKS.md` is a retired historical backlog snapshot.
-`docs/project/IMPLEMENTATION_STATUS.md` is a durable implementation registry and
+`docs/project/registries/IMPLEMENTATION_STATUS.md` is a durable implementation registry and
 closure-evidence ledger. Neither file is a live scheduling/status source.
 
 Agents MUST NOT add new actionable work to `OPEN_TASKS.md`, update it to mirror

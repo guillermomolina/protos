@@ -1282,7 +1282,7 @@ chapter as closed:
 
 The canonical project view is:
 
-- [`Implementation Status`](../project/IMPLEMENTATION_STATUS.md).
+- [`Implementation Status`](../project/registries/IMPLEMENTATION_STATUS.md).
 
 The implementation itself reflects the capability model:
 

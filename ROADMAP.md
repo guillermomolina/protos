@@ -24,7 +24,7 @@ than as unrelated external systems.
 See the [README](README.md) for the current build/run path, the
 [`Protos Development` Project](https://github.com/users/guillermomolina/projects/1)
 for live scheduling/status, and the
-[implementation registry](docs/project/IMPLEMENTATION_STATUS.md) for durable
+[implementation registry](docs/project/registries/IMPLEMENTATION_STATUS.md) for durable
 historical/closure evidence.
 
 ## Now

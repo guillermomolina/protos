@@ -26,7 +26,7 @@ implementation and command-line interface are under active development. See
 [`Protos Development` Project](https://github.com/users/guillermomolina/projects/1)
 and [GitHub Issues](https://github.com/guillermomolina/protos/issues) for live
 project coordination, and
-[`docs/project/IMPLEMENTATION_STATUS.md`](docs/project/IMPLEMENTATION_STATUS.md)
+[`docs/project/registries/IMPLEMENTATION_STATUS.md`](docs/project/registries/IMPLEMENTATION_STATUS.md)
 for durable implementation/closure history.
 
 ## Why Protos?
@@ -463,7 +463,7 @@ development. Their live work/status is coordinated through
 [GitHub Issues](https://github.com/guillermomolina/protos/issues) and the
 [`Protos Development` Project](https://github.com/users/guillermomolina/projects/1);
 durable implementation and closure history remains recorded in
-[`docs/project/IMPLEMENTATION_STATUS.md`](docs/project/IMPLEMENTATION_STATUS.md).
+[`docs/project/registries/IMPLEMENTATION_STATUS.md`](docs/project/registries/IMPLEMENTATION_STATUS.md).
 
 ## Learn Protos
 
@@ -477,7 +477,7 @@ durable implementation and closure history remains recorded in
     non-normative principles behind language and architecture choices.
 -   [Protos Development Project](https://github.com/users/guillermomolina/projects/1) —
     live scheduling, status, priority, and roadmap position.
--   [Implementation registry](docs/project/IMPLEMENTATION_STATUS.md) — durable
+-   [Implementation registry](docs/project/registries/IMPLEMENTATION_STATUS.md) — durable
     implementation inventory and closure evidence.
 
 ## Contributing

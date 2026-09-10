@@ -36,7 +36,7 @@ Materially reviewed for this decision:
 - `AGENTS.md`
 - `docs/design/STANDARD_LIBRARY_IDEAS.md`
 - `docs/design/PROTOS_DESIGN_PHILOSOPHY.md`
-- `docs/project/IMPLEMENTATION_STATUS.md`
+- `docs/project/registries/IMPLEMENTATION_STATUS.md`
 - `docs/project/TOOL001_PACKAGE_TOOL.md`
 - `docs/design/PACKAGE_LOCKFILE_FORMAT.md`
 - `docs/design/PACKAGE_VERSION_RESOLUTION.md`

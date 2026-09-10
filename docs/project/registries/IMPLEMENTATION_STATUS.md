@@ -1590,7 +1590,7 @@ closure.
 - `docs/project/registries/IMPLEMENTATION_BLOCKERS.md` — durable normative implementation
   blockers and unblock conditions.
 - `docs/project/history/OPEN_TASKS.md` — retired historical backlog snapshot.
-- `docs/project/IMPLEMENTATION_STATUS.md` — this durable implementation registry
+- `docs/project/registries/IMPLEMENTATION_STATUS.md` — this durable implementation registry
   and closure-evidence ledger.
 
 <!-- END DURABLE IMPLEMENTATION REGISTRY -->

@@ -9,7 +9,7 @@ harness. It does not define Protos language semantics or performance guarantees.
 
 `guillermomolina/protos` remains the canonical owner of the `PERFxxx` work-item
 lifecycle. GitHub Issues and the `Protos Development` Project own live PERF
-coordination/status; `docs/project/IMPLEMENTATION_STATUS.md` retains durable
+coordination/status; `docs/project/registries/IMPLEMENTATION_STATUS.md` retains durable
 historical/closure evidence.
 
 The Protos-language workload corpus remains under `protos/benchmarks/`. Those

@@ -68,7 +68,7 @@ The control-flow dependency that originally blocked chapter 04 is closed.
 D044 / specification revision `0.1.381` defines the complete standard Closure
 `while` protocol, D045 / specification revision `0.1.382` clarifies task-scoped
 structured ownership for returned task-backed Futures, and
-[`I023 — Standard while protocol`](../project/IMPLEMENTATION_STATUS.md#i023--standard-while-protocol)
+[`I023 — Standard while protocol`](../project/registries/IMPLEMENTATION_STATUS.md#i023--standard-while-protocol)
 has published the reference implementation plus full conformance closure.
 [`B007`](../project/registries/IMPLEMENTATION_BLOCKERS.md#b007--standard-while-protocol-semantics)
 is CLOSED.

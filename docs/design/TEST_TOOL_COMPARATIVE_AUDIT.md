@@ -12,7 +12,7 @@ Related Protos architecture and project records:
 - `docs/design/TEST_TOOL_ARCHITECTURE.md`
 - `docs/design/TEST_TOOL_SCALE_AND_DISTRIBUTION_ARCHITECTURE.md`
 - `docs/project/TOOL002_TEST_TOOL.md`
-- `docs/project/IMPLEMENTATION_STATUS.md`
+- `docs/project/registries/IMPLEMENTATION_STATUS.md`
 - `spec/io/PROCESS_IO.md`
 - `spec/semantics/MODULES.md`
 - `spec/concurrency/ACTORS.md`

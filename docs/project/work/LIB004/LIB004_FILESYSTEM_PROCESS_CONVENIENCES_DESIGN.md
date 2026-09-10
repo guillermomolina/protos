@@ -66,7 +66,7 @@ precedent.
 - `docs/README.md`
 - `docs/design/PROTOS_DESIGN_PHILOSOPHY.md`
 - `docs/design/STANDARD_LIBRARY_IDEAS.md`
-- `docs/project/IMPLEMENTATION_STATUS.md`
+- `docs/project/registries/IMPLEMENTATION_STATUS.md`
 - `docs/project/registries/IMPLEMENTATION_BLOCKERS.md`
 - `docs/project/architecture/CORE_NATIVE_BOUNDARY.md`
 - `docs/project/work/LIB001/LIB001_COLLECTIONS_DESIGN.md`

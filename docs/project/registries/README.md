@@ -12,8 +12,10 @@ reference radius and authority can be checked independently:
 - [`IMPLEMENTATION_BLOCKERS.md`](IMPLEMENTATION_BLOCKERS.md) — durable Bxxx
   normative-unblock-condition ledger, migrated by F5B; it is implementation
   state, not a normative specification;
-- `IMPLEMENTATION_STATUS.md` — durable implementation/closure registry, pending F5C.
+- [`IMPLEMENTATION_STATUS.md`](IMPLEMENTATION_STATUS.md) — durable implementation
+  inventory, historical publication state and closure-evidence registry, migrated
+  by F5C; it is not the live repository-level status/scheduling view.
 
-`IMPLEMENTATION_STATUS.md` remains at its current legacy path until F5C
-completes. Registry location never makes a file a live scheduling surface or a
-normative language specification.
+DOC002-F5A/F5B/F5C complete the bounded legacy registry migration. Registry
+location never makes a file a live scheduling surface or a normative language
+specification.

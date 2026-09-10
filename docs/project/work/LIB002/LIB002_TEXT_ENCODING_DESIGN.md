@@ -38,7 +38,7 @@ choosing an API.
 - `src/AGENTS.md`
 - `docs/design/PROTOS_DESIGN_PHILOSOPHY.md`
 - `docs/design/STANDARD_LIBRARY_IDEAS.md`
-- `docs/project/IMPLEMENTATION_STATUS.md`
+- `docs/project/registries/IMPLEMENTATION_STATUS.md`
 - `docs/project/registries/IMPLEMENTATION_BLOCKERS.md`
 - `docs/project/governance/STANDARD_LIBRARY_NAMING.md`
 - `docs/project/architecture/CORE_NATIVE_BOUNDARY.md`
@@ -1109,7 +1109,7 @@ follow the repository's executable-impact publication rules:
 6. run the full Maven test suite;
 7. run static/governance/license/diff checks required by the repository;
 8. publish only after all required validation passes;
-9. update `docs/project/IMPLEMENTATION_STATUS.md` in the same publication.
+9. update `docs/project/registries/IMPLEMENTATION_STATUS.md` in the same publication.
 
 If the complete selected initial surface is implemented and validated with no
 new blocker, `LIB002-A` and the top-level `LIB002` work item may both close in
