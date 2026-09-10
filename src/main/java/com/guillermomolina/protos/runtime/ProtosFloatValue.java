@@ -17,6 +17,15 @@
 
 package com.guillermomolina.protos.runtime;
 
+import com.oracle.truffle.api.interop.InteropLibrary;
+import com.oracle.truffle.api.interop.UnsupportedMessageException;
+import com.oracle.truffle.api.library.ExportLibrary;
+import com.oracle.truffle.api.library.ExportMessage;
+
+import java.math.BigDecimal;
+import java.math.BigInteger;
+
+@ExportLibrary(InteropLibrary.class)
 public final class ProtosFloatValue implements ProtosRepresentedValue {
     private final double value;
 
@@ -31,6 +40,125 @@ public final class ProtosFloatValue implements ProtosRepresentedValue {
     @Override
     public Object representedDelegationParent(ProtosPrelude prelude) {
         return ProtosRepresentedValue.requirePrelude(prelude, "Float").floatPrototype();
+    }
+
+
+    @ExportMessage
+    boolean isNumber() {
+        return true;
+    }
+
+    @ExportMessage
+    boolean fitsInByte() {
+        byte converted = (byte) value;
+        return converted == value && !isNegativeZero(value);
+    }
+
+    @ExportMessage
+    boolean fitsInShort() {
+        short converted = (short) value;
+        return converted == value && !isNegativeZero(value);
+    }
+
+    @ExportMessage
+    boolean fitsInInt() {
+        int converted = (int) value;
+        return converted == value && !isNegativeZero(value);
+    }
+
+    @ExportMessage
+    boolean fitsInLong() {
+        if (isNegativeZero(value)) {
+            return false;
+        }
+        long converted = (long) value;
+        return converted != Long.MAX_VALUE && converted == value;
+    }
+
+    @ExportMessage
+    boolean fitsInBigInteger() {
+        return value % 1.0d == 0.0d && !isNegativeZero(value);
+    }
+
+    @ExportMessage
+    boolean fitsInFloat() {
+        float converted = (float) value;
+        return !Double.isFinite(value) || converted == value;
+    }
+
+    @ExportMessage
+    boolean fitsInDouble() {
+        return true;
+    }
+
+    @ExportMessage
+    byte asByte() throws UnsupportedMessageException {
+        byte converted = (byte) value;
+        if (converted == value && !isNegativeZero(value)) {
+            return converted;
+        }
+        throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    short asShort() throws UnsupportedMessageException {
+        short converted = (short) value;
+        if (converted == value && !isNegativeZero(value)) {
+            return converted;
+        }
+        throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    int asInt() throws UnsupportedMessageException {
+        int converted = (int) value;
+        if (converted == value && !isNegativeZero(value)) {
+            return converted;
+        }
+        throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    long asLong() throws UnsupportedMessageException {
+        if (!isNegativeZero(value)) {
+            long converted = (long) value;
+            if (converted != Long.MAX_VALUE && converted == value) {
+                return converted;
+            }
+        }
+        throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    BigInteger asBigInteger() throws UnsupportedMessageException {
+        if (!fitsInBigInteger()) {
+            throw UnsupportedMessageException.create();
+        }
+        return new BigDecimal(value).toBigIntegerExact();
+    }
+
+    @ExportMessage
+    float asFloat() throws UnsupportedMessageException {
+        float converted = (float) value;
+        if (!Double.isFinite(value) || converted == value) {
+            return converted;
+        }
+        throw UnsupportedMessageException.create();
+    }
+
+    @ExportMessage
+    double asDouble() {
+        return value;
+    }
+
+    @ExportMessage
+    String toDisplayString(@SuppressWarnings("unused") boolean allowSideEffects) {
+        return Double.toString(value);
+    }
+
+    private static boolean isNegativeZero(double candidate) {
+        return Double.doubleToRawLongBits(candidate)
+                == Double.doubleToRawLongBits(-0.0d);
     }
 
 }
