@@ -305,7 +305,7 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                         () -> requiredPlan.executeActivation(missing));
 
                 String complexCharacters =
-                        "(head, fallback = child()) => { fallback }";
+                        "(head, fallback = child(other())) => { fallback }";
                 Source complexSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -325,14 +325,14 @@ final class ProtosPerf006B2C3B2SimpleDefaultBindingTest {
                 assertTrue(
                         failure.getMessage()
                                 .contains(
-                                        "default expression must be literal or lexical lookup"));
+                                        "default call argument must be literal or lexical lookup"));
             } finally {
                 context.leave();
             }
         }
 
         System.out.println("PERF006_B2C3B2_REQUIRED_ARITY_ERROR=PASS");
-        System.out.println("PERF006_B2C3B2_CALL_DEFAULT_STILL_DEFERRED=PASS");
+        System.out.println("PERF006_B2C3B2_NESTED_DEFAULT_ARGUMENT_STILL_DEFERRED=PASS");
     }
 
     private static ProtosClosureValue semanticClosure(

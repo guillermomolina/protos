@@ -28,6 +28,7 @@ import com.guillermomolina.protos.semantic.ast.CanonicalLiteral;
 import com.guillermomolina.protos.semantic.ast.CanonicalLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalParameter;
 import com.guillermomolina.protos.semantic.ast.CanonicalSequence;
+import com.guillermomolina.protos.semantic.ast.CanonicalSend;
 import com.guillermomolina.protos.source.SourceSpan;
 import com.oracle.truffle.api.CallTarget;
 import com.oracle.truffle.api.bytecode.BytecodeConfig;
@@ -40,10 +41,10 @@ import java.util.Objects;
 /**
  * Parallel canonical-to-Bytecode lowering seam for the PERF006-B migration.
  *
- * <p>PERF006-B2C3B2 lowers the Closure activation prologue as ordinary
- * Bytecode operations. Required positional binding, literal/lookup defaults,
- * and trailing rest binding therefore execute in declaration order inside the
- * same activation root as the body. Calls compose child Bytecode continuations
+ * <p>PERF006-B2C3B3 lowers the Closure activation prologue as ordinary
+ * Bytecode operations. Required positional binding, defaults, and trailing rest
+ * binding execute in declaration order inside the same activation root as the
+ * body. Default calls/sends and body calls compose child Bytecode continuations
  * through their caller rather than treating a child continuation as a guest value.
  * The ordinary {@link ProtosSourceCompiler} remains
  * on the established AST lowerer
@@ -99,10 +100,26 @@ final class CanonicalToBytecodeLowerer {
                                     rootSpan.length());
                             builder.beginRoot();
 
+                            BytecodeLocal defaultValue = null;
+                            BytecodeLocal defaultPreparedCall = null;
+                            BytecodeLocal defaultChildResult = null;
+                            BytecodeLocal defaultResumeValue = null;
+                            if (activationDefinition != null
+                                    && hasComposedDefault(activationDefinition)) {
+                                defaultValue = builder.createLocal("defaultValue", null);
+                                defaultPreparedCall = builder.createLocal("defaultPreparedClosureCall", null);
+                                defaultChildResult = builder.createLocal("defaultChildResult", null);
+                                defaultResumeValue = builder.createLocal("defaultResumeValue", null);
+                            }
+
                             if (activationDefinition != null) {
                                 emitClosureParameterBindings(
                                         builder,
-                                        activationDefinition);
+                                        activationDefinition,
+                                        defaultValue,
+                                        defaultPreparedCall,
+                                        defaultChildResult,
+                                        defaultResumeValue);
                             }
 
                             if (sequence.expressions().isEmpty()) {
@@ -182,20 +199,69 @@ final class CanonicalToBytecodeLowerer {
             if (parameter.defaultValue().isEmpty()) {
                 continue;
             }
-            CanonicalExpression defaultExpression =
-                    parameter.defaultValue().orElseThrow();
-            validateSpan(defaultExpression.span());
-            if (!(defaultExpression instanceof CanonicalLiteral)
-                    && !(defaultExpression instanceof CanonicalLookup)) {
-                throw new UnsupportedOperationException(
-                        "PERF006-B2C3B2 default expression must be literal or lexical lookup");
-            }
+            validateSupportedDefaultExpression(parameter.defaultValue().orElseThrow());
         }
+    }
+
+    private void validateSupportedDefaultExpression(
+            CanonicalExpression expression) {
+        validateSpan(expression.span());
+        if (expression instanceof CanonicalLiteral
+                || expression instanceof CanonicalLookup) {
+            return;
+        }
+        if (expression instanceof CanonicalCall call) {
+            if (!(call.receiver() instanceof CanonicalLookup)) {
+                throw new UnsupportedOperationException(
+                        "PERF006-B2C3B3 default call requires a lexical lookup receiver");
+            }
+            validateSupportedDefaultExpression(call.receiver());
+            for (CanonicalExpression argument : call.arguments()) {
+                if (!(argument instanceof CanonicalLiteral)
+                        && !(argument instanceof CanonicalLookup)) {
+                    throw new UnsupportedOperationException(
+                            "PERF006-B2C3B3 default call argument must be literal or lexical lookup");
+                }
+                validateSupportedDefaultExpression(argument);
+            }
+            return;
+        }
+        if (expression instanceof CanonicalSend send) {
+            if (!(send.receiver() instanceof CanonicalLiteral)
+                    && !(send.receiver() instanceof CanonicalLookup)) {
+                throw new UnsupportedOperationException(
+                        "PERF006-B2C3B3 default send receiver must be literal or lexical lookup");
+            }
+            validateSupportedDefaultExpression(send.receiver());
+            for (CanonicalExpression argument : send.arguments()) {
+                if (!(argument instanceof CanonicalLiteral)
+                        && !(argument instanceof CanonicalLookup)) {
+                    throw new UnsupportedOperationException(
+                            "PERF006-B2C3B3 default send argument must be literal or lexical lookup");
+                }
+                validateSupportedDefaultExpression(argument);
+            }
+            return;
+        }
+        throw new UnsupportedOperationException(
+                "PERF006-B2C3B3 default expression is not migrated: "
+                        + expression.getClass().getSimpleName());
+    }
+
+    private static boolean hasComposedDefault(CanonicalClosure definition) {
+        return definition.parameters().stream()
+                .flatMap(parameter -> parameter.defaultValue().stream())
+                .anyMatch(expression -> expression instanceof CanonicalCall
+                        || expression instanceof CanonicalSend);
     }
 
     private static void emitClosureParameterBindings(
             ProtosBytecodeRootNodeGen.Builder builder,
-            CanonicalClosure definition) {
+            CanonicalClosure definition,
+            BytecodeLocal defaultValue,
+            BytecodeLocal defaultPreparedCall,
+            BytecodeLocal defaultChildResult,
+            BytecodeLocal defaultResumeValue) {
         int positionalIndex = 0;
         boolean hasRest = false;
 
@@ -229,15 +295,35 @@ final class CanonicalToBytecodeLowerer {
                 builder.endBlock();
 
                 builder.beginBlock();
-                builder.beginBindClosureParameter();
-                builder.emitLoadArgument(0);
-                builder.emitLoadConstant(parameter.name());
-                builder.beginSourceSection(
-                        defaultExpression.span().startOffset(),
-                        defaultExpression.span().length());
-                emitExpression(builder, defaultExpression);
-                builder.endSourceSection();
-                builder.endBindClosureParameter();
+                if (defaultExpression instanceof CanonicalCall defaultCall) {
+                    emitComposedDefaultCall(
+                            builder,
+                            defaultCall,
+                            defaultValue,
+                            defaultPreparedCall,
+                            defaultChildResult,
+                            defaultResumeValue);
+                    emitBindDefaultLocal(builder, parameter, defaultValue);
+                } else if (defaultExpression instanceof CanonicalSend defaultSend) {
+                    emitComposedDefaultSend(
+                            builder,
+                            defaultSend,
+                            defaultValue,
+                            defaultPreparedCall,
+                            defaultChildResult,
+                            defaultResumeValue);
+                    emitBindDefaultLocal(builder, parameter, defaultValue);
+                } else {
+                    builder.beginBindClosureParameter();
+                    builder.emitLoadArgument(0);
+                    builder.emitLoadConstant(parameter.name());
+                    builder.beginSourceSection(
+                            defaultExpression.span().startOffset(),
+                            defaultExpression.span().length());
+                    emitExpression(builder, defaultExpression);
+                    builder.endSourceSection();
+                    builder.endBindClosureParameter();
+                }
                 builder.endBlock();
 
                 builder.endIfThenElse();
@@ -256,6 +342,117 @@ final class CanonicalToBytecodeLowerer {
             builder.emitLoadArgument(0);
             builder.emitLoadConstant(positionalIndex);
             builder.endCheckClosureArgumentUpperBound();
+        }
+    }
+
+    private static void emitBindDefaultLocal(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalParameter parameter,
+            BytecodeLocal defaultValue) {
+        if (defaultValue == null) {
+            throw new AssertionError("composed default value local was not allocated");
+        }
+        builder.beginBindClosureParameter();
+        builder.emitLoadArgument(0);
+        builder.emitLoadConstant(parameter.name());
+        builder.emitLoadLocal(defaultValue);
+        builder.endBindClosureParameter();
+    }
+
+    private static void emitComposedDefaultCall(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalCall call,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        requireDefaultScratch(result, preparedCall, childResult, resumeValue);
+        CanonicalLookup receiver = (CanonicalLookup) call.receiver();
+        builder.beginSourceSection(call.span().startOffset(), call.span().length());
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginStoreLocal(preparedCall);
+        builder.beginPrepareDefaultClosureCallArguments();
+        emitLookup(builder, receiver);
+        builder.emitLoadArgument(0);
+        for (CanonicalExpression argument : call.arguments()) {
+            emitExpression(builder, argument);
+        }
+        builder.endPrepareDefaultClosureCallArguments();
+        builder.endStoreLocal();
+        emitComposedPreparedDefaultInvocation(builder, result, preparedCall, childResult, resumeValue);
+        builder.endTag(StandardTags.CallTag.class);
+        builder.endSourceSection();
+    }
+
+    private static void emitComposedDefaultSend(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            CanonicalSend send,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        requireDefaultScratch(result, preparedCall, childResult, resumeValue);
+        builder.beginSourceSection(send.span().startOffset(), send.span().length());
+        builder.beginTag(StandardTags.CallTag.class);
+        builder.beginStoreLocal(preparedCall);
+        builder.beginPrepareDefaultSendArguments();
+        emitExpression(builder, send.receiver());
+        builder.emitLoadConstant(send.message());
+        builder.emitLoadArgument(0);
+        for (CanonicalExpression argument : send.arguments()) {
+            emitExpression(builder, argument);
+        }
+        builder.endPrepareDefaultSendArguments();
+        builder.endStoreLocal();
+        emitComposedPreparedDefaultInvocation(builder, result, preparedCall, childResult, resumeValue);
+        builder.endTag(StandardTags.CallTag.class);
+        builder.endSourceSection();
+    }
+
+    private static void emitComposedPreparedDefaultInvocation(
+            ProtosBytecodeRootNodeGen.Builder builder,
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        builder.beginStoreLocal(childResult);
+        builder.beginEnterClosureCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.endEnterClosureCall();
+        builder.endStoreLocal();
+        builder.beginWhile();
+        builder.beginIsContinuation();
+        builder.emitLoadLocal(childResult);
+        builder.endIsContinuation();
+        builder.beginBlock();
+        builder.beginStoreLocal(resumeValue);
+        builder.beginYield();
+        builder.emitLoadLocal(childResult);
+        builder.endYield();
+        builder.endStoreLocal();
+        builder.beginStoreLocal(childResult);
+        builder.beginResumeContinuation();
+        builder.emitLoadLocal(childResult);
+        builder.emitLoadLocal(resumeValue);
+        builder.endResumeContinuation();
+        builder.endStoreLocal();
+        builder.endBlock();
+        builder.endWhile();
+        builder.beginStoreLocal(result);
+        builder.beginFinishClosureCall();
+        builder.emitLoadLocal(preparedCall);
+        builder.emitLoadLocal(childResult);
+        builder.endFinishClosureCall();
+        builder.endStoreLocal();
+    }
+
+    private static void requireDefaultScratch(
+            BytecodeLocal result,
+            BytecodeLocal preparedCall,
+            BytecodeLocal childResult,
+            BytecodeLocal resumeValue) {
+        if (result == null || preparedCall == null || childResult == null || resumeValue == null) {
+            throw new AssertionError("Bytecode composed-default scratch locals were not allocated");
         }
     }
 

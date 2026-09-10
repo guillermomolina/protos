@@ -186,7 +186,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
     }
 
     @Test
-    void arityFailureAndCallDefaultBoundaryRemainUnchanged()
+    void arityFailureAndNestedDefaultArgumentBoundaryRemainFailClosed()
             throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
@@ -229,7 +229,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                         () -> missingRoot.getCallTarget().call(module));
 
                 String defaultCharacters =
-                        "(head, fallback = child()) => { fallback }";
+                        "(head, fallback = child(other())) => { fallback }";
                 Source defaultSource =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -249,7 +249,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
                 assertTrue(
                         failure.getMessage()
                                 .contains(
-                                        "default expression must be literal or lexical lookup"));
+                                        "default call argument must be literal or lexical lookup"));
             } finally {
                 context.leave();
             }
@@ -257,7 +257,7 @@ final class ProtosPerf006B2C3B1ActivationRootSeamTest {
 
         System.out.println("PERF006_B2C3B1_ARITY_ERROR_PRESERVED=PASS");
         System.out.println(
-                "PERF006_B2C3B1_CALL_DEFAULT_BINDING_STILL_DEFERRED=PASS");
+                "PERF006_B2C3B1_NESTED_DEFAULT_ARGUMENT_STILL_DEFERRED=PASS");
     }
 
     private static ProtosClosureValue semanticClosure(

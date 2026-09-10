@@ -284,13 +284,13 @@ final class ProtosPerf006B2AClosureActivationTest {
     }
 
     @Test
-    void callDefaultsRemainFailClosedUntilCallDefaultMigration() throws Exception {
+    void nestedCallArgumentsInDefaultsRemainFailClosedUntilArgumentCompositionMigration() throws Exception {
         try (Context context = Context.newBuilder(ProtosLanguage.ID).build()) {
             context.initialize(ProtosLanguage.ID);
             context.enter();
             try {
                 ProtosLanguage language = LANGUAGE_REF.get(null);
-                String characters = "(x, y = child()) => y";
+                String characters = "(x, y = child(other())) => y";
                 Source source =
                         Source.newBuilder(
                                         ProtosLanguage.ID,
@@ -310,13 +310,13 @@ final class ProtosPerf006B2AClosureActivationTest {
                                                 source));
                 assertTrue(
                         failure.getMessage()
-                                .contains("default expression must be literal or lexical lookup"));
+                                .contains("default call argument must be literal or lexical lookup"));
             } finally {
                 context.leave();
             }
         }
 
-        System.out.println("PERF006_B2A_CALL_DEFAULT_BINDING_NOT_SILENTLY_MIGRATED=PASS");
+        System.out.println("PERF006_B2A_NESTED_DEFAULT_ARGUMENT_NOT_SILENTLY_MIGRATED=PASS");
     }
 
     private static CanonicalClosure closureDefinition(String characters) {

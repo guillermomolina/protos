@@ -25,6 +25,10 @@ import com.guillermomolina.protos.runtime.ProtosCoreErrors;
 import com.guillermomolina.protos.runtime.ProtosPrelude;
 import com.guillermomolina.protos.runtime.ProtosReturnHome;
 import com.guillermomolina.protos.runtime.ProtosSignalException;
+import com.guillermomolina.protos.runtime.ProtosNativeClosureBody;
+import com.guillermomolina.protos.runtime.ProtosObjectValue;
+import com.guillermomolina.protos.runtime.ProtosSlotLookupResult;
+import com.guillermomolina.protos.runtime.ProtosValueLookup;
 import com.guillermomolina.protos.semantic.ast.CanonicalClosure;
 import com.oracle.truffle.api.RootCallTarget;
 import com.oracle.truffle.api.bytecode.ContinuationResult;
@@ -217,40 +221,46 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
 
     static final class PreparedClosureCall {
         private final RootCallTarget bodyTarget;
+        private final ProtosNativeClosureBody nativeBody;
+        private final List<?> supplied;
         private final ProtosActivation activation;
         private final ProtosReturnHome returnHome;
         private final boolean ownsReturnHome;
 
-        PreparedClosureCall(
+        PreparedClosureCall(RootCallTarget bodyTarget, ProtosActivation activation) {
+            this(java.util.Objects.requireNonNull(bodyTarget, "bodyTarget"), null, List.of(), activation);
+        }
+
+        private PreparedClosureCall(
                 RootCallTarget bodyTarget,
+                ProtosNativeClosureBody nativeBody,
+                List<?> supplied,
                 ProtosActivation activation) {
-            this.bodyTarget =
-                    java.util.Objects.requireNonNull(
-                            bodyTarget, "bodyTarget");
-            this.activation =
-                    java.util.Objects.requireNonNull(
-                            activation, "activation");
-            this.returnHome =
-                    activation.returnHome()
-                            .orElseThrow(
-                                    () ->
-                                            new IllegalStateException(
-                                                    "Closure invocation requires a return home"));
+            this.bodyTarget = bodyTarget;
+            this.nativeBody = nativeBody;
+            this.supplied = List.copyOf(supplied);
+            this.activation = java.util.Objects.requireNonNull(activation, "activation");
+            this.returnHome = activation.returnHome().orElseThrow(
+                    () -> new IllegalStateException("Closure invocation requires a return home"));
             this.ownsReturnHome = activation.ownsReturnHome();
         }
 
-        RootCallTarget bodyTarget() {
-            return bodyTarget;
+        static PreparedClosureCall nativeCall(
+                ProtosNativeClosureBody nativeBody,
+                List<?> supplied,
+                ProtosActivation activation) {
+            return new PreparedClosureCall(null, java.util.Objects.requireNonNull(nativeBody, "nativeBody"), supplied, activation);
         }
 
-        ProtosActivation activation() {
-            return activation;
+        RootCallTarget bodyTarget() { return bodyTarget; }
+        ProtosActivation activation() { return activation; }
+        boolean isNative() { return nativeBody != null; }
+        Object enterNative() {
+            if (nativeBody == null) throw new IllegalStateException("prepared Closure call is not native");
+            return nativeBody.execute(activation, supplied);
         }
-
         Object finish(Object result) {
-            if (ownsReturnHome && returnHome.isActive()) {
-                returnHome.complete();
-            }
+            if (ownsReturnHome && returnHome.isActive()) returnHome.complete();
             return result;
         }
     }
@@ -317,9 +327,96 @@ abstract class ProtosBytecodeRootNode extends RootNode implements BytecodeRootNo
     }
 
     @Operation
+    public static final class PrepareDefaultClosureCallArguments {
+        @Specialization
+        public static PreparedClosureCall perform(
+                Object receiver, ProtosActivation caller, @Variadic Object[] supplied) {
+            if (!(receiver instanceof ProtosClosureValue closure)) {
+                throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
+            }
+            return prepareDefaultLexicalCall(closure, List.of(supplied), caller);
+        }
+    }
+
+    @Operation
+    public static final class PrepareDefaultSendArguments {
+        @Specialization
+        public static PreparedClosureCall perform(
+                Object receiver, String selector, ProtosActivation caller, @Variadic Object[] supplied) {
+            ProtosPrelude prelude = caller.prelude().orElse(null);
+            ProtosSlotLookupResult selected;
+            try {
+                selected = ProtosValueLookup.lookup(receiver, selector, prelude)
+                        .orElseThrow(() -> new ProtosSignalException(ProtosCoreErrors.newSlotNotFound(caller)));
+            } catch (UnsupportedOperationException unsupportedRepresentation) {
+                throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
+            }
+            if (!(selected.value() instanceof ProtosClosureValue closure)) {
+                throw new ProtosSignalException(ProtosCoreErrors.newError(caller));
+            }
+            return prepareDefaultImmediateMethodCall(
+                    closure, receiver, selected.home(), List.of(supplied), caller);
+        }
+    }
+
+    private static PreparedClosureCall prepareDefaultLexicalCall(
+            ProtosClosureValue closure, List<?> supplied, ProtosActivation caller) {
+        rejectDefaultTaskOrProjection(closure, caller);
+        ProtosActivation activation = ProtosActivation.forClosureInvocation(
+                closure, supplied, caller.prelude().orElse(null), caller.actorModuleState(),
+                caller.currentModuleKey().orElse(null), caller.executionDomain());
+        activation.inheritDynamicControlState(caller);
+        return finishPreparingDefaultCall(closure, supplied, activation);
+    }
+
+    private static PreparedClosureCall prepareDefaultImmediateMethodCall(
+            ProtosClosureValue closure,
+            Object receiver,
+            ProtosObjectValue methodHome,
+            List<?> supplied,
+            ProtosActivation caller) {
+        rejectDefaultTaskOrProjection(closure, caller);
+        ProtosActivation activation = ProtosActivation.forImmediateMethodInvocation(
+                closure, supplied, receiver, methodHome, caller.prelude().orElse(null),
+                caller.actorModuleState(), caller.currentModuleKey().orElse(null), caller.executionDomain());
+        activation.inheritDynamicControlState(caller);
+        return finishPreparingDefaultCall(closure, supplied, activation);
+    }
+
+    private static void rejectDefaultTaskOrProjection(
+            ProtosClosureValue closure, ProtosActivation caller) {
+        if (caller.task().isPresent()) {
+            throw new UnsupportedOperationException(
+                    "PERF006-B2C3B3 Task/Future continuation ownership belongs to PERF006-B3");
+        }
+        if (closure.requiresContextLocalExecutionProjectionForRuntime()) {
+            throw new UnsupportedOperationException(
+                    "PERF006-B2C3B3 shared-Context Closure projection is not migrated yet");
+        }
+    }
+
+    private static PreparedClosureCall finishPreparingDefaultCall(
+            ProtosClosureValue closure, List<?> supplied, ProtosActivation activation) {
+        if (closure.nativeBody().isPresent()) {
+            return PreparedClosureCall.nativeCall(closure.nativeBody().orElseThrow(), supplied, activation);
+        }
+        ProtosClosureExecutionPlan plan = closure.executionPlanForRuntimeInvocation();
+        if (!plan.isBytecodeBackendForRuntime()) {
+            throw new UnsupportedOperationException(
+                    "PERF006-B2C3B3 default invocation receiver still has an AST execution plan");
+        }
+        return new PreparedClosureCall(plan.bytecodeActivationTargetForComposition(), activation);
+    }
+
+    @Operation
     public static final class EnterClosureCall {
+        @Specialization(guards = "prepared.isNative()")
+        public static Object nativeCall(PreparedClosureCall prepared) {
+            return prepared.enterNative();
+        }
+
         @Specialization(
-                guards = "prepared.bodyTarget() == cachedTarget",
+                guards = {"!prepared.isNative()", "prepared.bodyTarget() == cachedTarget"},
                 limit = "3")
         public static Object direct(
                 PreparedClosureCall prepared,
