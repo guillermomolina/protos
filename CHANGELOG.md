@@ -1,5 +1,7 @@
 ## 0.2.335-SNAPSHOT
 
+- Migrate DOC002-E2 closed AUD002 work record into `docs/project/work/AUD002/` under the ratified role-first information architecture. Reconcile active Markdown references from the execution-time publication base, retain historical path spellings in frozen/chronological records, and make no specification, implementation/runtime, public API, license-term, or implementation-version change.
+
 - Migrate DOC002-E1 maintained DIST001 work records into `docs/project/work/DIST001/` under the ratified role-first information architecture. Reconcile execution-time Markdown references and relative links, keep immutable DIST001 evidence in `docs/project/evidence/DIST001/`, leave historical path spellings intact where they are chronology/evidence, and make no specification, runtime/implementation, release-record-format, release-artifact, license-term, or implementation-version change.
 
 - Migrate DOC002-D3 immutable DIST001 release evidence into `docs/project/evidence/DIST001/` under the ratified role-first documentation architecture. Preserve all seven evidence blobs byte-for-byte, atomically cut over bounded `dist/*.py` release-tool and test path consumers plus current Markdown references from the execution-time publication base, preserve persisted-record excerpts, leave DIST001 maintained work records for DOC002-E, close DOC002-D, and make no specification, runtime/language implementation, release artifact, public API, license-term, or implementation-version change.
