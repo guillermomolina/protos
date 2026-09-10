@@ -2,7 +2,7 @@
 
 Status: **IN_PROGRESS**
 
-Current published slice after this record: **LM009-A CLOSED; LM009-B LEXICAL ASSETS PUBLISHED / MANIFEST DECISION PENDING**
+Current published slice after this record: **LM009-A CLOSED; LM009-B MANIFEST WIRING PUBLISHED / S1 LIVE EVIDENCE PENDING**
 
 Nature: non-normative language-maturity / editor-tooling evidence
 
@@ -348,3 +348,66 @@ The next LM009-B checkpoint is the already-exposed installable-manifest
 compatibility decision: select the bounded `engines.vscode` support/development
 floor before adding the manifest, `.protos` language association and basic
 language configuration. That choice remains unselected by this publication.
+
+## LM009-B manifest identity and VS Code support floor
+
+Decision status: **APPROVED**
+
+Approval: explicit project-owner approval on 2026-09-10 after confirming that
+`guillermomolina` is an already-owned Visual Studio Marketplace publisher.
+
+The approved manifest contract is:
+
+- publisher: `guillermomolina`;
+- extension name: `protos`;
+- resulting extension identity: `guillermomolina.protos`;
+- initial extension version: `0.1.0`;
+- `engines.vscode`: `^1.104.0`;
+- language id: `protos`; and
+- canonical file association: `.protos`.
+
+The extension version is intentionally independent from the Protos Maven/runtime
+implementation version. The VS Code support floor is stable by default: it is
+not raised merely because newer VS Code releases exist. A later floor increase
+requires a demonstrated editor API or dependency need introduced after 1.104
+and must validate that new compatibility boundary.
+
+This approval does not publish a Marketplace release, choose a release cadence,
+select runtime discovery, public DAP lifecycle, static-language-service hosting,
+or change Protos specification/runtime semantics.
+
+## LM009-B declarative manifest-wiring tranche
+
+Status: **MANIFEST WIRED; S1 LIVE VS CODE EVIDENCE PENDING**
+
+This tranche turns the already-published lexical assets into a declarative VS
+Code extension surface without executable extension-host code.
+
+Published wiring:
+
+- `editors/vscode/package.json` contributes the `protos` language, canonical
+  `.protos` association and existing `source.protos` TextMate grammar under the
+  approved `guillermomolina.protos` identity and `^1.104.0` support floor;
+- `editors/vscode/language-configuration.json` configures only the normative
+  line/block comment delimiters plus ordinary `()`, `[]` and `{}` structural
+  bracket pairs;
+- `editors/vscode/test/validate_extension.py` guards identity, compatibility
+  floor, language association, grammar binding and the intentionally declarative
+  no-runtime-code boundary; and
+- `editors/vscode/README.md` documents repository-local validation and the live
+  VS Code S1 check.
+
+The language configuration deliberately does not invent `wordPattern`,
+indentation, folding, on-enter, quote, formatter, parser, or semantic behavior.
+Those surfaces require their own real authority or evidence if later work needs
+them.
+
+Repository-side structural validation can prove that the VS Code manifest
+wiring is internally coherent, but it cannot honestly replace observation in an
+actual VS Code extension host. LM009-B therefore remains `IN_PROGRESS` until
+the documented S1 live check confirms that VS Code recognizes a `.protos` file
+as Protos and applies the published grammar/configuration.
+
+No Protos runtime source, specification, Maven implementation version, public
+DAP contract, static language-service architecture or Marketplace release is
+changed by this tranche.

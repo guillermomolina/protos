@@ -1,0 +1,42 @@
+{
+  "name": "protos",
+  "displayName": "Protos",
+  "description": "Language support for the Protos programming language.",
+  "version": "0.1.0",
+  "publisher": "guillermomolina",
+  "license": "APL-1.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/guillermomolina/protos.git"
+  },
+  "bugs": {
+    "url": "https://github.com/guillermomolina/protos/issues"
+  },
+  "engines": {
+    "vscode": "^1.104.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "protos",
+        "aliases": [
+          "Protos"
+        ],
+        "extensions": [
+          ".protos"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "protos",
+        "scopeName": "source.protos",
+        "path": "./syntaxes/protos.tmLanguage.json"
+      }
+    ]
+  }
+}
