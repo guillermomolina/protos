@@ -41,6 +41,7 @@ final class ProtosNioTcpConnectionBackend
     private final SocketChannel channel;
     private final AtomicBoolean physicalClosed = new AtomicBoolean();
     private final AtomicReference<ReadRequest> pendingRead = new AtomicReference<>();
+    private final AtomicReference<WriteRequest> pendingWrite = new AtomicReference<>();
     private volatile SelectionKey key;
 
     ProtosNioTcpConnectionBackend(
@@ -86,8 +87,19 @@ final class ProtosNioTcpConnectionBackend
     public ProtosByteIoFlow.Cancellation write(
             byte[] bytes, ProtosByteIoFlow.WriteCompletion completion) {
         Objects.requireNonNull(bytes, "bytes");
-        Objects.requireNonNull(completion, "completion").failed(0);
-        return NO_CANCELLATION;
+        Objects.requireNonNull(completion, "completion");
+        if (!(completion instanceof ProtosByteIoFlow.FirstEffectWriteCompletion firstEffect)
+                || bytes.length == 0 || physicalClosed.get() || !channel.isOpen()) {
+            reportWriteFailure(completion, 0);
+            return NO_CANCELLATION;
+        }
+        WriteRequest request = new WriteRequest(bytes, firstEffect);
+        try {
+            poller.submit(() -> startWriteOnPoller(request), ignored -> request.reportFailure());
+        } catch (RuntimeException unavailablePoller) {
+            request.reportFailure();
+        }
+        return request::cancel;
     }
 
     @Override
@@ -111,22 +123,22 @@ final class ProtosNioTcpConnectionBackend
 
     @Override
     public void ready(SelectionKey selectedKey) {
-        if (selectedKey.isReadable()) {
-            serviceReadOnPoller();
-        }
-        // E3C later adds OP_WRITE handling independently.
+        if (selectedKey.isReadable()) serviceReadOnPoller();
+        if (selectedKey.isValid() && selectedKey.isWritable()) serviceWriteOnPoller();
     }
 
     @Override
     public void failed(Exception failure) {
         physicalClosed.set(true);
         failPendingRead();
+        failPendingWrite();
     }
 
     @Override
     public void closed() {
         physicalClosed.set(true);
         failPendingRead();
+        failPendingWrite();
     }
 
     private void startReadOnPoller(ReadRequest request) {
@@ -293,6 +305,137 @@ final class ProtosNioTcpConnectionBackend
         }
     }
 
+
+    private void startWriteOnPoller(WriteRequest request) {
+        if (request.cancelled.get()) { request.reportFailure(); return; }
+        if (physicalClosed.get() || !channel.isOpen() || key == null || !key.isValid()) {
+            request.reportFailure(); return;
+        }
+        if (!pendingWrite.compareAndSet(null, request)) { request.reportFailure(); return; }
+        serviceWriteOnPoller();
+    }
+
+    private void serviceWriteOnPoller() {
+        WriteRequest request = pendingWrite.get();
+        if (request == null) { disableWriteInterestBestEffort(); return; }
+        if (request.cancelled.get() && request.contributedPrefix() == 0) {
+            finishWriteFailure(request); return;
+        }
+
+        boolean firstAttempt = request.contributedPrefix() == 0;
+        if (firstAttempt && !request.completion.beginFirstEffectAttempt()) {
+            retireWrite(request); return;
+        }
+
+        final int count;
+        try {
+            count = channel.write(request.buffer);
+        } catch (IOException writeFailure) {
+            if (firstAttempt && !request.completion.finishFirstEffectAttempt(false)) {
+                retireWrite(request); return;
+            }
+            finishWriteFailure(request); return;
+        }
+
+        if (firstAttempt && !request.completion.finishFirstEffectAttempt(count > 0)) {
+            retireWrite(request); return;
+        }
+        if (!request.buffer.hasRemaining()) { finishWriteSuccess(request); return; }
+        if (request.cancelled.get() && request.contributedPrefix() == 0) {
+            finishWriteFailure(request); return;
+        }
+        enableWriteInterest();
+    }
+
+    private void finishWriteSuccess(WriteRequest request) {
+        if (!pendingWrite.compareAndSet(request, null)) return;
+        disableWriteInterestBestEffort(); request.reportSuccess();
+    }
+
+    private void finishWriteFailure(WriteRequest request) {
+        if (!pendingWrite.compareAndSet(request, null)) return;
+        disableWriteInterestBestEffort(); request.reportFailure();
+    }
+
+    private void retireWrite(WriteRequest request) {
+        if (!pendingWrite.compareAndSet(request, null)) return;
+        disableWriteInterestBestEffort(); request.reported.set(true);
+    }
+
+    private void cancelWriteOnPoller(WriteRequest request) {
+        if (request.contributedPrefix() > 0) return;
+        if (!pendingWrite.compareAndSet(request, null)) return;
+        disableWriteInterestBestEffort(); request.reportFailure();
+    }
+
+    private void enableWriteInterest() {
+        SelectionKey current=key;
+        if (current==null || !current.isValid()) {
+            WriteRequest request=pendingWrite.get();
+            if (request!=null) finishWriteFailure(request);
+            return;
+        }
+        int currentOps=current.interestOps();
+        int desired=currentOps | SelectionKey.OP_WRITE;
+        if (desired!=currentOps) poller.interestOps(current,desired);
+    }
+
+    private void disableWriteInterestBestEffort() {
+        SelectionKey current=key;
+        if (current==null || !current.isValid()) return;
+        try {
+            int currentOps=current.interestOps();
+            int desired=currentOps & ~SelectionKey.OP_WRITE;
+            if (desired!=currentOps) poller.interestOps(current,desired);
+        } catch (RuntimeException ignored) {
+            // Physical close/poller failure owns an invalid key.
+        }
+    }
+
+    private void failPendingWrite() {
+        WriteRequest request=pendingWrite.getAndSet(null);
+        if (request!=null) request.reportFailure();
+    }
+
+    private static void reportWriteFailure(
+            ProtosByteIoFlow.WriteCompletion completion, int contributedPrefix) {
+        try { completion.failed(contributedPrefix); }
+        catch (RuntimeException ignored) {
+            // A defective callback cannot create a second backend outcome.
+        }
+    }
+
+    private final class WriteRequest {
+        private final ByteBuffer buffer;
+        private final ProtosByteIoFlow.FirstEffectWriteCompletion completion;
+        private final AtomicBoolean cancelled=new AtomicBoolean();
+        private final AtomicBoolean reported=new AtomicBoolean();
+
+        private WriteRequest(byte[] bytes, ProtosByteIoFlow.FirstEffectWriteCompletion completion) {
+            this.buffer=ByteBuffer.wrap(bytes);
+            this.completion=completion;
+        }
+        private int contributedPrefix() { return buffer.position(); }
+
+        private void cancel() {
+            if (!cancelled.compareAndSet(false,true) || reported.get()) return;
+            try {
+                poller.submit(() -> cancelWriteOnPoller(this), ignored -> {});
+            } catch (RuntimeException unavailablePoller) {
+                // Poller terminal cleanup owns registered-channel retirement.
+            }
+        }
+
+        private void reportSuccess() {
+            if (!reported.compareAndSet(false,true)) return;
+            try { completion.succeeded(); } catch (RuntimeException ignored) {}
+        }
+        private void reportFailure() {
+            if (!reported.compareAndSet(false,true)) return;
+            reportWriteFailure(completion,contributedPrefix());
+        }
+    }
+
     private void requestPhysicalClose(ProtosByteIoFlow.ReceiverCompletion completion) {
         if (physicalClosed.get()) {
             if (completion != null) reportSucceeded(completion);
@@ -323,6 +466,7 @@ final class ProtosNioTcpConnectionBackend
         SelectionKey current = key;
         if (current != null) current.cancel();
         failPendingRead();
+        failPendingWrite();
         try {
             channel.close();
             return true;

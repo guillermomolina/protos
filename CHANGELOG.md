@@ -1,3 +1,15 @@
+## 0.2.314-SNAPSHOT
+
+- Close `I028-E3C — NIO write lane + PLAT009 partial-write arbitration` under
+  D047/D052, ByteWritable and ratified PLAT003/PLAT006/PLAT009. Add one
+  poller-owned ordered NIO write request, immediate/`OP_WRITE` partial progress,
+  first-attempt zero/positive arbitration through the E3A gate, hidden
+  contributed-prefix failure accounting and pre-first-byte cancellation retirement.
+  Preserve independent `OP_READ`, retain backend custody after first contribution,
+  add loopback delivery/partial-cancellation/full-duplex evidence and release E3D.
+  Specification, public Protos API, native boundary, poller policy and license terms
+  are unchanged. Implementation version becomes `0.2.314-SNAPSHOT`.
+
 ## 0.2.313-SNAPSHOT
 
 - Stop requiring routine agents to reconcile GitHub Project metadata to reconcile GitHub Project metadata during formal
