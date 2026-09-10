@@ -32,4 +32,4 @@ m: Map()
 m[key] = 1
 key.code = 8
 
-m.containsKey(key).not()
+!m.containsKey(key)

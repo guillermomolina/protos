@@ -42,5 +42,5 @@ absent: m.containsKey(key)
 found &&
     (value == 42) &&
     (removed == 42) &&
-    absent.not() &&
+    !absent &&
     (calls.count == 0)
